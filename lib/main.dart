@@ -1,0 +1,68 @@
+import 'package:flutter/material.dart';
+import 'screens/home_screen.dart';
+import 'screens/start_screen.dart';
+import 'services/auth_service.dart';
+
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const StepTrackerApp());
+}
+
+class StepTrackerApp extends StatelessWidget {
+  const StepTrackerApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Step Tracker',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
+        useMaterial3: true,
+      ),
+      home: const _SessionGate(),
+    );
+  }
+}
+
+class _SessionGate extends StatefulWidget {
+  const _SessionGate();
+
+  @override
+  State<_SessionGate> createState() => _SessionGateState();
+}
+
+class _SessionGateState extends State<_SessionGate> {
+  final AuthService _authService = AuthService();
+  bool _loading = true;
+  bool _hasSession = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkSession();
+  }
+
+  Future<void> _checkSession() async {
+    final restored = await _authService.restoreSession();
+    setState(() {
+      _hasSession = restored;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_hasSession) {
+      return HomeScreen(authService: _authService);
+    }
+
+    return const StartScreen();
+  }
+}
