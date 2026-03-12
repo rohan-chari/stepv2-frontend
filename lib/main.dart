@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'screens/display_name_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/start_screen.dart';
 import 'services/auth_service.dart';
@@ -60,8 +61,12 @@ class _SessionGateState extends State<_SessionGate> {
       );
     }
 
-    if (_hasSession) {
+    if (_hasSession && _authService.displayName != null) {
       return HomeScreen(authService: _authService);
+    }
+
+    if (_hasSession) {
+      return DisplayNameScreen(authService: _authService);
     }
 
     return const StartScreen();

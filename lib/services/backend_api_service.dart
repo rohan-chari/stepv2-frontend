@@ -51,6 +51,161 @@ class BackendApiService {
     await _decodeJsonResponse(response);
   }
 
+  Future<Map<String, dynamic>> fetchMe({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/auth/me',
+      identityToken: identityToken,
+    );
+
+    final payload = await _decodeJsonResponse(response);
+    final user = payload['user'];
+
+    if (user is! Map<String, dynamic>) {
+      throw const HttpException('Backend did not return a user payload');
+    }
+
+    return user;
+  }
+
+  Future<Map<String, dynamic>> setStepGoal({
+    required String identityToken,
+    required int stepGoal,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'PUT',
+      path: '/auth/me/step-goal',
+      body: {'stepGoal': stepGoal},
+      identityToken: identityToken,
+    );
+
+    final payload = await _decodeJsonResponse(response);
+    final user = payload['user'];
+
+    if (user is! Map<String, dynamic>) {
+      throw const HttpException('Backend did not return a user payload');
+    }
+
+    return user;
+  }
+
+  Future<Map<String, dynamic>> setDisplayName({
+    required String identityToken,
+    required String? displayName,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'PUT',
+      path: '/auth/me/display-name',
+      body: {'displayName': displayName},
+      identityToken: identityToken,
+    );
+
+    final payload = await _decodeJsonResponse(response);
+    final user = payload['user'];
+
+    if (user is! Map<String, dynamic>) {
+      throw const HttpException('Backend did not return a user payload');
+    }
+
+    return user;
+  }
+
+  Future<List<Map<String, dynamic>>> searchUsers({
+    required String identityToken,
+    required String query,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/friends/search?q=${Uri.encodeComponent(query)}',
+      identityToken: identityToken,
+    );
+
+    final payload = await _decodeJsonResponse(response);
+    final users = payload['users'];
+
+    if (users is! List) {
+      throw const HttpException('Backend did not return a users list');
+    }
+
+    return users.cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> fetchFriends({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/friends',
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> sendFriendRequest({
+    required String identityToken,
+    required String addresseeId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/friends/request',
+      body: {'addresseeId': addresseeId},
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> respondToFriendRequest({
+    required String identityToken,
+    required String friendshipId,
+    required bool accept,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'PUT',
+      path: '/friends/request/$friendshipId',
+      body: {'accept': accept},
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  Future<List<Map<String, dynamic>>> fetchFriendsSteps({
+    required String identityToken,
+    required String date,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/friends/steps?date=${Uri.encodeComponent(date)}',
+      identityToken: identityToken,
+    );
+
+    final payload = await _decodeJsonResponse(response);
+    final friends = payload['friends'];
+
+    if (friends is! List) {
+      throw const HttpException('Backend did not return a friends list');
+    }
+
+    return friends.cast<Map<String, dynamic>>();
+  }
+
+  Future<HttpClientResponse> _sendGetRequest({
+    required String path,
+    String? identityToken,
+  }) async {
+    final request = await _httpClient.openUrl(
+      'GET',
+      Uri.parse('${BackendConfig.baseUrl}$path'),
+    );
+    if (identityToken != null) {
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer $identityToken',
+      );
+    }
+    return request.close();
+  }
+
   Future<HttpClientResponse> _sendJsonRequest({
     required String method,
     required String path,

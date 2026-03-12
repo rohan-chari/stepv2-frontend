@@ -20,7 +20,15 @@ class GameBackground extends StatelessWidget {
         Positioned.fill(
           child: Container(
             decoration: const BoxDecoration(
-              gradient: AppColors.skyGradient,
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xFF87CEEB),
+                  Color(0xFFB0E0F0),
+                  Color(0xFFD4F1F9),
+                ],
+              ),
             ),
           ),
         ),
@@ -65,7 +73,7 @@ class _IslandPainter extends CustomPainter {
         ..shader = const LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [AppColors.earthLight, AppColors.earthMid, AppColors.earthDark],
+          colors: [AppColors.dirtLight, AppColors.dirtMid, AppColors.dirtDark],
         ).createShader(Offset.zero & size),
     );
 
@@ -88,7 +96,7 @@ class _IslandPainter extends CustomPainter {
         ..shader = const LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [AppColors.grassLight, AppColors.grassMid, AppColors.grassDark],
+          colors: [AppColors.grassBright, AppColors.grassMid, AppColors.grassDark],
         ).createShader(Offset.zero & size),
     );
 
@@ -104,13 +112,13 @@ class _IslandPainter extends CustomPainter {
     canvas.drawPath(
       highlightPath,
       Paint()
-        ..color = AppColors.grassHighlight
+        ..color = const Color(0xFFA5D6A7)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 3,
     );
 
     final tuftPaint = Paint()
-      ..color = AppColors.grassTuft
+      ..color = const Color(0xFF388E3C)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
       ..strokeCap = StrokeCap.round;

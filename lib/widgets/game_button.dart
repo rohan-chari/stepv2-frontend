@@ -22,6 +22,18 @@ class GameButton extends StatefulWidget {
 class _GameButtonState extends State<GameButton> {
   bool _pressed = false;
 
+  static const _gold = Color(0xFFF5C842);
+  static const _goldMid = Color(0xFFEBB030);
+  static const _goldDark = Color(0xFFD4991E);
+  static const _goldBorder = Color(0xFFB8860B);
+  static const _goldShadow = Color(0xFF8B6508);
+  static const _goldText = Color(0xFF7A5A00);
+  static const _goldGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [_gold, _goldMid, _goldDark],
+  );
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -36,12 +48,12 @@ class _GameButtonState extends State<GameButton> {
         transform: Matrix4.translationValues(0, _pressed ? 6 : 0, 0),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          color: AppColors.goldBorder,
+          color: _goldBorder,
           boxShadow: _pressed
               ? []
-              : [
-                  const BoxShadow(
-                    color: AppColors.goldShadow,
+              : const [
+                  BoxShadow(
+                    color: _goldShadow,
                     offset: Offset(0, 6),
                     blurRadius: 0,
                   ),
@@ -51,26 +63,19 @@ class _GameButtonState extends State<GameButton> {
           padding: widget.padding,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            gradient: AppColors.goldGradient,
+            gradient: _goldGradient,
             border: Border.all(
-              color: AppColors.goldBorder,
+              color: _goldBorder,
               width: 2.5,
             ),
           ),
+          alignment: Alignment.center,
           child: Text(
             widget.label,
-            style: TextStyle(
-              fontSize: widget.fontSize,
-              fontWeight: FontWeight.w900,
-              color: AppColors.goldText,
-              letterSpacing: 4,
-              shadows: [
-                Shadow(
-                  color: AppColors.goldHighlight.withValues(alpha: 0.6),
-                  offset: const Offset(0, 1),
-                  blurRadius: 0,
-                ),
-              ],
+            textAlign: TextAlign.center,
+            style: PixelText.button(
+              size: widget.fontSize,
+              color: _goldText,
             ),
           ),
         ),

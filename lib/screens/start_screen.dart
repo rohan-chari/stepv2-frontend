@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 
+import 'display_name_screen.dart';
 import 'home_screen.dart';
 import '../services/auth_service.dart';
 import '../styles.dart';
 import '../widgets/capybara.dart';
+import '../widgets/error_toast.dart';
 import '../widgets/game_background.dart';
 import '../widgets/game_button.dart';
+import '../widgets/trail_sign.dart';
 
 class StartScreen extends StatefulWidget {
   const StartScreen({super.key});
@@ -27,7 +30,9 @@ class _StartScreenState extends State<StartScreen> {
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (context) => HomeScreen(authService: _authService),
+          builder: (context) => _authService.displayName != null
+              ? HomeScreen(authService: _authService)
+              : DisplayNameScreen(authService: _authService),
         ),
       );
       return;
@@ -41,17 +46,18 @@ class _StartScreenState extends State<StartScreen> {
     if (success) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (context) => HomeScreen(authService: _authService),
+          builder: (context) => _authService.displayName != null
+              ? HomeScreen(authService: _authService)
+              : DisplayNameScreen(authService: _authService),
         ),
       );
       return;
     }
 
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(_authService.lastErrorMessage ?? 'Apple sign-in failed.'),
-      ),
+    if (!mounted) return;
+    showErrorToast(
+      context,
+      _authService.lastErrorMessage ?? 'Apple sign-in failed.',
     );
   }
 
@@ -63,7 +69,7 @@ class _StartScreenState extends State<StartScreen> {
       body: GameBackground(
         child: Stack(
           children: [
-            // Capybara walking
+            // Capybara walking on the grass
             Positioned(
               left: 0,
               right: 0,
@@ -75,61 +81,58 @@ class _StartScreenState extends State<StartScreen> {
               ),
             ),
 
-            // Title and button
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Step Tracker',
-                    style: TextStyle(
-                      fontSize: 42,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                      shadows: [
-                        Shadow(
-                          color: Colors.black.withValues(alpha: 0.3),
-                          offset: const Offset(0, 4),
-                          blurRadius: 12,
+            // Billboard + centered button
+            Positioned.fill(
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 24, right: 24, top: 60),
+                  child: Column(
+                    children: [
+                      TrailSign(
+                        width: 340,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'STEP TRACKER',
+                              style: PixelText.title(
+                                size: 26,
+                                color: AppColors.textDark,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              'Your daily walking companion',
+                              style: PixelText.body(
+                                size: 14,
+                                color: AppColors.textMid,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
                         ),
-                        Shadow(
-                          color: AppColors.titleShadow.withValues(alpha: 0.4),
-                          offset: const Offset(0, 2),
-                          blurRadius: 20,
-                        ),
-                      ],
-                      letterSpacing: 2,
-                    ),
+                      ),
+                      const Spacer(),
+                      _isSigningIn
+                          ? const CircularProgressIndicator(
+                              color: AppColors.accent,
+                            )
+                          : SizedBox(
+                              width: 340,
+                              child: GameButton(
+                                label: 'START',
+                                fontSize: 16,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 48,
+                                  vertical: 16,
+                                ),
+                                onPressed: _onStart,
+                              ),
+                            ),
+                      const Spacer(),
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Your daily walking companion',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white.withValues(alpha: 0.9),
-                      shadows: [
-                        Shadow(
-                          color: Colors.black.withValues(alpha: 0.25),
-                          offset: const Offset(0, 2),
-                          blurRadius: 8,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 50),
-
-                  // 3D Start button
-                  if (_isSigningIn)
-                    const CircularProgressIndicator(color: Colors.white)
-                  else
-                    GameButton(
-                      label: 'START',
-                      fontSize: 30,
-                      padding: const EdgeInsets.symmetric(horizontal: 60, vertical: 18),
-                      onPressed: _onStart,
-                    ),
-                ],
+                ),
               ),
             ),
           ],
