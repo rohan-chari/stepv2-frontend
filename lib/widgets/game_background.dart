@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../styles.dart';
 
 /// The shared sky + island ground background used across all screens.
 class GameBackground extends StatelessWidget {
@@ -19,15 +20,7 @@ class GameBackground extends StatelessWidget {
         Positioned.fill(
           child: Container(
             decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFF87CEEB),
-                  Color(0xFFB0E0F0),
-                  Color(0xFFD4F1F9),
-                ],
-              ),
+              gradient: AppColors.skyGradient,
             ),
           ),
         ),
@@ -72,7 +65,7 @@ class _IslandPainter extends CustomPainter {
         ..shader = const LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFF8D6E4C), Color(0xFF6D4C2A), Color(0xFF5D4037)],
+          colors: [AppColors.earthLight, AppColors.earthMid, AppColors.earthDark],
         ).createShader(Offset.zero & size),
     );
 
@@ -95,7 +88,7 @@ class _IslandPainter extends CustomPainter {
         ..shader = const LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFF66BB6A), Color(0xFF43A047), Color(0xFF2E7D32)],
+          colors: [AppColors.grassLight, AppColors.grassMid, AppColors.grassDark],
         ).createShader(Offset.zero & size),
     );
 
@@ -111,13 +104,13 @@ class _IslandPainter extends CustomPainter {
     canvas.drawPath(
       highlightPath,
       Paint()
-        ..color = const Color(0xFFA5D6A7)
+        ..color = AppColors.grassHighlight
         ..style = PaintingStyle.stroke
         ..strokeWidth = 3,
     );
 
     final tuftPaint = Paint()
-      ..color = const Color(0xFF388E3C)
+      ..color = AppColors.grassTuft
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
       ..strokeCap = StrokeCap.round;

@@ -72,3 +72,4 @@ app.*.map.json
 
 # macOS
 *.xcuserdatad
+.claude/

@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import 'home_screen.dart';
 import '../services/auth_service.dart';
+import '../styles.dart';
 import '../widgets/capybara.dart';
 import '../widgets/game_background.dart';
+import '../widgets/game_button.dart';
 
 class StartScreen extends StatefulWidget {
   const StartScreen({super.key});
@@ -14,7 +16,6 @@ class StartScreen extends StatefulWidget {
 
 class _StartScreenState extends State<StartScreen> {
   final AuthService _authService = AuthService();
-  bool _buttonPressed = false;
   bool _isSigningIn = false;
 
   Future<void> _onStart() async {
@@ -92,7 +93,7 @@ class _StartScreenState extends State<StartScreen> {
                           blurRadius: 12,
                         ),
                         Shadow(
-                          color: const Color(0xFF1565C0).withValues(alpha: 0.4),
+                          color: AppColors.titleShadow.withValues(alpha: 0.4),
                           offset: const Offset(0, 2),
                           blurRadius: 20,
                         ),
@@ -122,74 +123,11 @@ class _StartScreenState extends State<StartScreen> {
                   if (_isSigningIn)
                     const CircularProgressIndicator(color: Colors.white)
                   else
-                    GestureDetector(
-                      onTapDown: (_) => setState(() => _buttonPressed = true),
-                      onTapUp: (_) {
-                        setState(() => _buttonPressed = false);
-                        _onStart();
-                      },
-                      onTapCancel: () => setState(() => _buttonPressed = false),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 60),
-                        transform: Matrix4.translationValues(
-                          0,
-                          _buttonPressed ? 6 : 0,
-                          0,
-                        ),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          color: const Color(0xFFB8860B),
-                          boxShadow: _buttonPressed
-                              ? []
-                              : [
-                                  const BoxShadow(
-                                    color: Color(0xFF8B6508),
-                                    offset: Offset(0, 6),
-                                    blurRadius: 0,
-                                  ),
-                                ],
-                        ),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 60,
-                            vertical: 18,
-                          ),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            gradient: const LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Color(0xFFF5C842),
-                                Color(0xFFEBB030),
-                                Color(0xFFD4991E),
-                              ],
-                            ),
-                            border: Border.all(
-                              color: const Color(0xFFB8860B),
-                              width: 2.5,
-                            ),
-                          ),
-                          child: Text(
-                            'START',
-                            style: TextStyle(
-                              fontSize: 30,
-                              fontWeight: FontWeight.w900,
-                              color: const Color(0xFF7A5A00),
-                              letterSpacing: 4,
-                              shadows: [
-                                Shadow(
-                                  color: const Color(
-                                    0xFFFFE082,
-                                  ).withValues(alpha: 0.6),
-                                  offset: const Offset(0, 1),
-                                  blurRadius: 0,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
+                    GameButton(
+                      label: 'START',
+                      fontSize: 30,
+                      padding: const EdgeInsets.symmetric(horizontal: 60, vertical: 18),
+                      onPressed: _onStart,
                     ),
                 ],
               ),

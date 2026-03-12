@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'screens/home_screen.dart';
 import 'screens/start_screen.dart';
 import 'services/auth_service.dart';
+import 'styles.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,7 +18,7 @@ class StepTrackerApp extends StatelessWidget {
       title: 'Step Tracker',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
+        colorScheme: ColorScheme.fromSeed(seedColor: AppColors.accent),
         useMaterial3: true,
       ),
       home: const _SessionGate(),

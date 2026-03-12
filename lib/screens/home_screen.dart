@@ -6,7 +6,9 @@ import '../models/step_data.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../services/health_service.dart';
+import '../styles.dart';
 import '../widgets/game_background.dart';
+import '../widgets/game_button.dart';
 import '../widgets/step_count_card.dart';
 import 'start_screen.dart';
 
@@ -19,7 +21,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final HealthService _healthService = HealthService();
   final BackendApiService _backendApiService = BackendApiService();
 
@@ -27,6 +29,34 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = false;
   String? _error;
   StepData? _stepData;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _restoreAndFetch();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _healthAuthorized) {
+      _fetchSteps();
+    }
+  }
+
+  Future<void> _restoreAndFetch() async {
+    final wasAuthorized = await _healthService.restoreHealthAuthState();
+    if (!wasAuthorized || !mounted) return;
+
+    setState(() => _healthAuthorized = true);
+    await _fetchSteps();
+  }
 
   Future<void> _enableHealthData() async {
     setState(() => _isLoading = true);
@@ -95,8 +125,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  bool _enablePressed = false;
-
   Widget _buildPermissionView() {
     return Center(
       child: Padding(
@@ -107,7 +135,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Icon(
               Icons.directions_walk,
               size: 72,
-              color: const Color(0xFFF5C842),
+              color: AppColors.accent,
               shadows: [
                 Shadow(
                   color: Colors.black.withValues(alpha: 0.3),
@@ -131,7 +159,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     blurRadius: 10,
                   ),
                   Shadow(
-                    color: const Color(0xFF1565C0).withValues(alpha: 0.4),
+                    color: AppColors.titleShadow.withValues(alpha: 0.4),
                     offset: const Offset(0, 2),
                     blurRadius: 16,
                   ),
@@ -163,7 +191,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Text(
                 _error!,
                 style: TextStyle(
-                  color: const Color(0xFFFF8A80),
+                  color: AppColors.error,
                   fontWeight: FontWeight.w600,
                   shadows: [
                     Shadow(
@@ -178,74 +206,11 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 16),
             ],
             if (_isLoading)
-              const CircularProgressIndicator(color: Color(0xFFF5C842))
+              const CircularProgressIndicator(color: AppColors.accent)
             else
-              GestureDetector(
-                onTapDown: (_) => setState(() => _enablePressed = true),
-                onTapUp: (_) {
-                  setState(() => _enablePressed = false);
-                  _enableHealthData();
-                },
-                onTapCancel: () => setState(() => _enablePressed = false),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 60),
-                  transform: Matrix4.translationValues(
-                    0,
-                    _enablePressed ? 6 : 0,
-                    0,
-                  ),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    color: const Color(0xFFB8860B),
-                    boxShadow: _enablePressed
-                        ? []
-                        : [
-                            const BoxShadow(
-                              color: Color(0xFF8B6508),
-                              offset: Offset(0, 6),
-                              blurRadius: 0,
-                            ),
-                          ],
-                  ),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 40,
-                      vertical: 16,
-                    ),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      gradient: const LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Color(0xFFF5C842),
-                          Color(0xFFEBB030),
-                          Color(0xFFD4991E),
-                        ],
-                      ),
-                      border: Border.all(
-                        color: const Color(0xFFB8860B),
-                        width: 2.5,
-                      ),
-                    ),
-                    child: Text(
-                      'ENABLE',
-                      style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w900,
-                        color: const Color(0xFF7A5A00),
-                        letterSpacing: 4,
-                        shadows: [
-                          Shadow(
-                            color: const Color(0xFFFFE082).withValues(alpha: 0.6),
-                            offset: const Offset(0, 1),
-                            blurRadius: 0,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+              GameButton(
+                label: 'ENABLE',
+                onPressed: _enableHealthData,
               ),
           ],
         ),
@@ -254,6 +219,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildStepsView() {
+    final zeroHint = _stepData != null && _stepData!.steps == 0 && !_isLoading
+        ? 'Showing 0 steps? Make sure Step Tracker has access in Settings > Health > Data Access.'
+        : null;
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -264,13 +233,18 @@ class _HomeScreenState extends State<HomeScreen> {
               stepData: _stepData,
               isLoading: _isLoading,
               error: _error,
+              hint: zeroHint,
             ),
             const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: _isLoading ? null : _fetchSteps,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Refresh'),
-            ),
+            if (_isLoading)
+              const CircularProgressIndicator(color: AppColors.accent)
+            else
+              GameButton(
+                label: 'REFRESH',
+                fontSize: 22,
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                onPressed: _fetchSteps,
+              ),
           ],
         ),
       ),
