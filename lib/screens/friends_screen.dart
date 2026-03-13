@@ -76,7 +76,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      showErrorToast(context, 'Failed to load friends: $e');
+      showErrorToast(context, 'Couldn\u2019t load friends. Please try again.');
     }
   }
 
@@ -143,7 +143,12 @@ class _FriendsScreenState extends State<FriendsScreen> {
       await _loadFriends();
     } catch (e) {
       if (!mounted) return;
-      showErrorToast(context, '$e');
+      final raw = e.toString();
+      if (raw.contains('already') || raw.contains('existing')) {
+        showErrorToast(context, 'You already have a request with this user.');
+      } else {
+        showErrorToast(context, 'Couldn\u2019t send friend request. Please try again.');
+      }
     }
   }
 
@@ -162,7 +167,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
       await _loadFriends();
     } catch (e) {
       if (!mounted) return;
-      showErrorToast(context, '$e');
+      showErrorToast(context, 'Couldn\u2019t respond to request. Please try again.');
     }
   }
 

@@ -3,7 +3,7 @@ import '../styles.dart';
 
 class GameButton extends StatefulWidget {
   final String label;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final double fontSize;
   final EdgeInsets padding;
 
@@ -34,27 +34,45 @@ class _GameButtonState extends State<GameButton> {
     colors: [_gold, _goldMid, _goldDark],
   );
 
+  static const _disabledGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFFBBBBBB), Color(0xFFAAAAAA), Color(0xFF999999)],
+  );
+  static const _disabledBorder = Color(0xFF888888);
+  static const _disabledShadow = Color(0xFF666666);
+  static const _disabledText = Color(0xFF666666);
+
+  bool get _enabled => widget.onPressed != null;
+
   @override
   Widget build(BuildContext context) {
+    final gradient = _enabled ? _goldGradient : _disabledGradient;
+    final borderColor = _enabled ? _goldBorder : _disabledBorder;
+    final shadowColor = _enabled ? _goldShadow : _disabledShadow;
+    final textColor = _enabled ? _goldText : _disabledText;
+
     return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) {
-        setState(() => _pressed = false);
-        widget.onPressed();
-      },
-      onTapCancel: () => setState(() => _pressed = false),
+      onTapDown: _enabled ? (_) => setState(() => _pressed = true) : null,
+      onTapUp: _enabled
+          ? (_) {
+              setState(() => _pressed = false);
+              widget.onPressed!();
+            }
+          : null,
+      onTapCancel: _enabled ? () => setState(() => _pressed = false) : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 60),
         transform: Matrix4.translationValues(0, _pressed ? 6 : 0, 0),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          color: _goldBorder,
+          color: borderColor,
           boxShadow: _pressed
               ? []
-              : const [
+              : [
                   BoxShadow(
-                    color: _goldShadow,
-                    offset: Offset(0, 6),
+                    color: shadowColor,
+                    offset: const Offset(0, 6),
                     blurRadius: 0,
                   ),
                 ],
@@ -63,9 +81,9 @@ class _GameButtonState extends State<GameButton> {
           padding: widget.padding,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            gradient: _goldGradient,
+            gradient: gradient,
             border: Border.all(
-              color: _goldBorder,
+              color: borderColor,
               width: 2.5,
             ),
           ),
@@ -75,7 +93,7 @@ class _GameButtonState extends State<GameButton> {
             textAlign: TextAlign.center,
             style: PixelText.button(
               size: widget.fontSize,
-              color: _goldText,
+              color: textColor,
             ),
           ),
         ),

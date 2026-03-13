@@ -5,9 +5,11 @@ import '../widgets/error_toast.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
 import '../widgets/capybara.dart';
+import '../widgets/content_board.dart';
 import '../widgets/game_background.dart';
 import '../widgets/game_button.dart';
 import '../widgets/trail_sign.dart';
+import 'display_name_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, required this.authService});
@@ -133,7 +135,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        showErrorToast(context, 'Failed to save step goal: $e');
+        showErrorToast(context, 'Couldn\u2019t save your step goal. Please try again.');
       }
     }
   }
@@ -141,6 +143,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final groundHeight = MediaQuery.of(context).size.height * 0.22;
+    final boardWidth = MediaQuery.of(context).size.width - 48;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -166,7 +169,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
 
-            // Billboard + centered button
             Positioned.fill(
               child: SafeArea(
                 child: Padding(
@@ -174,7 +176,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Column(
                     children: [
                       TrailSign(
-                        width: 340,
+                        width: boardWidth,
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -188,17 +190,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ],
                         ),
                       ),
-                      const Spacer(),
-                      SizedBox(
-                        width: 340,
-                        child: GameButton(
-                          label: 'CHANGE STEP GOAL',
-                          fontSize: 16,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 48,
-                            vertical: 16,
-                          ),
-                          onPressed: _showStepGoalDialog,
+                      const SizedBox(height: 24),
+                      ContentBoard(
+                        width: boardWidth,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'MAKE CHANGES TO\nYOUR ACCOUNT',
+                              style: PixelText.title(
+                                size: 16,
+                                color: AppColors.textDark,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              width: double.infinity,
+                              child: GameButton(
+                                label: 'CHANGE DISPLAY NAME',
+                                fontSize: 14,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                  vertical: 14,
+                                ),
+                                onPressed: () async {
+                                  await Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (context) => DisplayNameScreen(
+                                        authService: widget.authService,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: GameButton(
+                                label: 'CHANGE STEP GOAL',
+                                fontSize: 14,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                  vertical: 14,
+                                ),
+                                onPressed: _showStepGoalDialog,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       const Spacer(),

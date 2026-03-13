@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../models/step_data.dart';
@@ -14,6 +12,7 @@ import '../widgets/game_background.dart';
 import '../widgets/game_button.dart';
 import '../widgets/step_count_card.dart';
 import '../widgets/trail_sign.dart';
+import 'display_name_screen.dart';
 import 'friends_screen.dart';
 import 'settings_screen.dart';
 import 'start_screen.dart';
@@ -37,6 +36,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   StepData? _stepData;
   int? _stepGoal;
   int _incomingFriendRequests = 0;
+  String? _displayName;
   List<Map<String, dynamic>> _friendsSteps = [];
 
   @override
@@ -62,7 +62,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _restoreAndFetch() async {
-    setState(() => _stepGoal = widget.authService.stepGoal);
+    setState(() {
+      _stepGoal = widget.authService.stepGoal;
+      _displayName = widget.authService.displayName;
+    });
 
     final wasAuthorized = await _healthService.restoreHealthAuthState();
     if (!wasAuthorized || !mounted) return;
@@ -110,7 +113,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         final identityToken = widget.authService.identityToken;
 
         if (identityToken == null || identityToken.isEmpty) {
-          throw const HttpException('You are no longer signed in.');
+          throw Exception('not signed in');
         }
 
         await _backendApiService.recordSteps(
@@ -118,7 +121,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           stepData: stepData,
         );
       } catch (e) {
-        syncWarning = 'Steps loaded, but backend sync failed. ${e.toString()}';
+        syncWarning = 'Steps loaded, but sync failed. Check your connection.';
       }
 
       setState(() {
@@ -172,11 +175,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       );
       final goal = user['stepGoal'] as int?;
       final incoming = user['incomingFriendRequests'] as int? ?? 0;
+      final displayName = user['displayName'] as String?;
       await widget.authService.updateStepGoal(goal);
+      await widget.authService.updateDisplayName(displayName);
       if (mounted) {
         setState(() {
           _stepGoal = goal;
           _incomingFriendRequests = incoming;
+          _displayName = displayName;
         });
       }
     } catch (_) {
@@ -306,7 +312,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
     } catch (e) {
       if (mounted) {
-        showErrorToast(context, 'Failed to save step goal: $e');
+        showErrorToast(context, 'Couldn\u2019t save your step goal. Please try again.');
       }
     }
   }
@@ -429,30 +435,63 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
 
               // Friends steps
-              if (_friendsSteps.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                ContentBoard(
-                  width: double.infinity,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        'FRIENDS',
-                        style: PixelText.title(size: 16, color: AppColors.textMid),
+              const SizedBox(height: 16),
+              ContentBoard(
+                width: double.infinity,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'FRIENDS',
+                      style: PixelText.title(size: 16, color: AppColors.textMid),
+                      textAlign: TextAlign.center,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Text(
+                        'Track your friends\u2019 progress and\nmotivate them to get their steps in!',
+                        style: PixelText.body(size: 13, color: AppColors.textMid),
                         textAlign: TextAlign.center,
                       ),
-                      for (final friend in _friendsSteps)
-                        _buildFriendRow(friend),
-                    ],
-                  ),
+                    ),
+                    for (final friend in _friendsSteps)
+                      _buildFriendRow(friend),
+                  ],
                 ),
-              ],
+              ),
 
               const SizedBox(height: 20),
 
               // Action buttons
               Column(
                 children: [
+                  if (_displayName == null)
+                    SizedBox(
+                      width: double.infinity,
+                      child: GameButton(
+                        label: 'SET DISPLAY NAME',
+                        fontSize: 16,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 48,
+                          vertical: 16,
+                        ),
+                        onPressed: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => DisplayNameScreen(
+                                authService: widget.authService,
+                              ),
+                            ),
+                          );
+                          if (mounted) {
+                            setState(() {
+                              _displayName = widget.authService.displayName;
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                  if (_displayName == null) const SizedBox(height: 12),
                   if (_stepGoal == null)
                     SizedBox(
                       width: double.infinity,
@@ -476,9 +515,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         horizontal: 48,
                         vertical: 16,
                       ),
-                      onPressed: () {
-                        // TODO: implement challenge
-                      },
+                      onPressed: _displayName != null
+                          ? () {
+                              // TODO: implement challenge
+                            }
+                          : null,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -494,19 +535,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             horizontal: 48,
                             vertical: 16,
                           ),
-                          onPressed: () async {
-                            await Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (context) => FriendsScreen(
-                                  authService: widget.authService,
-                                ),
-                              ),
-                            );
-                            if (mounted) {
-                              _refreshStepGoal();
-                              _fetchFriendsSteps();
-                            }
-                          },
+                          onPressed: _displayName != null
+                              ? () async {
+                                  await Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (context) => FriendsScreen(
+                                        authService: widget.authService,
+                                      ),
+                                    ),
+                                  );
+                                  if (mounted) {
+                                    _refreshStepGoal();
+                                    _fetchFriendsSteps();
+                                  }
+                                }
+                              : null,
                         ),
                       ),
                       if (_incomingFriendRequests > 0)

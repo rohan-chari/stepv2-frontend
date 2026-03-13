@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import 'home_screen.dart';
@@ -23,8 +21,16 @@ class DisplayNameScreen extends StatefulWidget {
 
 class _DisplayNameScreenState extends State<DisplayNameScreen> {
   final BackendApiService _backendApiService = BackendApiService();
-  final TextEditingController _controller = TextEditingController();
+  late final TextEditingController _controller;
   bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(
+      text: widget.authService.displayName ?? '',
+    );
+  }
 
   @override
   void dispose() {
@@ -46,7 +52,7 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
       final identityToken = widget.authService.identityToken;
 
       if (identityToken == null || identityToken.isEmpty) {
-        throw const HttpException('You are no longer signed in.');
+        throw Exception('not signed in');
       }
 
       await _backendApiService.setDisplayName(
@@ -58,18 +64,28 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
 
       if (!mounted) return;
 
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (context) =>
-              HomeScreen(authService: widget.authService),
-        ),
-      );
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      } else {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) =>
+                HomeScreen(authService: widget.authService),
+          ),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
-      final message = e.toString().contains('already taken')
-          ? 'That name is taken \u2014 try another!'
-          : 'Failed to save display name: $e';
+      final raw = e.toString();
+      final String message;
+      if (raw.contains('already taken')) {
+        message = 'That name is taken \u2014 try another!';
+      } else if (raw.contains('non-empty string')) {
+        message = 'Please enter a valid display name.';
+      } else {
+        message = 'Couldn\u2019t save your display name. Please try again.';
+      }
       showErrorToast(context, message);
     }
   }

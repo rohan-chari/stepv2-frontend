@@ -62,3 +62,5 @@ HealthKit requires two things to be configured manually in Xcode:
 
 
 flutter run --dart-define=BACKEND_BASE_URL=http://10.0.0.209:3000
+
+flutter build ios --dart-define=BACKEND_BASE_URL=https://steptracker-api.org

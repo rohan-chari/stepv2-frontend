@@ -4,6 +4,15 @@ import 'dart:io';
 import '../config/backend_config.dart';
 import '../models/step_data.dart';
 
+/// An API error with a user-friendly message.
+class ApiException implements Exception {
+  final String message;
+  const ApiException(this.message);
+
+  @override
+  String toString() => message;
+}
+
 class BackendApiService {
   BackendApiService({HttpClient? httpClient})
     : _httpClient = httpClient ?? HttpClient();
@@ -31,7 +40,7 @@ class BackendApiService {
     final user = payload['user'];
 
     if (user is! Map<String, dynamic>) {
-      throw const HttpException('Backend did not return a user payload');
+      throw const ApiException('Something went wrong. Please try again.');
     }
 
     return user;
@@ -63,7 +72,7 @@ class BackendApiService {
     final user = payload['user'];
 
     if (user is! Map<String, dynamic>) {
-      throw const HttpException('Backend did not return a user payload');
+      throw const ApiException('Something went wrong. Please try again.');
     }
 
     return user;
@@ -84,7 +93,7 @@ class BackendApiService {
     final user = payload['user'];
 
     if (user is! Map<String, dynamic>) {
-      throw const HttpException('Backend did not return a user payload');
+      throw const ApiException('Something went wrong. Please try again.');
     }
 
     return user;
@@ -105,7 +114,7 @@ class BackendApiService {
     final user = payload['user'];
 
     if (user is! Map<String, dynamic>) {
-      throw const HttpException('Backend did not return a user payload');
+      throw const ApiException('Something went wrong. Please try again.');
     }
 
     return user;
@@ -124,7 +133,7 @@ class BackendApiService {
     final users = payload['users'];
 
     if (users is! List) {
-      throw const HttpException('Backend did not return a users list');
+      throw const ApiException('Something went wrong. Please try again.');
     }
 
     return users.cast<Map<String, dynamic>>();
@@ -183,7 +192,7 @@ class BackendApiService {
     final friends = payload['friends'];
 
     if (friends is! List) {
-      throw const HttpException('Backend did not return a friends list');
+      throw const ApiException('Something went wrong. Please try again.');
     }
 
     return friends.cast<Map<String, dynamic>>();
@@ -246,12 +255,10 @@ class BackendApiService {
     final message = parsedBody['error'];
 
     if (message is String && message.isNotEmpty) {
-      throw HttpException(message);
+      throw ApiException(message);
     }
 
-    throw HttpException(
-      'Backend request failed with status ${response.statusCode}',
-    );
+    throw const ApiException('Something went wrong. Please try again.');
   }
 
   String _formatDate(DateTime date) {
