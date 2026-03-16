@@ -198,6 +198,100 @@ class BackendApiService {
     return friends.cast<Map<String, dynamic>>();
   }
 
+  Future<Map<String, dynamic>> initiateChallenge({
+    required String identityToken,
+    required String friendUserId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/challenges/initiate',
+      body: {'friendUserId': friendUserId},
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  Future<List<Map<String, dynamic>>> fetchStakeCatalog({
+    required String identityToken,
+    String? relationshipType,
+  }) async {
+    final query = relationshipType != null
+        ? '?relationship_type=${Uri.encodeComponent(relationshipType)}'
+        : '';
+    final response = await _sendGetRequest(
+      path: '/stakes$query',
+      identityToken: identityToken,
+    );
+
+    final payload = await _decodeJsonResponse(response);
+    final stakes = payload['stakes'];
+
+    if (stakes is! List) {
+      throw const ApiException('Something went wrong. Please try again.');
+    }
+
+    return stakes.cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> proposeStake({
+    required String identityToken,
+    required String instanceId,
+    required String stakeId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/challenges/$instanceId/propose-stake',
+      body: {'stakeId': stakeId},
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> respondToStake({
+    required String identityToken,
+    required String instanceId,
+    required bool accept,
+    String? counterStakeId,
+  }) async {
+    final body = <String, dynamic>{'accept': accept};
+    if (counterStakeId != null) body['counterStakeId'] = counterStakeId;
+
+    final response = await _sendJsonRequest(
+      method: 'PUT',
+      path: '/challenges/$instanceId/respond-stake',
+      body: body,
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> fetchChallengeProgress({
+    required String identityToken,
+    required String instanceId,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/challenges/$instanceId/progress',
+      identityToken: identityToken,
+    );
+
+    final payload = await _decodeJsonResponse(response);
+    return payload['progress'] as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> fetchCurrentChallenge({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/challenges/current',
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
   Future<HttpClientResponse> _sendGetRequest({
     required String path,
     String? identityToken,

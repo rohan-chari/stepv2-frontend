@@ -12,9 +12,11 @@ import '../widgets/game_background.dart';
 import '../widgets/game_button.dart';
 import '../widgets/step_count_card.dart';
 import '../widgets/trail_sign.dart';
+import 'challenge_detail_screen.dart';
 import 'display_name_screen.dart';
 import 'friends_screen.dart';
 import 'settings_screen.dart';
+import 'stake_picker_screen.dart';
 import 'start_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -38,6 +40,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _incomingFriendRequests = 0;
   String? _displayName;
   List<Map<String, dynamic>> _friendsSteps = [];
+  Map<String, dynamic>? _currentChallenge;
 
   @override
   void initState() {
@@ -58,6 +61,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _fetchSteps();
       _refreshStepGoal();
       _fetchFriendsSteps();
+      _fetchCurrentChallenge();
     }
   }
 
@@ -74,6 +78,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await _fetchSteps();
     _refreshStepGoal();
     _fetchFriendsSteps();
+    _fetchCurrentChallenge();
   }
 
   Future<void> _enableHealthData() async {
@@ -159,6 +164,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
       if (mounted) {
         setState(() => _friendsSteps = friends);
+      }
+    } catch (_) {
+      // Non-critical — keep whatever we had
+    }
+  }
+
+  Future<void> _fetchCurrentChallenge() async {
+    try {
+      final identityToken = widget.authService.identityToken;
+      if (identityToken == null || identityToken.isEmpty) return;
+
+      final data = await _backendApiService.fetchCurrentChallenge(
+        identityToken: identityToken,
+      );
+
+      if (mounted) {
+        setState(() => _currentChallenge = data);
       }
     } catch (_) {
       // Non-critical — keep whatever we had
@@ -375,7 +397,128 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  bool _hasActiveChallenge() {
+    return _currentChallenge != null &&
+        _currentChallenge!['challenge'] != null;
+  }
+
+  Future<void> _challengeFriend(String friendId, String friendName) async {
+    try {
+      final identityToken = widget.authService.identityToken;
+      if (identityToken == null || identityToken.isEmpty) return;
+
+      final result = await _backendApiService.initiateChallenge(
+        identityToken: identityToken,
+        friendUserId: friendId,
+      );
+
+      if (!mounted) return;
+
+      final instance = result['instance'] as Map<String, dynamic>?;
+      if (instance == null) return;
+
+      // Navigate to stake picker
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => StakePickerScreen(
+            authService: widget.authService,
+            instanceId: instance['id'] as String,
+            friendName: friendName,
+          ),
+        ),
+      );
+
+      if (mounted) _fetchCurrentChallenge();
+    } catch (e) {
+      if (mounted) {
+        showErrorToast(context, e.toString());
+      }
+    }
+  }
+
+  Map<String, dynamic>? _getInstanceForFriend(String friendId) {
+    final instances = _currentChallenge?['instances'] as List? ?? [];
+    for (final i in instances) {
+      final inst = i as Map<String, dynamic>;
+      final aId = inst['userAId'] as String? ??
+          (inst['userA'] as Map<String, dynamic>?)?['id'] as String? ??
+          '';
+      final bId = inst['userBId'] as String? ??
+          (inst['userB'] as Map<String, dynamic>?)?['id'] as String? ??
+          '';
+      if (aId == friendId || bId == friendId) return inst;
+    }
+    return null;
+  }
+
+  void _openChallengeDetail(Map<String, dynamic> instance) {
+    final challenge =
+        _currentChallenge?['challenge'] as Map<String, dynamic>? ?? {};
+    Navigator.of(context)
+        .push<bool>(
+      MaterialPageRoute(
+        builder: (context) => ChallengeDetailScreen(
+          authService: widget.authService,
+          instance: instance,
+          challenge: challenge,
+        ),
+      ),
+    )
+        .then((_) {
+      if (mounted) _fetchCurrentChallenge();
+    });
+  }
+
+  Widget _buildChallengeAction(String friendId, String displayName) {
+    final instance = _getInstanceForFriend(friendId);
+    if (instance == null) {
+      return GameButton(
+        label: 'CHALLENGE',
+        fontSize: 11,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        onPressed: () => _challengeFriend(friendId, displayName),
+      );
+    }
+
+    final status = instance['status'] as String? ?? '';
+    final stakeStatus = instance['stakeStatus'] as String? ?? '';
+
+    if (status == 'ACTIVE' || stakeStatus == 'AGREED') {
+      return GestureDetector(
+        onTap: () => _openChallengeDetail(instance),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: AppColors.accent.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            'ACTIVE',
+            style: PixelText.button(size: 11, color: AppColors.accent),
+          ),
+        ),
+      );
+    }
+
+    // pending_stake / proposing
+    return GestureDetector(
+      onTap: () => _openChallengeDetail(instance),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.orange.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          'NEGOTIATING',
+          style: PixelText.button(size: 11, color: Colors.orange.shade800),
+        ),
+      ),
+    );
+  }
+
   Widget _buildFriendRow(Map<String, dynamic> friend) {
+    final friendId = friend['id'] as String? ?? '';
     final displayName = friend['displayName'] as String? ?? '???';
     final steps = friend['steps'] as int? ?? 0;
     final stepGoal = friend['stepGoal'] as int?;
@@ -388,6 +531,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       progressText = '$steps steps';
     }
 
+    final challengeActive = _hasActiveChallenge();
+
     return Container(
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
@@ -399,15 +544,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       child: Row(
         children: [
           Expanded(
-            child: Text(
-              displayName,
-              style: PixelText.title(size: 14, color: AppColors.textDark),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  displayName,
+                  style: PixelText.title(size: 14, color: AppColors.textDark),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  progressText,
+                  style: PixelText.body(size: 13, color: AppColors.textMid),
+                ),
+              ],
             ),
           ),
-          Text(
-            progressText,
-            style: PixelText.body(size: 13, color: AppColors.textMid),
-          ),
+          if (challengeActive && _displayName != null)
+            _buildChallengeAction(friendId, displayName),
         ],
       ),
     );
@@ -434,6 +587,35 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 onSettings: _openSettings,
               ),
 
+              // Weekly challenge banner
+              if (_hasActiveChallenge()) ...[
+                const SizedBox(height: 16),
+                ContentBoard(
+                  width: double.infinity,
+                  child: Column(
+                    children: [
+                      Text(
+                        'THIS WEEK\u2019S CHALLENGE',
+                        style: PixelText.title(size: 14, color: AppColors.accent),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _currentChallenge!['challenge']['title'] as String? ?? '',
+                        style: PixelText.title(size: 18, color: AppColors.textDark),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _currentChallenge!['challenge']['description'] as String? ?? '',
+                        style: PixelText.body(size: 13, color: AppColors.textMid),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
               // Friends steps
               const SizedBox(height: 16),
               ContentBoard(
@@ -446,14 +628,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       style: PixelText.title(size: 16, color: AppColors.textMid),
                       textAlign: TextAlign.center,
                     ),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 10),
-                      child: Text(
-                        'Track your friends\u2019 progress and\nmotivate them to get their steps in!',
-                        style: PixelText.body(size: 13, color: AppColors.textMid),
-                        textAlign: TextAlign.center,
+                    if (!_hasActiveChallenge())
+                      Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: Text(
+                          'Track your friends\u2019 progress and\nmotivate them to get their steps in!',
+                          style: PixelText.body(size: 13, color: AppColors.textMid),
+                          textAlign: TextAlign.center,
+                        ),
                       ),
-                    ),
+                    if (_hasActiveChallenge())
+                      Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: Text(
+                          'Challenge a friend to compete!',
+                          style: PixelText.body(size: 13, color: AppColors.textMid),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
                     for (final friend in _friendsSteps)
                       _buildFriendRow(friend),
                   ],
@@ -506,23 +698,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       ),
                     ),
                   if (_stepGoal == null) const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: GameButton(
-                      label: 'START A CHALLENGE',
-                      fontSize: 16,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 48,
-                        vertical: 16,
-                      ),
-                      onPressed: _displayName != null
-                          ? () {
-                              // TODO: implement challenge
-                            }
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
                   Stack(
                     clipBehavior: Clip.none,
                     children: [
