@@ -9,6 +9,7 @@ import '../widgets/content_board.dart';
 import '../widgets/game_background.dart';
 import '../widgets/game_button.dart';
 import '../widgets/trail_sign.dart';
+import 'admin_challenge_screen.dart';
 import 'display_name_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -59,20 +60,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     filled: true,
                     fillColor: AppColors.parchmentLight,
                     border: OutlineInputBorder(
-                      borderSide:
-                          BorderSide(color: AppColors.parchmentBorder),
+                      borderSide: BorderSide(color: AppColors.parchmentBorder),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     enabledBorder: OutlineInputBorder(
-                      borderSide:
-                          BorderSide(color: AppColors.parchmentBorder),
+                      borderSide: BorderSide(color: AppColors.parchmentBorder),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(
-                        color: AppColors.accent,
-                        width: 2,
-                      ),
+                      borderSide: BorderSide(color: AppColors.accent, width: 2),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     contentPadding: const EdgeInsets.symmetric(
@@ -126,7 +122,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await widget.authService.updateStepGoal(result);
 
     try {
-      final identityToken = widget.authService.identityToken;
+      final identityToken = widget.authService.authToken;
       if (identityToken != null && identityToken.isNotEmpty) {
         await _backendApiService.setStepGoal(
           identityToken: identityToken,
@@ -135,7 +131,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        showErrorToast(context, 'Couldn\u2019t save your step goal. Please try again.');
+        showErrorToast(
+          context,
+          'Couldn\u2019t save your step goal. Please try again.',
+        );
       }
     }
   }
@@ -238,6 +237,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 onPressed: _showStepGoalDialog,
                               ),
                             ),
+                            if (widget.authService.isAdmin) ...[
+                              const SizedBox(height: 12),
+                              SizedBox(
+                                width: double.infinity,
+                                child: GameButton(
+                                  label: 'ADMIN CHALLENGE TOOLS',
+                                  fontSize: 14,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 14,
+                                  ),
+                                  onPressed: () async {
+                                    await Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            AdminChallengeScreen(
+                                              authService: widget.authService,
+                                            ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),

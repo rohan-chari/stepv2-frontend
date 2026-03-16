@@ -127,8 +127,17 @@ No required environment variables are defined in source.
 |----------|---------|-------------|
 | `BACKEND_BASE_URL` | `http://127.0.0.1:3000` | Compile-time API base URL used by `BackendApiService` for all auth, steps, and friends requests. |
 
+### Local
+
 ```bash
-flutter run --dart-define=BACKEND_BASE_URL=http://127.0.0.1:3000
+# Make sure your backend listens on 0.0.0.0:3000, not just localhost:3000
+# Your iPhone and Mac must be on the same Wi-Fi network
+flutter run --dart-define=BACKEND_BASE_URL=http://<YOUR_LAN_IP>:3000
+```
+
+### Production
+
+```bash
 flutter build ios --dart-define=BACKEND_BASE_URL=https://your-api-host
 ```
 
@@ -182,15 +191,21 @@ On iOS, the app treats `health_authorized` as a cached best-effort flag because 
 flutter test
 ```
 
-Current automated coverage is light: 1 Dart widget smoke test plus 2 scaffold XCTest placeholders in the native Apple host projects. There are no service, backend-contract, or platform integration tests in this repository yet.
+Current automated coverage is still light, but now includes a small Dart unit test file for backend transport-error messaging alongside the widget smoke test and the 2 scaffold XCTest placeholders in the native Apple host projects. There are still no backend-contract or platform integration tests in this repository.
 
 ### Test Coverage
+
+#### Backend transport unit tests - 3 tests (`test/backend_api_service_test.dart`)
+
+| Group | Tests | What's covered |
+|-------|-------|----------------|
+| `describeBackendConnectionError` | 3 | Clear messages for LAN socket failures, iOS App Transport Security HTTP failures, and request timeouts. |
 
 #### Widget smoke test - 1 test (`test/widget_test.dart`)
 
 | Group | Tests | What's covered |
 |-------|-------|----------------|
-| `top-level` | 1 | `StepTrackerApp` pumps successfully and renders the `Step Tracker` title text. |
+| `top-level` | 1 | `StepTrackerApp` pumps successfully and builds the root `MaterialApp`. |
 
 #### iOS host XCTest placeholder - 1 test (`ios/RunnerTests/RunnerTests.swift`)
 
@@ -208,7 +223,8 @@ Current automated coverage is light: 1 Dart widget smoke test plus 2 scaffold XC
 
 ```text
 test/
-  widget_test.dart                 # Boots `StepTrackerApp` and verifies the app title renders
+  backend_api_service_test.dart    # Verifies backend transport failures map to actionable user-facing messages
+  widget_test.dart                 # Boots `StepTrackerApp` and verifies the root app widget builds
 ios/
   RunnerTests/
     RunnerTests.swift              # Default iOS XCTest placeholder
@@ -231,6 +247,7 @@ The iOS host project is the only platform configured for live step tracking toda
 - **Deployment target**: `platform :ios, '14.0'` in `ios/Podfile`
 - **Info.plist usage strings**: `NSHealthShareUsageDescription` and `NSHealthUpdateUsageDescription` are present in `ios/Runner/Info.plist`
 - **Entitlements**: `com.apple.developer.healthkit` and `com.apple.developer.applesignin` are enabled in `ios/Runner/Runner.entitlements`
+- **Local backend access**: `NSAllowsLocalNetworking` is enabled in `ios/Runner/Info.plist` so development builds can call a LAN HTTP backend from a physical iPhone
 - **CocoaPods setup**: `use_frameworks!` is enabled in `ios/Podfile`
 - **Orientation support**: portrait and landscape on iPhone, plus portrait upside-down on iPad, are declared in `ios/Runner/Info.plist`
 

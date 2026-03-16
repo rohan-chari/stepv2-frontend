@@ -49,7 +49,7 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
     setState(() => _isSaving = true);
 
     try {
-      final identityToken = widget.authService.identityToken;
+      final identityToken = widget.authService.authToken;
 
       if (identityToken == null || identityToken.isEmpty) {
         throw Exception('not signed in');

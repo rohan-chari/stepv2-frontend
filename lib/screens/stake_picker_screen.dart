@@ -41,7 +41,7 @@ class _StakePickerScreenState extends State<StakePickerScreen> {
 
   Future<void> _fetchStakes() async {
     try {
-      final token = widget.authService.identityToken;
+      final token = widget.authService.authToken;
       if (token == null || token.isEmpty) return;
 
       final stakes = await _api.fetchStakeCatalog(identityToken: token);
@@ -66,7 +66,7 @@ class _StakePickerScreenState extends State<StakePickerScreen> {
     setState(() => _isSubmitting = true);
 
     try {
-      final token = widget.authService.identityToken;
+      final token = widget.authService.authToken;
       if (token == null || token.isEmpty) return;
 
       if (widget.currentProposalId != null) {

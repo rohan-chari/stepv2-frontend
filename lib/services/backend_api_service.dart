@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -7,16 +8,52 @@ import '../models/step_data.dart';
 /// An API error with a user-friendly message.
 class ApiException implements Exception {
   final String message;
-  const ApiException(this.message);
+  final int? statusCode;
+  const ApiException(this.message, {this.statusCode});
 
   @override
   String toString() => message;
 }
 
+String describeBackendConnectionError(Object error, {required Uri uri}) {
+  final target = uri.hasPort ? '${uri.host}:${uri.port}' : uri.host;
+
+  if (error is TimeoutException) {
+    return 'Request to $target timed out. Make sure the backend is running and reachable from this device.';
+  }
+
+  if (error is SocketException) {
+    final isLoopback = uri.host == '127.0.0.1' || uri.host == 'localhost';
+
+    if (isLoopback) {
+      return "Can't reach the backend at $target. On a physical iPhone, localhost points to the phone itself. Use your Mac's LAN IP instead.";
+    }
+
+    return "Can't reach the backend at $target. Make sure the backend is listening on 0.0.0.0:${uri.port}, your Mac and iPhone are on the same Wi-Fi, and macOS isn't blocking the port.";
+  }
+
+  if (error is HandshakeException) {
+    return 'Secure connection to $target failed. Check the backend HTTPS certificate and TLS configuration.';
+  }
+
+  if (error is HttpException) {
+    if (error.message.contains('App Transport Security')) {
+      return 'iOS blocked insecure HTTP to $target because of App Transport Security. Use HTTPS or allow local HTTP in the iOS Runner target.';
+    }
+
+    return 'Backend request to $target failed: ${error.message}';
+  }
+
+  return 'Could not connect to the backend at $target. Check the server URL and local network access.';
+}
+
 class BackendApiService {
   BackendApiService({HttpClient? httpClient})
-    : _httpClient = httpClient ?? HttpClient();
+    : _httpClient = httpClient ?? HttpClient() {
+    _httpClient.connectionTimeout = _requestTimeout;
+  }
 
+  static const Duration _requestTimeout = Duration(seconds: 15);
   final HttpClient _httpClient;
 
   Future<Map<String, dynamic>> provisionAppleUser({
@@ -43,7 +80,18 @@ class BackendApiService {
       throw const ApiException('Something went wrong. Please try again.');
     }
 
-    return user;
+    return payload;
+  }
+
+  Future<Map<String, dynamic>> refreshSessionToken({
+    required String authToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/auth/session',
+      identityToken: authToken,
+    );
+
+    return _decodeJsonResponse(response);
   }
 
   Future<void> recordSteps({
@@ -60,9 +108,7 @@ class BackendApiService {
     await _decodeJsonResponse(response);
   }
 
-  Future<Map<String, dynamic>> fetchMe({
-    required String identityToken,
-  }) async {
+  Future<Map<String, dynamic>> fetchMe({required String identityToken}) async {
     final response = await _sendGetRequest(
       path: '/auth/me',
       identityToken: identityToken,
@@ -292,21 +338,80 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  Future<Map<String, dynamic>> fetchAdminWeeklyChallenge({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/admin/weekly-challenge',
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> ensureAdminWeeklyChallenge({
+    required String identityToken,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/admin/weekly-challenge/ensure-current',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> resolveAdminWeeklyChallenge({
+    required String identityToken,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/admin/weekly-challenge/resolve-current',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> resetAdminWeeklyChallenge({
+    required String identityToken,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/admin/weekly-challenge/reset-current',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
   Future<HttpClientResponse> _sendGetRequest({
     required String path,
     String? identityToken,
   }) async {
-    final request = await _httpClient.openUrl(
-      'GET',
-      Uri.parse('${BackendConfig.baseUrl}$path'),
-    );
-    if (identityToken != null) {
-      request.headers.set(
-        HttpHeaders.authorizationHeader,
-        'Bearer $identityToken',
-      );
+    final uri = Uri.parse('${BackendConfig.baseUrl}$path');
+
+    try {
+      final request = await _httpClient.openUrl('GET', uri);
+      if (identityToken != null) {
+        request.headers.set(
+          HttpHeaders.authorizationHeader,
+          'Bearer $identityToken',
+        );
+      }
+      return await request.close().timeout(_requestTimeout);
+    } on SocketException catch (error) {
+      throw ApiException(describeBackendConnectionError(error, uri: uri));
+    } on TimeoutException catch (error) {
+      throw ApiException(describeBackendConnectionError(error, uri: uri));
+    } on HandshakeException catch (error) {
+      throw ApiException(describeBackendConnectionError(error, uri: uri));
+    } on HttpException catch (error) {
+      throw ApiException(describeBackendConnectionError(error, uri: uri));
     }
-    return request.close();
   }
 
   Future<HttpClientResponse> _sendJsonRequest({
@@ -315,23 +420,32 @@ class BackendApiService {
     required Map<String, dynamic> body,
     String? identityToken,
   }) async {
-    final request = await _httpClient.openUrl(
-      method,
-      Uri.parse('${BackendConfig.baseUrl}$path'),
-    );
+    final uri = Uri.parse('${BackendConfig.baseUrl}$path');
 
-    request.headers.contentType = ContentType.json;
+    try {
+      final request = await _httpClient.openUrl(method, uri);
 
-    if (identityToken != null) {
-      request.headers.set(
-        HttpHeaders.authorizationHeader,
-        'Bearer $identityToken',
-      );
+      request.headers.contentType = ContentType.json;
+
+      if (identityToken != null) {
+        request.headers.set(
+          HttpHeaders.authorizationHeader,
+          'Bearer $identityToken',
+        );
+      }
+
+      request.write(jsonEncode(body));
+
+      return await request.close().timeout(_requestTimeout);
+    } on SocketException catch (error) {
+      throw ApiException(describeBackendConnectionError(error, uri: uri));
+    } on TimeoutException catch (error) {
+      throw ApiException(describeBackendConnectionError(error, uri: uri));
+    } on HandshakeException catch (error) {
+      throw ApiException(describeBackendConnectionError(error, uri: uri));
+    } on HttpException catch (error) {
+      throw ApiException(describeBackendConnectionError(error, uri: uri));
     }
-
-    request.write(jsonEncode(body));
-
-    return request.close();
   }
 
   Future<Map<String, dynamic>> _decodeJsonResponse(
@@ -349,10 +463,13 @@ class BackendApiService {
     final message = parsedBody['error'];
 
     if (message is String && message.isNotEmpty) {
-      throw ApiException(message);
+      throw ApiException(message, statusCode: response.statusCode);
     }
 
-    throw const ApiException('Something went wrong. Please try again.');
+    throw ApiException(
+      'Something went wrong. Please try again.',
+      statusCode: response.statusCode,
+    );
   }
 
   String _formatDate(DateTime date) {

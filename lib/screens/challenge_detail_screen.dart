@@ -72,7 +72,7 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
   Future<void> _fetchProgress() async {
     setState(() => _isLoading = true);
     try {
-      final token = widget.authService.identityToken;
+      final token = widget.authService.authToken;
       if (token == null || token.isEmpty) return;
 
       final instanceId = _instance['id'] as String;
@@ -95,7 +95,7 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
   Future<void> _acceptStake() async {
     setState(() => _isAccepting = true);
     try {
-      final token = widget.authService.identityToken;
+      final token = widget.authService.authToken;
       if (token == null || token.isEmpty) return;
 
       final result = await _api.respondToStake(

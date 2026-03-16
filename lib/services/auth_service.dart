@@ -5,6 +5,10 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import 'backend_api_service.dart';
 
+bool isAuthenticationFailure(Object error) {
+  return error is ApiException && error.statusCode == 401;
+}
+
 class AuthService {
   AuthService({BackendApiService? backendApiService})
     : _backendApiService = backendApiService ?? BackendApiService();
@@ -14,6 +18,8 @@ class AuthService {
   static const _keyBackendUserId = 'auth_backend_user_id';
   static const _keyStepGoal = 'auth_step_goal';
   static const _keyDisplayName = 'auth_display_name';
+  static const _keySessionToken = 'auth_session_token';
+  static const _keyIsAdmin = 'auth_is_admin';
 
   final BackendApiService _backendApiService;
   String? _identityToken;
@@ -22,13 +28,20 @@ class AuthService {
   String? _lastErrorMessage;
   int? _stepGoal;
   String? _displayName;
+  String? _sessionToken;
+  bool _isAdmin = false;
 
   String? get identityToken => _identityToken;
+  String? get sessionToken => _sessionToken;
+  String? get authToken => _sessionToken ?? _identityToken;
   String? get userId => _backendUserId;
   String? get lastErrorMessage => _lastErrorMessage;
   int? get stepGoal => _stepGoal;
   String? get displayName => _displayName;
+  bool get isAdmin => _isAdmin;
   bool get isSignedIn => _identityToken != null && _userIdentifier != null;
+  bool get hasSessionToken =>
+      _sessionToken != null && _sessionToken!.isNotEmpty;
 
   /// Loads persisted auth state. Returns true if a session exists.
   Future<bool> restoreSession() async {
@@ -38,7 +51,9 @@ class AuthService {
     _backendUserId = prefs.getString(_keyBackendUserId);
     _stepGoal = prefs.getInt(_keyStepGoal);
     _displayName = prefs.getString(_keyDisplayName);
-    return isSignedIn;
+    _sessionToken = prefs.getString(_keySessionToken);
+    _isAdmin = prefs.getBool(_keyIsAdmin) ?? false;
+    return isSignedIn && hasSessionToken;
   }
 
   Future<bool> signInWithApple() async {
@@ -66,17 +81,21 @@ class AuthService {
         );
       }
 
-      final backendUser = await _backendApiService.provisionAppleUser(
+      final response = await _backendApiService.provisionAppleUser(
         identityToken: identityToken,
         userIdentifier: userIdentifier,
         email: credential.email,
         name: _buildDisplayName(credential),
       );
 
+      final backendUser = response['user'] as Map<String, dynamic>;
+
       _identityToken = identityToken;
       _userIdentifier = userIdentifier;
       _backendUserId = backendUser['id'] as String?;
       _displayName = backendUser['displayName'] as String?;
+      _sessionToken = response['sessionToken'] as String?;
+      _isAdmin = backendUser['isAdmin'] as bool? ?? false;
       _lastErrorMessage = null;
 
       await _persist();
@@ -117,6 +136,8 @@ class AuthService {
     _lastErrorMessage = null;
     _stepGoal = null;
     _displayName = null;
+    _sessionToken = null;
+    _isAdmin = false;
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyIdentityToken);
@@ -124,6 +145,24 @@ class AuthService {
     await prefs.remove(_keyBackendUserId);
     await prefs.remove(_keyStepGoal);
     await prefs.remove(_keyDisplayName);
+    await prefs.remove(_keySessionToken);
+    await prefs.remove(_keyIsAdmin);
+  }
+
+  Future<void> updateSessionToken(String? token) async {
+    _sessionToken = token;
+    final prefs = await SharedPreferences.getInstance();
+    if (token != null) {
+      await prefs.setString(_keySessionToken, token);
+    } else {
+      await prefs.remove(_keySessionToken);
+    }
+  }
+
+  Future<void> updateAdminAccess(bool isAdmin) async {
+    _isAdmin = isAdmin;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyIsAdmin, isAdmin);
   }
 
   Future<void> _persist() async {
@@ -140,6 +179,10 @@ class AuthService {
     if (_displayName != null) {
       await prefs.setString(_keyDisplayName, _displayName!);
     }
+    if (_sessionToken != null) {
+      await prefs.setString(_keySessionToken, _sessionToken!);
+    }
+    await prefs.setBool(_keyIsAdmin, _isAdmin);
   }
 
   String? _buildDisplayName(AuthorizationCredentialAppleID credential) {

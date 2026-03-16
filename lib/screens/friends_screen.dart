@@ -50,7 +50,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
 
   Future<void> _loadFriends() async {
     try {
-      final identityToken = widget.authService.identityToken;
+      final identityToken = widget.authService.authToken;
       if (identityToken == null || identityToken.isEmpty) return;
 
       final data = await _backendApiService.fetchFriends(
@@ -104,7 +104,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
 
   Future<void> _searchUsers(String query) async {
     try {
-      final identityToken = widget.authService.identityToken;
+      final identityToken = widget.authService.authToken;
       if (identityToken == null || identityToken.isEmpty) return;
 
       final results = await _backendApiService.searchUsers(
@@ -126,7 +126,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
 
   Future<void> _sendRequest(String addresseeId) async {
     try {
-      final identityToken = widget.authService.identityToken;
+      final identityToken = widget.authService.authToken;
       if (identityToken == null || identityToken.isEmpty) return;
 
       await _backendApiService.sendFriendRequest(
@@ -154,7 +154,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
 
   Future<void> _respond(String friendshipId, bool accept) async {
     try {
-      final identityToken = widget.authService.identityToken;
+      final identityToken = widget.authService.authToken;
       if (identityToken == null || identityToken.isEmpty) return;
 
       await _backendApiService.respondToFriendRequest(

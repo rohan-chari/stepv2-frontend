@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:workmanager/workmanager.dart';
 import 'screens/display_name_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/start_screen.dart';
 import 'services/auth_service.dart';
+import 'services/background_sync_service.dart';
 import 'styles.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
   runApp(const StepTrackerApp());
 }
 

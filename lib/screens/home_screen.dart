@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/step_data.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
+import '../services/background_sync_manager.dart';
 import '../services/health_service.dart';
 import '../styles.dart';
 import '../widgets/capybara.dart';
@@ -20,17 +21,27 @@ import 'stake_picker_screen.dart';
 import 'start_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.authService});
+  const HomeScreen({
+    super.key,
+    required this.authService,
+    this.healthService,
+    this.backendApiService,
+    this.scheduleBackgroundSync,
+  });
 
   final AuthService authService;
+  final HealthService? healthService;
+  final BackendApiService? backendApiService;
+  final Future<bool> Function()? scheduleBackgroundSync;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
-  final HealthService _healthService = HealthService();
-  final BackendApiService _backendApiService = BackendApiService();
+  late final HealthService _healthService;
+  late final BackendApiService _backendApiService;
+  late final Future<bool> Function() _scheduleBackgroundSync;
 
   bool _healthAuthorized = false;
   bool _isLoading = false;
@@ -45,6 +56,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    _healthService = widget.healthService ?? HealthService();
+    _backendApiService = widget.backendApiService ?? BackendApiService();
+    _scheduleBackgroundSync =
+        widget.scheduleBackgroundSync ?? BackgroundSyncManager.scheduleNextSync;
     WidgetsBinding.instance.addObserver(this);
     _restoreAndFetch();
   }
@@ -71,14 +86,56 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _displayName = widget.authService.displayName;
     });
 
+    // Proactively refresh session token to keep it valid
+    final sessionIsValid = await _refreshSessionToken();
+    if (!sessionIsValid || !mounted) return;
+
     final wasAuthorized = await _healthService.restoreHealthAuthState();
     if (!wasAuthorized || !mounted) return;
 
     setState(() => _healthAuthorized = true);
+    await _scheduleBackgroundSync();
     await _fetchSteps();
     _refreshStepGoal();
     _fetchFriendsSteps();
     _fetchCurrentChallenge();
+  }
+
+  Future<bool> _refreshSessionToken() async {
+    try {
+      final token = widget.authService.authToken;
+      if (token == null || token.isEmpty) return false;
+
+      final data = await _backendApiService.refreshSessionToken(
+        authToken: token,
+      );
+      final newToken = data['sessionToken'] as String?;
+      final user = data['user'] as Map<String, dynamic>?;
+      if (newToken != null) {
+        await widget.authService.updateSessionToken(newToken);
+      }
+      if (user != null) {
+        await widget.authService.updateAdminAccess(
+          user['isAdmin'] as bool? ?? false,
+        );
+      }
+      return true;
+    } catch (error) {
+      if (isAuthenticationFailure(error)) {
+        await widget.authService.signOut();
+        if (!mounted) return false;
+
+        showErrorToast(context, 'Session expired. Please sign in again.');
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const StartScreen()),
+          (route) => false,
+        );
+        return false;
+      }
+
+      // Network errors should not force a sign-out.
+      return true;
+    }
   }
 
   Future<void> _enableHealthData() async {
@@ -89,12 +146,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (!authorized) {
         setState(() {
           _isLoading = false;
-          _error = 'Health data access not granted.\nPlease allow access in Settings.';
+          _error =
+              'Health data access not granted.\nPlease allow access in Settings.';
         });
         return;
       }
 
       setState(() => _healthAuthorized = true);
+      await _scheduleBackgroundSync();
       await _fetchSteps();
     } catch (e) {
       setState(() {
@@ -115,7 +174,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       String? syncWarning;
 
       try {
-        final identityToken = widget.authService.identityToken;
+        final identityToken = widget.authService.authToken;
 
         if (identityToken == null || identityToken.isEmpty) {
           throw Exception('not signed in');
@@ -126,7 +185,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           stepData: stepData,
         );
       } catch (e) {
-        syncWarning = 'Steps loaded, but sync failed. Check your connection.';
+        syncWarning = e is ApiException
+            ? 'Steps loaded, but sync failed: ${e.message}'
+            : 'Steps loaded, but sync failed. Check your connection.';
       }
 
       setState(() {
@@ -150,7 +211,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _fetchFriendsSteps() async {
     try {
-      final identityToken = widget.authService.identityToken;
+      final identityToken = widget.authService.authToken;
       if (identityToken == null || identityToken.isEmpty) return;
 
       final now = DateTime.now();
@@ -172,7 +233,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _fetchCurrentChallenge() async {
     try {
-      final identityToken = widget.authService.identityToken;
+      final identityToken = widget.authService.authToken;
       if (identityToken == null || identityToken.isEmpty) return;
 
       final data = await _backendApiService.fetchCurrentChallenge(
@@ -189,7 +250,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _refreshStepGoal() async {
     try {
-      final identityToken = widget.authService.identityToken;
+      final identityToken = widget.authService.authToken;
       if (identityToken == null || identityToken.isEmpty) return;
 
       final user = await _backendApiService.fetchMe(
@@ -198,8 +259,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final goal = user['stepGoal'] as int?;
       final incoming = user['incomingFriendRequests'] as int? ?? 0;
       final displayName = user['displayName'] as String?;
+      final isAdmin = user['isAdmin'] as bool? ?? false;
       await widget.authService.updateStepGoal(goal);
       await widget.authService.updateDisplayName(displayName);
+      await widget.authService.updateAdminAccess(isAdmin);
       if (mounted) {
         setState(() {
           _stepGoal = goal;
@@ -219,13 +282,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ),
     );
     if (!mounted) return;
-    setState(() => _stepGoal = widget.authService.stepGoal);
+
+    setState(() {
+      _stepGoal = widget.authService.stepGoal;
+      _displayName = widget.authService.displayName;
+    });
+    await _fetchCurrentChallenge();
   }
 
   Future<void> _showStepGoalDialog() async {
-    final controller = TextEditingController(
-      text: _stepGoal?.toString() ?? '',
-    );
+    final controller = TextEditingController(text: _stepGoal?.toString() ?? '');
 
     final result = await showDialog<int>(
       context: context,
@@ -265,10 +331,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(
-                        color: AppColors.accent,
-                        width: 2,
-                      ),
+                      borderSide: BorderSide(color: AppColors.accent, width: 2),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     contentPadding: const EdgeInsets.symmetric(
@@ -325,7 +388,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     // Sync to backend in background
     try {
-      final identityToken = widget.authService.identityToken;
+      final identityToken = widget.authService.authToken;
       if (identityToken != null && identityToken.isNotEmpty) {
         await _backendApiService.setStepGoal(
           identityToken: identityToken,
@@ -334,7 +397,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
     } catch (e) {
       if (mounted) {
-        showErrorToast(context, 'Couldn\u2019t save your step goal. Please try again.');
+        showErrorToast(
+          context,
+          'Couldn\u2019t save your step goal. Please try again.',
+        );
       }
     }
   }
@@ -353,30 +419,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 children: [
                   Text(
                     'HEALTH DATA',
-                    style: PixelText.title(
-                      size: 20,
-                      color: AppColors.textDark,
-                    ),
+                    style: PixelText.title(size: 20, color: AppColors.textDark),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 14),
                   Text(
                     'Step Tracker needs access to your health data to count your daily steps.\n\n'
                     "That's all we use - just your step count.",
-                    style: PixelText.body(
-                      size: 14,
-                      color: AppColors.textMid,
-                    ),
+                    style: PixelText.body(size: 14, color: AppColors.textMid),
                     textAlign: TextAlign.center,
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: 14),
                     Text(
                       _error!,
-                      style: PixelText.body(
-                        size: 13,
-                        color: AppColors.error,
-                      ),
+                      style: PixelText.body(size: 13, color: AppColors.error),
                       textAlign: TextAlign.center,
                     ),
                   ],
@@ -387,10 +444,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             if (_isLoading)
               const CircularProgressIndicator(color: AppColors.accent)
             else
-              GameButton(
-                label: 'ENABLE',
-                onPressed: _enableHealthData,
-              ),
+              GameButton(label: 'ENABLE', onPressed: _enableHealthData),
           ],
         ),
       ),
@@ -398,13 +452,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   bool _hasActiveChallenge() {
-    return _currentChallenge != null &&
-        _currentChallenge!['challenge'] != null;
+    return _currentChallenge != null && _currentChallenge!['challenge'] != null;
   }
 
   Future<void> _challengeFriend(String friendId, String friendName) async {
     try {
-      final identityToken = widget.authService.identityToken;
+      final identityToken = widget.authService.authToken;
       if (identityToken == null || identityToken.isEmpty) return;
 
       final result = await _backendApiService.initiateChallenge(
@@ -440,10 +493,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final instances = _currentChallenge?['instances'] as List? ?? [];
     for (final i in instances) {
       final inst = i as Map<String, dynamic>;
-      final aId = inst['userAId'] as String? ??
+      final aId =
+          inst['userAId'] as String? ??
           (inst['userA'] as Map<String, dynamic>?)?['id'] as String? ??
           '';
-      final bId = inst['userBId'] as String? ??
+      final bId =
+          inst['userBId'] as String? ??
           (inst['userB'] as Map<String, dynamic>?)?['id'] as String? ??
           '';
       if (aId == friendId || bId == friendId) return inst;
@@ -456,17 +511,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _currentChallenge?['challenge'] as Map<String, dynamic>? ?? {};
     Navigator.of(context)
         .push<bool>(
-      MaterialPageRoute(
-        builder: (context) => ChallengeDetailScreen(
-          authService: widget.authService,
-          instance: instance,
-          challenge: challenge,
-        ),
-      ),
-    )
+          MaterialPageRoute(
+            builder: (context) => ChallengeDetailScreen(
+              authService: widget.authService,
+              instance: instance,
+              challenge: challenge,
+            ),
+          ),
+        )
         .then((_) {
-      if (mounted) _fetchCurrentChallenge();
-    });
+          if (mounted) _fetchCurrentChallenge();
+        });
   }
 
   Widget _buildChallengeAction(String friendId, String displayName) {
@@ -574,7 +629,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return Positioned.fill(
       child: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.only(left: 24, right: 24, top: 16, bottom: 40),
+          padding: const EdgeInsets.only(
+            left: 24,
+            right: 24,
+            top: 16,
+            bottom: 40,
+          ),
           child: Column(
             children: [
               StepCountCard(
@@ -596,19 +656,31 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     children: [
                       Text(
                         'THIS WEEK\u2019S CHALLENGE',
-                        style: PixelText.title(size: 14, color: AppColors.accent),
+                        style: PixelText.title(
+                          size: 14,
+                          color: AppColors.accent,
+                        ),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        _currentChallenge!['challenge']['title'] as String? ?? '',
-                        style: PixelText.title(size: 18, color: AppColors.textDark),
+                        _currentChallenge!['challenge']['title'] as String? ??
+                            '',
+                        style: PixelText.title(
+                          size: 18,
+                          color: AppColors.textDark,
+                        ),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        _currentChallenge!['challenge']['description'] as String? ?? '',
-                        style: PixelText.body(size: 13, color: AppColors.textMid),
+                        _currentChallenge!['challenge']['description']
+                                as String? ??
+                            '',
+                        style: PixelText.body(
+                          size: 13,
+                          color: AppColors.textMid,
+                        ),
                         textAlign: TextAlign.center,
                       ),
                     ],
@@ -625,7 +697,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   children: [
                     Text(
                       'FRIENDS',
-                      style: PixelText.title(size: 16, color: AppColors.textMid),
+                      style: PixelText.title(
+                        size: 16,
+                        color: AppColors.textMid,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                     if (!_hasActiveChallenge())
@@ -633,7 +708,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         padding: const EdgeInsets.only(top: 10),
                         child: Text(
                           'Track your friends\u2019 progress and\nmotivate them to get their steps in!',
-                          style: PixelText.body(size: 13, color: AppColors.textMid),
+                          style: PixelText.body(
+                            size: 13,
+                            color: AppColors.textMid,
+                          ),
                           textAlign: TextAlign.center,
                         ),
                       ),
@@ -642,12 +720,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         padding: const EdgeInsets.only(top: 10),
                         child: Text(
                           'Challenge a friend to compete!',
-                          style: PixelText.body(size: 13, color: AppColors.textMid),
+                          style: PixelText.body(
+                            size: 13,
+                            color: AppColors.textMid,
+                          ),
                           textAlign: TextAlign.center,
                         ),
                       ),
-                    for (final friend in _friendsSteps)
-                      _buildFriendRow(friend),
+                    for (final friend in _friendsSteps) _buildFriendRow(friend),
                   ],
                 ),
               ),
