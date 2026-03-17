@@ -866,7 +866,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: const Icon(Icons.arrow_back, color: AppColors.textDark),
           onPressed: () {
             Navigator.of(context).pushReplacement(
               PageRouteBuilder(
@@ -883,7 +883,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ),
         title: Text(
           'Step Tracker',
-          style: PixelText.body(size: 14, color: Colors.white),
+          style: PixelText.body(size: 14, color: AppColors.textDark),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,

@@ -41,6 +41,37 @@ class HomeTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final String contentKey;
+    if (!healthAuthorized) {
+      contentKey = 'health';
+    } else if (notificationsState == null) {
+      contentKey = 'notifications';
+    } else {
+      contentKey = 'home';
+    }
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 400),
+      transitionBuilder: (Widget child, Animation<double> animation) {
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1.0, 0.0),
+            end: Offset.zero,
+          ).animate(CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+          )),
+          child: child,
+        );
+      },
+      child: KeyedSubtree(
+        key: ValueKey(contentKey),
+        child: _buildCurrentContent(context),
+      ),
+    );
+  }
+
+  Widget _buildCurrentContent(BuildContext context) {
     if (!healthAuthorized) {
       return _buildPermissionPrompt(context);
     }
@@ -117,7 +148,7 @@ class HomeTab extends StatelessWidget {
       children: [
         Text(
           'TODAY\'S STEPS',
-          style: PixelText.title(size: 14, color: Colors.white).copyWith(
+          style: PixelText.title(size: 14, color: AppColors.textDark).copyWith(
             shadows: [
               const Shadow(
                 color: Color(0x50000000),
@@ -146,7 +177,7 @@ class HomeTab extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             '/ $stepGoal',
-            style: PixelText.body(size: 18, color: Colors.white).copyWith(
+            style: PixelText.body(size: 18, color: AppColors.textDark).copyWith(
               shadows: [
                 const Shadow(
                   color: Color(0x60000000),
@@ -198,7 +229,7 @@ class HomeTab extends StatelessWidget {
         const SizedBox(height: 6),
         Text(
           '$pct% of daily goal',
-          style: PixelText.body(size: 12, color: Colors.white).copyWith(
+          style: PixelText.body(size: 12, color: AppColors.textDark).copyWith(
             shadows: [
               const Shadow(
                 color: Color(0x50000000),
@@ -274,7 +305,7 @@ class HomeTab extends StatelessWidget {
           children: [
             Text(
               'HEALTH DATA',
-              style: PixelText.title(size: 20, color: Colors.white).copyWith(
+              style: PixelText.title(size: 20, color: AppColors.textDark).copyWith(
                 shadows: [
                   const Shadow(
                     color: Color(0x60000000),
@@ -289,7 +320,7 @@ class HomeTab extends StatelessWidget {
             Text(
               'Step Tracker needs access to your health data to count your daily steps.\n\n'
               "That's all we use - just your step count.",
-              style: PixelText.body(size: 14, color: Colors.white).copyWith(
+              style: PixelText.body(size: 14, color: AppColors.textDark).copyWith(
                 shadows: [
                   const Shadow(
                     color: Color(0x60000000),
@@ -327,7 +358,7 @@ class HomeTab extends StatelessWidget {
           children: [
             Text(
               'NOTIFICATIONS',
-              style: PixelText.title(size: 20, color: Colors.white).copyWith(
+              style: PixelText.title(size: 20, color: AppColors.textDark).copyWith(
                 shadows: [
                   const Shadow(
                     color: Color(0x60000000),
@@ -342,7 +373,7 @@ class HomeTab extends StatelessWidget {
             Text(
               'Get notified when a friend challenges you to a step battle!\n\n'
               'We\u2019ll only send important updates \u2014 no spam.',
-              style: PixelText.body(size: 14, color: Colors.white).copyWith(
+              style: PixelText.body(size: 14, color: AppColors.textDark).copyWith(
                 shadows: [
                   const Shadow(
                     color: Color(0x60000000),
