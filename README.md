@@ -133,6 +133,9 @@ No required environment variables are defined in source.
 # Make sure your backend listens on 0.0.0.0:3000, not just localhost:3000
 # Your iPhone and Mac must be on the same Wi-Fi network
 flutter run --dart-define=BACKEND_BASE_URL=http://<YOUR_LAN_IP>:3000
+flutter run --dart-define=BACKEND_BASE_URL=http://192.168.1.188:3000
+flutter run --profile --dart-define=BACKEND_BASE_URL=http://192.168.1.188:3000                                                      
+
 ```
 
 ### Production

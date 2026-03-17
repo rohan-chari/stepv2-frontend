@@ -119,6 +119,22 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
     }
   }
 
+  Future<void> _openEditStake() async {
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (context) => StakePickerScreen(
+          authService: widget.authService,
+          instanceId: _instance['id'] as String,
+          friendName: _friendName(),
+        ),
+      ),
+    );
+
+    if (changed == true && mounted) {
+      Navigator.of(context).pop(true);
+    }
+  }
+
   Future<void> _openCounterPicker() async {
     final proposed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
@@ -211,15 +227,29 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
-              if (isMyProposal)
+              if (isMyProposal) ...[
                 Text(
                   'Waiting for ${_friendName()} to respond...',
                   style: PixelText.body(size: 13, color: AppColors.textMid),
                   textAlign: TextAlign.center,
                 ),
+              ],
             ],
           ),
         ),
+        if (isMyProposal) ...[
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: GameButton(
+              label: 'EDIT STAKE',
+              fontSize: 16,
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 48, vertical: 16),
+              onPressed: _openEditStake,
+            ),
+          ),
+        ],
         if (!isMyProposal) ...[
           const SizedBox(height: 16),
           if (_isAccepting)

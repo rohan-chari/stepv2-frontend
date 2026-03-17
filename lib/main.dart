@@ -1,20 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:workmanager/workmanager.dart';
 import 'screens/display_name_screen.dart';
-import 'screens/home_screen.dart';
+import 'screens/main_shell.dart';
 import 'screens/start_screen.dart';
 import 'services/auth_service.dart';
 import 'services/background_sync_service.dart';
+import 'services/notification_service.dart';
 import 'styles.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
-  runApp(const StepTrackerApp());
+
+  final notificationService = NotificationService();
+  await notificationService.initialize();
+
+  runApp(StepTrackerApp(notificationService: notificationService));
 }
 
 class StepTrackerApp extends StatelessWidget {
-  const StepTrackerApp({super.key});
+  const StepTrackerApp({super.key, required this.notificationService});
+
+  final NotificationService notificationService;
 
   @override
   Widget build(BuildContext context) {
@@ -25,13 +32,15 @@ class StepTrackerApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: AppColors.accent),
         useMaterial3: true,
       ),
-      home: const _SessionGate(),
+      home: _SessionGate(notificationService: notificationService),
     );
   }
 }
 
 class _SessionGate extends StatefulWidget {
-  const _SessionGate();
+  const _SessionGate({required this.notificationService});
+
+  final NotificationService notificationService;
 
   @override
   State<_SessionGate> createState() => _SessionGateState();
@@ -65,13 +74,19 @@ class _SessionGateState extends State<_SessionGate> {
     }
 
     if (_hasSession && _authService.displayName != null) {
-      return HomeScreen(authService: _authService);
+      return MainShell(
+        authService: _authService,
+        notificationService: widget.notificationService,
+      );
     }
 
     if (_hasSession) {
-      return DisplayNameScreen(authService: _authService);
+      return DisplayNameScreen(
+        authService: _authService,
+        notificationService: widget.notificationService,
+      );
     }
 
-    return const StartScreen();
+    return StartScreen(notificationService: widget.notificationService);
   }
 }

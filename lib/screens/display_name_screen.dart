@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
-import 'home_screen.dart';
+import 'main_shell.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
+import '../services/notification_service.dart';
 import '../styles.dart';
 import '../widgets/capybara.dart';
 import '../widgets/error_toast.dart';
@@ -11,9 +12,14 @@ import '../widgets/game_button.dart';
 import '../widgets/trail_sign.dart';
 
 class DisplayNameScreen extends StatefulWidget {
-  const DisplayNameScreen({super.key, required this.authService});
+  const DisplayNameScreen({
+    super.key,
+    required this.authService,
+    this.notificationService,
+  });
 
   final AuthService authService;
+  final NotificationService? notificationService;
 
   @override
   State<DisplayNameScreen> createState() => _DisplayNameScreenState();
@@ -69,8 +75,10 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
       } else {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (context) =>
-                HomeScreen(authService: widget.authService),
+            builder: (context) => MainShell(
+              authService: widget.authService,
+              notificationService: widget.notificationService,
+            ),
           ),
         );
       }

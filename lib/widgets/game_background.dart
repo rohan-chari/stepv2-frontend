@@ -5,14 +5,19 @@ import '../styles.dart';
 /// The shared sky + island ground background used across all screens.
 class GameBackground extends StatelessWidget {
   final Widget child;
+  final double groundHeightFraction;
 
-  const GameBackground({super.key, required this.child});
+  const GameBackground({
+    super.key,
+    required this.child,
+    this.groundHeightFraction = 0.22,
+  });
 
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
-    final groundHeight = screenHeight * 0.22;
+    final groundHeight = screenHeight * groundHeightFraction;
 
     return Stack(
       children: [

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
 import 'display_name_screen.dart';
-import 'home_screen.dart';
+import 'main_shell.dart';
 import '../services/auth_service.dart';
+import '../services/notification_service.dart';
 import '../styles.dart';
 import '../widgets/capybara.dart';
 import '../widgets/error_toast.dart';
@@ -11,7 +12,9 @@ import '../widgets/game_button.dart';
 import '../widgets/trail_sign.dart';
 
 class StartScreen extends StatefulWidget {
-  const StartScreen({super.key});
+  const StartScreen({super.key, this.notificationService});
+
+  final NotificationService? notificationService;
 
   @override
   State<StartScreen> createState() => _StartScreenState();
@@ -31,8 +34,14 @@ class _StartScreenState extends State<StartScreen> {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (context) => _authService.displayName != null
-              ? HomeScreen(authService: _authService)
-              : DisplayNameScreen(authService: _authService),
+              ? MainShell(
+                  authService: _authService,
+                  notificationService: widget.notificationService,
+                )
+              : DisplayNameScreen(
+                  authService: _authService,
+                  notificationService: widget.notificationService,
+                ),
         ),
       );
       return;
@@ -47,8 +56,14 @@ class _StartScreenState extends State<StartScreen> {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (context) => _authService.displayName != null
-              ? HomeScreen(authService: _authService)
-              : DisplayNameScreen(authService: _authService),
+              ? MainShell(
+                  authService: _authService,
+                  notificationService: widget.notificationService,
+                )
+              : DisplayNameScreen(
+                  authService: _authService,
+                  notificationService: widget.notificationService,
+                ),
         ),
       );
       return;

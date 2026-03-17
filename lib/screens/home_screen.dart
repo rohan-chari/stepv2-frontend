@@ -555,18 +555,29 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       );
     }
 
-    // pending_stake / proposing
+    // pending_stake / proposing — differentiate incoming vs outgoing
+    final proposedById = instance['proposedById'] as String? ?? '';
+    final myUserId = widget.authService.userId ?? '';
+    final isIncoming = proposedById.isNotEmpty && proposedById != myUserId;
+
     return GestureDetector(
       onTap: () => _openChallengeDetail(instance),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: Colors.orange.withValues(alpha: 0.15),
+          color: isIncoming
+              ? const Color(0xFFE05040).withValues(alpha: 0.15)
+              : Colors.orange.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(4),
         ),
         child: Text(
-          'NEGOTIATING',
-          style: PixelText.button(size: 11, color: Colors.orange.shade800),
+          isIncoming ? 'RESPOND' : 'WAITING',
+          style: PixelText.button(
+            size: 11,
+            color: isIncoming
+                ? const Color(0xFFE05040)
+                : Colors.orange.shade800,
+          ),
         ),
       ),
     );

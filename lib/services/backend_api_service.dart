@@ -388,6 +388,35 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  Future<void> registerDeviceToken({
+    required String identityToken,
+    required String deviceToken,
+    required String platform,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/notifications/device-token',
+      body: {'deviceToken': deviceToken, 'platform': platform},
+      identityToken: identityToken,
+    );
+
+    await _decodeJsonResponse(response);
+  }
+
+  Future<void> unregisterDeviceToken({
+    required String identityToken,
+    required String deviceToken,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'DELETE',
+      path: '/notifications/device-token',
+      body: {'deviceToken': deviceToken},
+      identityToken: identityToken,
+    );
+
+    await _decodeJsonResponse(response);
+  }
+
   Future<HttpClientResponse> _sendGetRequest({
     required String path,
     String? identityToken,
