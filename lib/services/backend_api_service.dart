@@ -247,11 +247,12 @@ class BackendApiService {
   Future<Map<String, dynamic>> initiateChallenge({
     required String identityToken,
     required String friendUserId,
+    required String stakeId,
   }) async {
     final response = await _sendJsonRequest(
       method: 'POST',
       path: '/challenges/initiate',
-      body: {'friendUserId': friendUserId},
+      body: {'friendUserId': friendUserId, 'stakeId': stakeId},
       identityToken: identityToken,
     );
 

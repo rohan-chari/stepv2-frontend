@@ -464,6 +464,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
               controller: _pageController,
               onPageChanged: (index) {
                 setState(() => _currentTab = index);
+                if (index == 1) _fetchCurrentChallenge();
               },
               children: [
                 HomeTab(

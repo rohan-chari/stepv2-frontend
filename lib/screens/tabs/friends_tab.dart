@@ -206,28 +206,26 @@ class _FriendsTabState extends State<FriendsTab> {
   }
 
   Future<void> _challengeFriend(String friendId, String friendName) async {
+    // Pick a stake first (selection-only mode — no instanceId)
+    final stakeId = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (context) => StakePickerScreen(
+          authService: widget.authService,
+          friendName: friendName,
+        ),
+      ),
+    );
+
+    if (stakeId == null || !mounted) return;
+
     try {
       final identityToken = widget.authService.authToken;
       if (identityToken == null || identityToken.isEmpty) return;
 
-      final result = await _backendApiService.initiateChallenge(
+      await _backendApiService.initiateChallenge(
         identityToken: identityToken,
         friendUserId: friendId,
-      );
-
-      if (!mounted) return;
-
-      final instance = result['instance'] as Map<String, dynamic>?;
-      if (instance == null) return;
-
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => StakePickerScreen(
-            authService: widget.authService,
-            instanceId: instance['id'] as String,
-            friendName: friendName,
-          ),
-        ),
+        stakeId: stakeId,
       );
 
       if (mounted) widget.onChallengeChanged();

@@ -10,14 +10,14 @@ import '../widgets/trail_sign.dart';
 
 class StakePickerScreen extends StatefulWidget {
   final AuthService authService;
-  final String instanceId;
+  final String? instanceId;
   final String friendName;
   final String? currentProposalId;
 
   const StakePickerScreen({
     super.key,
     required this.authService,
-    required this.instanceId,
+    this.instanceId,
     required this.friendName,
     this.currentProposalId,
   });
@@ -63,6 +63,12 @@ class _StakePickerScreenState extends State<StakePickerScreen> {
   Future<void> _submitProposal() async {
     if (_selectedStakeId == null) return;
 
+    // Selection-only mode: no instanceId, just return the chosen stakeId
+    if (widget.instanceId == null) {
+      Navigator.of(context).pop(_selectedStakeId);
+      return;
+    }
+
     setState(() => _isSubmitting = true);
 
     try {
@@ -73,7 +79,7 @@ class _StakePickerScreenState extends State<StakePickerScreen> {
         // Counter-proposing
         await _api.respondToStake(
           identityToken: token,
-          instanceId: widget.instanceId,
+          instanceId: widget.instanceId!,
           accept: false,
           counterStakeId: _selectedStakeId,
         );
@@ -81,7 +87,7 @@ class _StakePickerScreenState extends State<StakePickerScreen> {
         // Initial proposal
         await _api.proposeStake(
           identityToken: token,
-          instanceId: widget.instanceId,
+          instanceId: widget.instanceId!,
           stakeId: _selectedStakeId!,
         );
       }
