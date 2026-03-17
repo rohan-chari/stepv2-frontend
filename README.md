@@ -141,7 +141,7 @@ flutter run --profile --dart-define=BACKEND_BASE_URL=http://192.168.1.188:3000
 ### Production
 
 ```bash
-flutter build ios --dart-define=BACKEND_BASE_URL=https://your-api-host
+flutter build ios --dart-define=BACKEND_BASE_URL=https://steptracker-api.org
 ```
 
 ## Local Persistence
