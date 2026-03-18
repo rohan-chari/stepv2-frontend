@@ -34,6 +34,7 @@ class SettingsTab extends StatefulWidget {
 
 class _SettingsTabState extends State<SettingsTab> {
   final BackendApiService _backendApiService = BackendApiService();
+  final GlobalKey<_StatsSectionState> _statsKey = GlobalKey();
 
   Future<void> _showStepGoalDialog() async {
     final currentGoal = widget.authService.stepGoal;
@@ -145,6 +146,7 @@ class _SettingsTabState extends State<SettingsTab> {
           identityToken: identityToken,
           stepGoal: result,
         );
+        _statsKey.currentState?._loadStats();
       }
     } catch (e) {
       if (mounted) {
@@ -222,12 +224,8 @@ class _SettingsTabState extends State<SettingsTab> {
                   style: PixelText.title(size: 16, color: AppColors.textMid),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'Coming soon...',
-                  style: PixelText.body(size: 13, color: AppColors.textMid),
-                  textAlign: TextAlign.center,
-                ),
+                const SizedBox(height: 12),
+                _StatsSection(key: _statsKey, authService: widget.authService),
               ],
             ),
           ),
@@ -298,6 +296,141 @@ class _SettingsTabState extends State<SettingsTab> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _StatsSection extends StatefulWidget {
+  final AuthService authService;
+  const _StatsSection({super.key, required this.authService});
+
+  @override
+  State<_StatsSection> createState() => _StatsSectionState();
+}
+
+class _StatsSectionState extends State<_StatsSection> {
+  final BackendApiService _api = BackendApiService();
+  bool _isLoading = true;
+  int _thisWeek = 0;
+  int _thisMonth = 0;
+  int _thisYear = 0;
+  int _allTime = 0;
+  int _streak = 0;
+  int _wins = 0;
+  int _losses = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStats();
+  }
+
+  Future<void> _loadStats() async {
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+
+    try {
+      final stats = await _api.fetchStats(identityToken: token);
+
+      if (mounted) {
+        setState(() {
+          _thisWeek = stats['thisWeek'] as int? ?? 0;
+          _thisMonth = stats['thisMonth'] as int? ?? 0;
+          _thisYear = stats['thisYear'] as int? ?? 0;
+          _allTime = stats['allTime'] as int? ?? 0;
+          _streak = stats['streak'] as int? ?? 0;
+          _wins = stats['wins'] as int? ?? 0;
+          _losses = stats['losses'] as int? ?? 0;
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  String _formatSteps(int steps) {
+    if (steps >= 1000) {
+      return '${(steps / 1000).toStringAsFixed(1)}k';
+    }
+    return '$steps';
+  }
+
+  Widget _buildStatCard(String label, String value) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        decoration: BoxDecoration(
+          color: AppColors.parchmentLight,
+          border: Border.all(color: AppColors.parchmentBorder),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          children: [
+            Text(
+              value,
+              style: PixelText.number(size: 18, color: AppColors.accent),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: PixelText.body(size: 10, color: AppColors.textMid),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Padding(
+        padding: EdgeInsets.all(12),
+        child: Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              color: AppColors.accent,
+              strokeWidth: 2,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            _buildStatCard('THIS WEEK', _formatSteps(_thisWeek)),
+            const SizedBox(width: 12),
+            _buildStatCard('THIS MONTH', _formatSteps(_thisMonth)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            _buildStatCard('THIS YEAR', _formatSteps(_thisYear)),
+            const SizedBox(width: 12),
+            _buildStatCard('ALL TIME', _formatSteps(_allTime)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            _buildStatCard('GOAL STREAK', '$_streak day${_streak == 1 ? '' : 's'}'),
+            const SizedBox(width: 12),
+            _buildStatCard('RECORD', '$_wins W - $_losses L'),
+          ],
+        ),
+      ],
     );
   }
 }

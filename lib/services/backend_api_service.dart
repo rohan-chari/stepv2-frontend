@@ -339,6 +339,31 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  Future<Map<String, dynamic>> fetchStats({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/steps/stats',
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  Future<List<Map<String, dynamic>>> fetchStepsHistory({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/steps',
+      identityToken: identityToken,
+    );
+
+    final payload = await _decodeJsonResponse(response);
+    final records = payload['records'];
+    if (records is! List) return [];
+    return records.cast<Map<String, dynamic>>();
+  }
+
   Future<Map<String, dynamic>> fetchAdminWeeklyChallenge({
     required String identityToken,
   }) async {

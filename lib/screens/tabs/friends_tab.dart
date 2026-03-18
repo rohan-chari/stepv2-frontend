@@ -9,15 +9,12 @@ import '../../widgets/error_toast.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_icon_button.dart';
 import '../../widgets/tab_layout.dart';
-import '../challenge_detail_screen.dart';
-import '../stake_picker_screen.dart';
 
 class FriendsTab extends StatefulWidget {
   final AuthService authService;
   final List<Map<String, dynamic>> friendsSteps;
   final Map<String, dynamic>? currentChallenge;
   final VoidCallback onFriendsChanged;
-  final VoidCallback onChallengeChanged;
 
   const FriendsTab({
     super.key,
@@ -25,7 +22,6 @@ class FriendsTab extends StatefulWidget {
     required this.friendsSteps,
     required this.currentChallenge,
     required this.onFriendsChanged,
-    required this.onChallengeChanged,
   });
 
   @override
@@ -57,10 +53,6 @@ class _FriendsTabState extends State<FriendsTab> {
     _searchController.dispose();
     super.dispose();
   }
-
-  bool get _hasActiveChallenge =>
-      widget.currentChallenge != null &&
-      widget.currentChallenge!['challenge'] != null;
 
   Future<void> _loadFriends() async {
     try {
@@ -204,108 +196,33 @@ class _FriendsTabState extends State<FriendsTab> {
     return null;
   }
 
-  Future<void> _challengeFriend(String friendId, String friendName) async {
-    // Pick a stake first (selection-only mode — no instanceId)
-    final stakeId = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (context) => StakePickerScreen(
-          authService: widget.authService,
-          friendName: friendName,
-        ),
-      ),
-    );
-
-    if (stakeId == null || !mounted) return;
-
-    try {
-      final identityToken = widget.authService.authToken;
-      if (identityToken == null || identityToken.isEmpty) return;
-
-      await _backendApiService.initiateChallenge(
-        identityToken: identityToken,
-        friendUserId: friendId,
-        stakeId: stakeId,
-      );
-
-      if (mounted) widget.onChallengeChanged();
-    } catch (e) {
-      if (mounted) showErrorToast(context, e.toString());
-    }
-  }
-
-  void _openChallengeDetail(Map<String, dynamic> instance) {
-    final challenge =
-        widget.currentChallenge?['challenge'] as Map<String, dynamic>? ?? {};
-    Navigator.of(context)
-        .push<bool>(
-          MaterialPageRoute(
-            builder: (context) => ChallengeDetailScreen(
-              authService: widget.authService,
-              instance: instance,
-              challenge: challenge,
-            ),
-          ),
-        )
-        .then((_) {
-          if (mounted) widget.onChallengeChanged();
-        });
-  }
-
-  Widget _buildChallengeAction(String friendId, String displayName) {
-    final instance = _getInstanceForFriend(friendId);
-    if (instance == null) {
-      return PillButton(
-        label: 'CHALLENGE',
-        variant: PillButtonVariant.secondary,
-        fontSize: 11,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        onPressed: () => _challengeFriend(friendId, displayName),
-      );
-    }
-
-    final status = instance['status'] as String? ?? '';
-    final stakeStatus = instance['stakeStatus'] as String? ?? '';
-
-    if (status == 'ACTIVE' || stakeStatus == 'AGREED') {
-      return GestureDetector(
-        onTap: () => _openChallengeDetail(instance),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: AppColors.pillGreen.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            'ACTIVE',
-            style: PixelText.pill(size: 11, color: AppColors.pillGreen),
-          ),
-        ),
-      );
-    }
-
-    final proposedById = instance['proposedById'] as String? ?? '';
-    final myUserId = widget.authService.userId ?? '';
-    final isIncoming = proposedById.isNotEmpty && proposedById != myUserId;
-
-    return GestureDetector(
-      onTap: () => _openChallengeDetail(instance),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: isIncoming
-              ? AppColors.pillTerra.withValues(alpha: 0.15)
-              : AppColors.pillGold.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          isIncoming ? 'RESPOND' : 'WAITING',
-          style: PixelText.pill(
-            size: 11,
-            color: isIncoming ? AppColors.pillTerra : AppColors.pillGold,
-          ),
-        ),
-      ),
-    );
+  /// Sort friends by goal progress percentage descending.
+  List<Map<String, dynamic>> _sortedFriends() {
+    final sorted = List<Map<String, dynamic>>.from(_friends);
+    sorted.sort((a, b) {
+      final aId = a['id'] as String? ?? '';
+      final bId = b['id'] as String? ?? '';
+      int aSteps = 0, bSteps = 0;
+      int? aGoal, bGoal;
+      for (final fs in widget.friendsSteps) {
+        if (fs['id'] == aId) {
+          aSteps = fs['steps'] as int? ?? 0;
+          aGoal = fs['stepGoal'] as int?;
+        }
+        if (fs['id'] == bId) {
+          bSteps = fs['steps'] as int? ?? 0;
+          bGoal = fs['stepGoal'] as int?;
+        }
+      }
+      final aPct = (aGoal != null && aGoal > 0)
+          ? aSteps / aGoal
+          : aSteps / 10000.0;
+      final bPct = (bGoal != null && bGoal > 0)
+          ? bSteps / bGoal
+          : bSteps / 10000.0;
+      return bPct.compareTo(aPct);
+    });
+    return sorted;
   }
 
   Widget _buildSearchDropdown() {
@@ -426,9 +343,38 @@ class _FriendsTabState extends State<FriendsTab> {
     );
   }
 
-  Widget _buildFriendRow(Map<String, dynamic> friend) {
+  Widget _buildStatusBadge(Map<String, dynamic> instance) {
+    final myUserId = widget.authService.userId ?? '';
+    final status = instance['status'] as String? ?? '';
+    final stakeStatus = instance['stakeStatus'] as String? ?? '';
+
+    String label;
+    Color color;
+    if (status == 'ACTIVE' || stakeStatus == 'AGREED') {
+      label = 'ACTIVE';
+      color = AppColors.pillGreen;
+    } else {
+      final proposedById = instance['proposedById'] as String? ?? '';
+      final isIncoming = proposedById.isNotEmpty && proposedById != myUserId;
+      label = isIncoming ? 'RESPOND' : 'WAITING';
+      color = isIncoming ? AppColors.pillTerra : AppColors.pillGold;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        label,
+        style: PixelText.pill(size: 11, color: color),
+      ),
+    );
+  }
+
+  Widget _buildFriendRow(Map<String, dynamic> friend, int rank) {
     final friendId = friend['id'] as String? ?? '';
-    final displayName = friend['displayName'] as String? ?? '???';
 
     // Find step data from shared friendsSteps
     int steps = 0;
@@ -441,13 +387,14 @@ class _FriendsTabState extends State<FriendsTab> {
       }
     }
 
-    String progressText;
-    if (friendStepGoal != null && friendStepGoal > 0) {
-      final pct = ((steps / friendStepGoal) * 100).round();
-      progressText = '$steps / $friendStepGoal  ($pct%)';
-    } else {
-      progressText = '$steps steps';
-    }
+    final progress = (friendStepGoal != null && friendStepGoal > 0)
+        ? (steps / friendStepGoal).clamp(0.0, 1.0)
+        : 0.0;
+    final pct = (progress * 100).round();
+    final displayName = friend['displayName'] as String? ?? '???';
+
+    // Challenge status badge
+    final instance = _getInstanceForFriend(friendId);
 
     return Container(
       margin: const EdgeInsets.only(top: 8),
@@ -459,6 +406,13 @@ class _FriendsTabState extends State<FriendsTab> {
       ),
       child: Row(
         children: [
+          SizedBox(
+            width: 28,
+            child: Text(
+              '#$rank',
+              style: PixelText.title(size: 13, color: AppColors.textMid),
+            ),
+          ),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -467,16 +421,50 @@ class _FriendsTabState extends State<FriendsTab> {
                   displayName,
                   style: PixelText.title(size: 14, color: AppColors.textDark),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  progressText,
-                  style: PixelText.body(size: 13, color: AppColors.textMid),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: FractionallySizedBox(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: progress,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [
+                                  AppColors.pillGreen,
+                                  AppColors.pillGreenDark,
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      friendStepGoal != null && friendStepGoal > 0
+                          ? '$pct%'
+                          : '$steps',
+                      style:
+                          PixelText.body(size: 12, color: AppColors.textMid),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-          if (_hasActiveChallenge && widget.authService.displayName != null)
-            _buildChallengeAction(friendId, displayName),
+          if (instance != null) ...[
+            const SizedBox(width: 8),
+            _buildStatusBadge(instance),
+          ],
         ],
       ),
     );
@@ -493,6 +481,8 @@ class _FriendsTabState extends State<FriendsTab> {
     final searchBorderRadius = _showDropdown
         ? const BorderRadius.vertical(top: Radius.circular(8))
         : BorderRadius.circular(8);
+
+    final sortedFriends = _sortedFriends();
 
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
@@ -544,8 +534,7 @@ class _FriendsTabState extends State<FriendsTab> {
                             ),
                             borderRadius: searchBorderRadius,
                           ),
-                          contentPadding:
-                              const EdgeInsets.symmetric(
+                          contentPadding: const EdgeInsets.symmetric(
                             horizontal: 16,
                             vertical: 12,
                           ),
@@ -632,9 +621,9 @@ class _FriendsTabState extends State<FriendsTab> {
                 ),
             ],
 
-            // Friends list with steps
-            _buildSectionHeader('YOUR FRIENDS'),
-            if (_friends.isEmpty)
+            // Friends leaderboard
+            _buildSectionHeader('LEADERBOARD'),
+            if (sortedFriends.isEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
@@ -646,8 +635,8 @@ class _FriendsTabState extends State<FriendsTab> {
                   textAlign: TextAlign.center,
                 ),
               ),
-            for (final friend in _friends)
-              _buildFriendRow(friend),
+            for (int i = 0; i < sortedFriends.length; i++)
+              _buildFriendRow(sortedFriends[i], i + 1),
           ],
         ),
       ),

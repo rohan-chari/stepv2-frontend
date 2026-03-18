@@ -56,6 +56,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   String? _displayName;
   List<Map<String, dynamic>> _friendsSteps = [];
   Map<String, dynamic>? _currentChallenge;
+  Map<String, dynamic>? _activeChallengeProgress;
 
   @override
   void initState() {
@@ -275,6 +276,24 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       if (mounted) {
         setState(() => _currentChallenge = data);
       }
+
+      // Fetch progress for first active instance (for Home tab summary)
+      final instances = data['instances'] as List? ?? [];
+      for (final i in instances) {
+        final inst = i as Map<String, dynamic>;
+        if (inst['status'] == 'ACTIVE') {
+          try {
+            final progress = await _backendApiService.fetchChallengeProgress(
+              identityToken: identityToken,
+              instanceId: inst['id'] as String,
+            );
+            if (mounted) {
+              setState(() => _activeChallengeProgress = progress);
+            }
+          } catch (_) {}
+          break;
+        }
+      }
     } catch (_) {}
   }
 
@@ -483,10 +502,15 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   onEnableNotifications: _enableNotifications,
                   onSetStepGoal: _showStepGoalDialog,
                   onDisplayNameChanged: _syncSettingsState,
+                  currentChallenge: _currentChallenge,
+                  friendsSteps: _friendsSteps,
+                  activeChallengeProgress: _activeChallengeProgress,
+                  onChallengeChanged: _fetchCurrentChallenge,
                 ),
                 ChallengesTab(
                   authService: widget.authService,
                   currentChallenge: _currentChallenge,
+                  friendsSteps: _friendsSteps,
                   onChallengeChanged: _fetchCurrentChallenge,
                 ),
                 FriendsTab(
@@ -497,7 +521,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     _refreshStepGoal();
                     _fetchFriendsSteps();
                   },
-                  onChallengeChanged: _fetchCurrentChallenge,
                 ),
                 SettingsTab(
                   authService: widget.authService,
