@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/step_data.dart';
@@ -59,6 +61,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   List<Map<String, dynamic>> _friendsSteps = [];
   Map<String, dynamic>? _currentChallenge;
   Map<String, dynamic>? _activeChallengeProgress;
+  Timer? _foregroundPollTimer;
+  static const Duration _foregroundPollInterval = Duration(minutes: 5);
 
   @override
   void initState() {
@@ -74,6 +78,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _foregroundPollTimer?.cancel();
     _pageController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -86,7 +91,25 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _refreshStepGoal();
       _fetchFriendsSteps();
       _fetchCurrentChallenge();
+      _startForegroundPolling();
+    } else if (state == AppLifecycleState.paused) {
+      _stopForegroundPolling();
     }
+  }
+
+  void _startForegroundPolling() {
+    _foregroundPollTimer?.cancel();
+    _foregroundPollTimer = Timer.periodic(_foregroundPollInterval, (_) {
+      if (_healthAuthorized) {
+        _fetchSteps();
+        _refreshStepGoal();
+      }
+    });
+  }
+
+  void _stopForegroundPolling() {
+    _foregroundPollTimer?.cancel();
+    _foregroundPollTimer = null;
   }
 
   Future<void> _restoreAndFetch() async {
@@ -108,6 +131,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _refreshStepGoal();
     _fetchFriendsSteps();
     _fetchCurrentChallenge();
+    _startForegroundPolling();
   }
 
   Future<bool> _refreshSessionToken() async {

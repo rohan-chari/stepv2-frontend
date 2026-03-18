@@ -36,7 +36,7 @@ void main() {
     expect(arguments['uniqueName'], BackgroundSyncManager.taskIdentifier);
     expect(arguments['taskName'], BackgroundSyncManager.taskName);
     expect(arguments['networkType'], 'connected');
-    expect(arguments['existingWorkPolicy'], 'keep');
+    expect(arguments['existingWorkPolicy'], 'replace');
     expect(arguments['initialDelaySeconds'], 3600);
   });
 
