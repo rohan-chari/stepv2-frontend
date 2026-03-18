@@ -60,7 +60,6 @@ class WoodenTabBar extends StatelessWidget {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final tabWidth = constraints.maxWidth / items.length;
-                const boardWidth = 72.0;
                 const boardHeight = 54.0;
 
                 return Stack(
@@ -69,11 +68,10 @@ class WoodenTabBar extends StatelessWidget {
                     AnimatedPositioned(
                       duration: const Duration(milliseconds: 250),
                       curve: Curves.easeOutCubic,
-                      left: tabWidth * currentIndex +
-                          (tabWidth - boardWidth) / 2,
+                      left: tabWidth * currentIndex,
                       top: 0,
                       child: SizedBox(
-                        width: boardWidth,
+                        width: tabWidth,
                         height: boardHeight,
                         child: const _MiniBulletinBoard(),
                       ),

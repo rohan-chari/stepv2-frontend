@@ -17,6 +17,7 @@ import 'start_screen.dart';
 import 'tabs/challenges_tab.dart';
 import 'tabs/friends_tab.dart';
 import 'tabs/home_tab.dart';
+import 'tabs/profile_tab.dart';
 import 'tabs/settings_tab.dart';
 
 class MainShell extends StatefulWidget {
@@ -54,6 +55,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   int? _stepGoal;
   int _incomingFriendRequests = 0;
   String? _displayName;
+  String? _email;
   List<Map<String, dynamic>> _friendsSteps = [];
   Map<String, dynamic>? _currentChallenge;
   Map<String, dynamic>? _activeChallengeProgress;
@@ -308,6 +310,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       final goal = user['stepGoal'] as int?;
       final incoming = user['incomingFriendRequests'] as int? ?? 0;
       final displayName = user['displayName'] as String?;
+      final email = user['email'] as String?;
       final isAdmin = user['isAdmin'] as bool? ?? false;
       await widget.authService.updateStepGoal(goal);
       await widget.authService.updateDisplayName(displayName);
@@ -317,6 +320,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           _stepGoal = goal;
           _incomingFriendRequests = incoming;
           _displayName = displayName;
+          _email = email;
         });
       }
     } catch (_) {}
@@ -522,10 +526,15 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     _fetchFriendsSteps();
                   },
                 ),
-                SettingsTab(
+                ProfileTab(
                   authService: widget.authService,
                   displayName: _displayName,
                   stepGoal: _stepGoal,
+                  email: _email,
+                  onSettingsChanged: _syncSettingsState,
+                ),
+                SettingsTab(
+                  authService: widget.authService,
                   onSettingsChanged: _syncSettingsState,
                   notificationService: widget.notificationService,
                 ),
@@ -560,6 +569,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   icon: Icons.people_rounded,
                   label: 'Friends',
                   badgeCount: _incomingFriendRequests,
+                ),
+                const WoodenTabItem(
+                  icon: Icons.person_rounded,
+                  label: 'Profile',
                 ),
                 const WoodenTabItem(
                   icon: Icons.settings_rounded,
