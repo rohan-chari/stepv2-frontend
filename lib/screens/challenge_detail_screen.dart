@@ -6,7 +6,7 @@ import '../styles.dart';
 import '../widgets/content_board.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/game_background.dart';
-import '../widgets/game_button.dart';
+import '../widgets/pill_button.dart';
 import '../widgets/trail_sign.dart';
 import 'stake_picker_screen.dart';
 
@@ -181,28 +181,27 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: GameButton(
-              label: 'PICK A STAKE',
-              fontSize: 16,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
-              onPressed: () async {
-                final proposed = await Navigator.of(context).push<bool>(
-                  MaterialPageRoute(
-                    builder: (context) => StakePickerScreen(
-                      authService: widget.authService,
-                      instanceId: _instance['id'] as String,
-                      friendName: _friendName(),
-                    ),
+          PillButton(
+            label: 'PICK A STAKE',
+            variant: PillButtonVariant.primary,
+            fontSize: 16,
+            fullWidth: true,
+            padding:
+                const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
+            onPressed: () async {
+              final proposed = await Navigator.of(context).push<bool>(
+                MaterialPageRoute(
+                  builder: (context) => StakePickerScreen(
+                    authService: widget.authService,
+                    instanceId: _instance['id'] as String,
+                    friendName: _friendName(),
                   ),
-                );
-                if (proposed == true && mounted) {
-                  Navigator.of(context).pop(true);
-                }
-              },
-            ),
+                ),
+              );
+              if (proposed == true && mounted) {
+                Navigator.of(context).pop(true);
+              }
+            },
           ),
         ],
       );
@@ -239,15 +238,14 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
         ),
         if (isMyProposal) ...[
           const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: GameButton(
-              label: 'EDIT STAKE',
-              fontSize: 16,
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 48, vertical: 16),
-              onPressed: _openEditStake,
-            ),
+          PillButton(
+            label: 'EDIT STAKE',
+            variant: PillButtonVariant.secondary,
+            fontSize: 16,
+            fullWidth: true,
+            padding: const EdgeInsets.symmetric(
+                horizontal: 48, vertical: 16),
+            onPressed: _openEditStake,
           ),
         ],
         if (!isMyProposal) ...[
@@ -256,26 +254,24 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
             const Center(
                 child: CircularProgressIndicator(color: AppColors.accent))
           else ...[
-            SizedBox(
-              width: double.infinity,
-              child: GameButton(
-                label: 'ACCEPT STAKE',
-                fontSize: 16,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 48, vertical: 16),
-                onPressed: _acceptStake,
-              ),
+            PillButton(
+              label: 'ACCEPT STAKE',
+              variant: PillButtonVariant.primary,
+              fontSize: 16,
+              fullWidth: true,
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 48, vertical: 16),
+              onPressed: _acceptStake,
             ),
             const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: GameButton(
-                label: 'COUNTER',
-                fontSize: 16,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 48, vertical: 16),
-                onPressed: _openCounterPicker,
-              ),
+            PillButton(
+              label: 'COUNTER',
+              variant: PillButtonVariant.secondary,
+              fontSize: 16,
+              fullWidth: true,
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 48, vertical: 16),
+              onPressed: _openCounterPicker,
             ),
           ],
         ],
@@ -361,7 +357,7 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
                                 style: PixelText.number(
                                   size: 28,
                                   color: winning
-                                      ? AppColors.accent
+                                      ? AppColors.pillGreen
                                       : AppColors.textDark,
                                 ),
                               ),
@@ -388,7 +384,7 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
                                 style: PixelText.number(
                                   size: 28,
                                   color: !winning
-                                      ? AppColors.accent
+                                      ? AppColors.pillGreen
                                       : AppColors.textDark,
                                 ),
                               ),

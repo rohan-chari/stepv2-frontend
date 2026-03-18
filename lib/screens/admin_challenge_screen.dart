@@ -6,7 +6,7 @@ import '../styles.dart';
 import '../widgets/content_board.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/game_background.dart';
-import '../widgets/game_button.dart';
+import '../widgets/pill_button.dart';
 import '../widgets/trail_sign.dart';
 
 class AdminChallengeScreen extends StatefulWidget {
@@ -269,76 +269,73 @@ class _AdminChallengeScreenState extends State<AdminChallengeScreen> {
                               _stringOrDash(instanceCounts['completed']),
                             ),
                             const SizedBox(height: 18),
-                            SizedBox(
-                              width: double.infinity,
-                              child: GameButton(
-                                label: _isRunningAction
-                                    ? 'WORKING...'
-                                    : 'ENSURE CURRENT WEEK',
-                                fontSize: 14,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 24,
-                                  vertical: 14,
-                                ),
-                                onPressed: _isRunningAction
-                                    ? null
-                                    : () => _runAction(
-                                        (token) => _backendApiService
-                                            .ensureAdminWeeklyChallenge(
-                                              identityToken: token,
-                                            ),
-                                        successMessage:
-                                            'Current weekly challenge ensured.',
-                                      ),
+                            PillButton(
+                              label: _isRunningAction
+                                  ? 'WORKING...'
+                                  : 'ENSURE CURRENT WEEK',
+                              variant: PillButtonVariant.primary,
+                              fontSize: 13,
+                              fullWidth: true,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 12,
                               ),
+                              onPressed: _isRunningAction
+                                  ? null
+                                  : () => _runAction(
+                                      (token) => _backendApiService
+                                          .ensureAdminWeeklyChallenge(
+                                            identityToken: token,
+                                          ),
+                                      successMessage:
+                                          'Current weekly challenge ensured.',
+                                    ),
                             ),
-                            const SizedBox(height: 12),
-                            SizedBox(
-                              width: double.infinity,
-                              child: GameButton(
-                                label: _isRunningAction
-                                    ? 'WORKING...'
-                                    : 'RESOLVE CURRENT WEEK',
-                                fontSize: 14,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 24,
-                                  vertical: 14,
-                                ),
-                                onPressed: _isRunningAction
-                                    ? null
-                                    : () => _runAction(
-                                        (token) => _backendApiService
-                                            .resolveAdminWeeklyChallenge(
-                                              identityToken: token,
-                                            ),
-                                        successMessage:
-                                            'Current weekly challenge resolved.',
-                                      ),
+                            const SizedBox(height: 10),
+                            PillButton(
+                              label: _isRunningAction
+                                  ? 'WORKING...'
+                                  : 'RESOLVE CURRENT WEEK',
+                              variant: PillButtonVariant.secondary,
+                              fontSize: 13,
+                              fullWidth: true,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 12,
                               ),
+                              onPressed: _isRunningAction
+                                  ? null
+                                  : () => _runAction(
+                                      (token) => _backendApiService
+                                          .resolveAdminWeeklyChallenge(
+                                            identityToken: token,
+                                          ),
+                                      successMessage:
+                                          'Current weekly challenge resolved.',
+                                    ),
                             ),
-                            const SizedBox(height: 12),
-                            SizedBox(
-                              width: double.infinity,
-                              child: GameButton(
-                                label: _isRunningAction
-                                    ? 'WORKING...'
-                                    : 'RESET CURRENT WEEK',
-                                fontSize: 14,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 24,
-                                  vertical: 14,
-                                ),
-                                onPressed: _isRunningAction
-                                    ? null
-                                    : () => _runAction(
-                                        (token) => _backendApiService
-                                            .resetAdminWeeklyChallenge(
-                                              identityToken: token,
-                                            ),
-                                        successMessage:
-                                            'Current week reset for testing.',
-                                      ),
+                            const SizedBox(height: 10),
+                            PillButton(
+                              label: _isRunningAction
+                                  ? 'WORKING...'
+                                  : 'RESET CURRENT WEEK',
+                              variant: PillButtonVariant.accent,
+                              fontSize: 13,
+                              fullWidth: true,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 12,
                               ),
+                              onPressed: _isRunningAction
+                                  ? null
+                                  : () => _runAction(
+                                      (token) => _backendApiService
+                                          .resetAdminWeeklyChallenge(
+                                            identityToken: token,
+                                          ),
+                                      successMessage:
+                                          'Current week reset for testing.',
+                                    ),
                             ),
                             const SizedBox(height: 20),
                             Text(

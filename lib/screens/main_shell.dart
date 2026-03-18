@@ -10,7 +10,7 @@ import '../styles.dart';
 import '../widgets/capybara.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/game_background.dart';
-import '../widgets/game_button.dart';
+import '../widgets/pill_button.dart';
 import '../widgets/trail_sign.dart';
 import '../widgets/wooden_tab_bar.dart';
 import 'start_screen.dart';
@@ -362,9 +362,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                 Row(
                   children: [
                     Expanded(
-                      child: GameButton(
+                      child: PillButton(
                         label: 'CANCEL',
-                        fontSize: 14,
+                        variant: PillButtonVariant.secondary,
+                        fontSize: 13,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
                           vertical: 10,
@@ -374,9 +375,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: GameButton(
+                      child: PillButton(
                         label: 'SAVE',
-                        fontSize: 14,
+                        variant: PillButtonVariant.primary,
+                        fontSize: 13,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
                           vertical: 10,

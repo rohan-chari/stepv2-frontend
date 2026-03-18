@@ -4,7 +4,7 @@ import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../styles.dart';
 import '../../widgets/content_board.dart';
-import '../../widgets/game_button.dart';
+import '../../widgets/pill_button.dart';
 import '../display_name_screen.dart';
 
 class HomeTab extends StatelessWidget {
@@ -218,7 +218,7 @@ class HomeTab extends StatelessWidget {
               child: Container(
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [AppColors.accent, AppColors.accentLight],
+                    colors: [AppColors.pillGreen, AppColors.pillGreenDark],
                   ),
                   borderRadius: BorderRadius.circular(5),
                 ),
@@ -343,7 +343,11 @@ class HomeTab extends StatelessWidget {
             if (isLoading)
               const CircularProgressIndicator(color: AppColors.accent)
             else
-              GameButton(label: 'ENABLE', onPressed: onEnableHealth),
+              PillButton(
+                label: 'ENABLE HEALTH DATA',
+                variant: PillButtonVariant.primary,
+                onPressed: onEnableHealth,
+              ),
           ],
         ),
       ),
@@ -385,7 +389,11 @@ class HomeTab extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
-            GameButton(label: 'ENABLE', onPressed: onEnableNotifications),
+            PillButton(
+              label: 'ENABLE NOTIFICATIONS',
+              variant: PillButtonVariant.primary,
+              onPressed: onEnableNotifications,
+            ),
           ],
         ),
       ),
@@ -397,36 +405,34 @@ class HomeTab extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (displayName == null)
-          SizedBox(
-            width: double.infinity,
-            child: GameButton(
-              label: 'SET DISPLAY NAME',
-              fontSize: 14,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              onPressed: () async {
-                await Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => DisplayNameScreen(
-                      authService: authService,
-                    ),
+          PillButton(
+            label: 'SET DISPLAY NAME',
+            variant: PillButtonVariant.secondary,
+            fontSize: 14,
+            fullWidth: true,
+            padding:
+                const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            onPressed: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => DisplayNameScreen(
+                    authService: authService,
                   ),
-                );
-                onDisplayNameChanged();
-              },
-            ),
+                ),
+              );
+              onDisplayNameChanged();
+            },
           ),
         if (displayName == null) const SizedBox(height: 10),
         if (stepGoal == null)
-          SizedBox(
-            width: double.infinity,
-            child: GameButton(
-              label: 'SET STEP GOAL',
-              fontSize: 14,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              onPressed: onSetStepGoal,
-            ),
+          PillButton(
+            label: 'SET STEP GOAL',
+            variant: PillButtonVariant.secondary,
+            fontSize: 14,
+            fullWidth: true,
+            padding:
+                const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            onPressed: onSetStepGoal,
           ),
       ],
     );

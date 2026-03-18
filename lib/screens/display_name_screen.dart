@@ -8,7 +8,7 @@ import '../styles.dart';
 import '../widgets/capybara.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/game_background.dart';
-import '../widgets/game_button.dart';
+import '../widgets/pill_button.dart';
 import '../widgets/trail_sign.dart';
 
 class DisplayNameScreen extends StatefulWidget {
@@ -212,9 +212,11 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
                       )
                     : SizedBox(
                         width: 340,
-                        child: GameButton(
+                        child: PillButton(
                           label: 'CONTINUE',
+                          variant: PillButtonVariant.primary,
                           fontSize: 16,
+                          fullWidth: true,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 48,
                             vertical: 16,

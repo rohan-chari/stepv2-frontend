@@ -4,9 +4,9 @@ import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../services/notification_service.dart';
 import '../../styles.dart';
-import '../../widgets/content_board.dart';
 import '../../widgets/error_toast.dart';
-import '../../widgets/game_button.dart';
+import '../../widgets/pill_button.dart';
+import '../../widgets/tab_layout.dart';
 import '../../widgets/trail_sign.dart';
 import '../admin_challenge_screen.dart';
 import '../display_name_screen.dart';
@@ -95,9 +95,10 @@ class _SettingsTabState extends State<SettingsTab> {
                 Row(
                   children: [
                     Expanded(
-                      child: GameButton(
+                      child: PillButton(
                         label: 'CANCEL',
-                        fontSize: 14,
+                        variant: PillButtonVariant.secondary,
+                        fontSize: 13,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
                           vertical: 10,
@@ -107,9 +108,10 @@ class _SettingsTabState extends State<SettingsTab> {
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: GameButton(
+                      child: PillButton(
                         label: 'SAVE',
-                        fontSize: 14,
+                        variant: PillButtonVariant.primary,
+                        fontSize: 13,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
                           vertical: 10,
@@ -166,179 +168,135 @@ class _SettingsTabState extends State<SettingsTab> {
     );
   }
 
+  Widget _buildDivider() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Container(
+        height: 1,
+        color: AppColors.parchmentBorder.withValues(alpha: 0.5),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final boardWidth = MediaQuery.of(context).size.width - 48;
-
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.only(top: 24, left: 24, right: 24, bottom: 120),
-        child: Center(
-          child: Column(
-            children: [
-              // Profile section
-              TrailSign(
-                width: boardWidth,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'PROFILE',
-                      style: PixelText.title(
-                        size: 24,
-                        color: AppColors.textDark,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    if (widget.displayName != null)
-                      Text(
-                        widget.displayName!,
-                        style: PixelText.title(
-                          size: 16,
-                          color: AppColors.accent,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    if (widget.stepGoal != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        'Goal: ${widget.stepGoal} steps/day',
-                        style: PixelText.body(
-                          size: 13,
-                          color: AppColors.textMid,
-                        ),
-                      ),
-                    ],
-                  ],
+    return TabLayout(
+      title: 'SETTINGS',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Profile section
+          Center(
+            child: Column(
+              children: [
+                Text(
+                  'PROFILE',
+                  style: PixelText.title(size: 16, color: AppColors.textMid),
                 ),
-              ),
-              const SizedBox(height: 16),
-
-              // Stats placeholder
-              ContentBoard(
-                width: boardWidth,
-                child: Column(
-                  children: [
-                    Text(
-                      'STATS',
-                      style: PixelText.title(
-                        size: 16,
-                        color: AppColors.textMid,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Coming soon...',
-                      style: PixelText.body(
-                        size: 13,
-                        color: AppColors.textMid,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Settings actions
-              ContentBoard(
-                width: boardWidth,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'SETTINGS',
-                      style: PixelText.title(
-                        size: 16,
-                        color: AppColors.textDark,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: GameButton(
-                        label: 'CHANGE DISPLAY NAME',
-                        fontSize: 14,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 14,
-                        ),
-                        onPressed: () async {
-                          await Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => DisplayNameScreen(
-                                authService: widget.authService,
-                              ),
-                            ),
-                          );
-                          widget.onSettingsChanged();
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: GameButton(
-                        label: 'CHANGE STEP GOAL',
-                        fontSize: 14,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 14,
-                        ),
-                        onPressed: _showStepGoalDialog,
-                      ),
-                    ),
-                    if (widget.authService.isAdmin) ...[
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: GameButton(
-                          label: 'ADMIN CHALLENGE TOOLS',
-                          fontSize: 14,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 14,
-                          ),
-                          onPressed: () async {
-                            await Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (context) => AdminChallengeScreen(
-                                  authService: widget.authService,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                    if (widget.notificationService != null) ...[
-                      const SizedBox(height: 12),
-                      _NotificationToggle(
-                        notificationService: widget.notificationService!,
-                        authToken: widget.authService.authToken,
-                      ),
-                    ],
-                    const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      child: GameButton(
-                        label: 'SIGN OUT',
-                        fontSize: 14,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 14,
-                        ),
-                        onPressed: _signOut,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+                const SizedBox(height: 8),
+                if (widget.displayName != null)
+                  Text(
+                    widget.displayName!,
+                    style: PixelText.title(size: 16, color: AppColors.accent),
+                    textAlign: TextAlign.center,
+                  ),
+                if (widget.stepGoal != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Goal: ${widget.stepGoal} steps/day',
+                    style: PixelText.body(size: 13, color: AppColors.textMid),
+                  ),
+                ],
+              ],
+            ),
           ),
-        ),
+
+          _buildDivider(),
+
+          // Stats section
+          Center(
+            child: Column(
+              children: [
+                Text(
+                  'STATS',
+                  style: PixelText.title(size: 16, color: AppColors.textMid),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Coming soon...',
+                  style: PixelText.body(size: 13, color: AppColors.textMid),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+
+          _buildDivider(),
+
+          // Actions
+          PillButton(
+            label: 'CHANGE DISPLAY NAME',
+            variant: PillButtonVariant.primary,
+            fontSize: 13,
+            fullWidth: true,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            onPressed: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => DisplayNameScreen(
+                    authService: widget.authService,
+                  ),
+                ),
+              );
+              widget.onSettingsChanged();
+            },
+          ),
+          const SizedBox(height: 10),
+          PillButton(
+            label: 'CHANGE STEP GOAL',
+            variant: PillButtonVariant.secondary,
+            fontSize: 13,
+            fullWidth: true,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            onPressed: _showStepGoalDialog,
+          ),
+          if (widget.authService.isAdmin) ...[
+            const SizedBox(height: 10),
+            PillButton(
+              label: 'ADMIN CHALLENGE TOOLS',
+              variant: PillButtonVariant.secondary,
+              fontSize: 13,
+              fullWidth: true,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => AdminChallengeScreen(
+                      authService: widget.authService,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+          if (widget.notificationService != null) ...[
+            const SizedBox(height: 10),
+            _NotificationToggle(
+              notificationService: widget.notificationService!,
+              authToken: widget.authService.authToken,
+            ),
+          ],
+          const SizedBox(height: 16),
+          PillButton(
+            label: 'SIGN OUT',
+            variant: PillButtonVariant.accent,
+            fontSize: 13,
+            fullWidth: true,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            onPressed: _signOut,
+          ),
+        ],
       ),
     );
   }
@@ -384,14 +342,13 @@ class _NotificationToggleState extends State<_NotificationToggle> {
 
     final label = _granted! ? 'NOTIFICATIONS ON' : 'ENABLE NOTIFICATIONS';
 
-    return SizedBox(
-      width: double.infinity,
-      child: GameButton(
-        label: label,
-        fontSize: 14,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-        onPressed: _granted! ? null : _enable,
-      ),
+    return PillButton(
+      label: label,
+      variant: PillButtonVariant.secondary,
+      fontSize: 13,
+      fullWidth: true,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      onPressed: _granted! ? null : _enable,
     );
   }
 }

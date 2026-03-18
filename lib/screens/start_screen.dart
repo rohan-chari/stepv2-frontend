@@ -8,7 +8,7 @@ import '../styles.dart';
 import '../widgets/capybara.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/game_background.dart';
-import '../widgets/game_button.dart';
+import '../widgets/pill_button.dart';
 import '../widgets/trail_sign.dart';
 
 class StartScreen extends StatefulWidget {
@@ -134,9 +134,11 @@ class _StartScreenState extends State<StartScreen> {
                             )
                           : SizedBox(
                               width: 340,
-                              child: GameButton(
+                              child: PillButton(
                                 label: 'START',
+                                variant: PillButtonVariant.primary,
                                 fontSize: 16,
+                                fullWidth: true,
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 48,
                                   vertical: 16,

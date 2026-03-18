@@ -54,6 +54,8 @@ class WoodenTabBar extends StatelessWidget {
             padding: EdgeInsets.only(
               top: 8,
               bottom: bottomPadding + 10,
+              left: 12,
+              right: 12,
             ),
             child: LayoutBuilder(
               builder: (context, constraints) {

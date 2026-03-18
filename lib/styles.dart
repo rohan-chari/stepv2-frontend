@@ -86,6 +86,20 @@ abstract final class AppColors {
 
   // Firefly
   static const fireflyGlow = Color(0xFFFFE87C);
+
+  // Pill button palette (3 colors)
+  // Primary – green
+  static const pillGreen = Color(0xFF58CC02);
+  static const pillGreenDark = Color(0xFF46A302);
+  static const pillGreenShadow = Color(0xFF3A8A01);
+  // Secondary – arcade gold
+  static const pillGold = Color(0xFFF5C842);
+  static const pillGoldDark = Color(0xFFD4991E);
+  static const pillGoldShadow = Color(0xFFB8860B);
+  // Accent – warm terracotta
+  static const pillTerra = Color(0xFFD4573B);
+  static const pillTerraDark = Color(0xFFA8442F);
+  static const pillTerraShadow = Color(0xFF7D3322);
 }
 
 /// Game-themed text styles — bold and clean, not arcade-pixel.
@@ -119,6 +133,14 @@ abstract final class PixelText {
       fontSize: size,
       color: color,
       letterSpacing: 2,
+    );
+  }
+
+  static TextStyle pill({double size = 15, Color color = Colors.white}) {
+    return GoogleFonts.russoOne(
+      fontSize: size,
+      color: color,
+      letterSpacing: 1.5,
     );
   }
 }

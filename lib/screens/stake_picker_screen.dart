@@ -5,7 +5,7 @@ import '../services/backend_api_service.dart';
 import '../styles.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/game_background.dart';
-import '../widgets/game_button.dart';
+import '../widgets/pill_button.dart';
 import '../widgets/trail_sign.dart';
 
 class StakePickerScreen extends StatefulWidget {
@@ -191,15 +191,15 @@ class _StakePickerScreenState extends State<StakePickerScreen> {
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 color: selected
-                                    ? AppColors.accent.withValues(alpha: 0.15)
+                                    ? AppColors.pillGreen.withValues(alpha: 0.15)
                                     : AppColors.parchmentLight,
                                 border: Border.all(
                                   color: selected
-                                      ? AppColors.accent
+                                      ? AppColors.pillGreen
                                       : AppColors.parchmentBorder,
                                   width: selected ? 2 : 1,
                                 ),
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(12),
                               ),
                               child: Row(
                                 children: [
@@ -207,7 +207,7 @@ class _StakePickerScreenState extends State<StakePickerScreen> {
                                     _categoryIcon(category),
                                     size: 20,
                                     color: selected
-                                        ? AppColors.accent
+                                        ? AppColors.pillGreen
                                         : AppColors.textMid,
                                   ),
                                   const SizedBox(width: 12),
@@ -239,7 +239,7 @@ class _StakePickerScreenState extends State<StakePickerScreen> {
                                   if (selected)
                                     const Icon(
                                       Icons.check_circle,
-                                      color: AppColors.accent,
+                                      color: AppColors.pillGreen,
                                       size: 22,
                                     ),
                                 ],
@@ -258,9 +258,11 @@ class _StakePickerScreenState extends State<StakePickerScreen> {
                       ? const Center(
                           child: CircularProgressIndicator(
                               color: AppColors.accent))
-                      : GameButton(
+                      : PillButton(
                           label: buttonLabel,
+                          variant: PillButtonVariant.primary,
                           fontSize: 16,
+                          fullWidth: true,
                           padding: const EdgeInsets.symmetric(
                               horizontal: 48, vertical: 16),
                           onPressed:
