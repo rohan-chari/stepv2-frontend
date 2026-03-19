@@ -14,7 +14,7 @@ class BackgroundSyncManager {
         taskIdentifier,
         taskName,
         constraints: Constraints(networkType: NetworkType.connected),
-        existingWorkPolicy: ExistingWorkPolicy.keep,
+        existingWorkPolicy: ExistingWorkPolicy.replace,
         initialDelay: syncInterval,
       );
       return true;
