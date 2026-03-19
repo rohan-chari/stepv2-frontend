@@ -4,6 +4,7 @@ import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
 import '../../widgets/error_toast.dart';
+import '../../widgets/info_toast.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/tab_layout.dart';
 import '../challenge_detail_screen.dart';
@@ -14,6 +15,7 @@ class ChallengesTab extends StatefulWidget {
   final Map<String, dynamic>? currentChallenge;
   final List<Map<String, dynamic>> friendsSteps;
   final VoidCallback onChallengeChanged;
+  final VoidCallback? onOpenFriendsTab;
   final Future<void> Function()? onRefresh;
 
   const ChallengesTab({
@@ -22,6 +24,7 @@ class ChallengesTab extends StatefulWidget {
     required this.currentChallenge,
     required this.friendsSteps,
     required this.onChallengeChanged,
+    this.onOpenFriendsTab,
     this.onRefresh,
   });
 
@@ -129,6 +132,18 @@ class _ChallengesTabState extends State<ChallengesTab> {
     }
   }
 
+  void _handleChallengeFriendTap(List<Map<String, dynamic>> availableFriends) {
+    if (widget.friendsSteps.isEmpty) {
+      widget.onOpenFriendsTab?.call();
+      showInfoToast(context, 'Add some friends first on the Friends tab.');
+      return;
+    }
+
+    if (availableFriends.isEmpty) return;
+
+    setState(() => _showFriendPicker = true);
+  }
+
   @override
   Widget build(BuildContext context) {
     return TabLayout(
@@ -207,7 +222,7 @@ class _ChallengesTabState extends State<ChallengesTab> {
         ],
 
         // Start a challenge button
-        if (availableFriends.isNotEmpty &&
+        if ((widget.friendsSteps.isEmpty || availableFriends.isNotEmpty) &&
             widget.authService.displayName != null) ...[
           _buildDivider(),
           if (!_showFriendPicker)
@@ -217,7 +232,7 @@ class _ChallengesTabState extends State<ChallengesTab> {
               fontSize: 14,
               fullWidth: true,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              onPressed: () => setState(() => _showFriendPicker = true),
+              onPressed: () => _handleChallengeFriendTap(availableFriends),
             )
           else
             _buildFriendPicker(availableFriends),

@@ -109,7 +109,7 @@ class _StartScreenState extends State<StartScreen> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              'STEP TRACKER',
+                              'Bara',
                               style: PixelText.title(
                                 size: 26,
                                 color: AppColors.textDark,
@@ -117,7 +117,7 @@ class _StartScreenState extends State<StartScreen> {
                             ),
                             const SizedBox(height: 10),
                             Text(
-                              'Your daily walking companion',
+                              'Track your steps, challenge friends, and put a stake on the week.',
                               style: PixelText.body(
                                 size: 14,
                                 color: AppColors.textMid,

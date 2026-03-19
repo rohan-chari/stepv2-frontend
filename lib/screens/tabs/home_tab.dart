@@ -52,6 +52,15 @@ class HomeTab extends StatelessWidget {
   bool get _hasActiveChallenge =>
       currentChallenge != null && currentChallenge!['challenge'] != null;
 
+  List<Map<String, dynamic>> get _challengeInstances =>
+      (currentChallenge?['instances'] as List?)?.cast<Map<String, dynamic>>() ??
+      const [];
+
+  bool get _hasChallengeActivity => _challengeInstances.isNotEmpty;
+
+  bool get _shouldShowHowItWorks =>
+      friendsSteps.isEmpty && !_hasChallengeActivity;
+
   @override
   Widget build(BuildContext context) {
     if (!healthAuthorized) {
@@ -91,6 +100,11 @@ class HomeTab extends StatelessWidget {
         if (friendsSteps.isNotEmpty) ...[
           _buildDivider(),
           _buildFriendsLeaderboard(),
+        ],
+
+        if (_shouldShowHowItWorks) ...[
+          _buildDivider(),
+          _buildHowItWorksSection(),
         ],
       ],
     );
@@ -168,7 +182,6 @@ class HomeTab extends StatelessWidget {
   Widget _buildChallengeSection(BuildContext context) {
     final challenge =
         currentChallenge!['challenge'] as Map<String, dynamic>? ?? {};
-    final instances = currentChallenge!['instances'] as List? ?? [];
     final myUserId = authService.userId ?? '';
 
     return Column(
@@ -178,9 +191,80 @@ class HomeTab extends StatelessWidget {
           style: PixelText.title(size: 13, color: AppColors.accent),
         ),
         const SizedBox(height: 8),
-        for (final i in instances)
-          _buildChallengeRow(context, i as Map<String, dynamic>, challenge, myUserId),
+        if (_challengeInstances.isEmpty)
+          Text(
+            'No competitions yet. Head to the Challenges tab to start one.',
+            style: PixelText.body(size: 13, color: AppColors.textMid),
+            textAlign: TextAlign.center,
+          )
+        else
+          for (final i in _challengeInstances)
+            _buildChallengeRow(
+              context,
+              i as Map<String, dynamic>,
+              challenge,
+              myUserId,
+            ),
       ],
+    );
+  }
+
+  Widget _buildHowItWorksSection() {
+    return Column(
+      children: [
+        Text(
+          'HOW BARA WORKS',
+          style: PixelText.title(size: 13, color: AppColors.accent),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Bara turns your daily step count into a private weekly competition with friends.',
+          style: PixelText.body(size: 13, color: AppColors.textMid),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 12),
+        _buildGuideCard(
+          title: 'TRACK TODAY',
+          body:
+              'Sync Health data and watch today\u2019s ring fill as your steps come in.',
+        ),
+        const SizedBox(height: 10),
+        _buildGuideCard(
+          title: 'BUILD YOUR CREW',
+          body:
+              'Add friends to unlock the leaderboard and see who is actually hitting their goal.',
+        ),
+        const SizedBox(height: 10),
+        _buildGuideCard(
+          title: 'START A STAKED CHALLENGE',
+          body:
+              'Open Challenges, pick a friend, propose a stake, and let Sunday\u2019s totals settle it.',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGuideCard({required String title, required String body}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.parchmentLight,
+        border: Border.all(color: AppColors.parchmentBorder, width: 2),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: PixelText.title(size: 12, color: AppColors.textDark),
+          ),
+          const SizedBox(height: 6),
+          Text(body, style: PixelText.body(size: 13, color: AppColors.textMid)),
+        ],
+      ),
     );
   }
 
@@ -218,13 +302,15 @@ class HomeTab extends StatelessWidget {
     return GestureDetector(
       onTap: () {
         Navigator.of(context)
-            .push<bool>(MaterialPageRoute(
-              builder: (context) => ChallengeDetailScreen(
-                authService: authService,
-                instance: instance,
-                challenge: challenge,
+            .push<bool>(
+              MaterialPageRoute(
+                builder: (context) => ChallengeDetailScreen(
+                  authService: authService,
+                  instance: instance,
+                  challenge: challenge,
+                ),
               ),
-            ))
+            )
             .then((_) => onChallengeChanged());
       },
       child: Padding(
@@ -290,8 +376,9 @@ class HomeTab extends StatelessWidget {
     final name = friend['displayName'] as String? ?? '???';
     final steps = friend['steps'] as int? ?? 0;
     final goal = friend['stepGoal'] as int?;
-    final progress =
-        (goal != null && goal > 0) ? (steps / goal).clamp(0.0, 1.0) : 0.0;
+    final progress = (goal != null && goal > 0)
+        ? (steps / goal).clamp(0.0, 1.0)
+        : 0.0;
     final pct = (progress * 100).round();
 
     return Padding(
@@ -321,7 +408,9 @@ class HomeTab extends StatelessWidget {
                       child: Container(
                         height: 8,
                         decoration: BoxDecoration(
-                          color: AppColors.parchmentBorder.withValues(alpha: 0.3),
+                          color: AppColors.parchmentBorder.withValues(
+                            alpha: 0.3,
+                          ),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: FractionallySizedBox(
@@ -344,8 +433,7 @@ class HomeTab extends StatelessWidget {
                     const SizedBox(width: 8),
                     Text(
                       goal != null && goal > 0 ? '$pct%' : '$steps',
-                      style:
-                          PixelText.body(size: 11, color: AppColors.textMid),
+                      style: PixelText.body(size: 11, color: AppColors.textMid),
                     ),
                   ],
                 ),
@@ -434,14 +522,12 @@ class HomeTab extends StatelessWidget {
             variant: PillButtonVariant.secondary,
             fontSize: 14,
             fullWidth: true,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             onPressed: () async {
               await Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (context) => DisplayNameScreen(
-                    authService: authService,
-                  ),
+                  builder: (context) =>
+                      DisplayNameScreen(authService: authService),
                 ),
               );
               onDisplayNameChanged();
@@ -454,8 +540,7 @@ class HomeTab extends StatelessWidget {
             variant: PillButtonVariant.secondary,
             fontSize: 14,
             fullWidth: true,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             onPressed: onSetStepGoal,
           ),
       ],

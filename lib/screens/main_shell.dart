@@ -303,6 +303,14 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     await _refreshStepGoal();
   }
 
+  void _openFriendsTab() {
+    _pageController.animateToPage(
+      2,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   Future<void> _fetchCurrentChallenge() async {
     try {
       final identityToken = widget.authService.authToken;
@@ -548,6 +556,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   currentChallenge: _currentChallenge,
                   friendsSteps: _friendsSteps,
                   onChallengeChanged: _fetchCurrentChallenge,
+                  onOpenFriendsTab: _openFriendsTab,
                   onRefresh: _refreshChallengesTab,
                 ),
                 FriendsTab(
