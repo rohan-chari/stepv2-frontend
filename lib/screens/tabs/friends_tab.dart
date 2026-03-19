@@ -15,6 +15,8 @@ class FriendsTab extends StatefulWidget {
   final List<Map<String, dynamic>> friendsSteps;
   final Map<String, dynamic>? currentChallenge;
   final VoidCallback onFriendsChanged;
+  final Future<void> Function()? onRefresh;
+  final BackendApiService? backendApiService;
 
   const FriendsTab({
     super.key,
@@ -22,6 +24,8 @@ class FriendsTab extends StatefulWidget {
     required this.friendsSteps,
     required this.currentChallenge,
     required this.onFriendsChanged,
+    this.onRefresh,
+    this.backendApiService,
   });
 
   @override
@@ -29,7 +33,7 @@ class FriendsTab extends StatefulWidget {
 }
 
 class _FriendsTabState extends State<FriendsTab> {
-  final BackendApiService _backendApiService = BackendApiService();
+  late final BackendApiService _backendApiService;
   final TextEditingController _searchController = TextEditingController();
 
   List<Map<String, dynamic>> _friends = [];
@@ -44,6 +48,7 @@ class _FriendsTabState extends State<FriendsTab> {
   @override
   void initState() {
     super.initState();
+    _backendApiService = widget.backendApiService ?? BackendApiService();
     _loadFriends();
   }
 
@@ -155,7 +160,9 @@ class _FriendsTabState extends State<FriendsTab> {
         showErrorToast(context, 'You already have a request with this user.');
       } else {
         showErrorToast(
-            context, 'Couldn\u2019t send friend request. Please try again.');
+          context,
+          'Couldn\u2019t send friend request. Please try again.',
+        );
       }
     }
   }
@@ -177,7 +184,16 @@ class _FriendsTabState extends State<FriendsTab> {
     } catch (e) {
       if (!mounted) return;
       showErrorToast(
-          context, 'Couldn\u2019t respond to request. Please try again.');
+        context,
+        'Couldn\u2019t respond to request. Please try again.',
+      );
+    }
+  }
+
+  Future<void> _handleRefresh() async {
+    await _loadFriends();
+    if (widget.onRefresh != null) {
+      await widget.onRefresh!();
     }
   }
 
@@ -185,10 +201,12 @@ class _FriendsTabState extends State<FriendsTab> {
     final instances = widget.currentChallenge?['instances'] as List? ?? [];
     for (final i in instances) {
       final inst = i as Map<String, dynamic>;
-      final aId = inst['userAId'] as String? ??
+      final aId =
+          inst['userAId'] as String? ??
           (inst['userA'] as Map<String, dynamic>?)?['id'] as String? ??
           '';
-      final bId = inst['userBId'] as String? ??
+      final bId =
+          inst['userBId'] as String? ??
           (inst['userB'] as Map<String, dynamic>?)?['id'] as String? ??
           '';
       if (aId == friendId || bId == friendId) return inst;
@@ -264,8 +282,7 @@ class _FriendsTabState extends State<FriendsTab> {
                 ? BoxDecoration(
                     border: Border(
                       bottom: BorderSide(
-                        color:
-                            AppColors.parchmentBorder.withValues(alpha: 0.4),
+                        color: AppColors.parchmentBorder.withValues(alpha: 0.4),
                       ),
                     ),
                   )
@@ -275,8 +292,7 @@ class _FriendsTabState extends State<FriendsTab> {
                 Expanded(
                   child: Text(
                     _searchResults[i]['displayName'] as String? ?? '',
-                    style:
-                        PixelText.body(size: 15, color: AppColors.textDark),
+                    style: PixelText.body(size: 15, color: AppColors.textDark),
                   ),
                 ),
                 PillButton(
@@ -299,8 +315,7 @@ class _FriendsTabState extends State<FriendsTab> {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.parchmentLight,
-        borderRadius:
-            const BorderRadius.vertical(bottom: Radius.circular(8)),
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(8)),
         border: Border.all(color: AppColors.parchmentBorder),
       ),
       child: Column(mainAxisSize: MainAxisSize.min, children: items),
@@ -317,10 +332,7 @@ class _FriendsTabState extends State<FriendsTab> {
     );
   }
 
-  Widget _buildRequestRow({
-    required String displayName,
-    Widget? trailing,
-  }) {
+  Widget _buildRequestRow({required String displayName, Widget? trailing}) {
     return Container(
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
@@ -366,10 +378,7 @@ class _FriendsTabState extends State<FriendsTab> {
         color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Text(
-        label,
-        style: PixelText.pill(size: 11, color: color),
-      ),
+      child: Text(label, style: PixelText.pill(size: 11, color: color)),
     );
   }
 
@@ -453,8 +462,7 @@ class _FriendsTabState extends State<FriendsTab> {
                       friendStepGoal != null && friendStepGoal > 0
                           ? '$pct%'
                           : '$steps',
-                      style:
-                          PixelText.body(size: 12, color: AppColors.textMid),
+                      style: PixelText.body(size: 12, color: AppColors.textMid),
                     ),
                   ],
                 ),
@@ -489,6 +497,7 @@ class _FriendsTabState extends State<FriendsTab> {
       behavior: HitTestBehavior.opaque,
       child: TabLayout(
         title: 'FRIENDS',
+        onRefresh: _handleRefresh,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -563,9 +572,9 @@ class _FriendsTabState extends State<FriendsTab> {
               _buildSectionHeader('INCOMING REQUESTS'),
               for (final req in _incomingRequests)
                 _buildRequestRow(
-                  displayName: (req['user']
-                              as Map<String, dynamic>?)?[
-                          'displayName'] as String? ??
+                  displayName:
+                      (req['user'] as Map<String, dynamic>?)?['displayName']
+                          as String? ??
                       '',
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -578,10 +587,8 @@ class _FriendsTabState extends State<FriendsTab> {
                           horizontal: 10,
                           vertical: 6,
                         ),
-                        onPressed: () => _respond(
-                          req['friendshipId'] as String,
-                          true,
-                        ),
+                        onPressed: () =>
+                            _respond(req['friendshipId'] as String, true),
                       ),
                       const SizedBox(width: 6),
                       PillButton(
@@ -592,10 +599,8 @@ class _FriendsTabState extends State<FriendsTab> {
                           horizontal: 10,
                           vertical: 6,
                         ),
-                        onPressed: () => _respond(
-                          req['friendshipId'] as String,
-                          false,
-                        ),
+                        onPressed: () =>
+                            _respond(req['friendshipId'] as String, false),
                       ),
                     ],
                   ),
@@ -607,9 +612,9 @@ class _FriendsTabState extends State<FriendsTab> {
               _buildSectionHeader('SENT REQUESTS'),
               for (final req in _outgoingRequests)
                 _buildRequestRow(
-                  displayName: (req['user']
-                              as Map<String, dynamic>?)?[
-                          'displayName'] as String? ??
+                  displayName:
+                      (req['user'] as Map<String, dynamic>?)?['displayName']
+                          as String? ??
                       '',
                   trailing: Text(
                     'PENDING',
@@ -628,10 +633,7 @@ class _FriendsTabState extends State<FriendsTab> {
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
                   'No friends yet \u2014 search above to add some!',
-                  style: PixelText.body(
-                    size: 14,
-                    color: AppColors.textMid,
-                  ),
+                  style: PixelText.body(size: 14, color: AppColors.textMid),
                   textAlign: TextAlign.center,
                 ),
               ),

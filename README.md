@@ -1,6 +1,6 @@
-# Step Tracker
+# Bara
 
-Step Tracker is a Flutter app for iOS-focused daily step competition. It signs users in with Apple, reads the current day's steps from HealthKit, syncs them to a backend API, supports friend discovery and weekly challenge matchups with negotiated stakes, and includes admin tools for weekly challenge operations. The app boots background sync and push-notification plumbing at launch, all wrapped in a custom hiking-game themed UI built from reusable Flutter widgets, Google Fonts typography, and an animated capybara sprite.
+Bara is a Flutter app for iOS-focused daily step competition. It signs users in with Apple, reads the current day's steps from HealthKit, syncs them to a backend API, supports friend discovery and weekly challenge matchups with negotiated stakes, and includes admin tools for weekly challenge operations. The app boots background sync and push-notification plumbing at launch, all wrapped in a custom hiking-game themed UI built from reusable Flutter widgets, Google Fonts typography, and an animated capybara sprite.
 
 ## Tech Stack
 
@@ -191,6 +191,7 @@ flutter run --dart-define=BACKEND_BASE_URL=http://<YOUR_LAN_IP>:3000
 flutter run --dart-define=BACKEND_BASE_URL=http://192.168.1.188:3000
 flutter run --profile --dart-define=BACKEND_BASE_URL=http://192.168.1.188:3000                                                      
 
+  flutter run --profile --dart-define=BACKEND_BASE_URL=http://192.168.86.195:3000
 ```
 
 ### Production

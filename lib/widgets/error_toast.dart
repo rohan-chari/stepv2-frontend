@@ -3,8 +3,11 @@ import '../styles.dart';
 
 /// Shows a red wooden bulletin board error toast that slides up from the bottom
 /// and auto-dismisses after [duration].
-void showErrorToast(BuildContext context, String message,
-    {Duration duration = const Duration(seconds: 3)}) {
+void showErrorToast(
+  BuildContext context,
+  String message, {
+  Duration duration = const Duration(seconds: 3),
+}) {
   final overlay = Overlay.of(context);
   late final OverlayEntry entry;
 
@@ -70,8 +73,8 @@ class _ErrorToastOverlay extends StatelessWidget {
           onTap: onDismiss,
           child: Container(
             decoration: BoxDecoration(
-              color: const Color(0xFF8B2020),
-              border: Border.all(color: const Color(0xFF5C1010), width: px),
+              color: const Color(0xFFAA5252),
+              border: Border.all(color: const Color(0xFF8B2020), width: px),
               borderRadius: BorderRadius.circular(4),
               boxShadow: const [
                 BoxShadow(
@@ -87,9 +90,7 @@ class _ErrorToastOverlay extends StatelessWidget {
                 Positioned.fill(
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(2),
-                    child: CustomPaint(
-                      painter: _RedWoodGrainPainter(px: px),
-                    ),
+                    child: CustomPaint(painter: _RedWoodGrainPainter(px: px)),
                   ),
                 ),
                 // Inner parchment area
@@ -144,7 +145,9 @@ class _RedWoodGrainPainter extends CustomPainter {
     }
     for (double y = px * 5; y < size.height; y += px * 7) {
       canvas.drawRect(
-          Rect.fromLTWH(0, y, size.width, px * 0.5), highlightPaint);
+        Rect.fromLTWH(0, y, size.width, px * 0.5),
+        highlightPaint,
+      );
     }
   }
 

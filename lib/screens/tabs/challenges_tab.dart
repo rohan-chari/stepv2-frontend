@@ -14,6 +14,7 @@ class ChallengesTab extends StatefulWidget {
   final Map<String, dynamic>? currentChallenge;
   final List<Map<String, dynamic>> friendsSteps;
   final VoidCallback onChallengeChanged;
+  final Future<void> Function()? onRefresh;
 
   const ChallengesTab({
     super.key,
@@ -21,6 +22,7 @@ class ChallengesTab extends StatefulWidget {
     required this.currentChallenge,
     required this.friendsSteps,
     required this.onChallengeChanged,
+    this.onRefresh,
   });
 
   @override
@@ -39,15 +41,16 @@ class _ChallengesTabState extends State<ChallengesTab> {
   String get _myUserId => widget.authService.userId ?? '';
 
   List<Map<String, dynamic>> _getAvailableFriends() {
-    final instances =
-        widget.currentChallenge?['instances'] as List? ?? [];
+    final instances = widget.currentChallenge?['instances'] as List? ?? [];
     final challengedIds = <String>{};
     for (final i in instances) {
       final inst = i as Map<String, dynamic>;
-      final aId = inst['userAId'] as String? ??
+      final aId =
+          inst['userAId'] as String? ??
           (inst['userA'] as Map<String, dynamic>?)?['id'] as String? ??
           '';
-      final bId = inst['userBId'] as String? ??
+      final bId =
+          inst['userBId'] as String? ??
           (inst['userB'] as Map<String, dynamic>?)?['id'] as String? ??
           '';
       challengedIds.add(aId);
@@ -62,8 +65,7 @@ class _ChallengesTabState extends State<ChallengesTab> {
 
   /// Categorize instances into incoming, outgoing, and active
   Map<String, List<Map<String, dynamic>>> _categorizeInstances() {
-    final instances =
-        widget.currentChallenge?['instances'] as List? ?? [];
+    final instances = widget.currentChallenge?['instances'] as List? ?? [];
     final incoming = <Map<String, dynamic>>[];
     final outgoing = <Map<String, dynamic>>[];
     final active = <Map<String, dynamic>>[];
@@ -131,6 +133,7 @@ class _ChallengesTabState extends State<ChallengesTab> {
   Widget build(BuildContext context) {
     return TabLayout(
       title: 'CHALLENGES',
+      onRefresh: widget.onRefresh,
       child: _hasActiveChallenge
           ? _buildActiveChallenge(context)
           : _buildEmptyState(),
@@ -213,8 +216,7 @@ class _ChallengesTabState extends State<ChallengesTab> {
               variant: PillButtonVariant.primary,
               fontSize: 14,
               fullWidth: true,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               onPressed: () => setState(() => _showFriendPicker = true),
             )
           else
@@ -264,15 +266,13 @@ class _ChallengesTabState extends State<ChallengesTab> {
           style: PixelText.title(size: 13, color: AppColors.textMid),
         ),
         const SizedBox(height: 8),
-        for (final friend in friends)
-          _buildFriendPickerRow(friend),
+        for (final friend in friends) _buildFriendPickerRow(friend),
         const SizedBox(height: 8),
         PillButton(
           label: 'CANCEL',
           variant: PillButtonVariant.secondary,
           fontSize: 12,
-          padding:
-              const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           onPressed: () => setState(() => _showFriendPicker = false),
         ),
       ],
@@ -301,11 +301,7 @@ class _ChallengesTabState extends State<ChallengesTab> {
                 style: PixelText.title(size: 14, color: AppColors.textDark),
               ),
             ),
-            Icon(
-              Icons.chevron_right,
-              size: 20,
-              color: AppColors.textMid,
-            ),
+            Icon(Icons.chevron_right, size: 20, color: AppColors.textMid),
           ],
         ),
       ),
@@ -335,7 +331,8 @@ class _ChallengesTabState extends State<ChallengesTab> {
     // Determine stake name for display
     final proposedStake = instance['proposedStake'] as Map<String, dynamic>?;
     final agreedStake = instance['stake'] as Map<String, dynamic>?;
-    final stakeName = agreedStake?['name'] as String? ??
+    final stakeName =
+        agreedStake?['name'] as String? ??
         proposedStake?['name'] as String? ??
         '';
 
@@ -395,8 +392,7 @@ class _ChallengesTabState extends State<ChallengesTab> {
               ),
             ),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
                 color: statusColor.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),

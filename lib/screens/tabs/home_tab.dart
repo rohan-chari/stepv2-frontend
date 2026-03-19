@@ -369,7 +369,7 @@ class HomeTab extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            'Step Tracker needs access to your health data to count your daily steps.\n\n'
+            'Bara needs access to your health data to count your daily steps.\n\n'
             "That's all we use - just your step count.",
             style: PixelText.body(size: 14, color: AppColors.textMid),
             textAlign: TextAlign.center,

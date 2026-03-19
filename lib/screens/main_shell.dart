@@ -50,7 +50,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   int _currentTab = 0;
   late final PageController _pageController;
   bool _healthAuthorized = false;
-  bool? _notificationsState; // null = not prompted, true = granted, false = denied
+  bool?
+  _notificationsState; // null = not prompted, true = granted, false = denied
   bool _isLoading = false;
   String? _error;
   StepData? _stepData;
@@ -290,6 +291,18 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     } catch (_) {}
   }
 
+  Future<void> _refreshChallengesTab() async {
+    await Future.wait([_fetchCurrentChallenge(), _fetchFriendsSteps()]);
+  }
+
+  Future<void> _refreshFriendsTab() async {
+    await Future.wait([_refreshStepGoal(), _fetchFriendsSteps()]);
+  }
+
+  Future<void> _refreshProfileTab() async {
+    await _refreshStepGoal();
+  }
+
   Future<void> _fetchCurrentChallenge() async {
     try {
       final identityToken = widget.authService.authToken;
@@ -351,8 +364,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   Future<void> _showStepGoalDialog() async {
-    final controller =
-        TextEditingController(text: _stepGoal?.toString() ?? '');
+    final controller = TextEditingController(text: _stepGoal?.toString() ?? '');
 
     final result = await showDialog<int>(
       context: context,
@@ -379,24 +391,20 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   controller: controller,
                   keyboardType: TextInputType.number,
                   textAlign: TextAlign.center,
-                  style:
-                      PixelText.number(size: 24, color: AppColors.textDark),
+                  style: PixelText.number(size: 24, color: AppColors.textDark),
                   decoration: InputDecoration(
                     filled: true,
                     fillColor: AppColors.parchmentLight,
                     border: OutlineInputBorder(
-                      borderSide:
-                          BorderSide(color: AppColors.parchmentBorder),
+                      borderSide: BorderSide(color: AppColors.parchmentBorder),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     enabledBorder: OutlineInputBorder(
-                      borderSide:
-                          BorderSide(color: AppColors.parchmentBorder),
+                      borderSide: BorderSide(color: AppColors.parchmentBorder),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderSide:
-                          BorderSide(color: AppColors.accent, width: 2),
+                      borderSide: BorderSide(color: AppColors.accent, width: 2),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     contentPadding: const EdgeInsets.symmetric(
@@ -540,6 +548,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   currentChallenge: _currentChallenge,
                   friendsSteps: _friendsSteps,
                   onChallengeChanged: _fetchCurrentChallenge,
+                  onRefresh: _refreshChallengesTab,
                 ),
                 FriendsTab(
                   authService: widget.authService,
@@ -549,6 +558,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     _refreshStepGoal();
                     _fetchFriendsSteps();
                   },
+                  onRefresh: _refreshFriendsTab,
+                  backendApiService: _backendApiService,
                 ),
                 ProfileTab(
                   authService: widget.authService,
@@ -556,6 +567,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   stepGoal: _stepGoal,
                   email: _email,
                   onSettingsChanged: _syncSettingsState,
+                  onRefresh: _refreshProfileTab,
+                  backendApiService: _backendApiService,
                 ),
                 SettingsTab(
                   authService: widget.authService,
@@ -581,10 +594,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                 );
               },
               items: [
-                const WoodenTabItem(
-                  icon: Icons.home_rounded,
-                  label: 'Home',
-                ),
+                const WoodenTabItem(icon: Icons.home_rounded, label: 'Home'),
                 const WoodenTabItem(
                   icon: Icons.emoji_events_rounded,
                   label: 'Challenges',

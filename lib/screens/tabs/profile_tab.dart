@@ -15,6 +15,8 @@ class ProfileTab extends StatefulWidget {
   final int? stepGoal;
   final String? email;
   final VoidCallback onSettingsChanged;
+  final Future<void> Function()? onRefresh;
+  final BackendApiService? backendApiService;
 
   const ProfileTab({
     super.key,
@@ -23,6 +25,8 @@ class ProfileTab extends StatefulWidget {
     required this.stepGoal,
     required this.onSettingsChanged,
     this.email,
+    this.onRefresh,
+    this.backendApiService,
   });
 
   @override
@@ -30,8 +34,14 @@ class ProfileTab extends StatefulWidget {
 }
 
 class _ProfileTabState extends State<ProfileTab> {
-  final BackendApiService _api = BackendApiService();
+  late final BackendApiService _api;
   final GlobalKey<_StatsSectionState> _statsKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    _api = widget.backendApiService ?? BackendApiService();
+  }
 
   Future<void> _showStepGoalDialog() async {
     final currentGoal = widget.authService.stepGoal;
@@ -69,18 +79,15 @@ class _ProfileTabState extends State<ProfileTab> {
                     filled: true,
                     fillColor: AppColors.parchmentLight,
                     border: OutlineInputBorder(
-                      borderSide:
-                          BorderSide(color: AppColors.parchmentBorder),
+                      borderSide: BorderSide(color: AppColors.parchmentBorder),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     enabledBorder: OutlineInputBorder(
-                      borderSide:
-                          BorderSide(color: AppColors.parchmentBorder),
+                      borderSide: BorderSide(color: AppColors.parchmentBorder),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderSide:
-                          BorderSide(color: AppColors.accent, width: 2),
+                      borderSide: BorderSide(color: AppColors.accent, width: 2),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     contentPadding: const EdgeInsets.symmetric(
@@ -139,11 +146,8 @@ class _ProfileTabState extends State<ProfileTab> {
     try {
       final identityToken = widget.authService.authToken;
       if (identityToken != null && identityToken.isNotEmpty) {
-        await _api.setStepGoal(
-          identityToken: identityToken,
-          stepGoal: result,
-        );
-        _statsKey.currentState?._loadStats();
+        await _api.setStepGoal(identityToken: identityToken, stepGoal: result);
+        _statsKey.currentState?.loadStats();
       }
     } catch (e) {
       if (mounted) {
@@ -188,10 +192,18 @@ class _ProfileTabState extends State<ProfileTab> {
     );
   }
 
+  Future<void> _handleRefresh() async {
+    if (widget.onRefresh != null) {
+      await widget.onRefresh!();
+    }
+    await _statsKey.currentState?.loadStats();
+  }
+
   @override
   Widget build(BuildContext context) {
     return TabLayout(
       title: 'PROFILE',
+      onRefresh: _handleRefresh,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -234,13 +246,15 @@ class _ProfileTabState extends State<ProfileTab> {
                   label: 'EDIT NAME',
                   variant: PillButtonVariant.secondary,
                   fontSize: 12,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
                   onPressed: () async {
                     await Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (context) => DisplayNameScreen(
-                          authService: widget.authService,
-                        ),
+                        builder: (context) =>
+                            DisplayNameScreen(authService: widget.authService),
                       ),
                     );
                     widget.onSettingsChanged();
@@ -253,7 +267,10 @@ class _ProfileTabState extends State<ProfileTab> {
                   label: 'EDIT GOAL',
                   variant: PillButtonVariant.secondary,
                   fontSize: 12,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
                   onPressed: _showStepGoalDialog,
                 ),
               ),
@@ -272,7 +289,11 @@ class _ProfileTabState extends State<ProfileTab> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
-                _StatsSection(key: _statsKey, authService: widget.authService),
+                _StatsSection(
+                  key: _statsKey,
+                  authService: widget.authService,
+                  backendApiService: _api,
+                ),
               ],
             ),
           ),
@@ -284,14 +305,19 @@ class _ProfileTabState extends State<ProfileTab> {
 
 class _StatsSection extends StatefulWidget {
   final AuthService authService;
-  const _StatsSection({super.key, required this.authService});
+  final BackendApiService backendApiService;
+
+  const _StatsSection({
+    super.key,
+    required this.authService,
+    required this.backendApiService,
+  });
 
   @override
   State<_StatsSection> createState() => _StatsSectionState();
 }
 
 class _StatsSectionState extends State<_StatsSection> {
-  final BackendApiService _api = BackendApiService();
   bool _isLoading = true;
   int _thisWeek = 0;
   int _thisMonth = 0;
@@ -304,10 +330,14 @@ class _StatsSectionState extends State<_StatsSection> {
   @override
   void initState() {
     super.initState();
-    _loadStats();
+    loadStats();
   }
 
-  Future<void> _loadStats() async {
+  Future<void> loadStats() async {
+    if (mounted) {
+      setState(() => _isLoading = true);
+    }
+
     final token = widget.authService.authToken;
     if (token == null || token.isEmpty) {
       if (mounted) setState(() => _isLoading = false);
@@ -315,7 +345,9 @@ class _StatsSectionState extends State<_StatsSection> {
     }
 
     try {
-      final stats = await _api.fetchStats(identityToken: token);
+      final stats = await widget.backendApiService.fetchStats(
+        identityToken: token,
+      );
 
       if (mounted) {
         setState(() {
@@ -407,7 +439,10 @@ class _StatsSectionState extends State<_StatsSection> {
         const SizedBox(height: 12),
         Row(
           children: [
-            _buildStatCard('GOAL STREAK', '$_streak day${_streak == 1 ? '' : 's'}'),
+            _buildStatCard(
+              'GOAL STREAK',
+              '$_streak day${_streak == 1 ? '' : 's'}',
+            ),
             const SizedBox(width: 12),
             _buildStatCard('RECORD', '$_wins W - $_losses L'),
           ],

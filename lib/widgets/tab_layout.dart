@@ -6,6 +6,8 @@ import '../styles.dart';
 /// Enforces the "one board per screen" pattern for tabs.
 /// Fixed TrailSign header at top, single scrollable ContentBoard below.
 class TabLayout extends StatelessWidget {
+  static const double _horizontalMargin = 16;
+
   final String title;
   final Widget child;
   final Future<void> Function()? onRefresh;
@@ -19,15 +21,18 @@ class TabLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final boardWidth = MediaQuery.of(context).size.width - 48;
+    final boardWidth =
+        MediaQuery.of(context).size.width - (_horizontalMargin * 2);
 
     Widget scrollable = SingleChildScrollView(
-      padding: const EdgeInsets.only(top: 16, left: 24, right: 24, bottom: 120),
+      padding: const EdgeInsets.only(
+        top: 16,
+        left: _horizontalMargin,
+        right: _horizontalMargin,
+        bottom: 120,
+      ),
       child: Center(
-        child: ContentBoard(
-          width: boardWidth,
-          child: child,
-        ),
+        child: ContentBoard(width: boardWidth, child: child),
       ),
     );
 
@@ -37,12 +42,14 @@ class TabLayout extends StatelessWidget {
         color: AppColors.accent,
         backgroundColor: AppColors.parchment,
         child: AlwaysScrollableScrollView(
-          padding: const EdgeInsets.only(top: 16, left: 24, right: 24, bottom: 120),
+          padding: const EdgeInsets.only(
+            top: 16,
+            left: _horizontalMargin,
+            right: _horizontalMargin,
+            bottom: 120,
+          ),
           child: Center(
-            child: ContentBoard(
-              width: boardWidth,
-              child: child,
-            ),
+            child: ContentBoard(width: boardWidth, child: child),
           ),
         ),
       );
@@ -53,7 +60,11 @@ class TabLayout extends StatelessWidget {
         children: [
           // Fixed header
           Padding(
-            padding: const EdgeInsets.only(top: 24, left: 24, right: 24),
+            padding: const EdgeInsets.only(
+              top: 24,
+              left: _horizontalMargin,
+              right: _horizontalMargin,
+            ),
             child: TrailSign(
               width: boardWidth,
               child: Text(
