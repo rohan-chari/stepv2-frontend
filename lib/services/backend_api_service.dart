@@ -166,6 +166,18 @@ class BackendApiService {
     return user;
   }
 
+  Future<Map<String, dynamic>> checkDisplayName({
+    required String identityToken,
+    required String name,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/auth/check-display-name?name=${Uri.encodeComponent(name)}',
+      identityToken: identityToken,
+    );
+
+    return await _decodeJsonResponse(response);
+  }
+
   Future<List<Map<String, dynamic>>> searchUsers({
     required String identityToken,
     required String query,
@@ -333,6 +345,18 @@ class BackendApiService {
   }) async {
     final response = await _sendGetRequest(
       path: '/challenges/current',
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> fetchLeaderboard({
+    required String identityToken,
+    String period = 'today',
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/leaderboard?period=${Uri.encodeComponent(period)}',
       identityToken: identityToken,
     );
 

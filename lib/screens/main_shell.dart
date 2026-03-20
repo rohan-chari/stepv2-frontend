@@ -20,8 +20,8 @@ import 'start_screen.dart';
 import 'tabs/challenges_tab.dart';
 import 'tabs/friends_tab.dart';
 import 'tabs/home_tab.dart';
+import 'tabs/leaderboard_tab.dart';
 import 'tabs/profile_tab.dart';
-import 'tabs/settings_tab.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({
@@ -594,11 +594,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   onSettingsChanged: _syncSettingsState,
                   onRefresh: _refreshProfileTab,
                   backendApiService: _backendApiService,
-                ),
-                SettingsTab(
-                  authService: widget.authService,
-                  onSettingsChanged: _syncSettingsState,
                   notificationService: widget.notificationService,
+                ),
+                LeaderboardTab(
+                  authService: widget.authService,
+                  backendApiService: _backendApiService,
                 ),
               ],
             ),
@@ -634,8 +634,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   label: 'Profile',
                 ),
                 const WoodenTabItem(
-                  icon: Icons.settings_rounded,
-                  label: 'Settings',
+                  icon: Icons.leaderboard_rounded,
+                  label: 'Leaderboard',
                 ),
               ],
             ),

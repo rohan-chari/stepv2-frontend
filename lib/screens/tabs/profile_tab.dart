@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
+import '../../services/notification_service.dart';
 import '../../styles.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/pill_button.dart';
+import '../../widgets/pill_icon_button.dart';
 import '../../widgets/tab_layout.dart';
 import '../../widgets/trail_sign.dart';
+import '../admin_challenge_screen.dart';
 import '../display_name_screen.dart';
+import '../start_screen.dart';
 
 class ProfileTab extends StatefulWidget {
   final AuthService authService;
@@ -17,6 +21,7 @@ class ProfileTab extends StatefulWidget {
   final VoidCallback onSettingsChanged;
   final Future<void> Function()? onRefresh;
   final BackendApiService? backendApiService;
+  final NotificationService? notificationService;
 
   const ProfileTab({
     super.key,
@@ -27,6 +32,7 @@ class ProfileTab extends StatefulWidget {
     this.email,
     this.onRefresh,
     this.backendApiService,
+    this.notificationService,
   });
 
   @override
@@ -199,6 +205,20 @@ class _ProfileTabState extends State<ProfileTab> {
     await _statsKey.currentState?.loadStats();
   }
 
+  void _openSettings() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.parchment,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => _SettingsSheet(
+        authService: widget.authService,
+        notificationService: widget.notificationService,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return TabLayout(
@@ -207,6 +227,17 @@ class _ProfileTabState extends State<ProfileTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Gear button
+          Align(
+            alignment: Alignment.topRight,
+            child: PillIconButton(
+              icon: Icons.settings_rounded,
+              size: 36,
+              variant: PillButtonVariant.secondary,
+              onPressed: _openSettings,
+            ),
+          ),
+          const SizedBox(height: 8),
           // User info
           Center(
             child: Column(
@@ -217,7 +248,8 @@ class _ProfileTabState extends State<ProfileTab> {
                     style: PixelText.title(size: 20, color: AppColors.accent),
                     textAlign: TextAlign.center,
                   ),
-                if (widget.email != null) ...[
+                if (widget.email != null &&
+                    !widget.email!.endsWith('@privaterelay.appleid.com')) ...[
                   const SizedBox(height: 4),
                   Text(
                     widget.email!,
@@ -448,6 +480,137 @@ class _StatsSectionState extends State<_StatsSection> {
           ],
         ),
       ],
+    );
+  }
+}
+
+class _SettingsSheet extends StatefulWidget {
+  final AuthService authService;
+  final NotificationService? notificationService;
+
+  const _SettingsSheet({
+    required this.authService,
+    this.notificationService,
+  });
+
+  @override
+  State<_SettingsSheet> createState() => _SettingsSheetState();
+}
+
+class _SettingsSheetState extends State<_SettingsSheet> {
+  Future<void> _signOut() async {
+    await widget.notificationService?.unregisterDeviceToken(
+      widget.authService.authToken,
+    );
+    await widget.authService.signOut();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => const StartScreen()),
+      (route) => false,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'SETTINGS',
+            style: PixelText.title(size: 18, color: AppColors.textDark),
+          ),
+          const SizedBox(height: 16),
+          if (widget.notificationService != null) ...[
+            _NotificationToggle(
+              notificationService: widget.notificationService!,
+              authToken: widget.authService.authToken,
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (widget.authService.isAdmin) ...[
+            PillButton(
+              label: 'ADMIN CHALLENGE TOOLS',
+              variant: PillButtonVariant.secondary,
+              fontSize: 13,
+              fullWidth: true,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => AdminChallengeScreen(
+                      authService: widget.authService,
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 10),
+          ],
+          PillButton(
+            label: 'SIGN OUT',
+            variant: PillButtonVariant.accent,
+            fontSize: 13,
+            fullWidth: true,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            onPressed: _signOut,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NotificationToggle extends StatefulWidget {
+  final NotificationService notificationService;
+  final String? authToken;
+
+  const _NotificationToggle({
+    required this.notificationService,
+    required this.authToken,
+  });
+
+  @override
+  State<_NotificationToggle> createState() => _NotificationToggleState();
+}
+
+class _NotificationToggleState extends State<_NotificationToggle> {
+  bool? _granted;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final state = await widget.notificationService.getPermissionState();
+    if (mounted) setState(() => _granted = state ?? false);
+  }
+
+  Future<void> _enable() async {
+    final granted = await widget.notificationService.requestPermission(
+      widget.authToken,
+    );
+    if (mounted) setState(() => _granted = granted);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_granted == null) return const SizedBox.shrink();
+
+    final label = _granted! ? 'NOTIFICATIONS ON' : 'ENABLE NOTIFICATIONS';
+
+    return PillButton(
+      label: label,
+      variant: PillButtonVariant.secondary,
+      fontSize: 13,
+      fullWidth: true,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      onPressed: _granted! ? null : _enable,
     );
   }
 }

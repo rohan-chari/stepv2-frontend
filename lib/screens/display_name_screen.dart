@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'main_shell.dart';
@@ -10,6 +12,8 @@ import '../widgets/error_toast.dart';
 import '../widgets/game_background.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/trail_sign.dart';
+
+const _minDisplayNameLength = 8;
 
 class DisplayNameScreen extends StatefulWidget {
   const DisplayNameScreen({
@@ -29,6 +33,10 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
   final BackendApiService _backendApiService = BackendApiService();
   late final TextEditingController _controller;
   bool _isSaving = false;
+  Timer? _debounce;
+  String? _availabilityMessage;
+  bool? _isAvailable;
+  bool _isChecking = false;
 
   @override
   void initState() {
@@ -36,12 +44,71 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
     _controller = TextEditingController(
       text: widget.authService.displayName ?? '',
     );
+    _controller.addListener(_onNameChanged);
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
+    _controller.removeListener(_onNameChanged);
     _controller.dispose();
     super.dispose();
+  }
+
+  void _onNameChanged() {
+    _debounce?.cancel();
+    final text = _controller.text.trim();
+
+    if (text.length < _minDisplayNameLength) {
+      setState(() {
+        _isAvailable = null;
+        _isChecking = false;
+        _availabilityMessage = text.isEmpty
+            ? null
+            : 'Must be at least $_minDisplayNameLength characters';
+      });
+      return;
+    }
+
+    // Same as current name — no need to check
+    if (text == widget.authService.displayName) {
+      setState(() {
+        _isAvailable = true;
+        _isChecking = false;
+        _availabilityMessage = null;
+      });
+      return;
+    }
+
+    setState(() => _isChecking = true);
+
+    _debounce = Timer(const Duration(milliseconds: 500), () async {
+      final token = widget.authService.authToken;
+      if (token == null || token.isEmpty) return;
+
+      try {
+        final result = await _backendApiService.checkDisplayName(
+          identityToken: token,
+          name: text,
+        );
+        if (!mounted || _controller.text.trim() != text) return;
+
+        final available = result['available'] == true;
+        setState(() {
+          _isAvailable = available;
+          _isChecking = false;
+          _availabilityMessage =
+              available ? null : (result['reason'] as String? ?? 'That name is taken');
+        });
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          _isChecking = false;
+          _isAvailable = null;
+          _availabilityMessage = null;
+        });
+      }
+    });
   }
 
   Future<void> _onContinue() async {
@@ -49,6 +116,11 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
 
     if (displayName.isEmpty) {
       showErrorToast(context, 'Please enter a display name.');
+      return;
+    }
+
+    if (displayName.length < _minDisplayNameLength) {
+      showErrorToast(context, 'Must be at least $_minDisplayNameLength characters.');
       return;
     }
 
@@ -89,6 +161,8 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
       final String message;
       if (raw.contains('already taken')) {
         message = 'That name is taken \u2014 try another!';
+      } else if (raw.contains('at least')) {
+        message = 'Must be at least $_minDisplayNameLength characters.';
       } else if (raw.contains('non-empty string')) {
         message = 'Please enter a valid display name.';
       } else {
@@ -191,6 +265,50 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
                                 ),
                               ),
                             ),
+                            if (_isChecking ||
+                                _availabilityMessage != null ||
+                                _isAvailable == true)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: _isChecking
+                                    ? Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          SizedBox(
+                                            width: 12,
+                                            height: 12,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: AppColors.textMid,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            'Checking...',
+                                            style: PixelText.body(
+                                              size: 12,
+                                              color: AppColors.textMid,
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                    : _isAvailable == true
+                                        ? Text(
+                                            'Name is available!',
+                                            style: PixelText.body(
+                                              size: 12,
+                                              color: Colors.green.shade700,
+                                            ),
+                                          )
+                                        : Text(
+                                            _availabilityMessage ?? '',
+                                            style: PixelText.body(
+                                              size: 12,
+                                              color: Colors.red.shade700,
+                                            ),
+                                          ),
+                              ),
                           ],
                         ),
                       ),
