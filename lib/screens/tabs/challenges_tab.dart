@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
@@ -17,6 +19,7 @@ class ChallengesTab extends StatefulWidget {
   final VoidCallback onChallengeChanged;
   final VoidCallback? onOpenFriendsTab;
   final Future<void> Function()? onRefresh;
+  final DateTime Function()? now;
 
   const ChallengesTab({
     super.key,
@@ -26,6 +29,7 @@ class ChallengesTab extends StatefulWidget {
     required this.onChallengeChanged,
     this.onOpenFriendsTab,
     this.onRefresh,
+    this.now,
   });
 
   @override
@@ -36,10 +40,20 @@ class _ChallengesTabState extends State<ChallengesTab> {
   final BackendApiService _api = BackendApiService();
   bool _showFriendPicker = false;
   bool _isInitiating = false;
+  Timer? _countdownTimer;
+  late DateTime _countdownNow;
 
   bool get _hasActiveChallenge =>
       widget.currentChallenge != null &&
       widget.currentChallenge!['challenge'] != null;
+
+  DateTime get _now => (widget.now ?? DateTime.now).call();
+
+  DateTime? get _challengeEndsAt {
+    final rawValue = widget.currentChallenge?['endsAt'] as String?;
+    if (rawValue == null || rawValue.isEmpty) return null;
+    return DateTime.tryParse(rawValue)?.toLocal();
+  }
 
   String get _myUserId => widget.authService.userId ?? '';
 
@@ -64,6 +78,26 @@ class _ChallengesTabState extends State<ChallengesTab> {
       final id = f['id'] as String? ?? '';
       return !challengedIds.contains(id);
     }).toList();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _countdownNow = _now;
+    _syncCountdownTimer();
+  }
+
+  @override
+  void didUpdateWidget(covariant ChallengesTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _countdownNow = _now;
+    _syncCountdownTimer();
+  }
+
+  @override
+  void dispose() {
+    _countdownTimer?.cancel();
+    super.dispose();
   }
 
   /// Categorize instances into incoming, outgoing, and active
@@ -132,6 +166,32 @@ class _ChallengesTabState extends State<ChallengesTab> {
     }
   }
 
+  void _syncCountdownTimer() {
+    _countdownTimer?.cancel();
+
+    if (!_hasActiveChallenge || _challengeEndsAt == null) {
+      return;
+    }
+
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() {
+        _countdownNow = _now;
+      });
+    });
+  }
+
+  String _formatCountdown(Duration duration) {
+    final safeDuration =
+        duration.isNegative ? Duration.zero : duration;
+    final days = safeDuration.inDays;
+    final hours = safeDuration.inHours.remainder(24);
+    final minutes = safeDuration.inMinutes.remainder(60);
+    final seconds = safeDuration.inSeconds.remainder(60);
+
+    return '${days}D ${hours}H ${minutes}M ${seconds}S';
+  }
+
   void _handleChallengeFriendTap(List<Map<String, dynamic>> availableFriends) {
     if (widget.friendsSteps.isEmpty) {
       widget.onOpenFriendsTab?.call();
@@ -165,6 +225,7 @@ class _ChallengesTabState extends State<ChallengesTab> {
     final availableFriends = _getAvailableFriends();
     final hasAnyInstances =
         incoming.isNotEmpty || outgoing.isNotEmpty || active.isNotEmpty;
+    final challengeEndsAt = _challengeEndsAt;
 
     return Column(
       children: [
@@ -186,6 +247,10 @@ class _ChallengesTabState extends State<ChallengesTab> {
           style: PixelText.body(size: 13, color: AppColors.textMid),
           textAlign: TextAlign.center,
         ),
+        if (challengeEndsAt != null) ...[
+          const SizedBox(height: 12),
+          _buildCountdownBoard(challengeEndsAt),
+        ],
 
         // Incoming challenges
         if (incoming.isNotEmpty) ...[
@@ -238,6 +303,35 @@ class _ChallengesTabState extends State<ChallengesTab> {
             _buildFriendPicker(availableFriends),
         ],
       ],
+    );
+  }
+
+  Widget _buildCountdownBoard(DateTime endsAt) {
+    final remaining = endsAt.difference(_countdownNow);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.parchmentLight,
+        border: Border.all(color: AppColors.parchmentBorder),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        children: [
+          Text(
+            'CHALLENGE ENDS IN',
+            style: PixelText.title(size: 12, color: AppColors.textMid),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _formatCountdown(remaining),
+            style: PixelText.number(size: 18, color: AppColors.accent),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 

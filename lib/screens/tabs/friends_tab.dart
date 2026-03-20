@@ -197,22 +197,6 @@ class _FriendsTabState extends State<FriendsTab> {
     }
   }
 
-  Map<String, dynamic>? _getInstanceForFriend(String friendId) {
-    final instances = widget.currentChallenge?['instances'] as List? ?? [];
-    for (final i in instances) {
-      final inst = i as Map<String, dynamic>;
-      final aId =
-          inst['userAId'] as String? ??
-          (inst['userA'] as Map<String, dynamic>?)?['id'] as String? ??
-          '';
-      final bId =
-          inst['userBId'] as String? ??
-          (inst['userB'] as Map<String, dynamic>?)?['id'] as String? ??
-          '';
-      if (aId == friendId || bId == friendId) return inst;
-    }
-    return null;
-  }
 
   /// Sort friends by goal progress percentage descending.
   List<Map<String, dynamic>> _sortedFriends() {
@@ -355,32 +339,6 @@ class _FriendsTabState extends State<FriendsTab> {
     );
   }
 
-  Widget _buildStatusBadge(Map<String, dynamic> instance) {
-    final myUserId = widget.authService.userId ?? '';
-    final status = instance['status'] as String? ?? '';
-    final stakeStatus = instance['stakeStatus'] as String? ?? '';
-
-    String label;
-    Color color;
-    if (status == 'ACTIVE' || stakeStatus == 'AGREED') {
-      label = 'ACTIVE';
-      color = AppColors.pillGreen;
-    } else {
-      final proposedById = instance['proposedById'] as String? ?? '';
-      final isIncoming = proposedById.isNotEmpty && proposedById != myUserId;
-      label = isIncoming ? 'RESPOND' : 'WAITING';
-      color = isIncoming ? AppColors.pillTerra : AppColors.pillGold;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(label, style: PixelText.pill(size: 11, color: color)),
-    );
-  }
 
   Widget _buildFriendRow(Map<String, dynamic> friend, int rank) {
     final friendId = friend['id'] as String? ?? '';
@@ -401,9 +359,6 @@ class _FriendsTabState extends State<FriendsTab> {
         : 0.0;
     final pct = (progress * 100).round();
     final displayName = friend['displayName'] as String? ?? '???';
-
-    // Challenge status badge
-    final instance = _getInstanceForFriend(friendId);
 
     return Container(
       margin: const EdgeInsets.only(top: 8),
@@ -469,10 +424,6 @@ class _FriendsTabState extends State<FriendsTab> {
               ],
             ),
           ),
-          if (instance != null) ...[
-            const SizedBox(width: 8),
-            _buildStatusBadge(instance),
-          ],
         ],
       ),
     );

@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:workmanager/workmanager.dart';
 import 'screens/display_name_screen.dart';
 import 'screens/main_shell.dart';
 import 'screens/start_screen.dart';
 import 'services/auth_service.dart';
-import 'services/background_sync_service.dart';
+import 'services/background_sync_bootstrap_service.dart';
 import 'services/notification_service.dart';
 import 'styles.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
+  await BackgroundSyncBootstrapService().persistBackendBaseUrl();
 
   final notificationService = NotificationService();
   await notificationService.initialize();

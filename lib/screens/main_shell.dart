@@ -5,7 +5,8 @@ import 'package:flutter/material.dart';
 import '../models/step_data.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
-import '../services/background_sync_manager.dart';
+import '../services/background_sync_bootstrap_service.dart';
+import '../services/challenge_week_step_sync_service.dart';
 import '../services/health_service.dart';
 import '../services/notification_service.dart';
 import '../styles.dart';
@@ -28,14 +29,16 @@ class MainShell extends StatefulWidget {
     required this.authService,
     this.healthService,
     this.backendApiService,
-    this.scheduleBackgroundSync,
+    this.backgroundSyncBootstrapService,
+    this.challengeWeekStepSyncService,
     this.notificationService,
   });
 
   final AuthService authService;
   final HealthService? healthService;
   final BackendApiService? backendApiService;
-  final Future<bool> Function()? scheduleBackgroundSync;
+  final BackgroundSyncBootstrapService? backgroundSyncBootstrapService;
+  final ChallengeWeekStepSyncService? challengeWeekStepSyncService;
   final NotificationService? notificationService;
 
   @override
@@ -45,7 +48,8 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   late final HealthService _healthService;
   late final BackendApiService _backendApiService;
-  late final Future<bool> Function() _scheduleBackgroundSync;
+  late final BackgroundSyncBootstrapService _backgroundSyncBootstrapService;
+  late final ChallengeWeekStepSyncService _challengeWeekStepSyncService;
 
   int _currentTab = 0;
   late final PageController _pageController;
@@ -70,8 +74,15 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     super.initState();
     _healthService = widget.healthService ?? HealthService();
     _backendApiService = widget.backendApiService ?? BackendApiService();
-    _scheduleBackgroundSync =
-        widget.scheduleBackgroundSync ?? BackgroundSyncManager.scheduleNextSync;
+    _backgroundSyncBootstrapService =
+        widget.backgroundSyncBootstrapService ??
+        BackgroundSyncBootstrapService();
+    _challengeWeekStepSyncService =
+        widget.challengeWeekStepSyncService ??
+        ChallengeWeekStepSyncService(
+          backendApiService: _backendApiService,
+          healthService: _healthService,
+        );
     _pageController = PageController();
     WidgetsBinding.instance.addObserver(this);
     _restoreAndFetch();
@@ -126,7 +137,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     if (!wasAuthorized || !mounted) return;
 
     setState(() => _healthAuthorized = true);
-    await _scheduleBackgroundSync();
+    await _backgroundSyncBootstrapService.enableHealthKitBackgroundDelivery();
     await _checkNotificationState();
     await _fetchSteps();
     _refreshStepGoal();
@@ -185,7 +196,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       }
 
       setState(() => _healthAuthorized = true);
-      await _scheduleBackgroundSync();
+      await _backgroundSyncBootstrapService.enableHealthKitBackgroundDelivery();
       await _checkNotificationState();
       await _fetchSteps();
     } catch (e) {
@@ -232,24 +243,29 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     });
 
     try {
-      final stepData = await _healthService.getStepsToday();
+      final identityToken = widget.authService.authToken;
+      final stepEntries =
+          identityToken != null && identityToken.isNotEmpty
+          ? await _challengeWeekStepSyncService.loadCurrentChallengeWeekSteps(
+              identityToken: identityToken,
+            )
+          : [await _healthService.getStepsToday()];
+      final stepData = stepEntries.last;
       String? syncWarning;
 
-      try {
-        final identityToken = widget.authService.authToken;
-
-        if (identityToken == null || identityToken.isEmpty) {
-          throw Exception('not signed in');
+      if (identityToken != null && identityToken.isNotEmpty) {
+        try {
+          for (final dailyStep in stepEntries) {
+            await _backendApiService.recordSteps(
+              identityToken: identityToken,
+              stepData: dailyStep,
+            );
+          }
+        } catch (e) {
+          syncWarning = e is ApiException
+              ? 'Steps loaded, but sync failed: ${e.message}'
+              : 'Steps loaded, but sync failed. Check your connection.';
         }
-
-        await _backendApiService.recordSteps(
-          identityToken: identityToken,
-          stepData: stepData,
-        );
-      } catch (e) {
-        syncWarning = e is ApiException
-            ? 'Steps loaded, but sync failed: ${e.message}'
-            : 'Steps loaded, but sync failed. Check your connection.';
       }
 
       setState(() {

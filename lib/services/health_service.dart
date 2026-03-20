@@ -1,9 +1,12 @@
 import 'package:health/health.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/challenge_sync_day.dart';
 import '../models/step_data.dart';
 
 class HealthService {
-  final Health _health = Health();
+  HealthService({Health? health}) : _health = health ?? Health();
+
+  final Health _health;
 
   static const _keyHealthAuthorized = 'health_authorized';
 
@@ -39,13 +42,66 @@ class HealthService {
 
   Future<StepData> getStepsToday() async {
     final now = DateTime.now();
-    final midnight = DateTime(now.year, now.month, now.day);
-
-    final steps = await _health.getTotalStepsInInterval(midnight, now);
-
-    return StepData(
-      steps: steps ?? 0,
-      date: now,
+    final stepData = await getStepsForDateRange(
+      startDate: DateTime(now.year, now.month, now.day),
+      endDate: now,
     );
+
+    return stepData.last;
+  }
+
+  Future<List<StepData>> getStepsForSyncDays({
+    required List<ChallengeSyncDay> syncDays,
+  }) async {
+    final entries = <StepData>[];
+
+    for (final syncDay in syncDays) {
+      final steps = await _health.getTotalStepsInInterval(
+        syncDay.startsAt,
+        syncDay.endsAt,
+      );
+
+      entries.add(StepData(steps: steps ?? 0, date: syncDay.date));
+    }
+
+    return entries;
+  }
+
+  Future<List<StepData>> getStepsForDateRange({
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    final normalizedStartDate = DateTime(
+      startDate.year,
+      startDate.month,
+      startDate.day,
+    );
+    final normalizedEndDate = DateTime(
+      endDate.year,
+      endDate.month,
+      endDate.day,
+    );
+    final entries = <StepData>[];
+    var currentDate = normalizedStartDate;
+
+    while (!currentDate.isAfter(normalizedEndDate)) {
+      final isCurrentDay =
+          currentDate.year == normalizedEndDate.year &&
+          currentDate.month == normalizedEndDate.month &&
+          currentDate.day == normalizedEndDate.day;
+      final intervalEnd = isCurrentDay
+          ? endDate
+          : currentDate.add(const Duration(days: 1));
+      final steps = await _health.getTotalStepsInInterval(
+        currentDate,
+        intervalEnd,
+      );
+
+      entries.add(StepData(steps: steps ?? 0, date: currentDate));
+
+      currentDate = currentDate.add(const Duration(days: 1));
+    }
+
+    return entries;
   }
 }
