@@ -7,6 +7,7 @@ import '../widgets/content_board.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/game_background.dart';
 import '../widgets/pill_button.dart';
+import '../widgets/race_track.dart';
 import '../widgets/trail_sign.dart';
 
 class ChallengeDetailScreen extends StatefulWidget {
@@ -40,7 +41,6 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
   bool _isSubmittingStake = false;
   String? _selectedStakeId;
   String? _selectedRelationshipType;
-  bool _showRelationshipDropdown = false;
 
   String get _myUserId => widget.authService.userId ?? '';
 
@@ -140,7 +140,6 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
       _showingStakePicker = false;
       _selectedStakeId = null;
       _selectedRelationshipType = null;
-      _showRelationshipDropdown = false;
     });
   }
 
@@ -181,7 +180,6 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
     setState(() {
       _selectedRelationshipType = type;
       _selectedStakeId = null;
-      _showRelationshipDropdown = false;
     });
     _fetchStakes();
   }
@@ -248,6 +246,25 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
       default:
         return Icons.star;
     }
+  }
+
+  // ── Race track ──
+
+  Widget _buildRaceTrack() {
+    final userA = _progress!['userA'] as Map<String, dynamic>? ?? {};
+    final userB = _progress!['userB'] as Map<String, dynamic>? ?? {};
+    final aId = userA['userId'] as String? ?? '';
+    final bool iAmA = aId == _myUserId;
+
+    final myData = iAmA ? userA : userB;
+    final theirData = iAmA ? userB : userA;
+
+    return RaceTrack(
+      mySteps: myData['totalSteps'] as int? ?? 0,
+      theirSteps: theirData['totalSteps'] as int? ?? 0,
+      myName: widget.authService.displayName ?? 'You',
+      theirName: _friendName(),
+    );
   }
 
   // ── Progress display (driven by resolution rule) ──
@@ -591,23 +608,32 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
     );
   }
 
-  Widget _buildDropdownOption(String? type, String label) {
-    final isSelected = _selectedRelationshipType == type;
-    return GestureDetector(
-      onTap: () => _selectRelationshipType(type),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        color: isSelected
-            ? AppColors.pillGreen.withValues(alpha: 0.12)
-            : Colors.transparent,
-        child: Text(
-          label,
-          style: PixelText.body(
-            size: 12,
-            color: isSelected ? AppColors.pillGreen : AppColors.textDark,
-          ),
-        ),
+  Widget _buildFilterChips() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _buildFilterChip(null, 'ALL'),
+          for (final type in _relationshipTypes)
+            Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: _buildFilterChip(type, type.toUpperCase()),
+            ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildFilterChip(String? type, String label) {
+    final selected = _selectedRelationshipType == type;
+    return PillButton(
+      label: label,
+      variant: selected
+          ? PillButtonVariant.primary
+          : PillButtonVariant.secondary,
+      fontSize: 10,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      onPressed: () => _selectRelationshipType(type),
     );
   }
 
@@ -631,7 +657,7 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
             behavior: HitTestBehavior.opaque,
             onTap: () => setState(() => _selectedStakeId = id),
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10),
+              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
               child: Icon(
                 _categoryIcon(category),
                 size: 18,
@@ -646,7 +672,7 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
             behavior: HitTestBehavior.opaque,
             onTap: () => setState(() => _selectedStakeId = id),
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10),
+              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -721,7 +747,9 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
           style: PixelText.body(size: 13, color: AppColors.textMid),
           textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
+        _buildFilterChips(),
+        const SizedBox(height: 8),
         if (_stakesLoading)
           const Padding(
             padding: EdgeInsets.all(20),
@@ -730,74 +758,8 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
         else
           ContentBoard(
             width: double.infinity,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Relationship type dropdown
-                GestureDetector(
-                  onTap: () => setState(() =>
-                      _showRelationshipDropdown =
-                          !_showRelationshipDropdown),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: AppColors.parchmentLight,
-                      border:
-                          Border.all(color: AppColors.parchmentBorder),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Row(
-                      mainAxisAlignment:
-                          MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          _selectedRelationshipType?.toUpperCase() ??
-                              'ALL',
-                          style: PixelText.title(
-                              size: 12, color: AppColors.textDark),
-                        ),
-                        Icon(
-                          _showRelationshipDropdown
-                              ? Icons.expand_less
-                              : Icons.expand_more,
-                          size: 20,
-                          color: AppColors.textMid,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                if (_showRelationshipDropdown)
-                  Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.parchmentLight,
-                      border:
-                          Border.all(color: AppColors.parchmentBorder),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    margin: const EdgeInsets.only(top: 2),
-                    child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.stretch,
-                      children: [
-                        _buildDropdownOption(null, 'ALL'),
-                        for (final type in _relationshipTypes)
-                          _buildDropdownOption(
-                              type, type.toUpperCase()),
-                      ],
-                    ),
-                  ),
-                const SizedBox(height: 8),
-                Container(
-                  height: 1,
-                  color: AppColors.parchmentBorder
-                      .withValues(alpha: 0.5),
-                ),
-                const SizedBox(height: 4),
-                // Stakes table
-                if (_stakes.isEmpty)
-                  Padding(
+            child: _stakes.isEmpty
+                ? Padding(
                     padding:
                         const EdgeInsets.symmetric(vertical: 20),
                     child: Text(
@@ -807,17 +769,16 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
                       textAlign: TextAlign.center,
                     ),
                   )
-                else
-                  Table(
+                : Table(
                     border: TableBorder(
                       horizontalInside: BorderSide(
                         color: AppColors.parchmentBorder
-                            .withValues(alpha: 0.5),
-                        width: 1,
+                            .withValues(alpha: 0.4),
+                        width: 0.5,
                       ),
                     ),
                     columnWidths: const {
-                      0: FixedColumnWidth(36),
+                      0: FixedColumnWidth(32),
                       1: FlexColumnWidth(),
                       2: FixedColumnWidth(30),
                     },
@@ -826,25 +787,23 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
                         _buildStakeRow(stake),
                     ],
                   ),
-                const SizedBox(height: 16),
-                if (_isSubmittingStake)
-                  const Center(
-                      child: CircularProgressIndicator(
-                          color: AppColors.accent))
-                else
-                  PillButton(
-                    label: buttonLabel,
-                    variant: PillButtonVariant.primary,
-                    fontSize: 16,
-                    fullWidth: true,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 48, vertical: 16),
-                    onPressed: _selectedStakeId != null
-                        ? _submitStakeSelection
-                        : null,
-                  ),
-              ],
-            ),
+          ),
+        const SizedBox(height: 16),
+        if (_isSubmittingStake)
+          const Center(
+              child: CircularProgressIndicator(
+                  color: AppColors.accent))
+        else
+          PillButton(
+            label: buttonLabel,
+            variant: PillButtonVariant.primary,
+            fontSize: 16,
+            fullWidth: true,
+            padding: const EdgeInsets.symmetric(
+                horizontal: 48, vertical: 16),
+            onPressed: _selectedStakeId != null
+                ? _submitStakeSelection
+                : null,
           ),
       ],
     );
@@ -937,6 +896,11 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
                       ],
                     ),
                   ),
+                  // Race track (only when progress is loaded)
+                  if (_progress != null) ...[
+                    const SizedBox(height: 16),
+                    _buildRaceTrack(),
+                  ],
                   const SizedBox(height: 16),
                   // Always show progress
                   _buildProgressSection(),

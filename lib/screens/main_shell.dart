@@ -312,7 +312,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   Future<void> _refreshFriendsTab() async {
-    await Future.wait([_refreshStepGoal(), _fetchFriendsSteps()]);
+    await _refreshStepGoal();
   }
 
   Future<void> _refreshProfileTab() async {
@@ -577,8 +577,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                 ),
                 FriendsTab(
                   authService: widget.authService,
-                  friendsSteps: _friendsSteps,
-                  currentChallenge: _currentChallenge,
                   onFriendsChanged: () {
                     _refreshStepGoal();
                     _fetchFriendsSteps();

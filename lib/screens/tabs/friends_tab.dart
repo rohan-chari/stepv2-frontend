@@ -12,8 +12,6 @@ import '../../widgets/tab_layout.dart';
 
 class FriendsTab extends StatefulWidget {
   final AuthService authService;
-  final List<Map<String, dynamic>> friendsSteps;
-  final Map<String, dynamic>? currentChallenge;
   final VoidCallback onFriendsChanged;
   final Future<void> Function()? onRefresh;
   final BackendApiService? backendApiService;
@@ -21,8 +19,6 @@ class FriendsTab extends StatefulWidget {
   const FriendsTab({
     super.key,
     required this.authService,
-    required this.friendsSteps,
-    required this.currentChallenge,
     required this.onFriendsChanged,
     this.onRefresh,
     this.backendApiService,
@@ -198,34 +194,6 @@ class _FriendsTabState extends State<FriendsTab> {
   }
 
 
-  /// Sort friends by goal progress percentage descending.
-  List<Map<String, dynamic>> _sortedFriends() {
-    final sorted = List<Map<String, dynamic>>.from(_friends);
-    sorted.sort((a, b) {
-      final aId = a['id'] as String? ?? '';
-      final bId = b['id'] as String? ?? '';
-      int aSteps = 0, bSteps = 0;
-      int? aGoal, bGoal;
-      for (final fs in widget.friendsSteps) {
-        if (fs['id'] == aId) {
-          aSteps = fs['steps'] as int? ?? 0;
-          aGoal = fs['stepGoal'] as int?;
-        }
-        if (fs['id'] == bId) {
-          bSteps = fs['steps'] as int? ?? 0;
-          bGoal = fs['stepGoal'] as int?;
-        }
-      }
-      final aPct = (aGoal != null && aGoal > 0)
-          ? aSteps / aGoal
-          : aSteps / 10000.0;
-      final bPct = (bGoal != null && bGoal > 0)
-          ? bSteps / bGoal
-          : bSteps / 10000.0;
-      return bPct.compareTo(aPct);
-    });
-    return sorted;
-  }
 
   Widget _buildSearchDropdown() {
     final List<Widget> items;
@@ -308,10 +276,10 @@ class _FriendsTabState extends State<FriendsTab> {
 
   Widget _buildSectionHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.only(top: 16, bottom: 4),
+      padding: const EdgeInsets.only(top: 12, bottom: 6),
       child: Text(
         title,
-        style: PixelText.title(size: 13, color: AppColors.textMid),
+        style: PixelText.title(size: 12, color: AppColors.textMid),
       ),
     );
   }
@@ -340,93 +308,10 @@ class _FriendsTabState extends State<FriendsTab> {
   }
 
 
-  Widget _buildFriendRow(Map<String, dynamic> friend, int rank) {
-    final friendId = friend['id'] as String? ?? '';
-
-    // Find step data from shared friendsSteps
-    int steps = 0;
-    int? friendStepGoal;
-    for (final fs in widget.friendsSteps) {
-      if (fs['id'] == friendId) {
-        steps = fs['steps'] as int? ?? 0;
-        friendStepGoal = fs['stepGoal'] as int?;
-        break;
-      }
-    }
-
-    final progress = (friendStepGoal != null && friendStepGoal > 0)
-        ? (steps / friendStepGoal).clamp(0.0, 1.0)
-        : 0.0;
-    final pct = (progress * 100).round();
+  Widget _buildFriendRow(Map<String, dynamic> friend) {
     final displayName = friend['displayName'] as String? ?? '???';
 
-    return Container(
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-      decoration: BoxDecoration(
-        color: AppColors.parchmentLight,
-        border: Border.all(color: AppColors.parchmentBorder),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 28,
-            child: Text(
-              '#$rank',
-              style: PixelText.title(size: 13, color: AppColors.textMid),
-            ),
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  displayName,
-                  style: PixelText.title(size: 14, color: AppColors.textDark),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: FractionallySizedBox(
-                          alignment: Alignment.centerLeft,
-                          widthFactor: progress,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [
-                                  AppColors.pillGreen,
-                                  AppColors.pillGreenDark,
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      friendStepGoal != null && friendStepGoal > 0
-                          ? '$pct%'
-                          : '$steps',
-                      style: PixelText.body(size: 12, color: AppColors.textMid),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+    return _buildRequestRow(displayName: displayName);
   }
 
   @override
@@ -440,8 +325,6 @@ class _FriendsTabState extends State<FriendsTab> {
     final searchBorderRadius = _showDropdown
         ? const BorderRadius.vertical(top: Radius.circular(8))
         : BorderRadius.circular(8);
-
-    final sortedFriends = _sortedFriends();
 
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
@@ -577,19 +460,25 @@ class _FriendsTabState extends State<FriendsTab> {
                 ),
             ],
 
-            // Friends leaderboard
-            _buildSectionHeader('LEADERBOARD'),
-            if (sortedFriends.isEmpty)
+            // Friends list
+            _buildSectionHeader('YOUR FRIENDS'),
+            if (_friends.isEmpty)
               Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  'No friends yet \u2014 search above to add some!',
-                  style: PixelText.body(size: 14, color: AppColors.textMid),
-                  textAlign: TextAlign.center,
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Column(
+                  children: [
+                    Icon(Icons.group_add, size: 32, color: AppColors.textMid),
+                    const SizedBox(height: 8),
+                    Text(
+                      'No adventurers yet \u2014 invite some friends!',
+                      style: PixelText.body(size: 13, color: AppColors.textMid),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
               ),
-            for (int i = 0; i < sortedFriends.length; i++)
-              _buildFriendRow(sortedFriends[i], i + 1),
+            for (final friend in _friends)
+              _buildFriendRow(friend),
           ],
         ),
       ),

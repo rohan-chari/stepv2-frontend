@@ -104,7 +104,7 @@ abstract final class AppColors {
 
 /// Game-themed text styles — bold and clean, not arcade-pixel.
 abstract final class PixelText {
-  static TextStyle title({double size = 24, Color color = AppColors.textDark}) {
+  static TextStyle title({double size = 30, Color color = AppColors.textDark}) {
     return GoogleFonts.russoOne(
       fontSize: size,
       color: color,
@@ -112,7 +112,7 @@ abstract final class PixelText {
     );
   }
 
-  static TextStyle body({double size = 14, Color color = AppColors.textDark}) {
+  static TextStyle body({double size = 17.5, Color color = AppColors.textDark}) {
     return GoogleFonts.chakraPetch(
       fontSize: size,
       color: color,
@@ -120,7 +120,7 @@ abstract final class PixelText {
     );
   }
 
-  static TextStyle number({double size = 36, Color color = AppColors.textAccent}) {
+  static TextStyle number({double size = 45, Color color = AppColors.textAccent}) {
     return GoogleFonts.russoOne(
       fontSize: size,
       color: color,
@@ -128,7 +128,7 @@ abstract final class PixelText {
     );
   }
 
-  static TextStyle button({double size = 16, Color color = AppColors.buttonText}) {
+  static TextStyle button({double size = 20, Color color = AppColors.buttonText}) {
     return GoogleFonts.russoOne(
       fontSize: size,
       color: color,
@@ -136,7 +136,7 @@ abstract final class PixelText {
     );
   }
 
-  static TextStyle pill({double size = 15, Color color = Colors.white}) {
+  static TextStyle pill({double size = 19, Color color = Colors.white}) {
     return GoogleFonts.russoOne(
       fontSize: size,
       color: color,

@@ -278,11 +278,19 @@ class _ChallengesTabState extends State<ChallengesTab> {
 
         // Empty state
         if (!hasAnyInstances && availableFriends.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          Text(
-            'No challenges yet this week',
-            style: PixelText.body(size: 13, color: AppColors.textMid),
-            textAlign: TextAlign.center,
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Column(
+              children: [
+                Icon(Icons.emoji_events, size: 32, color: AppColors.textMid),
+                const SizedBox(height: 8),
+                Text(
+                  'No challenges yet \u2014 time to start one!',
+                  style: PixelText.body(size: 13, color: AppColors.textMid),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
           ),
         ],
 
@@ -347,7 +355,7 @@ class _ChallengesTabState extends State<ChallengesTab> {
 
   Widget _buildSectionHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 6),
       child: Align(
         alignment: Alignment.centerLeft,
         child: Text(
@@ -518,22 +526,19 @@ class _ChallengesTabState extends State<ChallengesTab> {
   }
 
   Widget _buildEmptyState() {
-    return Column(
-      children: [
-        const SizedBox(height: 8),
-        Text(
-          'NO ACTIVE COMPETITION',
-          style: PixelText.title(size: 16, color: AppColors.textMid),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Check back next week!',
-          style: PixelText.body(size: 14, color: AppColors.textMid),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 8),
-      ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Column(
+        children: [
+          Icon(Icons.emoji_events, size: 32, color: AppColors.textMid),
+          const SizedBox(height: 8),
+          Text(
+            'No active challenges \u2014 time to start one!',
+            style: PixelText.body(size: 13, color: AppColors.textMid),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 }

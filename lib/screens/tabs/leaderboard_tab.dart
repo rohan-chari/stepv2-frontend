@@ -228,11 +228,17 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
           else ...[
             if (_top10.isEmpty)
               Padding(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.symmetric(vertical: 24),
                 child: Center(
-                  child: Text(
-                    'No steps recorded yet.',
-                    style: PixelText.body(size: 13, color: AppColors.textMid),
+                  child: Column(
+                    children: [
+                      Icon(Icons.directions_walk, size: 32, color: AppColors.textMid),
+                      const SizedBox(height: 8),
+                      Text(
+                        'No steps yet \u2014 get walking!',
+                        style: PixelText.body(size: 13, color: AppColors.textMid),
+                      ),
+                    ],
                   ),
                 ),
               )

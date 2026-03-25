@@ -4,7 +4,7 @@ import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../styles.dart';
 import '../../widgets/pill_button.dart';
-import '../../widgets/step_progress_ring.dart';
+import '../../widgets/step_progress_bar.dart';
 import '../../widgets/tab_layout.dart';
 import '../challenge_detail_screen.dart';
 import '../display_name_screen.dart';
@@ -158,23 +158,15 @@ class HomeTab extends StatelessWidget {
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 8),
-        if (goal > 0)
-          StepProgressRing(
-            progress: progress,
-            width: 220,
-            height: 150,
-            child: Text(
-              '$steps / $goal',
-              style: PixelText.number(size: 28, color: AppColors.accent),
-              textAlign: TextAlign.center,
-            ),
-          )
-        else
-          Text(
-            '$steps',
-            style: PixelText.number(size: 36, color: AppColors.accent),
-            textAlign: TextAlign.center,
-          ),
+        Text(
+          goal > 0 ? '$steps / $goal' : '$steps',
+          style: PixelText.number(size: 28, color: AppColors.accent),
+          textAlign: TextAlign.center,
+        ),
+        if (goal > 0) ...[
+          const SizedBox(height: 4),
+          StepProgressBar(progress: progress),
+        ],
       ],
     );
   }
@@ -183,25 +175,32 @@ class HomeTab extends StatelessWidget {
     final challenge =
         currentChallenge!['challenge'] as Map<String, dynamic>? ?? {};
     final myUserId = authService.userId ?? '';
+    final activeInstances = _challengeInstances
+        .where((i) {
+          final status = i['status'] as String? ?? '';
+          final stakeStatus = i['stakeStatus'] as String? ?? '';
+          return status == 'ACTIVE' || stakeStatus == 'AGREED';
+        })
+        .toList();
 
     return Column(
       children: [
         Text(
           'COMPETITIONS',
-          style: PixelText.title(size: 13, color: AppColors.accent),
+          style: PixelText.title(size: 12, color: AppColors.textMid),
         ),
-        const SizedBox(height: 8),
-        if (_challengeInstances.isEmpty)
+        const SizedBox(height: 6),
+        if (activeInstances.isEmpty)
           Text(
-            'No competitions yet. Head to the Challenges tab to start one.',
+            'No active competitions yet. Head to the Challenges tab to start one.',
             style: PixelText.body(size: 13, color: AppColors.textMid),
             textAlign: TextAlign.center,
           )
         else
-          for (final i in _challengeInstances)
+          for (final i in activeInstances)
             _buildChallengeRow(
               context,
-              i as Map<String, dynamic>,
+              i,
               challenge,
               myUserId,
             ),
@@ -214,10 +213,10 @@ class HomeTab extends StatelessWidget {
       children: [
         Text(
           'HOW BARA WORKS',
-          style: PixelText.title(size: 13, color: AppColors.accent),
+          style: PixelText.title(size: 12, color: AppColors.textMid),
           textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Text(
           'Bara turns your daily step count into a private weekly competition with friends.',
           style: PixelText.body(size: 13, color: AppColors.textMid),
@@ -283,21 +282,9 @@ class HomeTab extends StatelessWidget {
       friendName = userB['displayName'] as String? ?? '???';
     }
 
-    final status = instance['status'] as String? ?? '';
-    final stakeStatus = instance['stakeStatus'] as String? ?? '';
-    final isActive = status == 'ACTIVE' || stakeStatus == 'AGREED';
-
-    String statusLabel;
-    Color statusColor;
-    if (isActive) {
-      statusLabel = 'ACTIVE';
-      statusColor = AppColors.pillGreen;
-    } else {
-      final proposedById = instance['proposedById'] as String? ?? '';
-      final isIncoming = proposedById.isNotEmpty && proposedById != myUserId;
-      statusLabel = isIncoming ? 'ACCEPT' : 'WAITING';
-      statusColor = isIncoming ? AppColors.accent : AppColors.pillGold;
-    }
+    final ranking = instance['ranking'] as Map<String, dynamic>?;
+    final rank = ranking?['rank'] as int? ?? 1;
+    final rankLabel = _ordinal(rank);
 
     return GestureDetector(
       onTap: () {
@@ -320,20 +307,13 @@ class HomeTab extends StatelessWidget {
             Expanded(
               child: Text(
                 'vs $friendName',
-                style: PixelText.body(size: 13, color: AppColors.textDark),
+                style: PixelText.body(color: AppColors.textDark),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                statusLabel,
-                style: PixelText.pill(size: 10, color: statusColor),
-              ),
+            Text(
+              rankLabel,
+              style: PixelText.body(color: AppColors.textMid),
             ),
           ],
         ),
@@ -363,9 +343,9 @@ class HomeTab extends StatelessWidget {
       children: [
         Text(
           'FRIENDS TODAY',
-          style: PixelText.title(size: 13, color: AppColors.accent),
+          style: PixelText.title(size: 12, color: AppColors.textMid),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 6),
         for (int i = 0; i < topFriends.length; i++)
           _buildLeaderboardRow(i + 1, topFriends[i]),
       ],
@@ -545,5 +525,19 @@ class HomeTab extends StatelessWidget {
           ),
       ],
     );
+  }
+
+  static String _ordinal(int n) {
+    if (n % 100 >= 11 && n % 100 <= 13) return '${n}th';
+    switch (n % 10) {
+      case 1:
+        return '${n}st';
+      case 2:
+        return '${n}nd';
+      case 3:
+        return '${n}rd';
+      default:
+        return '${n}th';
+    }
   }
 }

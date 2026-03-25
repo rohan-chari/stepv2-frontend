@@ -92,7 +92,7 @@ void main() {
       expect(find.text('COMPETITIONS'), findsOneWidget);
       expect(
         find.text(
-          'No competitions yet. Head to the Challenges tab to start one.',
+          'No active competitions yet. Head to the Challenges tab to start one.',
         ),
         findsOneWidget,
       );
