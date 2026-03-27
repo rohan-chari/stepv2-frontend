@@ -163,6 +163,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         await widget.authService.updateAdminAccess(
           user['isAdmin'] as bool? ?? false,
         );
+        await widget.authService.updateCoins(
+          user['coins'] as int? ?? 0,
+        );
       }
       return true;
     } catch (error) {

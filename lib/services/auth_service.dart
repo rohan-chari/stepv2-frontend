@@ -20,6 +20,7 @@ class AuthService {
   static const _keyDisplayName = 'auth_display_name';
   static const _keySessionToken = 'auth_session_token';
   static const _keyIsAdmin = 'auth_is_admin';
+  static const _keyCoins = 'auth_coins';
 
   final BackendApiService _backendApiService;
   String? _identityToken;
@@ -30,6 +31,7 @@ class AuthService {
   String? _displayName;
   String? _sessionToken;
   bool _isAdmin = false;
+  int _coins = 0;
 
   String? get identityToken => _identityToken;
   String? get sessionToken => _sessionToken;
@@ -39,6 +41,7 @@ class AuthService {
   int? get stepGoal => _stepGoal;
   String? get displayName => _displayName;
   bool get isAdmin => _isAdmin;
+  int get coins => _coins;
   bool get isSignedIn => _identityToken != null && _userIdentifier != null;
   bool get hasSessionToken =>
       _sessionToken != null && _sessionToken!.isNotEmpty;
@@ -53,6 +56,7 @@ class AuthService {
     _displayName = prefs.getString(_keyDisplayName);
     _sessionToken = prefs.getString(_keySessionToken);
     _isAdmin = prefs.getBool(_keyIsAdmin) ?? false;
+    _coins = prefs.getInt(_keyCoins) ?? 0;
     return isSignedIn && hasSessionToken;
   }
 
@@ -96,6 +100,7 @@ class AuthService {
       _displayName = backendUser['displayName'] as String?;
       _sessionToken = response['sessionToken'] as String?;
       _isAdmin = backendUser['isAdmin'] as bool? ?? false;
+      _coins = backendUser['coins'] as int? ?? 0;
       _lastErrorMessage = null;
 
       await _persist();
@@ -137,6 +142,7 @@ class AuthService {
     _stepGoal = null;
     _displayName = null;
     _sessionToken = null;
+    _coins = 0;
     _isAdmin = false;
 
     final prefs = await SharedPreferences.getInstance();
@@ -157,6 +163,12 @@ class AuthService {
     } else {
       await prefs.remove(_keySessionToken);
     }
+  }
+
+  Future<void> updateCoins(int coins) async {
+    _coins = coins;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyCoins, coins);
   }
 
   Future<void> updateAdminAccess(bool isAdmin) async {
@@ -183,6 +195,7 @@ class AuthService {
       await prefs.setString(_keySessionToken, _sessionToken!);
     }
     await prefs.setBool(_keyIsAdmin, _isAdmin);
+    await prefs.setInt(_keyCoins, _coins);
   }
 
   String? _buildDisplayName(AuthorizationCredentialAppleID credential) {

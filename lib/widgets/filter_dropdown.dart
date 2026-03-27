@@ -33,6 +33,7 @@ class FilterDropdown<T> extends StatelessWidget {
           icon: Icon(Icons.expand_more, color: AppColors.textMid, size: 22),
           dropdownColor: AppColors.parchmentLight,
           borderRadius: BorderRadius.circular(8),
+          alignment: AlignmentDirectional.bottomStart,
           style: PixelText.title(size: 16, color: AppColors.textDark),
           selectedItemBuilder: (context) {
             return options.map((o) {

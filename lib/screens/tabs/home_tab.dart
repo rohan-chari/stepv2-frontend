@@ -83,6 +83,19 @@ class HomeTab extends StatelessWidget {
   Widget _buildContent(BuildContext context) {
     return Column(
       children: [
+        // Coin balance
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.monetization_on, size: 22, color: AppColors.pillGold),
+            const SizedBox(width: 4),
+            Text(
+              '${authService.coins}',
+              style: PixelText.title(size: 20, color: AppColors.pillGold),
+            ),
+          ],
+        ),
+        _buildDivider(),
         // Steps display
         _buildStepDisplay(),
 

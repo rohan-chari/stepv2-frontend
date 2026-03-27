@@ -157,7 +157,7 @@ class _ProfileTabState extends State<ProfileTab> {
                   const SizedBox(height: 4),
                   Text(
                     widget.email!,
-                    style: PixelText.body(size: 12, color: AppColors.textMid),
+                    style: PixelText.body(color: AppColors.textMid),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -165,7 +165,7 @@ class _ProfileTabState extends State<ProfileTab> {
                   const SizedBox(height: 4),
                   Text(
                     'Goal: ${widget.stepGoal} steps/day',
-                    style: PixelText.body(size: 13, color: AppColors.textMid),
+                    style: PixelText.body(color: AppColors.textMid),
                   ),
                 ],
               ],
@@ -268,31 +268,30 @@ class _StatsSectionState extends State<_StatsSection> {
     return '$steps';
   }
 
-  Widget _buildStatCard(String label, String value) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-        decoration: BoxDecoration(
-          color: AppColors.parchmentLight,
-          border: Border.all(color: AppColors.parchmentBorder),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Column(
-          children: [
-            Text(
-              value,
-              style: PixelText.number(size: 18, color: AppColors.accent),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: PixelText.body(size: 10, color: AppColors.textMid),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+  TableRow _buildStatRow(String label, String value, int index) {
+    return TableRow(
+      decoration: BoxDecoration(
+        color: index.isOdd
+            ? AppColors.accent.withValues(alpha: 0.07)
+            : Colors.transparent,
       ),
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          child: Text(
+            label,
+            style: PixelText.body(size: 16, color: AppColors.textMid),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          child: Text(
+            value,
+            style: PixelText.title(size: 18, color: AppColors.textDark),
+            textAlign: TextAlign.right,
+          ),
+        ),
+      ],
     );
   }
 
@@ -314,34 +313,30 @@ class _StatsSectionState extends State<_StatsSection> {
       );
     }
 
-    return Column(
+    return Table(
+      columnWidths: const {
+        0: FlexColumnWidth(),
+        1: IntrinsicColumnWidth(),
+      },
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      border: TableBorder(
+        horizontalInside: BorderSide(
+          color: AppColors.parchmentBorder.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
       children: [
-        Row(
-          children: [
-            _buildStatCard('THIS WEEK', _formatSteps(_thisWeek)),
-            const SizedBox(width: 12),
-            _buildStatCard('THIS MONTH', _formatSteps(_thisMonth)),
-          ],
+        _buildStatRow('This Week', _formatSteps(_thisWeek), 0),
+        _buildStatRow('This Month', _formatSteps(_thisMonth), 1),
+        _buildStatRow('This Year', _formatSteps(_thisYear), 2),
+        _buildStatRow('All Time', _formatSteps(_allTime), 3),
+        _buildStatRow(
+          'Goal Streak',
+          '$_streak day${_streak == 1 ? '' : 's'}',
+          4,
         ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            _buildStatCard('THIS YEAR', _formatSteps(_thisYear)),
-            const SizedBox(width: 12),
-            _buildStatCard('ALL TIME', _formatSteps(_allTime)),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            _buildStatCard(
-              'GOAL STREAK',
-              '$_streak day${_streak == 1 ? '' : 's'}',
-            ),
-            const SizedBox(width: 12),
-            _buildStatCard('RECORD', '$_wins W - $_losses L'),
-          ],
-        ),
+        _buildStatRow('Record', '$_wins W - $_losses L', 5),
+        _buildStatRow('Coins', '${widget.authService.coins}', 6),
       ],
     );
   }
