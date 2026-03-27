@@ -87,6 +87,12 @@ abstract final class AppColors {
   // Firefly
   static const fireflyGlow = Color(0xFFFFE87C);
 
+  // Coin (rich gold)
+  static const coinLight = Color(0xFFE8C850);
+  static const coinMid = Color(0xFFCDA434);
+  static const coinDark = Color(0xFFB8860B);
+  static const coinEdge = Color(0xFF8B6914);
+
   // Pill button palette (3 colors)
   // Primary – green
   static const pillGreen = Color(0xFF58CC02);

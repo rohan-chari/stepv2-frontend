@@ -336,7 +336,6 @@ class _StatsSectionState extends State<_StatsSection> {
           4,
         ),
         _buildStatRow('Record', '$_wins W - $_losses L', 5),
-        _buildStatRow('Coins', '${widget.authService.coins}', 6),
       ],
     );
   }

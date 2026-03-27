@@ -5,6 +5,7 @@ import '../../services/auth_service.dart';
 import '../../styles.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/goal_track.dart';
+import '../../widgets/spinning_coin.dart';
 import '../../widgets/tab_layout.dart';
 import '../challenge_detail_screen.dart';
 import '../display_name_screen.dart';
@@ -80,24 +81,34 @@ class HomeTab extends StatelessWidget {
     );
   }
 
+  Widget _buildCoinBadge() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SpinningCoin(size: 20),
+        const SizedBox(width: 5),
+        Text(
+          '${authService.coins}',
+          style: PixelText.title(size: 16, color: AppColors.coinDark),
+        ),
+      ],
+    );
+  }
+
   Widget _buildContent(BuildContext context) {
     return Column(
       children: [
-        // Coin balance
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        // Steps display with coin badge top-right
+        Stack(
           children: [
-            Icon(Icons.monetization_on, size: 22, color: AppColors.pillGold),
-            const SizedBox(width: 4),
-            Text(
-              '${authService.coins}',
-              style: PixelText.title(size: 20, color: AppColors.pillGold),
+            _buildStepDisplay(),
+            Positioned(
+              top: 0,
+              right: 0,
+              child: _buildCoinBadge(),
             ),
           ],
         ),
-        _buildDivider(),
-        // Steps display
-        _buildStepDisplay(),
 
         // Setup prompts
         if (displayName == null || stepGoal == null) ...[
