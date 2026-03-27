@@ -1,83 +1,121 @@
 import 'package:flutter/material.dart';
 import 'content_board.dart';
-import 'trail_sign.dart';
 import '../styles.dart';
 
-/// Enforces the "one board per screen" pattern for tabs.
-/// Fixed TrailSign header at top, single scrollable ContentBoard below.
+/// Single full-screen board layout for tabs.
+/// Sky background shows above the board (behind the notch/status bar).
+/// The wood frame starts below the safe area, contains the title + content,
+/// and its bottom rests on the nav bar.
 class TabLayout extends StatelessWidget {
-  static const double _horizontalMargin = 16;
-
   final String title;
   final Widget child;
   final Future<void> Function()? onRefresh;
+  final bool centerContent;
+  final bool showTitle;
 
   const TabLayout({
     super.key,
     required this.title,
     required this.child,
     this.onRefresh,
+    this.centerContent = false,
+    this.showTitle = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    final boardWidth =
-        MediaQuery.of(context).size.width - (_horizontalMargin * 2);
+    final topInset = MediaQuery.of(context).padding.top;
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+    final tabBarHeight = 77.5 + bottomInset;
 
-    Widget scrollable = SingleChildScrollView(
-      padding: const EdgeInsets.only(
-        top: 16,
-        left: _horizontalMargin,
-        right: _horizontalMargin,
-        bottom: 120,
-      ),
-      child: Center(
-        child: ContentBoard(width: boardWidth, child: child),
-      ),
+    return Column(
+      children: [
+        // Sky area above the board (status bar / notch region)
+        SizedBox(height: topInset + 24),
+        // Board from here down to the nav bar
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(bottom: tabBarHeight + 110),
+            child: ContentBoard(
+              expand: true,
+              child: centerContent
+                  ? Column(
+                      children: [
+                        if (showTitle) ...[
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4, bottom: 8),
+                            child: Text(
+                              title,
+                              style: PixelText.title(
+                                  size: 24, color: AppColors.textDark),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                          Container(
+                            height: 1,
+                            color: AppColors.parchmentBorder
+                                .withValues(alpha: 0.5),
+                          ),
+                        ],
+                        Expanded(
+                          child: Center(
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 16),
+                              child: child,
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : _buildScrollable(),
+            ),
+          ),
+        ),
+      ],
     );
+  }
 
+  Widget _buildScrollableContent() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (showTitle) ...[
+          Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 8),
+            child: Text(
+              title,
+              style: PixelText.title(size: 24, color: AppColors.textDark),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          Container(
+            height: 1,
+            color: AppColors.parchmentBorder.withValues(alpha: 0.5),
+          ),
+          const SizedBox(height: 12),
+        ],
+        child,
+      ],
+    );
+  }
+
+  Widget _buildScrollable() {
     if (onRefresh != null) {
-      scrollable = RefreshIndicator(
+      return RefreshIndicator(
         onRefresh: onRefresh!,
         color: AppColors.accent,
         backgroundColor: AppColors.parchment,
         child: AlwaysScrollableScrollView(
-          padding: const EdgeInsets.only(
-            top: 16,
-            left: _horizontalMargin,
-            right: _horizontalMargin,
-            bottom: 120,
-          ),
-          child: Center(
-            child: ContentBoard(width: boardWidth, child: child),
-          ),
+          padding: const EdgeInsets.only(top: 4, bottom: 16),
+          child: _buildScrollableContent(),
         ),
       );
     }
 
-    return SafeArea(
-      child: Column(
-        children: [
-          // Fixed header
-          Padding(
-            padding: const EdgeInsets.only(
-              top: 24,
-              left: _horizontalMargin,
-              right: _horizontalMargin,
-            ),
-            child: TrailSign(
-              width: boardWidth,
-              child: Text(
-                title,
-                style: PixelText.title(size: 24, color: AppColors.textDark),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-          // Scrollable content board
-          Expanded(child: scrollable),
-        ],
-      ),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(top: 4, bottom: 16),
+      child: _buildScrollableContent(),
     );
   }
 }

@@ -237,6 +237,18 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  Future<void> removeFriend({
+    required String identityToken,
+    required String friendshipId,
+  }) async {
+    await _sendJsonRequest(
+      method: 'DELETE',
+      path: '/friends/$friendshipId',
+      body: {},
+      identityToken: identityToken,
+    );
+  }
+
   Future<List<Map<String, dynamic>>> fetchFriendsSteps({
     required String identityToken,
     required String date,
@@ -338,6 +350,18 @@ class BackendApiService {
 
     final payload = await _decodeJsonResponse(response);
     return payload['progress'] as Map<String, dynamic>;
+  }
+
+  Future<void> cancelChallenge({
+    required String identityToken,
+    required String instanceId,
+  }) async {
+    await _sendJsonRequest(
+      method: 'DELETE',
+      path: '/challenges/$instanceId',
+      body: {},
+      identityToken: identityToken,
+    );
   }
 
   Future<Map<String, dynamic>> fetchCurrentChallenge({

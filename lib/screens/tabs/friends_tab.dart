@@ -276,42 +276,23 @@ class _FriendsTabState extends State<FriendsTab> {
 
   Widget _buildSectionHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.only(top: 12, bottom: 6),
+      padding: const EdgeInsets.only(top: 16, bottom: 8),
       child: Text(
         title,
-        style: PixelText.title(size: 12, color: AppColors.textMid),
+        style: PixelText.title(size: 14, color: AppColors.textMid),
+        textAlign: TextAlign.center,
       ),
     );
   }
 
-  Widget _buildRequestRow({required String displayName, Widget? trailing}) {
-    return Container(
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-      decoration: BoxDecoration(
-        color: AppColors.parchmentLight,
-        border: Border.all(color: AppColors.parchmentBorder),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              displayName,
-              style: PixelText.title(size: 14, color: AppColors.textDark),
-            ),
-          ),
-          ?trailing,
-        ],
+  Widget _buildDivider() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Container(
+        height: 1,
+        color: AppColors.parchmentBorder.withValues(alpha: 0.5),
       ),
     );
-  }
-
-
-  Widget _buildFriendRow(Map<String, dynamic> friend) {
-    final displayName = friend['displayName'] as String? ?? '???';
-
-    return _buildRequestRow(displayName: displayName);
   }
 
   @override
@@ -403,64 +384,52 @@ class _FriendsTabState extends State<FriendsTab> {
 
             // Incoming requests
             if (_incomingRequests.isNotEmpty) ...[
+              _buildDivider(),
               _buildSectionHeader('INCOMING REQUESTS'),
-              for (final req in _incomingRequests)
-                _buildRequestRow(
-                  displayName:
-                      (req['user'] as Map<String, dynamic>?)?['displayName']
-                          as String? ??
-                      '',
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      PillButton(
-                        label: 'ACCEPT',
-                        variant: PillButtonVariant.primary,
-                        fontSize: 11,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        onPressed: () =>
-                            _respond(req['friendshipId'] as String, true),
-                      ),
-                      const SizedBox(width: 6),
-                      PillButton(
-                        label: 'DECLINE',
-                        variant: PillButtonVariant.accent,
-                        fontSize: 11,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        onPressed: () =>
-                            _respond(req['friendshipId'] as String, false),
-                      ),
-                    ],
+              Table(
+                columnWidths: const {
+                  0: FlexColumnWidth(),
+                  1: IntrinsicColumnWidth(),
+                },
+                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                border: TableBorder(
+                  horizontalInside: BorderSide(
+                    color: AppColors.parchmentBorder.withValues(alpha: 0.3),
+                    width: 1,
                   ),
                 ),
+                children: [
+                  for (int i = 0; i < _incomingRequests.length; i++)
+                    _buildIncomingRow(_incomingRequests[i], i),
+                ],
+              ),
             ],
 
             // Outgoing requests
             if (_outgoingRequests.isNotEmpty) ...[
+              _buildDivider(),
               _buildSectionHeader('SENT REQUESTS'),
-              for (final req in _outgoingRequests)
-                _buildRequestRow(
-                  displayName:
-                      (req['user'] as Map<String, dynamic>?)?['displayName']
-                          as String? ??
-                      '',
-                  trailing: Text(
-                    'PENDING',
-                    style: PixelText.button(
-                      size: 11,
-                      color: AppColors.textAccent,
-                    ),
+              Table(
+                columnWidths: const {
+                  0: FlexColumnWidth(),
+                  1: IntrinsicColumnWidth(),
+                },
+                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                border: TableBorder(
+                  horizontalInside: BorderSide(
+                    color: AppColors.parchmentBorder.withValues(alpha: 0.3),
+                    width: 1,
                   ),
                 ),
+                children: [
+                  for (int i = 0; i < _outgoingRequests.length; i++)
+                    _buildOutgoingRow(_outgoingRequests[i], i),
+                ],
+              ),
             ],
 
             // Friends list
+            _buildDivider(),
             _buildSectionHeader('YOUR FRIENDS'),
             if (_friends.isEmpty)
               Padding(
@@ -471,17 +440,191 @@ class _FriendsTabState extends State<FriendsTab> {
                     const SizedBox(height: 8),
                     Text(
                       'No adventurers yet \u2014 invite some friends!',
-                      style: PixelText.body(size: 13, color: AppColors.textMid),
+                      style: PixelText.body(color: AppColors.textMid),
                       textAlign: TextAlign.center,
                     ),
                   ],
                 ),
+              )
+            else
+              Table(
+                columnWidths: const {
+                  0: FlexColumnWidth(),
+                  1: IntrinsicColumnWidth(),
+                },
+                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                border: TableBorder(
+                  horizontalInside: BorderSide(
+                    color: AppColors.parchmentBorder.withValues(alpha: 0.3),
+                    width: 1,
+                  ),
+                ),
+                children: [
+                  for (int i = 0; i < _friends.length; i++)
+                    _buildFriendTableRow(_friends[i], i),
+                ],
               ),
-            for (final friend in _friends)
-              _buildFriendRow(friend),
           ],
         ),
       ),
     );
+  }
+
+  TableRow _buildFriendTableRow(Map<String, dynamic> friend, int index) {
+    final displayName = friend['displayName'] as String? ?? '???';
+    final friendshipId = friend['friendshipId'] as String? ?? '';
+
+    return TableRow(
+      decoration: BoxDecoration(
+        color: index.isOdd
+            ? AppColors.accent.withValues(alpha: 0.07)
+            : Colors.transparent,
+      ),
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+          child: Text(
+            displayName,
+            style: PixelText.body(size: 18, color: AppColors.textDark),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        GestureDetector(
+          onTap: () => _showFriendMenu(friendshipId, displayName),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+            child: Icon(Icons.more_horiz, size: 22, color: AppColors.textMid),
+          ),
+        ),
+      ],
+    );
+  }
+
+  TableRow _buildIncomingRow(Map<String, dynamic> req, int index) {
+    final displayName =
+        (req['user'] as Map<String, dynamic>?)?['displayName'] as String? ?? '';
+    final friendshipId = req['friendshipId'] as String;
+
+    return TableRow(
+      decoration: BoxDecoration(
+        color: index.isOdd
+            ? AppColors.accent.withValues(alpha: 0.07)
+            : Colors.transparent,
+      ),
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          child: Text(
+            displayName,
+            style: PixelText.body(size: 18, color: AppColors.textDark),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            PillButton(
+              label: 'ACCEPT',
+              variant: PillButtonVariant.primary,
+              fontSize: 11,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              onPressed: () => _respond(friendshipId, true),
+            ),
+            const SizedBox(width: 6),
+            PillButton(
+              label: 'DECLINE',
+              variant: PillButtonVariant.accent,
+              fontSize: 11,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              onPressed: () => _respond(friendshipId, false),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  TableRow _buildOutgoingRow(Map<String, dynamic> req, int index) {
+    final displayName =
+        (req['user'] as Map<String, dynamic>?)?['displayName'] as String? ?? '';
+
+    return TableRow(
+      decoration: BoxDecoration(
+        color: index.isOdd
+            ? AppColors.accent.withValues(alpha: 0.07)
+            : Colors.transparent,
+      ),
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+          child: Text(
+            displayName,
+            style: PixelText.body(size: 18, color: AppColors.textDark),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+          child: Text(
+            'PENDING',
+            style: PixelText.title(size: 14, color: AppColors.textMid),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showFriendMenu(String friendshipId, String displayName) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.parchment,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              displayName,
+              style: PixelText.title(size: 18, color: AppColors.textDark),
+            ),
+            const SizedBox(height: 16),
+            PillButton(
+              label: 'REMOVE FRIEND',
+              variant: PillButtonVariant.accent,
+              fontSize: 13,
+              fullWidth: true,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await _removeFriend(friendshipId);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _removeFriend(String friendshipId) async {
+    try {
+      final identityToken = widget.authService.authToken;
+      if (identityToken == null || identityToken.isEmpty) return;
+
+      await _backendApiService.removeFriend(
+        identityToken: identityToken,
+        friendshipId: friendshipId,
+      );
+
+      if (!mounted) return;
+      await _loadFriends();
+      widget.onFriendsChanged();
+    } catch (e) {
+      if (!mounted) return;
+      showErrorToast(context, 'Couldn\u2019t remove friend. Please try again.');
+    }
   }
 }

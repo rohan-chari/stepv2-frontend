@@ -5,6 +5,7 @@ import '../services/backend_api_service.dart';
 import '../styles.dart';
 import '../widgets/content_board.dart';
 import '../widgets/error_toast.dart';
+import '../widgets/filter_dropdown.dart';
 import '../widgets/game_background.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/race_track.dart';
@@ -74,6 +75,73 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
   String? _agreedStakeName() {
     final stake = _instance['stake'] as Map<String, dynamic>?;
     return stake?['name'] as String?;
+  }
+
+  void _confirmCancel() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.parchment,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'CANCEL CHALLENGE?',
+              style: PixelText.title(size: 18, color: AppColors.textDark),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'This will remove the challenge with ${_friendName()}.',
+              style: PixelText.body(color: AppColors.textMid),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            PillButton(
+              label: 'YES, CANCEL',
+              variant: PillButtonVariant.accent,
+              fontSize: 13,
+              fullWidth: true,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                _cancelChallenge();
+              },
+            ),
+            const SizedBox(height: 10),
+            PillButton(
+              label: 'KEEP IT',
+              variant: PillButtonVariant.secondary,
+              fontSize: 13,
+              fullWidth: true,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              onPressed: () => Navigator.of(ctx).pop(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _cancelChallenge() async {
+    try {
+      final token = widget.authService.authToken;
+      if (token == null || token.isEmpty) return;
+
+      await _api.cancelChallenge(
+        identityToken: token,
+        instanceId: _instance['id'] as String,
+      );
+
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) {
+        showErrorToast(context, 'Couldn\u2019t cancel challenge. Please try again.');
+      }
+    }
   }
 
   Future<void> _fetchProgress() async {
@@ -609,31 +677,13 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
   }
 
   Widget _buildFilterChips() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          _buildFilterChip(null, 'ALL'),
-          for (final type in _relationshipTypes)
-            Padding(
-              padding: const EdgeInsets.only(left: 6),
-              child: _buildFilterChip(type, type.toUpperCase()),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFilterChip(String? type, String label) {
-    final selected = _selectedRelationshipType == type;
-    return PillButton(
-      label: label,
-      variant: selected
-          ? PillButtonVariant.primary
-          : PillButtonVariant.secondary,
-      fontSize: 10,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      onPressed: () => _selectRelationshipType(type),
+    return FilterDropdown<String>(
+      value: _selectedRelationshipType,
+      options: [
+        (null, 'ALL'),
+        for (final type in _relationshipTypes) (type, type.toUpperCase()),
+      ],
+      onChanged: (val) => _selectRelationshipType(val),
     );
   }
 
@@ -910,6 +960,16 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
                     _buildActiveStakeInfo()
                   else
                     _buildNegotiationView(),
+                  const SizedBox(height: 24),
+                  PillButton(
+                    label: 'CANCEL CHALLENGE',
+                    variant: PillButtonVariant.accent,
+                    fontSize: 13,
+                    fullWidth: true,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 12),
+                    onPressed: _confirmCancel,
+                  ),
                 ],
               ),
             ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
+import '../../widgets/filter_dropdown.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/tab_layout.dart';
 
@@ -83,27 +84,12 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   }
 
   Widget _buildPeriodSelector() {
-    return Row(
-      children: _periods.map((entry) {
-        final (value, label) = entry;
-        final selected = value == _selectedPeriod;
-        return Expanded(
-          child: Padding(
-            padding: EdgeInsets.only(
-              right: value == _periods.last.$1 ? 0 : 6,
-            ),
-            child: PillButton(
-              label: label,
-              variant: selected
-                  ? PillButtonVariant.primary
-                  : PillButtonVariant.secondary,
-              fontSize: 10,
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-              onPressed: () => _selectPeriod(value),
-            ),
-          ),
-        );
-      }).toList(),
+    return FilterDropdown<String>(
+      value: _selectedPeriod,
+      options: [for (final (val, label) in _periods) (val, label)],
+      onChanged: (val) {
+        if (val != null) _selectPeriod(val);
+      },
     );
   }
 
@@ -112,8 +98,31 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     bool showEllipsis = false,
     List<TableRow>? trailingRows,
   }) {
-    final allRows = [...rows, ...?trailingRows];
-    final table = Table(
+    final allRows = [...rows];
+
+    if (showEllipsis) {
+      allRows.add(
+        TableRow(
+          children: [
+            const SizedBox.shrink(),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Center(
+                child: Text(
+                  '\u2022 \u2022 \u2022',
+                  style: PixelText.title(size: 18, color: AppColors.textMid),
+                ),
+              ),
+            ),
+            const SizedBox.shrink(),
+          ],
+        ),
+      );
+    }
+
+    allRows.addAll(trailingRows ?? []);
+
+    return Table(
       columnWidths: const {
         0: FixedColumnWidth(32),
         1: FlexColumnWidth(),
@@ -128,32 +137,6 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
       ),
       children: allRows,
     );
-
-    if (!showEllipsis) return table;
-
-    return Stack(
-      children: [
-        table,
-        Positioned(
-          left: 0,
-          right: 0,
-          // Each row is ~31px (6+13+6 padding + font). Position the
-          // ellipsis so it sits centred on the divider between the last
-          // top-10 row and the current-user row.
-          bottom: 31.0 / 2,
-          child: Center(
-            child: Container(
-              color: AppColors.parchment,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text(
-                '...',
-                style: PixelText.body(size: 14, color: AppColors.textMid),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
   }
 
   TableRow _buildTableRow({
@@ -163,21 +146,19 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     bool isCurrentUser = false,
     bool isTop3 = false,
   }) {
-    final rankColor = isTop3 ? AppColors.accent : AppColors.textMid;
-    final nameColor = isCurrentUser ? AppColors.accent : AppColors.textDark;
-
+    final alternateRow = rank.isEven;
     return TableRow(
-      decoration: isCurrentUser
-          ? BoxDecoration(
-              color: AppColors.accent.withValues(alpha: 0.08),
-            )
-          : null,
+      decoration: BoxDecoration(
+        color: alternateRow
+            ? AppColors.accent.withValues(alpha: 0.07)
+            : Colors.transparent,
+      ),
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
           child: Text(
             '$rank',
-            style: PixelText.number(size: 13, color: rankColor),
+            style: PixelText.title(size: 18, color: AppColors.textDark),
             textAlign: TextAlign.right,
           ),
         ),
@@ -185,7 +166,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
           padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
           child: Text(
             displayName,
-            style: PixelText.body(size: 13, color: nameColor),
+            style: PixelText.body(size: 18, color: AppColors.textDark),
             overflow: TextOverflow.ellipsis,
           ),
         ),
@@ -193,7 +174,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
           padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
           child: Text(
             _formatSteps(totalSteps),
-            style: PixelText.number(size: 13, color: AppColors.accent),
+            style: PixelText.title(size: 18, color: AppColors.textDark),
             textAlign: TextAlign.right,
           ),
         ),
@@ -236,7 +217,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                       const SizedBox(height: 8),
                       Text(
                         'No steps yet \u2014 get walking!',
-                        style: PixelText.body(size: 13, color: AppColors.textMid),
+                        style: PixelText.body(size: 18, color: AppColors.textMid),
                       ),
                     ],
                   ),

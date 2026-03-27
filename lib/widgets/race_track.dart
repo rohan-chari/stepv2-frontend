@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../styles.dart';
@@ -16,7 +17,7 @@ class RaceTrack extends StatefulWidget {
     required this.theirSteps,
     required this.myName,
     required this.theirName,
-    this.height = 200,
+    this.height = 240,
   });
 
   @override
@@ -88,7 +89,7 @@ class _RaceTrackPainter extends CustomPainter {
   final String myInitials;
   final String theirInitials;
 
-  static const double _trackWidth = 28.0;
+  static const double _trackWidth = 32.0;
   static const double _avatarRadius = 18.0;
   static const double _avatarBorder = 2.5;
 
@@ -101,132 +102,180 @@ class _RaceTrackPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final (trackPath, trackRect) = _buildOvalPath(size);
+    final trackPath = _buildWindingPath(size);
 
-    _drawTrackOutline(canvas, trackPath);
+    _drawGrass(canvas, size);
+    _drawTrees(canvas, size);
+    _drawCurbs(canvas, trackPath);
     _drawTrackSurface(canvas, trackPath);
-    _drawCenterLine(canvas, trackPath);
-    _drawAvatars(canvas, trackPath, trackRect);
+    _drawDashedCenterLine(canvas, trackPath);
+    _drawFinishLine(canvas, trackPath);
+    _drawAvatars(canvas, trackPath);
   }
 
-  (Path, Rect) _buildOvalPath(Size size) {
+  Path _buildWindingPath(Size size) {
     final w = size.width;
     final h = size.height;
-    final padding = _avatarRadius + _avatarBorder + 12;
-    final trackRect =
-        Rect.fromLTRB(padding, padding + 4, w - padding, h - padding - 4);
-    final ry = trackRect.height / 2;
+    final m = _trackWidth + 20;
 
-    final path = Path()
-      ..addRRect(RRect.fromRectAndRadius(trackRect, Radius.circular(ry)));
-    return (path, trackRect);
+    final path = Path();
+    path.moveTo(w / 2, h - m);
+    path.cubicTo(w - m, h - m, w - m, h * 0.6, w - m, h * 0.55);
+    path.cubicTo(w - m, h * 0.4, m, h * 0.45, m, h * 0.35);
+    path.cubicTo(m, h * 0.2, w - m, h * 0.15, w * 0.6, m);
+
+    return path;
   }
 
-  void _drawTrackOutline(Canvas canvas, Path path) {
-    canvas.drawPath(
-      path,
+  void _drawGrass(Canvas canvas, Size size) {
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(0, 0, size.width, size.height),
+        const Radius.circular(12),
+      ),
       Paint()
-        ..color = AppColors.dirtMid.withValues(alpha: 0.45)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = _trackWidth + 6,
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF8BC34A), Color(0xFF7CB342), Color(0xFF689F38)],
+        ).createShader(Offset.zero & size),
     );
   }
 
-  void _drawTrackSurface(Canvas canvas, Path path) {
+  void _drawTrees(Canvas canvas, Size size) {
+    final rng = math.Random(42);
+    final paint = Paint()..color = AppColors.grassDark.withValues(alpha: 0.5);
+    for (int i = 0; i < 8; i++) {
+      final x = rng.nextDouble() * size.width;
+      final y = rng.nextDouble() * size.height;
+      final r = 10.0 + rng.nextDouble() * 14;
+      canvas.drawCircle(Offset(x, y - r * 0.3), r * 0.6, paint);
+      canvas.drawCircle(Offset(x - r * 0.4, y + r * 0.2), r * 0.5, paint);
+      canvas.drawCircle(Offset(x + r * 0.4, y + r * 0.2), r * 0.5, paint);
+    }
+  }
+
+  void _drawCurbs(Canvas canvas, Path trackPath) {
+    final metrics = trackPath.computeMetrics().first;
+    final totalLength = metrics.length;
+    const stripeLen = 12.0;
+    final redPaint = Paint()
+      ..color = AppColors.accent
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = _trackWidth + 10
+      ..strokeCap = StrokeCap.round;
+    final whitePaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = _trackWidth + 10
+      ..strokeCap = StrokeCap.round;
+
+    for (double d = 0; d < totalLength; d += stripeLen * 2) {
+      final end = (d + stripeLen).clamp(0.0, totalLength);
+      canvas.drawPath(metrics.extractPath(d, end), redPaint);
+      final start2 = end;
+      final end2 = (end + stripeLen).clamp(0.0, totalLength);
+      if (start2 < totalLength) {
+        canvas.drawPath(metrics.extractPath(start2, end2), whitePaint);
+      }
+    }
+  }
+
+  void _drawTrackSurface(Canvas canvas, Path trackPath) {
     canvas.drawPath(
-      path,
+      trackPath,
       Paint()
-        ..color = AppColors.dirtLight.withValues(alpha: 0.55)
+        ..color = const Color(0xFF9E9E9E)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = _trackWidth,
+        ..strokeWidth = _trackWidth
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
     );
   }
 
-  void _drawCenterLine(Canvas canvas, Path path) {
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = AppColors.parchmentDark.withValues(alpha: 0.3)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1,
-    );
+  void _drawDashedCenterLine(Canvas canvas, Path trackPath) {
+    final metrics = trackPath.computeMetrics().first;
+    final totalLength = metrics.length;
+    final paint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round;
+
+    for (double d = 0; d < totalLength; d += 18) {
+      final end = (d + 10).clamp(0.0, totalLength);
+      canvas.drawPath(metrics.extractPath(d, end), paint);
+    }
   }
 
-  void _drawAvatars(Canvas canvas, Path trackPath, Rect trackRect) {
+  void _drawFinishLine(Canvas canvas, Path trackPath) {
+    final metrics = trackPath.computeMetrics().first;
+    final tangent = metrics.getTangentForOffset(metrics.length);
+    if (tangent == null) return;
+
+    canvas.save();
+    canvas.translate(tangent.position.dx, tangent.position.dy);
+    canvas.rotate(tangent.angle);
+
+    const cs = 3.0;
+    const rows = 3;
+    final totalSpan = _trackWidth + 16;
+    final cols = (totalSpan / cs).floor();
+    final sx = -rows * cs / 2;
+    final sy = -totalSpan / 2;
+
+    for (int r = 0; r < rows; r++) {
+      for (int c = 0; c < cols; c++) {
+        canvas.drawRect(
+          Rect.fromLTWH(sx + r * cs, sy + c * cs, cs, cs),
+          Paint()..color = (r + c) % 2 == 0 ? Colors.black : Colors.white,
+        );
+      }
+    }
+    canvas.restore();
+  }
+
+  void _drawAvatars(Canvas canvas, Path trackPath) {
     final metrics = trackPath.computeMetrics().first;
     final totalLength = metrics.length;
 
-    // Find the fraction along the path closest to the bottom center of the rect.
-    // This avoids guessing where addRRect starts its path.
-    final bottomCenter = Offset(trackRect.center.dx, trackRect.bottom);
-    double startFrac = 0.5;
-    double bestDist = double.infinity;
-    for (int i = 0; i < 200; i++) {
-      final frac = i / 200.0;
-      final tangent = metrics.getTangentForOffset(frac * totalLength);
-      if (tangent != null) {
-        final dist = (tangent.position - bottomCenter).distanceSquared;
-        if (dist < bestDist) {
-          bestDist = dist;
-          startFrac = frac;
-        }
-      }
-    }
-
-    // Counter-clockwise: subtract position from the start fraction
-    final myFrac = (startFrac - myPosition) % 1.0;
-    final theirFrac = (startFrac - theirPosition) % 1.0;
+    final myFrac = myPosition.clamp(0.0, 0.999);
+    final theirFrac = theirPosition.clamp(0.0, 0.999);
 
     final myTangent = metrics.getTangentForOffset(myFrac * totalLength);
     final theirTangent = metrics.getTangentForOffset(theirFrac * totalLength);
 
     if (myTangent == null || theirTangent == null) return;
 
-    // Draw trailing avatar first so leader renders on top
     if (myPosition >= theirPosition) {
-      _drawAvatar(
-          canvas, theirTangent.position, theirInitials, AppColors.pillGold);
-      _drawAvatar(
-          canvas, myTangent.position, myInitials, AppColors.pillGreen);
+      _drawAvatar(canvas, theirTangent.position, theirInitials, AppColors.pillGold);
+      _drawAvatar(canvas, myTangent.position, myInitials, AppColors.pillGreen);
     } else {
-      _drawAvatar(
-          canvas, myTangent.position, myInitials, AppColors.pillGreen);
-      _drawAvatar(
-          canvas, theirTangent.position, theirInitials, AppColors.pillGold);
+      _drawAvatar(canvas, myTangent.position, myInitials, AppColors.pillGreen);
+      _drawAvatar(canvas, theirTangent.position, theirInitials, AppColors.pillGold);
     }
   }
 
-  void _drawAvatar(
-      Canvas canvas, Offset center, String initials, Color color) {
-    canvas.drawCircle(
-        center, _avatarRadius + _avatarBorder, Paint()..color = Colors.white);
+  void _drawAvatar(Canvas canvas, Offset center, String initials, Color color) {
+    canvas.drawCircle(center, _avatarRadius + _avatarBorder, Paint()..color = Colors.white);
     canvas.drawCircle(center, _avatarRadius, Paint()..color = color);
 
     final builder = ui.ParagraphBuilder(ui.ParagraphStyle(
-      textAlign: TextAlign.center,
-      fontSize: 14,
-      fontWeight: FontWeight.bold,
+      textAlign: TextAlign.center, fontSize: 14, fontWeight: FontWeight.bold,
     ))
-      ..pushStyle(ui.TextStyle(
-        color: Colors.white,
-        fontWeight: FontWeight.bold,
-      ))
+      ..pushStyle(ui.TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
       ..addText(initials);
 
     final paragraph = builder.build()
       ..layout(const ui.ParagraphConstraints(width: _avatarRadius * 2));
 
-    canvas.drawParagraph(
-      paragraph,
-      Offset(center.dx - _avatarRadius, center.dy - paragraph.height / 2),
-    );
+    canvas.drawParagraph(paragraph,
+      Offset(center.dx - _avatarRadius, center.dy - paragraph.height / 2));
   }
 
   @override
   bool shouldRepaint(covariant _RaceTrackPainter oldDelegate) {
     return oldDelegate.myPosition != myPosition ||
-        oldDelegate.theirPosition != theirPosition ||
-        oldDelegate.myInitials != myInitials ||
-        oldDelegate.theirInitials != theirInitials;
+        oldDelegate.theirPosition != theirPosition;
   }
 }

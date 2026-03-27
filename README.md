@@ -191,9 +191,14 @@ flutter run --dart-define=BACKEND_BASE_URL=http://<YOUR_LAN_IP>:3000
 flutter run --dart-define=BACKEND_BASE_URL=http://192.168.1.188:3000
 flutter run --profile --dart-define=BACKEND_BASE_URL=http://192.168.1.188:3000                                                      
 
+
 flutter run --profile --dart-define=BACKEND_BASE_URL=http://192.168.86.195:3000
 
-flutter run --profile --dart-define=BACKEND_BASE_URL=http://192.168.1.94:3000                                                       
+#Shef apartment
+  flutter run --profile --dart-define=BACKEND_BASE_URL=http://192.168.1.151:3000                                                      
+
+#my apartment
+flutter run --dart-define=BACKEND_BASE_URL=http://192.168.1.94:3000                                                       
 ```
 
 ### Production

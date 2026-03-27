@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 
@@ -12,7 +13,6 @@ import '../services/notification_service.dart';
 import '../styles.dart';
 import '../widgets/capybara.dart';
 import '../widgets/error_toast.dart';
-import '../widgets/game_background.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/trail_sign.dart';
 import '../widgets/wooden_tab_bar.dart';
@@ -512,33 +512,30 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final screenHeight = MediaQuery.of(context).size.height;
-    final groundHeight = screenHeight * 0.28;
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    // Tab bar height: top border(2) + bevel(1.5) + grain(2) + padding(8) + board(54) + padding(10) + safe area
+    final tabBarHeight = 77.5 + bottomPadding;
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
-          // Shared background across all tabs
+          // Sky gradient background
           Positioned.fill(
-            child: GameBackground(
-              groundHeightFraction: 0.28,
-              child: const SizedBox.shrink(),
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color(0xFF87CEEB),
+                    Color(0xFFB0E0F0),
+                    Color(0xFFD4F1F9),
+                  ],
+                ),
+              ),
             ),
           ),
-
-          // Capybara walking on the ground (all tabs)
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: groundHeight * 0.45,
-            height: 200,
-            child: const WalkingCapybara(
-              walkDuration: Duration(seconds: 12),
-              size: 200,
-            ),
-          ),
-
           // Tab content — swipeable
           Positioned.fill(
             child: PageView(
@@ -566,6 +563,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   friendsSteps: _friendsSteps,
                   activeChallengeProgress: _activeChallengeProgress,
                   onChallengeChanged: _fetchCurrentChallenge,
+                  onOpenFriendsTab: _openFriendsTab,
                 ),
                 ChallengesTab(
                   authService: widget.authService,
@@ -584,6 +582,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   onRefresh: _refreshFriendsTab,
                   backendApiService: _backendApiService,
                 ),
+                LeaderboardTab(
+                  authService: widget.authService,
+                  backendApiService: _backendApiService,
+                ),
                 ProfileTab(
                   authService: widget.authService,
                   displayName: _displayName,
@@ -594,11 +596,30 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   backendApiService: _backendApiService,
                   notificationService: widget.notificationService,
                 ),
-                LeaderboardTab(
-                  authService: widget.authService,
-                  backendApiService: _backendApiService,
-                ),
               ],
+            ),
+          ),
+
+          // Grass ground strip above the nav bar
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: tabBarHeight,
+            height: 110,
+            child: CustomPaint(
+              painter: _GrassStripPainter(),
+            ),
+          ),
+
+          // Capybara walking on the grass
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: tabBarHeight + 10,
+            height: 112,
+            child: const WalkingCapybara(
+              walkDuration: Duration(seconds: 10),
+              size: 112,
             ),
           ),
 
@@ -628,12 +649,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   badgeCount: _incomingFriendRequests,
                 ),
                 const WoodenTabItem(
-                  icon: Icons.person_rounded,
-                  label: 'Profile',
-                ),
-                const WoodenTabItem(
                   icon: Icons.leaderboard_rounded,
                   label: 'Leaderboard',
+                ),
+                const WoodenTabItem(
+                  icon: Icons.person_rounded,
+                  label: 'Profile',
                 ),
               ],
             ),
@@ -642,4 +663,87 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       ),
     );
   }
+}
+
+class _GrassStripPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Dirt layer
+    final dirtPath = Path()
+      ..moveTo(0, size.height * 0.3);
+    for (double x = 0; x <= size.width; x += 4) {
+      final y = size.height * 0.3 +
+          sin(x * 0.008) * 6 +
+          cos(x * 0.015) * 4;
+      dirtPath.lineTo(x, y);
+    }
+    dirtPath.lineTo(size.width, size.height);
+    dirtPath.lineTo(0, size.height);
+    dirtPath.close();
+
+    canvas.drawPath(
+      dirtPath,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [AppColors.dirtLight, AppColors.dirtMid, AppColors.dirtDark],
+        ).createShader(Offset.zero & size),
+    );
+
+    // Grass layer
+    final grassPath = Path()
+      ..moveTo(0, size.height * 0.2);
+    for (double x = 0; x <= size.width; x += 4) {
+      final y = size.height * 0.2 +
+          sin(x * 0.008) * 6 +
+          cos(x * 0.015) * 4;
+      grassPath.lineTo(x, y);
+    }
+    grassPath.lineTo(size.width, size.height * 0.4);
+    for (double x = size.width; x >= 0; x -= 4) {
+      final y = size.height * 0.4 +
+          sin(x * 0.008) * 4 +
+          cos(x * 0.015) * 3;
+      grassPath.lineTo(x, y);
+    }
+    grassPath.close();
+
+    canvas.drawPath(
+      grassPath,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            AppColors.grassBright,
+            AppColors.grassMid,
+            AppColors.grassDark,
+          ],
+        ).createShader(Offset.zero & size),
+    );
+
+    // Grass highlight line
+    final highlightPath = Path();
+    for (double x = 0; x <= size.width; x += 4) {
+      final y = size.height * 0.2 +
+          sin(x * 0.008) * 6 +
+          cos(x * 0.015) * 4;
+      if (x == 0) {
+        highlightPath.moveTo(x, y);
+      } else {
+        highlightPath.lineTo(x, y);
+      }
+    }
+    canvas.drawPath(
+      highlightPath,
+      Paint()
+        ..color = const Color(0xFFA5D6A7)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

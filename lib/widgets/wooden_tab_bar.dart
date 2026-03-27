@@ -174,7 +174,7 @@ class _TabItemWidget extends StatelessWidget {
         Stack(
           clipBehavior: Clip.none,
           children: [
-            Icon(item.icon, size: 22, color: color),
+            Icon(item.icon, size: 26, color: color),
             // Badge
             if (item.badgeCount > 0)
               Positioned(
@@ -205,9 +205,11 @@ class _TabItemWidget extends StatelessWidget {
         Text(
           item.label,
           style: PixelText.body(
-            size: 10,
+            size: 11,
             color: color,
           ),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
         ),
       ],
     );

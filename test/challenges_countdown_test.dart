@@ -49,7 +49,7 @@ void main() {
       ),
     );
 
-    expect(find.text('CHALLENGE ENDS IN'), findsOneWidget);
+    expect(find.text('CHALLENGE END: '), findsOneWidget);
     expect(find.text('1D 1H 2M 5S'), findsOneWidget);
 
     now = now.add(const Duration(seconds: 1));

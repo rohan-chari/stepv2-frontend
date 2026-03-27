@@ -7,11 +7,12 @@ import '../../styles.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_icon_button.dart';
+import '../../widgets/content_board.dart';
 import '../../widgets/tab_layout.dart';
-import '../../widgets/trail_sign.dart';
 import '../admin_challenge_screen.dart';
 import '../display_name_screen.dart';
 import '../start_screen.dart';
+import '../step_goal_screen.dart';
 
 class ProfileTab extends StatefulWidget {
   final AuthService authService;
@@ -50,118 +51,14 @@ class _ProfileTabState extends State<ProfileTab> {
   }
 
   Future<void> _showStepGoalDialog() async {
-    final currentGoal = widget.authService.stepGoal;
-    final controller = TextEditingController(
-      text: currentGoal?.toString() ?? '',
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (context) => StepGoalScreen(authService: widget.authService),
+      ),
     );
-
-    final result = await showDialog<int>(
-      context: context,
-      builder: (context) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          child: TrailSign(
-            width: 300,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'STEP GOAL',
-                  style: PixelText.title(size: 18, color: AppColors.textDark),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'How many steps per day?',
-                  style: PixelText.body(size: 14, color: AppColors.textMid),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: controller,
-                  keyboardType: TextInputType.number,
-                  textAlign: TextAlign.center,
-                  style: PixelText.number(size: 24, color: AppColors.textDark),
-                  decoration: InputDecoration(
-                    filled: true,
-                    fillColor: AppColors.parchmentLight,
-                    border: OutlineInputBorder(
-                      borderSide: BorderSide(color: AppColors.parchmentBorder),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: AppColors.parchmentBorder),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: AppColors.accent, width: 2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: PillButton(
-                        label: 'CANCEL',
-                        variant: PillButtonVariant.secondary,
-                        fontSize: 13,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: PillButton(
-                        label: 'SAVE',
-                        variant: PillButtonVariant.primary,
-                        fontSize: 13,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        onPressed: () {
-                          final value = int.tryParse(controller.text);
-                          if (value != null && value > 0) {
-                            Navigator.of(context).pop(value);
-                          }
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-
-    if (result == null || !mounted) return;
-
-    await widget.authService.updateStepGoal(result);
-    widget.onSettingsChanged();
-
-    try {
-      final identityToken = widget.authService.authToken;
-      if (identityToken != null && identityToken.isNotEmpty) {
-        await _api.setStepGoal(identityToken: identityToken, stepGoal: result);
-        _statsKey.currentState?.loadStats();
-      }
-    } catch (e) {
-      if (mounted) {
-        showErrorToast(
-          context,
-          'Couldn\u2019t save your step goal. Please try again.',
-        );
-      }
+    if (result == true && mounted) {
+      widget.onSettingsChanged();
+      _statsKey.currentState?.loadStats();
     }
   }
 
@@ -215,6 +112,8 @@ class _ProfileTabState extends State<ProfileTab> {
       builder: (context) => _SettingsSheet(
         authService: widget.authService,
         notificationService: widget.notificationService,
+        onSettingsChanged: widget.onSettingsChanged,
+        onShowStepGoalDialog: _showStepGoalDialog,
       ),
     );
   }
@@ -227,27 +126,32 @@ class _ProfileTabState extends State<ProfileTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Gear button
-          Align(
-            alignment: Alignment.topRight,
-            child: PillIconButton(
-              icon: Icons.settings_rounded,
-              size: 36,
-              variant: PillButtonVariant.secondary,
-              onPressed: _openSettings,
-            ),
+          // Display name centered, gear in top-right corner
+          Row(
+            children: [
+              const SizedBox(width: 36),
+              if (widget.displayName != null)
+                Expanded(
+                  child: Text(
+                    widget.displayName!,
+                    style: PixelText.title(size: 20, color: AppColors.accent),
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              PillIconButton(
+                icon: Icons.settings_rounded,
+                size: 36,
+                variant: PillButtonVariant.secondary,
+                onPressed: _openSettings,
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           // User info
           Center(
             child: Column(
               children: [
-                if (widget.displayName != null)
-                  Text(
-                    widget.displayName!,
-                    style: PixelText.title(size: 20, color: AppColors.accent),
-                    textAlign: TextAlign.center,
-                  ),
                 if (widget.email != null &&
                     !widget.email!.endsWith('@privaterelay.appleid.com')) ...[
                   const SizedBox(height: 4),
@@ -266,47 +170,6 @@ class _ProfileTabState extends State<ProfileTab> {
                 ],
               ],
             ),
-          ),
-
-          const SizedBox(height: 12),
-
-          // Edit buttons
-          Row(
-            children: [
-              Expanded(
-                child: PillButton(
-                  label: 'EDIT NAME',
-                  variant: PillButtonVariant.secondary,
-                  fontSize: 12,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  onPressed: () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            DisplayNameScreen(authService: widget.authService),
-                      ),
-                    );
-                    widget.onSettingsChanged();
-                  },
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: PillButton(
-                  label: 'EDIT GOAL',
-                  variant: PillButtonVariant.secondary,
-                  fontSize: 12,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  onPressed: _showStepGoalDialog,
-                ),
-              ),
-            ],
           ),
 
           _buildDivider(),
@@ -487,10 +350,14 @@ class _StatsSectionState extends State<_StatsSection> {
 class _SettingsSheet extends StatefulWidget {
   final AuthService authService;
   final NotificationService? notificationService;
+  final VoidCallback onSettingsChanged;
+  final VoidCallback onShowStepGoalDialog;
 
   const _SettingsSheet({
     required this.authService,
     this.notificationService,
+    required this.onSettingsChanged,
+    required this.onShowStepGoalDialog,
   });
 
   @override
@@ -522,6 +389,36 @@ class _SettingsSheetState extends State<_SettingsSheet> {
             style: PixelText.title(size: 18, color: AppColors.textDark),
           ),
           const SizedBox(height: 16),
+          PillButton(
+            label: 'EDIT DISPLAY NAME',
+            variant: PillButtonVariant.secondary,
+            fontSize: 13,
+            fullWidth: true,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) =>
+                      DisplayNameScreen(authService: widget.authService),
+                ),
+              );
+              widget.onSettingsChanged();
+            },
+          ),
+          const SizedBox(height: 10),
+          PillButton(
+            label: 'EDIT STEP GOAL',
+            variant: PillButtonVariant.secondary,
+            fontSize: 13,
+            fullWidth: true,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            onPressed: () {
+              Navigator.of(context).pop();
+              widget.onShowStepGoalDialog();
+            },
+          ),
+          const SizedBox(height: 10),
           if (widget.notificationService != null) ...[
             _NotificationToggle(
               notificationService: widget.notificationService!,

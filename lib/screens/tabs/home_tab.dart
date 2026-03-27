@@ -4,7 +4,7 @@ import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../styles.dart';
 import '../../widgets/pill_button.dart';
-import '../../widgets/step_progress_bar.dart';
+import '../../widgets/goal_track.dart';
 import '../../widgets/tab_layout.dart';
 import '../challenge_detail_screen.dart';
 import '../display_name_screen.dart';
@@ -27,6 +27,7 @@ class HomeTab extends StatelessWidget {
   final List<Map<String, dynamic>> friendsSteps;
   final Map<String, dynamic>? activeChallengeProgress;
   final VoidCallback onChallengeChanged;
+  final VoidCallback? onOpenFriendsTab;
 
   const HomeTab({
     super.key,
@@ -47,6 +48,7 @@ class HomeTab extends StatelessWidget {
     required this.friendsSteps,
     this.activeChallengeProgress,
     required this.onChallengeChanged,
+    this.onOpenFriendsTab,
   });
 
   bool get _hasActiveChallenge =>
@@ -94,12 +96,6 @@ class HomeTab extends StatelessWidget {
         if (_hasActiveChallenge) ...[
           _buildDivider(),
           _buildChallengeSection(context),
-        ],
-
-        // Friends leaderboard
-        if (friendsSteps.isNotEmpty) ...[
-          _buildDivider(),
-          _buildFriendsLeaderboard(),
         ],
 
         if (_shouldShowHowItWorks) ...[
@@ -165,7 +161,20 @@ class HomeTab extends StatelessWidget {
         ),
         if (goal > 0) ...[
           const SizedBox(height: 4),
-          StepProgressBar(progress: progress),
+          GoalTrack(
+            runners: [
+              GoalTrackRunner(
+                name: displayName ?? 'You',
+                progress: progress,
+                isUser: true,
+              ),
+              for (final friend in friendsSteps)
+                GoalTrackRunner(
+                  name: friend['displayName'] as String? ?? '???',
+                  progress: _friendGoalProgress(friend),
+                ),
+            ],
+          ),
         ],
       ],
     );
@@ -187,23 +196,39 @@ class HomeTab extends StatelessWidget {
       children: [
         Text(
           'COMPETITIONS',
-          style: PixelText.title(size: 12, color: AppColors.textMid),
+          style: PixelText.title(size: 14, color: AppColors.textMid),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         if (activeInstances.isEmpty)
           Text(
             'No active competitions yet. Head to the Challenges tab to start one.',
-            style: PixelText.body(size: 13, color: AppColors.textMid),
+            style: PixelText.body(color: AppColors.textMid),
             textAlign: TextAlign.center,
           )
         else
-          for (final i in activeInstances)
-            _buildChallengeRow(
-              context,
-              i,
-              challenge,
-              myUserId,
+          Table(
+            columnWidths: const {
+              0: FlexColumnWidth(),
+              1: IntrinsicColumnWidth(),
+            },
+            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+            border: TableBorder(
+              horizontalInside: BorderSide(
+                color: AppColors.parchmentBorder.withValues(alpha: 0.3),
+                width: 1,
+              ),
             ),
+            children: [
+              for (int idx = 0; idx < activeInstances.length; idx++)
+                _buildChallengeTableRow(
+                  context,
+                  activeInstances[idx],
+                  challenge,
+                  myUserId,
+                  idx,
+                ),
+            ],
+          ),
       ],
     );
   }
@@ -212,38 +237,29 @@ class HomeTab extends StatelessWidget {
     return Column(
       children: [
         Text(
-          'HOW BARA WORKS',
-          style: PixelText.title(size: 12, color: AppColors.textMid),
+          'GET STARTED',
+          style: PixelText.title(size: 14, color: AppColors.textMid),
           textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Text(
-          'Bara turns your daily step count into a private weekly competition with friends.',
-          style: PixelText.body(size: 13, color: AppColors.textMid),
+          'Add friends to race against them on the track and start weekly step challenges!',
+          style: PixelText.body(color: AppColors.textMid),
           textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 12),
-        _buildGuideCard(
-          title: 'TRACK TODAY',
-          body:
-              'Sync Health data and watch today\u2019s ring fill as your steps come in.',
-        ),
-        const SizedBox(height: 10),
-        _buildGuideCard(
-          title: 'BUILD YOUR CREW',
-          body:
-              'Add friends to unlock the leaderboard and see who is actually hitting their goal.',
-        ),
-        const SizedBox(height: 10),
-        _buildGuideCard(
-          title: 'START A STAKED CHALLENGE',
-          body:
-              'Open Challenges, pick a friend, propose a stake, and let Sunday\u2019s totals settle it.',
+        const SizedBox(height: 16),
+        PillButton(
+          label: 'ADD FRIENDS',
+          variant: PillButtonVariant.primary,
+          fullWidth: true,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          onPressed: () => onOpenFriendsTab?.call(),
         ),
       ],
     );
   }
 
+  // ignore: unused_element
   Widget _buildGuideCard({required String title, required String body}) {
     return Container(
       width: double.infinity,
@@ -267,11 +283,12 @@ class HomeTab extends StatelessWidget {
     );
   }
 
-  Widget _buildChallengeRow(
+  TableRow _buildChallengeTableRow(
     BuildContext context,
     Map<String, dynamic> instance,
     Map<String, dynamic> challenge,
     String myUserId,
+    int index,
   ) {
     final userA = instance['userA'] as Map<String, dynamic>?;
     final userB = instance['userB'] as Map<String, dynamic>?;
@@ -286,38 +303,66 @@ class HomeTab extends StatelessWidget {
     final rank = ranking?['rank'] as int? ?? 1;
     final rankLabel = _ordinal(rank);
 
-    return GestureDetector(
-      onTap: () {
-        Navigator.of(context)
-            .push<bool>(
-              MaterialPageRoute(
-                builder: (context) => ChallengeDetailScreen(
-                  authService: authService,
-                  instance: instance,
-                  challenge: challenge,
-                ),
-              ),
-            )
-            .then((_) => onChallengeChanged());
-      },
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 6),
-        child: Row(
-          children: [
-            Expanded(
+    return TableRow(
+      decoration: BoxDecoration(
+        color: index.isOdd
+            ? AppColors.accent.withValues(alpha: 0.07)
+            : Colors.transparent,
+      ),
+      children: [
+        TableCell(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              Navigator.of(context)
+                  .push<bool>(
+                    MaterialPageRoute(
+                      builder: (context) => ChallengeDetailScreen(
+                        authService: authService,
+                        instance: instance,
+                        challenge: challenge,
+                      ),
+                    ),
+                  )
+                  .then((_) => onChallengeChanged());
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
               child: Text(
                 'vs $friendName',
-                style: PixelText.body(color: AppColors.textDark),
+                style: PixelText.title(size: 18, color: AppColors.textDark),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            Text(
-              rankLabel,
-              style: PixelText.body(color: AppColors.textMid),
-            ),
-          ],
+          ),
         ),
-      ),
+        TableCell(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              Navigator.of(context)
+                  .push<bool>(
+                    MaterialPageRoute(
+                      builder: (context) => ChallengeDetailScreen(
+                        authService: authService,
+                        instance: instance,
+                        challenge: challenge,
+                      ),
+                    ),
+                  )
+                  .then((_) => onChallengeChanged());
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+              child: Text(
+                rankLabel,
+                style: PixelText.title(size: 18, color: AppColors.textDark),
+                textAlign: TextAlign.right,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -427,30 +472,26 @@ class HomeTab extends StatelessWidget {
 
   Widget _buildPermissionPrompt(BuildContext context) {
     return TabLayout(
-      title: 'HOME',
+      title: 'HEALTH DATA',
+      centerContent: true,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            'HEALTH DATA',
-            style: PixelText.title(size: 20, color: AppColors.textDark),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 14),
           Text(
             'Bara needs access to your health data to count your daily steps.\n\n'
             "That's all we use - just your step count.",
-            style: PixelText.body(size: 14, color: AppColors.textMid),
+            style: PixelText.body(color: AppColors.textMid),
             textAlign: TextAlign.center,
           ),
           if (error != null) ...[
             const SizedBox(height: 14),
             Text(
               error!,
-              style: PixelText.body(size: 13, color: AppColors.error),
+              style: PixelText.body(color: AppColors.error),
               textAlign: TextAlign.center,
             ),
           ],
-          const SizedBox(height: 24),
+          const SizedBox(height: 28),
           if (isLoading)
             const CircularProgressIndicator(color: AppColors.accent)
           else
@@ -466,22 +507,18 @@ class HomeTab extends StatelessWidget {
 
   Widget _buildNotificationPrompt() {
     return TabLayout(
-      title: 'HOME',
+      title: 'NOTIFICATIONS',
+      centerContent: true,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            'NOTIFICATIONS',
-            style: PixelText.title(size: 20, color: AppColors.textDark),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 14),
           Text(
             'Get notified when a friend challenges you to a step battle!\n\n'
             'We\u2019ll only send important updates \u2014 no spam.',
-            style: PixelText.body(size: 14, color: AppColors.textMid),
+            style: PixelText.body(color: AppColors.textMid),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 28),
           PillButton(
             label: 'ENABLE NOTIFICATIONS',
             variant: PillButtonVariant.primary,
@@ -525,6 +562,13 @@ class HomeTab extends StatelessWidget {
           ),
       ],
     );
+  }
+
+  static double _friendGoalProgress(Map<String, dynamic> friend) {
+    final steps = friend['steps'] as int? ?? 0;
+    final goal = friend['stepGoal'] as int?;
+    if (goal != null && goal > 0) return (steps / goal).clamp(0.0, 1.0);
+    return 0.0;
   }
 
   static String _ordinal(int n) {

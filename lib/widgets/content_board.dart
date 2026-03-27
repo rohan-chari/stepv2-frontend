@@ -8,11 +8,13 @@ import '../styles.dart';
 class ContentBoard extends StatelessWidget {
   final Widget child;
   final double width;
+  final bool expand;
 
   const ContentBoard({
     super.key,
     required this.child,
     this.width = 340,
+    this.expand = false,
   });
 
   @override
@@ -21,7 +23,8 @@ class ContentBoard extends StatelessWidget {
     const frameThickness = px * 3;
 
     return Container(
-      width: width,
+      width: expand ? null : width,
+      height: expand ? double.infinity : null,
       decoration: BoxDecoration(
         color: AppColors.woodDark,
         border: Border.all(color: AppColors.woodShadow, width: px),

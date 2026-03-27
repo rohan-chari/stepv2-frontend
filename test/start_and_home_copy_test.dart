@@ -48,10 +48,8 @@ void main() {
         ),
       );
 
-      expect(find.text('HOW BARA WORKS'), findsOneWidget);
-      expect(find.text('TRACK TODAY'), findsOneWidget);
-      expect(find.text('BUILD YOUR CREW'), findsOneWidget);
-      expect(find.text('START A STAKED CHALLENGE'), findsOneWidget);
+      expect(find.text('GET STARTED'), findsOneWidget);
+      expect(find.text('ADD FRIENDS'), findsOneWidget);
     },
   );
 
@@ -146,7 +144,7 @@ void main() {
         ),
       );
 
-      expect(find.text('HOW BARA WORKS'), findsNothing);
+      expect(find.text('GET STARTED'), findsNothing);
     },
   );
 }

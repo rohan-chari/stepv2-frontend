@@ -199,7 +199,10 @@ class _ChallengesTabState extends State<ChallengesTab> {
       return;
     }
 
-    if (availableFriends.isEmpty) return;
+    if (availableFriends.isEmpty) {
+      showInfoToast(context, 'All friends already challenged this week!');
+      return;
+    }
 
     setState(() => _showFriendPicker = true);
   }
@@ -244,7 +247,7 @@ class _ChallengesTabState extends State<ChallengesTab> {
         const SizedBox(height: 6),
         Text(
           challenge['description'] as String? ?? '',
-          style: PixelText.body(size: 13, color: AppColors.textMid),
+          style: PixelText.body(color: AppColors.textMid),
           textAlign: TextAlign.center,
         ),
         if (challengeEndsAt != null) ...[
@@ -252,32 +255,27 @@ class _ChallengesTabState extends State<ChallengesTab> {
           _buildCountdownBoard(challengeEndsAt),
         ],
 
-        // Incoming challenges
+        // Instance tables by category
         if (incoming.isNotEmpty) ...[
           _buildDivider(),
           _buildSectionHeader('INCOMING'),
-          for (final inst in incoming)
-            _buildInstanceRow(context, inst, challenge),
+          _buildInstanceTable(context, incoming, challenge),
         ],
 
-        // Active challenges
         if (active.isNotEmpty) ...[
           _buildDivider(),
           _buildSectionHeader('ACTIVE'),
-          for (final inst in active)
-            _buildInstanceRow(context, inst, challenge),
+          _buildInstanceTable(context, active, challenge),
         ],
 
-        // Outgoing challenges
         if (outgoing.isNotEmpty) ...[
           _buildDivider(),
           _buildSectionHeader('SENT'),
-          for (final inst in outgoing)
-            _buildInstanceRow(context, inst, challenge),
+          _buildInstanceTable(context, outgoing, challenge),
         ],
 
         // Empty state
-        if (!hasAnyInstances && availableFriends.isNotEmpty) ...[
+        if (!hasAnyInstances) ...[
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 24),
             child: Column(
@@ -286,7 +284,7 @@ class _ChallengesTabState extends State<ChallengesTab> {
                 const SizedBox(height: 8),
                 Text(
                   'No challenges yet \u2014 time to start one!',
-                  style: PixelText.body(size: 13, color: AppColors.textMid),
+                  style: PixelText.body(color: AppColors.textMid),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -295,10 +293,9 @@ class _ChallengesTabState extends State<ChallengesTab> {
         ],
 
         // Start a challenge button
-        if ((widget.friendsSteps.isEmpty || availableFriends.isNotEmpty) &&
-            widget.authService.displayName != null) ...[
+        if (widget.authService.displayName != null) ...[
           _buildDivider(),
-          if (!_showFriendPicker)
+          if (!_showFriendPicker) ...[
             PillButton(
               label: 'CHALLENGE A FRIEND',
               variant: PillButtonVariant.primary,
@@ -306,8 +303,17 @@ class _ChallengesTabState extends State<ChallengesTab> {
               fullWidth: true,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               onPressed: () => _handleChallengeFriendTap(availableFriends),
-            )
-          else
+            ),
+            if (widget.friendsSteps.isNotEmpty && availableFriends.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'All friends already challenged this week!',
+                  style: PixelText.body(color: AppColors.textMid),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+          ] else
             _buildFriendPicker(availableFriends),
         ],
       ],
@@ -317,29 +323,18 @@ class _ChallengesTabState extends State<ChallengesTab> {
   Widget _buildCountdownBoard(DateTime endsAt) {
     final remaining = endsAt.difference(_countdownNow);
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColors.parchmentLight,
-        border: Border.all(color: AppColors.parchmentBorder),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        children: [
-          Text(
-            'CHALLENGE ENDS IN',
-            style: PixelText.title(size: 12, color: AppColors.textMid),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            _formatCountdown(remaining),
-            style: PixelText.number(size: 18, color: AppColors.accent),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          'CHALLENGE END: ',
+          style: PixelText.title(size: 17.5, color: AppColors.textMid),
+        ),
+        Text(
+          _formatCountdown(remaining),
+          style: PixelText.number(size: 17.5, color: AppColors.textDark),
+        ),
+      ],
     );
   }
 
@@ -380,11 +375,27 @@ class _ChallengesTabState extends State<ChallengesTab> {
       children: [
         Text(
           'PICK A FRIEND',
-          style: PixelText.title(size: 13, color: AppColors.textMid),
+          style: PixelText.title(size: 14, color: AppColors.textMid),
         ),
         const SizedBox(height: 8),
-        for (final friend in friends) _buildFriendPickerRow(friend),
-        const SizedBox(height: 8),
+        Table(
+          columnWidths: const {
+            0: FlexColumnWidth(),
+            1: IntrinsicColumnWidth(),
+          },
+          defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+          border: TableBorder(
+            horizontalInside: BorderSide(
+              color: AppColors.parchmentBorder.withValues(alpha: 0.3),
+              width: 1,
+            ),
+          ),
+          children: [
+            for (int i = 0; i < friends.length; i++)
+              _buildFriendPickerTableRow(friends[i], i),
+          ],
+        ),
+        const SizedBox(height: 12),
         PillButton(
           label: 'CANCEL',
           variant: PillButtonVariant.secondary,
@@ -396,40 +407,76 @@ class _ChallengesTabState extends State<ChallengesTab> {
     );
   }
 
-  Widget _buildFriendPickerRow(Map<String, dynamic> friend) {
+  TableRow _buildFriendPickerTableRow(Map<String, dynamic> friend, int index) {
     final id = friend['id'] as String? ?? '';
     final name = friend['displayName'] as String? ?? '???';
 
-    return GestureDetector(
-      onTap: () => _startChallenge(id, name),
-      child: Container(
-        margin: const EdgeInsets.only(top: 6),
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-        decoration: BoxDecoration(
-          color: AppColors.parchmentLight,
-          border: Border.all(color: AppColors.parchmentBorder),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          children: [
-            Expanded(
+    return TableRow(
+      decoration: BoxDecoration(
+        color: index.isOdd
+            ? AppColors.accent.withValues(alpha: 0.07)
+            : Colors.transparent,
+      ),
+      children: [
+        TableCell(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _startChallenge(id, name),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
               child: Text(
                 name,
-                style: PixelText.title(size: 14, color: AppColors.textDark),
+                style: PixelText.body(size: 18, color: AppColors.textDark),
               ),
             ),
-            Icon(Icons.chevron_right, size: 20, color: AppColors.textMid),
-          ],
+          ),
         ),
-      ),
+        TableCell(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _startChallenge(id, name),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+              child: Icon(Icons.chevron_right, size: 22, color: AppColors.textMid),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildInstanceRow(
+  Widget _buildInstanceTable(
+    BuildContext context,
+    List<Map<String, dynamic>> instances,
+    Map<String, dynamic> challenge,
+  ) {
+    return Table(
+      columnWidths: const {
+        0: FlexColumnWidth(),
+        1: IntrinsicColumnWidth(),
+        2: FixedColumnWidth(36),
+      },
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      border: TableBorder(
+        horizontalInside: BorderSide(
+          color: AppColors.parchmentBorder.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      children: [
+        for (int i = 0; i < instances.length; i++)
+          _buildInstanceTableRow(context, instances[i], challenge, i),
+      ],
+    );
+  }
+
+  TableRow _buildInstanceTableRow(
     BuildContext context,
     Map<String, dynamic> instance,
     Map<String, dynamic> challenge,
+    int index,
   ) {
+    final instanceId = instance['id'] as String? ?? '';
     final userA = instance['userA'] as Map<String, dynamic>?;
     final userB = instance['userB'] as Map<String, dynamic>?;
 
@@ -445,7 +492,6 @@ class _ChallengesTabState extends State<ChallengesTab> {
     final proposedById = instance['proposedById'] as String? ?? '';
     final isIncoming = proposedById.isNotEmpty && proposedById != _myUserId;
 
-    // Determine stake name for display
     final proposedStake = instance['proposedStake'] as Map<String, dynamic>?;
     final agreedStake = instance['stake'] as Map<String, dynamic>?;
     final stakeName =
@@ -454,75 +500,143 @@ class _ChallengesTabState extends State<ChallengesTab> {
         '';
 
     String statusLabel;
-    Color statusColor;
     if (status == 'ACTIVE' || stakeStatus == 'AGREED') {
       statusLabel = 'ACTIVE';
-      statusColor = AppColors.pillGreen;
     } else if (isIncoming) {
       statusLabel = 'ACCEPT';
-      statusColor = AppColors.accent;
     } else {
       statusLabel = 'WAITING';
-      statusColor = AppColors.pillGold;
     }
 
-    return GestureDetector(
-      onTap: () {
-        Navigator.of(context)
-            .push<bool>(
-              MaterialPageRoute(
-                builder: (context) => ChallengeDetailScreen(
-                  authService: widget.authService,
-                  instance: instance,
-                  challenge: challenge,
-                ),
+    void onTap() {
+      Navigator.of(context)
+          .push<bool>(
+            MaterialPageRoute(
+              builder: (context) => ChallengeDetailScreen(
+                authService: widget.authService,
+                instance: instance,
+                challenge: challenge,
               ),
-            )
-            .then((_) => widget.onChallengeChanged());
-      },
-      child: Container(
-        margin: const EdgeInsets.only(top: 6),
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-        decoration: BoxDecoration(
-          color: AppColors.parchmentLight,
-          border: Border.all(color: AppColors.parchmentBorder),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          children: [
-            Expanded(
+            ),
+          )
+          .then((_) => widget.onChallengeChanged());
+    }
+
+    return TableRow(
+      decoration: BoxDecoration(
+        color: index.isOdd
+            ? AppColors.accent.withValues(alpha: 0.07)
+            : Colors.transparent,
+      ),
+      children: [
+        TableCell(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     'vs $friendName',
-                    style: PixelText.title(size: 14, color: AppColors.textDark),
+                    style:
+                        PixelText.title(size: 18, color: AppColors.textDark),
+                    overflow: TextOverflow.ellipsis,
                   ),
                   if (stakeName.isNotEmpty) ...[
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 2),
                     Text(
                       stakeName,
-                      style: PixelText.body(size: 11, color: AppColors.textMid),
+                      style: PixelText.body(
+                          size: 14, color: AppColors.textMid),
                     ),
                   ],
                 ],
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(12),
-              ),
+          ),
+        ),
+        TableCell(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
               child: Text(
                 statusLabel,
-                style: PixelText.pill(size: 11, color: statusColor),
+                style:
+                    PixelText.title(size: 16, color: AppColors.textDark),
+                textAlign: TextAlign.right,
               ),
+            ),
+          ),
+        ),
+        TableCell(
+          child: GestureDetector(
+            onTap: () => _showChallengeMenu(instanceId, friendName),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Icon(Icons.more_horiz, size: 22, color: AppColors.textMid),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showChallengeMenu(String instanceId, String friendName) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.parchment,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'vs $friendName',
+              style: PixelText.title(size: 18, color: AppColors.textDark),
+            ),
+            const SizedBox(height: 16),
+            PillButton(
+              label: 'CANCEL CHALLENGE',
+              variant: PillButtonVariant.accent,
+              fontSize: 13,
+              fullWidth: true,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await _cancelChallenge(instanceId);
+              },
             ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _cancelChallenge(String instanceId) async {
+    try {
+      final token = widget.authService.authToken;
+      if (token == null || token.isEmpty) return;
+
+      await BackendApiService().cancelChallenge(
+        identityToken: token,
+        instanceId: instanceId,
+      );
+
+      if (!mounted) return;
+      widget.onChallengeChanged();
+    } catch (e) {
+      if (!mounted) return;
+      showErrorToast(
+          context, 'Couldn\u2019t cancel challenge. Please try again.');
+    }
   }
 
   Widget _buildEmptyState() {

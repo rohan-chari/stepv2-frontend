@@ -6,6 +6,7 @@ import '../styles.dart';
 import '../widgets/content_board.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/game_background.dart';
+import '../widgets/filter_dropdown.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/trail_sign.dart';
 
@@ -125,31 +126,13 @@ class _StakePickerScreenState extends State<StakePickerScreen> {
   }
 
   Widget _buildFilterChips() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          _buildFilterChip(null, 'ALL'),
-          for (final type in _relationshipTypes)
-            Padding(
-              padding: const EdgeInsets.only(left: 6),
-              child: _buildFilterChip(type, type.toUpperCase()),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFilterChip(String? type, String label) {
-    final selected = _selectedRelationshipType == type;
-    return PillButton(
-      label: label,
-      variant: selected
-          ? PillButtonVariant.primary
-          : PillButtonVariant.secondary,
-      fontSize: 10,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      onPressed: () => _selectRelationshipType(type),
+    return FilterDropdown<String>(
+      value: _selectedRelationshipType,
+      options: [
+        (null, 'ALL'),
+        for (final type in _relationshipTypes) (type, type.toUpperCase()),
+      ],
+      onChanged: (val) => _selectRelationshipType(val),
     );
   }
 
