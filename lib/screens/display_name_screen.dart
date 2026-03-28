@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'main_shell.dart';
+import 'step_goal_onboarding_screen.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../services/notification_service.dart';
@@ -148,7 +148,7 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
       } else {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (context) => MainShell(
+            builder: (context) => StepGoalOnboardingScreen(
               authService: widget.authService,
               notificationService: widget.notificationService,
             ),

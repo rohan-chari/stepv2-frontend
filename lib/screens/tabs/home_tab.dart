@@ -87,7 +87,7 @@ class HomeTab extends StatelessWidget {
                     _buildTopStatusBar(),
                     const SizedBox(height: 12),
 
-                    if (displayName == null || stepGoal == null) ...[
+                    if (displayName == null) ...[
                       _buildSetupPrompts(context),
                       const SizedBox(height: 12),
                     ],
@@ -312,16 +312,6 @@ class HomeTab extends StatelessWidget {
               );
               onDisplayNameChanged();
             },
-          ),
-        if (displayName == null) const SizedBox(height: 10),
-        if (stepGoal == null)
-          PillButton(
-            label: 'SET STEP GOAL',
-            variant: PillButtonVariant.secondary,
-            fontSize: 14,
-            fullWidth: true,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            onPressed: onSetStepGoal,
           ),
       ],
     );

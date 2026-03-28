@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../config/backend_config.dart';
 import '../models/step_data.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
@@ -456,7 +457,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 8),
+                Text(
+                  'Minimum: 5,000 steps',
+                  style: PixelText.body(size: 12, color: AppColors.textMid),
+                ),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
@@ -483,7 +489,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                         ),
                         onPressed: () {
                           final value = int.tryParse(controller.text);
-                          if (value != null && value > 0) {
+                          if (value != null && value >= BackendConfig.minStepGoal) {
                             Navigator.of(context).pop(value);
                           }
                         },
