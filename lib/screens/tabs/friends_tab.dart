@@ -2,19 +2,23 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/pill_button.dart';
-import '../../widgets/pill_icon_button.dart';
-import '../../widgets/tab_layout.dart';
+import '../../widgets/retro_card.dart';
+import '../../widgets/spinning_coin.dart';
 
 class FriendsTab extends StatefulWidget {
   final AuthService authService;
   final VoidCallback onFriendsChanged;
   final Future<void> Function()? onRefresh;
   final BackendApiService? backendApiService;
+  final StepData? stepData;
+  final int? stepGoal;
+  final String? displayName;
 
   const FriendsTab({
     super.key,
@@ -22,6 +26,9 @@ class FriendsTab extends StatefulWidget {
     required this.onFriendsChanged,
     this.onRefresh,
     this.backendApiService,
+    this.stepData,
+    this.stepGoal,
+    this.displayName,
   });
 
   @override
@@ -40,6 +47,10 @@ class _FriendsTabState extends State<FriendsTab> {
   bool _isSearching = false;
   bool _showDropdown = false;
   Timer? _debounce;
+
+  static const _textShadows = [
+    Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
+  ];
 
   @override
   void initState() {
@@ -193,7 +204,275 @@ class _FriendsTabState extends State<FriendsTab> {
     }
   }
 
+  Future<void> _removeFriend(String friendshipId) async {
+    try {
+      final identityToken = widget.authService.authToken;
+      if (identityToken == null || identityToken.isEmpty) return;
 
+      await _backendApiService.removeFriend(
+        identityToken: identityToken,
+        friendshipId: friendshipId,
+      );
+
+      if (!mounted) return;
+      await _loadFriends();
+      widget.onFriendsChanged();
+    } catch (e) {
+      if (!mounted) return;
+      showErrorToast(context, 'Couldn\u2019t remove friend. Please try again.');
+    }
+  }
+
+  void _showFriendMenu(String friendshipId, String displayName) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.parchment,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              displayName,
+              style: PixelText.title(size: 18, color: AppColors.textDark),
+            ),
+            const SizedBox(height: 16),
+            PillButton(
+              label: 'REMOVE FRIEND',
+              variant: PillButtonVariant.accent,
+              fontSize: 13,
+              fullWidth: true,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await _removeFriend(friendshipId);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // -- Build --
+
+  @override
+  Widget build(BuildContext context) {
+    final topInset = MediaQuery.of(context).padding.top;
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+    final tabBarHeight = 77.5 + bottomInset;
+
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.accent),
+      );
+    }
+
+    final searchBorderRadius = _showDropdown
+        ? const BorderRadius.vertical(top: Radius.circular(8))
+        : BorderRadius.circular(8);
+
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: EdgeInsets.only(top: topInset + 12, bottom: tabBarHeight),
+        child: RefreshIndicator(
+          onRefresh: _handleRefresh,
+          color: AppColors.accent,
+          backgroundColor: AppColors.parchment,
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                sliver: SliverToBoxAdapter(
+                  child: Column(
+                    children: [
+                      _buildTopStatusBar(),
+                      const SizedBox(height: 12),
+
+                      // Search bar
+                      Column(
+                        children: [
+                          TextField(
+                            controller: _searchController,
+                            onChanged: _onSearchChanged,
+                            textAlign: TextAlign.center,
+                            style: PixelText.body(
+                              size: 16,
+                              color: AppColors.textDark,
+                            ),
+                            decoration: InputDecoration(
+                              filled: true,
+                              fillColor: AppColors.parchmentLight,
+                              hintText: 'Search by display name',
+                              hintStyle: PixelText.body(
+                                size: 16,
+                                color: AppColors.parchmentBorder,
+                              ),
+                              border: OutlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: AppColors.parchmentBorder,
+                                ),
+                                borderRadius: searchBorderRadius,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: AppColors.parchmentBorder,
+                                ),
+                                borderRadius: searchBorderRadius,
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: AppColors.accent,
+                                  width: 2,
+                                ),
+                                borderRadius: searchBorderRadius,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                            ),
+                          ),
+                          if (_showDropdown) _buildSearchDropdown(),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Incoming requests
+                      if (_incomingRequests.isNotEmpty) ...[
+                        _buildSectionHeader('INCOMING REQUESTS'),
+                        const SizedBox(height: 8),
+                        for (final req in _incomingRequests) ...[
+                          _buildIncomingCard(req),
+                          const SizedBox(height: 8),
+                        ],
+                        const SizedBox(height: 8),
+                      ],
+
+                      // Outgoing requests
+                      if (_outgoingRequests.isNotEmpty) ...[
+                        _buildSectionHeader('SENT REQUESTS'),
+                        const SizedBox(height: 8),
+                        for (final req in _outgoingRequests) ...[
+                          _buildOutgoingCard(req),
+                          const SizedBox(height: 8),
+                        ],
+                        const SizedBox(height: 8),
+                      ],
+
+                      // Friends list
+                      _buildSectionHeader('YOUR FRIENDS'),
+                      const SizedBox(height: 8),
+                      if (_friends.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                          child: Column(
+                            children: [
+                              Icon(Icons.group_add, size: 32,
+                                  color: AppColors.textMid.withValues(alpha: 0.6)),
+                              const SizedBox(height: 8),
+                              Text(
+                                'No adventurers yet \u2014 invite some friends!',
+                                style: PixelText.body(color: AppColors.textMid)
+                                    .copyWith(shadows: _textShadows),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        for (final friend in _friends) ...[
+                          _buildFriendCard(friend),
+                          const SizedBox(height: 8),
+                        ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopStatusBar() {
+    final steps = widget.stepData?.steps ?? 0;
+    final goal = widget.stepGoal ?? 0;
+    final stepsStr = _formatNumber(steps);
+    final goalStr = goal > 0 ? _formatCompact(goal) : null;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (widget.displayName != null)
+                Text(
+                  widget.displayName!,
+                  style: PixelText.title(size: 26, color: AppColors.textDark)
+                      .copyWith(shadows: _textShadows),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              const SizedBox(height: 2),
+              if (goalStr != null)
+                Text(
+                  '$stepsStr / $goalStr',
+                  style: PixelText.number(size: 20, color: AppColors.accent)
+                      .copyWith(shadows: _textShadows),
+                )
+              else
+                Text(
+                  stepsStr,
+                  style: PixelText.number(size: 20, color: AppColors.accent)
+                      .copyWith(shadows: _textShadows),
+                ),
+            ],
+          ),
+        ),
+        const SpinningCoin(size: 32),
+        const SizedBox(width: 6),
+        Text(
+          '${widget.authService.coins}',
+          style: PixelText.title(size: 24, color: AppColors.coinDark)
+              .copyWith(shadows: _textShadows),
+        ),
+      ],
+    );
+  }
+
+  static String _formatNumber(int n) {
+    final s = n.toString();
+    final buf = StringBuffer();
+    for (int i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) buf.write(',');
+      buf.write(s[i]);
+    }
+    return buf.toString();
+  }
+
+  static String _formatCompact(int n) {
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}k';
+    return '$n';
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Text(
+      title,
+      style: PixelText.title(size: 14, color: AppColors.textMid)
+          .copyWith(shadows: _textShadows),
+      textAlign: TextAlign.center,
+    );
+  }
 
   Widget _buildSearchDropdown() {
     final List<Widget> items;
@@ -274,357 +553,87 @@ class _FriendsTabState extends State<FriendsTab> {
     );
   }
 
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 16, bottom: 8),
-      child: Text(
-        title,
-        style: PixelText.title(size: 14, color: AppColors.textMid),
-        textAlign: TextAlign.center,
-      ),
-    );
-  }
-
-  Widget _buildDivider() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Container(
-        height: 1,
-        color: AppColors.parchmentBorder.withValues(alpha: 0.5),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: AppColors.accent),
-      );
-    }
-
-    final searchBorderRadius = _showDropdown
-        ? const BorderRadius.vertical(top: Radius.circular(8))
-        : BorderRadius.circular(8);
+  Widget _buildFriendCard(Map<String, dynamic> friend) {
+    final displayName = friend['displayName'] as String? ?? '???';
+    final friendshipId = friend['friendshipId'] as String? ?? '';
 
     return GestureDetector(
-      onTap: () => FocusScope.of(context).unfocus(),
-      behavior: HitTestBehavior.opaque,
-      child: TabLayout(
-        title: 'FRIENDS',
-        onRefresh: _handleRefresh,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+      onTap: () => _showFriendMenu(friendshipId, displayName),
+      child: RetroCard(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
           children: [
-            // Search + refresh
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    children: [
-                      TextField(
-                        controller: _searchController,
-                        onChanged: _onSearchChanged,
-                        textAlign: TextAlign.center,
-                        style: PixelText.body(
-                          size: 16,
-                          color: AppColors.textDark,
-                        ),
-                        decoration: InputDecoration(
-                          filled: true,
-                          fillColor: AppColors.parchmentLight,
-                          hintText: 'Search by display name',
-                          hintStyle: PixelText.body(
-                            size: 16,
-                            color: AppColors.parchmentBorder,
-                          ),
-                          border: OutlineInputBorder(
-                            borderSide: BorderSide(
-                              color: AppColors.parchmentBorder,
-                            ),
-                            borderRadius: searchBorderRadius,
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderSide: BorderSide(
-                              color: AppColors.parchmentBorder,
-                            ),
-                            borderRadius: searchBorderRadius,
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderSide: BorderSide(
-                              color: AppColors.accent,
-                              width: 2,
-                            ),
-                            borderRadius: searchBorderRadius,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
-                        ),
-                      ),
-                      if (_showDropdown) _buildSearchDropdown(),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                PillIconButton(
-                  icon: Icons.refresh,
-                  size: 50,
-                  onPressed: _isLoading
-                      ? null
-                      : () {
-                          _loadFriends();
-                          widget.onFriendsChanged();
-                        },
-                ),
-              ],
+            Expanded(
+              child: Text(
+                displayName,
+                style: PixelText.body(size: 16, color: AppColors.textDark),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-
-            // Incoming requests
-            if (_incomingRequests.isNotEmpty) ...[
-              _buildDivider(),
-              _buildSectionHeader('INCOMING REQUESTS'),
-              Table(
-                columnWidths: const {
-                  0: FlexColumnWidth(),
-                  1: IntrinsicColumnWidth(),
-                },
-                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-                border: TableBorder(
-                  horizontalInside: BorderSide(
-                    color: AppColors.parchmentBorder.withValues(alpha: 0.3),
-                    width: 1,
-                  ),
-                ),
-                children: [
-                  for (int i = 0; i < _incomingRequests.length; i++)
-                    _buildIncomingRow(_incomingRequests[i], i),
-                ],
-              ),
-            ],
-
-            // Outgoing requests
-            if (_outgoingRequests.isNotEmpty) ...[
-              _buildDivider(),
-              _buildSectionHeader('SENT REQUESTS'),
-              Table(
-                columnWidths: const {
-                  0: FlexColumnWidth(),
-                  1: IntrinsicColumnWidth(),
-                },
-                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-                border: TableBorder(
-                  horizontalInside: BorderSide(
-                    color: AppColors.parchmentBorder.withValues(alpha: 0.3),
-                    width: 1,
-                  ),
-                ),
-                children: [
-                  for (int i = 0; i < _outgoingRequests.length; i++)
-                    _buildOutgoingRow(_outgoingRequests[i], i),
-                ],
-              ),
-            ],
-
-            // Friends list
-            _buildDivider(),
-            _buildSectionHeader('YOUR FRIENDS'),
-            if (_friends.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 24),
-                child: Column(
-                  children: [
-                    Icon(Icons.group_add, size: 32, color: AppColors.textMid),
-                    const SizedBox(height: 8),
-                    Text(
-                      'No adventurers yet \u2014 invite some friends!',
-                      style: PixelText.body(color: AppColors.textMid),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              )
-            else
-              Table(
-                columnWidths: const {
-                  0: FlexColumnWidth(),
-                  1: IntrinsicColumnWidth(),
-                },
-                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-                border: TableBorder(
-                  horizontalInside: BorderSide(
-                    color: AppColors.parchmentBorder.withValues(alpha: 0.3),
-                    width: 1,
-                  ),
-                ),
-                children: [
-                  for (int i = 0; i < _friends.length; i++)
-                    _buildFriendTableRow(_friends[i], i),
-                ],
-              ),
+            const Icon(Icons.more_horiz, size: 22, color: AppColors.textMid),
           ],
         ),
       ),
     );
   }
 
-  TableRow _buildFriendTableRow(Map<String, dynamic> friend, int index) {
-    final displayName = friend['displayName'] as String? ?? '???';
-    final friendshipId = friend['friendshipId'] as String? ?? '';
-
-    return TableRow(
-      decoration: BoxDecoration(
-        color: index.isOdd
-            ? AppColors.accent.withValues(alpha: 0.07)
-            : Colors.transparent,
-      ),
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-          child: Text(
-            displayName,
-            style: PixelText.body(size: 18, color: AppColors.textDark),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        GestureDetector(
-          onTap: () => _showFriendMenu(friendshipId, displayName),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-            child: Icon(Icons.more_horiz, size: 22, color: AppColors.textMid),
-          ),
-        ),
-      ],
-    );
-  }
-
-  TableRow _buildIncomingRow(Map<String, dynamic> req, int index) {
+  Widget _buildIncomingCard(Map<String, dynamic> req) {
     final displayName =
         (req['user'] as Map<String, dynamic>?)?['displayName'] as String? ?? '';
     final friendshipId = req['friendshipId'] as String;
 
-    return TableRow(
-      decoration: BoxDecoration(
-        color: index.isOdd
-            ? AppColors.accent.withValues(alpha: 0.07)
-            : Colors.transparent,
-      ),
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-          child: Text(
-            displayName,
-            style: PixelText.body(size: 18, color: AppColors.textDark),
-            overflow: TextOverflow.ellipsis,
+    return RetroCard(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              displayName,
+              style: PixelText.body(size: 16, color: AppColors.textDark),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-        ),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            PillButton(
-              label: 'ACCEPT',
-              variant: PillButtonVariant.primary,
-              fontSize: 11,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              onPressed: () => _respond(friendshipId, true),
-            ),
-            const SizedBox(width: 6),
-            PillButton(
-              label: 'DECLINE',
-              variant: PillButtonVariant.accent,
-              fontSize: 11,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              onPressed: () => _respond(friendshipId, false),
-            ),
-          ],
-        ),
-      ],
+          PillButton(
+            label: 'ACCEPT',
+            variant: PillButtonVariant.primary,
+            fontSize: 11,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            onPressed: () => _respond(friendshipId, true),
+          ),
+          const SizedBox(width: 6),
+          PillButton(
+            label: 'DECLINE',
+            variant: PillButtonVariant.accent,
+            fontSize: 11,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            onPressed: () => _respond(friendshipId, false),
+          ),
+        ],
+      ),
     );
   }
 
-  TableRow _buildOutgoingRow(Map<String, dynamic> req, int index) {
+  Widget _buildOutgoingCard(Map<String, dynamic> req) {
     final displayName =
         (req['user'] as Map<String, dynamic>?)?['displayName'] as String? ?? '';
 
-    return TableRow(
-      decoration: BoxDecoration(
-        color: index.isOdd
-            ? AppColors.accent.withValues(alpha: 0.07)
-            : Colors.transparent,
-      ),
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-          child: Text(
-            displayName,
-            style: PixelText.body(size: 18, color: AppColors.textDark),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-          child: Text(
-            'PENDING',
-            style: PixelText.title(size: 14, color: AppColors.textMid),
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _showFriendMenu(String friendshipId, String displayName) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.parchment,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
+    return RetroCard(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
               displayName,
-              style: PixelText.title(size: 18, color: AppColors.textDark),
+              style: PixelText.body(size: 16, color: AppColors.textDark),
+              overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 16),
-            PillButton(
-              label: 'REMOVE FRIEND',
-              variant: PillButtonVariant.accent,
-              fontSize: 13,
-              fullWidth: true,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              onPressed: () async {
-                Navigator.of(context).pop();
-                await _removeFriend(friendshipId);
-              },
-            ),
-          ],
-        ),
+          ),
+          Text(
+            'PENDING',
+            style: PixelText.title(size: 13, color: AppColors.textMid),
+          ),
+        ],
       ),
     );
-  }
-
-  Future<void> _removeFriend(String friendshipId) async {
-    try {
-      final identityToken = widget.authService.authToken;
-      if (identityToken == null || identityToken.isEmpty) return;
-
-      await _backendApiService.removeFriend(
-        identityToken: identityToken,
-        friendshipId: friendshipId,
-      );
-
-      if (!mounted) return;
-      await _loadFriends();
-      widget.onFriendsChanged();
-    } catch (e) {
-      if (!mounted) return;
-      showErrorToast(context, 'Couldn\u2019t remove friend. Please try again.');
-    }
   }
 }

@@ -5,9 +5,8 @@ import '../../services/auth_service.dart';
 import '../../styles.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/goal_track.dart';
+import '../../widgets/retro_card.dart';
 import '../../widgets/spinning_coin.dart';
-import '../../widgets/tab_layout.dart';
-import '../challenge_detail_screen.dart';
 import '../display_name_screen.dart';
 
 class HomeTab extends StatelessWidget {
@@ -29,6 +28,8 @@ class HomeTab extends StatelessWidget {
   final Map<String, dynamic>? activeChallengeProgress;
   final VoidCallback onChallengeChanged;
   final VoidCallback? onOpenFriendsTab;
+  final VoidCallback? onOpenChallengesTab;
+  final VoidCallback? onOpenLeaderboardTab;
 
   const HomeTab({
     super.key,
@@ -50,19 +51,9 @@ class HomeTab extends StatelessWidget {
     this.activeChallengeProgress,
     required this.onChallengeChanged,
     this.onOpenFriendsTab,
+    this.onOpenChallengesTab,
+    this.onOpenLeaderboardTab,
   });
-
-  bool get _hasActiveChallenge =>
-      currentChallenge != null && currentChallenge!['challenge'] != null;
-
-  List<Map<String, dynamic>> get _challengeInstances =>
-      (currentChallenge?['instances'] as List?)?.cast<Map<String, dynamic>>() ??
-      const [];
-
-  bool get _hasChallengeActivity => _challengeInstances.isNotEmpty;
-
-  bool get _shouldShowHowItWorks =>
-      friendsSteps.isEmpty && !_hasChallengeActivity;
 
   @override
   Widget build(BuildContext context) {
@@ -74,76 +65,110 @@ class HomeTab extends StatelessWidget {
       return _buildNotificationPrompt();
     }
 
-    return TabLayout(
-      title: 'HOME',
-      onRefresh: onRefresh,
-      child: _buildContent(context),
-    );
-  }
+    final topInset = MediaQuery.of(context).padding.top;
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+    final tabBarHeight = 77.5 + bottomInset;
+    final bottomPadding = tabBarHeight;
 
-  Widget _buildCoinBadge() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const SpinningCoin(size: 20),
-        const SizedBox(width: 5),
-        Text(
-          '${authService.coins}',
-          style: PixelText.title(size: 16, color: AppColors.coinDark),
-        ),
-      ],
-    );
-  }
+    return Padding(
+      padding: EdgeInsets.only(top: topInset + 12, bottom: bottomPadding),
+      child: RefreshIndicator(
+        onRefresh: onRefresh,
+        color: AppColors.accent,
+        backgroundColor: AppColors.parchment,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              sliver: SliverToBoxAdapter(
+                child: Column(
+                  children: [
+                    _buildTopStatusBar(),
+                    const SizedBox(height: 12),
 
-  Widget _buildContent(BuildContext context) {
-    return Column(
-      children: [
-        // Steps display with coin badge top-right
-        Stack(
-          children: [
-            _buildStepDisplay(),
-            Positioned(
-              top: 0,
-              right: 0,
-              child: _buildCoinBadge(),
+                    if (displayName == null || stepGoal == null) ...[
+                      _buildSetupPrompts(context),
+                      const SizedBox(height: 12),
+                    ],
+
+                    _buildGoalTrackSection(),
+                    const SizedBox(height: 16),
+
+                    _buildActionButtons(),
+                    const SizedBox(height: 16),
+
+                    _buildDailyRewardSlots(),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
-
-        // Setup prompts
-        if (displayName == null || stepGoal == null) ...[
-          _buildDivider(),
-          _buildSetupPrompts(context),
-        ],
-
-        // Challenge section
-        if (_hasActiveChallenge) ...[
-          _buildDivider(),
-          _buildChallengeSection(context),
-        ],
-
-        if (_shouldShowHowItWorks) ...[
-          _buildDivider(),
-          _buildHowItWorksSection(),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildDivider() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Container(
-        height: 1,
-        color: AppColors.parchmentBorder.withValues(alpha: 0.5),
       ),
     );
   }
 
-  Widget _buildStepDisplay() {
+  // -- Top status bar: name | steps | streak | coins --
+
+  Widget _buildTopStatusBar() {
+    final steps = stepData?.steps ?? 0;
+    final goal = stepGoal ?? 0;
+    final stepsStr = _formatNumber(steps);
+    final goalStr = goal > 0 ? _formatCompact(goal) : null;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (displayName != null)
+                Text(
+                  displayName!,
+                  style: PixelText.title(size: 26, color: AppColors.textDark).copyWith(
+                    shadows: _textShadows,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              const SizedBox(height: 2),
+              if (goalStr != null)
+                Text(
+                  '$stepsStr / $goalStr',
+                  style: PixelText.number(size: 20, color: AppColors.accent).copyWith(
+                    shadows: _textShadows,
+                  ),
+                )
+              else
+                Text(
+                  stepsStr,
+                  style: PixelText.number(size: 20, color: AppColors.accent).copyWith(
+                    shadows: _textShadows,
+                  ),
+                ),
+            ],
+          ),
+        ),
+
+        const SpinningCoin(size: 32),
+        const SizedBox(width: 6),
+        Text(
+          '${authService.coins}',
+          style: PixelText.title(size: 24, color: AppColors.coinDark).copyWith(
+            shadows: _textShadows,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // -- GoalTrack centerpiece --
+
+  Widget _buildGoalTrackSection() {
     if (isLoading && stepData == null) {
       return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 16),
+        padding: EdgeInsets.symmetric(vertical: 32),
         child: Center(
           child: SizedBox(
             width: 36,
@@ -158,10 +183,13 @@ class HomeTab extends StatelessWidget {
     }
 
     if (error != null) {
-      return Text(
-        error!,
-        style: PixelText.body(size: 13, color: AppColors.error),
-        textAlign: TextAlign.center,
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Text(
+          error!,
+          style: PixelText.body(size: 13, color: AppColors.error),
+          textAlign: TextAlign.center,
+        ),
       );
     }
 
@@ -169,389 +197,100 @@ class HomeTab extends StatelessWidget {
     final goal = stepGoal ?? 0;
     final progress = goal > 0 ? steps / goal : 0.0;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          'TODAY\u2019S STEPS',
-          style: PixelText.title(size: 14, color: AppColors.textMid),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 8),
-        Text(
-          goal > 0 ? '$steps / $goal' : '$steps',
-          style: PixelText.number(size: 28, color: AppColors.accent),
-          textAlign: TextAlign.center,
-        ),
-        if (goal > 0) ...[
-          const SizedBox(height: 4),
-          GoalTrack(
-            runners: [
-              GoalTrackRunner(
-                name: displayName ?? 'You',
-                progress: progress,
-                isUser: true,
-              ),
-              for (final friend in friendsSteps)
-                GoalTrackRunner(
-                  name: friend['displayName'] as String? ?? '???',
-                  progress: _friendGoalProgress(friend),
-                ),
-            ],
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildChallengeSection(BuildContext context) {
-    final challenge =
-        currentChallenge!['challenge'] as Map<String, dynamic>? ?? {};
-    final myUserId = authService.userId ?? '';
-    final activeInstances = _challengeInstances
-        .where((i) {
-          final status = i['status'] as String? ?? '';
-          final stakeStatus = i['stakeStatus'] as String? ?? '';
-          return status == 'ACTIVE' || stakeStatus == 'AGREED';
-        })
-        .toList();
-
-    return Column(
-      children: [
-        Text(
-          'COMPETITIONS',
-          style: PixelText.title(size: 14, color: AppColors.textMid),
-        ),
-        const SizedBox(height: 8),
-        if (activeInstances.isEmpty)
-          Text(
-            'No active competitions yet. Head to the Challenges tab to start one.',
-            style: PixelText.body(color: AppColors.textMid),
-            textAlign: TextAlign.center,
-          )
-        else
-          Table(
-            columnWidths: const {
-              0: FlexColumnWidth(),
-              1: IntrinsicColumnWidth(),
-            },
-            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-            border: TableBorder(
-              horizontalInside: BorderSide(
-                color: AppColors.parchmentBorder.withValues(alpha: 0.3),
-                width: 1,
-              ),
-            ),
-            children: [
-              for (int idx = 0; idx < activeInstances.length; idx++)
-                _buildChallengeTableRow(
-                  context,
-                  activeInstances[idx],
-                  challenge,
-                  myUserId,
-                  idx,
-                ),
-            ],
-          ),
-      ],
-    );
-  }
-
-  Widget _buildHowItWorksSection() {
-    return Column(
-      children: [
-        Text(
-          'GET STARTED',
-          style: PixelText.title(size: 14, color: AppColors.textMid),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Add friends to race against them on the track and start weekly step challenges!',
-          style: PixelText.body(color: AppColors.textMid),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 16),
-        PillButton(
-          label: 'ADD FRIENDS',
-          variant: PillButtonVariant.primary,
-          fullWidth: true,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          onPressed: () => onOpenFriendsTab?.call(),
-        ),
-      ],
-    );
-  }
-
-  // ignore: unused_element
-  Widget _buildGuideCard({required String title, required String body}) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.parchmentLight,
-        border: Border.all(color: AppColors.parchmentBorder, width: 2),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    if (goal <= 0) {
+      return Column(
         children: [
           Text(
-            title,
-            style: PixelText.title(size: 12, color: AppColors.textDark),
+            '$steps',
+            style: PixelText.number(size: 36, color: AppColors.accent),
+            textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 6),
-          Text(body, style: PixelText.body(size: 13, color: AppColors.textMid)),
+          Text(
+            'steps today',
+            style: PixelText.body(size: 14, color: AppColors.textMid),
+          ),
         ],
-      ),
-    );
-  }
-
-  TableRow _buildChallengeTableRow(
-    BuildContext context,
-    Map<String, dynamic> instance,
-    Map<String, dynamic> challenge,
-    String myUserId,
-    int index,
-  ) {
-    final userA = instance['userA'] as Map<String, dynamic>?;
-    final userB = instance['userB'] as Map<String, dynamic>?;
-    String friendName = '???';
-    if (userA != null && userA['id'] != myUserId) {
-      friendName = userA['displayName'] as String? ?? '???';
-    } else if (userB != null) {
-      friendName = userB['displayName'] as String? ?? '???';
+      );
     }
 
-    final ranking = instance['ranking'] as Map<String, dynamic>?;
-    final rank = ranking?['rank'] as int? ?? 1;
-    final rankLabel = _ordinal(rank);
-
-    return TableRow(
-      decoration: BoxDecoration(
-        color: index.isOdd
-            ? AppColors.accent.withValues(alpha: 0.07)
-            : Colors.transparent,
+    return RetroCard(
+      padding: const EdgeInsets.all(6),
+      child: GoalTrack(
+        height: 300,
+      runners: [
+        GoalTrackRunner(
+          name: displayName ?? 'You',
+          progress: progress,
+          isUser: true,
+        ),
+        for (final friend in friendsSteps)
+          GoalTrackRunner(
+            name: friend['displayName'] as String? ?? '???',
+            progress: _friendGoalProgress(friend),
+          ),
+      ],
       ),
+    );
+  }
+
+  // -- Action buttons: CHALLENGE + LEADERBOARD --
+
+  Widget _buildActionButtons() {
+    return Row(
       children: [
-        TableCell(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {
-              Navigator.of(context)
-                  .push<bool>(
-                    MaterialPageRoute(
-                      builder: (context) => ChallengeDetailScreen(
-                        authService: authService,
-                        instance: instance,
-                        challenge: challenge,
-                      ),
-                    ),
-                  )
-                  .then((_) => onChallengeChanged());
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-              child: Text(
-                'vs $friendName',
-                style: PixelText.title(size: 18, color: AppColors.textDark),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
+        Expanded(
+          child: PillButton(
+            label: 'CHALLENGES',
+            variant: PillButtonVariant.accent,
+            fontSize: 14,
+            fullWidth: true,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            onPressed: () => onOpenChallengesTab?.call(),
           ),
         ),
-        TableCell(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {
-              Navigator.of(context)
-                  .push<bool>(
-                    MaterialPageRoute(
-                      builder: (context) => ChallengeDetailScreen(
-                        authService: authService,
-                        instance: instance,
-                        challenge: challenge,
-                      ),
-                    ),
-                  )
-                  .then((_) => onChallengeChanged());
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-              child: Text(
-                rankLabel,
-                style: PixelText.title(size: 18, color: AppColors.textDark),
-                textAlign: TextAlign.right,
-              ),
-            ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: PillButton(
+            label: 'LEADERBOARD',
+            variant: PillButtonVariant.secondary,
+            fontSize: 14,
+            fullWidth: true,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            onPressed: () => onOpenLeaderboardTab?.call(),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildFriendsLeaderboard() {
-    final sorted = List<Map<String, dynamic>>.from(friendsSteps);
-    sorted.sort((a, b) {
-      final aSteps = a['steps'] as int? ?? 0;
-      final aGoal = a['stepGoal'] as int?;
-      final bSteps = b['steps'] as int? ?? 0;
-      final bGoal = b['stepGoal'] as int?;
-      final aPct = (aGoal != null && aGoal > 0)
-          ? aSteps / aGoal
-          : aSteps / 10000.0;
-      final bPct = (bGoal != null && bGoal > 0)
-          ? bSteps / bGoal
-          : bSteps / 10000.0;
-      return bPct.compareTo(aPct);
-    });
+  // -- Daily reward slots --
 
-    final topFriends = sorted.take(5).toList();
+  Widget _buildDailyRewardSlots() {
+    final steps = stepData?.steps ?? 0;
+    final goal = stepGoal ?? 0;
+    final hitGoal = goal > 0 && steps >= goal;
+    final hitDoubleGoal = goal > 0 && steps >= goal * 2;
 
     return Column(
       children: [
-        Text(
-          'FRIENDS TODAY',
-          style: PixelText.title(size: 12, color: AppColors.textMid),
+        _DailyRewardCard(
+          label: '1x GOAL',
+          description: 'Hit your daily step goal',
+          reward: '+10 coins',
+          unlocked: hitGoal,
         ),
-        const SizedBox(height: 6),
-        for (int i = 0; i < topFriends.length; i++)
-          _buildLeaderboardRow(i + 1, topFriends[i]),
+        const SizedBox(height: 10),
+        _DailyRewardCard(
+          label: '2x GOAL',
+          description: 'Double your daily step goal',
+          reward: '+10 coins',
+          unlocked: hitDoubleGoal,
+        ),
       ],
     );
   }
 
-  Widget _buildLeaderboardRow(int rank, Map<String, dynamic> friend) {
-    final name = friend['displayName'] as String? ?? '???';
-    final steps = friend['steps'] as int? ?? 0;
-    final goal = friend['stepGoal'] as int?;
-    final progress = (goal != null && goal > 0)
-        ? (steps / goal).clamp(0.0, 1.0)
-        : 0.0;
-    final pct = (progress * 100).round();
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 24,
-            child: Text(
-              '#$rank',
-              style: PixelText.title(size: 12, color: AppColors.textMid),
-            ),
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: PixelText.body(size: 13, color: AppColors.textDark),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 3),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: AppColors.parchmentBorder.withValues(
-                            alpha: 0.3,
-                          ),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: FractionallySizedBox(
-                          alignment: Alignment.centerLeft,
-                          widthFactor: progress,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [
-                                  AppColors.pillGreen,
-                                  AppColors.pillGreenDark,
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      goal != null && goal > 0 ? '$pct%' : '$steps',
-                      style: PixelText.body(size: 11, color: AppColors.textMid),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPermissionPrompt(BuildContext context) {
-    return TabLayout(
-      title: 'HEALTH DATA',
-      centerContent: true,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'Bara needs access to your health data to count your daily steps.\n\n'
-            "That's all we use - just your step count.",
-            style: PixelText.body(color: AppColors.textMid),
-            textAlign: TextAlign.center,
-          ),
-          if (error != null) ...[
-            const SizedBox(height: 14),
-            Text(
-              error!,
-              style: PixelText.body(color: AppColors.error),
-              textAlign: TextAlign.center,
-            ),
-          ],
-          const SizedBox(height: 28),
-          if (isLoading)
-            const CircularProgressIndicator(color: AppColors.accent)
-          else
-            PillButton(
-              label: 'ENABLE HEALTH DATA',
-              variant: PillButtonVariant.primary,
-              onPressed: onEnableHealth,
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNotificationPrompt() {
-    return TabLayout(
-      title: 'NOTIFICATIONS',
-      centerContent: true,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'Get notified when a friend challenges you to a step battle!\n\n'
-            'We\u2019ll only send important updates \u2014 no spam.',
-            style: PixelText.body(color: AppColors.textMid),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 28),
-          PillButton(
-            label: 'ENABLE NOTIFICATIONS',
-            variant: PillButtonVariant.primary,
-            onPressed: onEnableNotifications,
-          ),
-        ],
-      ),
-    );
-  }
+  // -- Setup prompts (kept from original) --
 
   Widget _buildSetupPrompts(BuildContext context) {
     return Column(
@@ -588,6 +327,99 @@ class HomeTab extends StatelessWidget {
     );
   }
 
+  // -- Permission / notification prompts --
+
+  Widget _buildPermissionPrompt(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          children: [
+            const Spacer(flex: 2),
+            Icon(Icons.favorite_rounded, size: 48, color: AppColors.accent),
+            const SizedBox(height: 16),
+            Text(
+              'HEALTH DATA',
+              style: PixelText.title(size: 24, color: AppColors.textDark)
+                  .copyWith(shadows: _textShadows),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Bara needs access to your health data to count your daily steps.\n\n'
+              "That's all we use - just your step count.",
+              style: PixelText.body(color: AppColors.textMid)
+                  .copyWith(shadows: _textShadows),
+              textAlign: TextAlign.center,
+            ),
+            if (error != null) ...[
+              const SizedBox(height: 14),
+              Text(
+                error!,
+                style: PixelText.body(color: AppColors.error),
+                textAlign: TextAlign.center,
+              ),
+            ],
+            const SizedBox(height: 32),
+            if (isLoading)
+              const CircularProgressIndicator(color: AppColors.accent)
+            else
+              PillButton(
+                label: 'ENABLE HEALTH DATA',
+                variant: PillButtonVariant.primary,
+                fontSize: 16,
+                fullWidth: true,
+                padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
+                onPressed: onEnableHealth,
+              ),
+            const Spacer(flex: 3),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationPrompt() {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          children: [
+            const Spacer(flex: 2),
+            Icon(Icons.notifications_rounded, size: 48, color: AppColors.accent),
+            const SizedBox(height: 16),
+            Text(
+              'NOTIFICATIONS',
+              style: PixelText.title(size: 24, color: AppColors.textDark)
+                  .copyWith(shadows: _textShadows),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Get notified when a friend challenges you to a step battle!\n\n'
+              'We\u2019ll only send important updates \u2014 no spam.',
+              style: PixelText.body(color: AppColors.textMid)
+                  .copyWith(shadows: _textShadows),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            PillButton(
+              label: 'ENABLE NOTIFICATIONS',
+              variant: PillButtonVariant.primary,
+              fontSize: 16,
+              fullWidth: true,
+              padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
+              onPressed: onEnableNotifications,
+            ),
+            const Spacer(flex: 3),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // -- Helpers --
+
   static double _friendGoalProgress(Map<String, dynamic> friend) {
     final steps = friend['steps'] as int? ?? 0;
     final goal = friend['stepGoal'] as int?;
@@ -595,17 +427,87 @@ class HomeTab extends StatelessWidget {
     return 0.0;
   }
 
-  static String _ordinal(int n) {
-    if (n % 100 >= 11 && n % 100 <= 13) return '${n}th';
-    switch (n % 10) {
-      case 1:
-        return '${n}st';
-      case 2:
-        return '${n}nd';
-      case 3:
-        return '${n}rd';
-      default:
-        return '${n}th';
+  static String _formatNumber(int n) {
+    final s = n.toString();
+    final buf = StringBuffer();
+    for (int i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) buf.write(',');
+      buf.write(s[i]);
     }
+    return buf.toString();
+  }
+
+  static String _formatCompact(int n) {
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}k';
+    return '$n';
+  }
+
+  static const _textShadows = [
+    Shadow(
+      color: Color(0x40000000),
+      blurRadius: 4,
+      offset: Offset(0, 1),
+    ),
+  ];
+}
+
+// -- Daily reward card widget --
+
+class _DailyRewardCard extends StatelessWidget {
+  final String label;
+  final String description;
+  final String reward;
+  final bool unlocked;
+
+  const _DailyRewardCard({
+    required this.label,
+    required this.description,
+    required this.reward,
+    required this.unlocked,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return RetroCard(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+      child: Row(
+        children: [
+          if (unlocked)
+            const SpinningCoin(size: 28)
+          else
+            Icon(Icons.lock_rounded, size: 28, color: AppColors.textMid.withValues(alpha: 0.5)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: PixelText.title(
+                    size: 14,
+                    color: unlocked ? AppColors.textDark : AppColors.textMid,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  description,
+                  style: PixelText.body(
+                    size: 12,
+                    color: unlocked ? AppColors.textDark : AppColors.textMid,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            reward,
+            style: PixelText.title(
+              size: 14,
+              color: unlocked ? AppColors.coinDark : AppColors.textMid,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

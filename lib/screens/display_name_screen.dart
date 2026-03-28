@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 
@@ -8,8 +7,6 @@ import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../services/notification_service.dart';
 import '../styles.dart';
-import '../widgets/capybara.dart';
-import '../widgets/content_board.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/wooden_tab_bar.dart';
@@ -38,6 +35,10 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
   String? _availabilityMessage;
   bool? _isAvailable;
   bool _isChecking = false;
+
+  static const _textShadows = [
+    Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
+  ];
 
   @override
   void initState() {
@@ -71,7 +72,6 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
       return;
     }
 
-    // Same as current name — no need to check
     if (text == widget.authService.displayName) {
       setState(() {
         _isAvailable = true;
@@ -175,206 +175,160 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final topInset = MediaQuery.of(context).padding.top;
-
-    final bottomInset = MediaQuery.of(context).padding.bottom;
-    final tabBarHeight = 77.5 + bottomInset;
-    const grassHeight = 110.0;
-
     return Scaffold(
       resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
-          // Sky gradient background
-          Positioned.fill(
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Color(0xFF87CEEB),
-                    Color(0xFFB0E0F0),
-                    Color(0xFFD4F1F9),
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xFF87CEEB),
+                  Color(0xFFB0E0F0),
+                  Color(0xFFD4F1F9),
+                ],
+              ),
+            ),
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  children: [
+                    // Header
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        children: [
+                          if (Navigator.of(context).canPop())
+                            GestureDetector(
+                              onTap: () => Navigator.of(context).pop(),
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                child: const Icon(Icons.arrow_back,
+                                    color: AppColors.textDark, size: 24),
+                              ),
+                            ),
+                          Expanded(
+                            child: Text(
+                              'CHOOSE A DISPLAY NAME',
+                              style: PixelText.title(size: 20, color: AppColors.textDark)
+                                  .copyWith(shadows: _textShadows),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                          if (Navigator.of(context).canPop())
+                            const SizedBox(width: 40),
+                        ],
+                      ),
+                    ),
+
+                    // Content
+                    Expanded(
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'This is how friends will find you',
+                              style: PixelText.body(color: AppColors.textMid)
+                                  .copyWith(shadows: _textShadows),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 20),
+                            TextField(
+                              controller: _controller,
+                              textAlign: TextAlign.center,
+                              textCapitalization: TextCapitalization.words,
+                              style: PixelText.body(size: 18, color: AppColors.textDark),
+                              decoration: InputDecoration(
+                                filled: true,
+                                fillColor: AppColors.parchmentLight,
+                                hintText: 'Choose your name',
+                                hintStyle: PixelText.body(
+                                    size: 18, color: AppColors.parchmentBorder),
+                                border: OutlineInputBorder(
+                                  borderSide: BorderSide(color: AppColors.parchmentBorder),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderSide: BorderSide(color: AppColors.parchmentBorder),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderSide: BorderSide(color: AppColors.accent, width: 2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 12),
+                              ),
+                            ),
+                            if (_isChecking ||
+                                _availabilityMessage != null ||
+                                _isAvailable == true)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: _isChecking
+                                    ? Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          const SizedBox(
+                                            width: 12,
+                                            height: 12,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: AppColors.textMid,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text('Checking...',
+                                              style: PixelText.body(
+                                                  color: AppColors.textMid)),
+                                        ],
+                                      )
+                                    : _isAvailable == true
+                                        ? Text('Name is available!',
+                                            style: PixelText.body(
+                                                color: Colors.green.shade700))
+                                        : Text(_availabilityMessage ?? '',
+                                            style: PixelText.body(
+                                                color: Colors.red.shade700)),
+                              ),
+                            const SizedBox(height: 24),
+                            _isSaving
+                                ? const CircularProgressIndicator(
+                                    color: AppColors.accent)
+                                : PillButton(
+                                    label: 'CONTINUE',
+                                    variant: PillButtonVariant.primary,
+                                    fontSize: 16,
+                                    fullWidth: true,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 48, vertical: 16),
+                                    onPressed: _onContinue,
+                                  ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
             ),
           ),
 
-          // Content: board fills from top safe area to above grass
-          Positioned(
-            left: 0,
-            right: 0,
-            top: topInset + 24,
-            bottom: tabBarHeight + grassHeight,
-            child: ContentBoard(
-              expand: true,
-              child: Column(
-                children: [
-                  // Header
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4, bottom: 8),
-                    child: Text(
-                      'CHOOSE A DISPLAY NAME',
-                      style: PixelText.title(size: 24, color: AppColors.textDark),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                  Container(
-                    height: 1,
-                    color: AppColors.parchmentBorder.withValues(alpha: 0.5),
-                  ),
-                  // Centered content
-                  Expanded(
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                      Text(
-                        'This is how friends will find you',
-                        style: PixelText.body(color: AppColors.textMid),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 20),
-                      TextField(
-                        controller: _controller,
-                        textAlign: TextAlign.center,
-                        textCapitalization: TextCapitalization.words,
-                        style: PixelText.body(
-                          size: 18,
-                          color: AppColors.textDark,
-                        ),
-                        decoration: InputDecoration(
-                          filled: true,
-                          fillColor: AppColors.parchmentLight,
-                          hintText: 'Choose your name',
-                          hintStyle: PixelText.body(
-                            size: 18,
-                            color: AppColors.parchmentBorder,
-                          ),
-                          border: OutlineInputBorder(
-                            borderSide: BorderSide(
-                              color: AppColors.parchmentBorder,
-                            ),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderSide: BorderSide(
-                              color: AppColors.parchmentBorder,
-                            ),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderSide: BorderSide(
-                              color: AppColors.accent,
-                              width: 2,
-                            ),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
-                        ),
-                      ),
-                      if (_isChecking ||
-                          _availabilityMessage != null ||
-                          _isAvailable == true)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: _isChecking
-                              ? Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const SizedBox(
-                                      width: 12,
-                                      height: 12,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: AppColors.textMid,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'Checking...',
-                                      style: PixelText.body(
-                                        color: AppColors.textMid,
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              : _isAvailable == true
-                                  ? Text(
-                                      'Name is available!',
-                                      style: PixelText.body(
-                                        color: Colors.green.shade700,
-                                      ),
-                                    )
-                                  : Text(
-                                      _availabilityMessage ?? '',
-                                      style: PixelText.body(
-                                        color: Colors.red.shade700,
-                                      ),
-                                    ),
-                        ),
-                      const SizedBox(height: 24),
-                      _isSaving
-                          ? const CircularProgressIndicator(
-                              color: AppColors.accent,
-                            )
-                          : PillButton(
-                              label: 'CONTINUE',
-                              variant: PillButtonVariant.primary,
-                              fontSize: 16,
-                              fullWidth: true,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 48,
-                                vertical: 16,
-                              ),
-                              onPressed: _onContinue,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // Grass strip
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: tabBarHeight,
-            height: grassHeight,
-            child: CustomPaint(painter: _GrassPainter()),
-          ),
-
-          // Capybara walking on the grass
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: tabBarHeight + 10,
-            height: 112,
-            child: const WalkingCapybara(
-              walkDuration: Duration(seconds: 10),
-              size: 112,
-            ),
-          ),
-
-          // Nav bar at bottom (visual only)
           Positioned(
             left: 0,
             right: 0,
             bottom: 0,
             child: WoodenTabBar(
               currentIndex: 0,
-              onTap: (_) {},
+              onTap: (_) {
+                if (Navigator.of(context).canPop()) {
+                  Navigator.of(context).pop();
+                }
+              },
               items: const [
                 WoodenTabItem(icon: Icons.home_rounded, label: 'Home'),
                 WoodenTabItem(icon: Icons.emoji_events_rounded, label: 'Challenges'),
@@ -388,48 +342,4 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
       ),
     );
   }
-}
-
-class _GrassPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final dirtPath = Path()..moveTo(0, size.height * 0.3);
-    for (double x = 0; x <= size.width; x += 4) {
-      dirtPath.lineTo(x, size.height * 0.3 + sin(x * 0.008) * 6 + cos(x * 0.015) * 4);
-    }
-    dirtPath.lineTo(size.width, size.height);
-    dirtPath.lineTo(0, size.height);
-    dirtPath.close();
-    canvas.drawPath(dirtPath, Paint()
-      ..shader = const LinearGradient(
-        begin: Alignment.topCenter, end: Alignment.bottomCenter,
-        colors: [AppColors.dirtLight, AppColors.dirtMid, AppColors.dirtDark],
-      ).createShader(Offset.zero & size));
-
-    final grassPath = Path()..moveTo(0, size.height * 0.2);
-    for (double x = 0; x <= size.width; x += 4) {
-      grassPath.lineTo(x, size.height * 0.2 + sin(x * 0.008) * 6 + cos(x * 0.015) * 4);
-    }
-    grassPath.lineTo(size.width, size.height * 0.4);
-    for (double x = size.width; x >= 0; x -= 4) {
-      grassPath.lineTo(x, size.height * 0.4 + sin(x * 0.008) * 4 + cos(x * 0.015) * 3);
-    }
-    grassPath.close();
-    canvas.drawPath(grassPath, Paint()
-      ..shader = const LinearGradient(
-        begin: Alignment.topCenter, end: Alignment.bottomCenter,
-        colors: [AppColors.grassBright, AppColors.grassMid, AppColors.grassDark],
-      ).createShader(Offset.zero & size));
-
-    final hlPath = Path();
-    for (double x = 0; x <= size.width; x += 4) {
-      final y = size.height * 0.2 + sin(x * 0.008) * 6 + cos(x * 0.015) * 4;
-      if (x == 0) hlPath.moveTo(x, y); else hlPath.lineTo(x, y);
-    }
-    canvas.drawPath(hlPath, Paint()
-      ..color = const Color(0xFFA5D6A7)..style = PaintingStyle.stroke..strokeWidth = 2);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

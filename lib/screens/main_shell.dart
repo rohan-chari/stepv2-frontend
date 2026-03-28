@@ -322,9 +322,25 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     await _refreshStepGoal();
   }
 
+  void _openChallengesTab() {
+    _pageController.animateToPage(
+      1,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   void _openFriendsTab() {
     _pageController.animateToPage(
       2,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  void _openLeaderboardTab() {
+    _pageController.animateToPage(
+      3,
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOutCubic,
     );
@@ -539,7 +555,30 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
               ),
             ),
           ),
-          // Tab content — swipeable
+          // Grass ground strip above the nav bar
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: tabBarHeight,
+            height: 110,
+            child: CustomPaint(
+              painter: _GrassStripPainter(),
+            ),
+          ),
+
+          // Capybara walking on the grass
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: tabBarHeight + 10,
+            height: 112,
+            child: const WalkingCapybara(
+              walkDuration: Duration(seconds: 10),
+              size: 112,
+            ),
+          ),
+
+          // Tab content — swipeable (above grass/capybara so content scrolls over them)
           Positioned.fill(
             child: PageView(
               controller: _pageController,
@@ -567,6 +606,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   activeChallengeProgress: _activeChallengeProgress,
                   onChallengeChanged: _fetchCurrentChallenge,
                   onOpenFriendsTab: _openFriendsTab,
+                  onOpenChallengesTab: _openChallengesTab,
+                  onOpenLeaderboardTab: _openLeaderboardTab,
                 ),
                 ChallengesTab(
                   authService: widget.authService,
@@ -575,6 +616,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   onChallengeChanged: _fetchCurrentChallenge,
                   onOpenFriendsTab: _openFriendsTab,
                   onRefresh: _refreshChallengesTab,
+                  stepData: _stepData,
+                  stepGoal: _stepGoal,
+                  displayName: _displayName,
                 ),
                 FriendsTab(
                   authService: widget.authService,
@@ -584,10 +628,16 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   },
                   onRefresh: _refreshFriendsTab,
                   backendApiService: _backendApiService,
+                  stepData: _stepData,
+                  stepGoal: _stepGoal,
+                  displayName: _displayName,
                 ),
                 LeaderboardTab(
                   authService: widget.authService,
                   backendApiService: _backendApiService,
+                  stepData: _stepData,
+                  stepGoal: _stepGoal,
+                  displayName: _displayName,
                 ),
                 ProfileTab(
                   authService: widget.authService,
@@ -598,31 +648,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   onRefresh: _refreshProfileTab,
                   backendApiService: _backendApiService,
                   notificationService: widget.notificationService,
+                  stepData: _stepData,
                 ),
               ],
-            ),
-          ),
-
-          // Grass ground strip above the nav bar
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: tabBarHeight,
-            height: 110,
-            child: CustomPaint(
-              painter: _GrassStripPainter(),
-            ),
-          ),
-
-          // Capybara walking on the grass
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: tabBarHeight + 10,
-            height: 112,
-            child: const WalkingCapybara(
-              walkDuration: Duration(seconds: 10),
-              size: 112,
             ),
           ),
 

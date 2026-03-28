@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../services/notification_service.dart';
 import '../../styles.dart';
-import '../../widgets/error_toast.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_icon_button.dart';
-import '../../widgets/content_board.dart';
-import '../../widgets/tab_layout.dart';
+import '../../widgets/retro_card.dart';
+import '../../widgets/spinning_coin.dart';
 import '../admin_challenge_screen.dart';
 import '../display_name_screen.dart';
 import '../start_screen.dart';
@@ -23,6 +23,7 @@ class ProfileTab extends StatefulWidget {
   final Future<void> Function()? onRefresh;
   final BackendApiService? backendApiService;
   final NotificationService? notificationService;
+  final StepData? stepData;
 
   const ProfileTab({
     super.key,
@@ -34,6 +35,7 @@ class ProfileTab extends StatefulWidget {
     this.onRefresh,
     this.backendApiService,
     this.notificationService,
+    this.stepData,
   });
 
   @override
@@ -43,6 +45,10 @@ class ProfileTab extends StatefulWidget {
 class _ProfileTabState extends State<ProfileTab> {
   late final BackendApiService _api;
   final GlobalKey<_StatsSectionState> _statsKey = GlobalKey();
+
+  static const _textShadows = [
+    Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
+  ];
 
   @override
   void initState() {
@@ -60,39 +66,6 @@ class _ProfileTabState extends State<ProfileTab> {
       widget.onSettingsChanged();
       _statsKey.currentState?.loadStats();
     }
-  }
-
-  Widget _buildDivider() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Container(
-        height: 1,
-        color: AppColors.parchmentBorder.withValues(alpha: 0.5),
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 80,
-            child: Text(
-              label,
-              style: PixelText.body(size: 12, color: AppColors.textMid),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: PixelText.body(size: 13, color: AppColors.textDark),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _handleRefresh() async {
@@ -118,82 +91,155 @@ class _ProfileTabState extends State<ProfileTab> {
     );
   }
 
+  static String _formatNumber(int n) {
+    final s = n.toString();
+    final buf = StringBuffer();
+    for (int i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) buf.write(',');
+      buf.write(s[i]);
+    }
+    return buf.toString();
+  }
+
+  static String _formatCompact(int n) {
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}k';
+    return '$n';
+  }
+
   @override
   Widget build(BuildContext context) {
-    return TabLayout(
-      title: 'PROFILE',
-      onRefresh: _handleRefresh,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Display name centered, gear in top-right corner
-          Row(
-            children: [
-              const SizedBox(width: 36),
-              if (widget.displayName != null)
-                Expanded(
-                  child: Text(
-                    widget.displayName!,
-                    style: PixelText.title(size: 20, color: AppColors.accent),
-                    textAlign: TextAlign.center,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+    final topInset = MediaQuery.of(context).padding.top;
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+    final tabBarHeight = 77.5 + bottomInset;
+
+    return Padding(
+      padding: EdgeInsets.only(top: topInset + 12, bottom: tabBarHeight),
+      child: RefreshIndicator(
+        onRefresh: _handleRefresh,
+        color: AppColors.accent,
+        backgroundColor: AppColors.parchment,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              sliver: SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Top status bar
+                    _buildTopStatusBar(),
+                    const SizedBox(height: 16),
+
+                    // Profile info card
+                    RetroCard(
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (widget.email != null &&
+                                    !widget.email!.endsWith('@privaterelay.appleid.com')) ...[
+                                  Text(
+                                    widget.email!,
+                                    style: PixelText.body(size: 14, color: AppColors.textMid),
+                                  ),
+                                  const SizedBox(height: 4),
+                                ],
+                                if (widget.stepGoal != null)
+                                  Text(
+                                    'Goal: ${widget.stepGoal} steps/day',
+                                    style: PixelText.body(size: 14, color: AppColors.textMid),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          PillIconButton(
+                            icon: Icons.settings_rounded,
+                            size: 36,
+                            variant: PillButtonVariant.secondary,
+                            onPressed: _openSettings,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Stats card
+                    RetroCard(
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                      child: Column(
+                        children: [
+                          Text(
+                            'STATS',
+                            style: PixelText.title(size: 16, color: AppColors.textMid),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 12),
+                          _StatsSection(
+                            key: _statsKey,
+                            authService: widget.authService,
+                            backendApiService: _api,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              PillIconButton(
-                icon: Icons.settings_rounded,
-                size: 36,
-                variant: PillButtonVariant.secondary,
-                onPressed: _openSettings,
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopStatusBar() {
+    final steps = widget.stepData?.steps ?? 0;
+    final goal = widget.stepGoal ?? 0;
+    final stepsStr = _formatNumber(steps);
+    final goalStr = goal > 0 ? _formatCompact(goal) : null;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (widget.displayName != null)
+                Text(
+                  widget.displayName!,
+                  style: PixelText.title(size: 26, color: AppColors.textDark)
+                      .copyWith(shadows: _textShadows),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              const SizedBox(height: 2),
+              if (goalStr != null)
+                Text(
+                  '$stepsStr / $goalStr',
+                  style: PixelText.number(size: 20, color: AppColors.accent)
+                      .copyWith(shadows: _textShadows),
+                )
+              else
+                Text(
+                  stepsStr,
+                  style: PixelText.number(size: 20, color: AppColors.accent)
+                      .copyWith(shadows: _textShadows),
+                ),
             ],
           ),
-          const SizedBox(height: 4),
-          // User info
-          Center(
-            child: Column(
-              children: [
-                if (widget.email != null &&
-                    !widget.email!.endsWith('@privaterelay.appleid.com')) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    widget.email!,
-                    style: PixelText.body(color: AppColors.textMid),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-                if (widget.stepGoal != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    'Goal: ${widget.stepGoal} steps/day',
-                    style: PixelText.body(color: AppColors.textMid),
-                  ),
-                ],
-              ],
-            ),
-          ),
-
-          _buildDivider(),
-
-          // Stats
-          Center(
-            child: Column(
-              children: [
-                Text(
-                  'STATS',
-                  style: PixelText.title(size: 16, color: AppColors.textMid),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-                _StatsSection(
-                  key: _statsKey,
-                  authService: widget.authService,
-                  backendApiService: _api,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+        ),
+        const SpinningCoin(size: 32),
+        const SizedBox(width: 6),
+        Text(
+          '${widget.authService.coins}',
+          style: PixelText.title(size: 24, color: AppColors.coinDark)
+              .copyWith(shadows: _textShadows),
+        ),
+      ],
     );
   }
 }
@@ -229,9 +275,7 @@ class _StatsSectionState extends State<_StatsSection> {
   }
 
   Future<void> loadStats() async {
-    if (mounted) {
-      setState(() => _isLoading = true);
-    }
+    if (mounted) setState(() => _isLoading = true);
 
     final token = widget.authService.authToken;
     if (token == null || token.isEmpty) {
@@ -268,33 +312,6 @@ class _StatsSectionState extends State<_StatsSection> {
     return '$steps';
   }
 
-  TableRow _buildStatRow(String label, String value, int index) {
-    return TableRow(
-      decoration: BoxDecoration(
-        color: index.isOdd
-            ? AppColors.accent.withValues(alpha: 0.07)
-            : Colors.transparent,
-      ),
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-          child: Text(
-            label,
-            style: PixelText.body(size: 16, color: AppColors.textMid),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-          child: Text(
-            value,
-            style: PixelText.title(size: 18, color: AppColors.textDark),
-            textAlign: TextAlign.right,
-          ),
-        ),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -313,30 +330,40 @@ class _StatsSectionState extends State<_StatsSection> {
       );
     }
 
-    return Table(
-      columnWidths: const {
-        0: FlexColumnWidth(),
-        1: IntrinsicColumnWidth(),
-      },
-      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-      border: TableBorder(
-        horizontalInside: BorderSide(
-          color: AppColors.parchmentBorder.withValues(alpha: 0.3),
-          width: 1,
-        ),
-      ),
+    return Column(
       children: [
         _buildStatRow('This Week', _formatSteps(_thisWeek), 0),
         _buildStatRow('This Month', _formatSteps(_thisMonth), 1),
         _buildStatRow('This Year', _formatSteps(_thisYear), 2),
         _buildStatRow('All Time', _formatSteps(_allTime), 3),
-        _buildStatRow(
-          'Goal Streak',
-          '$_streak day${_streak == 1 ? '' : 's'}',
-          4,
-        ),
+        _buildStatRow('Goal Streak', '$_streak day${_streak == 1 ? '' : 's'}', 4),
         _buildStatRow('Record', '$_wins W - $_losses L', 5),
       ],
+    );
+  }
+
+  Widget _buildStatRow(String label, String value, int index) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+      decoration: BoxDecoration(
+        color: index.isOdd
+            ? AppColors.parchmentDark.withValues(alpha: 0.3)
+            : Colors.transparent,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: PixelText.body(size: 16, color: AppColors.textMid),
+            ),
+          ),
+          Text(
+            value,
+            style: PixelText.title(size: 18, color: AppColors.textDark),
+          ),
+        ],
+      ),
     );
   }
 }

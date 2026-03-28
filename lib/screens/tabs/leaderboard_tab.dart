@@ -3,18 +3,25 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
+import '../../models/step_data.dart';
 import '../../widgets/filter_dropdown.dart';
-import '../../widgets/pill_button.dart';
-import '../../widgets/tab_layout.dart';
+import '../../widgets/retro_card.dart';
+import '../../widgets/spinning_coin.dart';
 
 class LeaderboardTab extends StatefulWidget {
   final AuthService authService;
   final BackendApiService? backendApiService;
+  final StepData? stepData;
+  final int? stepGoal;
+  final String? displayName;
 
   const LeaderboardTab({
     super.key,
     required this.authService,
     this.backendApiService,
+    this.stepData,
+    this.stepGoal,
+    this.displayName,
   });
 
   @override
@@ -33,6 +40,10 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     ('week', 'WEEK'),
     ('month', 'MONTH'),
     ('allTime', 'ALL TIME'),
+  ];
+
+  static const _textShadows = [
+    Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
 
   @override
@@ -83,181 +94,282 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     return '$steps';
   }
 
-  Widget _buildPeriodSelector() {
-    return FilterDropdown<String>(
-      value: _selectedPeriod,
-      options: [for (final (val, label) in _periods) (val, label)],
-      onChanged: (val) {
-        if (val != null) _selectPeriod(val);
-      },
-    );
-  }
+  @override
+  Widget build(BuildContext context) {
+    final topInset = MediaQuery.of(context).padding.top;
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+    final tabBarHeight = 77.5 + bottomInset;
 
-  Widget _buildTable(
-    List<TableRow> rows, {
-    bool showEllipsis = false,
-    List<TableRow>? trailingRows,
-  }) {
-    final allRows = [...rows];
-
-    if (showEllipsis) {
-      allRows.add(
-        TableRow(
-          children: [
-            const SizedBox.shrink(),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Center(
-                child: Text(
-                  '\u2022 \u2022 \u2022',
-                  style: PixelText.title(size: 18, color: AppColors.textMid),
+    return Padding(
+      padding: EdgeInsets.only(top: topInset + 12, bottom: tabBarHeight),
+      child: RefreshIndicator(
+        onRefresh: _loadLeaderboard,
+        color: AppColors.accent,
+        backgroundColor: AppColors.parchment,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              sliver: SliverToBoxAdapter(
+                child: Column(
+                  children: [
+                    _buildTopStatusBar(),
+                    const SizedBox(height: 12),
+                    Text(
+                      'RANKING',
+                      style: PixelText.title(size: 14, color: AppColors.textMid)
+                          .copyWith(shadows: _textShadows),
+                    ),
+                    const SizedBox(height: 6),
+                    FilterDropdown<String>(
+                      value: _selectedPeriod,
+                      options: [
+                        for (final (val, label) in _periods) (val, label),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) _selectPeriod(val);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    if (_isLoading)
+                      const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: Center(
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: AppColors.accent,
+                              strokeWidth: 2,
+                            ),
+                          ),
+                        ),
+                      )
+                    else if (_top10.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Column(
+                          children: [
+                            Icon(Icons.directions_walk, size: 32,
+                                color: AppColors.textMid.withValues(alpha: 0.6)),
+                            const SizedBox(height: 8),
+                            Text(
+                              'No steps yet \u2014 get walking!',
+                              style: PixelText.body(size: 18, color: AppColors.textMid)
+                                  .copyWith(shadows: _textShadows),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      _buildLeaderboardTable(),
+                  ],
                 ),
               ),
             ),
-            const SizedBox.shrink(),
           ],
         ),
-      );
-    }
-
-    allRows.addAll(trailingRows ?? []);
-
-    return Table(
-      columnWidths: const {
-        0: FixedColumnWidth(32),
-        1: FlexColumnWidth(),
-        2: IntrinsicColumnWidth(),
-      },
-      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-      border: TableBorder(
-        horizontalInside: BorderSide(
-          color: AppColors.parchmentBorder.withValues(alpha: 0.4),
-          width: 0.5,
-        ),
       ),
-      children: allRows,
     );
   }
 
-  TableRow _buildTableRow({
-    required int rank,
-    required String displayName,
-    required int totalSteps,
-    bool isCurrentUser = false,
-    bool isTop3 = false,
-  }) {
-    final alternateRow = rank.isEven;
-    return TableRow(
-      decoration: BoxDecoration(
-        color: alternateRow
-            ? AppColors.accent.withValues(alpha: 0.07)
-            : Colors.transparent,
-      ),
+  Widget _buildTopStatusBar() {
+    final steps = widget.stepData?.steps ?? 0;
+    final goal = widget.stepGoal ?? 0;
+    final stepsStr = _formatNumber(steps);
+    final goalStr = goal > 0 ? _formatCompact(goal) : null;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-          child: Text(
-            '$rank',
-            style: PixelText.title(size: 18, color: AppColors.textDark),
-            textAlign: TextAlign.right,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (widget.displayName != null)
+                Text(
+                  widget.displayName!,
+                  style: PixelText.title(size: 26, color: AppColors.textDark)
+                      .copyWith(shadows: _textShadows),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              const SizedBox(height: 2),
+              if (goalStr != null)
+                Text(
+                  '$stepsStr / $goalStr',
+                  style: PixelText.number(size: 20, color: AppColors.accent)
+                      .copyWith(shadows: _textShadows),
+                )
+              else
+                Text(
+                  stepsStr,
+                  style: PixelText.number(size: 20, color: AppColors.accent)
+                      .copyWith(shadows: _textShadows),
+                ),
+            ],
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-          child: Text(
-            displayName,
-            style: PixelText.body(size: 18, color: AppColors.textDark),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-          child: Text(
-            _formatSteps(totalSteps),
-            style: PixelText.title(size: 18, color: AppColors.textDark),
-            textAlign: TextAlign.right,
-          ),
+        const SpinningCoin(size: 32),
+        const SizedBox(width: 6),
+        Text(
+          '${widget.authService.coins}',
+          style: PixelText.title(size: 24, color: AppColors.coinDark)
+              .copyWith(shadows: _textShadows),
         ),
       ],
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return TabLayout(
-      title: 'LEADERBOARD',
-      onRefresh: _loadLeaderboard,
+  static String _formatNumber(int n) {
+    final s = n.toString();
+    final buf = StringBuffer();
+    for (int i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) buf.write(',');
+      buf.write(s[i]);
+    }
+    return buf.toString();
+  }
+
+  static String _formatCompact(int n) {
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}k';
+    return '$n';
+  }
+
+  Widget _buildLeaderboardTable() {
+    final rows = <_LeaderboardRow>[];
+    for (final entry in _top10) {
+      rows.add(_LeaderboardRow(
+        rank: entry['rank'] as int? ?? 0,
+        displayName: entry['displayName'] as String? ?? 'Anonymous',
+        totalSteps: entry['totalSteps'] as int? ?? 0,
+        isMe: (entry['userId'] as String?) == widget.authService.userId,
+      ));
+    }
+
+    final showCurrentUser =
+        _currentUser != null && _currentUser!['inTop10'] != true;
+
+    return RetroCard(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildPeriodSelector(),
-          const SizedBox(height: 12),
-          if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.all(12),
-              child: Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    color: AppColors.accent,
-                    strokeWidth: 2,
-                  ),
+          // Header
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 36,
+                  child: Text('#',
+                      style: PixelText.title(size: 13, color: AppColors.textMid),
+                      textAlign: TextAlign.center),
                 ),
-              ),
-            )
-          else ...[
-            if (_top10.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 24),
-                child: Center(
-                  child: Column(
-                    children: [
-                      Icon(Icons.directions_walk, size: 32, color: AppColors.textMid),
-                      const SizedBox(height: 8),
-                      Text(
-                        'No steps yet \u2014 get walking!',
-                        style: PixelText.body(size: 18, color: AppColors.textMid),
-                      ),
-                    ],
-                  ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text('PLAYER',
+                      style: PixelText.title(size: 13, color: AppColors.textMid)),
                 ),
-              )
-            else ...[
-              _buildTable(
-                _top10.map((entry) {
-                  final rank = entry['rank'] as int;
-                  final userId = entry['userId'] as String;
-                  return _buildTableRow(
-                    rank: rank,
-                    displayName:
-                        entry['displayName'] as String? ?? 'Anonymous',
-                    totalSteps: entry['totalSteps'] as int? ?? 0,
-                    isCurrentUser: userId == widget.authService.userId,
-                    isTop3: rank <= 3,
-                  );
-                }).toList(),
-                showEllipsis: _currentUser != null &&
-                    _currentUser!['inTop10'] != true,
-                trailingRows: _currentUser != null &&
-                        _currentUser!['inTop10'] != true
-                    ? [
-                        _buildTableRow(
-                          rank: _currentUser!['rank'] as int? ?? 0,
-                          displayName:
-                              _currentUser!['displayName'] as String? ??
-                                  'Anonymous',
-                          totalSteps:
-                              _currentUser!['totalSteps'] as int? ?? 0,
-                          isCurrentUser: true,
-                        ),
-                      ]
-                    : null,
+                Text('STEPS',
+                    style: PixelText.title(size: 13, color: AppColors.textMid)),
+              ],
+            ),
+          ),
+          Container(
+            height: 1,
+            color: AppColors.parchmentBorder.withValues(alpha: 0.5),
+          ),
+          // Rows
+          for (int i = 0; i < rows.length; i++)
+            _buildRow(rows[i], i),
+          // Ellipsis + current user
+          if (showCurrentUser) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Text(
+                '\u2022 \u2022 \u2022',
+                style: PixelText.title(size: 14, color: AppColors.textMid),
+                textAlign: TextAlign.center,
               ),
-            ],
+            ),
+            _buildRow(
+              _LeaderboardRow(
+                rank: _currentUser!['rank'] as int? ?? 0,
+                displayName:
+                    _currentUser!['displayName'] as String? ?? 'Anonymous',
+                totalSteps: _currentUser!['totalSteps'] as int? ?? 0,
+                isMe: true,
+              ),
+              _top10.length,
+            ),
           ],
         ],
       ),
     );
   }
+
+  Widget _buildRow(_LeaderboardRow row, int index) {
+    final rankIcon = row.rank == 1
+        ? '\u{1F947}'
+        : row.rank == 2
+            ? '\u{1F948}'
+            : row.rank == 3
+                ? '\u{1F949}'
+                : null;
+
+    return Container(
+      color: row.isMe
+          ? AppColors.accent.withValues(alpha: 0.12)
+          : index.isOdd
+              ? AppColors.parchmentDark.withValues(alpha: 0.3)
+              : Colors.transparent,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 36,
+            child: rankIcon != null
+                ? Text(rankIcon,
+                    style: const TextStyle(fontSize: 18),
+                    textAlign: TextAlign.center)
+                : Text('${row.rank}',
+                    style: PixelText.title(size: 16, color: AppColors.textDark),
+                    textAlign: TextAlign.center),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              row.displayName,
+              style: PixelText.body(
+                size: 16,
+                color: row.isMe ? AppColors.accent : AppColors.textDark,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Text(
+            _formatSteps(row.totalSteps),
+            style: PixelText.title(
+              size: 16,
+              color: row.isMe ? AppColors.accent : AppColors.textDark,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LeaderboardRow {
+  final int rank;
+  final String displayName;
+  final int totalSteps;
+  final bool isMe;
+
+  const _LeaderboardRow({
+    required this.rank,
+    required this.displayName,
+    required this.totalSteps,
+    this.isMe = false,
+  });
 }

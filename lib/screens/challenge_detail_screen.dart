@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
-import '../widgets/content_board.dart';
 import '../widgets/error_toast.dart';
-import '../widgets/filter_dropdown.dart';
-import '../widgets/game_background.dart';
 import '../widgets/pill_button.dart';
+import '../widgets/retro_card.dart';
+import '../widgets/pill_icon_button.dart';
 import '../widgets/race_track.dart';
-import '../widgets/trail_sign.dart';
+import 'stake_picker_screen.dart';
+import '../widgets/wooden_tab_bar.dart';
 
 class ChallengeDetailScreen extends StatefulWidget {
   final AuthService authService;
@@ -34,16 +34,13 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
   bool _isLoading = false;
   bool _isAccepting = false;
 
-  // Inline stake picker state
-  bool _showingStakePicker = false;
-  String _stakePickerMode = 'propose';
-  List<Map<String, dynamic>> _stakes = [];
-  bool _stakesLoading = false;
-  bool _isSubmittingStake = false;
-  String? _selectedStakeId;
-  String? _selectedRelationshipType;
 
   String get _myUserId => widget.authService.userId ?? '';
+
+  static const _textShadows = [
+    Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
+  ];
+
 
   @override
   void initState() {
@@ -77,7 +74,14 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
     return stake?['name'] as String?;
   }
 
-  void _confirmCancel() {
+  // -- API methods --
+
+  void _openSettings() {
+    final status = _instance['status'] as String? ?? '';
+    final isActive = status == 'ACTIVE';
+    final isMyProposal = _isMyProposal();
+    final hasProposal = _instance['proposedStakeId'] != null;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.parchment,
@@ -90,18 +94,26 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'CANCEL CHALLENGE?',
+              'SETTINGS',
               style: PixelText.title(size: 18, color: AppColors.textDark),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'This will remove the challenge with ${_friendName()}.',
-              style: PixelText.body(color: AppColors.textMid),
-              textAlign: TextAlign.center,
-            ),
             const SizedBox(height: 16),
+            if (!isActive && hasProposal && isMyProposal) ...[
+              PillButton(
+                label: 'EDIT STAKE',
+                variant: PillButtonVariant.secondary,
+                fontSize: 13,
+                fullWidth: true,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  _navigateToStakePicker('edit');
+                },
+              ),
+              const SizedBox(height: 10),
+            ],
             PillButton(
-              label: 'YES, CANCEL',
+              label: 'CANCEL CHALLENGE',
               variant: PillButtonVariant.accent,
               fontSize: 13,
               fullWidth: true,
@@ -110,15 +122,6 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
                 Navigator.of(ctx).pop();
                 _cancelChallenge();
               },
-            ),
-            const SizedBox(height: 10),
-            PillButton(
-              label: 'KEEP IT',
-              variant: PillButtonVariant.secondary,
-              fontSize: 13,
-              fullWidth: true,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              onPressed: () => Navigator.of(ctx).pop(),
             ),
           ],
         ),
@@ -194,129 +197,209 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
     }
   }
 
-  void _openStakePicker(String mode) {
-    setState(() {
-      _showingStakePicker = true;
-      _stakePickerMode = mode;
-      _selectedStakeId = null;
+  void _navigateToStakePicker(String mode) {
+    final currentProposalId = mode == 'counter'
+        ? _instance['proposedStakeId'] as String?
+        : null;
+
+    Navigator.of(context).push<dynamic>(
+      MaterialPageRoute(
+        builder: (context) => StakePickerScreen(
+          authService: widget.authService,
+          instanceId: _instance['id'] as String,
+          friendName: _friendName(),
+          currentProposalId: currentProposalId,
+        ),
+      ),
+    ).then((result) {
+      if (result == true && mounted) {
+        _refreshInstance();
+      }
     });
-    if (_stakes.isEmpty) _fetchStakes();
   }
 
-  void _closeStakePicker() {
-    setState(() {
-      _showingStakePicker = false;
-      _selectedStakeId = null;
-      _selectedRelationshipType = null;
-    });
-  }
-
-  static const _relationshipTypes = [
-    'partner',
-    'friend',
-    'family',
-    'coworker',
-    'sibling',
-    'parent',
-  ];
-
-  Future<void> _fetchStakes() async {
-    setState(() => _stakesLoading = true);
+  Future<void> _refreshInstance() async {
     try {
       final token = widget.authService.authToken;
       if (token == null || token.isEmpty) return;
 
-      final stakes = await _api.fetchStakeCatalog(
-        identityToken: token,
-        relationshipType: _selectedRelationshipType,
-      );
-      if (mounted) {
-        setState(() {
-          _stakes = stakes;
-          _stakesLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _stakesLoading = false);
-        showErrorToast(context, 'Failed to load stakes');
-      }
-    }
-  }
+      final data = await _api.fetchCurrentChallenge(identityToken: token);
+      final instances = data['instances'] as List? ?? [];
+      final instanceId = _instance['id'] as String;
 
-  void _selectRelationshipType(String? type) {
-    setState(() {
-      _selectedRelationshipType = type;
-      _selectedStakeId = null;
-    });
-    _fetchStakes();
-  }
-
-  Future<void> _submitStakeSelection() async {
-    if (_selectedStakeId == null) return;
-
-    setState(() => _isSubmittingStake = true);
-
-    try {
-      final token = widget.authService.authToken;
-      if (token == null || token.isEmpty) return;
-
-      Map<String, dynamic> result;
-      if (_stakePickerMode == 'counter') {
-        result = await _api.respondToStake(
-          identityToken: token,
-          instanceId: _instance['id'] as String,
-          accept: false,
-          counterStakeId: _selectedStakeId,
-        );
-      } else {
-        result = await _api.proposeStake(
-          identityToken: token,
-          instanceId: _instance['id'] as String,
-          stakeId: _selectedStakeId!,
-        );
-      }
-
-      if (mounted) {
-        final updatedInstance =
-            result['instance'] as Map<String, dynamic>?;
-        if (updatedInstance != null) {
-          setState(() {
-            _instance = updatedInstance;
-            _showingStakePicker = false;
-            _selectedStakeId = null;
-            _isSubmittingStake = false;
-          });
-        } else {
-          Navigator.of(context).pop(true);
+      for (final i in instances) {
+        final inst = i as Map<String, dynamic>;
+        if (inst['id'] == instanceId) {
+          if (mounted) {
+            setState(() => _instance = inst);
+          }
+          break;
         }
       }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isSubmittingStake = false);
-        showErrorToast(context, e.toString());
-      }
-    }
+    } catch (_) {}
+
+    _fetchProgress();
   }
 
-  IconData _categoryIcon(String category) {
-    switch (category) {
-      case 'food':
-        return Icons.restaurant;
-      case 'activity':
-        return Icons.sports_esports;
-      case 'experience':
-        return Icons.explore;
-      case 'act_of_service':
-        return Icons.handshake;
-      case 'digital':
-        return Icons.phone_android;
-      default:
-        return Icons.star;
+  String _formatSteps(int steps) {
+    if (steps >= 10000) {
+      return '${(steps / 1000).toStringAsFixed(1)}k';
     }
+    return '$steps';
   }
 
-  // ── Race track ──
+  // -- Build --
+
+  @override
+  Widget build(BuildContext context) {
+    final status = _instance['status'] as String? ?? '';
+    final isActive = status == 'ACTIVE';
+
+    return Scaffold(
+      body: Stack(
+        children: [
+          Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color(0xFF87CEEB),
+                    Color(0xFFB0E0F0),
+                    Color(0xFFD4F1F9),
+                  ],
+                ),
+              ),
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    // Header
+                    Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () => Navigator.of(context).pop(true),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          child: const Icon(
+                            Icons.arrow_back,
+                            color: AppColors.textDark,
+                            size: 24,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Text(
+                              'You vs. ${_friendName()}',
+                              style: PixelText.title(size: 22, color: AppColors.textDark)
+                                  .copyWith(shadows: _textShadows),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              widget.challenge['title'] as String? ?? '',
+                              style: PixelText.title(size: 14, color: AppColors.textMid)
+                                  .copyWith(shadows: _textShadows),
+                              textAlign: TextAlign.center,
+                            ),
+                            if ((widget.challenge['description'] as String?)?.isNotEmpty ?? false) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                widget.challenge['description'] as String,
+                                style: PixelText.body(size: 12, color: AppColors.textMid)
+                                    .copyWith(shadows: _textShadows),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      PillIconButton(
+                        icon: Icons.settings_rounded,
+                        size: 36,
+                        variant: PillButtonVariant.secondary,
+                        onPressed: _openSettings,
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Scrollable content
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      top: 8,
+                      bottom: 77.5 + MediaQuery.of(context).padding.bottom + 16,
+                    ),
+                    child: Column(
+                      children: [
+                        // Stake section (top)
+                        if (isActive)
+                          _buildActiveStakeInfo()
+                        else
+                          _buildNegotiationView(),
+                        const SizedBox(height: 16),
+
+                        // Race track
+                        if (_progress != null) ...[
+                          _buildRaceTrack(),
+                          const SizedBox(height: 16),
+                        ],
+
+                        // Progress
+                        _buildProgressSection(),
+                        const SizedBox(height: 16),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+            // Tab bar
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: WoodenTabBar(
+                currentIndex: 1,
+                onTap: (index) {
+                  Navigator.of(context).pop(true);
+                },
+                items: const [
+                  WoodenTabItem(icon: Icons.home_rounded, label: 'Home'),
+                  WoodenTabItem(
+                    icon: Icons.emoji_events_rounded,
+                    label: 'Challenges',
+                  ),
+                  WoodenTabItem(
+                    icon: Icons.people_rounded,
+                    label: 'Friends',
+                  ),
+                  WoodenTabItem(
+                    icon: Icons.leaderboard_rounded,
+                    label: 'Leaderboard',
+                  ),
+                  WoodenTabItem(
+                    icon: Icons.person_rounded,
+                    label: 'Profile',
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // -- Race track --
 
   Widget _buildRaceTrack() {
     final userA = _progress!['userA'] as Map<String, dynamic>? ?? {};
@@ -327,15 +410,18 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
     final myData = iAmA ? userA : userB;
     final theirData = iAmA ? userB : userA;
 
-    return RaceTrack(
-      mySteps: myData['totalSteps'] as int? ?? 0,
-      theirSteps: theirData['totalSteps'] as int? ?? 0,
-      myName: widget.authService.displayName ?? 'You',
-      theirName: _friendName(),
+    return RetroCard(
+      padding: const EdgeInsets.all(6),
+      child: RaceTrack(
+        mySteps: myData['totalSteps'] as int? ?? 0,
+        theirSteps: theirData['totalSteps'] as int? ?? 0,
+        myName: widget.authService.displayName ?? 'You',
+        theirName: _friendName(),
+      ),
     );
   }
 
-  // ── Progress display (driven by resolution rule) ──
+  // -- Progress section --
 
   Widget _buildProgressSection() {
     if (_isLoading) {
@@ -349,17 +435,7 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
 
     if (_progress == null) return const SizedBox.shrink();
 
-    final challenge =
-        _progress!['challenge'] as Map<String, dynamic>? ?? {};
-    final rule = challenge['resolutionRule'] as String? ?? 'higher_total';
-
-    switch (rule) {
-      case 'higher_total':
-        return _buildHigherTotalProgress();
-      default:
-        // Fallback: show higher_total style for any unknown rule
-        return _buildHigherTotalProgress();
-    }
+    return _buildHigherTotalProgress();
   }
 
   Widget _buildHigherTotalProgress() {
@@ -384,17 +460,16 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
     final winning = myTotal >= theirTotal;
     final diff = (myTotal - theirTotal).abs();
 
-    return ContentBoard(
-      width: double.infinity,
+    return RetroCard(
+      padding: const EdgeInsets.all(16),
       child: Column(
         children: [
           Text(
             'WEEKLY STEPS',
-            style: PixelText.title(size: 14, color: AppColors.textMid),
+            style: PixelText.title(size: 18, color: AppColors.textMid),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
-          // Totals
           Row(
             children: [
               Expanded(
@@ -402,12 +477,12 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
                   children: [
                     Text('YOU',
                         style: PixelText.title(
-                            size: 12, color: AppColors.textMid)),
+                            size: 14, color: AppColors.textMid)),
                     const SizedBox(height: 4),
                     Text(
                       _formatSteps(myTotal),
                       style: PixelText.number(
-                        size: 28,
+                        size: 34,
                         color: winning
                             ? AppColors.pillGreen
                             : AppColors.textDark,
@@ -425,14 +500,14 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
                     Text(
                       _friendName().toUpperCase(),
                       style: PixelText.title(
-                          size: 12, color: AppColors.textMid),
+                          size: 14, color: AppColors.textMid),
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
                     Text(
                       _formatSteps(theirTotal),
                       style: PixelText.number(
-                        size: 28,
+                        size: 34,
                         color: !winning
                             ? AppColors.pillGreen
                             : AppColors.textDark,
@@ -453,7 +528,6 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
             style: PixelText.body(size: 12, color: AppColors.textMid),
             textAlign: TextAlign.center,
           ),
-          // Daily breakdown
           if (myDaily.isNotEmpty) ...[
             const SizedBox(height: 16),
             _buildDailyBreakdown(myDaily, theirDaily),
@@ -471,22 +545,21 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
 
     return Column(
       children: [
-        // Header row
         Row(
           children: [
             SizedBox(
-              width: 36,
+              width: 44,
               child: Text('DAY',
-                  style: PixelText.title(size: 10, color: AppColors.textMid)),
+                  style: PixelText.title(size: 13, color: AppColors.textMid)),
             ),
             Expanded(
               child: Text('YOU',
-                  style: PixelText.title(size: 10, color: AppColors.textMid),
+                  style: PixelText.title(size: 13, color: AppColors.textMid),
                   textAlign: TextAlign.right),
             ),
             Expanded(
               child: Text(_friendName().toUpperCase(),
-                  style: PixelText.title(size: 10, color: AppColors.textMid),
+                  style: PixelText.title(size: 13, color: AppColors.textMid),
                   textAlign: TextAlign.right,
                   overflow: TextOverflow.ellipsis),
             ),
@@ -516,19 +589,19 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
     final theyWon = theirSteps > mySteps;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         children: [
           SizedBox(
-            width: 36,
+            width: 44,
             child: Text(label,
-                style: PixelText.body(size: 11, color: AppColors.textMid)),
+                style: PixelText.body(size: 15, color: AppColors.textMid)),
           ),
           Expanded(
             child: Text(
               mySteps > 0 ? _formatSteps(mySteps) : '-',
               style: PixelText.body(
-                size: 12,
+                size: 16,
                 color: iWon ? AppColors.pillGreen : AppColors.textDark,
               ),
               textAlign: TextAlign.right,
@@ -538,7 +611,7 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
             child: Text(
               theirSteps > 0 ? _formatSteps(theirSteps) : '-',
               style: PixelText.body(
-                size: 12,
+                size: 16,
                 color: theyWon ? AppColors.pillGreen : AppColors.textDark,
               ),
               textAlign: TextAlign.right,
@@ -549,63 +622,54 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
     );
   }
 
-  String _formatSteps(int steps) {
-    if (steps >= 10000) {
-      return '${(steps / 1000).toStringAsFixed(1)}k';
-    }
-    return '$steps';
-  }
-
-  // ── Stake negotiation ──
+  // -- Stake negotiation --
 
   Widget _buildNegotiationView() {
-    if (_showingStakePicker) return _buildInlineStakePicker();
-
     final stakeName = _proposedStakeName();
     final isMyProposal = _isMyProposal();
     final proposedStakeId = _instance['proposedStakeId'] as String?;
 
     if (proposedStakeId == null) {
-      return Column(
-        children: [
-          TrailSign(
-            width: double.infinity,
-            child: Column(
-              children: [
-                Text(
-                  'SET THE STAKES',
-                  style:
-                      PixelText.title(size: 16, color: AppColors.textDark),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Pick what the loser owes the winner.',
-                  style:
-                      PixelText.body(size: 13, color: AppColors.textMid),
-                  textAlign: TextAlign.center,
-                ),
-              ],
+      return RetroCard(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Text(
+              'SET THE STAKES',
+              style: PixelText.title(size: 16, color: AppColors.textDark),
+              textAlign: TextAlign.center,
             ),
-          ),
-          const SizedBox(height: 16),
-          PillButton(
-            label: 'PICK A STAKE',
-            variant: PillButtonVariant.primary,
-            fontSize: 16,
-            fullWidth: true,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
-            onPressed: () => _openStakePicker('propose'),
-          ),
-        ],
+            const SizedBox(height: 8),
+            Text(
+              'Pick what the loser owes the winner.',
+              style: PixelText.body(size: 13, color: AppColors.textMid),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            PillButton(
+              label: 'PICK A STAKE',
+              variant: PillButtonVariant.primary,
+              fontSize: 16,
+              fullWidth: true,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
+              onPressed: () => _navigateToStakePicker('propose'),
+            ),
+          ],
+        ),
       );
     }
 
     return Column(
       children: [
-        ContentBoard(
+        Container(
           width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.parchment,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.parchmentBorder, width: 2),
+          ),
           child: Column(
             children: [
               Text(
@@ -633,16 +697,7 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
           ),
         ),
         if (isMyProposal) ...[
-          const SizedBox(height: 16),
-          PillButton(
-            label: 'EDIT STAKE',
-            variant: PillButtonVariant.secondary,
-            fontSize: 16,
-            fullWidth: true,
-            padding: const EdgeInsets.symmetric(
-                horizontal: 48, vertical: 16),
-            onPressed: () => _openStakePicker('edit'),
-          ),
+          const SizedBox(height: 0),
         ],
         if (!isMyProposal) ...[
           const SizedBox(height: 16),
@@ -668,7 +723,7 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
               fullWidth: true,
               padding: const EdgeInsets.symmetric(
                   horizontal: 48, vertical: 16),
-              onPressed: () => _openStakePicker('counter'),
+              onPressed: () => _navigateToStakePicker('counter'),
             ),
           ],
         ],
@@ -676,195 +731,12 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
     );
   }
 
-  Widget _buildFilterChips() {
-    return FilterDropdown<String>(
-      value: _selectedRelationshipType,
-      options: [
-        (null, 'ALL'),
-        for (final type in _relationshipTypes) (type, type.toUpperCase()),
-      ],
-      onChanged: (val) => _selectRelationshipType(val),
-    );
-  }
-
-  TableRow _buildStakeRow(Map<String, dynamic> stake) {
-    final id = stake['id'] as String;
-    final name = stake['name'] as String? ?? '';
-    final desc = stake['description'] as String? ?? '';
-    final category = stake['category'] as String? ?? '';
-    final selected = _selectedStakeId == id;
-
-    return TableRow(
-      decoration: BoxDecoration(
-        color: selected
-            ? AppColors.pillGreen.withValues(alpha: 0.12)
-            : Colors.transparent,
-      ),
-      children: [
-        TableCell(
-          verticalAlignment: TableCellVerticalAlignment.middle,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => setState(() => _selectedStakeId = id),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-              child: Icon(
-                _categoryIcon(category),
-                size: 18,
-                color: selected ? AppColors.pillGreen : AppColors.textMid,
-              ),
-            ),
-          ),
-        ),
-        TableCell(
-          verticalAlignment: TableCellVerticalAlignment.middle,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => setState(() => _selectedStakeId = id),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    name,
-                    style: PixelText.title(
-                        size: 13, color: AppColors.textDark),
-                  ),
-                  if (desc.isNotEmpty)
-                    Text(
-                      desc,
-                      style: PixelText.body(
-                          size: 11, color: AppColors.textMid),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        TableCell(
-          verticalAlignment: TableCellVerticalAlignment.middle,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => setState(() => _selectedStakeId = id),
-            child: selected
-                ? const Icon(Icons.check_circle,
-                    color: AppColors.pillGreen, size: 20)
-                : const SizedBox.shrink(),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildInlineStakePicker() {
-    final buttonLabel = _stakePickerMode == 'counter'
-        ? 'COUNTER WITH THIS'
-        : 'PROPOSE STAKE';
-
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            GestureDetector(
-              onTap: _closeStakePicker,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.arrow_back,
-                      size: 16, color: AppColors.textMid),
-                  const SizedBox(width: 4),
-                  Text(
-                    'BACK',
-                    style: PixelText.body(
-                        size: 12, color: AppColors.textMid),
-                  ),
-                ],
-              ),
-            ),
-            Text(
-              'PICK A STAKE',
-              style:
-                  PixelText.title(size: 14, color: AppColors.accent),
-            ),
-            const SizedBox(width: 60),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'What does the loser owe?',
-          style: PixelText.body(size: 13, color: AppColors.textMid),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 8),
-        _buildFilterChips(),
-        const SizedBox(height: 8),
-        if (_stakesLoading)
-          const Padding(
-            padding: EdgeInsets.all(20),
-            child: CircularProgressIndicator(color: AppColors.accent),
-          )
-        else
-          ContentBoard(
-            width: double.infinity,
-            child: _stakes.isEmpty
-                ? Padding(
-                    padding:
-                        const EdgeInsets.symmetric(vertical: 20),
-                    child: Text(
-                      'No stakes found',
-                      style: PixelText.body(
-                          size: 13, color: AppColors.textMid),
-                      textAlign: TextAlign.center,
-                    ),
-                  )
-                : Table(
-                    border: TableBorder(
-                      horizontalInside: BorderSide(
-                        color: AppColors.parchmentBorder
-                            .withValues(alpha: 0.4),
-                        width: 0.5,
-                      ),
-                    ),
-                    columnWidths: const {
-                      0: FixedColumnWidth(32),
-                      1: FlexColumnWidth(),
-                      2: FixedColumnWidth(30),
-                    },
-                    children: [
-                      for (final stake in _stakes)
-                        _buildStakeRow(stake),
-                    ],
-                  ),
-          ),
-        const SizedBox(height: 16),
-        if (_isSubmittingStake)
-          const Center(
-              child: CircularProgressIndicator(
-                  color: AppColors.accent))
-        else
-          PillButton(
-            label: buttonLabel,
-            variant: PillButtonVariant.primary,
-            fontSize: 16,
-            fullWidth: true,
-            padding: const EdgeInsets.symmetric(
-                horizontal: 48, vertical: 16),
-            onPressed: _selectedStakeId != null
-                ? _submitStakeSelection
-                : null,
-          ),
-      ],
-    );
-  }
-
-  // ── Active view (stake agreed) ──
+  // -- Active stake info --
 
   Widget _buildActiveStakeInfo() {
     final stakeName = _agreedStakeName() ?? 'Unknown';
-    return ContentBoard(
-      width: double.infinity,
+    return RetroCard(
+      padding: const EdgeInsets.all(16),
       child: Column(
         children: [
           Text(
@@ -883,99 +755,4 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
     );
   }
 
-  // ── Main build ──
-
-  @override
-  Widget build(BuildContext context) {
-    final status = _instance['status'] as String? ?? '';
-    final isActive = status == 'ACTIVE';
-
-    return PopScope(
-      canPop: !_showingStakePicker,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _closeStakePicker();
-      },
-      child: Scaffold(
-        extendBodyBehindAppBar: true,
-        appBar: AppBar(
-          leading: IconButton(
-            icon:
-                const Icon(Icons.arrow_back, color: AppColors.textDark),
-            onPressed: () {
-              if (_showingStakePicker) {
-                _closeStakePicker();
-              } else {
-                Navigator.of(context).pop(true);
-              }
-            },
-          ),
-          title: Text(
-            'vs ${_friendName()}',
-            style:
-                PixelText.body(size: 14, color: AppColors.textDark),
-          ),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-        ),
-        body: GameBackground(
-          child: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 24, vertical: 16),
-              child: Column(
-                children: [
-                  // Challenge info
-                  TrailSign(
-                    width: double.infinity,
-                    child: Column(
-                      children: [
-                        Text(
-                          widget.challenge['title'] as String? ?? '',
-                          style: PixelText.title(
-                              size: 18, color: AppColors.textDark),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          widget.challenge['description'] as String? ??
-                              '',
-                          style: PixelText.body(
-                              size: 13, color: AppColors.textMid),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Race track (only when progress is loaded)
-                  if (_progress != null) ...[
-                    const SizedBox(height: 16),
-                    _buildRaceTrack(),
-                  ],
-                  const SizedBox(height: 16),
-                  // Always show progress
-                  _buildProgressSection(),
-                  const SizedBox(height: 16),
-                  // Stake section
-                  if (isActive)
-                    _buildActiveStakeInfo()
-                  else
-                    _buildNegotiationView(),
-                  const SizedBox(height: 24),
-                  PillButton(
-                    label: 'CANCEL CHALLENGE',
-                    variant: PillButtonVariant.accent,
-                    fontSize: 13,
-                    fullWidth: true,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 12),
-                    onPressed: _confirmCancel,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }

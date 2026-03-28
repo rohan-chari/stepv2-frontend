@@ -49,12 +49,18 @@ void main() {
       ),
     );
 
-    expect(find.text('CHALLENGE END: '), findsOneWidget);
-    expect(find.text('1D 1H 2M 5S'), findsOneWidget);
+    // Countdown units: 01 days, 01 hours, 02 minutes, 05 seconds
+    expect(find.text('01'), findsNWidgets(2)); // days and hours
+    expect(find.text('02'), findsOneWidget);   // minutes
+    expect(find.text('05'), findsOneWidget);   // seconds
+    expect(find.text('DAYS'), findsOneWidget);
+    expect(find.text('HRS'), findsOneWidget);
+    expect(find.text('MIN'), findsOneWidget);
+    expect(find.text('SEC'), findsOneWidget);
 
     now = now.add(const Duration(seconds: 1));
     await tester.pump(const Duration(seconds: 1));
 
-    expect(find.text('1D 1H 2M 4S'), findsOneWidget);
+    expect(find.text('04'), findsOneWidget); // seconds ticked down to 04
   });
 }

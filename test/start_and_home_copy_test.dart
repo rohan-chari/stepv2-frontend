@@ -14,14 +14,14 @@ void main() {
     expect(find.text('Bara'), findsOneWidget);
     expect(
       find.text(
-        'Track your steps, challenge friends, and put a stake on the week.',
+        'Track your steps, challenge friends,\nand put a stake on the week.',
       ),
       findsOneWidget,
     );
   });
 
   testWidgets(
-    'HomeTab shows a how-it-works guide when social activity is empty',
+    'HomeTab shows action buttons for challenge and leaderboard',
     (WidgetTester tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -48,13 +48,13 @@ void main() {
         ),
       );
 
-      expect(find.text('GET STARTED'), findsOneWidget);
-      expect(find.text('ADD FRIENDS'), findsOneWidget);
+      expect(find.text('CHALLENGES'), findsOneWidget);
+      expect(find.text('LEADERBOARD'), findsOneWidget);
     },
   );
 
   testWidgets(
-    'HomeTab points users to Challenges when the weekly competition has no matchups yet',
+    'HomeTab shows daily reward slots',
     (WidgetTester tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -73,13 +73,7 @@ void main() {
               onEnableNotifications: () {},
               onSetStepGoal: () {},
               onDisplayNameChanged: () {},
-              currentChallenge: {
-                'challenge': {
-                  'title': 'Summit Sprint',
-                  'description': 'Outwalk your friend this week.',
-                },
-                'instances': const [],
-              },
+              currentChallenge: null,
               friendsSteps: const [],
               onChallengeChanged: () {},
             ),
@@ -87,18 +81,13 @@ void main() {
         ),
       );
 
-      expect(find.text('COMPETITIONS'), findsOneWidget);
-      expect(
-        find.text(
-          'No active competitions yet. Head to the Challenges tab to start one.',
-        ),
-        findsOneWidget,
-      );
+      expect(find.text('1x GOAL'), findsOneWidget);
+      expect(find.text('2x GOAL'), findsOneWidget);
     },
   );
 
   testWidgets(
-    'HomeTab hides the how-it-works guide once social sections are populated',
+    'HomeTab displays username and step count in status bar',
     (WidgetTester tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -144,7 +133,8 @@ void main() {
         ),
       );
 
-      expect(find.text('GET STARTED'), findsNothing);
+      expect(find.text('Trail Walker'), findsOneWidget);
+      expect(find.text('2,388 / 5k'), findsOneWidget);
     },
   );
 }

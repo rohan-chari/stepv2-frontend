@@ -2,14 +2,17 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/info_toast.dart';
 import '../../widgets/pill_button.dart';
-import '../../widgets/tab_layout.dart';
+import '../../widgets/retro_card.dart';
+import '../../widgets/spinning_coin.dart';
 import '../challenge_detail_screen.dart';
+import '../friend_picker_screen.dart';
 import '../stake_picker_screen.dart';
 
 class ChallengesTab extends StatefulWidget {
@@ -20,6 +23,9 @@ class ChallengesTab extends StatefulWidget {
   final VoidCallback? onOpenFriendsTab;
   final Future<void> Function()? onRefresh;
   final DateTime Function()? now;
+  final StepData? stepData;
+  final int? stepGoal;
+  final String? displayName;
 
   const ChallengesTab({
     super.key,
@@ -30,6 +36,9 @@ class ChallengesTab extends StatefulWidget {
     this.onOpenFriendsTab,
     this.onRefresh,
     this.now,
+    this.stepData,
+    this.stepGoal,
+    this.displayName,
   });
 
   @override
@@ -38,7 +47,6 @@ class ChallengesTab extends StatefulWidget {
 
 class _ChallengesTabState extends State<ChallengesTab> {
   final BackendApiService _api = BackendApiService();
-  bool _showFriendPicker = false;
   bool _isInitiating = false;
   Timer? _countdownTimer;
   late DateTime _countdownNow;
@@ -100,7 +108,6 @@ class _ChallengesTabState extends State<ChallengesTab> {
     super.dispose();
   }
 
-  /// Categorize instances into incoming, outgoing, and active
   Map<String, List<Map<String, dynamic>>> _categorizeInstances() {
     final instances = widget.currentChallenge?['instances'] as List? ?? [];
     final incoming = <Map<String, dynamic>>[];
@@ -152,10 +159,7 @@ class _ChallengesTabState extends State<ChallengesTab> {
       );
 
       if (mounted) {
-        setState(() {
-          _isInitiating = false;
-          _showFriendPicker = false;
-        });
+        setState(() => _isInitiating = false);
         widget.onChallengeChanged();
       }
     } catch (e) {
@@ -181,408 +185,28 @@ class _ChallengesTabState extends State<ChallengesTab> {
     });
   }
 
-  String _formatCountdown(Duration duration) {
-    final safeDuration =
-        duration.isNegative ? Duration.zero : duration;
-    final days = safeDuration.inDays;
-    final hours = safeDuration.inHours.remainder(24);
-    final minutes = safeDuration.inMinutes.remainder(60);
-    final seconds = safeDuration.inSeconds.remainder(60);
-
-    return '${days}D ${hours}H ${minutes}M ${seconds}S';
-  }
-
-  void _handleChallengeFriendTap(List<Map<String, dynamic>> availableFriends) {
+  void _navigateToFriendPicker() {
     if (widget.friendsSteps.isEmpty) {
       widget.onOpenFriendsTab?.call();
       showInfoToast(context, 'Add some friends first on the Friends tab.');
       return;
     }
 
+    final availableFriends = _getAvailableFriends();
     if (availableFriends.isEmpty) {
       showInfoToast(context, 'All friends already challenged this week!');
       return;
     }
 
-    setState(() => _showFriendPicker = true);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return TabLayout(
-      title: 'CHALLENGES',
-      onRefresh: widget.onRefresh,
-      child: _hasActiveChallenge
-          ? _buildActiveChallenge(context)
-          : _buildEmptyState(),
-    );
-  }
-
-  Widget _buildActiveChallenge(BuildContext context) {
-    final challenge =
-        widget.currentChallenge!['challenge'] as Map<String, dynamic>? ?? {};
-    final categories = _categorizeInstances();
-    final incoming = categories['incoming']!;
-    final outgoing = categories['outgoing']!;
-    final active = categories['active']!;
-    final availableFriends = _getAvailableFriends();
-    final hasAnyInstances =
-        incoming.isNotEmpty || outgoing.isNotEmpty || active.isNotEmpty;
-    final challengeEndsAt = _challengeEndsAt;
-
-    return Column(
-      children: [
-        // Challenge header
-        Text(
-          'THIS WEEK\u2019S COMPETITION',
-          style: PixelText.title(size: 14, color: AppColors.accent),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 8),
-        Text(
-          challenge['title'] as String? ?? '',
-          style: PixelText.title(size: 18, color: AppColors.textDark),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 6),
-        Text(
-          challenge['description'] as String? ?? '',
-          style: PixelText.body(color: AppColors.textMid),
-          textAlign: TextAlign.center,
-        ),
-        if (challengeEndsAt != null) ...[
-          const SizedBox(height: 12),
-          _buildCountdownBoard(challengeEndsAt),
-        ],
-
-        // Instance tables by category
-        if (incoming.isNotEmpty) ...[
-          _buildDivider(),
-          _buildSectionHeader('INCOMING'),
-          _buildInstanceTable(context, incoming, challenge),
-        ],
-
-        if (active.isNotEmpty) ...[
-          _buildDivider(),
-          _buildSectionHeader('ACTIVE'),
-          _buildInstanceTable(context, active, challenge),
-        ],
-
-        if (outgoing.isNotEmpty) ...[
-          _buildDivider(),
-          _buildSectionHeader('SENT'),
-          _buildInstanceTable(context, outgoing, challenge),
-        ],
-
-        // Empty state
-        if (!hasAnyInstances) ...[
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 24),
-            child: Column(
-              children: [
-                Icon(Icons.emoji_events, size: 32, color: AppColors.textMid),
-                const SizedBox(height: 8),
-                Text(
-                  'No challenges yet \u2014 time to start one!',
-                  style: PixelText.body(color: AppColors.textMid),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-        ],
-
-        // Start a challenge button
-        if (widget.authService.displayName != null) ...[
-          _buildDivider(),
-          if (!_showFriendPicker) ...[
-            PillButton(
-              label: 'CHALLENGE A FRIEND',
-              variant: PillButtonVariant.primary,
-              fontSize: 14,
-              fullWidth: true,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              onPressed: () => _handleChallengeFriendTap(availableFriends),
-            ),
-            if (widget.friendsSteps.isNotEmpty && availableFriends.isEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  'All friends already challenged this week!',
-                  style: PixelText.body(color: AppColors.textMid),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-          ] else
-            _buildFriendPicker(availableFriends),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildCountdownBoard(DateTime endsAt) {
-    final remaining = endsAt.difference(_countdownNow);
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text(
-          'CHALLENGE END: ',
-          style: PixelText.title(size: 17.5, color: AppColors.textMid),
-        ),
-        Text(
-          _formatCountdown(remaining),
-          style: PixelText.number(size: 17.5, color: AppColors.textDark),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDivider() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Container(
-        height: 1,
-        color: AppColors.parchmentBorder.withValues(alpha: 0.5),
+    Navigator.of(context).push<(String, String)>(
+      MaterialPageRoute(
+        builder: (context) => FriendPickerScreen(friends: availableFriends),
       ),
-    );
-  }
-
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Text(
-          title,
-          style: PixelText.title(size: 12, color: AppColors.textMid),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFriendPicker(List<Map<String, dynamic>> friends) {
-    if (_isInitiating) {
-      return const Padding(
-        padding: EdgeInsets.all(16),
-        child: Center(
-          child: CircularProgressIndicator(color: AppColors.accent),
-        ),
-      );
-    }
-
-    return Column(
-      children: [
-        Text(
-          'PICK A FRIEND',
-          style: PixelText.title(size: 14, color: AppColors.textMid),
-        ),
-        const SizedBox(height: 8),
-        Table(
-          columnWidths: const {
-            0: FlexColumnWidth(),
-            1: IntrinsicColumnWidth(),
-          },
-          defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-          border: TableBorder(
-            horizontalInside: BorderSide(
-              color: AppColors.parchmentBorder.withValues(alpha: 0.3),
-              width: 1,
-            ),
-          ),
-          children: [
-            for (int i = 0; i < friends.length; i++)
-              _buildFriendPickerTableRow(friends[i], i),
-          ],
-        ),
-        const SizedBox(height: 12),
-        PillButton(
-          label: 'CANCEL',
-          variant: PillButtonVariant.secondary,
-          fontSize: 12,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          onPressed: () => setState(() => _showFriendPicker = false),
-        ),
-      ],
-    );
-  }
-
-  TableRow _buildFriendPickerTableRow(Map<String, dynamic> friend, int index) {
-    final id = friend['id'] as String? ?? '';
-    final name = friend['displayName'] as String? ?? '???';
-
-    return TableRow(
-      decoration: BoxDecoration(
-        color: index.isOdd
-            ? AppColors.accent.withValues(alpha: 0.07)
-            : Colors.transparent,
-      ),
-      children: [
-        TableCell(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => _startChallenge(id, name),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-              child: Text(
-                name,
-                style: PixelText.body(size: 18, color: AppColors.textDark),
-              ),
-            ),
-          ),
-        ),
-        TableCell(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => _startChallenge(id, name),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-              child: Icon(Icons.chevron_right, size: 22, color: AppColors.textMid),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildInstanceTable(
-    BuildContext context,
-    List<Map<String, dynamic>> instances,
-    Map<String, dynamic> challenge,
-  ) {
-    return Table(
-      columnWidths: const {
-        0: FlexColumnWidth(),
-        1: IntrinsicColumnWidth(),
-        2: FixedColumnWidth(36),
-      },
-      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-      border: TableBorder(
-        horizontalInside: BorderSide(
-          color: AppColors.parchmentBorder.withValues(alpha: 0.3),
-          width: 1,
-        ),
-      ),
-      children: [
-        for (int i = 0; i < instances.length; i++)
-          _buildInstanceTableRow(context, instances[i], challenge, i),
-      ],
-    );
-  }
-
-  TableRow _buildInstanceTableRow(
-    BuildContext context,
-    Map<String, dynamic> instance,
-    Map<String, dynamic> challenge,
-    int index,
-  ) {
-    final instanceId = instance['id'] as String? ?? '';
-    final userA = instance['userA'] as Map<String, dynamic>?;
-    final userB = instance['userB'] as Map<String, dynamic>?;
-
-    String friendName = '???';
-    if (userA != null && userA['id'] != _myUserId) {
-      friendName = userA['displayName'] as String? ?? '???';
-    } else if (userB != null) {
-      friendName = userB['displayName'] as String? ?? '???';
-    }
-
-    final status = instance['status'] as String? ?? '';
-    final stakeStatus = instance['stakeStatus'] as String? ?? '';
-    final proposedById = instance['proposedById'] as String? ?? '';
-    final isIncoming = proposedById.isNotEmpty && proposedById != _myUserId;
-
-    final proposedStake = instance['proposedStake'] as Map<String, dynamic>?;
-    final agreedStake = instance['stake'] as Map<String, dynamic>?;
-    final stakeName =
-        agreedStake?['name'] as String? ??
-        proposedStake?['name'] as String? ??
-        '';
-
-    String statusLabel;
-    if (status == 'ACTIVE' || stakeStatus == 'AGREED') {
-      statusLabel = 'ACTIVE';
-    } else if (isIncoming) {
-      statusLabel = 'ACCEPT';
-    } else {
-      statusLabel = 'WAITING';
-    }
-
-    void onTap() {
-      Navigator.of(context)
-          .push<bool>(
-            MaterialPageRoute(
-              builder: (context) => ChallengeDetailScreen(
-                authService: widget.authService,
-                instance: instance,
-                challenge: challenge,
-              ),
-            ),
-          )
-          .then((_) => widget.onChallengeChanged());
-    }
-
-    return TableRow(
-      decoration: BoxDecoration(
-        color: index.isOdd
-            ? AppColors.accent.withValues(alpha: 0.07)
-            : Colors.transparent,
-      ),
-      children: [
-        TableCell(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'vs $friendName',
-                    style:
-                        PixelText.title(size: 18, color: AppColors.textDark),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (stakeName.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      stakeName,
-                      style: PixelText.body(
-                          size: 14, color: AppColors.textMid),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
-        TableCell(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-              child: Text(
-                statusLabel,
-                style:
-                    PixelText.title(size: 16, color: AppColors.textDark),
-                textAlign: TextAlign.right,
-              ),
-            ),
-          ),
-        ),
-        TableCell(
-          child: GestureDetector(
-            onTap: () => _showChallengeMenu(instanceId, friendName),
-            child: const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: Icon(Icons.more_horiz, size: 22, color: AppColors.textMid),
-            ),
-          ),
-        ),
-      ],
-    );
+    ).then((result) {
+      if (result != null && mounted) {
+        _startChallenge(result.$1, result.$2);
+      }
+    });
   }
 
   void _showChallengeMenu(String instanceId, String friendName) {
@@ -639,20 +263,393 @@ class _ChallengesTabState extends State<ChallengesTab> {
     }
   }
 
-  Widget _buildEmptyState() {
+  // -- Build --
+
+  @override
+  Widget build(BuildContext context) {
+    final topInset = MediaQuery.of(context).padding.top;
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+    final tabBarHeight = 77.5 + bottomInset;
+    final bottomPadding = tabBarHeight;
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 24),
+      padding: EdgeInsets.only(top: topInset + 12, bottom: bottomPadding),
+      child: RefreshIndicator(
+        onRefresh: widget.onRefresh ?? () async {},
+        color: AppColors.accent,
+        backgroundColor: AppColors.parchment,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              sliver: SliverToBoxAdapter(
+                child: _hasActiveChallenge
+                    ? _buildActiveContent()
+                    : _buildEmptyContent(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActiveContent() {
+    final challenge =
+        widget.currentChallenge!['challenge'] as Map<String, dynamic>? ?? {};
+    final categories = _categorizeInstances();
+    final allInstances = [
+      ...categories['incoming']!,
+      ...categories['active']!,
+      ...categories['outgoing']!,
+    ];
+
+    return Column(
+      children: [
+        _buildTopStatusBar(),
+        const SizedBox(height: 16),
+        _buildCountdownCenterpiece(challenge),
+        const SizedBox(height: 16),
+        if (allInstances.isNotEmpty)
+          _buildChallengeTiles(allInstances, challenge),
+        if (allInstances.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Text(
+              'No challenges yet \u2014 time to start one!',
+              style: PixelText.body(color: AppColors.textMid).copyWith(
+                shadows: _textShadows,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyContent() {
+    return Column(
+      children: [
+        _buildTopStatusBar(),
+        const SizedBox(height: 48),
+        Icon(Icons.emoji_events, size: 48, color: AppColors.textMid.withValues(alpha: 0.6)),
+        const SizedBox(height: 12),
+        Text(
+          'No active challenges',
+          style: PixelText.title(size: 18, color: AppColors.textMid).copyWith(
+            shadows: _textShadows,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Challenge a friend to a weekly step battle!',
+          style: PixelText.body(size: 14, color: AppColors.textMid).copyWith(
+            shadows: _textShadows,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 24),
+        if (widget.authService.displayName != null)
+          PillButton(
+            label: 'NEW CHALLENGE',
+            variant: PillButtonVariant.primary,
+            fontSize: 14,
+            fullWidth: true,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+            onPressed: _navigateToFriendPicker,
+          ),
+      ],
+    );
+  }
+
+  // -- Top status bar (same as HomeTab) --
+
+  Widget _buildTopStatusBar() {
+    final steps = widget.stepData?.steps ?? 0;
+    final goal = widget.stepGoal ?? 0;
+    final stepsStr = _formatNumber(steps);
+    final goalStr = goal > 0 ? _formatCompact(goal) : null;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (widget.displayName != null)
+                Text(
+                  widget.displayName!,
+                  style: PixelText.title(size: 26, color: AppColors.textDark).copyWith(
+                    shadows: _textShadows,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              const SizedBox(height: 2),
+              if (goalStr != null)
+                Text(
+                  '$stepsStr / $goalStr',
+                  style: PixelText.number(size: 20, color: AppColors.accent).copyWith(
+                    shadows: _textShadows,
+                  ),
+                )
+              else
+                Text(
+                  stepsStr,
+                  style: PixelText.number(size: 20, color: AppColors.accent).copyWith(
+                    shadows: _textShadows,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SpinningCoin(size: 32),
+        const SizedBox(width: 6),
+        Text(
+          '${widget.authService.coins}',
+          style: PixelText.title(size: 24, color: AppColors.coinDark).copyWith(
+            shadows: _textShadows,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // -- Countdown centerpiece --
+
+  Widget _buildCountdownCenterpiece(Map<String, dynamic> challenge) {
+    final challengeEndsAt = _challengeEndsAt;
+    final remaining = challengeEndsAt != null
+        ? challengeEndsAt.difference(_countdownNow)
+        : Duration.zero;
+    final safeDuration = remaining.isNegative ? Duration.zero : remaining;
+
+    final days = safeDuration.inDays;
+    final hours = safeDuration.inHours.remainder(24);
+    final minutes = safeDuration.inMinutes.remainder(60);
+    final seconds = safeDuration.inSeconds.remainder(60);
+
+    return RetroCard(
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
       child: Column(
         children: [
-          Icon(Icons.emoji_events, size: 32, color: AppColors.textMid),
-          const SizedBox(height: 8),
           Text(
-            'No active challenges \u2014 time to start one!',
-            style: PixelText.body(size: 13, color: AppColors.textMid),
+            'THIS WEEK\u2019S CHALLENGE',
+            style: PixelText.title(size: 11, color: AppColors.textMid),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            challenge['title'] as String? ?? '',
+            style: PixelText.title(size: 18, color: AppColors.textDark),
             textAlign: TextAlign.center,
           ),
+          if ((challenge['description'] as String?)?.isNotEmpty ?? false) ...[
+            const SizedBox(height: 4),
+            Text(
+              challenge['description'] as String,
+              style: PixelText.body(size: 12, color: AppColors.textMid),
+              textAlign: TextAlign.center,
+            ),
+          ],
+          if (challengeEndsAt != null) ...[
+            const SizedBox(height: 14),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _CountdownUnit(value: days, label: 'DAYS'),
+                const SizedBox(width: 8),
+                _CountdownUnit(value: hours, label: 'HRS'),
+                const SizedBox(width: 8),
+                _CountdownUnit(value: minutes, label: 'MIN'),
+                const SizedBox(width: 8),
+                _CountdownUnit(value: seconds, label: 'SEC'),
+              ],
+            ),
+          ],
+          if (widget.authService.displayName != null) ...[
+            const SizedBox(height: 14),
+            PillButton(
+              label: _isInitiating ? 'STARTING...' : 'NEW CHALLENGE',
+              variant: PillButtonVariant.primary,
+              fontSize: 13,
+              fullWidth: true,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              onPressed: _isInitiating ? null : _navigateToFriendPicker,
+            ),
+          ],
         ],
       ),
+    );
+  }
+
+  // -- Challenge tiles grid --
+
+  Widget _buildChallengeTiles(
+    List<Map<String, dynamic>> instances,
+    Map<String, dynamic> challenge,
+  ) {
+    return Column(
+      children: [
+        for (int i = 0; i < instances.length; i++) ...[
+          _buildChallengeTile(instances[i], challenge),
+          if (i < instances.length - 1) const SizedBox(height: 10),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildChallengeTile(
+    Map<String, dynamic> instance,
+    Map<String, dynamic> challenge,
+  ) {
+    final instanceId = instance['id'] as String? ?? '';
+    final userA = instance['userA'] as Map<String, dynamic>?;
+    final userB = instance['userB'] as Map<String, dynamic>?;
+
+    String friendName = '???';
+    if (userA != null && userA['id'] != _myUserId) {
+      friendName = userA['displayName'] as String? ?? '???';
+    } else if (userB != null) {
+      friendName = userB['displayName'] as String? ?? '???';
+    }
+
+    final status = instance['status'] as String? ?? '';
+    final stakeStatus = instance['stakeStatus'] as String? ?? '';
+    final proposedById = instance['proposedById'] as String? ?? '';
+    final isIncoming = proposedById.isNotEmpty && proposedById != _myUserId;
+
+    final proposedStake = instance['proposedStake'] as Map<String, dynamic>?;
+    final agreedStake = instance['stake'] as Map<String, dynamic>?;
+    final stakeName =
+        agreedStake?['name'] as String? ??
+        proposedStake?['name'] as String? ??
+        '';
+
+    String statusLabel;
+    Color badgeColor;
+    if (status == 'ACTIVE' || stakeStatus == 'AGREED') {
+      statusLabel = 'ACTIVE';
+      badgeColor = AppColors.pillGreenDark;
+    } else if (isIncoming) {
+      statusLabel = 'ACCEPT';
+      badgeColor = AppColors.pillGoldDark;
+    } else {
+      statusLabel = 'WAITING';
+      badgeColor = AppColors.textMid;
+    }
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context)
+            .push<bool>(
+              MaterialPageRoute(
+                builder: (context) => ChallengeDetailScreen(
+                  authService: widget.authService,
+                  instance: instance,
+                  challenge: challenge,
+                ),
+              ),
+            )
+            .then((_) => widget.onChallengeChanged());
+      },
+      onLongPress: () => _showChallengeMenu(instanceId, friendName),
+      child: RetroCard(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'vs $friendName',
+                    style: PixelText.title(size: 16, color: AppColors.textDark),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                  if (stakeName.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      stakeName,
+                      style: PixelText.body(size: 12, color: AppColors.textMid),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: badgeColor,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                statusLabel,
+                style: PixelText.title(size: 11, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // -- Helpers --
+
+  static String _formatNumber(int n) {
+    final s = n.toString();
+    final buf = StringBuffer();
+    for (int i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) buf.write(',');
+      buf.write(s[i]);
+    }
+    return buf.toString();
+  }
+
+  static String _formatCompact(int n) {
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}k';
+    return '$n';
+  }
+
+  static const _textShadows = [
+    Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
+  ];
+}
+
+// -- Countdown unit widget --
+
+class _CountdownUnit extends StatelessWidget {
+  final int value;
+  final String label;
+
+  const _CountdownUnit({required this.value, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppColors.woodDark,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            value.toString().padLeft(2, '0'),
+            style: PixelText.number(size: 28, color: AppColors.parchment),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: PixelText.title(size: 9, color: AppColors.textMid),
+        ),
+      ],
     );
   }
 }

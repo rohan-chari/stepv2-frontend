@@ -94,9 +94,9 @@ void main() {
         ),
       );
 
-      expect(find.text('CHALLENGE A FRIEND'), findsOneWidget);
+      expect(find.text('NEW CHALLENGE'), findsOneWidget);
 
-      await tester.tap(find.text('CHALLENGE A FRIEND'));
+      await tester.tap(find.text('NEW CHALLENGE'));
       await tester.pump();
 
       expect(openFriendsCalls, 1);
