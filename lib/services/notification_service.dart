@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'backend_api_service.dart';
 
-enum NotificationRoute { home, friends, challengeDetail }
+enum NotificationRoute { home, friends, challengeDetail, raceDetail, races }
 
 class NotificationAction {
   final NotificationRoute route;
@@ -107,6 +107,9 @@ class NotificationService {
     if (payload['challengeInstanceId'] is String) {
       params['challengeInstanceId'] = payload['challengeInstanceId'] as String;
     }
+    if (payload['raceId'] is String) {
+      params['raceId'] = payload['raceId'] as String;
+    }
 
     pendingAction.value = NotificationAction(route: route, params: params);
   }
@@ -115,6 +118,13 @@ class NotificationService {
     switch (type) {
       case 'CHALLENGE_INITIATED':
         return NotificationRoute.challengeDetail;
+      case 'RACE_INVITE_SENT':
+      case 'RACE_INVITE_ACCEPTED':
+      case 'RACE_STARTED':
+      case 'RACE_COMPLETED':
+        return NotificationRoute.raceDetail;
+      case 'RACE_CANCELLED':
+        return NotificationRoute.races;
       default:
         return null;
     }

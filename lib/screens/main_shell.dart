@@ -23,6 +23,7 @@ import 'tabs/friends_tab.dart';
 import 'tabs/home_tab.dart';
 import 'tabs/leaderboard_tab.dart';
 import 'tabs/profile_tab.dart';
+import 'tabs/races_tab.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({
@@ -67,6 +68,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   List<Map<String, dynamic>> _friendsSteps = [];
   Map<String, dynamic>? _currentChallenge;
   Map<String, dynamic>? _activeChallengeProgress;
+  Map<String, dynamic>? _racesData;
   Timer? _foregroundPollTimer;
   static const Duration _foregroundPollInterval = Duration(minutes: 5);
 
@@ -104,6 +106,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _refreshStepGoal();
       _fetchFriendsSteps();
       _fetchCurrentChallenge();
+      _fetchRaces();
       _startForegroundPolling();
     } else if (state == AppLifecycleState.paused) {
       _stopForegroundPolling();
@@ -144,6 +147,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _refreshStepGoal();
     _fetchFriendsSteps();
     _fetchCurrentChallenge();
+    _fetchRaces();
     _startForegroundPolling();
   }
 
@@ -311,6 +315,25 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     } catch (_) {}
   }
 
+  Future<void> _fetchRaces() async {
+    try {
+      final identityToken = widget.authService.authToken;
+      if (identityToken == null || identityToken.isEmpty) return;
+
+      final data = await _backendApiService.fetchRaces(
+        identityToken: identityToken,
+      );
+
+      if (mounted) {
+        setState(() => _racesData = data);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _refreshRacesTab() async {
+    await Future.wait([_fetchRaces(), _fetchFriendsSteps()]);
+  }
+
   Future<void> _refreshChallengesTab() async {
     await Future.wait([_fetchCurrentChallenge(), _fetchFriendsSteps()]);
   }
@@ -333,7 +356,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   void _openFriendsTab() {
     _pageController.animateToPage(
-      2,
+      3,
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOutCubic,
     );
@@ -341,7 +364,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   void _openLeaderboardTab() {
     _pageController.animateToPage(
-      3,
+      4,
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOutCubic,
     );
@@ -591,6 +614,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
               onPageChanged: (index) {
                 setState(() => _currentTab = index);
                 if (index == 1) _fetchCurrentChallenge();
+                if (index == 2) _fetchRaces();
               },
               children: [
                 HomeTab(
@@ -624,6 +648,14 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   onRefresh: _refreshChallengesTab,
                   stepData: _stepData,
                   stepGoal: _stepGoal,
+                  displayName: _displayName,
+                ),
+                RacesTab(
+                  authService: widget.authService,
+                  racesData: _racesData,
+                  friendsSteps: _friendsSteps,
+                  onRacesChanged: _fetchRaces,
+                  onRefresh: _refreshRacesTab,
                   displayName: _displayName,
                 ),
                 FriendsTab(
@@ -679,6 +711,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                 const WoodenTabItem(
                   icon: Icons.emoji_events_rounded,
                   label: 'Challenges',
+                ),
+                const WoodenTabItem(
+                  icon: Icons.directions_run_rounded,
+                  label: 'Races',
                 ),
                 WoodenTabItem(
                   icon: Icons.people_rounded,

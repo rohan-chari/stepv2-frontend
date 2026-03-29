@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter_timezone/flutter_timezone.dart';
+
 import '../config/backend_config.dart';
 import '../models/step_data.dart';
 
@@ -55,6 +57,12 @@ class BackendApiService {
 
   static const Duration _requestTimeout = Duration(seconds: 15);
   final HttpClient _httpClient;
+  String? _cachedTimeZone;
+
+  Future<String> _getTimeZone() async {
+    _cachedTimeZone ??= await FlutterTimezone.getLocalTimezone();
+    return _cachedTimeZone!;
+  }
 
   Future<Map<String, dynamic>> provisionAppleUser({
     required String identityToken,
@@ -477,6 +485,120 @@ class BackendApiService {
     await _decodeJsonResponse(response);
   }
 
+  // -- Races --
+
+  Future<Map<String, dynamic>> createRace({
+    required String identityToken,
+    required String name,
+    required int targetSteps,
+    int maxDurationDays = 7,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races',
+      body: {
+        'name': name,
+        'targetSteps': targetSteps,
+        'maxDurationDays': maxDurationDays,
+      },
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> fetchRaces({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/races',
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> fetchRaceDetails({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/races/$raceId',
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> inviteToRace({
+    required String identityToken,
+    required String raceId,
+    required List<String> inviteeIds,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races/$raceId/invite',
+      body: {'inviteeIds': inviteeIds},
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> respondToRaceInvite({
+    required String identityToken,
+    required String raceId,
+    required bool accept,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'PUT',
+      path: '/races/$raceId/respond',
+      body: {'accept': accept},
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> startRace({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races/$raceId/start',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> fetchRaceProgress({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/races/$raceId/progress',
+      identityToken: identityToken,
+    );
+
+    final payload = await _decodeJsonResponse(response);
+    return payload['progress'] as Map<String, dynamic>;
+  }
+
+  Future<void> cancelRace({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    await _sendJsonRequest(
+      method: 'DELETE',
+      path: '/races/$raceId',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+  }
+
   Future<void> unregisterDeviceToken({
     required String identityToken,
     required String deviceToken,
@@ -505,6 +627,7 @@ class BackendApiService {
           'Bearer $identityToken',
         );
       }
+      request.headers.set('X-Timezone', await _getTimeZone());
       return await request.close().timeout(_requestTimeout);
     } on SocketException catch (error) {
       throw ApiException(describeBackendConnectionError(error, uri: uri));
@@ -536,6 +659,7 @@ class BackendApiService {
           'Bearer $identityToken',
         );
       }
+      request.headers.set('X-Timezone', await _getTimeZone());
 
       request.write(jsonEncode(body));
 

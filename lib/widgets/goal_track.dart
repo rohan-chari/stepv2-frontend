@@ -52,6 +52,8 @@ class _GoalTrackState extends State<GoalTrack>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _animation;
+  final List<_RunnerHitTarget> _hitTargets = [];
+  _RunnerHitTarget? _selectedRunner;
 
   @override
   void initState() {
@@ -73,6 +75,24 @@ class _GoalTrackState extends State<GoalTrack>
     super.dispose();
   }
 
+  void _onTapDown(TapDownDetails details) {
+    final tap = details.localPosition;
+    _RunnerHitTarget? closest;
+    double closestDist = double.infinity;
+
+    for (final target in _hitTargets) {
+      final dist = (target.center - tap).distance;
+      if (dist <= target.radius + 8 && dist < closestDist) {
+        closestDist = dist;
+        closest = target;
+      }
+    }
+
+    setState(() {
+      _selectedRunner = _selectedRunner == closest ? null : closest;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -81,20 +101,37 @@ class _GoalTrackState extends State<GoalTrack>
         SizedBox(
           width: double.infinity,
           height: widget.height,
-          child: AnimatedBuilder(
-            animation: _animation,
-            builder: (context, child) {
-              final t = _animation.value;
-              final painted = widget.runners.map((r) => _PaintedRunner(
-                    initials: _initials(r.name),
-                    position: r.progress.clamp(0.0, 1.0) * t,
-                    isUser: r.isUser,
-                    color: r.color,
-                  )).toList();
-              return CustomPaint(
-                painter: _GoalTrackPainter(runners: painted),
-              );
-            },
+          child: GestureDetector(
+            onTapDown: _onTapDown,
+            child: AnimatedBuilder(
+              animation: _animation,
+              builder: (context, child) {
+                final t = _animation.value;
+                final painted = widget.runners.map((r) => _PaintedRunner(
+                      name: r.isUser ? 'You' : r.name,
+                      initials: _initials(r.name),
+                      position: r.progress.clamp(0.0, 1.0) * t,
+                      rawProgress: r.progress,
+                      isUser: r.isUser,
+                      color: r.color,
+                    )).toList();
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned.fill(
+                      child: CustomPaint(
+                        painter: _GoalTrackPainter(
+                          runners: painted,
+                          hitTargets: _hitTargets,
+                        ),
+                      ),
+                    ),
+                    if (_selectedRunner != null)
+                      _buildTooltip(_selectedRunner!),
+                  ],
+                );
+              },
+            ),
           ),
         ),
         if (widget.runners.length > 1) ...[
@@ -102,6 +139,37 @@ class _GoalTrackState extends State<GoalTrack>
           _buildLegend(),
         ],
       ],
+    );
+  }
+
+  Widget _buildTooltip(_RunnerHitTarget target) {
+    final pct = (target.progress * 100).clamp(0, 100).toStringAsFixed(0);
+    final label = '${target.name} \u2022 $pct%';
+
+    return Positioned(
+      left: target.center.dx,
+      top: target.center.dy - target.radius - 38,
+      child: FractionalTranslation(
+        translation: const Offset(-0.5, 0),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: AppColors.woodDark,
+            borderRadius: BorderRadius.circular(6),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x40000000),
+                blurRadius: 4,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Text(
+            label,
+            style: PixelText.title(size: 11, color: AppColors.parchment),
+          ),
+        ),
+      ),
     );
   }
 
@@ -142,28 +210,47 @@ class _GoalTrackState extends State<GoalTrack>
 }
 
 class _PaintedRunner {
+  final String name;
   final String initials;
   final double position;
+  final double rawProgress;
   final bool isUser;
   final Color color;
 
   const _PaintedRunner({
+    required this.name,
     required this.initials,
     required this.position,
+    required this.rawProgress,
     required this.isUser,
     required this.color,
   });
 }
 
+class _RunnerHitTarget {
+  final Offset center;
+  final double radius;
+  final String name;
+  final double progress;
+
+  const _RunnerHitTarget({
+    required this.center,
+    required this.radius,
+    required this.name,
+    required this.progress,
+  });
+}
+
 class _GoalTrackPainter extends CustomPainter {
   final List<_PaintedRunner> runners;
+  final List<_RunnerHitTarget> hitTargets;
 
-  static const double _trackWidth = 32.0;
+  static const double _trackWidth = 54.0;
   static const double _avatarRadius = 18.0;
   static const double _friendAvatarRadius = 14.0;
   static const double _avatarBorder = 2.5;
 
-  _GoalTrackPainter({required this.runners});
+  _GoalTrackPainter({required this.runners, required this.hitTargets});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -181,11 +268,12 @@ class _GoalTrackPainter extends CustomPainter {
   Path _buildWindingPath(Size size) {
     final w = size.width;
     final h = size.height;
-    final m = _trackWidth + 20; // margin
+    final m = _trackWidth + 14; // margin
 
     final path = Path();
-    // Start at bottom center
-    path.moveTo(w / 2, h - m);
+    // Start at bottom-left, straight run rightward
+    path.moveTo(m, h - m);
+    path.lineTo(w / 2, h - m);
 
     // Curve right and up
     path.cubicTo(
@@ -204,9 +292,12 @@ class _GoalTrackPainter extends CustomPainter {
     // Curve right and up to top
     path.cubicTo(
       m, h * 0.2,
-      w - m, h * 0.15,
-      w * 0.6, m,
+      w * 0.35, m,
+      w * 0.5, m,
     );
+
+    // Straight run to the finish — gives staggered runners room to breathe
+    path.lineTo(w - m, m);
 
     return path;
   }
@@ -258,12 +349,12 @@ class _GoalTrackPainter extends CustomPainter {
     final redPaint = Paint()
       ..color = AppColors.accent
       ..style = PaintingStyle.stroke
-      ..strokeWidth = _trackWidth + 10
+      ..strokeWidth = _trackWidth + 12
       ..strokeCap = StrokeCap.round;
     final whitePaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = _trackWidth + 10
+      ..strokeWidth = _trackWidth + 12
       ..strokeCap = StrokeCap.round;
 
     for (double d = 0; d < totalLength; d += stripeLen * 2) {
@@ -356,21 +447,45 @@ class _GoalTrackPainter extends CustomPainter {
     final metrics = trackPath.computeMetrics().first;
     final totalLength = metrics.length;
 
+    // Assign each runner a stable lane offset across the track width.
+    // Spread evenly so they never fully overlap.
+    final n = runners.length;
+    final usableWidth = _trackWidth - _friendAvatarRadius * 2;
+
+    hitTargets.clear();
+
     // Sort: draw friends first (behind), then user on top
-    final sorted = [...runners]..sort((a, b) {
-        if (a.isUser && !b.isUser) return 1;
-        if (!a.isUser && b.isUser) return -1;
-        return a.position.compareTo(b.position);
+    final sorted = List.generate(n, (i) => i)
+      ..sort((a, b) {
+        if (runners[a].isUser && !runners[b].isUser) return 1;
+        if (!runners[a].isUser && runners[b].isUser) return -1;
+        return runners[a].position.compareTo(runners[b].position);
       });
 
-    for (final runner in sorted) {
+    for (final idx in sorted) {
+      final runner = runners[idx];
       final frac = runner.position.clamp(0.0, 0.999);
       final tangent = metrics.getTangentForOffset(frac * totalLength);
       if (tangent == null) continue;
 
+      // Perpendicular offset: spread runners across the track width
+      final laneOffset = n > 1
+          ? (idx / (n - 1) - 0.5) * usableWidth
+          : 0.0;
+      final angle = tangent.angle;
+      final perpX = -math.sin(angle) * laneOffset;
+      final perpY = math.cos(angle) * laneOffset;
+      final pos = tangent.position + Offset(perpX, perpY);
+
       final radius = runner.isUser ? _avatarRadius : _friendAvatarRadius;
-      final color = runner.color;
-      _drawAvatar(canvas, tangent.position, runner.initials, color, radius);
+      _drawAvatar(canvas, pos, runner.initials, runner.color, radius);
+
+      hitTargets.add(_RunnerHitTarget(
+        center: pos,
+        radius: radius + _avatarBorder,
+        name: runner.name,
+        progress: runner.rawProgress,
+      ));
     }
   }
 
