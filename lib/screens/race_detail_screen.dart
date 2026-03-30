@@ -31,7 +31,7 @@ class RaceDetailScreen extends StatefulWidget {
 const _powerupIcons = {
   'LEG_CRAMP': '\u{1F9B5}',       // leg
   'RED_CARD': '\u{1F7E5}',        // red square
-  'BANANA_PEEL': '\u{1F34C}',     // banana
+  'SHORTCUT': '\u{2702}',          // scissors
   'COMPRESSION_SOCKS': '\u{1F9E6}', // socks
   'PROTEIN_SHAKE': '\u{1F964}',   // cup with straw
   'RUNNERS_HIGH': '\u{26A1}',     // lightning
@@ -42,7 +42,7 @@ const _powerupIcons = {
 const _powerupNames = {
   'LEG_CRAMP': 'Leg Cramp',
   'RED_CARD': 'Red Card',
-  'BANANA_PEEL': 'Banana Peel',
+  'SHORTCUT': 'Shortcut',
   'COMPRESSION_SOCKS': 'Compression Socks',
   'PROTEIN_SHAKE': 'Protein Shake',
   'RUNNERS_HIGH': "Runner's High",
@@ -53,7 +53,7 @@ const _powerupNames = {
 const _powerupDescriptions = {
   'LEG_CRAMP': 'Freeze a rival\'s steps for 2 hours',
   'RED_CARD': 'Remove 10% of the leader\'s steps',
-  'BANANA_PEEL': 'Steal 1,000 steps from a rival',
+  'SHORTCUT': 'Steal 1,000 steps from a rival',
   'COMPRESSION_SOCKS': 'Shield against the next attack',
   'PROTEIN_SHAKE': '+1,500 bonus steps instantly',
   'RUNNERS_HIGH': '2x steps for 3 hours',
@@ -61,7 +61,7 @@ const _powerupDescriptions = {
   'STEALTH_MODE': 'Hide your progress for 4 hours',
 };
 
-const _targetedPowerups = ['LEG_CRAMP', 'BANANA_PEEL'];
+const _targetedPowerups = ['LEG_CRAMP', 'SHORTCUT'];
 
 const _rarityColors = {
   'COMMON': Color(0xFF8B8B8B),
