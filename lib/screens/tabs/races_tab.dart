@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../styles.dart';
 import '../../widgets/pill_button.dart';
+import '../../widgets/pill_icon_button.dart';
 import '../../widgets/retro_card.dart';
 import '../../widgets/spinning_coin.dart';
 import '../create_race_screen.dart';
@@ -15,6 +16,7 @@ class RacesTab extends StatefulWidget {
   final VoidCallback onRacesChanged;
   final Future<void> Function()? onRefresh;
   final String? displayName;
+  final VoidCallback? onOpenProfile;
 
   const RacesTab({
     super.key,
@@ -24,6 +26,7 @@ class RacesTab extends StatefulWidget {
     required this.onRacesChanged,
     this.onRefresh,
     this.displayName,
+    this.onOpenProfile,
   });
 
   @override
@@ -198,25 +201,33 @@ class _RacesTabState extends State<RacesTab> {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
               if (widget.displayName != null)
-                Text(
-                  widget.displayName!,
-                  style: PixelText.title(size: 26, color: AppColors.textDark)
-                      .copyWith(shadows: _textShadows),
-                  overflow: TextOverflow.ellipsis,
+                Flexible(
+                  child: Text(
+                    widget.displayName!,
+                    style: PixelText.title(size: 26, color: AppColors.textDark)
+                        .copyWith(shadows: _textShadows),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
+              const SizedBox(width: 8),
+              const SpinningCoin(size: 18),
+              const SizedBox(width: 3),
+              Text(
+                '${widget.authService.coins}',
+                style: PixelText.number(size: 16, color: AppColors.coinDark)
+                    .copyWith(shadows: _textShadows),
+              ),
             ],
           ),
         ),
-        const SpinningCoin(size: 32),
-        const SizedBox(width: 6),
-        Text(
-          '${widget.authService.coins}',
-          style: PixelText.title(size: 24, color: AppColors.coinDark)
-              .copyWith(shadows: _textShadows),
+        PillIconButton(
+          icon: Icons.person_rounded,
+          size: 36,
+          variant: PillButtonVariant.secondary,
+          onPressed: widget.onOpenProfile,
         ),
       ],
     );

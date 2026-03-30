@@ -23,6 +23,8 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
   final _stepsController = TextEditingController();
   int _selectedDuration = 7;
   bool _isCreating = false;
+  bool _powerupsEnabled = false;
+  int _powerupInterval = 5000;
 
   static const _textShadows = [
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
@@ -30,6 +32,7 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
 
   static const _durationOptions = [3, 5, 7, 14];
   static const _stepPresets = [25000, 50000, 100000, 250000];
+  static const _intervalPresets = [2500, 5000, 10000, 25000];
 
   @override
   void dispose() {
@@ -62,6 +65,8 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
         name: name,
         targetSteps: steps,
         maxDurationDays: _selectedDuration,
+        powerupsEnabled: _powerupsEnabled,
+        powerupStepInterval: _powerupsEnabled ? _powerupInterval : null,
       );
 
       if (mounted) {
@@ -252,6 +257,81 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
                                 );
                               }).toList(),
                             ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Powerups
+                      RetroCard(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('POWERUPS',
+                                    style: PixelText.title(
+                                        size: 13, color: AppColors.textMid)),
+                                SizedBox(
+                                  height: 28,
+                                  child: Switch.adaptive(
+                                    value: _powerupsEnabled,
+                                    activeTrackColor: AppColors.pillGreenDark,
+                                    onChanged: (v) =>
+                                        setState(() => _powerupsEnabled = v),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (_powerupsEnabled) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                'POWERUP EVERY',
+                                style: PixelText.body(
+                                    size: 11, color: AppColors.textMid),
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: _intervalPresets.map((interval) {
+                                  final selected =
+                                      _powerupInterval == interval;
+                                  final label = interval >= 1000
+                                      ? '${(interval / 1000).toStringAsFixed(interval % 1000 == 0 ? 0 : 1)}k'
+                                      : '$interval';
+                                  return Expanded(
+                                    child: GestureDetector(
+                                      onTap: () => setState(
+                                          () => _powerupInterval = interval),
+                                      child: Container(
+                                        margin: const EdgeInsets.symmetric(
+                                            horizontal: 3),
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: selected
+                                              ? AppColors.pillGreenDark
+                                              : AppColors.parchmentDark,
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        alignment: Alignment.center,
+                                        child: Text(
+                                          '$label steps',
+                                          style: PixelText.title(
+                                            size: 11,
+                                            color: selected
+                                                ? Colors.white
+                                                : AppColors.textDark,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ],
                           ],
                         ),
                       ),

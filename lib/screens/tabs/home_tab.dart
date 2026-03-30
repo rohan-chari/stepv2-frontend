@@ -4,6 +4,7 @@ import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../styles.dart';
 import '../../widgets/pill_button.dart';
+import '../../widgets/pill_icon_button.dart';
 import '../../widgets/goal_track.dart';
 import '../../widgets/retro_card.dart';
 import '../../widgets/spinning_coin.dart';
@@ -30,6 +31,7 @@ class HomeTab extends StatelessWidget {
   final VoidCallback? onOpenFriendsTab;
   final VoidCallback? onOpenChallengesTab;
   final VoidCallback? onOpenLeaderboardTab;
+  final VoidCallback? onOpenProfile;
 
   const HomeTab({
     super.key,
@@ -53,6 +55,7 @@ class HomeTab extends StatelessWidget {
     this.onOpenFriendsTab,
     this.onOpenChallengesTab,
     this.onOpenLeaderboardTab,
+    this.onOpenProfile,
   });
 
   @override
@@ -124,14 +127,29 @@ class HomeTab extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (displayName != null)
-                Text(
-                  displayName!,
-                  style: PixelText.title(size: 26, color: AppColors.textDark).copyWith(
-                    shadows: _textShadows,
+              Row(
+                children: [
+                  if (displayName != null)
+                    Flexible(
+                      child: Text(
+                        displayName!,
+                        style: PixelText.title(size: 26, color: AppColors.textDark).copyWith(
+                          shadows: _textShadows,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  const SizedBox(width: 8),
+                  const SpinningCoin(size: 18),
+                  const SizedBox(width: 3),
+                  Text(
+                    '${authService.coins}',
+                    style: PixelText.number(size: 16, color: AppColors.coinDark).copyWith(
+                      shadows: _textShadows,
+                    ),
                   ),
-                  overflow: TextOverflow.ellipsis,
-                ),
+                ],
+              ),
               const SizedBox(height: 2),
               if (goalStr != null)
                 Text(
@@ -150,14 +168,11 @@ class HomeTab extends StatelessWidget {
             ],
           ),
         ),
-
-        const SpinningCoin(size: 32),
-        const SizedBox(width: 6),
-        Text(
-          '${authService.coins}',
-          style: PixelText.title(size: 24, color: AppColors.coinDark).copyWith(
-            shadows: _textShadows,
-          ),
+        PillIconButton(
+          icon: Icons.person_rounded,
+          size: 36,
+          variant: PillButtonVariant.secondary,
+          onPressed: onOpenProfile,
         ),
       ],
     );

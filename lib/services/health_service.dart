@@ -2,6 +2,7 @@ import 'package:health/health.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/challenge_sync_day.dart';
 import '../models/step_data.dart';
+import '../models/step_sample_data.dart';
 
 class HealthService {
   HealthService({Health? health}) : _health = health ?? Health();
@@ -103,5 +104,31 @@ class HealthService {
     }
 
     return entries;
+  }
+
+  Future<List<StepSampleData>> getHourlySteps({
+    required DateTime startTime,
+    required DateTime endTime,
+  }) async {
+    final samples = <StepSampleData>[];
+    var current = DateTime(
+        startTime.year, startTime.month, startTime.day, startTime.hour);
+
+    while (current.isBefore(endTime)) {
+      final bucketEnd = current.add(const Duration(hours: 1));
+      final clampedEnd = bucketEnd.isAfter(endTime) ? endTime : bucketEnd;
+      final steps = await _health.getTotalStepsInInterval(current, clampedEnd);
+
+      if (steps != null && steps > 0) {
+        samples.add(StepSampleData(
+          periodStart: current.toUtc(),
+          periodEnd: clampedEnd.toUtc(),
+          steps: steps,
+        ));
+      }
+      current = bucketEnd;
+    }
+
+    return samples;
   }
 }

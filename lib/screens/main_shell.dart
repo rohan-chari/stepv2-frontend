@@ -269,6 +269,23 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
               stepData: dailyStep,
             );
           }
+
+          // Sync hourly step samples for today (for powerup accuracy)
+          try {
+            final now = DateTime.now();
+            final hourlySamples = await _healthService.getHourlySteps(
+              startTime: DateTime(now.year, now.month, now.day),
+              endTime: now,
+            );
+            if (hourlySamples.isNotEmpty) {
+              await _backendApiService.recordStepSamples(
+                identityToken: identityToken,
+                samples: hourlySamples,
+              );
+            }
+          } catch (_) {
+            // Don't fail the main sync if hourly samples fail
+          }
         } catch (e) {
           syncWarning = e is ApiException
               ? 'Steps loaded, but sync failed: ${e.message}'
@@ -287,6 +304,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       }
 
       _fetchFriendsSteps();
+      _refreshStepGoal();
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -370,6 +388,24 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     );
   }
 
+  void _openProfile() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ProfileTab(
+          authService: widget.authService,
+          displayName: _displayName,
+          stepGoal: _stepGoal,
+          email: _email,
+          onSettingsChanged: _syncSettingsState,
+          onRefresh: _refreshProfileTab,
+          backendApiService: _backendApiService,
+          notificationService: widget.notificationService,
+          stepData: _stepData,
+        ),
+      ),
+    );
+  }
+
   Future<void> _fetchCurrentChallenge() async {
     try {
       final identityToken = widget.authService.authToken;
@@ -419,6 +455,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       await widget.authService.updateStepGoal(goal);
       await widget.authService.updateDisplayName(displayName);
       await widget.authService.updateAdminAccess(isAdmin);
+      await widget.authService.updateCoins(
+        user['coins'] as int? ?? widget.authService.coins,
+      );
       if (mounted) {
         setState(() {
           _stepGoal = goal;
@@ -638,6 +677,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   onOpenFriendsTab: _openFriendsTab,
                   onOpenChallengesTab: _openChallengesTab,
                   onOpenLeaderboardTab: _openLeaderboardTab,
+                  onOpenProfile: _openProfile,
                 ),
                 ChallengesTab(
                   authService: widget.authService,
@@ -649,6 +689,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   stepData: _stepData,
                   stepGoal: _stepGoal,
                   displayName: _displayName,
+                  onOpenProfile: _openProfile,
                 ),
                 RacesTab(
                   authService: widget.authService,
@@ -657,6 +698,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   onRacesChanged: _fetchRaces,
                   onRefresh: _refreshRacesTab,
                   displayName: _displayName,
+                  onOpenProfile: _openProfile,
                 ),
                 FriendsTab(
                   authService: widget.authService,
@@ -669,6 +711,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   stepData: _stepData,
                   stepGoal: _stepGoal,
                   displayName: _displayName,
+                  onOpenProfile: _openProfile,
                 ),
                 LeaderboardTab(
                   authService: widget.authService,
@@ -676,17 +719,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   stepData: _stepData,
                   stepGoal: _stepGoal,
                   displayName: _displayName,
-                ),
-                ProfileTab(
-                  authService: widget.authService,
-                  displayName: _displayName,
-                  stepGoal: _stepGoal,
-                  email: _email,
-                  onSettingsChanged: _syncSettingsState,
-                  onRefresh: _refreshProfileTab,
-                  backendApiService: _backendApiService,
-                  notificationService: widget.notificationService,
-                  stepData: _stepData,
+                  onOpenProfile: _openProfile,
                 ),
               ],
             ),
@@ -724,10 +757,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                 const WoodenTabItem(
                   icon: Icons.leaderboard_rounded,
                   label: 'Leaderboard',
-                ),
-                const WoodenTabItem(
-                  icon: Icons.person_rounded,
-                  label: 'Profile',
                 ),
               ],
             ),

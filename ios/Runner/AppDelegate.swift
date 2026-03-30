@@ -286,6 +286,11 @@ protocol StepReading {
     for syncDays: [BackgroundSyncDay],
     completion: @escaping (Result<[BackgroundDailyStep], Error>) -> Void
   )
+  func fetchHourlyStepCounts(
+    from startDate: Date,
+    to endDate: Date,
+    completion: @escaping (Result<[[String: Any]], Error>) -> Void
+  )
 }
 
 protocol StepPosting {
@@ -294,6 +299,12 @@ protocol StepPosting {
     sessionToken: String,
     steps: Int,
     date: String,
+    completion: @escaping (Int?, Error?) -> Void
+  )
+  func postStepSamples(
+    baseURL: URL,
+    sessionToken: String,
+    samples: [[String: Any]],
     completion: @escaping (Int?, Error?) -> Void
   )
 }
@@ -341,7 +352,7 @@ final class BackgroundStepSyncCoordinator {
         ? syncDays!
         : BackgroundStepSyncDateFormatter.localFallbackSyncDays(now: currentTime)
 
-      stepReader.fetchStepCounts(for: resolvedSyncDays) { result in
+      stepReader.fetchStepCounts(for: resolvedSyncDays) { [stepReader] result in
         switch result {
         case .failure:
           completion(.failed)
@@ -355,9 +366,36 @@ final class BackgroundStepSyncCoordinator {
             dailySteps,
             baseURL: backendBaseURL,
             sessionToken: sessionToken,
-            poster: poster,
-            completion: completion
-          )
+            poster: poster
+          ) { dailyResult in
+            guard dailyResult == .success else {
+              completion(dailyResult)
+              return
+            }
+
+            // After daily sync succeeds, sync hourly samples for today
+            let todayStart = Calendar.current.startOfDay(for: currentTime)
+            stepReader.fetchHourlyStepCounts(from: todayStart, to: currentTime) { hourlyResult in
+              switch hourlyResult {
+              case .failure:
+                // Don't fail the overall sync if hourly samples fail
+                completion(.success)
+              case .success(let samples):
+                guard !samples.isEmpty else {
+                  completion(.success)
+                  return
+                }
+                poster.postStepSamples(
+                  baseURL: backendBaseURL,
+                  sessionToken: sessionToken,
+                  samples: samples
+                ) { _, _ in
+                  // Ignore hourly post failures - daily sync already succeeded
+                  completion(.success)
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -611,6 +649,70 @@ final class HealthKitStepReader: StepReading {
 
     fetchNextDay()
   }
+
+  func fetchHourlyStepCounts(
+    from startDate: Date,
+    to endDate: Date,
+    completion: @escaping (Result<[[String: Any]], Error>) -> Void
+  ) {
+    guard HKHealthStore.isHealthDataAvailable() else {
+      completion(.success([]))
+      return
+    }
+
+    guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else {
+      completion(.success([]))
+      return
+    }
+
+    let calendar = Calendar.current
+    let anchorDate = calendar.startOfDay(for: startDate)
+    let interval = DateComponents(hour: 1)
+
+    let predicate = HKQuery.predicateForSamples(
+      withStart: startDate,
+      end: endDate,
+      options: .strictStartDate
+    )
+
+    let query = HKStatisticsCollectionQuery(
+      quantityType: stepType,
+      quantitySamplePredicate: predicate,
+      options: .cumulativeSum,
+      anchorDate: anchorDate,
+      intervalComponents: interval
+    )
+
+    query.initialResultsHandler = { _, results, error in
+      if let error {
+        completion(.failure(error))
+        return
+      }
+
+      guard let results else {
+        completion(.success([]))
+        return
+      }
+
+      let formatter = ISO8601DateFormatter()
+      var samples: [[String: Any]] = []
+
+      results.enumerateStatistics(from: startDate, to: endDate) { statistics, _ in
+        let steps = Int(statistics.sumQuantity()?.doubleValue(for: HKUnit.count()) ?? 0)
+        if steps > 0 {
+          samples.append([
+            "periodStart": formatter.string(from: statistics.startDate),
+            "periodEnd": formatter.string(from: statistics.endDate),
+            "steps": steps,
+          ])
+        }
+      }
+
+      completion(.success(samples))
+    }
+
+    healthStore.execute(query)
+  }
 }
 
 final class URLSessionStepPoster: StepPosting {
@@ -641,6 +743,37 @@ final class URLSessionStepPoster: StepPosting {
       request.httpBody = try JSONSerialization.data(withJSONObject: [
         "steps": steps,
         "date": date,
+      ])
+    } catch {
+      completion(nil, error)
+      return
+    }
+
+    session.dataTask(with: request) { _, response, error in
+      let statusCode = (response as? HTTPURLResponse)?.statusCode
+      completion(statusCode, error)
+    }.resume()
+  }
+
+  func postStepSamples(
+    baseURL: URL,
+    sessionToken: String,
+    samples: [[String: Any]],
+    completion: @escaping (Int?, Error?) -> Void
+  ) {
+    guard let url = URL(string: "/steps/samples", relativeTo: baseURL)?.absoluteURL else {
+      completion(nil, NSError(domain: "BackgroundStepSync", code: -1))
+      return
+    }
+
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.setValue("Bearer \(sessionToken)", forHTTPHeaderField: "Authorization")
+
+    do {
+      request.httpBody = try JSONSerialization.data(withJSONObject: [
+        "samples": samples,
       ])
     } catch {
       completion(nil, error)

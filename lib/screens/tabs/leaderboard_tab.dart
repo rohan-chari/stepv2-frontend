@@ -6,6 +6,8 @@ import '../../styles.dart';
 import '../../models/step_data.dart';
 import '../../widgets/filter_dropdown.dart';
 import '../../widgets/retro_card.dart';
+import '../../widgets/pill_button.dart';
+import '../../widgets/pill_icon_button.dart';
 import '../../widgets/spinning_coin.dart';
 
 class LeaderboardTab extends StatefulWidget {
@@ -14,6 +16,7 @@ class LeaderboardTab extends StatefulWidget {
   final StepData? stepData;
   final int? stepGoal;
   final String? displayName;
+  final VoidCallback? onOpenProfile;
 
   const LeaderboardTab({
     super.key,
@@ -22,6 +25,7 @@ class LeaderboardTab extends StatefulWidget {
     this.stepData,
     this.stepGoal,
     this.displayName,
+    this.onOpenProfile,
   });
 
   @override
@@ -187,13 +191,27 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (widget.displayName != null)
-                Text(
-                  widget.displayName!,
-                  style: PixelText.title(size: 26, color: AppColors.textDark)
-                      .copyWith(shadows: _textShadows),
-                  overflow: TextOverflow.ellipsis,
-                ),
+              Row(
+                children: [
+                  if (widget.displayName != null)
+                    Flexible(
+                      child: Text(
+                        widget.displayName!,
+                        style: PixelText.title(size: 26, color: AppColors.textDark)
+                            .copyWith(shadows: _textShadows),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  const SizedBox(width: 8),
+                  const SpinningCoin(size: 18),
+                  const SizedBox(width: 3),
+                  Text(
+                    '${widget.authService.coins}',
+                    style: PixelText.number(size: 16, color: AppColors.coinDark)
+                        .copyWith(shadows: _textShadows),
+                  ),
+                ],
+              ),
               const SizedBox(height: 2),
               if (goalStr != null)
                 Text(
@@ -210,12 +228,11 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
             ],
           ),
         ),
-        const SpinningCoin(size: 32),
-        const SizedBox(width: 6),
-        Text(
-          '${widget.authService.coins}',
-          style: PixelText.title(size: 24, color: AppColors.coinDark)
-              .copyWith(shadows: _textShadows),
+        PillIconButton(
+          icon: Icons.person_rounded,
+          size: 36,
+          variant: PillButtonVariant.secondary,
+          onPressed: widget.onOpenProfile,
         ),
       ],
     );

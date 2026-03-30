@@ -24,6 +24,7 @@ class ProfileTab extends StatefulWidget {
   final BackendApiService? backendApiService;
   final NotificationService? notificationService;
   final StepData? stepData;
+  final VoidCallback? onBack;
 
   const ProfileTab({
     super.key,
@@ -36,6 +37,7 @@ class ProfileTab extends StatefulWidget {
     this.backendApiService,
     this.notificationService,
     this.stepData,
+    this.onBack,
   });
 
   @override
@@ -110,87 +112,94 @@ class _ProfileTabState extends State<ProfileTab> {
   Widget build(BuildContext context) {
     final topInset = MediaQuery.of(context).padding.top;
     final bottomInset = MediaQuery.of(context).padding.bottom;
-    final tabBarHeight = 77.5 + bottomInset;
 
-    return Padding(
-      padding: EdgeInsets.only(top: topInset + 12, bottom: tabBarHeight),
-      child: RefreshIndicator(
-        onRefresh: _handleRefresh,
-        color: AppColors.accent,
-        backgroundColor: AppColors.parchment,
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              sliver: SliverToBoxAdapter(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Top status bar
-                    _buildTopStatusBar(),
-                    const SizedBox(height: 16),
-
-                    // Profile info card
-                    RetroCard(
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (widget.email != null &&
-                                    !widget.email!.endsWith('@privaterelay.appleid.com')) ...[
-                                  Text(
-                                    widget.email!,
-                                    style: PixelText.body(size: 14, color: AppColors.textMid),
-                                  ),
-                                  const SizedBox(height: 4),
-                                ],
-                                if (widget.stepGoal != null)
-                                  Text(
-                                    'Goal: ${widget.stepGoal} steps/day',
-                                    style: PixelText.body(size: 14, color: AppColors.textMid),
-                                  ),
-                              ],
-                            ),
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF87CEEB), Color(0xFFB0E0F0), Color(0xFFD4F1F9)],
+          ),
+        ),
+        child: Padding(
+          padding: EdgeInsets.only(top: topInset + 12, bottom: bottomInset),
+          child: RefreshIndicator(
+            onRefresh: _handleRefresh,
+            color: AppColors.accent,
+            backgroundColor: AppColors.parchment,
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  sliver: SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildTopStatusBar(),
+                        const SizedBox(height: 16),
+                        RetroCard(
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (widget.email != null &&
+                                        !widget.email!.endsWith('@privaterelay.appleid.com')) ...[
+                                      Text(
+                                        widget.email!,
+                                        style: PixelText.body(size: 14, color: AppColors.textMid),
+                                      ),
+                                      const SizedBox(height: 4),
+                                    ],
+                                    if (widget.stepGoal != null)
+                                      Text(
+                                        'Goal: ${widget.stepGoal} steps/day',
+                                        style: PixelText.body(size: 14, color: AppColors.textMid),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              PillButton(
+                                label: 'SETTINGS',
+                                variant: PillButtonVariant.secondary,
+                                fontSize: 12,
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                onPressed: _openSettings,
+                              ),
+                            ],
                           ),
-                          PillIconButton(
-                            icon: Icons.settings_rounded,
-                            size: 36,
-                            variant: PillButtonVariant.secondary,
-                            onPressed: _openSettings,
+                        ),
+                        const SizedBox(height: 16),
+                        RetroCard(
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                          child: Column(
+                            children: [
+                              Text(
+                                'STATS',
+                                style: PixelText.title(size: 16, color: AppColors.textMid),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 12),
+                              _StatsSection(
+                                key: _statsKey,
+                                authService: widget.authService,
+                                backendApiService: _api,
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 16),
-
-                    // Stats card
-                    RetroCard(
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                      child: Column(
-                        children: [
-                          Text(
-                            'STATS',
-                            style: PixelText.title(size: 16, color: AppColors.textMid),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 12),
-                          _StatsSection(
-                            key: _statsKey,
-                            authService: widget.authService,
-                            backendApiService: _api,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -202,43 +211,50 @@ class _ProfileTabState extends State<ProfileTab> {
     final stepsStr = _formatNumber(steps);
     final goalStr = goal > 0 ? _formatCompact(goal) : null;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (widget.displayName != null)
-                Text(
+        PillIconButton(
+          icon: Icons.arrow_back_rounded,
+          size: 36,
+          variant: PillButtonVariant.secondary,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            if (widget.displayName != null)
+              Flexible(
+                child: Text(
                   widget.displayName!,
                   style: PixelText.title(size: 26, color: AppColors.textDark)
                       .copyWith(shadows: _textShadows),
                   overflow: TextOverflow.ellipsis,
                 ),
-              const SizedBox(height: 2),
-              if (goalStr != null)
-                Text(
-                  '$stepsStr / $goalStr',
-                  style: PixelText.number(size: 20, color: AppColors.accent)
-                      .copyWith(shadows: _textShadows),
-                )
-              else
-                Text(
-                  stepsStr,
-                  style: PixelText.number(size: 20, color: AppColors.accent)
-                      .copyWith(shadows: _textShadows),
-                ),
-            ],
+              ),
+            const SizedBox(width: 8),
+            const SpinningCoin(size: 18),
+            const SizedBox(width: 3),
+            Text(
+              '${widget.authService.coins}',
+              style: PixelText.number(size: 16, color: AppColors.coinDark)
+                  .copyWith(shadows: _textShadows),
+            ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        if (goalStr != null)
+          Text(
+            '$stepsStr / $goalStr',
+            style: PixelText.number(size: 20, color: AppColors.accent)
+                .copyWith(shadows: _textShadows),
+          )
+        else
+          Text(
+            stepsStr,
+            style: PixelText.number(size: 20, color: AppColors.accent)
+                .copyWith(shadows: _textShadows),
           ),
-        ),
-        const SpinningCoin(size: 32),
-        const SizedBox(width: 6),
-        Text(
-          '${widget.authService.coins}',
-          style: PixelText.title(size: 24, color: AppColors.coinDark)
-              .copyWith(shadows: _textShadows),
-        ),
       ],
     );
   }
@@ -265,8 +281,6 @@ class _StatsSectionState extends State<_StatsSection> {
   int _thisYear = 0;
   int _allTime = 0;
   int _streak = 0;
-  int _wins = 0;
-  int _losses = 0;
 
   @override
   void initState() {
@@ -295,8 +309,6 @@ class _StatsSectionState extends State<_StatsSection> {
           _thisYear = stats['thisYear'] as int? ?? 0;
           _allTime = stats['allTime'] as int? ?? 0;
           _streak = stats['streak'] as int? ?? 0;
-          _wins = stats['wins'] as int? ?? 0;
-          _losses = stats['losses'] as int? ?? 0;
           _isLoading = false;
         });
       }
@@ -337,7 +349,6 @@ class _StatsSectionState extends State<_StatsSection> {
         _buildStatRow('This Year', _formatSteps(_thisYear), 2),
         _buildStatRow('All Time', _formatSteps(_allTime), 3),
         _buildStatRow('Goal Streak', '$_streak day${_streak == 1 ? '' : 's'}', 4),
-        _buildStatRow('Record', '$_wins W - $_losses L', 5),
       ],
     );
   }

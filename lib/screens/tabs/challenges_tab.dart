@@ -9,6 +9,7 @@ import '../../styles.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/info_toast.dart';
 import '../../widgets/pill_button.dart';
+import '../../widgets/pill_icon_button.dart';
 import '../../widgets/retro_card.dart';
 import '../../widgets/spinning_coin.dart';
 import '../challenge_detail_screen.dart';
@@ -26,6 +27,7 @@ class ChallengesTab extends StatefulWidget {
   final StepData? stepData;
   final int? stepGoal;
   final String? displayName;
+  final VoidCallback? onOpenProfile;
 
   const ChallengesTab({
     super.key,
@@ -39,6 +41,7 @@ class ChallengesTab extends StatefulWidget {
     this.stepData,
     this.stepGoal,
     this.displayName,
+    this.onOpenProfile,
   });
 
   @override
@@ -50,6 +53,8 @@ class _ChallengesTabState extends State<ChallengesTab> {
   bool _isInitiating = false;
   Timer? _countdownTimer;
   late DateTime _countdownNow;
+  int _wins = 0;
+  int _losses = 0;
 
   bool get _hasActiveChallenge =>
       widget.currentChallenge != null &&
@@ -93,6 +98,7 @@ class _ChallengesTabState extends State<ChallengesTab> {
     super.initState();
     _countdownNow = _now;
     _syncCountdownTimer();
+    _loadRecord();
   }
 
   @override
@@ -185,6 +191,21 @@ class _ChallengesTabState extends State<ChallengesTab> {
     });
   }
 
+  Future<void> _loadRecord() async {
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) return;
+
+    try {
+      final stats = await _api.fetchStats(identityToken: token);
+      if (mounted) {
+        setState(() {
+          _wins = stats['wins'] as int? ?? 0;
+          _losses = stats['losses'] as int? ?? 0;
+        });
+      }
+    } catch (_) {}
+  }
+
   void _navigateToFriendPicker() {
     if (widget.friendsSteps.isEmpty) {
       widget.onOpenFriendsTab?.call();
@@ -275,7 +296,12 @@ class _ChallengesTabState extends State<ChallengesTab> {
     return Padding(
       padding: EdgeInsets.only(top: topInset + 12, bottom: bottomPadding),
       child: RefreshIndicator(
-        onRefresh: widget.onRefresh ?? () async {},
+        onRefresh: () async {
+          await Future.wait([
+            widget.onRefresh?.call() ?? Future.value(),
+            _loadRecord(),
+          ]);
+        },
         color: AppColors.accent,
         backgroundColor: AppColors.parchment,
         child: CustomScrollView(
@@ -308,6 +334,7 @@ class _ChallengesTabState extends State<ChallengesTab> {
     return Column(
       children: [
         _buildTopStatusBar(),
+        _buildRecordBadge(),
         const SizedBox(height: 16),
         _buildCountdownCenterpiece(challenge),
         const SizedBox(height: 16),
@@ -332,6 +359,7 @@ class _ChallengesTabState extends State<ChallengesTab> {
     return Column(
       children: [
         _buildTopStatusBar(),
+        _buildRecordBadge(),
         const SizedBox(height: 48),
         Icon(Icons.emoji_events, size: 48, color: AppColors.textMid.withValues(alpha: 0.6)),
         const SizedBox(height: 12),
@@ -364,6 +392,20 @@ class _ChallengesTabState extends State<ChallengesTab> {
     );
   }
 
+  Widget _buildRecordBadge() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Center(
+        child: Text(
+          '$_wins W - $_losses L',
+          style: PixelText.title(size: 22, color: AppColors.textDark).copyWith(
+            shadows: _textShadows,
+          ),
+        ),
+      ),
+    );
+  }
+
   // -- Top status bar (same as HomeTab) --
 
   Widget _buildTopStatusBar() {
@@ -379,14 +421,29 @@ class _ChallengesTabState extends State<ChallengesTab> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (widget.displayName != null)
-                Text(
-                  widget.displayName!,
-                  style: PixelText.title(size: 26, color: AppColors.textDark).copyWith(
-                    shadows: _textShadows,
+              Row(
+                children: [
+                  if (widget.displayName != null)
+                    Flexible(
+                      child: Text(
+                        widget.displayName!,
+                        style: PixelText.title(size: 26, color: AppColors.textDark).copyWith(
+                          shadows: _textShadows,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  const SizedBox(width: 8),
+                  const SpinningCoin(size: 18),
+                  const SizedBox(width: 3),
+                  Text(
+                    '${widget.authService.coins}',
+                    style: PixelText.number(size: 16, color: AppColors.coinDark).copyWith(
+                      shadows: _textShadows,
+                    ),
                   ),
-                  overflow: TextOverflow.ellipsis,
-                ),
+                ],
+              ),
               const SizedBox(height: 2),
               if (goalStr != null)
                 Text(
@@ -405,13 +462,11 @@ class _ChallengesTabState extends State<ChallengesTab> {
             ],
           ),
         ),
-        const SpinningCoin(size: 32),
-        const SizedBox(width: 6),
-        Text(
-          '${widget.authService.coins}',
-          style: PixelText.title(size: 24, color: AppColors.coinDark).copyWith(
-            shadows: _textShadows,
-          ),
+        PillIconButton(
+          icon: Icons.person_rounded,
+          size: 36,
+          variant: PillButtonVariant.secondary,
+          onPressed: widget.onOpenProfile,
         ),
       ],
     );
@@ -527,9 +582,21 @@ class _ChallengesTabState extends State<ChallengesTab> {
         proposedStake?['name'] as String? ??
         '';
 
+    final ranking = instance['ranking'] as Map<String, dynamic>?;
+    final isActive = status == 'ACTIVE' || stakeStatus == 'AGREED';
+
     String statusLabel;
     Color badgeColor;
-    if (status == 'ACTIVE' || stakeStatus == 'AGREED') {
+    if (isActive && ranking != null) {
+      final rank = ranking['rank'] as int? ?? 1;
+      if (rank <= 1) {
+        statusLabel = 'WINNING';
+        badgeColor = AppColors.pillGreenDark;
+      } else {
+        statusLabel = 'LOSING';
+        badgeColor = AppColors.error;
+      }
+    } else if (isActive) {
       statusLabel = 'ACTIVE';
       badgeColor = AppColors.pillGreenDark;
     } else if (isIncoming) {

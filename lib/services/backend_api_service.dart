@@ -6,6 +6,7 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 
 import '../config/backend_config.dart';
 import '../models/step_data.dart';
+import '../models/step_sample_data.dart';
 
 /// An API error with a user-friendly message.
 class ApiException implements Exception {
@@ -110,6 +111,24 @@ class BackendApiService {
       method: 'POST',
       path: '/steps',
       body: {'steps': stepData.steps, 'date': _formatDate(stepData.date)},
+      identityToken: identityToken,
+    );
+
+    await _decodeJsonResponse(response);
+  }
+
+  Future<void> recordStepSamples({
+    required String identityToken,
+    required List<StepSampleData> samples,
+  }) async {
+    if (samples.isEmpty) return;
+
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/steps/samples',
+      body: {
+        'samples': samples.map((s) => s.toJson()).toList(),
+      },
       identityToken: identityToken,
     );
 
@@ -492,15 +511,23 @@ class BackendApiService {
     required String name,
     required int targetSteps,
     int maxDurationDays = 7,
+    bool powerupsEnabled = false,
+    int? powerupStepInterval,
   }) async {
+    final body = <String, dynamic>{
+      'name': name,
+      'targetSteps': targetSteps,
+      'maxDurationDays': maxDurationDays,
+    };
+    if (powerupsEnabled) {
+      body['powerupsEnabled'] = true;
+      body['powerupStepInterval'] = powerupStepInterval;
+    }
+
     final response = await _sendJsonRequest(
       method: 'POST',
       path: '/races',
-      body: {
-        'name': name,
-        'targetSteps': targetSteps,
-        'maxDurationDays': maxDurationDays,
-      },
+      body: body,
       identityToken: identityToken,
     );
 
@@ -597,6 +624,66 @@ class BackendApiService {
       body: const <String, dynamic>{},
       identityToken: identityToken,
     );
+  }
+
+  Future<Map<String, dynamic>> usePowerup({
+    required String identityToken,
+    required String raceId,
+    required String powerupId,
+    String? targetUserId,
+  }) async {
+    final body = <String, dynamic>{};
+    if (targetUserId != null) body['targetUserId'] = targetUserId;
+
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races/$raceId/powerups/$powerupId/use',
+      body: body,
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> discardPowerup({
+    required String identityToken,
+    required String raceId,
+    required String powerupId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races/$raceId/powerups/$powerupId/discard',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> fetchRaceInventory({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/races/$raceId/inventory',
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> fetchRaceFeed({
+    required String identityToken,
+    required String raceId,
+    String? cursor,
+  }) async {
+    final query = cursor != null ? '?cursor=${Uri.encodeComponent(cursor)}' : '';
+    final response = await _sendGetRequest(
+      path: '/races/$raceId/feed$query',
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
   }
 
   Future<void> unregisterDeviceToken({
