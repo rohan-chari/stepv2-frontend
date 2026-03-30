@@ -10,6 +10,7 @@ import '../widgets/goal_track.dart';
 import '../widgets/info_toast.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/retro_card.dart';
+import '../widgets/powerup_icon.dart';
 import 'race_invite_screen.dart';
 
 class RaceDetailScreen extends StatefulWidget {
@@ -28,17 +29,6 @@ class RaceDetailScreen extends StatefulWidget {
   State<RaceDetailScreen> createState() => _RaceDetailScreenState();
 }
 
-const _powerupIcons = {
-  'LEG_CRAMP': '\u{1F9B5}',       // leg
-  'RED_CARD': '\u{1F7E5}',        // red square
-  'SHORTCUT': '\u{2702}',          // scissors
-  'COMPRESSION_SOCKS': '\u{1F9E6}', // socks
-  'PROTEIN_SHAKE': '\u{1F964}',   // cup with straw
-  'RUNNERS_HIGH': '\u{26A1}',     // lightning
-  'SECOND_WIND': '\u{1F4A8}',     // wind
-  'STEALTH_MODE': '\u{1F441}',    // eye
-};
-
 const _powerupNames = {
   'LEG_CRAMP': 'Leg Cramp',
   'RED_CARD': 'Red Card',
@@ -48,6 +38,8 @@ const _powerupNames = {
   'RUNNERS_HIGH': "Runner's High",
   'SECOND_WIND': 'Second Wind',
   'STEALTH_MODE': 'Stealth Mode',
+  'WRONG_TURN': 'Wrong Turn',
+  'FANNY_PACK': 'Fanny Pack',
 };
 
 const _powerupDescriptions = {
@@ -59,9 +51,11 @@ const _powerupDescriptions = {
   'RUNNERS_HIGH': '2x steps for 3 hours',
   'SECOND_WIND': 'Bonus steps based on how far behind you are',
   'STEALTH_MODE': 'Hide your progress for 4 hours',
+  'WRONG_TURN': 'Reverse a rival\'s steps for 1 hour',
+  'FANNY_PACK': 'Unlock an extra powerup slot',
 };
 
-const _targetedPowerups = ['LEG_CRAMP', 'SHORTCUT'];
+const _targetedPowerups = ['LEG_CRAMP', 'SHORTCUT', 'WRONG_TURN'];
 
 const _rarityColors = {
   'COMMON': Color(0xFF8B8B8B),
@@ -151,6 +145,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
       if (_powerupData?['enabled'] == true) {
         _loadFeed();
+
+        // Check for auto-activated Fanny Pack
+        final newBoxes = (_powerupData?['newBoxesEarned'] as List?) ?? [];
+        for (final box in newBoxes) {
+          if (box is Map && box['type'] == 'FANNY_PACK' && box['autoActivated'] == true) {
+            _showFannyPackActivation();
+            break;
+          }
+        }
       }
 
       if (progress['status'] == 'COMPLETED') {
@@ -416,6 +419,45 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     );
   }
 
+  void _showFannyPackActivation() {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: AppColors.parchment,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const PowerupIcon(type: 'FANNY_PACK', size: 48),
+              const SizedBox(height: 12),
+              Text(
+                'Fanny Pack Activated!',
+                style: PixelText.title(size: 18, color: AppColors.coinDark),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Your inventory was full, so the Fanny Pack was auto-equipped. You now have an extra powerup slot!',
+                style: PixelText.body(size: 13, color: AppColors.textMid),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              PillButton(
+                label: 'NICE',
+                variant: PillButtonVariant.primary,
+                fontSize: 14,
+                fullWidth: true,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                onPressed: () => Navigator.of(ctx).pop(),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   void _showPowerupActions(Map<String, dynamic> powerup) {
     final type = powerup['type'] as String;
     showModalBottomSheet(
@@ -431,9 +473,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  '${_powerupIcons[type] ?? ''} ${_powerupNames[type] ?? type}',
-                  style: PixelText.title(size: 18, color: AppColors.textDark),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    PowerupIcon(type: type, size: 22),
+                    const SizedBox(width: 6),
+                    Text(
+                      _powerupNames[type] ?? type,
+                      style: PixelText.title(size: 18, color: AppColors.textDark),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 4),
                 Container(
@@ -863,6 +912,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     final inventory = (_powerupData?['inventory'] as List?)
             ?.cast<Map<String, dynamic>>() ??
         [];
+    final slotCount = (_powerupData?['powerupSlots'] as int?) ?? 3;
+    final hasExtraSlot = slotCount > 3;
 
     return RetroCard(
       padding: const EdgeInsets.all(12),
@@ -873,7 +924,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               style: PixelText.title(size: 11, color: AppColors.textMid)),
           const SizedBox(height: 8),
           Row(
-            children: List.generate(3, (i) {
+            children: List.generate(slotCount, (i) {
+              final isExtraSlot = i >= 3;
               if (i < inventory.length) {
                 final pw = inventory[i];
                 final type = pw['type'] as String? ?? '';
@@ -887,15 +939,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                         color: AppColors.parchmentDark,
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: _rarityColors[pw['rarity']] ??
-                              AppColors.parchmentBorder,
-                          width: 2,
+                          color: isExtraSlot
+                              ? AppColors.coinMid
+                              : _rarityColors[pw['rarity']] ??
+                                  AppColors.parchmentBorder,
+                          width: isExtraSlot ? 2.5 : 2,
                         ),
                       ),
                       child: Column(
                         children: [
-                          Text(_powerupIcons[type] ?? '?',
-                              style: const TextStyle(fontSize: 22)),
+                          PowerupIcon(type: type, size: 22),
                           const SizedBox(height: 2),
                           Text(
                             _powerupNames[type] ?? type,
@@ -919,8 +972,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                       color: AppColors.parchmentDark.withValues(alpha: 0.4),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: AppColors.parchmentBorder.withValues(alpha: 0.3),
-                        width: 1,
+                        color: isExtraSlot
+                            ? AppColors.coinMid.withValues(alpha: 0.5)
+                            : AppColors.parchmentBorder.withValues(alpha: 0.3),
+                        width: isExtraSlot ? 2.5 : 1,
                       ),
                     ),
                     child: Column(
@@ -929,10 +984,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                             style: PixelText.body(
                                 size: 22, color: AppColors.textMid.withValues(alpha: 0.3))),
                         const SizedBox(height: 2),
-                        Text('Empty',
+                        Text(isExtraSlot ? 'Bonus' : 'Empty',
                             style: PixelText.title(
                                 size: 8,
-                                color: AppColors.textMid.withValues(alpha: 0.3))),
+                                color: isExtraSlot
+                                    ? AppColors.coinMid.withValues(alpha: 0.6)
+                                    : AppColors.textMid.withValues(alpha: 0.3))),
                       ],
                     ),
                   ),
@@ -978,10 +1035,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      _powerupIcons[_feedEvents[i]['powerupType']] ?? '\u{1F4E6}',
-                      style: const TextStyle(fontSize: 12),
-                    ),
+                    PowerupIcon(type: _feedEvents[i]['powerupType'] as String? ?? '', size: 14),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
@@ -1020,8 +1074,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                       PixelText.title(size: 13, color: AppColors.textMid)),
               const SizedBox(height: 8),
               if (winner != null) ...[
-                Text('\u{1F3C6}',
-                    style: const TextStyle(fontSize: 40)),
+                Icon(Icons.emoji_events, size: 40, color: AppColors.coinMid),
                 const SizedBox(height: 4),
                 Text(
                   winner['displayName'] as String? ?? 'Unknown',
@@ -1172,7 +1225,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     final isMe = userId == _myUserId;
     final isStealthed = p['stealthed'] == true;
 
-    final medals = ['\u{1F947}', '\u{1F948}', '\u{1F949}'];
+    final medals = ['1st', '2nd', '3rd'];
     final prefix = rank < 3 ? medals[rank] : '${rank + 1}.';
 
     // Find active effects on this participant
@@ -1211,10 +1264,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                 for (final e in activeEffects)
                   Padding(
                     padding: const EdgeInsets.only(left: 3),
-                    child: Text(
-                      _powerupIcons[e['type'] as String? ?? ''] ?? '',
-                      style: const TextStyle(fontSize: 11),
-                    ),
+                    child: PowerupIcon(type: e['type'] as String? ?? '', size: 13),
                   ),
               ],
             ),

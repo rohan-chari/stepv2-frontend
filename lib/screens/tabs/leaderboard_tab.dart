@@ -326,12 +326,12 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   }
 
   Widget _buildRow(_LeaderboardRow row, int index) {
-    final rankIcon = row.rank == 1
-        ? '\u{1F947}'
+    final rankLabel = row.rank == 1
+        ? '1st'
         : row.rank == 2
-            ? '\u{1F948}'
+            ? '2nd'
             : row.rank == 3
-                ? '\u{1F949}'
+                ? '3rd'
                 : null;
 
     return Container(
@@ -345,9 +345,9 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
         children: [
           SizedBox(
             width: 36,
-            child: rankIcon != null
-                ? Text(rankIcon,
-                    style: const TextStyle(fontSize: 18),
+            child: rankLabel != null
+                ? Text(rankLabel,
+                    style: PixelText.title(size: 13, color: AppColors.coinMid),
                     textAlign: TextAlign.center)
                 : Text('${row.rank}',
                     style: PixelText.title(size: 16, color: AppColors.textDark),
