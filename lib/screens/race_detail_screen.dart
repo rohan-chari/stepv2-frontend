@@ -514,8 +514,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final topInset = MediaQuery.of(context).padding.top;
-
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -525,8 +523,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             colors: [Color(0xFF87CEEB), Color(0xFFB0E0F0), Color(0xFFD4F1F9)],
           ),
         ),
-        child: Padding(
-          padding: EdgeInsets.only(top: topInset),
+        child: SafeArea(
+          bottom: false,
           child: Column(
             children: [
               // Header
@@ -569,6 +567,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                             color: AppColors.accent,
                             backgroundColor: AppColors.parchment,
                             child: SingleChildScrollView(
+                              clipBehavior: Clip.none,
                               physics:
                                   const AlwaysScrollableScrollPhysics(),
                               padding: const EdgeInsets.symmetric(
