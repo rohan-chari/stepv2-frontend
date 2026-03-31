@@ -29,6 +29,7 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip>
   late final Animation<double> _animation;
   late final List<_StripItem> _items;
   late final int _resultIndex;
+  bool _waitingForSwipe = false;
 
   static const _itemWidth = 80.0;
   static const _itemSpacing = 6.0;
@@ -81,10 +82,8 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip>
       }
     });
 
-    // Start after a brief pause
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (mounted) _controller.forward();
-    });
+    // Wait for swipe to start
+    _waitingForSwipe = true;
   }
 
   List<_StripItem> _generateStrip() {
@@ -119,60 +118,84 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip>
     super.dispose();
   }
 
+  void _startSpin() {
+    if (!_waitingForSwipe) return;
+    setState(() => _waitingForSwipe = false);
+    _controller.forward();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: widget.height + 20, // extra for pointer
+    return GestureDetector(
+      onHorizontalDragEnd: _waitingForSwipe ? (_) => _startSpin() : null,
       child: LayoutBuilder(
-        builder: (context, constraints) {
-          final viewportWidth = constraints.maxWidth;
-          final centerX = viewportWidth / 2;
+          builder: (context, constraints) {
+            final viewportWidth = constraints.maxWidth;
+            final centerX = viewportWidth / 2;
 
-          // The result item's left edge position in the full strip
-          final resultItemCenter = _resultIndex * _totalItemWidth + _itemWidth / 2;
+            // The result item's left edge position in the full strip
+            final resultItemCenter = _resultIndex * _totalItemWidth + _itemWidth / 2;
 
-          // We want to scroll so the result ends up at centerX
-          final totalScroll = resultItemCenter - centerX;
+            // We want to scroll so the result ends up at centerX
+            final totalScroll = resultItemCenter - centerX;
 
-          return Column(
-            children: [
-              // Pointer triangle
-              CustomPaint(
-                size: const Size(20, 12),
-                painter: _PointerPainter(),
-              ),
-              const SizedBox(height: 2),
-              // Strip viewport
-              SizedBox(
-                height: widget.height,
-                child: ClipRect(
-                  child: AnimatedBuilder(
-                    animation: _animation,
-                    builder: (context, child) {
-                      final scrollOffset = _animation.value * totalScroll;
-                      return Transform.translate(
-                        offset: Offset(-scrollOffset, 0),
-                        child: child,
-                      );
-                    },
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        for (int i = 0; i < _items.length; i++) ...[
-                          if (i > 0) SizedBox(width: _itemSpacing),
-                          _buildItem(_items[i], i == _resultIndex),
-                        ],
-                      ],
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Pointer triangle
+                CustomPaint(
+                  size: const Size(20, 12),
+                  painter: _PointerPainter(),
+                ),
+                const SizedBox(height: 2),
+                // Strip viewport
+                SizedBox(
+                  height: widget.height,
+                  width: viewportWidth,
+                  child: ClipRect(
+                    child: OverflowBox(
+                      maxWidth: double.infinity,
+                      alignment: Alignment.centerLeft,
+                      child: AnimatedBuilder(
+                        animation: _animation,
+                        builder: (context, child) {
+                          final scrollOffset = _animation.value * totalScroll;
+                          return Transform.translate(
+                            offset: Offset(-scrollOffset, 0),
+                            child: child,
+                          );
+                        },
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            for (int i = 0; i < _items.length; i++) ...[
+                              if (i > 0) SizedBox(width: _itemSpacing),
+                              _buildItem(_items[i], i == _resultIndex),
+                            ],
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
+                // Swipe hint
+                if (_waitingForSwipe) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    '\u2190  SWIPE TO SPIN  \u2192',
+                    style: PixelText.body(
+                      size: 14,
+                      color: AppColors.coinLight,
+                    ),
+                  ),
+                ],
+              ],
+            );
+          },
+        ),
+      );
   }
+
 
   Widget _buildItem(_StripItem item, bool isResult) {
     final borderColor = _rarityColor(item.rarity);
@@ -191,11 +214,14 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip>
           PowerupIcon(type: item.type, size: 36),
           const SizedBox(height: 4),
           Text(
-            _rarityLabel(item.rarity),
+            _typeName(item.type),
             style: PixelText.body(
               size: 10,
               color: borderColor,
             ),
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -213,15 +239,21 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip>
     }
   }
 
-  static String _rarityLabel(String rarity) {
-    switch (rarity.toUpperCase()) {
-      case 'RARE':
-        return 'RARE';
-      case 'UNCOMMON':
-        return 'UNCOMMON';
-      default:
-        return 'COMMON';
-    }
+  static const _powerupNames = {
+    'LEG_CRAMP': 'Leg Cramp',
+    'RED_CARD': 'Red Card',
+    'SHORTCUT': 'Shortcut',
+    'COMPRESSION_SOCKS': 'Compression\nSocks',
+    'PROTEIN_SHAKE': 'Protein Shake',
+    'RUNNERS_HIGH': "Runner's High",
+    'SECOND_WIND': 'Second Wind',
+    'STEALTH_MODE': 'Stealth Mode',
+    'WRONG_TURN': 'Wrong Turn',
+    'FANNY_PACK': 'Fanny Pack',
+  };
+
+  static String _typeName(String type) {
+    return _powerupNames[type] ?? type;
   }
 }
 

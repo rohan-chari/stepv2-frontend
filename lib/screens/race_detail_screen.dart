@@ -878,7 +878,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     final inventory = (_powerupData?['inventory'] as List?) ?? [];
     final slotCount = (_powerupData?['powerupSlots'] as int?) ?? 3;
     if (inventory.length >= slotCount) {
-      if (mounted) showErrorToast(context, 'Inventory full — discard a powerup first');
+      if (mounted) showErrorToast(context, 'Inventory full — discard or use a powerup first');
       return;
     }
 
@@ -930,7 +930,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       if (mounted) {
         setState(() => _isActing = false);
         final msg = e.toString().contains('Inventory full')
-            ? 'Inventory full — discard a powerup first'
+            ? 'Inventory full — discard or use a powerup first'
             : 'Failed to open mystery box';
         showErrorToast(context, msg);
       }
