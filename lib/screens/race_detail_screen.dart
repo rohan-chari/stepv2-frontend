@@ -71,7 +71,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   Map<String, dynamic>? _progress;
   Map<String, dynamic>? _powerupData;
   List<Map<String, dynamic>> _feedEvents = [];
-  int _mysteryBoxCount = 0;
+  int _queuedBoxCount = 0;
   bool _isLoading = true;
   bool _isActing = false;
   Timer? _pollTimer;
@@ -149,12 +149,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       if (_powerupData?['enabled'] == true) {
         _loadFeed();
 
-        _mysteryBoxCount = (_powerupData?['mysteryBoxCount'] as int?) ?? 0;
+        _queuedBoxCount = (_powerupData?['queuedBoxCount'] as int?) ?? 0;
         final newBoxes = (_powerupData?['newMysteryBoxes'] as List?) ?? [];
+        final newQueued = (_powerupData?['newQueuedBoxes'] as int?) ?? 0;
         if (newBoxes.length == 1) {
           showInfoToast(context, 'You earned a mystery box!');
         } else if (newBoxes.length > 1) {
           showInfoToast(context, 'You earned ${newBoxes.length} mystery boxes!');
+        }
+        if (newQueued > 0) {
+          showInfoToast(context, '$newQueued mystery box${newQueued > 1 ? 'es' : ''} queued \u2014 inventory full');
         }
       }
 
@@ -838,14 +842,24 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             _powerupData!['enabled'] == true) ...[
           const SizedBox(height: 12),
           _buildInventoryBar(),
+        ] else ...[
+          const SizedBox(height: 12),
+          RetroCard(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Icon(Icons.block_rounded, size: 18, color: AppColors.textMid.withValues(alpha: 0.5)),
+                const SizedBox(width: 8),
+                Text('Powerups are disabled for this race',
+                    style: PixelText.body(size: 14, color: AppColors.textMid)),
+              ],
+            ),
+          ),
         ],
 
         // Activity feed
-        if (_powerupData != null &&
-            _powerupData!['enabled'] == true) ...[
-          const SizedBox(height: 12),
-          _buildFeedSection(),
-        ],
+        const SizedBox(height: 12),
+        _buildFeedSection(),
 
         if (isCreator) ...[
           const SizedBox(height: 12),
@@ -872,29 +886,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     );
   }
 
-  Future<void> _openMysteryBox() async {
+  Future<void> _openMysteryBox(String boxId) async {
     if (_isActing) return;
-
-    final inventory = (_powerupData?['inventory'] as List?) ?? [];
-    final slotCount = (_powerupData?['powerupSlots'] as int?) ?? 3;
-    if (inventory.length >= slotCount) {
-      if (mounted) showErrorToast(context, 'Inventory full — discard or use a powerup first');
-      return;
-    }
-
-    // Use mystery box IDs from the latest progress response
-    final boxIds = (_powerupData?['mysteryBoxIds'] as List?)?.cast<String>() ?? [];
-    if (boxIds.isEmpty) {
-      if (mounted) showErrorToast(context, 'No mystery boxes available');
-      return;
-    }
 
     setState(() => _isActing = true);
     try {
       final token = widget.authService.authToken;
       if (token == null) return;
-
-      final boxId = boxIds.first;
 
       final result = await _api.openMysteryBox(
         identityToken: token,
@@ -929,10 +927,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isActing = false);
-        final msg = e.toString().contains('Inventory full')
-            ? 'Inventory full — discard or use a powerup first'
-            : 'Failed to open mystery box';
-        showErrorToast(context, msg);
+        showErrorToast(context, 'Failed to open mystery box');
       }
     }
   }
@@ -942,7 +937,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             ?.cast<Map<String, dynamic>>() ??
         [];
     final slotCount = (_powerupData?['powerupSlots'] as int?) ?? 3;
-    final hasExtraSlot = slotCount > 3;
 
     return RetroCard(
       padding: const EdgeInsets.all(12),
@@ -954,36 +948,27 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             children: [
               Text('POWERUPS',
                   style: PixelText.title(size: 14, color: AppColors.textMid)),
-              if (_mysteryBoxCount > 0)
-                GestureDetector(
-                  onTap: _isActing ? null : _openMysteryBox,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.coinLight.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.coinMid, width: 1.5),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const SizedBox(
-                          width: 24,
-                          height: 28,
-                          child: SpinningCrate(size: 22),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'x$_mysteryBoxCount',
-                          style: PixelText.title(size: 14, color: AppColors.coinDark),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'OPEN',
-                          style: PixelText.pill(size: 11, color: AppColors.coinDark),
-                        ),
-                      ],
-                    ),
+              if (_queuedBoxCount > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.coinLight.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(
+                        width: 18,
+                        height: 20,
+                        child: SpinningCrate(size: 16),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '$_queuedBoxCount queued',
+                        style: PixelText.body(size: 11, color: AppColors.coinDark),
+                      ),
+                    ],
                   ),
                 ),
             ],
@@ -994,7 +979,44 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               final isExtraSlot = i >= 3;
               if (i < inventory.length) {
                 final pw = inventory[i];
+                final status = pw['status'] as String? ?? 'HELD';
+                final isMysteryBox = status == 'MYSTERY_BOX';
                 final type = pw['type'] as String? ?? '';
+
+                if (isMysteryBox) {
+                  // Mystery box in slot — tap to open
+                  return Expanded(
+                    child: GestureDetector(
+                      onTap: _isActing ? null : () => _openMysteryBox(pw['id'] as String),
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: AppColors.parchmentDark,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: AppColors.coinMid,
+                            width: 2,
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            const SizedBox(height: 28, child: SpinningCrate(size: 22)),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Open',
+                              style: PixelText.title(
+                                  size: 10, color: AppColors.coinDark),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
+                // Held powerup in slot
                 return Expanded(
                   child: GestureDetector(
                     onTap: _isActing ? null : () => _showPowerupActions(pw),

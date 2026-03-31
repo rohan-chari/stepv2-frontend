@@ -103,12 +103,15 @@ class NotificationService {
     final route = _routeFromType(type);
     if (route == null) return;
 
+    final nested = payload['params'] is Map
+        ? Map<String, dynamic>.from(payload['params'] as Map)
+        : <String, dynamic>{};
     final params = <String, String>{};
-    if (payload['challengeInstanceId'] is String) {
-      params['challengeInstanceId'] = payload['challengeInstanceId'] as String;
+    if (nested['instanceId'] is String) {
+      params['challengeInstanceId'] = nested['instanceId'] as String;
     }
-    if (payload['raceId'] is String) {
-      params['raceId'] = payload['raceId'] as String;
+    if (nested['raceId'] is String) {
+      params['raceId'] = nested['raceId'] as String;
     }
 
     pendingAction.value = NotificationAction(route: route, params: params);
@@ -122,9 +125,17 @@ class NotificationService {
       case 'RACE_INVITE_ACCEPTED':
       case 'RACE_STARTED':
       case 'RACE_COMPLETED':
+      case 'POWERUP_USED':
         return NotificationRoute.raceDetail;
       case 'RACE_CANCELLED':
         return NotificationRoute.races;
+      case 'FRIEND_REQUEST_SENT':
+      case 'FRIEND_REQUEST_ACCEPTED':
+        return NotificationRoute.friends;
+      case 'STAKE_ACCEPTED':
+        return NotificationRoute.challengeDetail;
+      case 'CHALLENGE_DROPPED':
+        return NotificationRoute.home;
       default:
         return null;
     }

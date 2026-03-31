@@ -301,7 +301,7 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
                   ],
                 ),
                 child: Text(
-                  'NICE!',
+                  'Continue',
                   style: PixelText.pill(size: 18),
                 ),
               ),

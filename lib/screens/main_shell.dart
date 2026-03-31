@@ -23,6 +23,7 @@ import 'tabs/friends_tab.dart';
 import 'tabs/home_tab.dart';
 import 'tabs/leaderboard_tab.dart';
 import 'tabs/profile_tab.dart';
+import 'race_detail_screen.dart';
 import 'tabs/races_tab.dart';
 
 class MainShell extends StatefulWidget {
@@ -88,15 +89,52 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         );
     _pageController = PageController();
     WidgetsBinding.instance.addObserver(this);
+    widget.notificationService?.pendingAction.addListener(_onNotificationAction);
     _restoreAndFetch();
   }
 
   @override
   void dispose() {
+    widget.notificationService?.pendingAction.removeListener(_onNotificationAction);
     _foregroundPollTimer?.cancel();
     _pageController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  void _onNotificationAction() {
+    final action = widget.notificationService?.pendingAction.value;
+    if (action == null) return;
+    widget.notificationService?.pendingAction.value = null;
+
+    switch (action.route) {
+      case NotificationRoute.raceDetail:
+        final raceId = action.params['raceId'];
+        if (raceId != null) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => RaceDetailScreen(
+                authService: widget.authService,
+                raceId: raceId,
+                friends: _friendsSteps,
+              ),
+            ),
+          );
+        }
+        break;
+      case NotificationRoute.races:
+        _pageController.jumpToPage(2);
+        break;
+      case NotificationRoute.challengeDetail:
+        _pageController.jumpToPage(1);
+        break;
+      case NotificationRoute.friends:
+        _pageController.jumpToPage(3);
+        break;
+      case NotificationRoute.home:
+        _pageController.jumpToPage(0);
+        break;
+    }
   }
 
   @override
