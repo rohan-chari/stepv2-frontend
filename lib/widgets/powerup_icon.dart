@@ -10,6 +10,9 @@ class PowerupIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (type.toUpperCase() == 'WRONG_TURN') {
+      return Icon(Icons.undo, size: size, color: const Color(0xFFE05040));
+    }
     return CustomPaint(
       size: Size(size, size),
       painter: _PowerupPainter(type),
@@ -23,7 +26,7 @@ class _PowerupPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    switch (type) {
+    switch (type.toUpperCase()) {
       case 'LEG_CRAMP':
         _paintLegCramp(canvas, size);
       case 'RED_CARD':
@@ -253,34 +256,9 @@ class _PowerupPainter extends CustomPainter {
     );
   }
 
-  // Wrong Turn — U-turn arrow pointing backwards
+  // Wrong Turn — painted via Icon in the widget layer (see PowerupIcon build)
   void _paintWrongTurn(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFFE05040)
-      ..strokeWidth = size.width * 0.1
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
-    // U-turn path: goes up, curves over, comes back down
-    final path = Path()
-      ..moveTo(size.width * 0.3, size.height * 0.85)
-      ..lineTo(size.width * 0.3, size.height * 0.4)
-      ..quadraticBezierTo(size.width * 0.3, size.height * 0.15, size.width * 0.55, size.height * 0.15)
-      ..quadraticBezierTo(size.width * 0.8, size.height * 0.15, size.width * 0.8, size.height * 0.4)
-      ..lineTo(size.width * 0.8, size.height * 0.6);
-    canvas.drawPath(path, paint);
-
-    // Arrowhead pointing down
-    canvas.drawLine(
-      Offset(size.width * 0.8, size.height * 0.6),
-      Offset(size.width * 0.65, size.height * 0.45),
-      paint,
-    );
-    canvas.drawLine(
-      Offset(size.width * 0.8, size.height * 0.6),
-      Offset(size.width * 0.9, size.height * 0.45),
-      paint,
-    );
+    // No-op: handled by Icon widget overlay in PowerupIcon.build
   }
 
   // Fanny Pack — small pouch/bag shape

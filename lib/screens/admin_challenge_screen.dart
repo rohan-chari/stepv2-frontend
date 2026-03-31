@@ -7,7 +7,22 @@ import '../widgets/content_board.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/game_background.dart';
 import '../widgets/pill_button.dart';
+import '../widgets/powerup_icon.dart';
+import '../widgets/spinning_crate.dart';
 import '../widgets/trail_sign.dart';
+
+const _powerupEntries = [
+  (type: 'LEG_CRAMP', name: 'Leg Cramp', description: 'Freeze a rival\'s steps for 2 hours'),
+  (type: 'RED_CARD', name: 'Red Card', description: 'Remove 10% of the leader\'s steps'),
+  (type: 'SHORTCUT', name: 'Shortcut', description: 'Steal 1,000 steps from a rival'),
+  (type: 'COMPRESSION_SOCKS', name: 'Compression Socks', description: 'Shield against the next attack'),
+  (type: 'PROTEIN_SHAKE', name: 'Protein Shake', description: '+1,500 bonus steps instantly'),
+  (type: 'RUNNERS_HIGH', name: "Runner's High", description: '2x steps for 3 hours'),
+  (type: 'SECOND_WIND', name: 'Second Wind', description: 'Bonus steps based on how far behind'),
+  (type: 'STEALTH_MODE', name: 'Stealth Mode', description: 'Hide your progress for 4 hours'),
+  (type: 'WRONG_TURN', name: 'Wrong Turn', description: 'Reverse a rival\'s steps for 1 hour'),
+  (type: 'FANNY_PACK', name: 'Fanny Pack', description: 'Unlock an extra powerup slot'),
+];
 
 class AdminChallengeScreen extends StatefulWidget {
   const AdminChallengeScreen({
@@ -349,6 +364,72 @@ class _AdminChallengeScreenState extends State<AdminChallengeScreen> {
                             _buildInstances(instances),
                           ],
                         ),
+                ),
+                const SizedBox(height: 24),
+                ContentBoard(
+                  width: boardWidth,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'POWERUP ICONS',
+                        style: PixelText.title(
+                          size: 16,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      for (final entry in _powerupEntries)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Row(
+                            children: [
+                              PowerupIcon(type: entry.type, size: 28),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      entry.name,
+                                      style: PixelText.title(
+                                        size: 13,
+                                        color: AppColors.textDark,
+                                      ),
+                                    ),
+                                    Text(
+                                      entry.description,
+                                      style: PixelText.body(
+                                        size: 11,
+                                        color: AppColors.textMid,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                ContentBoard(
+                  width: boardWidth,
+                  child: Column(
+                    children: [
+                      Text(
+                        'POWERUP CRATE',
+                        style: PixelText.title(
+                          size: 16,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const SpinningCrate(size: 100),
+                      const SizedBox(height: 8),
+                    ],
+                  ),
                 ),
               ],
             ),

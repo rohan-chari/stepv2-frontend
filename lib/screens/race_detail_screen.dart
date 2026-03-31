@@ -377,7 +377,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               children: [
                 Text('TARGET FOR ${_powerupNames[powerupType]?.toUpperCase()}',
                     style:
-                        PixelText.title(size: 13, color: AppColors.textMid)),
+                        PixelText.title(size: 16, color: AppColors.textMid)),
                 const SizedBox(height: 12),
                 for (final t in targets)
                   GestureDetector(
@@ -719,7 +719,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             children: [
               Text('PARTICIPANTS ($acceptedCount)',
                   style:
-                      PixelText.title(size: 13, color: AppColors.textMid)),
+                      PixelText.title(size: 16, color: AppColors.textMid)),
               const SizedBox(height: 10),
               for (final p in participants) _buildParticipantRow(p),
             ],
@@ -853,13 +853,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                 children: [
                   Text('RACE TO ',
                       style: PixelText.title(
-                          size: 13, color: AppColors.textMid)),
+                          size: 16, color: AppColors.textMid)),
                   Text(_formatSteps(targetSteps),
                       style: PixelText.title(
-                          size: 13, color: AppColors.accent)),
+                          size: 16, color: AppColors.accent)),
                   Text(' STEPS',
                       style: PixelText.title(
-                          size: 13, color: AppColors.textMid)),
+                          size: 16, color: AppColors.textMid)),
                 ],
               ),
               const SizedBox(height: 10),
@@ -921,7 +921,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('POWERUPS',
-              style: PixelText.title(size: 11, color: AppColors.textMid)),
+              style: PixelText.title(size: 14, color: AppColors.textMid)),
           const SizedBox(height: 8),
           Row(
             children: List.generate(slotCount, (i) {
@@ -948,12 +948,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                       ),
                       child: Column(
                         children: [
-                          PowerupIcon(type: type, size: 22),
+                          SizedBox(height: 28, child: PowerupIcon(type: type, size: 22)),
                           const SizedBox(height: 2),
                           Text(
                             _powerupNames[type] ?? type,
                             style: PixelText.title(
-                                size: 8, color: AppColors.textDark),
+                                size: 10, color: AppColors.textDark),
                             textAlign: TextAlign.center,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -980,13 +980,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                     ),
                     child: Column(
                       children: [
-                        Text('---',
+                        SizedBox(
+                          height: 28,
+                          child: Text('---',
                             style: PixelText.body(
                                 size: 22, color: AppColors.textMid.withValues(alpha: 0.3))),
+                        ),
                         const SizedBox(height: 2),
                         Text(isExtraSlot ? 'Bonus' : 'Empty',
                             style: PixelText.title(
-                                size: 8,
+                                size: 10,
                                 color: isExtraSlot
                                     ? AppColors.coinMid.withValues(alpha: 0.6)
                                     : AppColors.textMid.withValues(alpha: 0.3))),
@@ -1012,7 +1015,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('ACTIVITY',
-                  style: PixelText.title(size: 14, color: AppColors.textMid)),
+                  style: PixelText.title(size: 16, color: AppColors.textMid)),
               GestureDetector(
                 onTap: _loadFeed,
                 child: Icon(Icons.refresh,
@@ -1071,7 +1074,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             children: [
               Text('RACE COMPLETE',
                   style:
-                      PixelText.title(size: 13, color: AppColors.textMid)),
+                      PixelText.title(size: 16, color: AppColors.textMid)),
               const SizedBox(height: 8),
               if (winner != null) ...[
                 Icon(Icons.emoji_events, size: 40, color: AppColors.coinMid),
@@ -1083,7 +1086,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                 ),
                 Text('WINNER',
                     style: PixelText.title(
-                        size: 13, color: AppColors.textMid)),
+                        size: 16, color: AppColors.textMid)),
               ] else
                 Text('No winner',
                     style: PixelText.title(
@@ -1120,7 +1123,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             children: [
               Text('FINAL STANDINGS',
                   style:
-                      PixelText.title(size: 13, color: AppColors.textMid)),
+                      PixelText.title(size: 16, color: AppColors.textMid)),
               const SizedBox(height: 10),
               for (int i = 0; i < participants.length; i++)
                 _buildLeaderboardRow(participants[i], i),
