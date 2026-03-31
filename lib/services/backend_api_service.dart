@@ -657,6 +657,21 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  Future<Map<String, dynamic>> openMysteryBox({
+    required String identityToken,
+    required String raceId,
+    required String powerupId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races/$raceId/powerups/$powerupId/open',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
   Future<Map<String, dynamic>> discardPowerup({
     required String identityToken,
     required String raceId,

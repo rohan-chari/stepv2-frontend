@@ -11,6 +11,8 @@ import '../widgets/info_toast.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/retro_card.dart';
 import '../widgets/powerup_icon.dart';
+import '../widgets/spinning_crate.dart';
+import 'case_opening_screen.dart';
 import 'race_invite_screen.dart';
 
 class RaceDetailScreen extends StatefulWidget {
@@ -69,6 +71,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   Map<String, dynamic>? _progress;
   Map<String, dynamic>? _powerupData;
   List<Map<String, dynamic>> _feedEvents = [];
+  int _mysteryBoxCount = 0;
   bool _isLoading = true;
   bool _isActing = false;
   Timer? _pollTimer;
@@ -146,13 +149,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       if (_powerupData?['enabled'] == true) {
         _loadFeed();
 
-        // Check for auto-activated Fanny Pack
-        final newBoxes = (_powerupData?['newBoxesEarned'] as List?) ?? [];
-        for (final box in newBoxes) {
-          if (box is Map && box['type'] == 'FANNY_PACK' && box['autoActivated'] == true) {
-            _showFannyPackActivation();
-            break;
-          }
+        _mysteryBoxCount = (_powerupData?['mysteryBoxCount'] as int?) ?? 0;
+        final newBoxes = (_powerupData?['newMysteryBoxes'] as List?) ?? [];
+        if (newBoxes.length == 1) {
+          showInfoToast(context, 'You earned a mystery box!');
+        } else if (newBoxes.length > 1) {
+          showInfoToast(context, 'You earned ${newBoxes.length} mystery boxes!');
         }
       }
 
@@ -419,44 +421,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     );
   }
 
-  void _showFannyPackActivation() {
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: AppColors.parchment,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const PowerupIcon(type: 'FANNY_PACK', size: 48),
-              const SizedBox(height: 12),
-              Text(
-                'Fanny Pack Activated!',
-                style: PixelText.title(size: 18, color: AppColors.coinDark),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Your inventory was full, so the Fanny Pack was auto-equipped. You now have an extra powerup slot!',
-                style: PixelText.body(size: 13, color: AppColors.textMid),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              PillButton(
-                label: 'NICE',
-                variant: PillButtonVariant.primary,
-                fontSize: 14,
-                fullWidth: true,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                onPressed: () => Navigator.of(ctx).pop(),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
 
   void _showPowerupActions(Map<String, dynamic> powerup) {
     final type = powerup['type'] as String;
@@ -908,6 +872,71 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     );
   }
 
+  Future<void> _openMysteryBox() async {
+    if (_isActing) return;
+
+    final inventory = (_powerupData?['inventory'] as List?) ?? [];
+    final slotCount = (_powerupData?['powerupSlots'] as int?) ?? 3;
+    if (inventory.length >= slotCount) {
+      if (mounted) showErrorToast(context, 'Inventory full — discard a powerup first');
+      return;
+    }
+
+    // Use mystery box IDs from the latest progress response
+    final boxIds = (_powerupData?['mysteryBoxIds'] as List?)?.cast<String>() ?? [];
+    if (boxIds.isEmpty) {
+      if (mounted) showErrorToast(context, 'No mystery boxes available');
+      return;
+    }
+
+    setState(() => _isActing = true);
+    try {
+      final token = widget.authService.authToken;
+      if (token == null) return;
+
+      final boxId = boxIds.first;
+
+      final result = await _api.openMysteryBox(
+        identityToken: token,
+        raceId: widget.raceId,
+        powerupId: boxId,
+      );
+
+      if (!mounted) return;
+      setState(() => _isActing = false);
+
+      final openResult = result['result'] as Map<String, dynamic>? ?? result;
+      final type = openResult['type'] as String? ?? '';
+      final rarity = openResult['rarity'] as String? ?? 'COMMON';
+      final autoActivated = openResult['autoActivated'] == true;
+
+      await Navigator.of(context).push(
+        PageRouteBuilder(
+          opaque: false,
+          pageBuilder: (_, __, ___) => CaseOpeningScreen(
+            resultType: type,
+            resultRarity: rarity,
+            autoActivated: autoActivated,
+          ),
+          transitionsBuilder: (_, anim, __, child) =>
+              FadeTransition(opacity: anim, child: child),
+          transitionDuration: const Duration(milliseconds: 300),
+        ),
+      );
+
+      // Refresh after closing
+      _loadProgress();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isActing = false);
+        final msg = e.toString().contains('Inventory full')
+            ? 'Inventory full — discard a powerup first'
+            : 'Failed to open mystery box';
+        showErrorToast(context, msg);
+      }
+    }
+  }
+
   Widget _buildInventoryBar() {
     final inventory = (_powerupData?['inventory'] as List?)
             ?.cast<Map<String, dynamic>>() ??
@@ -920,8 +949,45 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('POWERUPS',
-              style: PixelText.title(size: 14, color: AppColors.textMid)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('POWERUPS',
+                  style: PixelText.title(size: 14, color: AppColors.textMid)),
+              if (_mysteryBoxCount > 0)
+                GestureDetector(
+                  onTap: _isActing ? null : _openMysteryBox,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.coinLight.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.coinMid, width: 1.5),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(
+                          width: 24,
+                          height: 28,
+                          child: SpinningCrate(size: 22),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'x$_mysteryBoxCount',
+                          style: PixelText.title(size: 14, color: AppColors.coinDark),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'OPEN',
+                          style: PixelText.pill(size: 11, color: AppColors.coinDark),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
           const SizedBox(height: 8),
           Row(
             children: List.generate(slotCount, (i) {
