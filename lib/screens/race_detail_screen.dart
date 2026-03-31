@@ -1012,7 +1012,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('ACTIVITY',
-                  style: PixelText.title(size: 11, color: AppColors.textMid)),
+                  style: PixelText.title(size: 14, color: AppColors.textMid)),
               GestureDetector(
                 onTap: _loadFeed,
                 child: Icon(Icons.refresh,
@@ -1026,7 +1026,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Text('No powerup activity yet',
                   style: PixelText.body(
-                      size: 12, color: AppColors.textMid.withValues(alpha: 0.6))),
+                      size: 14, color: AppColors.textMid.withValues(alpha: 0.6))),
             )
           else
             for (int i = 0; i < _feedEvents.length && i < 10; i++)
@@ -1035,13 +1035,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    PowerupIcon(type: _feedEvents[i]['powerupType'] as String? ?? '', size: 14),
+                    PowerupIcon(type: _feedEvents[i]['powerupType'] as String? ?? '', size: 18),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         _feedEvents[i]['description'] as String? ?? '',
                         style:
-                            PixelText.body(size: 11, color: AppColors.textDark),
+                            PixelText.body(size: 14, color: AppColors.textDark),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -1199,7 +1199,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             child: Text(
               isMe ? '$name (you)' : name,
               style: PixelText.body(
-                size: 14,
+                size: 18,
                 color: isMe ? AppColors.accent : AppColors.textDark,
               ),
             ),
@@ -1211,7 +1211,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(badgeText,
-                style: PixelText.title(size: 9, color: Colors.white)),
+                style: PixelText.title(size: 12, color: Colors.white)),
           ),
         ],
       ),
@@ -1236,35 +1236,64 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         [];
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
           SizedBox(
-            width: 30,
+            width: 45,
             child: Text(prefix,
-                style: PixelText.title(size: 14, color: AppColors.textMid)),
+                style: PixelText.title(size: 18, color: AppColors.textMid)),
           ),
           Expanded(
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Flexible(
-                  child: Text(
-                    isStealthed ? '???' : (isMe ? '$name (you)' : name),
-                    style: PixelText.body(
-                      size: 14,
-                      color: isStealthed
-                          ? AppColors.textMid.withValues(alpha: 0.5)
-                          : isMe
-                              ? AppColors.accent
-                              : AppColors.textDark,
-                    ),
+                Text(
+                  isStealthed ? '???' : (isMe ? '$name (you)' : name),
+                  style: PixelText.body(
+                    size: 18,
+                    color: isStealthed
+                        ? AppColors.textMid.withValues(alpha: 0.5)
+                        : isMe
+                            ? AppColors.accent
+                            : AppColors.textDark,
                   ),
                 ),
-                // Effect indicators
-                for (final e in activeEffects)
+                if (activeEffects.isNotEmpty)
                   Padding(
-                    padding: const EdgeInsets.only(left: 3),
-                    child: PowerupIcon(type: e['type'] as String? ?? '', size: 13),
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: [
+                        for (final e in activeEffects)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: (e['onSelf'] == true ? AppColors.pillGreenDark : AppColors.error).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: e['onSelf'] == true ? AppColors.pillGreenDark : AppColors.error,
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                PowerupIcon(type: e['type'] as String? ?? '', size: 10),
+                                const SizedBox(width: 3),
+                                Text(
+                                  _powerupNames[e['type'] as String? ?? ''] ?? e['type'] as String? ?? '',
+                                  style: PixelText.body(
+                                    size: 10,
+                                    color: e['onSelf'] == true ? AppColors.pillGreenDark : AppColors.error,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
               ],
             ),
@@ -1272,7 +1301,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
           Text(
             isStealthed ? '???' : _formatSteps(totalSteps ?? 0),
             style: PixelText.number(
-              size: 14,
+              size: 18,
               color: isStealthed
                   ? AppColors.textMid.withValues(alpha: 0.5)
                   : AppColors.textMid,

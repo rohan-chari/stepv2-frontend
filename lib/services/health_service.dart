@@ -110,25 +110,24 @@ class HealthService {
     required DateTime startTime,
     required DateTime endTime,
   }) async {
-    final samples = <StepSampleData>[];
-    var current = DateTime(
-        startTime.year, startTime.month, startTime.day, startTime.hour);
+    final dataPoints = await _health.getHealthDataFromTypes(
+      types: [HealthDataType.STEPS],
+      startTime: startTime,
+      endTime: endTime,
+    );
 
-    while (current.isBefore(endTime)) {
-      final bucketEnd = current.add(const Duration(hours: 1));
-      final clampedEnd = bucketEnd.isAfter(endTime) ? endTime : bucketEnd;
-      final steps = await _health.getTotalStepsInInterval(current, clampedEnd);
+    // Remove duplicates (e.g. from multiple sources like Apple Watch + iPhone)
+    final unique = Health().removeDuplicates(dataPoints);
 
-      if (steps != null && steps > 0) {
-        samples.add(StepSampleData(
-          periodStart: current.toUtc(),
-          periodEnd: clampedEnd.toUtc(),
-          steps: steps,
-        ));
-      }
-      current = bucketEnd;
-    }
-
-    return samples;
+    return unique
+        .where((dp) =>
+            dp.value is NumericHealthValue &&
+            (dp.value as NumericHealthValue).numericValue > 0)
+        .map((dp) => StepSampleData(
+              periodStart: dp.dateFrom.toUtc(),
+              periodEnd: dp.dateTo.toUtc(),
+              steps: (dp.value as NumericHealthValue).numericValue.toInt(),
+            ))
+        .toList();
   }
 }

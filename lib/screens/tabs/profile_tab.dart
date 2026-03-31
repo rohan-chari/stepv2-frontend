@@ -9,6 +9,7 @@ import '../../widgets/pill_button.dart';
 import '../../widgets/pill_icon_button.dart';
 import '../../widgets/retro_card.dart';
 import '../../widgets/spinning_coin.dart';
+import '../../widgets/step_calendar.dart';
 import '../admin_challenge_screen.dart';
 import '../display_name_screen.dart';
 import '../start_screen.dart';
@@ -172,6 +173,14 @@ class _ProfileTabState extends State<ProfileTab> {
                                 onPressed: _openSettings,
                               ),
                             ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        RetroCard(
+                          padding: const EdgeInsets.all(12),
+                          child: StepCalendar(
+                            authService: widget.authService,
+                            backendApiService: _api,
                           ),
                         ),
                         const SizedBox(height: 16),

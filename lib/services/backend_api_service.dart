@@ -425,6 +425,18 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  Future<Map<String, dynamic>> fetchStepCalendar({
+    required String identityToken,
+    required String month,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/steps/calendar?month=$month',
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
   Future<List<Map<String, dynamic>>> fetchStepsHistory({
     required String identityToken,
   }) async {

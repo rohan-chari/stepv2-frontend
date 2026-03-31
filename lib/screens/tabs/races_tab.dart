@@ -329,14 +329,14 @@ class _RacesTabState extends State<RacesTab> {
                 children: [
                   Text(name,
                       style: PixelText.title(
-                          size: 16, color: AppColors.textDark),
+                          size: 18, color: AppColors.textDark),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1),
                   const SizedBox(height: 3),
                   Text(
                     '$stepsLabel \u2022 $participantCount runner${participantCount == 1 ? '' : 's'}${isInvite && creatorName.isNotEmpty ? ' \u2022 by $creatorName' : ''}',
                     style:
-                        PixelText.body(size: 12, color: AppColors.textMid),
+                        PixelText.body(size: 14, color: AppColors.textMid),
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
                   ),
@@ -352,7 +352,7 @@ class _RacesTabState extends State<RacesTab> {
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(statusLabel,
-                  style: PixelText.title(size: 11, color: Colors.white)),
+                  style: PixelText.title(size: 13, color: Colors.white)),
             ),
           ],
         ),
