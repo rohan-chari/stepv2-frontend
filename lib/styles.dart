@@ -84,6 +84,17 @@ abstract final class AppColors {
   static const error = Color(0xFFE05040);
   static const errorLight = Color(0xFFFF8A80);
 
+  // Medals
+  static const medalGold = Color(0xFFFFD700);
+  static const medalSilver = Color(0xFFC0C0C0);
+  static const medalBronze = Color(0xFFCD7F32);
+
+  // Feed event tints
+  static const feedAttack = Color(0xFFE05040);
+  static const feedShield = Color(0xFF4A90D9);
+  static const feedGold = Color(0xFFD4A017);
+  static const feedBoost = Color(0xFF58CC02);
+
   // Firefly
   static const fireflyGlow = Color(0xFFFFE87C);
 

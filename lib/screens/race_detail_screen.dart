@@ -13,6 +13,10 @@ import '../widgets/pill_button.dart';
 import '../widgets/retro_card.dart';
 import '../widgets/powerup_icon.dart';
 import '../widgets/spinning_crate.dart';
+import '../widgets/game_container.dart';
+import '../widgets/leaderboard_plank.dart';
+import '../widgets/item_slot.dart';
+import '../widgets/feed_bubble.dart';
 import 'case_opening_screen.dart';
 import 'race_invite_screen.dart';
 
@@ -545,10 +549,20 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
           bottom: false,
           child: Column(
             children: [
-              // Header
-              Padding(
+              // Header (fixed, does not scroll)
+              Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF87CEEB),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF87CEEB).withValues(alpha: 0.8),
+                      offset: const Offset(0, 2),
+                      blurRadius: 4,
+                    ),
+                  ],
+                ),
                 child: Row(
                   children: [
                     GestureDetector(
@@ -569,6 +583,18 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    if (_race != null &&
+                        (_race!['isCreator'] as bool? ?? false) &&
+                        (_race!['status'] == 'PENDING' ||
+                            _race!['status'] == 'ACTIVE'))
+                      GestureDetector(
+                        onTap: _showRaceOptionsSheet,
+                        child: const Padding(
+                          padding: EdgeInsets.all(8),
+                          child: Icon(Icons.more_horiz,
+                              color: AppColors.textDark, size: 24),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -703,15 +729,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         // Actions
         if (isCreator) ...[
           PillButton(
-            label: _isActing ? 'INVITING...' : 'INVITE FRIENDS',
-            variant: PillButtonVariant.secondary,
-            fontSize: 13,
-            fullWidth: true,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            onPressed: _isActing ? null : _inviteMore,
-          ),
-          const SizedBox(height: 10),
-          PillButton(
             label: _isActing ? 'STARTING...' : 'START RACE',
             variant: PillButtonVariant.primary,
             fontSize: 14,
@@ -727,15 +744,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               textAlign: TextAlign.center,
             ),
           ],
-          const SizedBox(height: 10),
-          PillButton(
-            label: 'CANCEL RACE',
-            variant: PillButtonVariant.accent,
-            fontSize: 13,
-            fullWidth: true,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            onPressed: _isActing ? null : _cancelRace,
-          ),
         ] else if (myStatus == 'INVITED') ...[
           PillButton(
             label: _isActing ? 'JOINING...' : 'ACCEPT',
@@ -836,8 +844,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     final endsAtRaw = _race!['endsAt'] as String?;
     final endsAt =
         endsAtRaw != null ? DateTime.tryParse(endsAtRaw)?.toLocal() : null;
-    final isCreator = _race!['isCreator'] as bool? ?? false;
-
     return Column(
       children: [
         // Countdown
@@ -868,31 +874,31 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         ),
         const SizedBox(height: 12),
 
-        // Leaderboard details
-        RetroCard(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text('RACE TO ',
-                      style: PixelText.title(
-                          size: 16, color: AppColors.textMid)),
-                  Text(_formatSteps(targetSteps),
-                      style: PixelText.title(
-                          size: 16, color: AppColors.accent)),
-                  Text(' STEPS',
-                      style: PixelText.title(
-                          size: 16, color: AppColors.textMid)),
-                ],
-              ),
-              const SizedBox(height: 10),
-              for (int i = 0; i < participants.length; i++)
-                _buildLeaderboardRow(participants[i], i),
-            ],
+        // Leaderboard
+        GameContainer(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text('RACE TO ',
+                        style: PixelText.title(
+                            size: 16, color: AppColors.textMid)),
+                    Text(_formatSteps(targetSteps),
+                        style: PixelText.title(
+                            size: 16, color: AppColors.accent)),
+                    Text(' STEPS',
+                        style: PixelText.title(
+                            size: 16, color: AppColors.textMid)),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                for (int i = 0; i < participants.length; i++)
+                  _buildLeaderboardPlank(participants[i], i),
+              ],
+            ),
           ),
-        ),
 
         // Powerup inventory bar
         if (_powerupData != null &&
@@ -901,7 +907,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
           _buildInventoryBar(),
         ] else ...[
           const SizedBox(height: 12),
-          RetroCard(
+          GameContainer(
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
@@ -918,26 +924,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         const SizedBox(height: 12),
         _buildFeedSection(),
 
-        if (isCreator) ...[
-          const SizedBox(height: 12),
-          PillButton(
-            label: 'INVITE MORE',
-            variant: PillButtonVariant.secondary,
-            fontSize: 13,
-            fullWidth: true,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            onPressed: _isActing ? null : _inviteMore,
-          ),
-          const SizedBox(height: 10),
-          PillButton(
-            label: 'CANCEL RACE',
-            variant: PillButtonVariant.accent,
-            fontSize: 13,
-            fullWidth: true,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            onPressed: _isActing ? null : _cancelRace,
-          ),
-        ],
         const SizedBox(height: 24),
       ],
     );
@@ -995,7 +981,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         [];
     final slotCount = (_powerupData?['powerupSlots'] as int?) ?? 3;
 
-    return RetroCard(
+    return GameContainer(
       padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1038,109 +1024,26 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                 final pw = inventory[i];
                 final status = pw['status'] as String? ?? 'HELD';
                 final isMysteryBox = status == 'MYSTERY_BOX';
-                final type = pw['type'] as String? ?? '';
 
                 if (isMysteryBox) {
-                  // Mystery box in slot — tap to open
-                  return Expanded(
-                    child: GestureDetector(
-                      onTap: _isActing ? null : () => _openMysteryBox(pw['id'] as String),
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 3),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(
-                          color: AppColors.parchmentDark,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: AppColors.coinMid,
-                            width: 2,
-                          ),
-                        ),
-                        child: Column(
-                          children: [
-                            const SizedBox(height: 28, child: SpinningCrate(size: 22)),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Open',
-                              style: PixelText.title(
-                                  size: 10, color: AppColors.coinDark),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                  return ItemSlot(
+                    state: ItemSlotState.mysteryBox,
+                    isExtraSlot: isExtraSlot,
+                    onTap: _isActing ? null : () => _openMysteryBox(pw['id'] as String),
                   );
                 }
 
-                // Held powerup in slot
-                return Expanded(
-                  child: GestureDetector(
-                    onTap: _isActing ? null : () => _showPowerupActions(pw),
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: AppColors.parchmentDark,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: isExtraSlot
-                              ? AppColors.coinMid
-                              : _rarityColors[pw['rarity']] ??
-                                  AppColors.parchmentBorder,
-                          width: isExtraSlot ? 2.5 : 2,
-                        ),
-                      ),
-                      child: Column(
-                        children: [
-                          SizedBox(height: 28, child: PowerupIcon(type: type, size: 22)),
-                          const SizedBox(height: 2),
-                          Text(
-                            _powerupNames[type] ?? type,
-                            style: PixelText.title(
-                                size: 10, color: AppColors.textDark),
-                            textAlign: TextAlign.center,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                return ItemSlot(
+                  state: ItemSlotState.held,
+                  powerupType: pw['type'] as String? ?? '',
+                  rarity: pw['rarity'] as String?,
+                  isExtraSlot: isExtraSlot,
+                  onTap: _isActing ? null : () => _showPowerupActions(pw),
                 );
               } else {
-                return Expanded(
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    decoration: BoxDecoration(
-                      color: AppColors.parchmentDark.withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: isExtraSlot
-                            ? AppColors.coinMid.withValues(alpha: 0.5)
-                            : AppColors.parchmentBorder.withValues(alpha: 0.3),
-                        width: isExtraSlot ? 2.5 : 1,
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        SizedBox(
-                          height: 28,
-                          child: Text('---',
-                            style: PixelText.body(
-                                size: 22, color: AppColors.textMid.withValues(alpha: 0.3))),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(isExtraSlot ? 'Bonus' : 'Empty',
-                            style: PixelText.title(
-                                size: 10,
-                                color: isExtraSlot
-                                    ? AppColors.coinMid.withValues(alpha: 0.6)
-                                    : AppColors.textMid.withValues(alpha: 0.3))),
-                      ],
-                    ),
-                  ),
+                return ItemSlot(
+                  state: ItemSlotState.empty,
+                  isExtraSlot: isExtraSlot,
                 );
               }
             }),
@@ -1150,55 +1053,117 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     );
   }
 
-  Widget _buildFeedSection() {
-    return RetroCard(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('ACTIVITY',
-                  style: PixelText.title(size: 16, color: AppColors.textMid)),
-              GestureDetector(
-                onTap: _loadFeed,
-                child: Icon(Icons.refresh,
-                    size: 16, color: AppColors.textMid.withValues(alpha: 0.6)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (_feedEvents.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text('No powerup activity yet',
-                  style: PixelText.body(
-                      size: 14, color: AppColors.textMid.withValues(alpha: 0.6))),
-            )
-          else
-            for (int i = 0; i < _feedEvents.length && i < 10; i++)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    PowerupIcon(type: _feedEvents[i]['powerupType'] as String? ?? '', size: 18),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        _feedEvents[i]['description'] as String? ?? '',
-                        style:
-                            PixelText.body(size: 14, color: AppColors.textDark),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-        ],
+  String _relativeTime(String? isoTimestamp) {
+    if (isoTimestamp == null) return '';
+    final dt = DateTime.tryParse(isoTimestamp);
+    if (dt == null) return '';
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m';
+    if (diff.inHours < 24) return '${diff.inHours}h';
+    if (diff.inDays < 7) return '${diff.inDays}d';
+    return '${(diff.inDays / 7).floor()}w';
+  }
+
+  void _showRaceOptionsSheet() {
+    final status = _race?['status'] as String? ?? '';
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.parchment,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'RACE OPTIONS',
+              style: PixelText.title(size: 18, color: AppColors.textDark),
+            ),
+            const SizedBox(height: 16),
+            PillButton(
+              label: status == 'PENDING' ? 'INVITE FRIENDS' : 'INVITE MORE',
+              variant: PillButtonVariant.secondary,
+              fontSize: 13,
+              fullWidth: true,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              onPressed: _isActing
+                  ? null
+                  : () {
+                      Navigator.of(context).pop();
+                      _inviteMore();
+                    },
+            ),
+            const SizedBox(height: 10),
+            PillButton(
+              label: 'CANCEL RACE',
+              variant: PillButtonVariant.accent,
+              fontSize: 13,
+              fullWidth: true,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              onPressed: _isActing
+                  ? null
+                  : () {
+                      Navigator.of(context).pop();
+                      _cancelRace();
+                    },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeedSection() {
+    // Build actor name lookup from participants
+    final participants = (_progress?['participants'] as List?)
+            ?.cast<Map<String, dynamic>>() ??
+        [];
+    final actorNames = <String, String>{};
+    for (final p in participants) {
+      final uid = p['userId'] as String? ?? '';
+      final name = p['displayName'] as String? ?? '???';
+      if (uid.isNotEmpty) actorNames[uid] = name;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('ACTIVITY',
+                style: PixelText.title(size: 16, color: AppColors.textMid)),
+            GestureDetector(
+              onTap: _loadFeed,
+              child: Icon(Icons.refresh,
+                  size: 16, color: AppColors.textMid.withValues(alpha: 0.6)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_feedEvents.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text('No powerup activity yet',
+                style: PixelText.body(
+                    size: 14, color: AppColors.textMid.withValues(alpha: 0.6))),
+          )
+        else
+          for (int i = 0; i < _feedEvents.length && i < 10; i++)
+            FeedBubble(
+              eventType: _feedEvents[i]['eventType'] as String? ?? '',
+              powerupType: _feedEvents[i]['powerupType'] as String?,
+              description: _feedEvents[i]['description'] as String? ?? '',
+              actorName: actorNames[_feedEvents[i]['actorUserId'] as String? ?? ''] ?? '???',
+              relativeTime: _relativeTime(_feedEvents[i]['createdAt'] as String?),
+              actorIsUser: (_feedEvents[i]['actorUserId'] as String?) == _myUserId,
+            ),
+      ],
     );
   }
 
@@ -1261,8 +1226,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         const SizedBox(height: 12),
 
         // Final standings - details
-        RetroCard(
-          padding: const EdgeInsets.all(16),
+        GameContainer(
+          padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1271,7 +1236,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                       PixelText.title(size: 16, color: AppColors.textMid)),
               const SizedBox(height: 10),
               for (int i = 0; i < participants.length; i++)
-                _buildLeaderboardRow(participants[i], i),
+                _buildLeaderboardPlank(participants[i], i),
             ],
           ),
         ),
@@ -1302,19 +1267,22 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     final minutes = safe.inMinutes.remainder(60);
     final seconds = safe.inSeconds.remainder(60);
 
-    return RetroCard(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _CountdownUnit(value: days, label: 'DAYS'),
-          const SizedBox(width: 8),
-          _CountdownUnit(value: hours, label: 'HRS'),
-          const SizedBox(width: 8),
-          _CountdownUnit(value: minutes, label: 'MIN'),
-          const SizedBox(width: 8),
-          _CountdownUnit(value: seconds, label: 'SEC'),
-        ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: GameContainer(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _CountdownUnit(value: days, label: 'DAYS'),
+            const SizedBox(width: 10),
+            _CountdownUnit(value: hours, label: 'HRS'),
+            const SizedBox(width: 10),
+            _CountdownUnit(value: minutes, label: 'MIN'),
+            const SizedBox(width: 10),
+            _CountdownUnit(value: seconds, label: 'SEC'),
+          ],
+        ),
       ),
     );
   }
@@ -1366,72 +1334,33 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     );
   }
 
-  Widget _buildLeaderboardRow(Map<String, dynamic> p, int rank) {
+  Widget _buildLeaderboardPlank(Map<String, dynamic> p, int rank) {
     final name = p['displayName'] as String? ?? '???';
-    final totalSteps = p['totalSteps'] as int?;
+    final totalSteps = p['totalSteps'] as int? ?? 0;
     final userId = p['userId'] as String? ?? '';
     final isMe = userId == _myUserId;
     final isStealthed = p['stealthed'] == true;
 
-    final medals = ['1st', '2nd', '3rd'];
-    final prefix = rank < 3 ? medals[rank] : '${rank + 1}.';
-
-    // Find active effects on this participant
     final activeEffects = (_powerupData?['activeEffects'] as List?)
             ?.cast<Map<String, dynamic>>()
             .where((e) => e['targetUserId'] == userId)
             .toList() ??
         [];
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 45,
-            child: Text(prefix,
-                style: PixelText.title(size: 18, color: AppColors.textMid)),
-          ),
-          Expanded(
-            child: Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    isStealthed ? '???' : (isMe ? '$name (you)' : name),
-                    style: PixelText.body(
-                      size: 18,
-                      color: isStealthed
-                          ? AppColors.textMid.withValues(alpha: 0.5)
-                          : isMe
-                              ? AppColors.accent
-                              : AppColors.textDark,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (activeEffects.isNotEmpty) ...[
-                  const SizedBox(width: 4),
-                  for (final e in activeEffects)
-                    _EffectIconWithTooltip(
-                      type: e['type'] as String? ?? '',
-                    ),
-                ],
-              ],
-            ),
-          ),
-          Text(
-            isStealthed ? '???' : _formatSteps(totalSteps ?? 0),
-            style: PixelText.number(
-              size: 18,
-              color: isStealthed
-                  ? AppColors.textMid.withValues(alpha: 0.5)
-                  : AppColors.textMid,
-            ),
-          ),
-        ],
-      ),
+    return LeaderboardPlank(
+      rank: rank,
+      name: name,
+      steps: totalSteps,
+      formattedSteps: _formatSteps(totalSteps),
+      isUser: isMe,
+      isStealthed: isStealthed,
+      effectIcons: [
+        for (final e in activeEffects)
+          _EffectIconWithTooltip(type: e['type'] as String? ?? ''),
+      ],
     );
   }
+
 
   /// Returns a fake progress value for stealthed runners, jittered ±10%.
   /// Seeded by userId + current minute so it's stable within a minute but
@@ -1465,19 +1394,26 @@ class _CountdownUnit extends StatelessWidget {
     return Column(
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
             color: AppColors.woodDark,
             borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.woodShadow.withValues(alpha: 0.5),
+                offset: const Offset(0, 3),
+                blurRadius: 6,
+              ),
+            ],
           ),
           child: Text(
             value.toString().padLeft(2, '0'),
-            style: PixelText.number(size: 22, color: AppColors.parchment),
+            style: PixelText.number(size: 26, color: AppColors.parchment),
           ),
         ),
         const SizedBox(height: 4),
         Text(label,
-            style: PixelText.title(size: 9, color: AppColors.textMid)),
+            style: PixelText.title(size: 11, color: AppColors.textMid)),
       ],
     );
   }
