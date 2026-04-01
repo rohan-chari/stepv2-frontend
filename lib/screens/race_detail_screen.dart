@@ -850,79 +850,91 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         if (endsAt != null) _buildCountdown(endsAt),
         const SizedBox(height: 12),
 
-        // Race track
-        RetroCard(
-          padding: const EdgeInsets.all(6),
-          child: GoalTrack(
-            height: 300,
-            runners: [
-              for (final p in participants)
-                GoalTrackRunner(
-                  name: p['stealthed'] == true
-                      ? '???'
-                      : (p['displayName'] as String? ?? '???'),
-                  progress: p['stealthed'] == true
-                      ? _jitterProgress(p['userId'] as String? ?? '', targetSteps)
-                      : targetSteps > 0 && p['totalSteps'] != null
-                          ? ((p['totalSteps'] as int) / targetSteps)
-                          : 0.0,
-                  isUser: (p['userId'] as String?) == _myUserId,
-                  isStealthed: p['stealthed'] == true,
+        // Single card for everything
+        GameContainer(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Race track
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: GoalTrack(
+                  height: 300,
+                  runners: [
+                    for (final p in participants)
+                      GoalTrackRunner(
+                        name: p['stealthed'] == true
+                            ? '???'
+                            : (p['displayName'] as String? ?? '???'),
+                        progress: p['stealthed'] == true
+                            ? _jitterProgress(p['userId'] as String? ?? '', targetSteps)
+                            : targetSteps > 0 && p['totalSteps'] != null
+                                ? ((p['totalSteps'] as int) / targetSteps)
+                                : 0.0,
+                        isUser: (p['userId'] as String?) == _myUserId,
+                        isStealthed: p['stealthed'] == true,
+                      ),
+                  ],
                 ),
+              ),
+              const SizedBox(height: 14),
+
+              // Leaderboard header
+              Row(
+                children: [
+                  Text('RACE TO ',
+                      style: PixelText.title(
+                          size: 16, color: AppColors.textMid)),
+                  Text(_formatSteps(targetSteps),
+                      style: PixelText.title(
+                          size: 16, color: AppColors.accent)),
+                  Text(' STEPS',
+                      style: PixelText.title(
+                          size: 16, color: AppColors.textMid)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              for (int i = 0; i < participants.length; i++)
+                _buildLeaderboardPlank(participants[i], i),
+
+              // Divider
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Divider(
+                  color: AppColors.parchmentBorder.withValues(alpha: 0.5),
+                  height: 1,
+                ),
+              ),
+
+              // Powerups
+              if (_powerupData != null &&
+                  _powerupData!['enabled'] == true)
+                _buildInventoryContent()
+              else
+                Row(
+                  children: [
+                    Icon(Icons.block_rounded, size: 18, color: AppColors.textMid.withValues(alpha: 0.5)),
+                    const SizedBox(width: 8),
+                    Text('Powerups are disabled for this race',
+                        style: PixelText.body(size: 14, color: AppColors.textMid)),
+                  ],
+                ),
+
+              // Divider
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Divider(
+                  color: AppColors.parchmentBorder.withValues(alpha: 0.5),
+                  height: 1,
+                ),
+              ),
+
+              // Activity feed
+              _buildFeedSection(),
             ],
           ),
         ),
-        const SizedBox(height: 12),
-
-        // Leaderboard
-        GameContainer(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text('RACE TO ',
-                        style: PixelText.title(
-                            size: 16, color: AppColors.textMid)),
-                    Text(_formatSteps(targetSteps),
-                        style: PixelText.title(
-                            size: 16, color: AppColors.accent)),
-                    Text(' STEPS',
-                        style: PixelText.title(
-                            size: 16, color: AppColors.textMid)),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                for (int i = 0; i < participants.length; i++)
-                  _buildLeaderboardPlank(participants[i], i),
-              ],
-            ),
-          ),
-
-        // Powerup inventory bar
-        if (_powerupData != null &&
-            _powerupData!['enabled'] == true) ...[
-          const SizedBox(height: 12),
-          _buildInventoryBar(),
-        ] else ...[
-          const SizedBox(height: 12),
-          GameContainer(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Icon(Icons.block_rounded, size: 18, color: AppColors.textMid.withValues(alpha: 0.5)),
-                const SizedBox(width: 8),
-                Text('Powerups are disabled for this race',
-                    style: PixelText.body(size: 14, color: AppColors.textMid)),
-              ],
-            ),
-          ),
-        ],
-
-        // Activity feed
-        const SizedBox(height: 12),
-        _buildFeedSection(),
 
         const SizedBox(height: 24),
       ],
@@ -975,17 +987,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     }
   }
 
-  Widget _buildInventoryBar() {
+  Widget _buildInventoryContent() {
     final inventory = (_powerupData?['inventory'] as List?)
             ?.cast<Map<String, dynamic>>() ??
         [];
     final slotCount = (_powerupData?['powerupSlots'] as int?) ?? 3;
 
-    return GameContainer(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -1049,8 +1059,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             }),
           ),
         ],
-      ),
-    );
+      );
   }
 
   String _relativeTime(String? isoTimestamp) {
