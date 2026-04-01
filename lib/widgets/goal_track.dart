@@ -22,16 +22,21 @@ class GoalTrackRunner {
   final String name;
   final double progress;
   final bool isUser;
+  final bool isStealthed;
 
   const GoalTrackRunner({
     required this.name,
     required this.progress,
     this.isUser = false,
+    this.isStealthed = false,
   });
 
   /// Deterministic color based on name hash.
-  Color get color =>
-      isUser ? AppColors.pillGreen : _friendColors[name.hashCode.abs() % _friendColors.length];
+  Color get color => isStealthed
+      ? const Color(0xFF9E9E9E)
+      : isUser
+          ? AppColors.pillGreen
+          : _friendColors[name.hashCode.abs() % _friendColors.length];
 }
 
 class GoalTrack extends StatefulWidget {
@@ -108,11 +113,12 @@ class _GoalTrackState extends State<GoalTrack>
               builder: (context, child) {
                 final t = _animation.value;
                 final painted = widget.runners.map((r) => _PaintedRunner(
-                      name: r.isUser ? 'You' : r.name,
-                      initials: _initials(r.name),
+                      name: r.isStealthed ? '???' : (r.isUser ? 'You' : r.name),
+                      initials: r.isStealthed ? '??' : _initials(r.name),
                       position: r.progress.clamp(0.0, 1.0) * t,
                       rawProgress: r.progress,
                       isUser: r.isUser,
+                      isStealthed: r.isStealthed,
                       color: r.color,
                     )).toList();
                 return Stack(
@@ -143,8 +149,9 @@ class _GoalTrackState extends State<GoalTrack>
   }
 
   Widget _buildTooltip(_RunnerHitTarget target) {
-    final pct = (target.progress * 100).clamp(0, 100).toStringAsFixed(0);
-    final label = '${target.name} \u2022 $pct%';
+    final label = target.isStealthed
+        ? '??? \u2022 ?%'
+        : '${target.name} \u2022 ${(target.progress * 100).clamp(0, 100).toStringAsFixed(0)}%';
 
     return Positioned(
       left: target.center.dx,
@@ -193,7 +200,7 @@ class _GoalTrackState extends State<GoalTrack>
               ),
               const SizedBox(width: 4),
               Text(
-                runner.isUser ? 'You' : runner.name,
+                runner.isStealthed ? '???' : (runner.isUser ? 'You' : runner.name),
                 style: PixelText.body(size: 12, color: AppColors.textMid),
               ),
             ],
@@ -215,6 +222,7 @@ class _PaintedRunner {
   final double position;
   final double rawProgress;
   final bool isUser;
+  final bool isStealthed;
   final Color color;
 
   const _PaintedRunner({
@@ -223,6 +231,7 @@ class _PaintedRunner {
     required this.position,
     required this.rawProgress,
     required this.isUser,
+    this.isStealthed = false,
     required this.color,
   });
 }
@@ -232,12 +241,14 @@ class _RunnerHitTarget {
   final double radius;
   final String name;
   final double progress;
+  final bool isStealthed;
 
   const _RunnerHitTarget({
     required this.center,
     required this.radius,
     required this.name,
     required this.progress,
+    this.isStealthed = false,
   });
 }
 
@@ -485,6 +496,7 @@ class _GoalTrackPainter extends CustomPainter {
         radius: radius + _avatarBorder,
         name: runner.name,
         progress: runner.rawProgress,
+        isStealthed: runner.isStealthed,
       ));
     }
   }

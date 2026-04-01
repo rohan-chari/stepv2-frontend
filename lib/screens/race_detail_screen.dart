@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -52,7 +53,7 @@ const _powerupDescriptions = {
   'PROTEIN_SHAKE': '+1,500 bonus steps instantly',
   'RUNNERS_HIGH': '2x steps for 3 hours',
   'SECOND_WIND': 'Bonus steps based on how far behind you are',
-  'STEALTH_MODE': 'Hide your progress for 4 hours',
+  'STEALTH_MODE': 'Hide your name, steps, and position on the track for 4 hours',
   'WRONG_TURN': 'Reverse a rival\'s steps for 1 hour',
   'FANNY_PACK': 'Unlock an extra powerup slot',
 };
@@ -607,6 +608,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       case 'PENDING':
         return _buildPendingContent();
       case 'ACTIVE':
+        final myStatus = _race!['myStatus'] as String? ?? '';
+        if (myStatus == 'INVITED') {
+          return _buildInvitedToActiveContent();
+        }
         return _buildActiveContent();
       case 'COMPLETED':
         return _buildCompletedContent();
@@ -774,6 +779,55 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     );
   }
 
+  Widget _buildInvitedToActiveContent() {
+    return Column(
+      children: [
+        _buildRaceInfoCard(),
+        const SizedBox(height: 12),
+        RetroCard(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Icon(Icons.directions_run_rounded,
+                  size: 32, color: AppColors.accent),
+              const SizedBox(height: 8),
+              Text(
+                'This race is already underway!',
+                style: PixelText.title(size: 16, color: AppColors.textDark),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Join now and your steps will count from when you accept.',
+                style: PixelText.body(size: 14, color: AppColors.textMid),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        PillButton(
+          label: _isActing ? 'JOINING...' : 'JOIN RACE',
+          variant: PillButtonVariant.primary,
+          fontSize: 14,
+          fullWidth: true,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          onPressed: _isActing ? null : () => _respondToInvite(true),
+        ),
+        const SizedBox(height: 10),
+        PillButton(
+          label: 'DECLINE',
+          variant: PillButtonVariant.accent,
+          fontSize: 13,
+          fullWidth: true,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          onPressed: _isActing ? null : () => _respondToInvite(false),
+        ),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
   Widget _buildActiveContent() {
     final participants = (_progress?['participants'] as List?)
             ?.cast<Map<String, dynamic>>() ??
@@ -801,10 +855,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                   name: p['stealthed'] == true
                       ? '???'
                       : (p['displayName'] as String? ?? '???'),
-                  progress: targetSteps > 0 && p['totalSteps'] != null
-                      ? ((p['totalSteps'] as int) / targetSteps)
-                      : 0.0,
+                  progress: p['stealthed'] == true
+                      ? _jitterProgress(p['userId'] as String? ?? '', targetSteps)
+                      : targetSteps > 0 && p['totalSteps'] != null
+                          ? ((p['totalSteps'] as int) / targetSteps)
+                          : 0.0,
                   isUser: (p['userId'] as String?) == _myUserId,
+                  isStealthed: p['stealthed'] == true,
                 ),
             ],
           ),
@@ -1336,56 +1393,29 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                 style: PixelText.title(size: 18, color: AppColors.textMid)),
           ),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Text(
-                  isStealthed ? '???' : (isMe ? '$name (you)' : name),
-                  style: PixelText.body(
-                    size: 18,
-                    color: isStealthed
-                        ? AppColors.textMid.withValues(alpha: 0.5)
-                        : isMe
-                            ? AppColors.accent
-                            : AppColors.textDark,
+                Flexible(
+                  child: Text(
+                    isStealthed ? '???' : (isMe ? '$name (you)' : name),
+                    style: PixelText.body(
+                      size: 18,
+                      color: isStealthed
+                          ? AppColors.textMid.withValues(alpha: 0.5)
+                          : isMe
+                              ? AppColors.accent
+                              : AppColors.textDark,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (activeEffects.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 3),
-                    child: Wrap(
-                      spacing: 4,
-                      runSpacing: 4,
-                      children: [
-                        for (final e in activeEffects)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: (e['onSelf'] == true ? AppColors.pillGreenDark : AppColors.error).withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(
-                                color: e['onSelf'] == true ? AppColors.pillGreenDark : AppColors.error,
-                                width: 1,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                PowerupIcon(type: e['type'] as String? ?? '', size: 10),
-                                const SizedBox(width: 3),
-                                Text(
-                                  _powerupNames[e['type'] as String? ?? ''] ?? e['type'] as String? ?? '',
-                                  style: PixelText.body(
-                                    size: 10,
-                                    color: e['onSelf'] == true ? AppColors.pillGreenDark : AppColors.error,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
+                if (activeEffects.isNotEmpty) ...[
+                  const SizedBox(width: 4),
+                  for (final e in activeEffects)
+                    _EffectIconWithTooltip(
+                      type: e['type'] as String? ?? '',
                     ),
-                  ),
+                ],
               ],
             ),
           ),
@@ -1401,6 +1431,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         ],
       ),
     );
+  }
+
+  /// Returns a fake progress value for stealthed runners, jittered ±10%.
+  /// Seeded by userId + current minute so it's stable within a minute but
+  /// shifts each poll cycle.
+  static double _jitterProgress(String userId, int targetSteps) {
+    final seed = userId.hashCode ^ (DateTime.now().minute * 7);
+    final rng = math.Random(seed);
+    final jitter = (rng.nextDouble() * 0.20) + 0.05; // 5%–25%
+    return jitter.clamp(0.0, 1.0);
   }
 
   static String _formatSteps(int n) {
@@ -1439,6 +1479,100 @@ class _CountdownUnit extends StatelessWidget {
         Text(label,
             style: PixelText.title(size: 9, color: AppColors.textMid)),
       ],
+    );
+  }
+}
+
+class _EffectIconWithTooltip extends StatefulWidget {
+  final String type;
+  const _EffectIconWithTooltip({required this.type});
+
+  @override
+  State<_EffectIconWithTooltip> createState() => _EffectIconWithTooltipState();
+}
+
+class _EffectIconWithTooltipState extends State<_EffectIconWithTooltip> {
+  OverlayEntry? _entry;
+
+  void _show() {
+    _dismiss();
+    final name = _powerupNames[widget.type] ?? widget.type;
+    final desc = _powerupDescriptions[widget.type] ?? '';
+    if (desc.isEmpty) return;
+
+    final box = context.findRenderObject() as RenderBox;
+    final offset = box.localToGlobal(Offset.zero);
+
+    _entry = OverlayEntry(
+      builder: (ctx) => GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: _dismiss,
+        child: Stack(
+          children: [
+            Positioned(
+              left: offset.dx - 60,
+              top: offset.dy - 68,
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 200),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.woodDark,
+                    borderRadius: BorderRadius.circular(6),
+                    boxShadow: const [
+                      BoxShadow(color: Colors.black38, blurRadius: 6, offset: Offset(0, 2)),
+                    ],
+                  ),
+                  child: Text(
+                    '$name: $desc',
+                    style: PixelText.body(size: 11, color: AppColors.parchment),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    Overlay.of(context).insert(_entry!);
+    Future.delayed(const Duration(seconds: 3), _dismiss);
+  }
+
+  void _dismiss() {
+    _entry?.remove();
+    _entry = null;
+  }
+
+  @override
+  void dispose() {
+    _dismiss();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 3),
+      child: GestureDetector(
+        onTap: _show,
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.woodDark,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: AppColors.woodShadow, width: 0.5),
+          ),
+          padding: const EdgeInsets.all(1.5),
+          child: Container(
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: AppColors.parchment,
+              borderRadius: BorderRadius.circular(4.5),
+            ),
+            child: PowerupIcon(type: widget.type, size: 18),
+          ),
+        ),
+      ),
     );
   }
 }
