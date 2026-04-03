@@ -15,6 +15,7 @@ const _powerupNames = {
   'STEALTH_MODE': 'Stealth Mode',
   'WRONG_TURN': 'Wrong Turn',
   'FANNY_PACK': 'Fanny Pack',
+  'TRAIL_MIX': 'Trail Mix',
 };
 
 const _powerupEntries = [
@@ -28,6 +29,7 @@ const _powerupEntries = [
   (type: 'STEALTH_MODE', name: 'Stealth Mode', description: 'Hide your progress for 4 hours'),
   (type: 'WRONG_TURN', name: 'Wrong Turn', description: 'Reverse a rival\'s steps for 1 hour'),
   (type: 'FANNY_PACK', name: 'Fanny Pack', description: 'Unlock an extra powerup slot'),
+  (type: 'TRAIL_MIX', name: 'Trail Mix', description: '+500 steps per unique powerup type used'),
 ];
 
 /// Full-screen overlay for opening a mystery box with CSGO-style animation.

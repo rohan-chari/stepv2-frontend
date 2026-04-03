@@ -13,6 +13,7 @@ const _powerupDisplayNames = {
   'STEALTH_MODE': 'Stealth Mode',
   'WRONG_TURN': 'Wrong Turn',
   'FANNY_PACK': 'Fanny Pack',
+  'TRAIL_MIX': 'Trail Mix',
   'BANANA_PEEL': 'Banana Peel',
 };
 
@@ -34,6 +35,7 @@ const _boostTypes = {
   'STEALTH_MODE',
   'FANNY_PACK',
   'SHORTCUT',
+  'TRAIL_MIX',
 };
 
 /// A feed entry with avatar, color-coded accent, and rich text.

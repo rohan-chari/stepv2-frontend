@@ -47,6 +47,8 @@ class _PowerupPainter extends CustomPainter {
         _paintWrongTurn(canvas, size);
       case 'FANNY_PACK':
         _paintFannyPack(canvas, size);
+      case 'TRAIL_MIX':
+        _paintTrailMix(canvas, size);
     }
   }
 
@@ -300,6 +302,69 @@ class _PowerupPainter extends CustomPainter {
       Offset(size.width * 0.5, size.height * 0.45),
       size.width * 0.06,
       Paint()..color = const Color(0xFFE8C850),
+    );
+  }
+
+  // Trail Mix — small bag with mixed dots (nuts, raisins, etc.)
+  void _paintTrailMix(Canvas canvas, Size size) {
+    final paint = Paint()..color = const Color(0xFF8B6914);
+
+    // Bag body
+    final bag = Path()
+      ..moveTo(size.width * 0.2, size.height * 0.35)
+      ..lineTo(size.width * 0.25, size.height * 0.85)
+      ..quadraticBezierTo(size.width * 0.5, size.height * 0.9, size.width * 0.75, size.height * 0.85)
+      ..lineTo(size.width * 0.8, size.height * 0.35)
+      ..close();
+    canvas.drawPath(bag, paint);
+
+    // Bag opening (crinkled top)
+    final top = Paint()..color = const Color(0xFFA0782C);
+    final topPath = Path()
+      ..moveTo(size.width * 0.15, size.height * 0.35)
+      ..lineTo(size.width * 0.3, size.height * 0.25)
+      ..lineTo(size.width * 0.5, size.height * 0.32)
+      ..lineTo(size.width * 0.7, size.height * 0.25)
+      ..lineTo(size.width * 0.85, size.height * 0.35)
+      ..lineTo(size.width * 0.8, size.height * 0.35)
+      ..lineTo(size.width * 0.2, size.height * 0.35)
+      ..close();
+    canvas.drawPath(topPath, top);
+
+    // Mix dots — nuts (tan)
+    canvas.drawCircle(
+      Offset(size.width * 0.38, size.height * 0.52),
+      size.width * 0.06,
+      Paint()..color = const Color(0xFFDEB887),
+    );
+    canvas.drawCircle(
+      Offset(size.width * 0.62, size.height * 0.65),
+      size.width * 0.055,
+      Paint()..color = const Color(0xFFDEB887),
+    );
+
+    // Mix dots — raisins (dark purple)
+    canvas.drawCircle(
+      Offset(size.width * 0.52, size.height * 0.55),
+      size.width * 0.05,
+      Paint()..color = const Color(0xFF4A0E4E),
+    );
+    canvas.drawCircle(
+      Offset(size.width * 0.4, size.height * 0.7),
+      size.width * 0.045,
+      Paint()..color = const Color(0xFF4A0E4E),
+    );
+
+    // Mix dots — chocolate (brown)
+    canvas.drawCircle(
+      Offset(size.width * 0.58, size.height * 0.48),
+      size.width * 0.04,
+      Paint()..color = const Color(0xFF5C3317),
+    );
+    canvas.drawCircle(
+      Offset(size.width * 0.48, size.height * 0.72),
+      size.width * 0.05,
+      Paint()..color = const Color(0xFF5C3317),
     );
   }
 }

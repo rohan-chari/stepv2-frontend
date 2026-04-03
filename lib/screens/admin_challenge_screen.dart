@@ -22,6 +22,7 @@ const _powerupEntries = [
   (type: 'STEALTH_MODE', name: 'Stealth Mode', description: 'Hide your progress for 4 hours'),
   (type: 'WRONG_TURN', name: 'Wrong Turn', description: 'Reverse a rival\'s steps for 1 hour'),
   (type: 'FANNY_PACK', name: 'Fanny Pack', description: 'Unlock an extra powerup slot'),
+  (type: 'TRAIL_MIX', name: 'Trail Mix', description: '+500 steps per unique powerup type used'),
 ];
 
 class AdminChallengeScreen extends StatefulWidget {

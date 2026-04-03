@@ -21,6 +21,7 @@ const _powerupNames = {
   'STEALTH_MODE': 'Stealth',
   'WRONG_TURN': 'Wrong Turn',
   'FANNY_PACK': 'Fanny Pack',
+  'TRAIL_MIX': 'Trail Mix',
 };
 
 enum ItemSlotState { empty, held, mysteryBox }

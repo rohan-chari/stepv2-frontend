@@ -11,6 +11,7 @@ import '../widgets/goal_track.dart';
 import '../widgets/info_toast.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/retro_card.dart';
+import '../widgets/trail_sign.dart';
 import '../widgets/powerup_icon.dart';
 import '../widgets/spinning_crate.dart';
 import '../widgets/game_container.dart';
@@ -47,6 +48,7 @@ const _powerupNames = {
   'STEALTH_MODE': 'Stealth Mode',
   'WRONG_TURN': 'Wrong Turn',
   'FANNY_PACK': 'Fanny Pack',
+  'TRAIL_MIX': 'Trail Mix',
 };
 
 const _powerupDescriptions = {
@@ -60,6 +62,7 @@ const _powerupDescriptions = {
   'STEALTH_MODE': 'Hide your name, steps, and position on the track for 4 hours',
   'WRONG_TURN': 'Reverse a rival\'s steps for 1 hour',
   'FANNY_PACK': 'Unlock an extra powerup slot',
+  'TRAIL_MIX': '+500 steps per unique powerup type used',
 };
 
 const _targetedPowerups = ['LEG_CRAMP', 'SHORTCUT', 'WRONG_TURN'];
@@ -233,6 +236,66 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     } finally {
       if (mounted) setState(() => _isActing = false);
     }
+  }
+
+  void _showCancelConfirmation() {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: TrailSign(
+          width: 300,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'CANCEL RACE',
+                style: PixelText.title(size: 18, color: AppColors.textDark),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'This cannot be undone. Are you sure you want to cancel this race?',
+                style: PixelText.body(size: 14, color: AppColors.textMid),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: PillButton(
+                      label: 'GO BACK',
+                      variant: PillButtonVariant.secondary,
+                      fontSize: 13,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: PillButton(
+                      label: 'CONFIRM',
+                      variant: PillButtonVariant.accent,
+                      fontSize: 13,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        _cancelRace();
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _cancelRace() async {
@@ -1118,7 +1181,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                   ? null
                   : () {
                       Navigator.of(context).pop();
-                      _cancelRace();
+                      _showCancelConfirmation();
                     },
             ),
           ],
