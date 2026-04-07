@@ -49,6 +49,7 @@ const _powerupNames = {
   'WRONG_TURN': 'Wrong Turn',
   'FANNY_PACK': 'Fanny Pack',
   'TRAIL_MIX': 'Trail Mix',
+  'DETOUR_SIGN': 'Detour Sign',
 };
 
 const _powerupDescriptions = {
@@ -59,13 +60,20 @@ const _powerupDescriptions = {
   'PROTEIN_SHAKE': '+1,500 bonus steps instantly',
   'RUNNERS_HIGH': '2x steps for 3 hours',
   'SECOND_WIND': 'Bonus steps based on how far behind you are',
-  'STEALTH_MODE': 'Hide your name, steps, and position on the track for 4 hours',
+  'STEALTH_MODE':
+      'Hide your name, steps, and position on the track for 4 hours',
   'WRONG_TURN': 'Reverse a rival\'s steps for 1 hour',
   'FANNY_PACK': 'Unlock an extra powerup slot',
   'TRAIL_MIX': '+500 steps per unique powerup type used',
+  'DETOUR_SIGN': 'Hide the entire leaderboard from a rival for 3 hours',
 };
 
-const _targetedPowerups = ['LEG_CRAMP', 'SHORTCUT', 'WRONG_TURN'];
+const _targetedPowerups = [
+  'LEG_CRAMP',
+  'SHORTCUT',
+  'WRONG_TURN',
+  'DETOUR_SIGN',
+];
 
 const _rarityColors = {
   'COMMON': Color(0xFF8B8B8B),
@@ -163,10 +171,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         if (newBoxes.length == 1) {
           showInfoToast(context, 'You earned a mystery box!');
         } else if (newBoxes.length > 1) {
-          showInfoToast(context, 'You earned ${newBoxes.length} mystery boxes!');
+          showInfoToast(
+            context,
+            'You earned ${newBoxes.length} mystery boxes!',
+          );
         }
         if (newQueued > 0) {
-          showInfoToast(context, '$newQueued mystery box${newQueued > 1 ? 'es' : ''} queued \u2014 inventory full');
+          showInfoToast(
+            context,
+            '$newQueued mystery box${newQueued > 1 ? 'es' : ''} queued \u2014 inventory full',
+          );
         }
       }
 
@@ -321,8 +335,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
     final participants =
         (_race?['participants'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final existingIds =
-        participants.map((p) => p['userId'] as String).toSet();
+    final existingIds = participants.map((p) => p['userId'] as String).toSet();
 
     final selectedIds = await Navigator.of(context).push<List<String>>(
       MaterialPageRoute(
@@ -363,13 +376,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     // For targeted powerups, show target picker
     String? targetUserId;
     if (_targetedPowerups.contains(type)) {
-      final participants = (_progress?['participants'] as List?)
-              ?.cast<Map<String, dynamic>>() ??
+      final participants =
+          (_progress?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
           [];
       final targets = participants
-          .where((p) =>
-              (p['userId'] as String?) != _myUserId &&
-              (p['stealthed'] != true))
+          .where(
+            (p) =>
+                (p['userId'] as String?) != _myUserId &&
+                (p['stealthed'] != true),
+          )
           .toList();
 
       if (targets.isEmpty) {
@@ -434,7 +449,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   }
 
   Future<String?> _showTargetPicker(
-      List<Map<String, dynamic>> targets, String powerupType) async {
+    List<Map<String, dynamic>> targets,
+    String powerupType,
+  ) async {
     return showModalBottomSheet<String>(
       context: context,
       backgroundColor: AppColors.parchment,
@@ -449,19 +466,21 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('TARGET FOR ${_powerupNames[powerupType]?.toUpperCase()}',
-                    style:
-                        PixelText.title(size: 16, color: AppColors.textMid)),
+                Text(
+                  'TARGET FOR ${_powerupNames[powerupType]?.toUpperCase()}',
+                  style: PixelText.title(size: 16, color: AppColors.textMid),
+                ),
                 const SizedBox(height: 12),
                 for (final t in targets)
                   GestureDetector(
-                    onTap: () =>
-                        Navigator.of(ctx).pop(t['userId'] as String?),
+                    onTap: () => Navigator.of(ctx).pop(t['userId'] as String?),
                     child: Container(
                       width: double.infinity,
                       margin: const EdgeInsets.only(bottom: 8),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                       decoration: BoxDecoration(
                         color: AppColors.parchmentDark,
                         borderRadius: BorderRadius.circular(8),
@@ -472,14 +491,18 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                             child: Text(
                               t['displayName'] as String? ?? '???',
                               style: PixelText.body(
-                                  size: 14, color: AppColors.textDark),
+                                size: 14,
+                                color: AppColors.textDark,
+                              ),
                             ),
                           ),
                           if (t['totalSteps'] != null)
                             Text(
                               '${_formatSteps(t['totalSteps'] as int)} steps',
                               style: PixelText.number(
-                                  size: 12, color: AppColors.textMid),
+                                size: 12,
+                                color: AppColors.textMid,
+                              ),
                             ),
                         ],
                       ),
@@ -492,7 +515,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       },
     );
   }
-
 
   void _showPowerupActions(Map<String, dynamic> powerup) {
     final type = powerup['type'] as String;
@@ -512,21 +534,26 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    PowerupIcon(type: type, size: 22),
+                    PowerupIcon(type: type, size: 22, spinning: true),
                     const SizedBox(width: 6),
                     Text(
                       _powerupNames[type] ?? type,
-                      style: PixelText.title(size: 18, color: AppColors.textDark),
+                      style: PixelText.title(
+                        size: 18,
+                        color: AppColors.textDark,
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 4),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
-                    color: _rarityColors[powerup['rarity']] ??
-                        AppColors.textMid,
+                    color:
+                        _rarityColors[powerup['rarity']] ?? AppColors.textMid,
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
@@ -547,7 +574,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                   fontSize: 14,
                   fullWidth: true,
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 24, vertical: 12),
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
                   onPressed: _isActing
                       ? null
                       : () {
@@ -562,7 +591,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                   fontSize: 13,
                   fullWidth: true,
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 24, vertical: 10),
+                    horizontal: 24,
+                    vertical: 10,
+                  ),
                   onPressed: _isActing
                       ? null
                       : () {
@@ -590,9 +621,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
       if (!mounted) return;
       setState(() {
-        _feedEvents = (result['events'] as List?)
-                ?.cast<Map<String, dynamic>>() ??
-            [];
+        _feedEvents =
+            (result['events'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       });
     } catch (_) {}
   }
@@ -614,8 +644,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             children: [
               // Header (fixed, does not scroll)
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFF87CEEB),
                   boxShadow: [
@@ -632,8 +664,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                       onTap: () => Navigator.of(context).pop(true),
                       child: const Padding(
                         padding: EdgeInsets.all(8),
-                        child: Icon(Icons.arrow_back,
-                            color: AppColors.textDark, size: 24),
+                        child: Icon(
+                          Icons.arrow_back,
+                          color: AppColors.textDark,
+                          size: 24,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -641,8 +676,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                       child: Text(
                         _race?['name'] as String? ?? 'Race',
                         style: PixelText.title(
-                                size: 22, color: AppColors.textDark)
-                            .copyWith(shadows: _textShadows),
+                          size: 22,
+                          color: AppColors.textDark,
+                        ).copyWith(shadows: _textShadows),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -654,8 +690,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                         onTap: _showRaceOptionsSheet,
                         child: const Padding(
                           padding: EdgeInsets.all(8),
-                          child: Icon(Icons.more_horiz,
-                              color: AppColors.textDark, size: 24),
+                          child: Icon(
+                            Icons.more_horiz,
+                            color: AppColors.textDark,
+                            size: 24,
+                          ),
                         ),
                       ),
                   ],
@@ -666,22 +705,22 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                 child: _isLoading
                     ? const Center(
                         child: CircularProgressIndicator(
-                            color: AppColors.accent))
+                          color: AppColors.accent,
+                        ),
+                      )
                     : _race == null
-                        ? const Center(child: Text('Failed to load race'))
-                        : RefreshIndicator(
-                            onRefresh: _loadDetails,
-                            color: AppColors.accent,
-                            backgroundColor: AppColors.parchment,
-                            child: SingleChildScrollView(
-                              clipBehavior: Clip.none,
-                              physics:
-                                  const AlwaysScrollableScrollPhysics(),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16),
-                              child: _buildContent(),
-                            ),
-                          ),
+                    ? const Center(child: Text('Failed to load race'))
+                    : RefreshIndicator(
+                        onRefresh: _loadDetails,
+                        color: AppColors.accent,
+                        backgroundColor: AppColors.parchment,
+                        child: SingleChildScrollView(
+                          clipBehavior: Clip.none,
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: _buildContent(),
+                        ),
+                      ),
               ),
             ],
           ),
@@ -723,35 +762,40 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text('TARGET',
-                    style: PixelText.title(
-                        size: 11, color: AppColors.textMid)),
+                Text(
+                  'TARGET',
+                  style: PixelText.title(size: 11, color: AppColors.textMid),
+                ),
                 const SizedBox(height: 4),
-                Text(_formatSteps(targetSteps),
-                    style: PixelText.number(
-                        size: 22, color: AppColors.accent)),
-                Text('steps',
-                    style: PixelText.body(
-                        size: 11, color: AppColors.textMid)),
+                Text(
+                  _formatSteps(targetSteps),
+                  style: PixelText.number(size: 22, color: AppColors.accent),
+                ),
+                Text(
+                  'steps',
+                  style: PixelText.body(size: 11, color: AppColors.textMid),
+                ),
               ],
             ),
           ),
-          Container(
-              width: 1, height: 40, color: AppColors.parchmentBorder),
+          Container(width: 1, height: 40, color: AppColors.parchmentBorder),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text('DURATION',
-                    style: PixelText.title(
-                        size: 11, color: AppColors.textMid)),
+                Text(
+                  'DURATION',
+                  style: PixelText.title(size: 11, color: AppColors.textMid),
+                ),
                 const SizedBox(height: 4),
-                Text('$maxDays',
-                    style: PixelText.number(
-                        size: 22, color: AppColors.textDark)),
-                Text('days',
-                    style: PixelText.body(
-                        size: 11, color: AppColors.textMid)),
+                Text(
+                  '$maxDays',
+                  style: PixelText.number(size: 22, color: AppColors.textDark),
+                ),
+                Text(
+                  'days',
+                  style: PixelText.body(size: 11, color: AppColors.textMid),
+                ),
               ],
             ),
           ),
@@ -765,8 +809,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     final myStatus = _race!['myStatus'] as String? ?? '';
     final participants =
         (_race!['participants'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final acceptedCount =
-        participants.where((p) => p['status'] == 'ACCEPTED').length;
+    final acceptedCount = participants
+        .where((p) => p['status'] == 'ACCEPTED')
+        .length;
 
     return Column(
       children: [
@@ -779,9 +824,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('PARTICIPANTS ($acceptedCount)',
-                  style:
-                      PixelText.title(size: 16, color: AppColors.textMid)),
+              Text(
+                'PARTICIPANTS ($acceptedCount)',
+                style: PixelText.title(size: 16, color: AppColors.textMid),
+              ),
               const SizedBox(height: 10),
               for (final p in participants) _buildParticipantRow(p),
             ],
@@ -829,20 +875,23 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
           SizedBox(
             width: double.infinity,
             child: RetroCard(
-            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-            child: Column(
-              children: [
-                Icon(Icons.hourglass_top_rounded,
-                    size: 32, color: AppColors.textMid.withValues(alpha: 0.6)),
-                const SizedBox(height: 8),
-                Text(
-                  'Waiting for the creator to start the race',
-                  style: PixelText.body(size: 14, color: AppColors.textMid),
-                  textAlign: TextAlign.center,
-                ),
-              ],
+              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.hourglass_top_rounded,
+                    size: 32,
+                    color: AppColors.textMid.withValues(alpha: 0.6),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Waiting for the creator to start the race',
+                    style: PixelText.body(size: 14, color: AppColors.textMid),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
             ),
-          ),
           ),
         ],
         const SizedBox(height: 24),
@@ -859,8 +908,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
           padding: const EdgeInsets.all(16),
           child: Column(
             children: [
-              Icon(Icons.directions_run_rounded,
-                  size: 32, color: AppColors.accent),
+              Icon(
+                Icons.directions_run_rounded,
+                size: 32,
+                color: AppColors.accent,
+              ),
               const SizedBox(height: 8),
               Text(
                 'This race is already underway!',
@@ -900,13 +952,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   }
 
   Widget _buildActiveContent() {
-    final participants = (_progress?['participants'] as List?)
-            ?.cast<Map<String, dynamic>>() ??
+    final participants =
+        (_progress?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
         [];
     final targetSteps = _race!['targetSteps'] as int? ?? 0;
     final endsAtRaw = _race!['endsAt'] as String?;
-    final endsAt =
-        endsAtRaw != null ? DateTime.tryParse(endsAtRaw)?.toLocal() : null;
+    final endsAt = endsAtRaw != null
+        ? DateTime.tryParse(endsAtRaw)?.toLocal()
+        : null;
     return Column(
       children: [
         // Countdown
@@ -931,10 +984,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                             ? '???'
                             : (p['displayName'] as String? ?? '???'),
                         progress: p['stealthed'] == true
-                            ? _jitterProgress(p['userId'] as String? ?? '', targetSteps)
+                            ? _jitterProgress(
+                                p['userId'] as String? ?? '',
+                                targetSteps,
+                              )
                             : targetSteps > 0 && p['totalSteps'] != null
-                                ? ((p['totalSteps'] as int) / targetSteps)
-                                : 0.0,
+                            ? ((p['totalSteps'] as int) / targetSteps)
+                            : 0.0,
                         isUser: (p['userId'] as String?) == _myUserId,
                         isStealthed: p['stealthed'] == true,
                       ),
@@ -946,15 +1002,18 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               // Leaderboard header
               Row(
                 children: [
-                  Text('RACE TO ',
-                      style: PixelText.title(
-                          size: 16, color: AppColors.textMid)),
-                  Text(_formatSteps(targetSteps),
-                      style: PixelText.title(
-                          size: 16, color: AppColors.accent)),
-                  Text(' STEPS',
-                      style: PixelText.title(
-                          size: 16, color: AppColors.textMid)),
+                  Text(
+                    'RACE TO ',
+                    style: PixelText.title(size: 18, color: AppColors.textMid),
+                  ),
+                  Text(
+                    _formatSteps(targetSteps),
+                    style: PixelText.title(size: 18, color: AppColors.accent),
+                  ),
+                  Text(
+                    ' STEPS',
+                    style: PixelText.title(size: 18, color: AppColors.textMid),
+                  ),
                 ],
               ),
               const SizedBox(height: 10),
@@ -971,16 +1030,21 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               ),
 
               // Powerups
-              if (_powerupData != null &&
-                  _powerupData!['enabled'] == true)
+              if (_powerupData != null && _powerupData!['enabled'] == true)
                 _buildInventoryContent()
               else
                 Row(
                   children: [
-                    Icon(Icons.block_rounded, size: 18, color: AppColors.textMid.withValues(alpha: 0.5)),
+                    Icon(
+                      Icons.block_rounded,
+                      size: 18,
+                      color: AppColors.textMid.withValues(alpha: 0.5),
+                    ),
                     const SizedBox(width: 8),
-                    Text('Powerups are disabled for this race',
-                        style: PixelText.body(size: 14, color: AppColors.textMid)),
+                    Text(
+                      'Powerups are disabled for this race',
+                      style: PixelText.body(size: 14, color: AppColors.textMid),
+                    ),
                   ],
                 ),
 
@@ -992,6 +1056,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                   height: 1,
                 ),
               ),
+
+              // Active effects on current user
+              _buildActiveEffectsSection(),
 
               // Activity feed
               _buildFeedSection(),
@@ -1029,12 +1096,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       await Navigator.of(context).push(
         PageRouteBuilder(
           opaque: false,
-          pageBuilder: (_, __, ___) => CaseOpeningScreen(
+          pageBuilder: (_, _, _) => CaseOpeningScreen(
             resultType: type,
             resultRarity: rarity,
             autoActivated: autoActivated,
           ),
-          transitionsBuilder: (_, anim, __, child) =>
+          transitionsBuilder: (_, anim, _, child) =>
               FadeTransition(opacity: anim, child: child),
           transitionDuration: const Duration(milliseconds: 300),
         ),
@@ -1050,79 +1117,196 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     }
   }
 
+  Widget _buildActiveEffectsSection() {
+    final effects =
+        (_powerupData?['activeEffects'] as List?)
+            ?.cast<Map<String, dynamic>>()
+            .where(
+              (e) =>
+                  e['onSelf'] == true ||
+                  e['targetUserId'] == widget.authService.userId,
+            )
+            .toList() ??
+        [];
+
+    if (effects.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            'ACTIVE EFFECTS',
+            style: PixelText.title(size: 14, color: AppColors.textMid),
+          ),
+        ),
+        ...effects.map((e) {
+          final type = e['type'] as String?;
+          final name = _powerupNames[type] ?? type ?? 'Unknown';
+          final desc = _powerupDescriptions[type] ?? '';
+          final expiresAtStr = e['expiresAt'] as String?;
+
+          String timeLabel;
+          if (expiresAtStr != null) {
+            final expiresAt = DateTime.parse(expiresAtStr);
+            final remaining = expiresAt.difference(_countdownNow);
+            if (remaining.isNegative) {
+              timeLabel = 'Expiring...';
+            } else if (remaining.inHours > 0) {
+              timeLabel = '${remaining.inHours}h ${remaining.inMinutes % 60}m';
+            } else if (remaining.inMinutes > 0) {
+              timeLabel =
+                  '${remaining.inMinutes}m ${remaining.inSeconds % 60}s';
+            } else {
+              timeLabel = '${remaining.inSeconds}s';
+            }
+          } else {
+            timeLabel = 'Until used';
+          }
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              children: [
+                PowerupIcon(type: type ?? '', size: 22, spinning: true),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: PixelText.title(
+                          size: 13,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      Text(
+                        desc,
+                        style: PixelText.body(
+                          size: 11,
+                          color: AppColors.textMid,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.woodDark,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    timeLabel,
+                    style: PixelText.title(
+                      size: 11,
+                      color: AppColors.parchment,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Divider(
+            color: AppColors.parchmentBorder.withValues(alpha: 0.5),
+            height: 1,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildInventoryContent() {
-    final inventory = (_powerupData?['inventory'] as List?)
-            ?.cast<Map<String, dynamic>>() ??
+    final inventory =
+        (_powerupData?['inventory'] as List?)?.cast<Map<String, dynamic>>() ??
         [];
     final slotCount = (_powerupData?['powerupSlots'] as int?) ?? 3;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('POWERUPS',
-                  style: PixelText.title(size: 14, color: AppColors.textMid)),
-              if (_queuedBoxCount > 0)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.coinLight.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const SizedBox(
-                        width: 18,
-                        height: 20,
-                        child: SpinningCrate(size: 16),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '$_queuedBoxCount queued',
-                        style: PixelText.body(size: 11, color: AppColors.coinDark),
-                      ),
-                    ],
-                  ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'POWERUPS',
+              style: PixelText.title(size: 18, color: AppColors.textMid),
+            ),
+            if (_queuedBoxCount > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.coinLight.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: List.generate(slotCount, (i) {
-              final isExtraSlot = i >= 3;
-              if (i < inventory.length) {
-                final pw = inventory[i];
-                final status = pw['status'] as String? ?? 'HELD';
-                final isMysteryBox = status == 'MYSTERY_BOX';
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(
+                      width: 18,
+                      height: 20,
+                      child: SpinningCrate(size: 16),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '$_queuedBoxCount queued',
+                      style: PixelText.body(
+                        size: 11,
+                        color: AppColors.coinDark,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: List.generate(slotCount, (i) {
+            final isExtraSlot = i >= 3;
+            if (i < inventory.length) {
+              final pw = inventory[i];
+              final status = pw['status'] as String? ?? 'HELD';
+              final isMysteryBox = status == 'MYSTERY_BOX';
 
-                if (isMysteryBox) {
-                  return ItemSlot(
-                    state: ItemSlotState.mysteryBox,
-                    isExtraSlot: isExtraSlot,
-                    onTap: _isActing ? null : () => _openMysteryBox(pw['id'] as String),
-                  );
-                }
-
+              if (isMysteryBox) {
                 return ItemSlot(
-                  state: ItemSlotState.held,
-                  powerupType: pw['type'] as String? ?? '',
-                  rarity: pw['rarity'] as String?,
+                  state: ItemSlotState.mysteryBox,
                   isExtraSlot: isExtraSlot,
-                  onTap: _isActing ? null : () => _showPowerupActions(pw),
-                );
-              } else {
-                return ItemSlot(
-                  state: ItemSlotState.empty,
-                  isExtraSlot: isExtraSlot,
+                  onTap: _isActing
+                      ? null
+                      : () => _openMysteryBox(pw['id'] as String),
                 );
               }
-            }),
-          ),
-        ],
-      );
+
+              return ItemSlot(
+                state: ItemSlotState.held,
+                powerupType: pw['type'] as String? ?? '',
+                rarity: pw['rarity'] as String?,
+                isExtraSlot: isExtraSlot,
+                onTap: _isActing ? null : () => _showPowerupActions(pw),
+              );
+            } else {
+              return ItemSlot(
+                state: ItemSlotState.empty,
+                isExtraSlot: isExtraSlot,
+              );
+            }
+          }),
+        ),
+      ],
+    );
   }
 
   String _relativeTime(String? isoTimestamp) {
@@ -1160,8 +1344,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               variant: PillButtonVariant.secondary,
               fontSize: 13,
               fullWidth: true,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               onPressed: _isActing
                   ? null
                   : () {
@@ -1175,8 +1358,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               variant: PillButtonVariant.accent,
               fontSize: 13,
               fullWidth: true,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               onPressed: _isActing
                   ? null
                   : () {
@@ -1192,8 +1374,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
   Widget _buildFeedSection() {
     // Build actor name lookup from participants
-    final participants = (_progress?['participants'] as List?)
-            ?.cast<Map<String, dynamic>>() ??
+    final participants =
+        (_progress?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
         [];
     final actorNames = <String, String>{};
     for (final p in participants) {
@@ -1208,12 +1390,17 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('ACTIVITY',
-                style: PixelText.title(size: 16, color: AppColors.textMid)),
+            Text(
+              'ACTIVITY',
+              style: PixelText.title(size: 18, color: AppColors.textMid),
+            ),
             GestureDetector(
               onTap: _loadFeed,
-              child: Icon(Icons.refresh,
-                  size: 16, color: AppColors.textMid.withValues(alpha: 0.6)),
+              child: Icon(
+                Icons.refresh,
+                size: 16,
+                color: AppColors.textMid.withValues(alpha: 0.6),
+              ),
             ),
           ],
         ),
@@ -1221,9 +1408,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         if (_feedEvents.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text('No powerup activity yet',
-                style: PixelText.body(
-                    size: 14, color: AppColors.textMid.withValues(alpha: 0.6))),
+            child: Text(
+              'No powerup activity yet',
+              style: PixelText.body(
+                size: 16,
+                color: AppColors.textMid.withValues(alpha: 0.6),
+              ),
+            ),
           )
         else
           for (int i = 0; i < _feedEvents.length && i < 10; i++)
@@ -1231,9 +1422,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               eventType: _feedEvents[i]['eventType'] as String? ?? '',
               powerupType: _feedEvents[i]['powerupType'] as String?,
               description: _feedEvents[i]['description'] as String? ?? '',
-              actorName: actorNames[_feedEvents[i]['actorUserId'] as String? ?? ''] ?? '???',
-              relativeTime: _relativeTime(_feedEvents[i]['createdAt'] as String?),
-              actorIsUser: (_feedEvents[i]['actorUserId'] as String?) == _myUserId,
+              actorName:
+                  actorNames[_feedEvents[i]['actorUserId'] as String? ?? ''] ??
+                  '???',
+              relativeTime: _relativeTime(
+                _feedEvents[i]['createdAt'] as String?,
+              ),
+              actorIsUser:
+                  (_feedEvents[i]['actorUserId'] as String?) == _myUserId,
             ),
       ],
     );
@@ -1241,8 +1437,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
   Widget _buildCompletedContent() {
     final winner = _race!['winner'] as Map<String, dynamic>?;
-    final participants = (_progress?['participants'] as List?)
-            ?.cast<Map<String, dynamic>>() ??
+    final participants =
+        (_progress?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
         (_race!['participants'] as List?)?.cast<Map<String, dynamic>>() ??
         [];
     final targetSteps = _race!['targetSteps'] as int? ?? 0;
@@ -1254,9 +1450,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
           padding: const EdgeInsets.all(20),
           child: Column(
             children: [
-              Text('RACE COMPLETE',
-                  style:
-                      PixelText.title(size: 16, color: AppColors.textMid)),
+              Text(
+                'RACE COMPLETE',
+                style: PixelText.title(size: 16, color: AppColors.textMid),
+              ),
               const SizedBox(height: 8),
               if (winner != null) ...[
                 Icon(Icons.emoji_events, size: 40, color: AppColors.coinMid),
@@ -1264,15 +1461,19 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                 Text(
                   winner['displayName'] as String? ?? 'Unknown',
                   style: PixelText.title(
-                      size: 22, color: AppColors.pillGreenDark),
+                    size: 22,
+                    color: AppColors.pillGreenDark,
+                  ),
                 ),
-                Text('WINNER',
-                    style: PixelText.title(
-                        size: 16, color: AppColors.textMid)),
+                Text(
+                  'WINNER',
+                  style: PixelText.title(size: 16, color: AppColors.textMid),
+                ),
               ] else
-                Text('No winner',
-                    style: PixelText.title(
-                        size: 18, color: AppColors.textMid)),
+                Text(
+                  'No winner',
+                  style: PixelText.title(size: 18, color: AppColors.textMid),
+                ),
             ],
           ),
         ),
@@ -1303,9 +1504,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('FINAL STANDINGS',
-                  style:
-                      PixelText.title(size: 16, color: AppColors.textMid)),
+              Text(
+                'FINAL STANDINGS',
+                style: PixelText.title(size: 16, color: AppColors.textMid),
+              ),
               const SizedBox(height: 10),
               for (int i = 0; i < participants.length; i++)
                 _buildLeaderboardPlank(participants[i], i),
@@ -1321,11 +1523,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     return Column(
       children: [
         const SizedBox(height: 48),
-        Icon(Icons.cancel_outlined,
-            size: 48, color: AppColors.textMid.withValues(alpha: 0.6)),
+        Icon(
+          Icons.cancel_outlined,
+          size: 48,
+          color: AppColors.textMid.withValues(alpha: 0.6),
+        ),
         const SizedBox(height: 12),
-        Text('This race was cancelled',
-            style: PixelText.title(size: 18, color: AppColors.textMid)),
+        Text(
+          'This race was cancelled',
+          style: PixelText.title(size: 18, color: AppColors.textMid),
+        ),
         const SizedBox(height: 24),
       ],
     );
@@ -1398,8 +1605,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               color: badgeColor,
               borderRadius: BorderRadius.circular(4),
             ),
-            child: Text(badgeText,
-                style: PixelText.title(size: 12, color: Colors.white)),
+            child: Text(
+              badgeText,
+              style: PixelText.title(size: 12, color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -1413,7 +1622,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     final isMe = userId == _myUserId;
     final isStealthed = p['stealthed'] == true;
 
-    final activeEffects = (_powerupData?['activeEffects'] as List?)
+    final activeEffects =
+        (_powerupData?['activeEffects'] as List?)
             ?.cast<Map<String, dynamic>>()
             .where((e) => e['targetUserId'] == userId)
             .toList() ??
@@ -1432,7 +1642,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       ],
     );
   }
-
 
   /// Returns a fake progress value for stealthed runners, jittered ±10%.
   /// Seeded by userId + current minute so it's stable within a minute but
@@ -1484,8 +1693,7 @@ class _CountdownUnit extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        Text(label,
-            style: PixelText.title(size: 11, color: AppColors.textMid)),
+        Text(label, style: PixelText.title(size: 11, color: AppColors.textMid)),
       ],
     );
   }
@@ -1524,12 +1732,19 @@ class _EffectIconWithTooltipState extends State<_EffectIconWithTooltip> {
                 color: Colors.transparent,
                 child: Container(
                   constraints: const BoxConstraints(maxWidth: 200),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.woodDark,
                     borderRadius: BorderRadius.circular(6),
                     boxShadow: const [
-                      BoxShadow(color: Colors.black38, blurRadius: 6, offset: Offset(0, 2)),
+                      BoxShadow(
+                        color: Colors.black38,
+                        blurRadius: 6,
+                        offset: Offset(0, 2),
+                      ),
                     ],
                   ),
                   child: Text(

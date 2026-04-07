@@ -5,7 +5,7 @@ import '../../services/backend_api_service.dart';
 import '../../styles.dart';
 import '../../models/step_data.dart';
 import '../../widgets/filter_dropdown.dart';
-import '../../widgets/retro_card.dart';
+import '../../widgets/game_container.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_icon_button.dart';
 import '../../widgets/spinning_coin.dart';
@@ -122,8 +122,10 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                     const SizedBox(height: 12),
                     Text(
                       'RANKING',
-                      style: PixelText.title(size: 14, color: AppColors.textMid)
-                          .copyWith(shadows: _textShadows),
+                      style: PixelText.title(
+                        size: 18,
+                        color: AppColors.textMid,
+                      ).copyWith(shadows: _textShadows),
                     ),
                     const SizedBox(height: 6),
                     FilterDropdown<String>(
@@ -155,13 +157,18 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                         padding: const EdgeInsets.symmetric(vertical: 24),
                         child: Column(
                           children: [
-                            Icon(Icons.directions_walk, size: 32,
-                                color: AppColors.textMid.withValues(alpha: 0.6)),
+                            Icon(
+                              Icons.directions_walk,
+                              size: 32,
+                              color: AppColors.textMid.withValues(alpha: 0.6),
+                            ),
                             const SizedBox(height: 8),
                             Text(
                               'No steps yet \u2014 get walking!',
-                              style: PixelText.body(size: 18, color: AppColors.textMid)
-                                  .copyWith(shadows: _textShadows),
+                              style: PixelText.body(
+                                size: 18,
+                                color: AppColors.textMid,
+                              ).copyWith(shadows: _textShadows),
                             ),
                           ],
                         ),
@@ -197,8 +204,10 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                     Flexible(
                       child: Text(
                         widget.displayName!,
-                        style: PixelText.title(size: 26, color: AppColors.textDark)
-                            .copyWith(shadows: _textShadows),
+                        style: PixelText.title(
+                          size: 26,
+                          color: AppColors.textDark,
+                        ).copyWith(shadows: _textShadows),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -207,8 +216,10 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                   const SizedBox(width: 3),
                   Text(
                     '${widget.authService.coins}',
-                    style: PixelText.number(size: 16, color: AppColors.coinDark)
-                        .copyWith(shadows: _textShadows),
+                    style: PixelText.number(
+                      size: 16,
+                      color: AppColors.coinDark,
+                    ).copyWith(shadows: _textShadows),
                   ),
                 ],
               ),
@@ -216,14 +227,18 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
               if (goalStr != null)
                 Text(
                   '$stepsStr / $goalStr',
-                  style: PixelText.number(size: 20, color: AppColors.accent)
-                      .copyWith(shadows: _textShadows),
+                  style: PixelText.number(
+                    size: 20,
+                    color: AppColors.accent,
+                  ).copyWith(shadows: _textShadows),
                 )
               else
                 Text(
                   stepsStr,
-                  style: PixelText.number(size: 20, color: AppColors.accent)
-                      .copyWith(shadows: _textShadows),
+                  style: PixelText.number(
+                    size: 20,
+                    color: AppColors.accent,
+                  ).copyWith(shadows: _textShadows),
                 ),
             ],
           ),
@@ -249,25 +264,28 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   }
 
   static String _formatCompact(int n) {
-    if (n >= 1000) return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}k';
+    if (n >= 1000)
+      return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}k';
     return '$n';
   }
 
   Widget _buildLeaderboardTable() {
     final rows = <_LeaderboardRow>[];
     for (final entry in _top10) {
-      rows.add(_LeaderboardRow(
-        rank: entry['rank'] as int? ?? 0,
-        displayName: entry['displayName'] as String? ?? 'Anonymous',
-        totalSteps: entry['totalSteps'] as int? ?? 0,
-        isMe: (entry['userId'] as String?) == widget.authService.userId,
-      ));
+      rows.add(
+        _LeaderboardRow(
+          rank: entry['rank'] as int? ?? 0,
+          displayName: entry['displayName'] as String? ?? 'Anonymous',
+          totalSteps: entry['totalSteps'] as int? ?? 0,
+          isMe: (entry['userId'] as String?) == widget.authService.userId,
+        ),
+      );
     }
 
     final showCurrentUser =
         _currentUser != null && _currentUser!['inTop10'] != true;
 
-    return RetroCard(
+    return GameContainer(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
       child: Column(
         children: [
@@ -278,17 +296,23 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
               children: [
                 SizedBox(
                   width: 36,
-                  child: Text('#',
-                      style: PixelText.title(size: 13, color: AppColors.textMid),
-                      textAlign: TextAlign.center),
+                  child: Text(
+                    '#',
+                    style: PixelText.title(size: 15, color: AppColors.textMid),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text('PLAYER',
-                      style: PixelText.title(size: 13, color: AppColors.textMid)),
+                  child: Text(
+                    'PLAYER',
+                    style: PixelText.title(size: 15, color: AppColors.textMid),
+                  ),
                 ),
-                Text('STEPS',
-                    style: PixelText.title(size: 13, color: AppColors.textMid)),
+                Text(
+                  'STEPS',
+                  style: PixelText.title(size: 15, color: AppColors.textMid),
+                ),
               ],
             ),
           ),
@@ -297,8 +321,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
             color: AppColors.parchmentBorder.withValues(alpha: 0.5),
           ),
           // Rows
-          for (int i = 0; i < rows.length; i++)
-            _buildRow(rows[i], i),
+          for (int i = 0; i < rows.length; i++) _buildRow(rows[i], i),
           // Ellipsis + current user
           if (showCurrentUser) ...[
             Padding(
@@ -329,29 +352,33 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     final rankLabel = row.rank == 1
         ? '1st'
         : row.rank == 2
-            ? '2nd'
-            : row.rank == 3
-                ? '3rd'
-                : null;
+        ? '2nd'
+        : row.rank == 3
+        ? '3rd'
+        : null;
 
     return Container(
       color: row.isMe
           ? AppColors.accent.withValues(alpha: 0.12)
           : index.isOdd
-              ? AppColors.parchmentDark.withValues(alpha: 0.3)
-              : Colors.transparent,
+          ? AppColors.parchmentDark.withValues(alpha: 0.3)
+          : Colors.transparent,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Row(
         children: [
           SizedBox(
             width: 36,
             child: rankLabel != null
-                ? Text(rankLabel,
+                ? Text(
+                    rankLabel,
                     style: PixelText.title(size: 13, color: AppColors.coinMid),
-                    textAlign: TextAlign.center)
-                : Text('${row.rank}',
+                    textAlign: TextAlign.center,
+                  )
+                : Text(
+                    '${row.rank}',
                     style: PixelText.title(size: 16, color: AppColors.textDark),
-                    textAlign: TextAlign.center),
+                    textAlign: TextAlign.center,
+                  ),
           ),
           const SizedBox(width: 8),
           Expanded(

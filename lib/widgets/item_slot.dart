@@ -4,24 +4,19 @@ import '../styles.dart';
 import 'powerup_icon.dart';
 import 'spinning_crate.dart';
 
-const _rarityColors = {
-  'COMMON': Color(0xFF8B8B8B),
-  'UNCOMMON': Color(0xFF4A90D9),
-  'RARE': Color(0xFFD4A017),
-};
-
 const _powerupNames = {
   'LEG_CRAMP': 'Leg Cramp',
   'RED_CARD': 'Red Card',
   'SHORTCUT': 'Shortcut',
   'COMPRESSION_SOCKS': 'Socks',
   'PROTEIN_SHAKE': 'Protein',
-  'RUNNERS_HIGH': "Runner's",
+  'RUNNERS_HIGH': "Runner's High",
   'SECOND_WIND': 'Wind',
   'STEALTH_MODE': 'Stealth',
   'WRONG_TURN': 'Wrong Turn',
   'FANNY_PACK': 'Fanny Pack',
   'TRAIL_MIX': 'Trail Mix',
+  'DETOUR_SIGN': 'Detour',
 };
 
 enum ItemSlotState { empty, held, mysteryBox }
@@ -79,7 +74,7 @@ class _ItemSlotState extends State<ItemSlot>
               case ItemSlotState.empty:
                 return _buildEmpty(t);
               case ItemSlotState.held:
-                return _buildHeld(t);
+                return _buildHeld();
               case ItemSlotState.mysteryBox:
                 return _buildMysteryBox(t);
             }
@@ -100,10 +95,7 @@ class _ItemSlotState extends State<ItemSlot>
         decoration: BoxDecoration(
           color: const Color(0xFFC48C3C),
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: const Color(0xFF6B4420),
-            width: 2,
-          ),
+          border: Border.all(color: const Color(0xFF6B4420), width: 2),
           boxShadow: [
             BoxShadow(
               color: AppColors.woodShadow.withValues(alpha: 0.3),
@@ -154,59 +146,44 @@ class _ItemSlotState extends State<ItemSlot>
     );
   }
 
-  Widget _buildHeld(double t) {
-    final scale = 1.0 + sin(t * 2 * pi) * 0.03;
-    final rarityColor =
-        _rarityColors[widget.rarity] ?? AppColors.parchmentBorder;
-
+  Widget _buildHeld() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 3),
-      child: Transform.scale(
-        scale: scale,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: AppColors.parchment,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: rarityColor,
-              width: widget.isExtraSlot ? 2.5 : 2,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.parchment,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: AppColors.parchmentBorder,
+            width: widget.isExtraSlot ? 2.5 : 2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.woodShadow.withValues(alpha: 0.25),
+              offset: const Offset(0, 3),
+              blurRadius: 6,
             ),
-            boxShadow: [
-              BoxShadow(
-                color: rarityColor.withValues(alpha: 0.4),
-                spreadRadius: 1,
-                blurRadius: 8,
+          ],
+        ),
+        child: Column(
+          children: [
+            SizedBox(
+              height: 32,
+              child: PowerupIcon(
+                type: widget.powerupType ?? '',
+                size: 24,
+                spinning: true,
               ),
-              BoxShadow(
-                color: AppColors.woodShadow.withValues(alpha: 0.25),
-                offset: const Offset(0, 3),
-                blurRadius: 6,
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              SizedBox(
-                height: 32,
-                child: PowerupIcon(
-                    type: widget.powerupType ?? '', size: 24),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                _powerupNames[widget.powerupType] ??
-                    widget.powerupType ??
-                    '',
-                style: PixelText.title(
-                  size: 9,
-                  color: AppColors.textDark,
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              _powerupNames[widget.powerupType] ?? widget.powerupType ?? '',
+              style: PixelText.title(size: 8, color: AppColors.textDark),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+            ),
+          ],
         ),
       ),
     );

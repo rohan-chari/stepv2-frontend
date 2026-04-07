@@ -46,10 +46,7 @@ class GameContainer extends StatelessWidget {
         decoration: BoxDecoration(
           color: frame,
           borderRadius: BorderRadius.circular(borderRadius + 2),
-          border: Border.all(
-            color: AppColors.woodShadow,
-            width: px * 0.8,
-          ),
+          border: Border.all(color: AppColors.woodShadow, width: px * 0.8),
         ),
         child: Stack(
           children: [
@@ -57,9 +54,7 @@ class GameContainer extends StatelessWidget {
             Positioned.fill(
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(borderRadius),
-                child: CustomPaint(
-                  painter: _WoodGrainPainter(px: px),
-                ),
+                child: CustomPaint(painter: _WoodGrainPainter(px: px)),
               ),
             ),
             // Inner parchment surface
@@ -74,38 +69,38 @@ class GameContainer extends StatelessWidget {
                     width: px * 0.6,
                   ),
                 ),
-                child: Stack(
-                  children: [
-                    // Parchment texture
-                    Positioned.fill(
-                      child: ClipRRect(
-                        borderRadius:
-                            BorderRadius.circular(borderRadius - 3),
-                        child: CustomPaint(
-                          painter: _ParchmentTexturePainter(px: px),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: Stack(
+                    children: [
+                      // Parchment texture
+                      Positioned.fill(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(borderRadius - 3),
+                          child: CustomPaint(
+                            painter: _ParchmentTexturePainter(px: px),
+                          ),
                         ),
                       ),
-                    ),
-                    // Top-edge bevel highlight
-                    Positioned(
-                      top: 0,
-                      left: px * 2,
-                      right: px * 2,
-                      child: Container(
-                        height: 1,
-                        decoration: BoxDecoration(
-                          color:
-                              AppColors.woodHighlight.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(1),
+                      // Top-edge bevel highlight
+                      Positioned(
+                        top: 0,
+                        left: px * 2,
+                        right: px * 2,
+                        child: Container(
+                          height: 1,
+                          decoration: BoxDecoration(
+                            color: AppColors.woodHighlight.withValues(
+                              alpha: 0.3,
+                            ),
+                            borderRadius: BorderRadius.circular(1),
+                          ),
                         ),
                       ),
-                    ),
-                    // Content
-                    Padding(
-                      padding: padding,
-                      child: child,
-                    ),
-                  ],
+                      // Content
+                      Padding(padding: padding, child: child),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -132,7 +127,9 @@ class _WoodGrainPainter extends CustomPainter {
     }
     for (double y = px * 5; y < size.height; y += px * 7) {
       canvas.drawRect(
-          Rect.fromLTWH(0, y, size.width, px * 0.5), highlightPaint);
+        Rect.fromLTWH(0, y, size.width, px * 0.5),
+        highlightPaint,
+      );
     }
   }
 

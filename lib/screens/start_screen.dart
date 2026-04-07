@@ -7,6 +7,7 @@ import '../services/notification_service.dart';
 import '../styles.dart';
 import '../widgets/capybara.dart';
 import '../widgets/error_toast.dart';
+import '../widgets/feature_highlights_row.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/retro_card.dart';
 import '../widgets/spinning_coin.dart';
@@ -87,11 +88,7 @@ class _StartScreenState extends State<StartScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF87CEEB),
-              Color(0xFFB0E0F0),
-              Color(0xFFD4F1F9),
-            ],
+            colors: [Color(0xFF87CEEB), Color(0xFFB0E0F0), Color(0xFFD4F1F9)],
           ),
         ),
         child: SafeArea(
@@ -104,53 +101,34 @@ class _StartScreenState extends State<StartScreen> {
                 // App title
                 Text(
                   'Bara',
-                  style: PixelText.title(size: 48, color: AppColors.textDark)
-                      .copyWith(shadows: _textShadows),
+                  style: PixelText.title(
+                    size: 48,
+                    color: AppColors.textDark,
+                  ).copyWith(shadows: _textShadows),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   'Track your steps, challenge friends,\nand put a stake on the week.',
-                  style: PixelText.body(size: 14, color: AppColors.textMid)
-                      .copyWith(shadows: _textShadows),
+                  style: PixelText.body(
+                    size: 14,
+                    color: AppColors.textMid,
+                  ).copyWith(shadows: _textShadows),
                   textAlign: TextAlign.center,
                 ),
 
                 const SizedBox(height: 32),
 
                 // Feature cards
-                Row(
-                  children: [
-                    Expanded(
-                      child: _FeatureCard(
-                        icon: Icons.directions_walk_rounded,
-                        label: 'TRACK',
-                        description: 'Daily steps',
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _FeatureCard(
-                        icon: Icons.emoji_events_rounded,
-                        label: 'COMPETE',
-                        description: 'Weekly challenges',
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _FeatureCard(
-                        icon: Icons.handshake_rounded,
-                        label: 'STAKE',
-                        description: 'Raise the stakes',
-                      ),
-                    ),
-                  ],
-                ),
+                const FeatureHighlightsRow(),
 
                 const SizedBox(height: 16),
 
                 // Coin reward teaser
                 RetroCard(
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 12,
+                    horizontal: 16,
+                  ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -158,7 +136,10 @@ class _StartScreenState extends State<StartScreen> {
                       const SizedBox(width: 8),
                       Text(
                         'Earn coins by hitting your daily goals',
-                        style: PixelText.body(size: 13, color: AppColors.textDark),
+                        style: PixelText.body(
+                          size: 13,
+                          color: AppColors.textDark,
+                        ),
                       ),
                     ],
                   ),
@@ -179,9 +160,7 @@ class _StartScreenState extends State<StartScreen> {
 
                 // Start button
                 _isSigningIn
-                    ? const CircularProgressIndicator(
-                        color: AppColors.accent,
-                      )
+                    ? const CircularProgressIndicator(color: AppColors.accent)
                     : PillButton(
                         label: 'GET STARTED',
                         variant: PillButtonVariant.primary,
@@ -199,42 +178,6 @@ class _StartScreenState extends State<StartScreen> {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _FeatureCard extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String description;
-
-  const _FeatureCard({
-    required this.icon,
-    required this.label,
-    required this.description,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return RetroCard(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-      child: Column(
-        children: [
-          Icon(icon, size: 28, color: AppColors.accent),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            style: PixelText.title(size: 12, color: AppColors.textDark),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 2),
-          Text(
-            description,
-            style: PixelText.body(size: 10, color: AppColors.textMid),
-            textAlign: TextAlign.center,
-          ),
-        ],
       ),
     );
   }

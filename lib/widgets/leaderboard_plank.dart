@@ -1,9 +1,8 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../styles.dart';
-import 'player_avatar.dart';
 
-/// A styled wooden plank for leaderboard rows with medal, avatar, and depth.
+/// A styled wooden plank for leaderboard rows with medal and depth.
 class LeaderboardPlank extends StatelessWidget {
   final int rank;
   final String name;
@@ -39,19 +38,20 @@ class LeaderboardPlank extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final displayName =
-        isStealthed ? '???' : (isUser ? '$name (you)' : name);
+    final displayName = isStealthed ? '???' : (isUser ? '$name (you)' : name);
 
     return Padding(
       padding: EdgeInsets.only(top: rank == 0 ? 0 : 4),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
-          color: _medalColor?.withValues(alpha: 0.08) ??
+          color:
+              _medalColor?.withValues(alpha: 0.08) ??
               AppColors.parchmentDark.withValues(alpha: 0.4),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: _medalColor?.withValues(alpha: 0.3) ??
+            color:
+                _medalColor?.withValues(alpha: 0.3) ??
                 AppColors.parchmentBorder.withValues(alpha: 0.3),
             width: 1,
           ),
@@ -60,7 +60,7 @@ class LeaderboardPlank extends StatelessWidget {
           children: [
             // Medal/rank badge
             SizedBox(
-              width: 30,
+              width: 26,
               height: 30,
               child: CustomPaint(
                 painter: _MedalPainter(
@@ -70,14 +70,6 @@ class LeaderboardPlank extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            // Player avatar
-            PlayerAvatar(
-              name: name,
-              size: 32,
-              isUser: isUser,
-              isStealthed: isStealthed,
-            ),
-            const SizedBox(width: 10),
             // Name + effects
             Expanded(
               child: Row(
@@ -90,8 +82,8 @@ class LeaderboardPlank extends StatelessWidget {
                         color: isStealthed
                             ? AppColors.textMid.withValues(alpha: 0.5)
                             : isUser
-                                ? AppColors.accent
-                                : AppColors.textDark,
+                            ? AppColors.accent
+                            : AppColors.textDark,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -164,34 +156,36 @@ class _MedalPainter extends CustomPainter {
       ..quadraticBezierTo(w * 0.12, h * 0.55, w * 0.12, h * 0.45)
       ..lineTo(w * 0.12, h * 0.14)
       ..close();
-    final highlightPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.2);
+    final highlightPaint = Paint()..color = Colors.white.withValues(alpha: 0.2);
     canvas.drawPath(highlightPath, highlightPaint);
 
     // Rank text
     final labels = ['1', '2', '3'];
     final label = rank < 3 ? labels[rank] : '${rank + 1}';
 
-    final paragraphBuilder = ui.ParagraphBuilder(
-      ui.ParagraphStyle(
-        textAlign: TextAlign.center,
-        fontSize: h * 0.4,
-        fontWeight: FontWeight.w900,
-      ),
-    )
-      ..pushStyle(ui.TextStyle(
-        color: Colors.white,
-        fontSize: h * 0.4,
-        fontWeight: FontWeight.w900,
-        shadows: [
-          const Shadow(
-            color: Color(0x80000000),
-            offset: Offset(1, 1),
-            blurRadius: 0,
-          ),
-        ],
-      ))
-      ..addText(label);
+    final paragraphBuilder =
+        ui.ParagraphBuilder(
+            ui.ParagraphStyle(
+              textAlign: TextAlign.center,
+              fontSize: h * 0.4,
+              fontWeight: FontWeight.w900,
+            ),
+          )
+          ..pushStyle(
+            ui.TextStyle(
+              color: Colors.white,
+              fontSize: h * 0.4,
+              fontWeight: FontWeight.w900,
+              shadows: [
+                const Shadow(
+                  color: Color(0x80000000),
+                  offset: Offset(1, 1),
+                  blurRadius: 0,
+                ),
+              ],
+            ),
+          )
+          ..addText(label);
 
     final paragraph = paragraphBuilder.build()
       ..layout(ui.ParagraphConstraints(width: w));

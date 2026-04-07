@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
 import '../../styles.dart';
+import '../../widgets/game_container.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_icon_button.dart';
-import '../../widgets/retro_card.dart';
 import '../../widgets/spinning_coin.dart';
 import '../create_race_screen.dart';
 import '../race_detail_screen.dart';
@@ -57,8 +57,7 @@ class _RacesTabState extends State<RacesTab> {
       [];
 
   List<Map<String, dynamic>> get _completed =>
-      (widget.racesData?['completed'] as List?)
-          ?.cast<Map<String, dynamic>>() ??
+      (widget.racesData?['completed'] as List?)?.cast<Map<String, dynamic>>() ??
       [];
 
   String get _myUserId => widget.authService.userId ?? '';
@@ -66,33 +65,33 @@ class _RacesTabState extends State<RacesTab> {
   void _navigateToCreateRace() {
     Navigator.of(context)
         .push<Map<String, dynamic>>(
-      MaterialPageRoute(
-        builder: (context) =>
-            CreateRaceScreen(authService: widget.authService),
-      ),
-    )
+          MaterialPageRoute(
+            builder: (context) =>
+                CreateRaceScreen(authService: widget.authService),
+          ),
+        )
         .then((race) {
-      if (race != null && mounted) {
-        widget.onRacesChanged();
-        _navigateToRaceDetail(race['id'] as String);
-      }
-    });
+          if (race != null && mounted) {
+            widget.onRacesChanged();
+            _navigateToRaceDetail(race['id'] as String);
+          }
+        });
   }
 
   void _navigateToRaceDetail(String raceId) {
     Navigator.of(context)
         .push<bool>(
-      MaterialPageRoute(
-        builder: (context) => RaceDetailScreen(
-          authService: widget.authService,
-          raceId: raceId,
-          friends: widget.friendsSteps,
-        ),
-      ),
-    )
+          MaterialPageRoute(
+            builder: (context) => RaceDetailScreen(
+              authService: widget.authService,
+              raceId: raceId,
+              friends: widget.friendsSteps,
+            ),
+          ),
+        )
         .then((_) {
-      if (mounted) widget.onRacesChanged();
-    });
+          if (mounted) widget.onRacesChanged();
+        });
   }
 
   @override
@@ -126,7 +125,10 @@ class _RacesTabState extends State<RacesTab> {
     final waiting = _waiting;
     final completed = _completed;
     final hasRaces =
-        active.isNotEmpty || invites.isNotEmpty || waiting.isNotEmpty || completed.isNotEmpty;
+        active.isNotEmpty ||
+        invites.isNotEmpty ||
+        waiting.isNotEmpty ||
+        completed.isNotEmpty;
 
     return Column(
       children: [
@@ -207,8 +209,10 @@ class _RacesTabState extends State<RacesTab> {
                 Flexible(
                   child: Text(
                     widget.displayName!,
-                    style: PixelText.title(size: 26, color: AppColors.textDark)
-                        .copyWith(shadows: _textShadows),
+                    style: PixelText.title(
+                      size: 26,
+                      color: AppColors.textDark,
+                    ).copyWith(shadows: _textShadows),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -217,8 +221,10 @@ class _RacesTabState extends State<RacesTab> {
               const SizedBox(width: 3),
               Text(
                 '${widget.authService.coins}',
-                style: PixelText.number(size: 16, color: AppColors.coinDark)
-                    .copyWith(shadows: _textShadows),
+                style: PixelText.number(
+                  size: 16,
+                  color: AppColors.coinDark,
+                ).copyWith(shadows: _textShadows),
               ),
             ],
           ),
@@ -237,21 +243,27 @@ class _RacesTabState extends State<RacesTab> {
     return Column(
       children: [
         const SizedBox(height: 32),
-        Icon(Icons.directions_run,
-            size: 48,
-            color: AppColors.textMid.withValues(alpha: 0.6)),
+        Icon(
+          Icons.directions_run,
+          size: 48,
+          color: AppColors.textMid.withValues(alpha: 0.6),
+        ),
         const SizedBox(height: 12),
         Text(
           'No races yet',
-          style: PixelText.title(size: 18, color: AppColors.textMid)
-              .copyWith(shadows: _textShadows),
+          style: PixelText.title(
+            size: 18,
+            color: AppColors.textMid,
+          ).copyWith(shadows: _textShadows),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 6),
         Text(
           'Create a race and invite friends!',
-          style: PixelText.body(size: 14, color: AppColors.textMid)
-              .copyWith(shadows: _textShadows),
+          style: PixelText.body(
+            size: 14,
+            color: AppColors.textMid,
+          ).copyWith(shadows: _textShadows),
           textAlign: TextAlign.center,
         ),
       ],
@@ -261,18 +273,24 @@ class _RacesTabState extends State<RacesTab> {
   Widget _buildSectionHeader(String title, int count) {
     return Row(
       children: [
-        Text(title,
-            style: PixelText.title(size: 13, color: AppColors.textMid)
-                .copyWith(shadows: _textShadows)),
+        Text(
+          title,
+          style: PixelText.title(
+            size: 18,
+            color: AppColors.textMid,
+          ).copyWith(shadows: _textShadows),
+        ),
         const SizedBox(width: 6),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
             color: AppColors.textMid.withValues(alpha: 0.2),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Text('$count',
-              style: PixelText.title(size: 11, color: AppColors.textMid)),
+          child: Text(
+            '$count',
+            style: PixelText.title(size: 12, color: AppColors.textMid),
+          ),
         ),
       ],
     );
@@ -319,7 +337,7 @@ class _RacesTabState extends State<RacesTab> {
 
     return GestureDetector(
       onTap: () => _navigateToRaceDetail(raceId),
-      child: RetroCard(
+      child: GameContainer(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
         child: Row(
           children: [
@@ -327,16 +345,16 @@ class _RacesTabState extends State<RacesTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(name,
-                      style: PixelText.title(
-                          size: 18, color: AppColors.textDark),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1),
+                  Text(
+                    name,
+                    style: PixelText.title(size: 18, color: AppColors.textDark),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
                   const SizedBox(height: 3),
                   Text(
                     '$stepsLabel \u2022 $participantCount runner${participantCount == 1 ? '' : 's'}${isInvite && creatorName.isNotEmpty ? ' \u2022 by $creatorName' : ''}',
-                    style:
-                        PixelText.body(size: 14, color: AppColors.textMid),
+                    style: PixelText.body(size: 14, color: AppColors.textMid),
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
                   ),
@@ -345,14 +363,15 @@ class _RacesTabState extends State<RacesTab> {
             ),
             const SizedBox(width: 10),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
                 color: badgeColor,
                 borderRadius: BorderRadius.circular(6),
               ),
-              child: Text(statusLabel,
-                  style: PixelText.title(size: 13, color: Colors.white)),
+              child: Text(
+                statusLabel,
+                style: PixelText.title(size: 13, color: Colors.white),
+              ),
             ),
           ],
         ),

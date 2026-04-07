@@ -50,10 +50,11 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip>
     'COMPRESSION_SOCKS': 'RARE',
     'FANNY_PACK': 'RARE',
     'TRAIL_MIX': 'COMMON',
+    'DETOUR_SIGN': 'COMMON',
   };
 
   // Weighted random: common 50%, uncommon 35%, rare 15%
-  static const _commonTypes = ['PROTEIN_SHAKE', 'SHORTCUT', 'TRAIL_MIX'];
+  static const _commonTypes = ['PROTEIN_SHAKE', 'SHORTCUT', 'TRAIL_MIX', 'DETOUR_SIGN'];
   static const _uncommonTypes = ['RUNNERS_HIGH', 'LEG_CRAMP', 'STEALTH_MODE', 'WRONG_TURN'];
   static const _rareTypes = ['RED_CARD', 'SECOND_WIND', 'COMPRESSION_SOCKS', 'FANNY_PACK'];
 
@@ -252,6 +253,7 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip>
     'WRONG_TURN': 'Wrong Turn',
     'FANNY_PACK': 'Fanny Pack',
     'TRAIL_MIX': 'Trail Mix',
+    'DETOUR_SIGN': 'Detour Sign',
   };
 
   static String _typeName(String type) {

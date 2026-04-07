@@ -7,9 +7,9 @@ import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
 import '../../widgets/error_toast.dart';
+import '../../widgets/game_container.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_icon_button.dart';
-import '../../widgets/retro_card.dart';
 import '../../widgets/spinning_coin.dart';
 
 class FriendsTab extends StatefulWidget {
@@ -248,8 +248,7 @@ class _FriendsTabState extends State<FriendsTab> {
               variant: PillButtonVariant.accent,
               fontSize: 13,
               fullWidth: true,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               onPressed: () async {
                 Navigator.of(context).pop();
                 await _removeFriend(friendshipId);
@@ -378,13 +377,17 @@ class _FriendsTabState extends State<FriendsTab> {
                           padding: const EdgeInsets.symmetric(vertical: 24),
                           child: Column(
                             children: [
-                              Icon(Icons.group_add, size: 32,
-                                  color: AppColors.textMid.withValues(alpha: 0.6)),
+                              Icon(
+                                Icons.group_add,
+                                size: 32,
+                                color: AppColors.textMid.withValues(alpha: 0.6),
+                              ),
                               const SizedBox(height: 8),
                               Text(
                                 'No adventurers yet \u2014 invite some friends!',
-                                style: PixelText.body(color: AppColors.textMid)
-                                    .copyWith(shadows: _textShadows),
+                                style: PixelText.body(
+                                  color: AppColors.textMid,
+                                ).copyWith(shadows: _textShadows),
                                 textAlign: TextAlign.center,
                               ),
                             ],
@@ -425,8 +428,10 @@ class _FriendsTabState extends State<FriendsTab> {
                     Flexible(
                       child: Text(
                         widget.displayName!,
-                        style: PixelText.title(size: 26, color: AppColors.textDark)
-                            .copyWith(shadows: _textShadows),
+                        style: PixelText.title(
+                          size: 26,
+                          color: AppColors.textDark,
+                        ).copyWith(shadows: _textShadows),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -435,8 +440,10 @@ class _FriendsTabState extends State<FriendsTab> {
                   const SizedBox(width: 3),
                   Text(
                     '${widget.authService.coins}',
-                    style: PixelText.number(size: 16, color: AppColors.coinDark)
-                        .copyWith(shadows: _textShadows),
+                    style: PixelText.number(
+                      size: 16,
+                      color: AppColors.coinDark,
+                    ).copyWith(shadows: _textShadows),
                   ),
                 ],
               ),
@@ -444,14 +451,18 @@ class _FriendsTabState extends State<FriendsTab> {
               if (goalStr != null)
                 Text(
                   '$stepsStr / $goalStr',
-                  style: PixelText.number(size: 20, color: AppColors.accent)
-                      .copyWith(shadows: _textShadows),
+                  style: PixelText.number(
+                    size: 20,
+                    color: AppColors.accent,
+                  ).copyWith(shadows: _textShadows),
                 )
               else
                 Text(
                   stepsStr,
-                  style: PixelText.number(size: 20, color: AppColors.accent)
-                      .copyWith(shadows: _textShadows),
+                  style: PixelText.number(
+                    size: 20,
+                    color: AppColors.accent,
+                  ).copyWith(shadows: _textShadows),
                 ),
             ],
           ),
@@ -477,15 +488,18 @@ class _FriendsTabState extends State<FriendsTab> {
   }
 
   static String _formatCompact(int n) {
-    if (n >= 1000) return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}k';
+    if (n >= 1000)
+      return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}k';
     return '$n';
   }
 
   Widget _buildSectionHeader(String title) {
     return Text(
       title,
-      style: PixelText.title(size: 14, color: AppColors.textMid)
-          .copyWith(shadows: _textShadows),
+      style: PixelText.title(
+        size: 18,
+        color: AppColors.textMid,
+      ).copyWith(shadows: _textShadows),
       textAlign: TextAlign.center,
     );
   }
@@ -575,7 +589,7 @@ class _FriendsTabState extends State<FriendsTab> {
 
     return GestureDetector(
       onTap: () => _showFriendMenu(friendshipId, displayName),
-      child: RetroCard(
+      child: GameContainer(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
           children: [
@@ -598,7 +612,7 @@ class _FriendsTabState extends State<FriendsTab> {
         (req['user'] as Map<String, dynamic>?)?['displayName'] as String? ?? '';
     final friendshipId = req['friendshipId'] as String;
 
-    return RetroCard(
+    return GameContainer(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Row(
         children: [
@@ -633,7 +647,7 @@ class _FriendsTabState extends State<FriendsTab> {
     final displayName =
         (req['user'] as Map<String, dynamic>?)?['displayName'] as String? ?? '';
 
-    return RetroCard(
+    return GameContainer(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       child: Row(
         children: [

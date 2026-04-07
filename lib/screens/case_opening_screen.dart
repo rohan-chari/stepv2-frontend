@@ -16,20 +16,70 @@ const _powerupNames = {
   'WRONG_TURN': 'Wrong Turn',
   'FANNY_PACK': 'Fanny Pack',
   'TRAIL_MIX': 'Trail Mix',
+  'DETOUR_SIGN': 'Detour Sign',
 };
 
 const _powerupEntries = [
-  (type: 'LEG_CRAMP', name: 'Leg Cramp', description: 'Freeze a rival\'s steps for 2 hours'),
-  (type: 'RED_CARD', name: 'Red Card', description: 'Remove 10% of the leader\'s steps'),
-  (type: 'SHORTCUT', name: 'Shortcut', description: 'Steal 1,000 steps from a rival'),
-  (type: 'COMPRESSION_SOCKS', name: 'Compression Socks', description: 'Shield against the next attack'),
-  (type: 'PROTEIN_SHAKE', name: 'Protein Shake', description: '+1,500 bonus steps instantly'),
-  (type: 'RUNNERS_HIGH', name: "Runner's High", description: '2x steps for 3 hours'),
-  (type: 'SECOND_WIND', name: 'Second Wind', description: 'Bonus steps based on how far behind'),
-  (type: 'STEALTH_MODE', name: 'Stealth Mode', description: 'Hide your progress for 4 hours'),
-  (type: 'WRONG_TURN', name: 'Wrong Turn', description: 'Reverse a rival\'s steps for 1 hour'),
-  (type: 'FANNY_PACK', name: 'Fanny Pack', description: 'Unlock an extra powerup slot'),
-  (type: 'TRAIL_MIX', name: 'Trail Mix', description: '+500 steps per unique powerup type used'),
+  (
+    type: 'LEG_CRAMP',
+    name: 'Leg Cramp',
+    description: 'Freeze a rival\'s steps for 2 hours',
+  ),
+  (
+    type: 'RED_CARD',
+    name: 'Red Card',
+    description: 'Remove 10% of the leader\'s steps',
+  ),
+  (
+    type: 'SHORTCUT',
+    name: 'Shortcut',
+    description: 'Steal 1,000 steps from a rival',
+  ),
+  (
+    type: 'COMPRESSION_SOCKS',
+    name: 'Compression Socks',
+    description: 'Shield against the next attack',
+  ),
+  (
+    type: 'PROTEIN_SHAKE',
+    name: 'Protein Shake',
+    description: '+1,500 bonus steps instantly',
+  ),
+  (
+    type: 'RUNNERS_HIGH',
+    name: "Runner's High",
+    description: '2x steps for 3 hours',
+  ),
+  (
+    type: 'SECOND_WIND',
+    name: 'Second Wind',
+    description: 'Bonus steps based on how far behind',
+  ),
+  (
+    type: 'STEALTH_MODE',
+    name: 'Stealth Mode',
+    description: 'Hide your progress for 4 hours',
+  ),
+  (
+    type: 'WRONG_TURN',
+    name: 'Wrong Turn',
+    description: 'Reverse a rival\'s steps for 1 hour',
+  ),
+  (
+    type: 'FANNY_PACK',
+    name: 'Fanny Pack',
+    description: 'Unlock an extra powerup slot',
+  ),
+  (
+    type: 'TRAIL_MIX',
+    name: 'Trail Mix',
+    description: '+500 steps per unique powerup type used',
+  ),
+  (
+    type: 'DETOUR_SIGN',
+    name: 'Detour Sign',
+    description: 'Hide the entire leaderboard from a rival for 3 hours',
+  ),
 ];
 
 /// Full-screen overlay for opening a mystery box with CSGO-style animation.
@@ -67,35 +117,36 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
           children: [
             SizedBox.expand(
               child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                const Spacer(flex: 2),
-                // Crate at top
-                if (!_revealed) ...[
-                  const SpinningCrate(size: 70),
-                  const SizedBox(height: 8),
-                  Text(
-                    'OPENING MYSTERY BOX...',
-                    style: PixelText.title(size: 18, color: AppColors.coinLight),
-                  ),
-                  const SizedBox(height: 30),
-                  // Scrolling strip
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: CaseOpeningStrip(
-                      resultType: widget.resultType,
-                      resultRarity: widget.resultRarity,
-                      onComplete: _onStripComplete,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const Spacer(flex: 2),
+                  // Crate at top
+                  if (!_revealed) ...[
+                    const SpinningCrate(size: 70),
+                    const SizedBox(height: 8),
+                    Text(
+                      'OPENING MYSTERY BOX...',
+                      style: PixelText.title(
+                        size: 18,
+                        color: AppColors.coinLight,
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 30),
+                    // Scrolling strip
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: CaseOpeningStrip(
+                        resultType: widget.resultType,
+                        resultRarity: widget.resultRarity,
+                        onComplete: _onStripComplete,
+                      ),
+                    ),
+                  ],
+                  // Reveal card
+                  if (_revealed) ...[_buildRevealCard()],
+                  const Spacer(flex: 3),
                 ],
-                // Reveal card
-                if (_revealed) ...[
-                  _buildRevealCard(),
-                ],
-                const Spacer(flex: 3),
-              ],
-            ),
+              ),
             ),
             // Question mark button — top right
             Positioned(
@@ -129,7 +180,10 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
                     alignment: Alignment.center,
                     child: Text(
                       '?',
-                      style: PixelText.pill(size: 18, color: AppColors.textDark),
+                      style: PixelText.pill(
+                        size: 18,
+                        color: AppColors.textDark,
+                      ),
                     ),
                   ),
                 ),
@@ -179,12 +233,16 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
                     child: ListView.separated(
                       controller: scrollController,
                       itemCount: _powerupEntries.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
                       itemBuilder: (context, index) {
                         final entry = _powerupEntries[index];
                         return Row(
                           children: [
-                            PowerupIcon(type: entry.type, size: 28),
+                            PowerupIcon(
+                              type: entry.type,
+                              size: 28,
+                              spinning: true,
+                            ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
@@ -232,10 +290,7 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
       builder: (context, value, child) {
         return Transform.scale(
           scale: value,
-          child: Opacity(
-            opacity: value.clamp(0.0, 1.0),
-            child: child,
-          ),
+          child: Opacity(opacity: value.clamp(0.0, 1.0), child: child),
         );
       },
       child: Container(
@@ -270,7 +325,7 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
             ),
             const SizedBox(height: 16),
             // Powerup icon
-            PowerupIcon(type: widget.resultType, size: 56),
+            PowerupIcon(type: widget.resultType, size: 56, spinning: true),
             const SizedBox(height: 12),
             // Powerup name
             Text(
@@ -291,7 +346,10 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
             GestureDetector(
               onTap: () => Navigator.of(context).pop(),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.pillGreen,
                   borderRadius: BorderRadius.circular(6),
@@ -302,10 +360,7 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
                     ),
                   ],
                 ),
-                child: Text(
-                  'Continue',
-                  style: PixelText.pill(size: 18),
-                ),
+                child: Text('Continue', style: PixelText.pill(size: 18)),
               ),
             ),
           ],

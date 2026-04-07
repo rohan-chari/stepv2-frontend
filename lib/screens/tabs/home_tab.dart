@@ -3,10 +3,11 @@ import 'package:flutter/material.dart';
 import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../styles.dart';
+import '../../widgets/feature_highlights_row.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_icon_button.dart';
 import '../../widgets/goal_track.dart';
-import '../../widgets/retro_card.dart';
+import '../../widgets/game_container.dart';
 import '../../widgets/spinning_coin.dart';
 import '../display_name_screen.dart';
 
@@ -133,9 +134,10 @@ class HomeTab extends StatelessWidget {
                     Flexible(
                       child: Text(
                         displayName!,
-                        style: PixelText.title(size: 26, color: AppColors.textDark).copyWith(
-                          shadows: _textShadows,
-                        ),
+                        style: PixelText.title(
+                          size: 26,
+                          color: AppColors.textDark,
+                        ).copyWith(shadows: _textShadows),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -144,9 +146,10 @@ class HomeTab extends StatelessWidget {
                   const SizedBox(width: 3),
                   Text(
                     '${authService.coins}',
-                    style: PixelText.number(size: 16, color: AppColors.coinDark).copyWith(
-                      shadows: _textShadows,
-                    ),
+                    style: PixelText.number(
+                      size: 16,
+                      color: AppColors.coinDark,
+                    ).copyWith(shadows: _textShadows),
                   ),
                 ],
               ),
@@ -154,16 +157,18 @@ class HomeTab extends StatelessWidget {
               if (goalStr != null)
                 Text(
                   '$stepsStr / $goalStr',
-                  style: PixelText.number(size: 20, color: AppColors.accent).copyWith(
-                    shadows: _textShadows,
-                  ),
+                  style: PixelText.number(
+                    size: 20,
+                    color: AppColors.accent,
+                  ).copyWith(shadows: _textShadows),
                 )
               else
                 Text(
                   stepsStr,
-                  style: PixelText.number(size: 20, color: AppColors.accent).copyWith(
-                    shadows: _textShadows,
-                  ),
+                  style: PixelText.number(
+                    size: 20,
+                    color: AppColors.accent,
+                  ).copyWith(shadows: _textShadows),
                 ),
             ],
           ),
@@ -228,22 +233,22 @@ class HomeTab extends StatelessWidget {
       );
     }
 
-    return RetroCard(
+    return GameContainer(
       padding: const EdgeInsets.all(6),
       child: GoalTrack(
         height: 300,
-      runners: [
-        GoalTrackRunner(
-          name: displayName ?? 'You',
-          progress: progress,
-          isUser: true,
-        ),
-        for (final friend in friendsSteps)
+        runners: [
           GoalTrackRunner(
-            name: friend['displayName'] as String? ?? '???',
-            progress: _friendGoalProgress(friend),
+            name: displayName ?? 'You',
+            progress: progress,
+            isUser: true,
           ),
-      ],
+          for (final friend in friendsSteps)
+            GoalTrackRunner(
+              name: friend['displayName'] as String? ?? '???',
+              progress: _friendGoalProgress(friend),
+            ),
+        ],
       ),
     );
   }
@@ -345,18 +350,23 @@ class HomeTab extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               'HEALTH DATA',
-              style: PixelText.title(size: 24, color: AppColors.textDark)
-                  .copyWith(shadows: _textShadows),
+              style: PixelText.title(
+                size: 24,
+                color: AppColors.textDark,
+              ).copyWith(shadows: _textShadows),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
             Text(
               'Bara needs access to your health data to count your daily steps.\n\n'
               "That's all we use - just your step count.",
-              style: PixelText.body(color: AppColors.textMid)
-                  .copyWith(shadows: _textShadows),
+              style: PixelText.body(
+                color: AppColors.textMid,
+              ).copyWith(shadows: _textShadows),
               textAlign: TextAlign.center,
             ),
+            const SizedBox(height: 24),
+            const FeatureHighlightsRow(),
             if (error != null) ...[
               const SizedBox(height: 14),
               Text(
@@ -374,7 +384,10 @@ class HomeTab extends StatelessWidget {
                 variant: PillButtonVariant.primary,
                 fontSize: 16,
                 fullWidth: true,
-                padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 48,
+                  vertical: 16,
+                ),
                 onPressed: onEnableHealth,
               ),
             const Spacer(flex: 3),
@@ -391,22 +404,31 @@ class HomeTab extends StatelessWidget {
         child: Column(
           children: [
             const Spacer(flex: 2),
-            Icon(Icons.notifications_rounded, size: 48, color: AppColors.accent),
+            Icon(
+              Icons.notifications_rounded,
+              size: 48,
+              color: AppColors.accent,
+            ),
             const SizedBox(height: 16),
             Text(
               'NOTIFICATIONS',
-              style: PixelText.title(size: 24, color: AppColors.textDark)
-                  .copyWith(shadows: _textShadows),
+              style: PixelText.title(
+                size: 24,
+                color: AppColors.textDark,
+              ).copyWith(shadows: _textShadows),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
             Text(
               'Get notified when a friend challenges you to a step battle!\n\n'
               'We\u2019ll only send important updates \u2014 no spam.',
-              style: PixelText.body(color: AppColors.textMid)
-                  .copyWith(shadows: _textShadows),
+              style: PixelText.body(
+                color: AppColors.textMid,
+              ).copyWith(shadows: _textShadows),
               textAlign: TextAlign.center,
             ),
+            const SizedBox(height: 24),
+            const FeatureHighlightsRow(),
             const SizedBox(height: 32),
             PillButton(
               label: 'ENABLE NOTIFICATIONS',
@@ -443,16 +465,13 @@ class HomeTab extends StatelessWidget {
   }
 
   static String _formatCompact(int n) {
-    if (n >= 1000) return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}k';
+    if (n >= 1000)
+      return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}k';
     return '$n';
   }
 
   static const _textShadows = [
-    Shadow(
-      color: Color(0x40000000),
-      blurRadius: 4,
-      offset: Offset(0, 1),
-    ),
+    Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
 }
 
@@ -473,14 +492,18 @@ class _DailyRewardCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RetroCard(
+    return GameContainer(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
       child: Row(
         children: [
           if (unlocked)
             const SpinningCoin(size: 28)
           else
-            Icon(Icons.lock_rounded, size: 28, color: AppColors.textMid.withValues(alpha: 0.5)),
+            Icon(
+              Icons.lock_rounded,
+              size: 28,
+              color: AppColors.textMid.withValues(alpha: 0.5),
+            ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(

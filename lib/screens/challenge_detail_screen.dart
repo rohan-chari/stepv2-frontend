@@ -4,8 +4,8 @@ import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
 import '../widgets/error_toast.dart';
+import '../widgets/game_container.dart';
 import '../widgets/pill_button.dart';
-import '../widgets/retro_card.dart';
 import '../widgets/pill_icon_button.dart';
 import '../widgets/race_track.dart';
 import 'stake_picker_screen.dart';
@@ -34,13 +34,11 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
   bool _isLoading = false;
   bool _isAccepting = false;
 
-
   String get _myUserId => widget.authService.userId ?? '';
 
   static const _textShadows = [
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
-
 
   @override
   void initState() {
@@ -64,8 +62,7 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
   }
 
   String? _proposedStakeName() {
-    final proposedStake =
-        _instance['proposedStake'] as Map<String, dynamic>?;
+    final proposedStake = _instance['proposedStake'] as Map<String, dynamic>?;
     return proposedStake?['name'] as String?;
   }
 
@@ -104,7 +101,10 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
                 variant: PillButtonVariant.secondary,
                 fontSize: 13,
                 fullWidth: true,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
                 onPressed: () {
                   Navigator.of(ctx).pop();
                   _navigateToStakePicker('edit');
@@ -142,7 +142,10 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
-        showErrorToast(context, 'Couldn\u2019t cancel challenge. Please try again.');
+        showErrorToast(
+          context,
+          'Couldn\u2019t cancel challenge. Please try again.',
+        );
       }
     }
   }
@@ -202,20 +205,22 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
         ? _instance['proposedStakeId'] as String?
         : null;
 
-    Navigator.of(context).push<dynamic>(
-      MaterialPageRoute(
-        builder: (context) => StakePickerScreen(
-          authService: widget.authService,
-          instanceId: _instance['id'] as String,
-          friendName: _friendName(),
-          currentProposalId: currentProposalId,
-        ),
-      ),
-    ).then((result) {
-      if (result == true && mounted) {
-        _refreshInstance();
-      }
-    });
+    Navigator.of(context)
+        .push<dynamic>(
+          MaterialPageRoute(
+            builder: (context) => StakePickerScreen(
+              authService: widget.authService,
+              instanceId: _instance['id'] as String,
+              friendName: _friendName(),
+              currentProposalId: currentProposalId,
+            ),
+          ),
+        )
+        .then((result) {
+          if (result == true && mounted) {
+            _refreshInstance();
+          }
+        });
   }
 
   Future<void> _refreshInstance() async {
@@ -259,172 +264,162 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
       body: Stack(
         children: [
           Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Color(0xFF87CEEB),
-                    Color(0xFFB0E0F0),
-                    Color(0xFFD4F1F9),
-                  ],
-                ),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xFF87CEEB),
+                  Color(0xFFB0E0F0),
+                  Color(0xFFD4F1F9),
+                ],
               ),
-              child: SafeArea(
-                child: Column(
-                  children: [
-                    // Header
-                    Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Row(
-                    children: [
-                      GestureDetector(
-                        onTap: () => Navigator.of(context).pop(true),
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          child: const Icon(
-                            Icons.arrow_back,
-                            color: AppColors.textDark,
-                            size: 24,
+            ),
+            child: SafeArea(
+              bottom: false,
+              child: Column(
+                children: [
+                  // Header
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF87CEEB),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF87CEEB).withValues(alpha: 0.8),
+                          offset: const Offset(0, 2),
+                          blurRadius: 4,
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        GestureDetector(
+                          onTap: () => Navigator.of(context).pop(true),
+                          child: const Padding(
+                            padding: EdgeInsets.all(8),
+                            child: Icon(
+                              Icons.arrow_back,
+                              color: AppColors.textDark,
+                              size: 24,
+                            ),
                           ),
                         ),
-                      ),
-                      Expanded(
-                        child: Column(
-                          children: [
-                            Text(
-                              'You vs. ${_friendName()}',
-                              style: PixelText.title(size: 22, color: AppColors.textDark)
-                                  .copyWith(shadows: _textShadows),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              widget.challenge['title'] as String? ?? '',
-                              style: PixelText.title(size: 14, color: AppColors.textMid)
-                                  .copyWith(shadows: _textShadows),
-                              textAlign: TextAlign.center,
-                            ),
-                            if ((widget.challenge['description'] as String?)?.isNotEmpty ?? false) ...[
-                              const SizedBox(height: 2),
+                        Expanded(
+                          child: Column(
+                            children: [
                               Text(
-                                widget.challenge['description'] as String,
-                                style: PixelText.body(size: 12, color: AppColors.textMid)
-                                    .copyWith(shadows: _textShadows),
+                                'You vs. ${_friendName()}',
+                                style: PixelText.title(
+                                  size: 22,
+                                  color: AppColors.textDark,
+                                ).copyWith(shadows: _textShadows),
                                 textAlign: TextAlign.center,
                               ),
+                              const SizedBox(height: 2),
+                              Text(
+                                widget.challenge['title'] as String? ?? '',
+                                style: PixelText.title(
+                                  size: 16,
+                                  color: AppColors.textMid,
+                                ).copyWith(shadows: _textShadows),
+                                textAlign: TextAlign.center,
+                              ),
+                              if ((widget.challenge['description'] as String?)
+                                      ?.isNotEmpty ??
+                                  false) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  widget.challenge['description'] as String,
+                                  style: PixelText.body(
+                                    size: 13,
+                                    color: AppColors.textMid,
+                                  ).copyWith(shadows: _textShadows),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
-                      ),
-                      PillIconButton(
-                        icon: Icons.settings_rounded,
-                        size: 36,
-                        variant: PillButtonVariant.secondary,
-                        onPressed: _openSettings,
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Scrollable content
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.only(
-                      left: 16,
-                      right: 16,
-                      top: 8,
-                      bottom: 77.5 + MediaQuery.of(context).padding.bottom + 16,
-                    ),
-                    child: Column(
-                      children: [
-                        // Stake section (top)
-                        if (isActive)
-                          _buildActiveStakeInfo()
-                        else
-                          _buildNegotiationView(),
-                        const SizedBox(height: 16),
-
-                        // Race track
-                        if (_progress != null) ...[
-                          _buildRaceTrack(),
-                          const SizedBox(height: 16),
-                        ],
-
-                        // Progress
-                        _buildProgressSection(),
-                        const SizedBox(height: 16),
+                        PillIconButton(
+                          icon: Icons.settings_rounded,
+                          size: 36,
+                          variant: PillButtonVariant.secondary,
+                          onPressed: _openSettings,
+                        ),
                       ],
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
-        ),
 
-            // Tab bar
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: WoodenTabBar(
-                currentIndex: 1,
-                onTap: (index) {
-                  Navigator.of(context).pop(true);
-                },
-                items: const [
-                  WoodenTabItem(icon: Icons.home_rounded, label: 'Home'),
-                  WoodenTabItem(
-                    icon: Icons.emoji_events_rounded,
-                    label: 'Challenges',
-                  ),
-                  WoodenTabItem(
-                    icon: Icons.people_rounded,
-                    label: 'Friends',
-                  ),
-                  WoodenTabItem(
-                    icon: Icons.leaderboard_rounded,
-                    label: 'Leaderboard',
-                  ),
-                  WoodenTabItem(
-                    icon: Icons.person_rounded,
-                    label: 'Profile',
+                  // Scrollable content
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: EdgeInsets.only(
+                        left: 16,
+                        right: 16,
+                        top: 12,
+                        bottom:
+                            77.5 + MediaQuery.of(context).padding.bottom + 16,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Stake section (top)
+                          if (isActive)
+                            _buildActiveStakeInfo()
+                          else
+                            _buildNegotiationView(),
+                          const SizedBox(height: 16),
+
+                          _buildTrackAndProgressSection(),
+                          if (_isLoading || _progress != null)
+                            const SizedBox(height: 16),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
+          ),
+
+          // Tab bar
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: WoodenTabBar(
+              currentIndex: 1,
+              onTap: (index) {
+                Navigator.of(context).pop(true);
+              },
+              items: const [
+                WoodenTabItem(icon: Icons.home_rounded, label: 'Home'),
+                WoodenTabItem(
+                  icon: Icons.emoji_events_rounded,
+                  label: 'Challenges',
+                ),
+                WoodenTabItem(icon: Icons.people_rounded, label: 'Friends'),
+                WoodenTabItem(
+                  icon: Icons.leaderboard_rounded,
+                  label: 'Leaderboard',
+                ),
+                WoodenTabItem(icon: Icons.person_rounded, label: 'Profile'),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
-  // -- Race track --
+  // -- Track + progress section --
 
-  Widget _buildRaceTrack() {
-    final userA = _progress!['userA'] as Map<String, dynamic>? ?? {};
-    final userB = _progress!['userB'] as Map<String, dynamic>? ?? {};
-    final aId = userA['userId'] as String? ?? '';
-    final bool iAmA = aId == _myUserId;
-
-    final myData = iAmA ? userA : userB;
-    final theirData = iAmA ? userB : userA;
-
-    return RetroCard(
-      padding: const EdgeInsets.all(6),
-      child: RaceTrack(
-        mySteps: myData['totalSteps'] as int? ?? 0,
-        theirSteps: theirData['totalSteps'] as int? ?? 0,
-        myName: widget.authService.displayName ?? 'You',
-        theirName: _friendName(),
-      ),
-    );
-  }
-
-  // -- Progress section --
-
-  Widget _buildProgressSection() {
-    if (_isLoading) {
+  Widget _buildTrackAndProgressSection() {
+    if (_isLoading && _progress == null) {
       return const Padding(
         padding: EdgeInsets.all(20),
         child: Center(
@@ -435,10 +430,43 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
 
     if (_progress == null) return const SizedBox.shrink();
 
-    return _buildHigherTotalProgress();
+    return GameContainer(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          _buildRaceTrackContent(),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Divider(
+              color: AppColors.parchmentBorder.withValues(alpha: 0.5),
+              height: 1,
+            ),
+          ),
+          _buildHigherTotalProgressContent(),
+        ],
+      ),
+    );
   }
 
-  Widget _buildHigherTotalProgress() {
+  Widget _buildRaceTrackContent() {
+    final userA = _progress!['userA'] as Map<String, dynamic>? ?? {};
+    final userB = _progress!['userB'] as Map<String, dynamic>? ?? {};
+    final aId = userA['userId'] as String? ?? '';
+    final bool iAmA = aId == _myUserId;
+
+    final myData = iAmA ? userA : userB;
+    final theirData = iAmA ? userB : userA;
+
+    return RaceTrack(
+      mySteps: myData['totalSteps'] as int? ?? 0,
+      theirSteps: theirData['totalSteps'] as int? ?? 0,
+      myName: widget.authService.displayName ?? 'You',
+      theirName: _friendName(),
+      height: 250,
+    );
+  }
+
+  Widget _buildHigherTotalProgressContent() {
     final userA = _progress!['userA'] as Map<String, dynamic>? ?? {};
     final userB = _progress!['userB'] as Map<String, dynamic>? ?? {};
 
@@ -450,90 +478,84 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
 
     final myTotal = myData['totalSteps'] as int? ?? 0;
     final theirTotal = theirData['totalSteps'] as int? ?? 0;
-    final myDaily = (myData['dailySteps'] as List?)
-            ?.cast<Map<String, dynamic>>() ??
-        [];
-    final theirDaily = (theirData['dailySteps'] as List?)
-            ?.cast<Map<String, dynamic>>() ??
-        [];
+    final myDaily =
+        (myData['dailySteps'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final theirDaily =
+        (theirData['dailySteps'] as List?)?.cast<Map<String, dynamic>>() ?? [];
 
     final winning = myTotal >= theirTotal;
     final diff = (myTotal - theirTotal).abs();
 
-    return RetroCard(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          Text(
-            'WEEKLY STEPS',
-            style: PixelText.title(size: 18, color: AppColors.textMid),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  children: [
-                    Text('YOU',
-                        style: PixelText.title(
-                            size: 14, color: AppColors.textMid)),
-                    const SizedBox(height: 4),
-                    Text(
-                      _formatSteps(myTotal),
-                      style: PixelText.number(
-                        size: 34,
-                        color: winning
-                            ? AppColors.pillGreen
-                            : AppColors.textDark,
-                      ),
+    return Column(
+      children: [
+        Text(
+          'WEEKLY STEPS',
+          style: PixelText.title(size: 18, color: AppColors.textMid),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                children: [
+                  Text(
+                    'YOU',
+                    style: PixelText.title(size: 15, color: AppColors.textMid),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _formatSteps(myTotal),
+                    style: PixelText.number(
+                      size: 34,
+                      color: winning ? AppColors.pillGreen : AppColors.textDark,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              Text('vs',
-                  style:
-                      PixelText.body(size: 16, color: AppColors.textMid)),
-              Expanded(
-                child: Column(
-                  children: [
-                    Text(
-                      _friendName().toUpperCase(),
-                      style: PixelText.title(
-                          size: 14, color: AppColors.textMid),
-                      overflow: TextOverflow.ellipsis,
+            ),
+            Text(
+              'vs',
+              style: PixelText.body(size: 16, color: AppColors.textMid),
+            ),
+            Expanded(
+              child: Column(
+                children: [
+                  Text(
+                    _friendName().toUpperCase(),
+                    style: PixelText.title(size: 15, color: AppColors.textMid),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _formatSteps(theirTotal),
+                    style: PixelText.number(
+                      size: 34,
+                      color: !winning
+                          ? AppColors.pillGreen
+                          : AppColors.textDark,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _formatSteps(theirTotal),
-                      style: PixelText.number(
-                        size: 34,
-                        color: !winning
-                            ? AppColors.pillGreen
-                            : AppColors.textDark,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            winning
-                ? (diff > 0
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          winning
+              ? (diff > 0
                     ? 'You\u2019re ahead by ${_formatSteps(diff)}'
                     : 'You\u2019re tied!')
-                : '${_friendName()} leads by ${_formatSteps(diff)}',
-            style: PixelText.body(size: 12, color: AppColors.textMid),
-            textAlign: TextAlign.center,
-          ),
-          if (myDaily.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            _buildDailyBreakdown(myDaily, theirDaily),
-          ],
+              : '${_friendName()} leads by ${_formatSteps(diff)}',
+          style: PixelText.body(size: 12, color: AppColors.textMid),
+          textAlign: TextAlign.center,
+        ),
+        if (myDaily.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          _buildDailyBreakdown(myDaily, theirDaily),
         ],
-      ),
+      ],
     );
   }
 
@@ -549,19 +571,25 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
           children: [
             SizedBox(
               width: 44,
-              child: Text('DAY',
-                  style: PixelText.title(size: 13, color: AppColors.textMid)),
+              child: Text(
+                'DAY',
+                style: PixelText.title(size: 15, color: AppColors.textMid),
+              ),
             ),
             Expanded(
-              child: Text('YOU',
-                  style: PixelText.title(size: 13, color: AppColors.textMid),
-                  textAlign: TextAlign.right),
+              child: Text(
+                'YOU',
+                style: PixelText.title(size: 15, color: AppColors.textMid),
+                textAlign: TextAlign.right,
+              ),
             ),
             Expanded(
-              child: Text(_friendName().toUpperCase(),
-                  style: PixelText.title(size: 13, color: AppColors.textMid),
-                  textAlign: TextAlign.right,
-                  overflow: TextOverflow.ellipsis),
+              child: Text(
+                _friendName().toUpperCase(),
+                style: PixelText.title(size: 15, color: AppColors.textMid),
+                textAlign: TextAlign.right,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -576,9 +604,7 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
           _buildDayRow(
             dayLabels[i],
             myDaily[i]['steps'] as int? ?? 0,
-            i < theirDaily.length
-                ? theirDaily[i]['steps'] as int? ?? 0
-                : 0,
+            i < theirDaily.length ? theirDaily[i]['steps'] as int? ?? 0 : 0,
           ),
       ],
     );
@@ -594,8 +620,10 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
         children: [
           SizedBox(
             width: 44,
-            child: Text(label,
-                style: PixelText.body(size: 15, color: AppColors.textMid)),
+            child: Text(
+              label,
+              style: PixelText.body(size: 15, color: AppColors.textMid),
+            ),
           ),
           Expanded(
             child: Text(
@@ -630,13 +658,13 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
     final proposedStakeId = _instance['proposedStakeId'] as String?;
 
     if (proposedStakeId == null) {
-      return RetroCard(
+      return GameContainer(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
             Text(
               'SET THE STAKES',
-              style: PixelText.title(size: 16, color: AppColors.textDark),
+              style: PixelText.title(size: 18, color: AppColors.textMid),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
@@ -651,8 +679,7 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
               variant: PillButtonVariant.primary,
               fontSize: 16,
               fullWidth: true,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
               onPressed: () => _navigateToStakePicker('propose'),
             ),
           ],
@@ -661,58 +688,51 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
     }
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          width: double.infinity,
+        GameContainer(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.parchment,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.parchmentBorder, width: 2),
-          ),
-          child: Column(
-            children: [
-              Text(
-                isMyProposal ? 'YOU PROPOSED' : 'THEIR PROPOSAL',
-                style:
-                    PixelText.title(size: 14, color: AppColors.accent),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 10),
-              Text(
-                stakeName ?? 'Unknown stake',
-                style: PixelText.title(
-                    size: 18, color: AppColors.textDark),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              if (isMyProposal)
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
                 Text(
-                  'Waiting for ${_friendName()} to respond...',
-                  style:
-                      PixelText.body(size: 13, color: AppColors.textMid),
+                  isMyProposal ? 'YOU PROPOSED' : 'THEIR PROPOSAL',
+                  style: PixelText.title(size: 14, color: AppColors.accent),
                   textAlign: TextAlign.center,
                 ),
-            ],
+                const SizedBox(height: 10),
+                Text(
+                  stakeName ?? 'Unknown stake',
+                  style: PixelText.title(size: 18, color: AppColors.textDark),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                if (isMyProposal)
+                  Text(
+                    'Waiting for ${_friendName()} to respond...',
+                    style: PixelText.body(size: 13, color: AppColors.textMid),
+                    textAlign: TextAlign.center,
+                  ),
+              ],
+            ),
           ),
         ),
-        if (isMyProposal) ...[
-          const SizedBox(height: 0),
-        ],
+        if (isMyProposal) ...[const SizedBox(height: 0)],
         if (!isMyProposal) ...[
           const SizedBox(height: 16),
           if (_isAccepting)
             const Center(
-                child:
-                    CircularProgressIndicator(color: AppColors.accent))
+              child: CircularProgressIndicator(color: AppColors.accent),
+            )
           else ...[
             PillButton(
               label: 'ACCEPT STAKE',
               variant: PillButtonVariant.primary,
               fontSize: 16,
               fullWidth: true,
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 48, vertical: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
               onPressed: _acceptStake,
             ),
             const SizedBox(height: 12),
@@ -721,8 +741,7 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
               variant: PillButtonVariant.secondary,
               fontSize: 16,
               fullWidth: true,
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 48, vertical: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
               onPressed: () => _navigateToStakePicker('counter'),
             ),
           ],
@@ -735,24 +754,27 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
 
   Widget _buildActiveStakeInfo() {
     final stakeName = _agreedStakeName() ?? 'Unknown';
-    return RetroCard(
+    return GameContainer(
       padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          Text(
-            'STAKE',
-            style: PixelText.title(size: 14, color: AppColors.accent),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            stakeName,
-            style: PixelText.title(size: 16, color: AppColors.textDark),
-            textAlign: TextAlign.center,
-          ),
-        ],
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'STAKE',
+              style: PixelText.title(size: 18, color: AppColors.accent),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              stakeName,
+              style: PixelText.title(size: 18, color: AppColors.textDark),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }
-
 }

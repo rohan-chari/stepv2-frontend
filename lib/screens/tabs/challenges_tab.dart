@@ -7,10 +7,10 @@ import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
 import '../../widgets/error_toast.dart';
+import '../../widgets/game_container.dart';
 import '../../widgets/info_toast.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_icon_button.dart';
-import '../../widgets/retro_card.dart';
 import '../../widgets/spinning_coin.dart';
 import '../challenge_detail_screen.dart';
 import '../friend_picker_screen.dart';
@@ -219,15 +219,17 @@ class _ChallengesTabState extends State<ChallengesTab> {
       return;
     }
 
-    Navigator.of(context).push<(String, String)>(
-      MaterialPageRoute(
-        builder: (context) => FriendPickerScreen(friends: availableFriends),
-      ),
-    ).then((result) {
-      if (result != null && mounted) {
-        _startChallenge(result.$1, result.$2);
-      }
-    });
+    Navigator.of(context)
+        .push<(String, String)>(
+          MaterialPageRoute(
+            builder: (context) => FriendPickerScreen(friends: availableFriends),
+          ),
+        )
+        .then((result) {
+          if (result != null && mounted) {
+            _startChallenge(result.$1, result.$2);
+          }
+        });
   }
 
   void _showChallengeMenu(String instanceId, String friendName) {
@@ -252,8 +254,7 @@ class _ChallengesTabState extends State<ChallengesTab> {
               variant: PillButtonVariant.accent,
               fontSize: 13,
               fullWidth: true,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               onPressed: () async {
                 Navigator.of(context).pop();
                 await _cancelChallenge(instanceId);
@@ -280,7 +281,9 @@ class _ChallengesTabState extends State<ChallengesTab> {
     } catch (e) {
       if (!mounted) return;
       showErrorToast(
-          context, 'Couldn\u2019t cancel challenge. Please try again.');
+        context,
+        'Couldn\u2019t cancel challenge. Please try again.',
+      );
     }
   }
 
@@ -345,9 +348,9 @@ class _ChallengesTabState extends State<ChallengesTab> {
             padding: const EdgeInsets.symmetric(vertical: 24),
             child: Text(
               'No challenges yet \u2014 time to start one!',
-              style: PixelText.body(color: AppColors.textMid).copyWith(
-                shadows: _textShadows,
-              ),
+              style: PixelText.body(
+                color: AppColors.textMid,
+              ).copyWith(shadows: _textShadows),
               textAlign: TextAlign.center,
             ),
           ),
@@ -361,21 +364,27 @@ class _ChallengesTabState extends State<ChallengesTab> {
         _buildTopStatusBar(),
         _buildRecordBadge(),
         const SizedBox(height: 48),
-        Icon(Icons.emoji_events, size: 48, color: AppColors.textMid.withValues(alpha: 0.6)),
+        Icon(
+          Icons.emoji_events,
+          size: 48,
+          color: AppColors.textMid.withValues(alpha: 0.6),
+        ),
         const SizedBox(height: 12),
         Text(
           'No active challenges',
-          style: PixelText.title(size: 18, color: AppColors.textMid).copyWith(
-            shadows: _textShadows,
-          ),
+          style: PixelText.title(
+            size: 18,
+            color: AppColors.textMid,
+          ).copyWith(shadows: _textShadows),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 6),
         Text(
           'Challenge a friend to a weekly step battle!',
-          style: PixelText.body(size: 14, color: AppColors.textMid).copyWith(
-            shadows: _textShadows,
-          ),
+          style: PixelText.body(
+            size: 14,
+            color: AppColors.textMid,
+          ).copyWith(shadows: _textShadows),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 24),
@@ -398,9 +407,10 @@ class _ChallengesTabState extends State<ChallengesTab> {
       child: Center(
         child: Text(
           '$_wins W - $_losses L',
-          style: PixelText.title(size: 22, color: AppColors.textDark).copyWith(
-            shadows: _textShadows,
-          ),
+          style: PixelText.title(
+            size: 22,
+            color: AppColors.textDark,
+          ).copyWith(shadows: _textShadows),
         ),
       ),
     );
@@ -427,9 +437,10 @@ class _ChallengesTabState extends State<ChallengesTab> {
                     Flexible(
                       child: Text(
                         widget.displayName!,
-                        style: PixelText.title(size: 26, color: AppColors.textDark).copyWith(
-                          shadows: _textShadows,
-                        ),
+                        style: PixelText.title(
+                          size: 26,
+                          color: AppColors.textDark,
+                        ).copyWith(shadows: _textShadows),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -438,9 +449,10 @@ class _ChallengesTabState extends State<ChallengesTab> {
                   const SizedBox(width: 3),
                   Text(
                     '${widget.authService.coins}',
-                    style: PixelText.number(size: 16, color: AppColors.coinDark).copyWith(
-                      shadows: _textShadows,
-                    ),
+                    style: PixelText.number(
+                      size: 16,
+                      color: AppColors.coinDark,
+                    ).copyWith(shadows: _textShadows),
                   ),
                 ],
               ),
@@ -448,16 +460,18 @@ class _ChallengesTabState extends State<ChallengesTab> {
               if (goalStr != null)
                 Text(
                   '$stepsStr / $goalStr',
-                  style: PixelText.number(size: 20, color: AppColors.accent).copyWith(
-                    shadows: _textShadows,
-                  ),
+                  style: PixelText.number(
+                    size: 20,
+                    color: AppColors.accent,
+                  ).copyWith(shadows: _textShadows),
                 )
               else
                 Text(
                   stepsStr,
-                  style: PixelText.number(size: 20, color: AppColors.accent).copyWith(
-                    shadows: _textShadows,
-                  ),
+                  style: PixelText.number(
+                    size: 20,
+                    color: AppColors.accent,
+                  ).copyWith(shadows: _textShadows),
                 ),
             ],
           ),
@@ -486,7 +500,7 @@ class _ChallengesTabState extends State<ChallengesTab> {
     final minutes = safeDuration.inMinutes.remainder(60);
     final seconds = safeDuration.inSeconds.remainder(60);
 
-    return RetroCard(
+    return GameContainer(
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
       child: Column(
         children: [
@@ -622,7 +636,7 @@ class _ChallengesTabState extends State<ChallengesTab> {
             .then((_) => widget.onChallengeChanged());
       },
       onLongPress: () => _showChallengeMenu(instanceId, friendName),
-      child: RetroCard(
+      child: GameContainer(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
         child: Row(
           children: [
@@ -679,7 +693,8 @@ class _ChallengesTabState extends State<ChallengesTab> {
   }
 
   static String _formatCompact(int n) {
-    if (n >= 1000) return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}k';
+    if (n >= 1000)
+      return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}k';
     return '$n';
   }
 
@@ -712,10 +727,7 @@ class _CountdownUnit extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        Text(
-          label,
-          style: PixelText.title(size: 9, color: AppColors.textMid),
-        ),
+        Text(label, style: PixelText.title(size: 9, color: AppColors.textMid)),
       ],
     );
   }
