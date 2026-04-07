@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
+import '../utils/race_participant_display.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/goal_track.dart';
 import '../widgets/info_toast.dart';
@@ -16,6 +17,7 @@ import '../widgets/powerup_icon.dart';
 import '../widgets/spinning_crate.dart';
 import '../widgets/game_container.dart';
 import '../widgets/leaderboard_plank.dart';
+import '../widgets/race_finishers_banner.dart';
 import '../widgets/item_slot.dart';
 import '../widgets/feed_bubble.dart';
 import 'case_opening_screen.dart';
@@ -952,9 +954,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   }
 
   Widget _buildActiveContent() {
-    final participants =
-        (_progress?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
-        [];
+    final participants = sortRaceParticipantsForDisplay(
+      (_progress?['participants'] as List?)?.cast<Map<String, dynamic>>() ?? [],
+    );
+    final finishedCount = participants
+        .where((p) => p['finishedAt'] != null)
+        .length;
     final targetSteps = _race!['targetSteps'] as int? ?? 0;
     final endsAtRaw = _race!['endsAt'] as String?;
     final endsAt = endsAtRaw != null
@@ -1016,9 +1021,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                   ),
                 ],
               ),
+              if (finishedCount > 0) ...[
+                const SizedBox(height: 10),
+                RaceFinishersBanner(
+                  finishedCount: finishedCount,
+                  targetSteps: targetSteps,
+                ),
+              ],
               const SizedBox(height: 10),
-              for (int i = 0; i < participants.length; i++)
-                _buildLeaderboardPlank(participants[i], i),
+              ..._buildLeaderboardRows(participants),
 
               // Divider
               Padding(
@@ -1437,10 +1448,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
   Widget _buildCompletedContent() {
     final winner = _race!['winner'] as Map<String, dynamic>?;
-    final participants =
-        (_progress?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
-        (_race!['participants'] as List?)?.cast<Map<String, dynamic>>() ??
-        [];
+    final participants = sortRaceParticipantsForDisplay(
+      (_progress?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
+          (_race!['participants'] as List?)?.cast<Map<String, dynamic>>() ??
+          [],
+    );
     final targetSteps = _race!['targetSteps'] as int? ?? 0;
 
     return Column(
@@ -1509,8 +1521,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                 style: PixelText.title(size: 16, color: AppColors.textMid),
               ),
               const SizedBox(height: 10),
-              for (int i = 0; i < participants.length; i++)
-                _buildLeaderboardPlank(participants[i], i),
+              ..._buildLeaderboardRows(participants),
             ],
           ),
         ),
@@ -1615,12 +1626,34 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     );
   }
 
-  Widget _buildLeaderboardPlank(Map<String, dynamic> p, int rank) {
+  List<Widget> _buildLeaderboardRows(List<Map<String, dynamic>> participants) {
+    var finishedSeen = 0;
+    final rows = <Widget>[];
+
+    for (int i = 0; i < participants.length; i++) {
+      final participant = participants[i];
+      final finishPlace = participant['finishedAt'] != null
+          ? ++finishedSeen
+          : null;
+      rows.add(
+        _buildLeaderboardPlank(participant, i, finishPlace: finishPlace),
+      );
+    }
+
+    return rows;
+  }
+
+  Widget _buildLeaderboardPlank(
+    Map<String, dynamic> p,
+    int rank, {
+    int? finishPlace,
+  }) {
     final name = p['displayName'] as String? ?? '???';
     final totalSteps = p['totalSteps'] as int? ?? 0;
     final userId = p['userId'] as String? ?? '';
     final isMe = userId == _myUserId;
     final isStealthed = p['stealthed'] == true;
+    final isFinished = p['finishedAt'] != null;
 
     final activeEffects =
         (_powerupData?['activeEffects'] as List?)
@@ -1636,6 +1669,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       formattedSteps: _formatSteps(totalSteps),
       isUser: isMe,
       isStealthed: isStealthed,
+      isFinished: isFinished,
+      finishPlace: finishPlace,
       effectIcons: [
         for (final e in activeEffects)
           _EffectIconWithTooltip(type: e['type'] as String? ?? ''),

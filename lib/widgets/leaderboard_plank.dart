@@ -1,6 +1,8 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+
 import '../styles.dart';
+import '../utils/race_participant_display.dart';
 
 /// A styled wooden plank for leaderboard rows with medal and depth.
 class LeaderboardPlank extends StatelessWidget {
@@ -9,6 +11,8 @@ class LeaderboardPlank extends StatelessWidget {
   final int steps;
   final bool isUser;
   final bool isStealthed;
+  final bool isFinished;
+  final int? finishPlace;
   final String formattedSteps;
   final List<Widget> effectIcons;
 
@@ -20,6 +24,8 @@ class LeaderboardPlank extends StatelessWidget {
     required this.formattedSteps,
     this.isUser = false,
     this.isStealthed = false,
+    this.isFinished = false,
+    this.finishPlace,
     this.effectIcons = const [],
   });
 
@@ -39,22 +45,36 @@ class LeaderboardPlank extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final displayName = isStealthed ? '???' : (isUser ? '$name (you)' : name);
+    final finishLabel = finishPlace == null
+        ? 'FINISH'
+        : '${formatOrdinal(finishPlace!)} FINISH';
 
     return Padding(
       padding: EdgeInsets.only(top: rank == 0 ? 0 : 4),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
-          color:
-              _medalColor?.withValues(alpha: 0.08) ??
-              AppColors.parchmentDark.withValues(alpha: 0.4),
+          color: isFinished
+              ? AppColors.coinLight.withValues(alpha: 0.14)
+              : _medalColor?.withValues(alpha: 0.08) ??
+                    AppColors.parchmentDark.withValues(alpha: 0.4),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color:
-                _medalColor?.withValues(alpha: 0.3) ??
-                AppColors.parchmentBorder.withValues(alpha: 0.3),
+            color: isFinished
+                ? AppColors.coinDark.withValues(alpha: 0.45)
+                : _medalColor?.withValues(alpha: 0.3) ??
+                      AppColors.parchmentBorder.withValues(alpha: 0.3),
             width: 1,
           ),
+          boxShadow: isFinished
+              ? [
+                  BoxShadow(
+                    color: AppColors.coinDark.withValues(alpha: 0.18),
+                    offset: const Offset(0, 2),
+                    blurRadius: 4,
+                  ),
+                ]
+              : null,
         ),
         child: Row(
           children: [
@@ -91,6 +111,56 @@ class LeaderboardPlank extends StatelessWidget {
                   if (effectIcons.isNotEmpty) ...[
                     const SizedBox(width: 4),
                     ...effectIcons,
+                  ],
+                  if (isFinished && !isStealthed) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(7),
+                        gradient: const LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            AppColors.roofLight,
+                            AppColors.roofMid,
+                            AppColors.roofDark,
+                          ],
+                        ),
+                        border: Border.all(
+                          color: AppColors.coinLight.withValues(alpha: 0.9),
+                          width: 1.1,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.coinDark.withValues(alpha: 0.45),
+                            offset: const Offset(0, 2),
+                            blurRadius: 0,
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.flag_rounded,
+                            size: 12,
+                            color: AppColors.coinLight,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            finishLabel,
+                            style: PixelText.title(
+                              size: 9.5,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ],
               ),

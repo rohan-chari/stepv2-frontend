@@ -35,11 +35,23 @@ class _PillButtonState extends State<PillButton> {
   (Color, Color, Color) _colors() {
     switch (widget.variant) {
       case PillButtonVariant.primary:
-        return (AppColors.pillGreen, AppColors.pillGreenDark, AppColors.pillGreenShadow);
+        return (
+          AppColors.pillGreen,
+          AppColors.pillGreenDark,
+          AppColors.pillGreenShadow,
+        );
       case PillButtonVariant.secondary:
-        return (AppColors.pillGold, AppColors.pillGoldDark, AppColors.pillGoldShadow);
+        return (
+          AppColors.pillGold,
+          AppColors.pillGoldDark,
+          AppColors.pillGoldShadow,
+        );
       case PillButtonVariant.accent:
-        return (AppColors.pillTerra, AppColors.pillTerraDark, AppColors.pillTerraShadow);
+        return (
+          AppColors.pillTerra,
+          AppColors.pillTerraDark,
+          AppColors.pillTerraShadow,
+        );
     }
   }
 
@@ -54,11 +66,13 @@ class _PillButtonState extends State<PillButton> {
     final activeDark = _enabled ? dark : disabledDark;
     final activeShadow = _enabled ? shadow : disabledShadow;
 
-    // Gold gets dark text (like the old arcade button), others get white
+    // Ochre keeps dark text for contrast; the other variants stay white.
     final bool darkText = widget.variant == PillButtonVariant.secondary;
     final textColor = _enabled
         ? (darkText ? AppColors.textDark : Colors.white)
-        : (darkText ? AppColors.textDark.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.7));
+        : (darkText
+              ? AppColors.textDark.withValues(alpha: 0.5)
+              : Colors.white.withValues(alpha: 0.7));
 
     final child = GestureDetector(
       onTapDown: _enabled ? (_) => setState(() => _pressed = true) : null,
@@ -108,10 +122,7 @@ class _PillButtonState extends State<PillButton> {
               Text(
                 widget.label,
                 textAlign: TextAlign.center,
-                style: PixelText.pill(
-                  size: widget.fontSize,
-                  color: textColor,
-                ),
+                style: PixelText.pill(size: widget.fontSize, color: textColor),
               ),
             ],
           ),

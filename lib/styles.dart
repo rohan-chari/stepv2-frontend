@@ -67,7 +67,7 @@ abstract final class AppColors {
   static const textDark = Color(0xFF3B2816);
   static const textMid = Color(0xFF6B5030);
   static const textLight = Color(0xFFF5E6C8);
-  static const textAccent = Color(0xFFD4691E);
+  static const textAccent = Color(0xFFB5763E);
 
   // Button (wooden plaque)
   static const buttonFace = Color(0xFFCB9860);
@@ -77,12 +77,12 @@ abstract final class AppColors {
   static const buttonText = Color(0xFF3B2816);
 
   // Accent
-  static const accent = Color(0xFFD4691E);
-  static const accentLight = Color(0xFFE8944A);
+  static const accent = Color(0xFFB5763E);
+  static const accentLight = Color(0xFFD39B69);
 
   // Error
-  static const error = Color(0xFFE05040);
-  static const errorLight = Color(0xFFFF8A80);
+  static const error = Color(0xFFB8604C);
+  static const errorLight = Color(0xFFD69A88);
 
   // Medals
   static const medalGold = Color(0xFFFFD700);
@@ -90,10 +90,10 @@ abstract final class AppColors {
   static const medalBronze = Color(0xFFCD7F32);
 
   // Feed event tints
-  static const feedAttack = Color(0xFFE05040);
+  static const feedAttack = error;
   static const feedShield = Color(0xFF4A90D9);
-  static const feedGold = Color(0xFFD4A017);
-  static const feedBoost = Color(0xFF58CC02);
+  static const feedGold = Color(0xFFC49A48);
+  static const feedBoost = roofLight;
 
   // Firefly
   static const fireflyGlow = Color(0xFFFFE87C);
@@ -105,52 +105,45 @@ abstract final class AppColors {
   static const coinEdge = Color(0xFF8B6914);
 
   // Pill button palette (3 colors)
-  // Primary – green
-  static const pillGreen = Color(0xFF58CC02);
-  static const pillGreenDark = Color(0xFF46A302);
-  static const pillGreenShadow = Color(0xFF3A8A01);
-  // Secondary – arcade gold
-  static const pillGold = Color(0xFFF5C842);
-  static const pillGoldDark = Color(0xFFD4991E);
-  static const pillGoldShadow = Color(0xFFB8860B);
-  // Accent – warm terracotta
-  static const pillTerra = Color(0xFFD4573B);
-  static const pillTerraDark = Color(0xFFA8442F);
-  static const pillTerraShadow = Color(0xFF7D3322);
+  // Primary – forest green
+  static const pillGreen = roofLight;
+  static const pillGreenDark = roofMid;
+  static const pillGreenShadow = roofDark;
+  // Secondary – trail ochre
+  static const pillGold = Color(0xFFE2C66F);
+  static const pillGoldDark = Color(0xFFC39A43);
+  static const pillGoldShadow = Color(0xFF8A672B);
+  // Accent – campfire clay
+  static const pillTerra = Color(0xFFB86A50);
+  static const pillTerraDark = Color(0xFF8E4D3A);
+  static const pillTerraShadow = Color(0xFF633326);
 }
 
 /// Game-themed text styles — bold and clean, not arcade-pixel.
 abstract final class PixelText {
   static TextStyle title({double size = 30, Color color = AppColors.textDark}) {
-    return GoogleFonts.russoOne(
-      fontSize: size,
-      color: color,
-      height: 1.3,
-    );
+    return GoogleFonts.russoOne(fontSize: size, color: color, height: 1.3);
   }
 
-  static TextStyle body({double size = 17.5, Color color = AppColors.textDark}) {
-    return GoogleFonts.chakraPetch(
-      fontSize: size,
-      color: color,
-      height: 1.5,
-    );
+  static TextStyle body({
+    double size = 17.5,
+    Color color = AppColors.textDark,
+  }) {
+    return GoogleFonts.chakraPetch(fontSize: size, color: color, height: 1.5);
   }
 
-  static TextStyle number({double size = 45, Color color = AppColors.textAccent}) {
-    return GoogleFonts.russoOne(
-      fontSize: size,
-      color: color,
-      height: 1.2,
-    );
+  static TextStyle number({
+    double size = 45,
+    Color color = AppColors.textAccent,
+  }) {
+    return GoogleFonts.russoOne(fontSize: size, color: color, height: 1.2);
   }
 
-  static TextStyle button({double size = 20, Color color = AppColors.buttonText}) {
-    return GoogleFonts.russoOne(
-      fontSize: size,
-      color: color,
-      letterSpacing: 2,
-    );
+  static TextStyle button({
+    double size = 20,
+    Color color = AppColors.buttonText,
+  }) {
+    return GoogleFonts.russoOne(fontSize: size, color: color, letterSpacing: 2);
   }
 
   static TextStyle pill({double size = 19, Color color = Colors.white}) {

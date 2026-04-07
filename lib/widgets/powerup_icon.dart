@@ -23,7 +23,10 @@ class PowerupIcon extends StatelessWidget {
     final icon = SizedBox.square(
       dimension: size,
       child: Center(
-        child: CustomPaint(size: Size(size, size), painter: _PowerupPainter(type)),
+        child: CustomPaint(
+          size: Size(size, size),
+          painter: _PowerupPainter(type),
+        ),
       ),
     );
 
@@ -993,217 +996,710 @@ class _PowerupPainter extends CustomPainter {
     canvas.drawPath(lowerTail, tailPaint);
   }
 
-  // Stealth Mode — eye with slash through it
+  // Stealth Mode — hooded visor under moonlight.
   void _paintStealthMode(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFF6B5030)
-      ..strokeWidth = size.width * 0.08
+    _paintMedallion(
+      canvas,
+      size,
+      fillColors: const [
+        Color(0xFFE0EEF8),
+        Color(0xFF607A9B),
+        Color(0xFF1A2239),
+      ],
+      edgeColor: const Color(0xFF10182B),
+      ringColor: const Color(0xFFC8D6E6),
+      shadowColor: const Color(0xFF070D18),
+    );
+
+    final moonCenter = Offset(size.width * 0.69, size.height * 0.27);
+    canvas.drawCircle(
+      moonCenter,
+      size.width * 0.12,
+      Paint()..color = const Color(0xFFF4FAFF).withValues(alpha: 0.9),
+    );
+    canvas.drawCircle(
+      moonCenter.translate(size.width * 0.06, -size.height * 0.01),
+      size.width * 0.11,
+      Paint()..color = const Color(0xFF293754),
+    );
+
+    final hoodPath = Path()
+      ..moveTo(size.width * 0.23, size.height * 0.69)
+      ..quadraticBezierTo(
+        size.width * 0.20,
+        size.height * 0.46,
+        size.width * 0.37,
+        size.height * 0.24,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.50,
+        size.height * 0.09,
+        size.width * 0.64,
+        size.height * 0.23,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.81,
+        size.height * 0.41,
+        size.width * 0.78,
+        size.height * 0.69,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.63,
+        size.height * 0.82,
+        size.width * 0.50,
+        size.height * 0.82,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.36,
+        size.height * 0.82,
+        size.width * 0.23,
+        size.height * 0.69,
+      )
+      ..close();
+
+    canvas.drawShadow(
+      hoodPath,
+      const Color(0xFF09111F).withValues(alpha: 0.42),
+      size.width * 0.04,
+      false,
+    );
+    canvas.drawPath(
+      hoodPath,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF314564), Color(0xFF172239), Color(0xFF0B1220)],
+        ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)),
+    );
+
+    final shoulderPath = Path()
+      ..moveTo(size.width * 0.24, size.height * 0.72)
+      ..quadraticBezierTo(
+        size.width * 0.36,
+        size.height * 0.58,
+        size.width * 0.50,
+        size.height * 0.62,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.66,
+        size.height * 0.67,
+        size.width * 0.77,
+        size.height * 0.59,
+      )
+      ..lineTo(size.width * 0.77, size.height * 0.75)
+      ..quadraticBezierTo(
+        size.width * 0.63,
+        size.height * 0.84,
+        size.width * 0.50,
+        size.height * 0.84,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.37,
+        size.height * 0.84,
+        size.width * 0.24,
+        size.height * 0.72,
+      )
+      ..close();
+    canvas.drawPath(
+      shoulderPath,
+      Paint()..color = const Color(0xFF0D1728).withValues(alpha: 0.95),
+    );
+
+    final visorPath = Path()
+      ..moveTo(size.width * 0.31, size.height * 0.52)
+      ..quadraticBezierTo(
+        size.width * 0.50,
+        size.height * 0.40,
+        size.width * 0.69,
+        size.height * 0.52,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.50,
+        size.height * 0.61,
+        size.width * 0.31,
+        size.height * 0.52,
+      )
+      ..close();
+    canvas.drawPath(
+      visorPath,
+      Paint()..color = const Color(0xFFF1FBFF).withValues(alpha: 0.96),
+    );
+    canvas.drawPath(
+      visorPath,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = size.width * 0.022
+        ..strokeJoin = StrokeJoin.round
+        ..color = const Color(0xFFADC8DB),
+    );
+
+    final pupilCenter = Offset(size.width * 0.54, size.height * 0.52);
+    canvas.drawCircle(
+      pupilCenter,
+      size.width * 0.048,
+      Paint()..color = const Color(0xFF0B1220),
+    );
+    canvas.drawCircle(
+      pupilCenter.translate(-size.width * 0.013, -size.height * 0.012),
+      size.width * 0.013,
+      Paint()..color = Colors.white.withValues(alpha: 0.9),
+    );
+
+    canvas.drawLine(
+      Offset(size.width * 0.36, size.height * 0.49),
+      Offset(size.width * 0.58, size.height * 0.46),
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.38)
+        ..strokeWidth = size.width * 0.022
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  // Wrong Turn — hooked road arrow that doubles back.
+  void _paintWrongTurn(Canvas canvas, Size size) {
+    _paintMedallion(
+      canvas,
+      size,
+      fillColors: const [
+        Color(0xFFFFE3CC),
+        Color(0xFFF08B43),
+        Color(0xFF8F3513),
+      ],
+      edgeColor: const Color(0xFF5C1E09),
+      ringColor: const Color(0xFFFFD8B7),
+      shadowColor: const Color(0xFF311003),
+    );
+
+    final roadShadow = Paint()
+      ..color = const Color(0xFF63321A).withValues(alpha: 0.22)
+      ..strokeWidth = size.width * 0.16
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    final roadPaint = Paint()
+      ..color = const Color(0xFFFFF4DE)
+      ..strokeWidth = size.width * 0.14
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    final roadEdge = Paint()
+      ..color = const Color(0xFFE4CAA0)
+      ..strokeWidth = size.width * 0.03
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
 
-    final cx = size.width / 2;
-    final cy = size.height / 2;
+    final roadPath = Path()
+      ..moveTo(size.width * 0.33, size.height * 0.79)
+      ..quadraticBezierTo(
+        size.width * 0.35,
+        size.height * 0.63,
+        size.width * 0.46,
+        size.height * 0.58,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.58,
+        size.height * 0.52,
+        size.width * 0.60,
+        size.height * 0.40,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.62,
+        size.height * 0.28,
+        size.width * 0.53,
+        size.height * 0.21,
+      );
 
-    // Eye shape
-    final eyePath = Path()
-      ..moveTo(size.width * 0.1, cy)
-      ..quadraticBezierTo(cx, cy - size.height * 0.3, size.width * 0.9, cy)
-      ..quadraticBezierTo(cx, cy + size.height * 0.3, size.width * 0.1, cy);
-    canvas.drawPath(eyePath, paint);
-
-    // Pupil
-    canvas.drawCircle(
-      Offset(cx, cy),
-      size.width * 0.08,
-      paint..style = PaintingStyle.fill,
+    canvas.drawPath(
+      roadPath.shift(Offset(size.width * 0.015, size.height * 0.02)),
+      roadShadow,
     );
-    paint.style = PaintingStyle.stroke;
+    canvas.drawPath(roadPath, roadPaint);
+    canvas.drawPath(roadPath, roadEdge);
 
-    // Slash
-    final slashPaint = Paint()
-      ..color = const Color(0xFFE05040)
-      ..strokeWidth = size.width * 0.08
+    final lanePaint = Paint()
+      ..color = const Color(0xFFBE9659)
+      ..strokeWidth = size.width * 0.022
       ..strokeCap = StrokeCap.round;
     canvas.drawLine(
-      Offset(size.width * 0.2, size.height * 0.2),
-      Offset(size.width * 0.8, size.height * 0.8),
-      slashPaint,
+      Offset(size.width * 0.37, size.height * 0.73),
+      Offset(size.width * 0.40, size.height * 0.63),
+      lanePaint,
+    );
+    canvas.drawLine(
+      Offset(size.width * 0.43, size.height * 0.58),
+      Offset(size.width * 0.47, size.height * 0.52),
+      lanePaint,
+    );
+    canvas.drawLine(
+      Offset(size.width * 0.50, size.height * 0.46),
+      Offset(size.width * 0.54, size.height * 0.37),
+      lanePaint,
+    );
+
+    final arrowPath = Path()
+      ..moveTo(size.width * 0.67, size.height * 0.78)
+      ..lineTo(size.width * 0.67, size.height * 0.38)
+      ..quadraticBezierTo(
+        size.width * 0.67,
+        size.height * 0.29,
+        size.width * 0.59,
+        size.height * 0.29,
+      )
+      ..lineTo(size.width * 0.44, size.height * 0.29)
+      ..lineTo(size.width * 0.44, size.height * 0.20)
+      ..lineTo(size.width * 0.24, size.height * 0.34)
+      ..lineTo(size.width * 0.44, size.height * 0.48)
+      ..lineTo(size.width * 0.44, size.height * 0.38)
+      ..lineTo(size.width * 0.58, size.height * 0.38)
+      ..lineTo(size.width * 0.58, size.height * 0.78)
+      ..close();
+
+    canvas.drawShadow(
+      arrowPath,
+      const Color(0xFF501808).withValues(alpha: 0.34),
+      size.width * 0.035,
+      false,
+    );
+    canvas.drawPath(
+      arrowPath,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFFFF4C4), Color(0xFFFFB24A), Color(0xFFD2551E)],
+        ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)),
+    );
+    canvas.drawPath(
+      arrowPath,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = size.width * 0.028
+        ..strokeJoin = StrokeJoin.round
+        ..color = const Color(0xFF7B290A),
+    );
+
+    canvas.drawLine(
+      Offset(size.width * 0.61, size.height * 0.44),
+      Offset(size.width * 0.61, size.height * 0.72),
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.44)
+        ..strokeWidth = size.width * 0.024
+        ..strokeCap = StrokeCap.round,
     );
   }
 
-  // Wrong Turn — painted via Icon in the widget layer (see PowerupIcon build)
-  void _paintWrongTurn(Canvas canvas, Size size) {
-    // No-op: handled by Icon widget overlay in PowerupIcon.build
+  // Fanny Pack — leather pouch with a curved strap and zipper.
+  void _paintFannyPack(Canvas canvas, Size size) {
+    _paintMedallion(
+      canvas,
+      size,
+      fillColors: const [
+        Color(0xFFFFE7CF),
+        Color(0xFFD4934C),
+        Color(0xFF7E4418),
+      ],
+      edgeColor: const Color(0xFF4D260E),
+      ringColor: const Color(0xFFFFDDBD),
+      shadowColor: const Color(0xFF241004),
+    );
+
+    final strapPath = Path()
+      ..moveTo(size.width * 0.20, size.height * 0.38)
+      ..quadraticBezierTo(
+        size.width * 0.50,
+        size.height * 0.10,
+        size.width * 0.82,
+        size.height * 0.38,
+      );
+    canvas.drawPath(
+      strapPath,
+      Paint()
+        ..color = const Color(0xFF5A3419).withValues(alpha: 0.32)
+        ..strokeWidth = size.width * 0.12
+        ..strokeCap = StrokeCap.round
+        ..style = PaintingStyle.stroke,
+    );
+    canvas.drawPath(
+      strapPath,
+      Paint()
+        ..color = const Color(0xFF8E5A28)
+        ..strokeWidth = size.width * 0.10
+        ..strokeCap = StrokeCap.round
+        ..style = PaintingStyle.stroke,
+    );
+    canvas.drawPath(
+      strapPath,
+      Paint()
+        ..color = const Color(0xFFD8A060)
+        ..strokeWidth = size.width * 0.028
+        ..strokeCap = StrokeCap.round
+        ..style = PaintingStyle.stroke,
+    );
+
+    final pouchPath = Path()
+      ..moveTo(size.width * 0.24, size.height * 0.49)
+      ..quadraticBezierTo(
+        size.width * 0.24,
+        size.height * 0.70,
+        size.width * 0.50,
+        size.height * 0.77,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.76,
+        size.height * 0.70,
+        size.width * 0.76,
+        size.height * 0.49,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.69,
+        size.height * 0.39,
+        size.width * 0.50,
+        size.height * 0.38,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.31,
+        size.height * 0.39,
+        size.width * 0.24,
+        size.height * 0.49,
+      )
+      ..close();
+
+    canvas.drawShadow(
+      pouchPath,
+      const Color(0xFF311604).withValues(alpha: 0.34),
+      size.width * 0.04,
+      false,
+    );
+    canvas.drawPath(
+      pouchPath,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFF6C98E), Color(0xFFB86E2D), Color(0xFF7A4318)],
+        ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)),
+    );
+    canvas.drawPath(
+      pouchPath,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = size.width * 0.028
+        ..strokeJoin = StrokeJoin.round
+        ..color = const Color(0xFF5B2C11),
+    );
+
+    final flapPath = Path()
+      ..moveTo(size.width * 0.26, size.height * 0.49)
+      ..quadraticBezierTo(
+        size.width * 0.50,
+        size.height * 0.31,
+        size.width * 0.74,
+        size.height * 0.49,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.60,
+        size.height * 0.58,
+        size.width * 0.50,
+        size.height * 0.58,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.39,
+        size.height * 0.58,
+        size.width * 0.26,
+        size.height * 0.49,
+      )
+      ..close();
+    canvas.drawPath(
+      flapPath,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFFFD9A4), Color(0xFFC7803B), Color(0xFFA05A25)],
+        ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)),
+    );
+
+    canvas.drawLine(
+      Offset(size.width * 0.33, size.height * 0.56),
+      Offset(size.width * 0.67, size.height * 0.56),
+      Paint()
+        ..color = const Color(0xFF6B3B16)
+        ..strokeWidth = size.width * 0.026
+        ..strokeCap = StrokeCap.round,
+    );
+    canvas.drawLine(
+      Offset(size.width * 0.35, size.height * 0.54),
+      Offset(size.width * 0.63, size.height * 0.54),
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.34)
+        ..strokeWidth = size.width * 0.016
+        ..strokeCap = StrokeCap.round,
+    );
+
+    final buckle = RRect.fromRectAndRadius(
+      Rect.fromCenter(
+        center: Offset(size.width * 0.50, size.height * 0.58),
+        width: size.width * 0.13,
+        height: size.height * 0.10,
+      ),
+      Radius.circular(size.width * 0.025),
+    );
+    canvas.drawRRect(buckle, Paint()..color = const Color(0xFFFFD677));
+    canvas.drawRRect(
+      buckle,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = size.width * 0.02
+        ..color = const Color(0xFF8F5C14),
+    );
   }
 
-  // Fanny Pack — small pouch/bag shape
-  void _paintFannyPack(Canvas canvas, Size size) {
-    final paint = Paint()..color = const Color(0xFFD4A017);
+  // Trail Mix — crinkled snack pouch with visible mix pieces.
+  void _paintTrailMix(Canvas canvas, Size size) {
+    _paintMedallion(
+      canvas,
+      size,
+      fillColors: const [
+        Color(0xFFF1F4D3),
+        Color(0xFF99AD5B),
+        Color(0xFF495627),
+      ],
+      edgeColor: const Color(0xFF2A3316),
+      ringColor: const Color(0xFFE4EBC0),
+      shadowColor: const Color(0xFF131809),
+    );
 
-    // Pouch body
-    final body = Path()
-      ..moveTo(size.width * 0.15, size.height * 0.45)
+    final pouchPath = Path()
+      ..moveTo(size.width * 0.28, size.height * 0.31)
+      ..lineTo(size.width * 0.72, size.height * 0.31)
+      ..lineTo(size.width * 0.77, size.height * 0.73)
       ..quadraticBezierTo(
-        size.width * 0.15,
-        size.height * 0.85,
-        size.width * 0.5,
-        size.height * 0.85,
-      )
-      ..quadraticBezierTo(
-        size.width * 0.85,
-        size.height * 0.85,
-        size.width * 0.85,
-        size.height * 0.45,
-      )
-      ..lineTo(size.width * 0.15, size.height * 0.45)
-      ..close();
-    canvas.drawPath(body, paint);
-
-    // Flap/lid
-    final flap = Paint()..color = const Color(0xFFB8860B);
-    final flapPath = Path()
-      ..moveTo(size.width * 0.1, size.height * 0.45)
-      ..lineTo(size.width * 0.9, size.height * 0.45)
-      ..lineTo(size.width * 0.85, size.height * 0.35)
-      ..quadraticBezierTo(
-        size.width * 0.5,
-        size.height * 0.25,
-        size.width * 0.15,
-        size.height * 0.35,
+        size.width * 0.50,
+        size.height * 0.84,
+        size.width * 0.23,
+        size.height * 0.73,
       )
       ..close();
-    canvas.drawPath(flapPath, flap);
 
-    // Strap
-    final strap = Paint()
-      ..color = const Color(0xFF8B6914)
-      ..strokeWidth = size.width * 0.06
+    canvas.drawShadow(
+      pouchPath,
+      const Color(0xFF2A200F).withValues(alpha: 0.28),
+      size.width * 0.035,
+      false,
+    );
+    canvas.drawPath(
+      pouchPath,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFF7E8B7), Color(0xFFD4A35A), Color(0xFF8D5C2B)],
+        ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)),
+    );
+    canvas.drawPath(
+      pouchPath,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = size.width * 0.026
+        ..strokeJoin = StrokeJoin.round
+        ..color = const Color(0xFF70461F),
+    );
+
+    final topFold = Path()
+      ..moveTo(size.width * 0.24, size.height * 0.31)
+      ..lineTo(size.width * 0.35, size.height * 0.22)
+      ..lineTo(size.width * 0.49, size.height * 0.29)
+      ..lineTo(size.width * 0.61, size.height * 0.21)
+      ..lineTo(size.width * 0.76, size.height * 0.31)
+      ..lineTo(size.width * 0.72, size.height * 0.36)
+      ..quadraticBezierTo(
+        size.width * 0.50,
+        size.height * 0.33,
+        size.width * 0.28,
+        size.height * 0.36,
+      )
+      ..close();
+    canvas.drawPath(topFold, Paint()..color = const Color(0xFFE8C679));
+
+    final windowCenter = Offset(size.width * 0.50, size.height * 0.56);
+    final windowRadius = size.width * 0.16;
+    canvas.drawCircle(
+      windowCenter,
+      windowRadius,
+      Paint()..color = const Color(0xFFF8EFD7),
+    );
+    canvas.drawCircle(
+      windowCenter,
+      windowRadius,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = size.width * 0.022
+        ..color = const Color(0xFFB88C49),
+    );
+
+    final nutPaint = Paint()..color = const Color(0xFFE8C695);
+    final berryPaint = Paint()..color = const Color(0xFF8A3150);
+    final seedPaint = Paint()..color = const Color(0xFF6A3E1F);
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(size.width * 0.43, size.height * 0.53),
+        width: size.width * 0.11,
+        height: size.height * 0.07,
+      ),
+      nutPaint,
+    );
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(size.width * 0.58, size.height * 0.60),
+        width: size.width * 0.10,
+        height: size.height * 0.065,
+      ),
+      nutPaint,
+    );
+    canvas.drawCircle(
+      Offset(size.width * 0.55, size.height * 0.50),
+      size.width * 0.05,
+      berryPaint,
+    );
+    canvas.drawCircle(
+      Offset(size.width * 0.42, size.height * 0.64),
+      size.width * 0.045,
+      berryPaint,
+    );
+    canvas.drawCircle(
+      Offset(size.width * 0.49, size.height * 0.58),
+      size.width * 0.03,
+      seedPaint,
+    );
+    canvas.drawCircle(
+      Offset(size.width * 0.61, size.height * 0.49),
+      size.width * 0.026,
+      seedPaint,
+    );
+
+    canvas.drawCircle(
+      Offset(size.width * 0.65, size.height * 0.28),
+      size.width * 0.033,
+      nutPaint,
+    );
+    canvas.drawCircle(
+      Offset(size.width * 0.58, size.height * 0.24),
+      size.width * 0.028,
+      berryPaint,
+    );
+  }
+
+  // Detour Sign — road sign with a route that bends around it.
+  void _paintDetourSign(Canvas canvas, Size size) {
+    _paintMedallion(
+      canvas,
+      size,
+      fillColors: const [
+        Color(0xFFFFE7C9),
+        Color(0xFFFFA64A),
+        Color(0xFFA54A0A),
+      ],
+      edgeColor: const Color(0xFF662B05),
+      ringColor: const Color(0xFFFFDBAE),
+      shadowColor: const Color(0xFF341402),
+    );
+
+    final post = RRect.fromRectAndRadius(
+      Rect.fromCenter(
+        center: Offset(size.width * 0.52, size.height * 0.66),
+        width: size.width * 0.08,
+        height: size.height * 0.32,
+      ),
+      Radius.circular(size.width * 0.03),
+    );
+    canvas.drawRRect(post, Paint()..color = const Color(0xFF7D4218));
+    canvas.drawRRect(
+      post,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = size.width * 0.018
+        ..color = const Color(0xFF4B2208),
+    );
+
+    final diamondPath = Path()
+      ..moveTo(size.width * 0.52, size.height * 0.17)
+      ..lineTo(size.width * 0.71, size.height * 0.36)
+      ..lineTo(size.width * 0.52, size.height * 0.55)
+      ..lineTo(size.width * 0.33, size.height * 0.36)
+      ..close();
+
+    canvas.drawShadow(
+      diamondPath,
+      const Color(0xFF4A1D05).withValues(alpha: 0.24),
+      size.width * 0.03,
+      false,
+    );
+    canvas.drawPath(
+      diamondPath,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFFFF0B6), Color(0xFFFFBC47), Color(0xFFE2751E)],
+        ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)),
+    );
+    canvas.drawPath(
+      diamondPath,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = size.width * 0.028
+        ..strokeJoin = StrokeJoin.round
+        ..color = const Color(0xFF5A2404),
+    );
+
+    final routePaint = Paint()
+      ..color = const Color(0xFF2D1A08)
+      ..strokeWidth = size.width * 0.055
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
-    final strapPath = Path()
-      ..moveTo(size.width * 0.15, size.height * 0.4)
+    final detourPath = Path()
+      ..moveTo(size.width * 0.30, size.height * 0.70)
       ..quadraticBezierTo(
-        size.width * 0.5,
-        size.height * 0.12,
-        size.width * 0.85,
-        size.height * 0.4,
-      );
-    canvas.drawPath(strapPath, strap);
-
-    // Clasp/button
-    canvas.drawCircle(
-      Offset(size.width * 0.5, size.height * 0.45),
-      size.width * 0.06,
-      Paint()..color = const Color(0xFFE8C850),
-    );
-  }
-
-  // Trail Mix — small bag with mixed dots (nuts, raisins, etc.)
-  void _paintTrailMix(Canvas canvas, Size size) {
-    final paint = Paint()..color = const Color(0xFF8B6914);
-
-    // Bag body
-    final bag = Path()
-      ..moveTo(size.width * 0.2, size.height * 0.35)
-      ..lineTo(size.width * 0.25, size.height * 0.85)
-      ..quadraticBezierTo(
-        size.width * 0.5,
-        size.height * 0.9,
-        size.width * 0.75,
-        size.height * 0.85,
+        size.width * 0.18,
+        size.height * 0.47,
+        size.width * 0.33,
+        size.height * 0.30,
       )
-      ..lineTo(size.width * 0.8, size.height * 0.35)
+      ..quadraticBezierTo(
+        size.width * 0.46,
+        size.height * 0.16,
+        size.width * 0.61,
+        size.height * 0.24,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.76,
+        size.height * 0.31,
+        size.width * 0.75,
+        size.height * 0.48,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.74,
+        size.height * 0.65,
+        size.width * 0.60,
+        size.height * 0.73,
+      );
+    canvas.drawPath(detourPath, routePaint);
+
+    final arrowHead = Path()
+      ..moveTo(size.width * 0.59, size.height * 0.73)
+      ..lineTo(size.width * 0.76, size.height * 0.68)
+      ..lineTo(size.width * 0.67, size.height * 0.84)
       ..close();
-    canvas.drawPath(bag, paint);
+    canvas.drawPath(arrowHead, Paint()..color = const Color(0xFF2D1A08));
 
-    // Bag opening (crinkled top)
-    final top = Paint()..color = const Color(0xFFA0782C);
-    final topPath = Path()
-      ..moveTo(size.width * 0.15, size.height * 0.35)
-      ..lineTo(size.width * 0.3, size.height * 0.25)
-      ..lineTo(size.width * 0.5, size.height * 0.32)
-      ..lineTo(size.width * 0.7, size.height * 0.25)
-      ..lineTo(size.width * 0.85, size.height * 0.35)
-      ..lineTo(size.width * 0.8, size.height * 0.35)
-      ..lineTo(size.width * 0.2, size.height * 0.35)
+    final signArrow = Path()
+      ..moveTo(size.width * 0.43, size.height * 0.39)
+      ..lineTo(size.width * 0.55, size.height * 0.39)
+      ..lineTo(size.width * 0.55, size.height * 0.34)
+      ..lineTo(size.width * 0.63, size.height * 0.43)
+      ..lineTo(size.width * 0.55, size.height * 0.51)
+      ..lineTo(size.width * 0.55, size.height * 0.46)
+      ..lineTo(size.width * 0.43, size.height * 0.46)
       ..close();
-    canvas.drawPath(topPath, top);
-
-    // Mix dots — nuts (tan)
-    canvas.drawCircle(
-      Offset(size.width * 0.38, size.height * 0.52),
-      size.width * 0.06,
-      Paint()..color = const Color(0xFFDEB887),
-    );
-    canvas.drawCircle(
-      Offset(size.width * 0.62, size.height * 0.65),
-      size.width * 0.055,
-      Paint()..color = const Color(0xFFDEB887),
-    );
-
-    // Mix dots — raisins (dark purple)
-    canvas.drawCircle(
-      Offset(size.width * 0.52, size.height * 0.55),
-      size.width * 0.05,
-      Paint()..color = const Color(0xFF4A0E4E),
-    );
-    canvas.drawCircle(
-      Offset(size.width * 0.4, size.height * 0.7),
-      size.width * 0.045,
-      Paint()..color = const Color(0xFF4A0E4E),
-    );
-
-    // Mix dots — chocolate (brown)
-    canvas.drawCircle(
-      Offset(size.width * 0.58, size.height * 0.48),
-      size.width * 0.04,
-      Paint()..color = const Color(0xFF5C3317),
-    );
-    canvas.drawCircle(
-      Offset(size.width * 0.48, size.height * 0.72),
-      size.width * 0.05,
-      Paint()..color = const Color(0xFF5C3317),
-    );
-  }
-
-  // Detour Sign — diamond warning sign with question mark
-  void _paintDetourSign(Canvas canvas, Size size) {
-    // Diamond shape
-    final diamond = Path()
-      ..moveTo(size.width * 0.5, size.height * 0.12)
-      ..lineTo(size.width * 0.88, size.height * 0.5)
-      ..lineTo(size.width * 0.5, size.height * 0.88)
-      ..lineTo(size.width * 0.12, size.height * 0.5)
-      ..close();
-    canvas.drawPath(diamond, Paint()..color = const Color(0xFFFF8C00));
-
-    // Border
-    canvas.drawPath(
-      diamond,
-      Paint()
-        ..color = const Color(0xFF8B4500)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = size.width * 0.05,
-    );
-
-    // Question mark
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: '?',
-        style: TextStyle(
-          color: Colors.black,
-          fontSize: size.width * 0.45,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    textPainter.paint(
-      canvas,
-      Offset(
-        (size.width - textPainter.width) / 2,
-        (size.height - textPainter.height) / 2,
-      ),
-    );
+    canvas.drawPath(signArrow, Paint()..color = const Color(0xFF2D1A08));
   }
 }
