@@ -1,14 +1,96 @@
 import 'package:flutter/material.dart';
 
+import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
-import '../../models/step_data.dart';
 import '../../widgets/filter_dropdown.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_icon_button.dart';
 import '../../widgets/spinning_coin.dart';
+
+enum _LeaderboardType { steps, challenges, races }
+
+_LeaderboardType _leaderboardTypeFromApi(String apiValue) {
+  switch (apiValue) {
+    case 'challenges':
+      return _LeaderboardType.challenges;
+    case 'races':
+      return _LeaderboardType.races;
+    case 'steps':
+    default:
+      return _LeaderboardType.steps;
+  }
+}
+
+extension on _LeaderboardType {
+  String get apiValue {
+    switch (this) {
+      case _LeaderboardType.steps:
+        return 'steps';
+      case _LeaderboardType.challenges:
+        return 'challenges';
+      case _LeaderboardType.races:
+        return 'races';
+    }
+  }
+
+  String get label {
+    switch (this) {
+      case _LeaderboardType.steps:
+        return 'STEPS';
+      case _LeaderboardType.challenges:
+        return 'CHALLENGES';
+      case _LeaderboardType.races:
+        return 'RACES';
+    }
+  }
+
+  String get trailingHeader {
+    switch (this) {
+      case _LeaderboardType.steps:
+        return 'STEPS';
+      case _LeaderboardType.challenges:
+        return 'W-L';
+      case _LeaderboardType.races:
+        return 'PODIUMS';
+    }
+  }
+
+  String get emptyTitle {
+    switch (this) {
+      case _LeaderboardType.steps:
+        return 'No steps yet - get walking!';
+      case _LeaderboardType.challenges:
+        return 'No qualified challenge records yet';
+      case _LeaderboardType.races:
+        return 'No race records yet';
+    }
+  }
+
+  String? get emptySubtitle {
+    switch (this) {
+      case _LeaderboardType.steps:
+        return null;
+      case _LeaderboardType.challenges:
+        return 'Finish more matchups to unlock the record board.';
+      case _LeaderboardType.races:
+        return 'Complete races to start building a podium record.';
+    }
+  }
+
+  IconData get emptyIcon {
+    switch (this) {
+      case _LeaderboardType.steps:
+        return Icons.directions_walk;
+      case _LeaderboardType.challenges:
+        return Icons.emoji_events_rounded;
+      case _LeaderboardType.races:
+        return Icons.flag_rounded;
+    }
+  }
+}
 
 class LeaderboardTab extends StatefulWidget {
   final AuthService authService;
@@ -16,6 +98,9 @@ class LeaderboardTab extends StatefulWidget {
   final StepData? stepData;
   final int? stepGoal;
   final String? displayName;
+  final String requestedType;
+  final String requestedPeriod;
+  final int selectionNonce;
   final VoidCallback? onOpenProfile;
 
   const LeaderboardTab({
@@ -25,6 +110,9 @@ class LeaderboardTab extends StatefulWidget {
     this.stepData,
     this.stepGoal,
     this.displayName,
+    this.requestedType = 'steps',
+    this.requestedPeriod = 'today',
+    this.selectionNonce = 0,
     this.onOpenProfile,
   });
 
@@ -34,7 +122,9 @@ class LeaderboardTab extends StatefulWidget {
 
 class _LeaderboardTabState extends State<LeaderboardTab> {
   late final BackendApiService _api;
+  _LeaderboardType _selectedType = _LeaderboardType.steps;
   String _selectedPeriod = 'today';
+  int _minimumCompletedChallenges = 5;
   bool _isLoading = true;
   List<Map<String, dynamic>> _top10 = [];
   Map<String, dynamic>? _currentUser;
@@ -54,34 +144,81 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   void initState() {
     super.initState();
     _api = widget.backendApiService ?? BackendApiService();
+    _selectedType = _leaderboardTypeFromApi(widget.requestedType);
+    _selectedPeriod = _selectedType == _LeaderboardType.steps
+        ? widget.requestedPeriod
+        : 'allTime';
+    _loadLeaderboard();
+  }
+
+  @override
+  void didUpdateWidget(covariant LeaderboardTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.selectionNonce == oldWidget.selectionNonce) return;
+
+    final requestedType = _leaderboardTypeFromApi(widget.requestedType);
+    final requestedPeriod = requestedType == _LeaderboardType.steps
+        ? widget.requestedPeriod
+        : 'allTime';
+
+    if (requestedType == _selectedType && requestedPeriod == _selectedPeriod) {
+      return;
+    }
+
+    setState(() {
+      _selectedType = requestedType;
+      _selectedPeriod = requestedPeriod;
+    });
     _loadLeaderboard();
   }
 
   Future<void> _loadLeaderboard() async {
-    if (mounted) setState(() => _isLoading = true);
+    if (mounted) {
+      setState(() => _isLoading = true);
+    }
 
     final token = widget.authService.authToken;
     if (token == null || token.isEmpty) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
       return;
     }
+
+    final requestType = _selectedType;
+    final requestPeriod = requestType == _LeaderboardType.steps
+        ? _selectedPeriod
+        : 'allTime';
 
     try {
       final data = await _api.fetchLeaderboard(
         identityToken: token,
-        period: _selectedPeriod,
+        type: requestType.apiValue,
+        period: requestPeriod,
       );
 
-      if (mounted) {
-        setState(() {
-          final top10Raw = data['top10'] as List? ?? [];
-          _top10 = top10Raw.cast<Map<String, dynamic>>();
-          _currentUser = data['currentUser'] as Map<String, dynamic>?;
-          _isLoading = false;
-        });
+      if (!mounted ||
+          requestType != _selectedType ||
+          requestPeriod !=
+              (_selectedType == _LeaderboardType.steps
+                  ? _selectedPeriod
+                  : 'allTime')) {
+        return;
       }
+
+      setState(() {
+        final top10Raw = data['top10'] as List? ?? [];
+        _top10 = top10Raw.cast<Map<String, dynamic>>();
+        _currentUser = data['currentUser'] as Map<String, dynamic>?;
+        _minimumCompletedChallenges =
+            data['minimumCompletedChallenges'] as int? ??
+            _minimumCompletedChallenges;
+        _isLoading = false;
+      });
     } catch (_) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -91,11 +228,33 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     _loadLeaderboard();
   }
 
+  void _selectType(_LeaderboardType type) {
+    if (type == _selectedType) return;
+    setState(() => _selectedType = type);
+    _loadLeaderboard();
+  }
+
   String _formatSteps(int steps) {
     if (steps >= 1000) {
       return '${(steps / 1000).toStringAsFixed(1)}k';
     }
     return '$steps';
+  }
+
+  String _displayValue(Map<String, dynamic> entry) {
+    switch (_selectedType) {
+      case _LeaderboardType.steps:
+        return _formatSteps(entry['totalSteps'] as int? ?? 0);
+      case _LeaderboardType.challenges:
+        final wins = entry['wins'] as int? ?? 0;
+        final losses = entry['losses'] as int? ?? 0;
+        return '$wins-$losses';
+      case _LeaderboardType.races:
+        final firsts = entry['firsts'] as int? ?? 0;
+        final seconds = entry['seconds'] as int? ?? 0;
+        final thirds = entry['thirds'] as int? ?? 0;
+        return '1ST $firsts  2ND $seconds  3RD $thirds';
+    }
   }
 
   @override
@@ -127,16 +286,24 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                         color: AppColors.textMid,
                       ).copyWith(shadows: _textShadows),
                     ),
-                    const SizedBox(height: 6),
-                    FilterDropdown<String>(
-                      value: _selectedPeriod,
-                      options: [
-                        for (final (val, label) in _periods) (val, label),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) _selectPeriod(val);
-                      },
-                    ),
+                    const SizedBox(height: 8),
+                    _buildTypeTabs(),
+                    if (_selectedType == _LeaderboardType.steps) ...[
+                      const SizedBox(height: 10),
+                      FilterDropdown<String>(
+                        value: _selectedPeriod,
+                        options: [
+                          for (final (val, label) in _periods) (val, label),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) _selectPeriod(val);
+                        },
+                      ),
+                    ],
+                    if (_selectedType == _LeaderboardType.challenges) ...[
+                      const SizedBox(height: 10),
+                      _buildChallengeQualificationBanner(),
+                    ],
                     const SizedBox(height: 16),
                     if (_isLoading)
                       const Padding(
@@ -153,26 +320,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                         ),
                       )
                     else if (_top10.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 24),
-                        child: Column(
-                          children: [
-                            Icon(
-                              Icons.directions_walk,
-                              size: 32,
-                              color: AppColors.textMid.withValues(alpha: 0.6),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'No steps yet \u2014 get walking!',
-                              style: PixelText.body(
-                                size: 18,
-                                color: AppColors.textMid,
-                              ).copyWith(shadows: _textShadows),
-                            ),
-                          ],
-                        ),
-                      )
+                      _buildEmptyState()
                     else
                       _buildLeaderboardTable(),
                   ],
@@ -264,9 +412,95 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   }
 
   static String _formatCompact(int n) {
-    if (n >= 1000)
+    if (n >= 1000) {
       return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}k';
+    }
     return '$n';
+  }
+
+  Widget _buildTypeTabs() {
+    return GameContainer(
+      padding: const EdgeInsets.all(8),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        alignment: WrapAlignment.center,
+        children: [
+          for (final type in _LeaderboardType.values)
+            PillButton(
+              label: type.label,
+              onPressed: () => _selectType(type),
+              variant: type == _selectedType
+                  ? PillButtonVariant.primary
+                  : PillButtonVariant.secondary,
+              fontSize: 12,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChallengeQualificationBanner() {
+    return GameContainer(
+      glowColor: AppColors.pillGoldShadow,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.military_tech_rounded,
+            color: AppColors.pillGoldDark,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'MINIMUM $_minimumCompletedChallenges COMPLETED CHALLENGES TO QUALIFY',
+              style: PixelText.title(
+                size: 13,
+                color: AppColors.textDark,
+              ).copyWith(shadows: _textShadows),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Column(
+        children: [
+          Icon(
+            _selectedType.emptyIcon,
+            size: 32,
+            color: AppColors.textMid.withValues(alpha: 0.6),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _selectedType.emptyTitle,
+            style: PixelText.body(
+              size: 18,
+              color: AppColors.textMid,
+            ).copyWith(shadows: _textShadows),
+            textAlign: TextAlign.center,
+          ),
+          if (_selectedType.emptySubtitle != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              _selectedType.emptySubtitle!,
+              style: PixelText.body(
+                size: 14,
+                color: AppColors.textMid,
+              ).copyWith(shadows: _textShadows),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   Widget _buildLeaderboardTable() {
@@ -274,9 +508,9 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     for (final entry in _top10) {
       rows.add(
         _LeaderboardRow(
-          rank: entry['rank'] as int? ?? 0,
+          rank: entry['rank'] as int?,
           displayName: entry['displayName'] as String? ?? 'Anonymous',
-          totalSteps: entry['totalSteps'] as int? ?? 0,
+          valueLabel: _displayValue(entry),
           isMe: (entry['userId'] as String?) == widget.authService.userId,
         ),
       );
@@ -289,7 +523,6 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
       child: Column(
         children: [
-          // Header
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
             child: Row(
@@ -310,7 +543,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                   ),
                 ),
                 Text(
-                  'STEPS',
+                  _selectedType.trailingHeader,
                   style: PixelText.title(size: 15, color: AppColors.textMid),
                 ),
               ],
@@ -320,24 +553,22 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
             height: 1,
             color: AppColors.parchmentBorder.withValues(alpha: 0.5),
           ),
-          // Rows
           for (int i = 0; i < rows.length; i++) _buildRow(rows[i], i),
-          // Ellipsis + current user
           if (showCurrentUser) ...[
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
               child: Text(
-                '\u2022 \u2022 \u2022',
+                '• • •',
                 style: PixelText.title(size: 14, color: AppColors.textMid),
                 textAlign: TextAlign.center,
               ),
             ),
             _buildRow(
               _LeaderboardRow(
-                rank: _currentUser!['rank'] as int? ?? 0,
+                rank: _currentUser!['rank'] as int?,
                 displayName:
                     _currentUser!['displayName'] as String? ?? 'Anonymous',
-                totalSteps: _currentUser!['totalSteps'] as int? ?? 0,
+                valueLabel: _displayValue(_currentUser!),
                 isMe: true,
               ),
               _top10.length,
@@ -349,13 +580,13 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   }
 
   Widget _buildRow(_LeaderboardRow row, int index) {
-    final rankLabel = row.rank == 1
-        ? '1st'
-        : row.rank == 2
-        ? '2nd'
-        : row.rank == 3
-        ? '3rd'
-        : null;
+    final rankLabel = switch (row.rank) {
+      1 => '1st',
+      2 => '2nd',
+      3 => '3rd',
+      null => '--',
+      _ => '${row.rank}',
+    };
 
     return Container(
       color: row.isMe
@@ -368,17 +599,25 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
         children: [
           SizedBox(
             width: 36,
-            child: rankLabel != null
-                ? Text(
-                    rankLabel,
-                    style: PixelText.title(size: 13, color: AppColors.coinMid),
-                    textAlign: TextAlign.center,
-                  )
-                : Text(
-                    '${row.rank}',
-                    style: PixelText.title(size: 16, color: AppColors.textDark),
-                    textAlign: TextAlign.center,
-                  ),
+            child: Text(
+              rankLabel,
+              style: PixelText.title(
+                size:
+                    rankLabel.endsWith('st') ||
+                        rankLabel.endsWith('nd') ||
+                        rankLabel.endsWith('rd')
+                    ? 13
+                    : 16,
+                color: rankLabel == '--'
+                    ? AppColors.textMid
+                    : (rankLabel.endsWith('st') ||
+                          rankLabel.endsWith('nd') ||
+                          rankLabel.endsWith('rd'))
+                    ? AppColors.coinMid
+                    : AppColors.textDark,
+              ),
+              textAlign: TextAlign.center,
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -391,11 +630,15 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          Text(
-            _formatSteps(row.totalSteps),
-            style: PixelText.title(
-              size: 16,
-              color: row.isMe ? AppColors.accent : AppColors.textDark,
+          const SizedBox(width: 12),
+          Flexible(
+            child: Text(
+              row.valueLabel,
+              style: PixelText.title(
+                size: _selectedType == _LeaderboardType.races ? 12 : 16,
+                color: row.isMe ? AppColors.accent : AppColors.textDark,
+              ),
+              textAlign: TextAlign.right,
             ),
           ),
         ],
@@ -405,15 +648,15 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
 }
 
 class _LeaderboardRow {
-  final int rank;
+  final int? rank;
   final String displayName;
-  final int totalSteps;
+  final String valueLabel;
   final bool isMe;
 
   const _LeaderboardRow({
     required this.rank,
     required this.displayName,
-    required this.totalSteps,
+    required this.valueLabel,
     this.isMe = false,
   });
 }

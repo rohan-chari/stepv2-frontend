@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../models/step_data.dart';
@@ -28,10 +30,14 @@ class HomeTab extends StatelessWidget {
   final Map<String, dynamic>? currentChallenge;
   final List<Map<String, dynamic>> friendsSteps;
   final Map<String, dynamic>? activeChallengeProgress;
+  final List<Map<String, dynamic>> leaderboardHighlights;
+  final bool leaderboardHighlightsLoading;
   final VoidCallback onChallengeChanged;
   final VoidCallback? onOpenFriendsTab;
   final VoidCallback? onOpenChallengesTab;
   final VoidCallback? onOpenLeaderboardTab;
+  final void Function(String leaderboardType, String period)?
+  onOpenLeaderboardHighlight;
   final VoidCallback? onOpenProfile;
 
   const HomeTab({
@@ -52,10 +58,13 @@ class HomeTab extends StatelessWidget {
     required this.currentChallenge,
     required this.friendsSteps,
     this.activeChallengeProgress,
+    this.leaderboardHighlights = const [],
+    this.leaderboardHighlightsLoading = false,
     required this.onChallengeChanged,
     this.onOpenFriendsTab,
     this.onOpenChallengesTab,
     this.onOpenLeaderboardTab,
+    this.onOpenLeaderboardHighlight,
     this.onOpenProfile,
   });
 
@@ -96,8 +105,13 @@ class HomeTab extends StatelessWidget {
                       const SizedBox(height: 12),
                     ],
 
-                    _buildGoalTrackSection(),
+                    _buildGoalTrackSection(context),
                     const SizedBox(height: 16),
+
+                    _buildLeaderboardHighlightsSection(),
+                    if (leaderboardHighlightsLoading ||
+                        leaderboardHighlights.isNotEmpty)
+                      const SizedBox(height: 16),
 
                     _buildActionButtons(),
                     const SizedBox(height: 16),
@@ -110,6 +124,34 @@ class HomeTab extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildLeaderboardHighlightsSection() {
+    final cards = leaderboardHighlights.take(3).toList(growable: false);
+    if (!leaderboardHighlightsLoading && cards.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'CLIMBING THE BOARDS',
+          style: PixelText.title(
+            size: 18,
+            color: AppColors.textMid,
+          ).copyWith(shadows: _textShadows),
+        ),
+        const SizedBox(height: 8),
+        if (leaderboardHighlightsLoading && cards.isEmpty)
+          const _ClimbingBoardsSkeleton()
+        else
+          _ClimbingBoardsCarousel(
+            cards: cards,
+            onOpenLeaderboardHighlight: onOpenLeaderboardHighlight,
+          ),
+      ],
     );
   }
 
@@ -185,7 +227,7 @@ class HomeTab extends StatelessWidget {
 
   // -- GoalTrack centerpiece --
 
-  Widget _buildGoalTrackSection() {
+  Widget _buildGoalTrackSection(BuildContext context) {
     if (isLoading && stepData == null) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 32),
@@ -216,6 +258,8 @@ class HomeTab extends StatelessWidget {
     final steps = stepData?.steps ?? 0;
     final goal = stepGoal ?? 0;
     final progress = goal > 0 ? steps / goal : 0.0;
+    final viewportHeight = MediaQuery.of(context).size.height;
+    final trackHeight = viewportHeight < 760 ? 236.0 : 300.0;
 
     if (goal <= 0) {
       return Column(
@@ -236,7 +280,7 @@ class HomeTab extends StatelessWidget {
     return GameContainer(
       padding: const EdgeInsets.all(6),
       child: GoalTrack(
-        height: 300,
+        height: trackHeight,
         runners: [
           GoalTrackRunner(
             name: displayName ?? 'You',
@@ -465,8 +509,9 @@ class HomeTab extends StatelessWidget {
   }
 
   static String _formatCompact(int n) {
-    if (n >= 1000)
+    if (n >= 1000) {
       return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}k';
+    }
     return '$n';
   }
 
@@ -535,6 +580,386 @@ class _DailyRewardCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ClimbingBoardsSkeleton extends StatelessWidget {
+  const _ClimbingBoardsSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return GameContainer(
+      key: const Key('climbing-boards-skeleton'),
+      padding: const EdgeInsets.all(0),
+      child: Container(
+        height: 146,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [AppColors.roofRidge, AppColors.roofMid],
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _SkeletonBar(width: 126, height: 18),
+              const SizedBox(height: 16),
+              _SkeletonBar(width: 240, height: 20),
+              const SizedBox(height: 10),
+              _SkeletonBar(width: 190, height: 14),
+              const Spacer(),
+              Align(
+                alignment: Alignment.center,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    _SkeletonDot(active: true),
+                    SizedBox(width: 6),
+                    _SkeletonDot(),
+                    SizedBox(width: 6),
+                    _SkeletonDot(),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ClimbingBoardsCarousel extends StatefulWidget {
+  const _ClimbingBoardsCarousel({
+    required this.cards,
+    this.onOpenLeaderboardHighlight,
+  });
+
+  final List<Map<String, dynamic>> cards;
+  final void Function(String leaderboardType, String period)?
+  onOpenLeaderboardHighlight;
+
+  @override
+  State<_ClimbingBoardsCarousel> createState() =>
+      _ClimbingBoardsCarouselState();
+}
+
+class _ClimbingBoardsCarouselState extends State<_ClimbingBoardsCarousel> {
+  late final PageController _pageController;
+  Timer? _autoAdvanceTimer;
+  int _currentPage = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+    _restartAutoAdvance();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ClimbingBoardsCarousel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.cards.length != widget.cards.length) {
+      if (_currentPage >= widget.cards.length) {
+        _currentPage = 0;
+        if (_pageController.hasClients) {
+          _pageController.jumpToPage(0);
+        }
+      }
+      _restartAutoAdvance();
+    }
+  }
+
+  @override
+  void dispose() {
+    _autoAdvanceTimer?.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _restartAutoAdvance() {
+    _autoAdvanceTimer?.cancel();
+    if (widget.cards.length < 2) return;
+
+    _autoAdvanceTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!_pageController.hasClients || widget.cards.length < 2) return;
+      final nextPage = (_currentPage + 1) % widget.cards.length;
+      _pageController.animateToPage(
+        nextPage,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
+  void _stopAutoAdvance() {
+    _autoAdvanceTimer?.cancel();
+    _autoAdvanceTimer = null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GameContainer(
+      padding: const EdgeInsets.all(0),
+      child: SizedBox(
+        height: 146,
+        child: Stack(
+          children: [
+            NotificationListener<ScrollStartNotification>(
+              onNotification: (_) {
+                _stopAutoAdvance();
+                return false;
+              },
+              child: PageView.builder(
+                key: const Key('climbing-boards-page-view'),
+                controller: _pageController,
+                itemCount: widget.cards.length,
+                onPageChanged: (page) {
+                  setState(() => _currentPage = page);
+                },
+                itemBuilder: (context, index) {
+                  final card = widget.cards[index];
+                  final title = card['title'] as String? ?? '';
+                  final subtitle = card['subtitle'] as String? ?? '';
+                  final leaderboardType =
+                      card['leaderboardType'] as String? ?? 'steps';
+                  final period = card['period'] as String? ?? 'today';
+
+                  return Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        _stopAutoAdvance();
+                        widget.onOpenLeaderboardHighlight?.call(
+                          leaderboardType,
+                          period,
+                        );
+                      },
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          gradient: const LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [AppColors.roofRidge, AppColors.roofMid],
+                          ),
+                          border: Border.all(
+                            color: AppColors.roofEdge,
+                            width: 2,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.roofDark.withValues(alpha: 0.28),
+                              offset: const Offset(0, 4),
+                              blurRadius: 0,
+                            ),
+                          ],
+                        ),
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      Colors.white.withValues(alpha: 0.10),
+                                      Colors.transparent,
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                14,
+                                10,
+                                14,
+                                16,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _ClimbingBoardsBadge(
+                                    label: _badgeLabel(leaderboardType, period),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          title,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style:
+                                              PixelText.title(
+                                                size: 16,
+                                                color: AppColors.parchmentLight,
+                                              ).copyWith(
+                                                shadows: HomeTab._textShadows,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          subtitle,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style:
+                                              PixelText.body(
+                                                size: 12.5,
+                                                color: AppColors.parchment,
+                                              ).copyWith(
+                                                shadows: HomeTab._textShadows,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 10,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  for (int i = 0; i < widget.cards.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 6),
+                    _ClimbingBoardsDot(active: i == _currentPage),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _badgeLabel(String leaderboardType, String period) {
+    final typeLabel = switch (leaderboardType) {
+      'challenges' => 'CHALLENGES',
+      'races' => 'RACES',
+      _ => 'STEPS',
+    };
+    final periodLabel = switch (period) {
+      'allTime' => 'ALL TIME',
+      'month' => 'MONTH',
+      'week' => 'WEEK',
+      _ => 'TODAY',
+    };
+    return '$typeLabel  •  $periodLabel';
+  }
+}
+
+class _ClimbingBoardsBadge extends StatelessWidget {
+  const _ClimbingBoardsBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.pillGoldDark,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.pillGoldShadow, width: 1.5),
+        boxShadow: const [
+          BoxShadow(
+            color: AppColors.pillGoldShadow,
+            offset: Offset(0, 2),
+            blurRadius: 0,
+          ),
+        ],
+      ),
+      child: Text(
+        label,
+        style: PixelText.pill(size: 10, color: AppColors.textDark),
+      ),
+    );
+  }
+}
+
+class _ClimbingBoardsDot extends StatelessWidget {
+  const _ClimbingBoardsDot({required this.active});
+
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      width: active ? 18 : 8,
+      height: 8,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        color: active ? AppColors.pillGold : AppColors.parchmentDark,
+        border: Border.all(
+          color: active ? AppColors.pillGoldShadow : AppColors.parchmentBorder,
+        ),
+      ),
+    );
+  }
+}
+
+class _SkeletonBar extends StatelessWidget {
+  const _SkeletonBar({required this.width, required this.height});
+
+  final double width;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.22),
+        borderRadius: BorderRadius.circular(10),
+      ),
+    );
+  }
+}
+
+class _SkeletonDot extends StatelessWidget {
+  const _SkeletonDot({this.active = false});
+
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: active ? 18 : 8,
+      height: 8,
+      decoration: BoxDecoration(
+        color: active
+            ? AppColors.pillGold.withValues(alpha: 0.85)
+            : Colors.white.withValues(alpha: 0.24),
+        borderRadius: BorderRadius.circular(999),
       ),
     );
   }

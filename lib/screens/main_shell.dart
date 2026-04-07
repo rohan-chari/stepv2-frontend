@@ -70,6 +70,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   Map<String, dynamic>? _currentChallenge;
   Map<String, dynamic>? _activeChallengeProgress;
   Map<String, dynamic>? _racesData;
+  List<Map<String, dynamic>> _leaderboardHighlights = const [];
+  bool _leaderboardHighlightsLoading = true;
+  String _requestedLeaderboardType = 'steps';
+  String _requestedLeaderboardPeriod = 'today';
+  int _leaderboardSelectionNonce = 0;
   Timer? _foregroundPollTimer;
   static const Duration _foregroundPollInterval = Duration(minutes: 5);
 
@@ -89,13 +94,17 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         );
     _pageController = PageController();
     WidgetsBinding.instance.addObserver(this);
-    widget.notificationService?.pendingAction.addListener(_onNotificationAction);
+    widget.notificationService?.pendingAction.addListener(
+      _onNotificationAction,
+    );
     _restoreAndFetch();
   }
 
   @override
   void dispose() {
-    widget.notificationService?.pendingAction.removeListener(_onNotificationAction);
+    widget.notificationService?.pendingAction.removeListener(
+      _onNotificationAction,
+    );
     _foregroundPollTimer?.cancel();
     _pageController.dispose();
     WidgetsBinding.instance.removeObserver(this);
@@ -145,6 +154,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _fetchFriendsSteps();
       _fetchCurrentChallenge();
       _fetchRaces();
+      _fetchLeaderboardHighlights();
       _startForegroundPolling();
     } else if (state == AppLifecycleState.paused) {
       _stopForegroundPolling();
@@ -181,6 +191,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     setState(() => _healthAuthorized = true);
     await _backgroundSyncBootstrapService.enableHealthKitBackgroundDelivery();
     await _checkNotificationState();
+    _fetchLeaderboardHighlights();
     await _fetchSteps();
     _refreshStepGoal();
     _fetchFriendsSteps();
@@ -206,9 +217,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         await widget.authService.updateAdminAccess(
           user['isAdmin'] as bool? ?? false,
         );
-        await widget.authService.updateCoins(
-          user['coins'] as int? ?? 0,
-        );
+        await widget.authService.updateCoins(user['coins'] as int? ?? 0);
       }
       return true;
     } catch (error) {
@@ -244,6 +253,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       setState(() => _healthAuthorized = true);
       await _backgroundSyncBootstrapService.enableHealthKitBackgroundDelivery();
       await _checkNotificationState();
+      _fetchLeaderboardHighlights();
       await _fetchSteps();
     } catch (e) {
       setState(() {
@@ -255,7 +265,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   Future<void> _checkNotificationState() async {
     final ns = widget.notificationService;
-    if (ns == null) return;
+    if (ns == null) {
+      if (mounted) {
+        setState(() => _notificationsState = true);
+      }
+      return;
+    }
 
     final state = await ns.getPermissionState();
     if (!mounted) return;
@@ -290,8 +305,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
     try {
       final identityToken = widget.authService.authToken;
-      final stepEntries =
-          identityToken != null && identityToken.isNotEmpty
+      final stepEntries = identityToken != null && identityToken.isNotEmpty
           ? await _challengeWeekStepSyncService.loadCurrentChallengeWeekSteps(
               identityToken: identityToken,
             )
@@ -390,6 +404,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     await Future.wait([_fetchRaces(), _fetchFriendsSteps()]);
   }
 
+  Future<void> _refreshHomeTab() async {
+    await Future.wait([_fetchSteps(), _fetchLeaderboardHighlights()]);
+  }
+
   Future<void> _refreshChallengesTab() async {
     await Future.wait([_fetchCurrentChallenge(), _fetchFriendsSteps()]);
   }
@@ -424,6 +442,15 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOutCubic,
     );
+  }
+
+  void _openLeaderboardHighlight(String leaderboardType, String period) {
+    setState(() {
+      _requestedLeaderboardType = leaderboardType;
+      _requestedLeaderboardPeriod = period;
+      _leaderboardSelectionNonce += 1;
+    });
+    _openLeaderboardTab();
   }
 
   void _openProfile() {
@@ -475,6 +502,41 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         }
       }
     } catch (_) {}
+  }
+
+  Future<void> _fetchLeaderboardHighlights() async {
+    final identityToken = widget.authService.authToken;
+    if (identityToken == null || identityToken.isEmpty) {
+      if (mounted) {
+        setState(() => _leaderboardHighlightsLoading = false);
+      }
+      return;
+    }
+
+    if (mounted) {
+      setState(() => _leaderboardHighlightsLoading = true);
+    }
+
+    try {
+      final data = await _backendApiService.fetchLeaderboardHighlights(
+        identityToken: identityToken,
+      );
+      final cards = (data['cards'] as List? ?? [])
+          .cast<Map<String, dynamic>>()
+          .take(3)
+          .toList(growable: false);
+
+      if (mounted) {
+        setState(() {
+          _leaderboardHighlights = cards;
+          _leaderboardHighlightsLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _leaderboardHighlightsLoading = false);
+      }
+    }
   }
 
   Future<void> _refreshStepGoal() async {
@@ -589,7 +651,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                         ),
                         onPressed: () {
                           final value = int.tryParse(controller.text);
-                          if (value != null && value >= BackendConfig.minStepGoal) {
+                          if (value != null &&
+                              value >= BackendConfig.minStepGoal) {
                             Navigator.of(context).pop(value);
                           }
                         },
@@ -667,9 +730,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
             right: 0,
             bottom: tabBarHeight,
             height: 110,
-            child: CustomPaint(
-              painter: _GrassStripPainter(),
-            ),
+            child: CustomPaint(painter: _GrassStripPainter()),
           ),
 
           // Capybara walking on the grass
@@ -703,7 +764,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   notificationsState: _notificationsState,
                   displayName: _displayName,
                   authService: widget.authService,
-                  onRefresh: _fetchSteps,
+                  onRefresh: _refreshHomeTab,
                   onEnableHealth: _enableHealthData,
                   onEnableNotifications: _enableNotifications,
                   onSetStepGoal: _showStepGoalDialog,
@@ -711,10 +772,13 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   currentChallenge: _currentChallenge,
                   friendsSteps: _friendsSteps,
                   activeChallengeProgress: _activeChallengeProgress,
+                  leaderboardHighlights: _leaderboardHighlights,
+                  leaderboardHighlightsLoading: _leaderboardHighlightsLoading,
                   onChallengeChanged: _fetchCurrentChallenge,
                   onOpenFriendsTab: _openFriendsTab,
                   onOpenChallengesTab: _openChallengesTab,
                   onOpenLeaderboardTab: _openLeaderboardTab,
+                  onOpenLeaderboardHighlight: _openLeaderboardHighlight,
                   onOpenProfile: _openProfile,
                 ),
                 ChallengesTab(
@@ -757,6 +821,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   stepData: _stepData,
                   stepGoal: _stepGoal,
                   displayName: _displayName,
+                  requestedType: _requestedLeaderboardType,
+                  requestedPeriod: _requestedLeaderboardPeriod,
+                  selectionNonce: _leaderboardSelectionNonce,
                   onOpenProfile: _openProfile,
                 ),
               ],
@@ -809,12 +876,9 @@ class _GrassStripPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     // Dirt layer
-    final dirtPath = Path()
-      ..moveTo(0, size.height * 0.3);
+    final dirtPath = Path()..moveTo(0, size.height * 0.3);
     for (double x = 0; x <= size.width; x += 4) {
-      final y = size.height * 0.3 +
-          sin(x * 0.008) * 6 +
-          cos(x * 0.015) * 4;
+      final y = size.height * 0.3 + sin(x * 0.008) * 6 + cos(x * 0.015) * 4;
       dirtPath.lineTo(x, y);
     }
     dirtPath.lineTo(size.width, size.height);
@@ -832,19 +896,14 @@ class _GrassStripPainter extends CustomPainter {
     );
 
     // Grass layer
-    final grassPath = Path()
-      ..moveTo(0, size.height * 0.2);
+    final grassPath = Path()..moveTo(0, size.height * 0.2);
     for (double x = 0; x <= size.width; x += 4) {
-      final y = size.height * 0.2 +
-          sin(x * 0.008) * 6 +
-          cos(x * 0.015) * 4;
+      final y = size.height * 0.2 + sin(x * 0.008) * 6 + cos(x * 0.015) * 4;
       grassPath.lineTo(x, y);
     }
     grassPath.lineTo(size.width, size.height * 0.4);
     for (double x = size.width; x >= 0; x -= 4) {
-      final y = size.height * 0.4 +
-          sin(x * 0.008) * 4 +
-          cos(x * 0.015) * 3;
+      final y = size.height * 0.4 + sin(x * 0.008) * 4 + cos(x * 0.015) * 3;
       grassPath.lineTo(x, y);
     }
     grassPath.close();
@@ -866,9 +925,7 @@ class _GrassStripPainter extends CustomPainter {
     // Grass highlight line
     final highlightPath = Path();
     for (double x = 0; x <= size.width; x += 4) {
-      final y = size.height * 0.2 +
-          sin(x * 0.008) * 6 +
-          cos(x * 0.015) * 4;
+      final y = size.height * 0.2 + sin(x * 0.008) * 6 + cos(x * 0.015) * 4;
       if (x == 0) {
         highlightPath.moveTo(x, y);
       } else {

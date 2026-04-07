@@ -66,7 +66,7 @@ const _powerupDescriptions = {
       'Hide your name, steps, and position on the track for 4 hours',
   'WRONG_TURN': 'Reverse a rival\'s steps for 1 hour',
   'FANNY_PACK': 'Unlock an extra powerup slot',
-  'TRAIL_MIX': '+500 steps per unique powerup type used',
+  'TRAIL_MIX': '+100 steps per unique powerup type used',
   'DETOUR_SIGN': 'Hide the entire leaderboard from a rival for 3 hours',
 };
 

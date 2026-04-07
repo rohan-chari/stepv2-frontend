@@ -126,9 +126,7 @@ class BackendApiService {
     final response = await _sendJsonRequest(
       method: 'POST',
       path: '/steps/samples',
-      body: {
-        'samples': samples.map((s) => s.toJson()).toList(),
-      },
+      body: {'samples': samples.map((s) => s.toJson()).toList()},
       identityToken: identityToken,
     );
 
@@ -404,10 +402,27 @@ class BackendApiService {
 
   Future<Map<String, dynamic>> fetchLeaderboard({
     required String identityToken,
+    String type = 'steps',
     String period = 'today',
   }) async {
+    final uri = Uri(
+      path: '/leaderboard',
+      queryParameters: {'type': type, 'period': period},
+    );
+
     final response = await _sendGetRequest(
-      path: '/leaderboard?period=${Uri.encodeComponent(period)}',
+      path: uri.toString(),
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> fetchLeaderboardHighlights({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/leaderboard/highlights',
       identityToken: identityToken,
     );
 
@@ -704,7 +719,9 @@ class BackendApiService {
     required String raceId,
     String? cursor,
   }) async {
-    final query = cursor != null ? '?cursor=${Uri.encodeComponent(cursor)}' : '';
+    final query = cursor != null
+        ? '?cursor=${Uri.encodeComponent(cursor)}'
+        : '';
     final response = await _sendGetRequest(
       path: '/races/$raceId/feed$query',
       identityToken: identityToken,

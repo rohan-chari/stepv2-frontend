@@ -73,7 +73,7 @@ const _powerupEntries = [
   (
     type: 'TRAIL_MIX',
     name: 'Trail Mix',
-    description: '+500 steps per unique powerup type used',
+    description: '+100 steps per unique powerup type used',
   ),
   (
     type: 'DETOUR_SIGN',
