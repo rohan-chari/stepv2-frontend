@@ -19,35 +19,27 @@ class ApiException implements Exception {
 }
 
 String describeBackendConnectionError(Object error, {required Uri uri}) {
-  final target = uri.hasPort ? '${uri.host}:${uri.port}' : uri.host;
-
   if (error is TimeoutException) {
-    return 'Request to $target timed out. Make sure the backend is running and reachable from this device.';
+    return 'Connection timed out. Check your internet connection and try again.';
   }
 
   if (error is SocketException) {
-    final isLoopback = uri.host == '127.0.0.1' || uri.host == 'localhost';
-
-    if (isLoopback) {
-      return "Can't reach the backend at $target. On a physical iPhone, localhost points to the phone itself. Use your Mac's LAN IP instead.";
-    }
-
-    return "Can't reach the backend at $target. Make sure the backend is listening on 0.0.0.0:${uri.port}, your Mac and iPhone are on the same Wi-Fi, and macOS isn't blocking the port.";
+    return "Can't connect right now. Check your internet connection and try again.";
   }
 
   if (error is HandshakeException) {
-    return 'Secure connection to $target failed. Check the backend HTTPS certificate and TLS configuration.';
+    return 'Secure connection failed. Please try again later.';
   }
 
   if (error is HttpException) {
     if (error.message.contains('App Transport Security')) {
-      return 'iOS blocked insecure HTTP to $target because of App Transport Security. Use HTTPS or allow local HTTP in the iOS Runner target.';
+      return 'Secure connection failed. Please try again later.';
     }
 
-    return 'Backend request to $target failed: ${error.message}';
+    return 'Request failed. Please try again.';
   }
 
-  return 'Could not connect to the backend at $target. Check the server URL and local network access.';
+  return 'Could not connect. Please try again.';
 }
 
 class BackendApiService {
@@ -540,11 +532,15 @@ class BackendApiService {
     int maxDurationDays = 7,
     bool powerupsEnabled = false,
     int? powerupStepInterval,
+    int buyInAmount = 0,
+    String payoutPreset = 'WINNER_TAKES_ALL',
   }) async {
     final body = <String, dynamic>{
       'name': name,
       'targetSteps': targetSteps,
       'maxDurationDays': maxDurationDays,
+      'buyInAmount': buyInAmount,
+      'payoutPreset': payoutPreset,
     };
     if (powerupsEnabled) {
       body['powerupsEnabled'] = true;

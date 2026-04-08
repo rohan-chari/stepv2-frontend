@@ -4,11 +4,11 @@ import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
+import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/filter_dropdown.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_icon_button.dart';
-import '../../widgets/spinning_coin.dart';
 
 enum _LeaderboardType { steps, challenges, races }
 
@@ -257,6 +257,27 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     }
   }
 
+  Widget _buildValueContent(_LeaderboardRow row) {
+    if (_selectedType != _LeaderboardType.races) {
+      return Text(
+        row.valueLabel,
+        style: PixelText.title(
+          size: _selectedType == _LeaderboardType.races ? 12 : 16,
+          color: row.isMe ? AppColors.accent : AppColors.textDark,
+        ),
+        textAlign: TextAlign.right,
+      );
+    }
+
+    return _RacePodiumBadges(
+      key: Key('leaderboard-race-podiums-${row.displayName}'),
+      firsts: row.firsts ?? 0,
+      seconds: row.seconds ?? 0,
+      thirds: row.thirds ?? 0,
+      isMe: row.isMe,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final topInset = MediaQuery.of(context).padding.top;
@@ -360,14 +381,9 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                       ),
                     ),
                   const SizedBox(width: 8),
-                  const SpinningCoin(size: 18),
-                  const SizedBox(width: 3),
-                  Text(
-                    '${widget.authService.coins}',
-                    style: PixelText.number(
-                      size: 16,
-                      color: AppColors.coinDark,
-                    ).copyWith(shadows: _textShadows),
+                  CoinBalanceBadge(
+                    coins: widget.authService.coins,
+                    heldCoins: widget.authService.heldCoins,
                   ),
                 ],
               ),
@@ -419,53 +435,52 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   }
 
   Widget _buildTypeTabs() {
-    return GameContainer(
-      padding: const EdgeInsets.all(8),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        alignment: WrapAlignment.center,
-        children: [
-          for (final type in _LeaderboardType.values)
-            PillButton(
-              label: type.label,
-              onPressed: () => _selectType(type),
-              variant: type == _selectedType
+    final types = _LeaderboardType.values;
+
+    return Row(
+      children: [
+        for (int i = 0; i < types.length; i++) ...[
+          if (i > 0) const SizedBox(width: 8),
+          Expanded(
+            child: PillButton(
+              label: types[i].label,
+              onPressed: () => _selectType(types[i]),
+              variant: types[i] == _selectedType
                   ? PillButtonVariant.primary
                   : PillButtonVariant.secondary,
               fontSize: 12,
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              fullWidth: true,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
             ),
+          ),
         ],
-      ),
+      ],
     );
   }
 
   Widget _buildChallengeQualificationBanner() {
-    return GameContainer(
-      glowColor: AppColors.pillGoldShadow,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(
-            Icons.military_tech_rounded,
-            color: AppColors.pillGoldDark,
-            size: 20,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'MINIMUM $_minimumCompletedChallenges COMPLETED CHALLENGES TO QUALIFY',
-              style: PixelText.title(
-                size: 13,
-                color: AppColors.textDark,
-              ).copyWith(shadows: _textShadows),
-            ),
-          ),
-        ],
+    return Align(
+      alignment: Alignment.center,
+      child: Text(
+        'MINIMUM $_minimumCompletedChallenges COMPLETED CHALLENGES TO QUALIFY',
+        style: PixelText.body(
+          size: 13,
+          color: AppColors.textMid,
+        ).copyWith(shadows: _textShadows),
+        textAlign: TextAlign.center,
       ),
     );
+  }
+
+  double get _valueColumnWidth {
+    switch (_selectedType) {
+      case _LeaderboardType.steps:
+        return 74;
+      case _LeaderboardType.challenges:
+        return 64;
+      case _LeaderboardType.races:
+        return 140;
+    }
   }
 
   Widget _buildEmptyState() {
@@ -512,6 +527,9 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
           displayName: entry['displayName'] as String? ?? 'Anonymous',
           valueLabel: _displayValue(entry),
           isMe: (entry['userId'] as String?) == widget.authService.userId,
+          firsts: entry['firsts'] as int?,
+          seconds: entry['seconds'] as int?,
+          thirds: entry['thirds'] as int?,
         ),
       );
     }
@@ -542,9 +560,13 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                     style: PixelText.title(size: 15, color: AppColors.textMid),
                   ),
                 ),
-                Text(
-                  _selectedType.trailingHeader,
-                  style: PixelText.title(size: 15, color: AppColors.textMid),
+                SizedBox(
+                  width: _valueColumnWidth,
+                  child: Text(
+                    _selectedType.trailingHeader,
+                    style: PixelText.title(size: 15, color: AppColors.textMid),
+                    textAlign: TextAlign.right,
+                  ),
                 ),
               ],
             ),
@@ -570,6 +592,9 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                     _currentUser!['displayName'] as String? ?? 'Anonymous',
                 valueLabel: _displayValue(_currentUser!),
                 isMe: true,
+                firsts: _currentUser!['firsts'] as int?,
+                seconds: _currentUser!['seconds'] as int?,
+                thirds: _currentUser!['thirds'] as int?,
               ),
               _top10.length,
             ),
@@ -631,14 +656,11 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
             ),
           ),
           const SizedBox(width: 12),
-          Flexible(
-            child: Text(
-              row.valueLabel,
-              style: PixelText.title(
-                size: _selectedType == _LeaderboardType.races ? 12 : 16,
-                color: row.isMe ? AppColors.accent : AppColors.textDark,
-              ),
-              textAlign: TextAlign.right,
+          SizedBox(
+            width: _valueColumnWidth,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: _buildValueContent(row),
             ),
           ),
         ],
@@ -652,11 +674,106 @@ class _LeaderboardRow {
   final String displayName;
   final String valueLabel;
   final bool isMe;
+  final int? firsts;
+  final int? seconds;
+  final int? thirds;
 
   const _LeaderboardRow({
     required this.rank,
     required this.displayName,
     required this.valueLabel,
     this.isMe = false,
+    this.firsts,
+    this.seconds,
+    this.thirds,
   });
+}
+
+class _RacePodiumBadges extends StatelessWidget {
+  const _RacePodiumBadges({
+    super.key,
+    required this.firsts,
+    required this.seconds,
+    required this.thirds,
+    required this.isMe,
+  });
+
+  final int firsts;
+  final int seconds;
+  final int thirds;
+  final bool isMe;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 4,
+      runSpacing: 4,
+      alignment: WrapAlignment.end,
+      children: [
+        _RacePodiumBadge(
+          label: '1ST',
+          count: firsts,
+          fill: AppColors.medalGold.withValues(alpha: 0.18),
+          border: AppColors.medalGold,
+          textColor: isMe ? AppColors.accent : AppColors.textDark,
+        ),
+        _RacePodiumBadge(
+          label: '2ND',
+          count: seconds,
+          fill: AppColors.medalSilver.withValues(alpha: 0.2),
+          border: AppColors.medalSilver.withValues(alpha: 0.9),
+          textColor: isMe ? AppColors.accent : AppColors.textDark,
+        ),
+        _RacePodiumBadge(
+          label: '3RD',
+          count: thirds,
+          fill: AppColors.medalBronze.withValues(alpha: 0.2),
+          border: AppColors.medalBronze.withValues(alpha: 0.9),
+          textColor: isMe ? AppColors.accent : AppColors.textDark,
+        ),
+      ],
+    );
+  }
+}
+
+class _RacePodiumBadge extends StatelessWidget {
+  const _RacePodiumBadge({
+    required this.label,
+    required this.count,
+    required this.fill,
+    required this.border,
+    required this.textColor,
+  });
+
+  final String label;
+  final int count;
+  final Color fill;
+  final Color border;
+  final Color textColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: fill,
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: border, width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: PixelText.title(size: 8.5, color: textColor),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '$count',
+            style: PixelText.number(size: 11, color: textColor),
+          ),
+        ],
+      ),
+    );
+  }
 }

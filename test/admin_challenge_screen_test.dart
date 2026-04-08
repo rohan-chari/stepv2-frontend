@@ -73,7 +73,7 @@ void main() {
         home: AdminChallengeScreen(
           authService: authService,
           backendApiService: backendApiService,
-          showToast: (_, __) {},
+          showToast: (_, _) {},
         ),
       ),
     );
@@ -93,4 +93,44 @@ void main() {
     expect(backendApiService.resetAdminWeeklyChallengeCalls, 1);
     expect(backendApiService.fetchAdminWeeklyChallengeCalls, 2);
   });
+
+  testWidgets(
+    'AdminChallengeScreen exposes test info and error toast buttons',
+    (WidgetTester tester) async {
+      final authService = AuthService();
+      await authService.restoreSession();
+      final backendApiService = _FakeBackendApiService();
+      final infoMessages = <String>[];
+      final errorMessages = <String>[];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AdminChallengeScreen(
+            authService: authService,
+            backendApiService: backendApiService,
+            showInfoToast: (_, message) {
+              infoMessages.add(message);
+            },
+            showErrorToast: (_, message) {
+              errorMessages.add(message);
+            },
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await tester.ensureVisible(find.text('TEST INFO TOAST'));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await tester.tap(find.text('TEST INFO TOAST'));
+      await tester.pump();
+      await tester.tap(find.text('TEST ERROR TOAST'));
+      await tester.pump();
+
+      expect(infoMessages, ['This is a test notification toast.']);
+      expect(errorMessages, ['This is a test error toast.']);
+    },
+  );
 }

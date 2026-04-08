@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
 import '../../styles.dart';
+import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_icon_button.dart';
-import '../../widgets/spinning_coin.dart';
 import '../create_race_screen.dart';
 import '../race_detail_screen.dart';
 
@@ -217,14 +217,9 @@ class _RacesTabState extends State<RacesTab> {
                   ),
                 ),
               const SizedBox(width: 8),
-              const SpinningCoin(size: 18),
-              const SizedBox(width: 3),
-              Text(
-                '${widget.authService.coins}',
-                style: PixelText.number(
-                  size: 16,
-                  color: AppColors.coinDark,
-                ).copyWith(shadows: _textShadows),
+              CoinBalanceBadge(
+                coins: widget.authService.coins,
+                heldCoins: widget.authService.heldCoins,
               ),
             ],
           ),

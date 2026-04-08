@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/tabs/challenges_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
-import 'package:step_tracker/styles.dart';
 import 'package:step_tracker/widgets/info_toast.dart';
 
 Future<AuthService> _createAuthService() async {
@@ -23,48 +22,37 @@ Future<AuthService> _createAuthService() async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('showInfoToast uses bulletin board styling', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Builder(
-            builder: (context) {
-              return TextButton(
-                onPressed: () =>
-                    showInfoToast(context, 'Add some friends first'),
-                child: const Text('Show info'),
-              );
-            },
+  testWidgets(
+    'showInfoToast uses the shared game toast shell with an info badge',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) {
+                return TextButton(
+                  onPressed: () =>
+                      showInfoToast(context, 'Add some friends first'),
+                  child: const Text('Show info'),
+                );
+              },
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    await tester.tap(find.text('Show info'));
-    await tester.pump();
+      await tester.tap(find.text('Show info'));
+      await tester.pump();
 
-    final bannerFinder = find.byWidgetPredicate((widget) {
-      if (widget is! Container || widget.decoration is! BoxDecoration) {
-        return false;
-      }
+      expect(find.byKey(const Key('info-toast-shell')), findsOneWidget);
+      expect(find.byKey(const Key('info-toast-badge')), findsOneWidget);
+      expect(find.text('NOTICE'), findsOneWidget);
+      expect(find.text('Add some friends first'), findsOneWidget);
 
-      final decoration = widget.decoration! as BoxDecoration;
-      return decoration.color == AppColors.woodDark;
-    });
-
-    expect(bannerFinder, findsOneWidget);
-
-    final banner = tester.widget<Container>(bannerFinder);
-    final decoration = banner.decoration! as BoxDecoration;
-    final border = decoration.border! as Border;
-
-    expect(border.top.color, AppColors.woodShadow);
-
-    await tester.pump(const Duration(seconds: 4));
-    await tester.pumpAndSettle();
-  });
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+    },
+  );
 
   testWidgets(
     'ChallengesTab redirects to Friends with info toast when no friends exist',

@@ -7,11 +7,11 @@ import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
 import '../../widgets/error_toast.dart';
+import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/info_toast.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_icon_button.dart';
-import '../../widgets/spinning_coin.dart';
 import '../challenge_detail_screen.dart';
 import '../friend_picker_screen.dart';
 import '../stake_picker_screen.dart';
@@ -445,14 +445,9 @@ class _ChallengesTabState extends State<ChallengesTab> {
                       ),
                     ),
                   const SizedBox(width: 8),
-                  const SpinningCoin(size: 18),
-                  const SizedBox(width: 3),
-                  Text(
-                    '${widget.authService.coins}',
-                    style: PixelText.number(
-                      size: 16,
-                      color: AppColors.coinDark,
-                    ).copyWith(shadows: _textShadows),
+                  CoinBalanceBadge(
+                    coins: widget.authService.coins,
+                    heldCoins: widget.authService.heldCoins,
                   ),
                 ],
               ),
@@ -693,8 +688,9 @@ class _ChallengesTabState extends State<ChallengesTab> {
   }
 
   static String _formatCompact(int n) {
-    if (n >= 1000)
+    if (n >= 1000) {
       return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}k';
+    }
     return '$n';
   }
 

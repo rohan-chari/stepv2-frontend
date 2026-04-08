@@ -200,7 +200,7 @@ void main() {
   );
 
   testWidgets(
-    'LeaderboardTab shows race podium counts and hides the period filter',
+    'LeaderboardTab shows styled race podium badges and hides the period filter',
     (WidgetTester tester) async {
       final authService = await _createAuthService();
       final backendApiService = _FakeBackendApiService();
@@ -220,8 +220,17 @@ void main() {
         type: 'races',
         period: 'allTime',
       ));
-      expect(find.text('1ST 1  2ND 1  3RD 0'), findsOneWidget);
-      expect(find.text('1ST 1  2ND 0  3RD 2'), findsOneWidget);
+      expect(
+        find.byKey(const Key('leaderboard-race-podiums-AtlasRun')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('leaderboard-race-podiums-Trail Walker')),
+        findsOneWidget,
+      );
+      expect(find.text('1ST'), findsNWidgets(2));
+      expect(find.text('2ND'), findsNWidgets(2));
+      expect(find.text('3RD'), findsNWidgets(2));
       expect(find.text('TODAY'), findsNothing);
     },
   );

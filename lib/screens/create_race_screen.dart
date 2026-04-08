@@ -10,21 +10,28 @@ import '../widgets/retro_card.dart';
 
 class CreateRaceScreen extends StatefulWidget {
   final AuthService authService;
+  final BackendApiService backendApiService;
 
-  const CreateRaceScreen({super.key, required this.authService});
+  CreateRaceScreen({
+    super.key,
+    required this.authService,
+    BackendApiService? backendApiService,
+  }) : backendApiService = backendApiService ?? BackendApiService();
 
   @override
   State<CreateRaceScreen> createState() => _CreateRaceScreenState();
 }
 
 class _CreateRaceScreenState extends State<CreateRaceScreen> {
-  final BackendApiService _api = BackendApiService();
   final _nameController = TextEditingController();
   final _stepsController = TextEditingController();
   int _selectedDuration = 7;
   bool _isCreating = false;
   bool _powerupsEnabled = false;
   int _powerupInterval = 5000;
+  bool _buyInEnabled = false;
+  int _buyInAmount = 100;
+  String _payoutPreset = 'WINNER_TAKES_ALL';
 
   static const _textShadows = [
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
@@ -33,6 +40,12 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
   static const _durationOptions = [3, 5, 7, 14];
   static const _stepPresets = [25000, 50000, 100000, 250000];
   static const _intervalPresets = [2500, 5000, 10000, 25000];
+  static const _buyInPresets = [50, 100, 250, 500];
+  static const _payoutOptions = [
+    ('WINNER TAKE ALL', 'WINNER_TAKES_ALL'),
+    ('TOP 3 70/20/10', 'TOP3_70_20_10'),
+    ('TOP 3 80/15/5', 'TOP3_80_15_5'),
+  ];
 
   @override
   void dispose() {
@@ -54,19 +67,34 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
       return;
     }
 
+    if (_buyInEnabled && _buyInAmount > widget.authService.coins) {
+      showErrorToast(context, 'You do not have enough gold for this buy-in');
+      return;
+    }
+
     setState(() => _isCreating = true);
 
     try {
       final token = widget.authService.authToken;
       if (token == null || token.isEmpty) return;
 
-      final result = await _api.createRace(
+      final result = await widget.backendApiService.createRace(
         identityToken: token,
         name: name,
         targetSteps: steps,
         maxDurationDays: _selectedDuration,
         powerupsEnabled: _powerupsEnabled,
         powerupStepInterval: _powerupsEnabled ? _powerupInterval : null,
+        buyInAmount: _buyInEnabled ? _buyInAmount : 0,
+        payoutPreset: _buyInEnabled ? _payoutPreset : 'WINNER_TAKES_ALL',
+      );
+
+      final user = await widget.backendApiService.fetchMe(identityToken: token);
+      await widget.authService.updateCoins(
+        user['coins'] as int? ?? widget.authService.coins,
+      );
+      await widget.authService.updateHeldCoins(
+        user['heldCoins'] as int? ?? widget.authService.heldCoins,
       );
 
       if (mounted) {
@@ -330,6 +358,165 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
                                     ),
                                   );
                                 }).toList(),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Buy-in
+                      RetroCard(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                GestureDetector(
+                                  onTap: () => setState(
+                                    () => _buyInEnabled = !_buyInEnabled,
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'BUY-IN',
+                                        style: PixelText.title(
+                                          size: 13,
+                                          color: AppColors.textMid,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        _buyInEnabled
+                                            ? 'PAID RACE'
+                                            : 'FREE RACE',
+                                        style: PixelText.body(
+                                          size: 11,
+                                          color: _buyInEnabled
+                                              ? AppColors.coinDark
+                                              : AppColors.textMid,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                SizedBox(
+                                  height: 28,
+                                  child: Switch.adaptive(
+                                    value: _buyInEnabled,
+                                    activeTrackColor:
+                                        AppColors.pillGreenDark,
+                                    onChanged: (value) => setState(
+                                      () => _buyInEnabled = value,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (_buyInEnabled) ...[
+                              const SizedBox(height: 12),
+                              Text(
+                                'BUY-IN PER RUNNER',
+                                style: PixelText.body(
+                                  size: 11,
+                                  color: AppColors.textMid,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: _buyInPresets.map((preset) {
+                                  final selected = _buyInAmount == preset;
+                                  return GestureDetector(
+                                    onTap: () => setState(
+                                      () => _buyInAmount = preset,
+                                    ),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 8,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: selected
+                                            ? AppColors.coinMid
+                                            : AppColors.parchmentDark,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        '$preset',
+                                        style: PixelText.title(
+                                          size: 13,
+                                          color: selected
+                                              ? Colors.white
+                                              : AppColors.textDark,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'PAYOUT MODE',
+                                style: PixelText.body(
+                                  size: 11,
+                                  color: AppColors.textMid,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Column(
+                                children: _payoutOptions.map((option) {
+                                  final selected = _payoutPreset == option.$2;
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 8),
+                                    child: GestureDetector(
+                                      onTap: () => setState(
+                                        () => _payoutPreset = option.$2,
+                                      ),
+                                      child: Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 10,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: selected
+                                              ? AppColors.pillGreenDark
+                                              : AppColors.parchmentDark,
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          option.$1,
+                                          style: PixelText.title(
+                                            size: 12,
+                                            color: selected
+                                                ? Colors.white
+                                                : AppColors.textDark,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                              SizedBox(
+                                width: double.infinity,
+                                child: Text(
+                                  _payoutPreset == 'WINNER_TAKES_ALL'
+                                      ? 'Winner takes the whole pot.'
+                                      : 'Top 3 payouts need at least 4 accepted runners before the race can start.',
+                                  style: PixelText.body(
+                                    size: 12,
+                                    color: AppColors.textMid,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
                               ),
                             ],
                           ],

@@ -21,6 +21,7 @@ class AuthService {
   static const _keySessionToken = 'auth_session_token';
   static const _keyIsAdmin = 'auth_is_admin';
   static const _keyCoins = 'auth_coins';
+  static const _keyHeldCoins = 'auth_held_coins';
 
   final BackendApiService _backendApiService;
   String? _identityToken;
@@ -32,6 +33,7 @@ class AuthService {
   String? _sessionToken;
   bool _isAdmin = false;
   int _coins = 0;
+  int _heldCoins = 0;
 
   String? get identityToken => _identityToken;
   String? get sessionToken => _sessionToken;
@@ -42,6 +44,7 @@ class AuthService {
   String? get displayName => _displayName;
   bool get isAdmin => _isAdmin;
   int get coins => _coins;
+  int get heldCoins => _heldCoins;
   bool get isSignedIn => _identityToken != null && _userIdentifier != null;
   bool get hasSessionToken =>
       _sessionToken != null && _sessionToken!.isNotEmpty;
@@ -57,6 +60,7 @@ class AuthService {
     _sessionToken = prefs.getString(_keySessionToken);
     _isAdmin = prefs.getBool(_keyIsAdmin) ?? false;
     _coins = prefs.getInt(_keyCoins) ?? 0;
+    _heldCoins = prefs.getInt(_keyHeldCoins) ?? 0;
     return isSignedIn && hasSessionToken;
   }
 
@@ -101,6 +105,7 @@ class AuthService {
       _sessionToken = response['sessionToken'] as String?;
       _isAdmin = backendUser['isAdmin'] as bool? ?? false;
       _coins = backendUser['coins'] as int? ?? 0;
+      _heldCoins = backendUser['heldCoins'] as int? ?? 0;
       _lastErrorMessage = null;
 
       await _persist();
@@ -143,6 +148,7 @@ class AuthService {
     _displayName = null;
     _sessionToken = null;
     _coins = 0;
+    _heldCoins = 0;
     _isAdmin = false;
 
     final prefs = await SharedPreferences.getInstance();
@@ -153,6 +159,7 @@ class AuthService {
     await prefs.remove(_keyDisplayName);
     await prefs.remove(_keySessionToken);
     await prefs.remove(_keyIsAdmin);
+    await prefs.remove(_keyHeldCoins);
   }
 
   Future<void> updateSessionToken(String? token) async {
@@ -169,6 +176,12 @@ class AuthService {
     _coins = coins;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_keyCoins, coins);
+  }
+
+  Future<void> updateHeldCoins(int heldCoins) async {
+    _heldCoins = heldCoins;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyHeldCoins, heldCoins);
   }
 
   Future<void> updateAdminAccess(bool isAdmin) async {
@@ -196,6 +209,7 @@ class AuthService {
     }
     await prefs.setBool(_keyIsAdmin, _isAdmin);
     await prefs.setInt(_keyCoins, _coins);
+    await prefs.setInt(_keyHeldCoins, _heldCoins);
   }
 
   String? _buildDisplayName(AuthorizationCredentialAppleID credential) {

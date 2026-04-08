@@ -218,6 +218,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           user['isAdmin'] as bool? ?? false,
         );
         await widget.authService.updateCoins(user['coins'] as int? ?? 0);
+        await widget.authService.updateHeldCoins(
+          user['heldCoins'] as int? ?? 0,
+        );
       }
       return true;
     } catch (error) {
@@ -557,6 +560,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       await widget.authService.updateAdminAccess(isAdmin);
       await widget.authService.updateCoins(
         user['coins'] as int? ?? widget.authService.coins,
+      );
+      await widget.authService.updateHeldCoins(
+        user['heldCoins'] as int? ?? widget.authService.heldCoins,
       );
       if (mounted) {
         setState(() {

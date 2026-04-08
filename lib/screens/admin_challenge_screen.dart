@@ -6,6 +6,7 @@ import '../styles.dart';
 import '../widgets/content_board.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/game_background.dart';
+import '../widgets/info_toast.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/powerup_icon.dart';
 import '../widgets/spinning_crate.dart';
@@ -80,11 +81,15 @@ class AdminChallengeScreen extends StatefulWidget {
     required this.authService,
     this.backendApiService,
     this.showToast,
+    this.showInfoToast,
+    this.showErrorToast,
   });
 
   final AuthService authService;
   final BackendApiService? backendApiService;
   final void Function(BuildContext context, String message)? showToast;
+  final void Function(BuildContext context, String message)? showInfoToast;
+  final void Function(BuildContext context, String message)? showErrorToast;
 
   @override
   State<AdminChallengeScreen> createState() => _AdminChallengeScreenState();
@@ -92,7 +97,9 @@ class AdminChallengeScreen extends StatefulWidget {
 
 class _AdminChallengeScreenState extends State<AdminChallengeScreen> {
   late final BackendApiService _backendApiService;
-  late final void Function(BuildContext context, String message) _showToast;
+  late final void Function(BuildContext context, String message) _showInfoToast;
+  late final void Function(BuildContext context, String message)
+  _showErrorToast;
 
   bool _isLoading = true;
   bool _isRunningAction = false;
@@ -102,7 +109,9 @@ class _AdminChallengeScreenState extends State<AdminChallengeScreen> {
   void initState() {
     super.initState();
     _backendApiService = widget.backendApiService ?? BackendApiService();
-    _showToast = widget.showToast ?? showErrorToast;
+    final fallbackToast = widget.showToast;
+    _showInfoToast = widget.showInfoToast ?? fallbackToast ?? showInfoToast;
+    _showErrorToast = widget.showErrorToast ?? fallbackToast ?? showErrorToast;
     _loadState();
   }
 
@@ -125,7 +134,7 @@ class _AdminChallengeScreenState extends State<AdminChallengeScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      _showToast(context, error.toString());
+      _showErrorToast(context, error.toString());
     }
   }
 
@@ -141,11 +150,11 @@ class _AdminChallengeScreenState extends State<AdminChallengeScreen> {
     try {
       await action(token);
       if (!mounted) return;
-      _showToast(context, successMessage);
+      _showInfoToast(context, successMessage);
       await _loadState();
     } catch (error) {
       if (!mounted) return;
-      _showToast(context, error.toString());
+      _showErrorToast(context, error.toString());
     } finally {
       if (mounted) {
         setState(() => _isRunningAction = false);
@@ -401,6 +410,52 @@ class _AdminChallengeScreenState extends State<AdminChallengeScreen> {
                                       successMessage:
                                           'Current week reset for testing.',
                                     ),
+                            ),
+                            const SizedBox(height: 20),
+                            Text(
+                              'TOAST TESTS',
+                              style: PixelText.title(
+                                size: 14,
+                                color: AppColors.textDark,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: PillButton(
+                                    label: 'TEST INFO TOAST',
+                                    variant: PillButtonVariant.primary,
+                                    fontSize: 11,
+                                    fullWidth: true,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 12,
+                                    ),
+                                    onPressed: () => _showInfoToast(
+                                      context,
+                                      'This is a test notification toast.',
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: PillButton(
+                                    label: 'TEST ERROR TOAST',
+                                    variant: PillButtonVariant.accent,
+                                    fontSize: 11,
+                                    fullWidth: true,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 12,
+                                    ),
+                                    onPressed: () => _showErrorToast(
+                                      context,
+                                      'This is a test error toast.',
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                             const SizedBox(height: 20),
                             Text(

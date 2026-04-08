@@ -27,13 +27,15 @@ class RaceDetailScreen extends StatefulWidget {
   final AuthService authService;
   final String raceId;
   final List<Map<String, dynamic>> friends;
+  final BackendApiService backendApiService;
 
-  const RaceDetailScreen({
+  RaceDetailScreen({
     super.key,
     required this.authService,
     required this.raceId,
     this.friends = const [],
-  });
+    BackendApiService? backendApiService,
+  }) : backendApiService = backendApiService ?? BackendApiService();
 
   @override
   State<RaceDetailScreen> createState() => _RaceDetailScreenState();
@@ -84,7 +86,6 @@ const _rarityColors = {
 };
 
 class _RaceDetailScreenState extends State<RaceDetailScreen> {
-  final BackendApiService _api = BackendApiService();
   Map<String, dynamic>? _race;
   Map<String, dynamic>? _progress;
   Map<String, dynamic>? _powerupData;
@@ -97,6 +98,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   late DateTime _countdownNow;
 
   String get _myUserId => widget.authService.userId ?? '';
+  BackendApiService get _api => widget.backendApiService;
 
   static const _textShadows = [
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
@@ -194,6 +196,19 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     } catch (_) {}
   }
 
+  Future<void> _refreshWallet() async {
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) return;
+
+    final user = await _api.fetchMe(identityToken: token);
+    await widget.authService.updateCoins(
+      user['coins'] as int? ?? widget.authService.coins,
+    );
+    await widget.authService.updateHeldCoins(
+      user['heldCoins'] as int? ?? widget.authService.heldCoins,
+    );
+  }
+
   void _startPolling() {
     _pollTimer?.cancel();
     _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
@@ -209,17 +224,93 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     });
   }
 
+  Future<bool> _confirmPaidInvite({required bool activeRace}) async {
+    final buyInAmount = _race?['buyInAmount'] as int? ?? 0;
+    if (buyInAmount <= 0) {
+      return true;
+    }
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: TrailSign(
+          width: 320,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '$buyInAmount GOLD BUY-IN',
+                style: PixelText.title(size: 18, color: AppColors.textDark),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                activeRace
+                    ? 'Your $buyInAmount gold goes straight into the live pot.'
+                    : 'Your $buyInAmount gold will be held until the race starts.',
+                style: PixelText.body(size: 14, color: AppColors.textMid),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                activeRace
+                    ? 'This race is already underway. You will need to catch up when you join.'
+                    : 'You can only get this gold back if the race is cancelled.',
+                style: PixelText.body(size: 13, color: AppColors.textMid),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              PillButton(
+                label: 'LOCK IT IN',
+                variant: PillButtonVariant.primary,
+                fullWidth: true,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                onPressed: () => Navigator.of(context).pop(true),
+              ),
+              const SizedBox(height: 10),
+              PillButton(
+                label: 'BACK',
+                variant: PillButtonVariant.accent,
+                fullWidth: true,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                onPressed: () => Navigator.of(context).pop(false),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    return result ?? false;
+  }
+
   Future<void> _respondToInvite(bool accept) async {
     setState(() => _isActing = true);
     try {
       final token = widget.authService.authToken;
       if (token == null || token.isEmpty) return;
 
+      if (accept) {
+        final isActiveRace = (_race?['status'] as String?) == 'ACTIVE';
+        final confirmed = await _confirmPaidInvite(activeRace: isActiveRace);
+        if (!confirmed) {
+          return;
+        }
+      }
+
       await _api.respondToRaceInvite(
         identityToken: token,
         raceId: widget.raceId,
         accept: accept,
       );
+      await _refreshWallet();
 
       if (!mounted) return;
 
@@ -243,6 +334,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       if (token == null || token.isEmpty) return;
 
       await _api.startRace(identityToken: token, raceId: widget.raceId);
+      await _refreshWallet();
       if (mounted) {
         showInfoToast(context, 'Race started!');
         _loadDetails();
@@ -321,6 +413,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       if (token == null || token.isEmpty) return;
 
       await _api.cancelRace(identityToken: token, raceId: widget.raceId);
+      await _refreshWallet();
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) showErrorToast(context, e.toString());
@@ -755,52 +848,135 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   Widget _buildRaceInfoCard() {
     final targetSteps = _race!['targetSteps'] as int? ?? 0;
     final maxDays = _race!['maxDurationDays'] as int? ?? 7;
+    final buyInAmount = _race!['buyInAmount'] as int? ?? 0;
+    final potCoins = _race!['projectedPotCoins'] as int? ?? 0;
+    final payouts = _race!['payouts'] as Map<String, dynamic>?;
 
     return RetroCard(
       padding: const EdgeInsets.all(16),
-      child: Row(
+      child: Column(
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      'TARGET',
+                      style: PixelText.title(size: 11, color: AppColors.textMid),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _formatSteps(targetSteps),
+                      style: PixelText.number(size: 22, color: AppColors.accent),
+                    ),
+                    Text(
+                      'steps',
+                      style: PixelText.body(size: 11, color: AppColors.textMid),
+                    ),
+                  ],
+                ),
+              ),
+              Container(width: 1, height: 40, color: AppColors.parchmentBorder),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      'DURATION',
+                      style: PixelText.title(size: 11, color: AppColors.textMid),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$maxDays',
+                      style: PixelText.number(size: 22, color: AppColors.textDark),
+                    ),
+                    Text(
+                      'days',
+                      style: PixelText.body(size: 11, color: AppColors.textMid),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (buyInAmount > 0) ...[
+            const SizedBox(height: 12),
+            Container(height: 1, color: AppColors.parchmentBorder),
+            const SizedBox(height: 12),
+            Row(
               children: [
-                Text(
-                  'TARGET',
-                  style: PixelText.title(size: 11, color: AppColors.textMid),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(
+                        'BUY-IN',
+                        style: PixelText.title(
+                          size: 11,
+                          color: AppColors.textMid,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '$buyInAmount',
+                        style: PixelText.number(
+                          size: 20,
+                          color: AppColors.coinDark,
+                        ),
+                      ),
+                      Text(
+                        'gold each',
+                        style: PixelText.body(
+                          size: 11,
+                          color: AppColors.textMid,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  _formatSteps(targetSteps),
-                  style: PixelText.number(size: 22, color: AppColors.accent),
-                ),
-                Text(
-                  'steps',
-                  style: PixelText.body(size: 11, color: AppColors.textMid),
+                Container(width: 1, height: 40, color: AppColors.parchmentBorder),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(
+                        'POT',
+                        style: PixelText.title(
+                          size: 11,
+                          color: AppColors.textMid,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '$potCoins',
+                        style: PixelText.number(
+                          size: 20,
+                          color: AppColors.coinDark,
+                        ),
+                      ),
+                      Text(
+                        'gold',
+                        style: PixelText.body(
+                          size: 11,
+                          color: AppColors.textMid,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
-          ),
-          Container(width: 1, height: 40, color: AppColors.parchmentBorder),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text(
-                  'DURATION',
-                  style: PixelText.title(size: 11, color: AppColors.textMid),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '$maxDays',
-                  style: PixelText.number(size: 22, color: AppColors.textDark),
-                ),
-                Text(
-                  'days',
-                  style: PixelText.body(size: 11, color: AppColors.textMid),
-                ),
-              ],
-            ),
-          ),
+            if (payouts != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                '1ST ${payouts['first']}  •  2ND ${payouts['second']}  •  3RD ${payouts['third']}',
+                style: PixelText.title(size: 11, color: AppColors.textMid),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ],
         ],
       ),
     );
@@ -839,6 +1015,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
         // Actions
         if (isCreator) ...[
+          PillButton(
+            label: 'INVITE FRIENDS',
+            variant: PillButtonVariant.secondary,
+            fontSize: 14,
+            fullWidth: true,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+            onPressed: _isActing ? null : _inviteMore,
+          ),
+          const SizedBox(height: 10),
           PillButton(
             label: _isActing ? 'STARTING...' : 'START RACE',
             variant: PillButtonVariant.primary,

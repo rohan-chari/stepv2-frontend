@@ -6,11 +6,11 @@ import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
+import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_icon_button.dart';
-import '../../widgets/spinning_coin.dart';
 
 class FriendsTab extends StatefulWidget {
   final AuthService authService;
@@ -436,14 +436,9 @@ class _FriendsTabState extends State<FriendsTab> {
                       ),
                     ),
                   const SizedBox(width: 8),
-                  const SpinningCoin(size: 18),
-                  const SizedBox(width: 3),
-                  Text(
-                    '${widget.authService.coins}',
-                    style: PixelText.number(
-                      size: 16,
-                      color: AppColors.coinDark,
-                    ).copyWith(shadows: _textShadows),
+                  CoinBalanceBadge(
+                    coins: widget.authService.coins,
+                    heldCoins: widget.authService.heldCoins,
                   ),
                 ],
               ),
@@ -488,8 +483,9 @@ class _FriendsTabState extends State<FriendsTab> {
   }
 
   static String _formatCompact(int n) {
-    if (n >= 1000)
+    if (n >= 1000) {
       return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}k';
+    }
     return '$n';
   }
 

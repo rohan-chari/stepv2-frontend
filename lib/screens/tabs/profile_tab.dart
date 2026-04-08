@@ -5,10 +5,10 @@ import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../services/notification_service.dart';
 import '../../styles.dart';
+import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_icon_button.dart';
 import '../../widgets/retro_card.dart';
-import '../../widgets/spinning_coin.dart';
 import '../../widgets/step_calendar.dart';
 import '../admin_challenge_screen.dart';
 import '../display_name_screen.dart';
@@ -242,12 +242,9 @@ class _ProfileTabState extends State<ProfileTab> {
                 ),
               ),
             const SizedBox(width: 8),
-            const SpinningCoin(size: 18),
-            const SizedBox(width: 3),
-            Text(
-              '${widget.authService.coins}',
-              style: PixelText.number(size: 16, color: AppColors.coinDark)
-                  .copyWith(shadows: _textShadows),
+            CoinBalanceBadge(
+              coins: widget.authService.coins,
+              heldCoins: widget.authService.heldCoins,
             ),
           ],
         ),

@@ -7,20 +7,21 @@ import 'package:step_tracker/services/backend_api_service.dart';
 void main() {
   group('describeBackendConnectionError', () {
     final uri = Uri.parse('http://192.168.1.188:3000');
+    final productionUri = Uri.parse('https://steptracker-api.org');
 
-    test('explains how to reach a LAN backend after a socket failure', () {
+    test('returns a generic message after a socket failure', () {
       final message = describeBackendConnectionError(
         const SocketException('Connection refused'),
         uri: uri,
       );
 
-      expect(message, contains("Can't reach the backend"));
-      expect(message, contains('192.168.1.188:3000'));
-      expect(message, contains('0.0.0.0'));
-      expect(message, contains('same Wi-Fi'));
+      expect(
+        message,
+        "Can't connect right now. Check your internet connection and try again.",
+      );
     });
 
-    test('surfaces ATS guidance for insecure HTTP failures on iOS', () {
+    test('returns a generic message for insecure HTTP failures on iOS', () {
       final message = describeBackendConnectionError(
         const HttpException(
           'App Transport Security policy requires the use of a secure connection',
@@ -28,19 +29,29 @@ void main() {
         uri: uri,
       );
 
-      expect(message, contains('iOS blocked insecure HTTP'));
-      expect(message, contains('HTTPS'));
-      expect(message, contains('App Transport Security'));
+      expect(message, 'Secure connection failed. Please try again later.');
     });
 
-    test('reports request timeouts distinctly', () {
+    test('reports request timeouts distinctly without leaking the host', () {
       final message = describeBackendConnectionError(
         TimeoutException('Request timed out'),
         uri: uri,
       );
 
-      expect(message, contains('timed out'));
-      expect(message, contains('192.168.1.188:3000'));
+      expect(
+        message,
+        'Connection timed out. Check your internet connection and try again.',
+      );
+      expect(message, isNot(contains('192.168.1.188:3000')));
+    });
+
+    test('does not leak the production hostname in user-facing errors', () {
+      final message = describeBackendConnectionError(
+        const SocketException('Connection refused'),
+        uri: productionUri,
+      );
+
+      expect(message, isNot(contains('steptracker-api.org')));
     });
   });
 }
