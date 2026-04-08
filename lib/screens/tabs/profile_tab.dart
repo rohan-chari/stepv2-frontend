@@ -5,6 +5,7 @@ import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../services/notification_service.dart';
 import '../../styles.dart';
+import '../../widgets/app_avatar.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_icon_button.dart';
@@ -26,6 +27,8 @@ class ProfileTab extends StatefulWidget {
   final NotificationService? notificationService;
   final StepData? stepData;
   final VoidCallback? onBack;
+  final Future<void> Function()? onAddProfilePhoto;
+  final Future<void> Function()? onRemoveProfilePhoto;
 
   const ProfileTab({
     super.key,
@@ -39,6 +42,8 @@ class ProfileTab extends StatefulWidget {
     this.notificationService,
     this.stepData,
     this.onBack,
+    this.onAddProfilePhoto,
+    this.onRemoveProfilePhoto,
   });
 
   @override
@@ -145,6 +150,15 @@ class _ProfileTabState extends State<ProfileTab> {
                           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
                           child: Row(
                             children: [
+                              AppAvatar(
+                                name: widget.displayName ?? 'You',
+                                imageUrl: widget.authService.profilePhotoUrl,
+                                size: 54,
+                                isUser: true,
+                                borderColor: AppColors.parchment,
+                                borderWidth: 2.5,
+                              ),
+                              const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -172,6 +186,43 @@ class _ProfileTabState extends State<ProfileTab> {
                                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                                 onPressed: _openSettings,
                               ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        RetroCard(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: PillButton(
+                                  label: widget.authService.profilePhotoUrl == null
+                                      ? 'ADD PHOTO'
+                                      : 'CHANGE PHOTO',
+                                  variant: PillButtonVariant.primary,
+                                  fontSize: 12,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                  onPressed: () => widget.onAddProfilePhoto?.call(),
+                                ),
+                              ),
+                              if (widget.authService.profilePhotoUrl != null) ...[
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: PillButton(
+                                    label: 'REMOVE PHOTO',
+                                    variant: PillButtonVariant.secondary,
+                                    fontSize: 12,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
+                                    onPressed: () => widget.onRemoveProfilePhoto?.call(),
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -232,8 +283,17 @@ class _ProfileTabState extends State<ProfileTab> {
         const SizedBox(height: 8),
         Row(
           children: [
+            AppAvatar(
+              name: widget.displayName ?? 'You',
+              imageUrl: widget.authService.profilePhotoUrl,
+              size: 44,
+              isUser: true,
+              borderColor: AppColors.parchment,
+              borderWidth: 2.25,
+            ),
+            const SizedBox(width: 10),
             if (widget.displayName != null)
-              Flexible(
+              Expanded(
                 child: Text(
                   widget.displayName!,
                   style: PixelText.title(size: 26, color: AppColors.textDark)

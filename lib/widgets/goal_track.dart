@@ -1,6 +1,7 @@
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+
+import 'app_avatar.dart';
 import '../styles.dart';
 
 /// Palette of distinct colors for friend avatars on the track.
@@ -20,12 +21,14 @@ const _friendColors = [
 /// A runner on the goal track.
 class GoalTrackRunner {
   final String name;
+  final String? profilePhotoUrl;
   final double progress;
   final bool isUser;
   final bool isStealthed;
 
   const GoalTrackRunner({
     required this.name,
+    this.profilePhotoUrl,
     required this.progress,
     this.isUser = false,
     this.isStealthed = false,
@@ -57,7 +60,6 @@ class _GoalTrackState extends State<GoalTrack>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _animation;
-  final List<_RunnerHitTarget> _hitTargets = [];
   _RunnerHitTarget? _selectedRunner;
 
   @override
@@ -80,24 +82,6 @@ class _GoalTrackState extends State<GoalTrack>
     super.dispose();
   }
 
-  void _onTapDown(TapDownDetails details) {
-    final tap = details.localPosition;
-    _RunnerHitTarget? closest;
-    double closestDist = double.infinity;
-
-    for (final target in _hitTargets) {
-      final dist = (target.center - tap).distance;
-      if (dist <= target.radius + 8 && dist < closestDist) {
-        closestDist = dist;
-        closest = target;
-      }
-    }
-
-    setState(() {
-      _selectedRunner = _selectedRunner == closest ? null : closest;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -106,38 +90,52 @@ class _GoalTrackState extends State<GoalTrack>
         SizedBox(
           width: double.infinity,
           height: widget.height,
-          child: GestureDetector(
-            onTapDown: _onTapDown,
-            child: AnimatedBuilder(
-              animation: _animation,
-              builder: (context, child) {
-                final t = _animation.value;
-                final painted = widget.runners.map((r) => _PaintedRunner(
-                      name: r.isStealthed ? '???' : (r.isUser ? 'You' : r.name),
-                      initials: r.isStealthed ? '??' : _initials(r.name),
-                      position: r.progress.clamp(0.0, 1.0) * t,
-                      rawProgress: r.progress,
-                      isUser: r.isUser,
-                      isStealthed: r.isStealthed,
-                      color: r.color,
-                    )).toList();
-                return Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Positioned.fill(
-                      child: CustomPaint(
-                        painter: _GoalTrackPainter(
-                          runners: painted,
-                          hitTargets: _hitTargets,
+          child: AnimatedBuilder(
+            animation: _animation,
+            builder: (context, child) {
+              return LayoutBuilder(
+                builder: (context, constraints) {
+                  final layouts = _buildRunnerLayouts(
+                    Size(constraints.maxWidth, widget.height),
+                    _animation.value,
+                  );
+
+                  return Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      const Positioned.fill(
+                        child: CustomPaint(
+                          painter: _GoalTrackPainter(),
                         ),
                       ),
-                    ),
-                    if (_selectedRunner != null)
-                      _buildTooltip(_selectedRunner!),
-                  ],
-                );
-              },
-            ),
+                      for (final layout in layouts)
+                        Positioned(
+                          left: layout.center.dx - layout.radius,
+                          top: layout.center.dy - layout.radius,
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _selectedRunner = _selectedRunner == layout.target
+                                    ? null
+                                    : layout.target;
+                              });
+                            },
+                            child: AppAvatar(
+                              name: layout.runner.name,
+                              imageUrl: layout.runner.profilePhotoUrl,
+                              size: layout.radius * 2,
+                              isUser: layout.runner.isUser,
+                              isStealthed: layout.runner.isStealthed,
+                              borderWidth: layout.runner.isUser ? 2.5 : 1.8,
+                            ),
+                          ),
+                        ),
+                      if (_selectedRunner != null) _buildTooltip(_selectedRunner!),
+                    ],
+                  );
+                },
+              );
+            },
           ),
         ),
         if (widget.runners.length > 1) ...[
@@ -214,11 +212,76 @@ class _GoalTrackState extends State<GoalTrack>
     if (trimmed.isEmpty) return '??';
     return trimmed.substring(0, trimmed.length.clamp(0, 2)).toUpperCase();
   }
+
+  List<_GoalTrackLayoutRunner> _buildRunnerLayouts(Size size, double t) {
+    final painted = widget.runners
+        .map(
+          (runner) => _PaintedRunner(
+            name: runner.isStealthed ? '???' : (runner.isUser ? 'You' : runner.name),
+            profilePhotoUrl: runner.profilePhotoUrl,
+            position: runner.progress.clamp(0.0, 1.0) * t,
+            rawProgress: runner.progress,
+            isUser: runner.isUser,
+            isStealthed: runner.isStealthed,
+            color: runner.color,
+          ),
+        )
+        .toList();
+
+    final trackPath = _buildGoalTrackPath(size);
+    final metrics = trackPath.computeMetrics().first;
+    final totalLength = metrics.length;
+    final count = painted.length;
+    final usableWidth = _GoalTrackPainter._trackWidth -
+        _GoalTrackPainter._friendAvatarRadius * 2;
+
+    final sorted = List.generate(count, (index) => index)
+      ..sort((left, right) {
+        if (painted[left].isUser && !painted[right].isUser) return 1;
+        if (!painted[left].isUser && painted[right].isUser) return -1;
+        return painted[left].position.compareTo(painted[right].position);
+      });
+
+    return [
+      for (final index in sorted)
+        () {
+          final runner = painted[index];
+          final frac = runner.position.clamp(0.0, 0.999);
+          final tangent = metrics.getTangentForOffset(frac * totalLength);
+          if (tangent == null) {
+            return null;
+          }
+
+          final laneOffset = count > 1
+              ? (index / (count - 1) - 0.5) * usableWidth
+              : 0.0;
+          final angle = tangent.angle;
+          final center = tangent.position +
+              Offset(-math.sin(angle) * laneOffset, math.cos(angle) * laneOffset);
+          final radius = runner.isUser
+              ? _GoalTrackPainter._avatarRadius
+              : _GoalTrackPainter._friendAvatarRadius;
+
+          return _GoalTrackLayoutRunner(
+            runner: runner,
+            center: center,
+            radius: radius,
+            target: _RunnerHitTarget(
+              center: center,
+              radius: radius + _GoalTrackPainter._avatarBorder,
+              name: runner.name,
+              progress: runner.rawProgress,
+              isStealthed: runner.isStealthed,
+            ),
+          );
+        }(),
+    ].whereType<_GoalTrackLayoutRunner>().toList(growable: false);
+  }
 }
 
 class _PaintedRunner {
   final String name;
-  final String initials;
+  final String? profilePhotoUrl;
   final double position;
   final double rawProgress;
   final bool isUser;
@@ -227,12 +290,26 @@ class _PaintedRunner {
 
   const _PaintedRunner({
     required this.name,
-    required this.initials,
+    this.profilePhotoUrl,
     required this.position,
     required this.rawProgress,
     required this.isUser,
     this.isStealthed = false,
     required this.color,
+  });
+}
+
+class _GoalTrackLayoutRunner {
+  final _PaintedRunner runner;
+  final Offset center;
+  final double radius;
+  final _RunnerHitTarget target;
+
+  const _GoalTrackLayoutRunner({
+    required this.runner,
+    required this.center,
+    required this.radius,
+    required this.target,
   });
 }
 
@@ -253,64 +330,22 @@ class _RunnerHitTarget {
 }
 
 class _GoalTrackPainter extends CustomPainter {
-  final List<_PaintedRunner> runners;
-  final List<_RunnerHitTarget> hitTargets;
-
   static const double _trackWidth = 54.0;
   static const double _avatarRadius = 18.0;
   static const double _friendAvatarRadius = 14.0;
   static const double _avatarBorder = 2.5;
 
-  _GoalTrackPainter({required this.runners, required this.hitTargets});
+  const _GoalTrackPainter();
 
   @override
   void paint(Canvas canvas, Size size) {
-    final trackPath = _buildWindingPath(size);
+    final trackPath = _buildGoalTrackPath(size);
 
     _drawGrass(canvas, size);
     _drawCurbs(canvas, trackPath);
     _drawTrackSurface(canvas, trackPath);
     _drawDashedCenterLine(canvas, trackPath);
     _drawFinishLine(canvas, trackPath);
-    _drawRunners(canvas, trackPath);
-  }
-
-  /// Winding S-curve track path, start at bottom-center.
-  Path _buildWindingPath(Size size) {
-    final w = size.width;
-    final h = size.height;
-    final m = _trackWidth + 14; // margin
-
-    final path = Path();
-    // Start at bottom-left, straight run rightward
-    path.moveTo(m, h - m);
-    path.lineTo(w / 2, h - m);
-
-    // Curve right and up
-    path.cubicTo(
-      w - m, h - m,
-      w - m, h * 0.6,
-      w - m, h * 0.55,
-    );
-
-    // Curve left across the middle
-    path.cubicTo(
-      w - m, h * 0.4,
-      m, h * 0.45,
-      m, h * 0.35,
-    );
-
-    // Curve right and up to top
-    path.cubicTo(
-      m, h * 0.2,
-      w * 0.35, m,
-      w * 0.5, m,
-    );
-
-    // Straight run to the finish — gives staggered runners room to breathe
-    path.lineTo(w - m, m);
-
-    return path;
   }
 
   void _drawGrass(Canvas canvas, Size size) {
@@ -454,80 +489,42 @@ class _GoalTrackPainter extends CustomPainter {
     canvas.restore();
   }
 
-  void _drawRunners(Canvas canvas, Path trackPath) {
-    final metrics = trackPath.computeMetrics().first;
-    final totalLength = metrics.length;
-
-    // Assign each runner a stable lane offset across the track width.
-    // Spread evenly so they never fully overlap.
-    final n = runners.length;
-    final usableWidth = _trackWidth - _friendAvatarRadius * 2;
-
-    hitTargets.clear();
-
-    // Sort: draw friends first (behind), then user on top
-    final sorted = List.generate(n, (i) => i)
-      ..sort((a, b) {
-        if (runners[a].isUser && !runners[b].isUser) return 1;
-        if (!runners[a].isUser && runners[b].isUser) return -1;
-        return runners[a].position.compareTo(runners[b].position);
-      });
-
-    for (final idx in sorted) {
-      final runner = runners[idx];
-      final frac = runner.position.clamp(0.0, 0.999);
-      final tangent = metrics.getTangentForOffset(frac * totalLength);
-      if (tangent == null) continue;
-
-      // Perpendicular offset: spread runners across the track width
-      final laneOffset = n > 1
-          ? (idx / (n - 1) - 0.5) * usableWidth
-          : 0.0;
-      final angle = tangent.angle;
-      final perpX = -math.sin(angle) * laneOffset;
-      final perpY = math.cos(angle) * laneOffset;
-      final pos = tangent.position + Offset(perpX, perpY);
-
-      final radius = runner.isUser ? _avatarRadius : _friendAvatarRadius;
-      _drawAvatar(canvas, pos, runner.initials, runner.color, radius);
-
-      hitTargets.add(_RunnerHitTarget(
-        center: pos,
-        radius: radius + _avatarBorder,
-        name: runner.name,
-        progress: runner.rawProgress,
-        isStealthed: runner.isStealthed,
-      ));
-    }
-  }
-
-  void _drawAvatar(Canvas canvas, Offset center, String initials, Color color,
-      double radius) {
-    canvas.drawCircle(
-        center, radius + _avatarBorder, Paint()..color = Colors.white);
-    canvas.drawCircle(center, radius, Paint()..color = color);
-
-    final fontSize = radius > 16 ? 14.0 : 10.0;
-    final builder = ui.ParagraphBuilder(ui.ParagraphStyle(
-      textAlign: TextAlign.center,
-      fontSize: fontSize,
-      fontWeight: FontWeight.bold,
-    ))
-      ..pushStyle(ui.TextStyle(
-        color: Colors.white,
-        fontWeight: FontWeight.bold,
-      ))
-      ..addText(initials);
-
-    final paragraph = builder.build()
-      ..layout(ui.ParagraphConstraints(width: radius * 2));
-
-    canvas.drawParagraph(
-      paragraph,
-      Offset(center.dx - radius, center.dy - paragraph.height / 2),
-    );
-  }
-
   @override
-  bool shouldRepaint(covariant _GoalTrackPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _GoalTrackPainter oldDelegate) => false;
+}
+
+Path _buildGoalTrackPath(Size size) {
+  final w = size.width;
+  final h = size.height;
+  final m = _GoalTrackPainter._trackWidth + 14;
+
+  final path = Path();
+  path.moveTo(m, h - m);
+  path.lineTo(w / 2, h - m);
+  path.cubicTo(
+    w - m,
+    h - m,
+    w - m,
+    h * 0.6,
+    w - m,
+    h * 0.55,
+  );
+  path.cubicTo(
+    w - m,
+    h * 0.4,
+    m,
+    h * 0.45,
+    m,
+    h * 0.35,
+  );
+  path.cubicTo(
+    m,
+    h * 0.2,
+    w * 0.35,
+    m,
+    w * 0.5,
+    m,
+  );
+  path.lineTo(w - m, m);
+  return path;
 }

@@ -6,6 +6,7 @@ import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
+import '../../widgets/app_avatar.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/game_container.dart';
@@ -462,10 +463,9 @@ class _FriendsTabState extends State<FriendsTab> {
             ],
           ),
         ),
-        PillIconButton(
-          icon: Icons.person_rounded,
-          size: 36,
-          variant: PillButtonVariant.secondary,
+        ProfileAvatarButton(
+          name: widget.displayName ?? 'You',
+          imageUrl: widget.authService.profilePhotoUrl,
           onPressed: widget.onOpenProfile,
         ),
       ],
@@ -546,6 +546,12 @@ class _FriendsTabState extends State<FriendsTab> {
                 : null,
             child: Row(
               children: [
+                AppAvatar(
+                  name: _searchResults[i]['displayName'] as String? ?? '',
+                  imageUrl: _searchResults[i]['profilePhotoUrl'] as String?,
+                  size: 30,
+                ),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     _searchResults[i]['displayName'] as String? ?? '',
@@ -581,6 +587,7 @@ class _FriendsTabState extends State<FriendsTab> {
 
   Widget _buildFriendCard(Map<String, dynamic> friend) {
     final displayName = friend['displayName'] as String? ?? '???';
+    final profilePhotoUrl = friend['profilePhotoUrl'] as String?;
     final friendshipId = friend['friendshipId'] as String? ?? '';
 
     return GestureDetector(
@@ -589,6 +596,12 @@ class _FriendsTabState extends State<FriendsTab> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
           children: [
+            AppAvatar(
+              name: displayName,
+              imageUrl: profilePhotoUrl,
+              size: 34,
+            ),
+            const SizedBox(width: 10),
             Expanded(
               child: Text(
                 displayName,
@@ -604,14 +617,21 @@ class _FriendsTabState extends State<FriendsTab> {
   }
 
   Widget _buildIncomingCard(Map<String, dynamic> req) {
-    final displayName =
-        (req['user'] as Map<String, dynamic>?)?['displayName'] as String? ?? '';
+    final user = (req['user'] as Map<String, dynamic>?) ?? const {};
+    final displayName = user['displayName'] as String? ?? '';
+    final profilePhotoUrl = user['profilePhotoUrl'] as String?;
     final friendshipId = req['friendshipId'] as String;
 
     return GameContainer(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Row(
         children: [
+          AppAvatar(
+            name: displayName,
+            imageUrl: profilePhotoUrl,
+            size: 34,
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               displayName,
@@ -640,13 +660,20 @@ class _FriendsTabState extends State<FriendsTab> {
   }
 
   Widget _buildOutgoingCard(Map<String, dynamic> req) {
-    final displayName =
-        (req['user'] as Map<String, dynamic>?)?['displayName'] as String? ?? '';
+    final user = (req['user'] as Map<String, dynamic>?) ?? const {};
+    final displayName = user['displayName'] as String? ?? '';
+    final profilePhotoUrl = user['profilePhotoUrl'] as String?;
 
     return GameContainer(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       child: Row(
         children: [
+          AppAvatar(
+            name: displayName,
+            imageUrl: profilePhotoUrl,
+            size: 34,
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               displayName,

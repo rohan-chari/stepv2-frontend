@@ -63,6 +63,84 @@ class _FakeBackendApiService extends BackendApiService {
   }
 }
 
+class _ActivePaidRaceBackendApiService extends BackendApiService {
+  @override
+  Future<Map<String, dynamic>> fetchRaceDetails({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    return {
+      'id': raceId,
+      'name': 'Gold Sprint',
+      'status': 'ACTIVE',
+      'targetSteps': 100000,
+      'maxDurationDays': 7,
+      'buyInAmount': 100,
+      'payoutPreset': 'TOP3_70_20_10',
+      'potCoins': 600,
+      'heldPotCoins': 0,
+      'projectedPotCoins': 600,
+      'payouts': {'first': 420, 'second': 120, 'third': 60},
+      'myStatus': 'ACCEPTED',
+      'isCreator': false,
+      'powerupsEnabled': false,
+      'endsAt': '2026-04-10T12:00:00.000Z',
+      'participants': const [
+        {
+          'userId': 'user-1',
+          'displayName': 'Trail Walker',
+          'status': 'ACCEPTED',
+        },
+        {
+          'userId': 'user-2',
+          'displayName': 'Hill Climber',
+          'status': 'ACCEPTED',
+        },
+      ],
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceProgress({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    return {
+      'status': 'ACTIVE',
+      'participants': const [
+        {
+          'userId': 'user-1',
+          'displayName': 'Trail Walker',
+          'totalSteps': 42000,
+          'finishedAt': null,
+        },
+        {
+          'userId': 'user-2',
+          'displayName': 'Hill Climber',
+          'totalSteps': 38000,
+          'finishedAt': null,
+        },
+      ],
+      'powerupData': const {
+        'enabled': false,
+        'inventory': [],
+        'powerupSlots': 3,
+        'queuedBoxCount': 0,
+        'activeEffects': [],
+      },
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceFeed({
+    String? cursor,
+    required String identityToken,
+    required String raceId,
+  }) async {
+    return const {'events': []};
+  }
+}
+
 Future<AuthService> _createAuthService() async {
   SharedPreferences.setMockInitialValues({
     'auth_identity_token': 'apple-token',
@@ -116,5 +194,31 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(backendApiService.respondCalls, 1);
+  });
+
+  testWidgets('RaceDetailScreen shows the prize pool near the countdown for active paid races', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _createAuthService();
+    final backendApiService = _ActivePaidRaceBackendApiService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RaceDetailScreen(
+          authService: authService,
+          raceId: 'race-2',
+          backendApiService: backendApiService,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('PRIZE POOL'), findsOneWidget);
+    expect(find.text('600'), findsOneWidget);
+    expect(find.text('1ST 420  •  2ND 120  •  3RD 60'), findsOneWidget);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pumpAndSettle();
   });
 }

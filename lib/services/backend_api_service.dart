@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_timezone/flutter_timezone.dart';
 
@@ -193,6 +194,116 @@ class BackendApiService {
     );
 
     return await _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> requestProfilePhotoUpload({
+    required String identityToken,
+    required String contentType,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/auth/me/profile-photo/upload-url',
+      body: {'contentType': contentType},
+      identityToken: identityToken,
+    );
+
+    final payload = await _decodeJsonResponse(response);
+    final upload = payload['upload'];
+    if (upload is! Map<String, dynamic>) {
+      throw const ApiException('Something went wrong. Please try again.');
+    }
+
+    return upload;
+  }
+
+  Future<Map<String, dynamic>> saveProfilePhoto({
+    required String identityToken,
+    required String key,
+    required String url,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'PUT',
+      path: '/auth/me/profile-photo',
+      body: {'key': key, 'url': url},
+      identityToken: identityToken,
+    );
+
+    final payload = await _decodeJsonResponse(response);
+    final user = payload['user'];
+    if (user is! Map<String, dynamic>) {
+      throw const ApiException('Something went wrong. Please try again.');
+    }
+
+    return user;
+  }
+
+  Future<Map<String, dynamic>> removeProfilePhoto({
+    required String identityToken,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'DELETE',
+      path: '/auth/me/profile-photo',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+
+    final payload = await _decodeJsonResponse(response);
+    final user = payload['user'];
+    if (user is! Map<String, dynamic>) {
+      throw const ApiException('Something went wrong. Please try again.');
+    }
+
+    return user;
+  }
+
+  Future<Map<String, dynamic>> dismissProfilePhotoPrompt({
+    required String identityToken,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/auth/me/profile-photo/prompt-dismiss',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+
+    final payload = await _decodeJsonResponse(response);
+    final user = payload['user'];
+    if (user is! Map<String, dynamic>) {
+      throw const ApiException('Something went wrong. Please try again.');
+    }
+
+    return user;
+  }
+
+  Future<void> uploadProfilePhotoBytes({
+    required String uploadUrl,
+    required Uint8List bytes,
+    required String contentType,
+  }) async {
+    final uri = Uri.parse(uploadUrl);
+
+    try {
+      final request = await _httpClient.putUrl(uri);
+      request.headers.set(HttpHeaders.contentTypeHeader, contentType);
+      request.contentLength = bytes.length;
+      request.add(bytes);
+      final response = await request.close().timeout(_requestTimeout);
+      await response.drain<void>();
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw const ApiException(
+          'Couldn’t upload your photo. Please try again.',
+        );
+      }
+    } on TimeoutException catch (error) {
+      throw ApiException(describeBackendConnectionError(error, uri: uri));
+    } on SocketException catch (error) {
+      throw ApiException(describeBackendConnectionError(error, uri: uri));
+    } on HandshakeException catch (error) {
+      throw ApiException(describeBackendConnectionError(error, uri: uri));
+    } on HttpException catch (error) {
+      throw ApiException(describeBackendConnectionError(error, uri: uri));
+    }
   }
 
   Future<List<Map<String, dynamic>>> searchUsers({

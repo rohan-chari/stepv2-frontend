@@ -4,6 +4,7 @@ import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
+import '../../widgets/app_avatar.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/filter_dropdown.dart';
 import '../../widgets/game_container.dart';
@@ -407,10 +408,9 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
             ],
           ),
         ),
-        PillIconButton(
-          icon: Icons.person_rounded,
-          size: 36,
-          variant: PillButtonVariant.secondary,
+        ProfileAvatarButton(
+          name: widget.displayName ?? 'You',
+          imageUrl: widget.authService.profilePhotoUrl,
           onPressed: widget.onOpenProfile,
         ),
       ],
@@ -525,6 +525,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
         _LeaderboardRow(
           rank: entry['rank'] as int?,
           displayName: entry['displayName'] as String? ?? 'Anonymous',
+          profilePhotoUrl: entry['profilePhotoUrl'] as String?,
           valueLabel: _displayValue(entry),
           isMe: (entry['userId'] as String?) == widget.authService.userId,
           firsts: entry['firsts'] as int?,
@@ -590,6 +591,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                 rank: _currentUser!['rank'] as int?,
                 displayName:
                     _currentUser!['displayName'] as String? ?? 'Anonymous',
+                profilePhotoUrl: _currentUser!['profilePhotoUrl'] as String?,
                 valueLabel: _displayValue(_currentUser!),
                 isMe: true,
                 firsts: _currentUser!['firsts'] as int?,
@@ -645,6 +647,14 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
             ),
           ),
           const SizedBox(width: 8),
+          AppAvatar(
+            name: row.displayName,
+            imageUrl: row.profilePhotoUrl,
+            size: 32,
+            isUser: row.isMe,
+            borderColor: row.isMe ? AppColors.accent : Colors.white,
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               row.displayName,
@@ -672,6 +682,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
 class _LeaderboardRow {
   final int? rank;
   final String displayName;
+  final String? profilePhotoUrl;
   final String valueLabel;
   final bool isMe;
   final int? firsts;
@@ -681,6 +692,7 @@ class _LeaderboardRow {
   const _LeaderboardRow({
     required this.rank,
     required this.displayName,
+    this.profilePhotoUrl,
     required this.valueLabel,
     this.isMe = false,
     this.firsts,

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../styles.dart';
+import '../../widgets/app_avatar.dart';
 import '../../widgets/feature_highlights_row.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_icon_button.dart';
@@ -40,6 +41,8 @@ class HomeTab extends StatelessWidget {
   final void Function(String leaderboardType, String period)?
   onOpenLeaderboardHighlight;
   final VoidCallback? onOpenProfile;
+  final Future<void> Function()? onAddProfilePhoto;
+  final Future<void> Function()? onDismissProfilePhotoPrompt;
 
   const HomeTab({
     super.key,
@@ -67,6 +70,8 @@ class HomeTab extends StatelessWidget {
     this.onOpenLeaderboardTab,
     this.onOpenLeaderboardHighlight,
     this.onOpenProfile,
+    this.onAddProfilePhoto,
+    this.onDismissProfilePhotoPrompt,
   });
 
   @override
@@ -83,6 +88,13 @@ class HomeTab extends StatelessWidget {
     final bottomInset = MediaQuery.of(context).padding.bottom;
     final tabBarHeight = 77.5 + bottomInset;
     final bottomPadding = tabBarHeight;
+    final hasProfilePhoto =
+        authService.profilePhotoUrl != null &&
+        authService.profilePhotoUrl!.isNotEmpty;
+    final showProfilePhotoPrompt =
+        displayName != null &&
+        !hasProfilePhoto &&
+        authService.profilePhotoPromptDismissedAt == null;
 
     return Padding(
       padding: EdgeInsets.only(top: topInset + 12, bottom: bottomPadding),
@@ -101,8 +113,11 @@ class HomeTab extends StatelessWidget {
                     _buildTopStatusBar(),
                     const SizedBox(height: 12),
 
-                    if (displayName == null) ...[
-                      _buildSetupPrompts(context),
+                    if (displayName == null || showProfilePhotoPrompt) ...[
+                      _buildSetupPrompts(
+                        context,
+                        showProfilePhotoPrompt: showProfilePhotoPrompt,
+                      ),
                       const SizedBox(height: 12),
                     ],
 
@@ -211,10 +226,9 @@ class HomeTab extends StatelessWidget {
             ],
           ),
         ),
-        PillIconButton(
-          icon: Icons.person_rounded,
-          size: 36,
-          variant: PillButtonVariant.secondary,
+        ProfileAvatarButton(
+          name: displayName ?? 'You',
+          imageUrl: authService.profilePhotoUrl,
           onPressed: onOpenProfile,
         ),
       ],
@@ -282,11 +296,13 @@ class HomeTab extends StatelessWidget {
             name: displayName ?? 'You',
             progress: progress,
             isUser: true,
+            profilePhotoUrl: authService.profilePhotoUrl,
           ),
           for (final friend in friendsSteps)
             GoalTrackRunner(
               name: friend['displayName'] as String? ?? '???',
               progress: _friendGoalProgress(friend),
+              profilePhotoUrl: friend['profilePhotoUrl'] as String?,
             ),
         ],
       ),
@@ -352,7 +368,10 @@ class HomeTab extends StatelessWidget {
 
   // -- Setup prompts (kept from original) --
 
-  Widget _buildSetupPrompts(BuildContext context) {
+  Widget _buildSetupPrompts(
+    BuildContext context, {
+    required bool showProfilePhotoPrompt,
+  }) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -373,6 +392,56 @@ class HomeTab extends StatelessWidget {
               onDisplayNameChanged();
             },
           ),
+        if (showProfilePhotoPrompt) ...[
+          GameContainer(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Text(
+                  'ADD A PROFILE PHOTO?',
+                  style: PixelText.title(size: 16, color: AppColors.textDark),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Make it easier for friends to spot you in races, challenges, and leaderboards.',
+                  style: PixelText.body(size: 13, color: AppColors.textMid),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: PillButton(
+                        label: 'ADD PHOTO',
+                        variant: PillButtonVariant.primary,
+                        fontSize: 13,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        onPressed: () => onAddProfilePhoto?.call(),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: PillButton(
+                        label: 'NO THANKS',
+                        variant: PillButtonVariant.secondary,
+                        fontSize: 13,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        onPressed: () => onDismissProfilePhotoPrompt?.call(),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }

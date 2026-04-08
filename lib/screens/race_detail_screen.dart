@@ -7,6 +7,7 @@ import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
 import '../utils/race_participant_display.dart';
+import '../widgets/app_avatar.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/goal_track.dart';
 import '../widgets/info_toast.dart';
@@ -582,6 +583,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                       ),
                       child: Row(
                         children: [
+                          AppAvatar(
+                            name: t['displayName'] as String? ?? '???',
+                            imageUrl: t['profilePhotoUrl'] as String?,
+                            size: 30,
+                          ),
+                          const SizedBox(width: 10),
                           Expanded(
                             child: Text(
                               t['displayName'] as String? ?? '???',
@@ -1146,6 +1153,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         .where((p) => p['finishedAt'] != null)
         .length;
     final targetSteps = _race!['targetSteps'] as int? ?? 0;
+    final buyInAmount = _race!['buyInAmount'] as int? ?? 0;
     final endsAtRaw = _race!['endsAt'] as String?;
     final endsAt = endsAtRaw != null
         ? DateTime.tryParse(endsAtRaw)?.toLocal()
@@ -1154,6 +1162,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       children: [
         // Countdown
         if (endsAt != null) _buildCountdown(endsAt),
+        if (buyInAmount > 0) _buildPrizePoolHeader(),
         const SizedBox(height: 12),
 
         // Single card for everything
@@ -1183,6 +1192,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                             : 0.0,
                         isUser: (p['userId'] as String?) == _myUserId,
                         isStealthed: p['stealthed'] == true,
+                        profilePhotoUrl: p['profilePhotoUrl'] as String?,
                       ),
                   ],
                 ),
@@ -1689,6 +1699,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                       ? ((p['totalSteps'] as int? ?? 0) / targetSteps)
                       : 0.0,
                   isUser: (p['userId'] as String?) == _myUserId,
+                  profilePhotoUrl: p['profilePhotoUrl'] as String?,
                 ),
             ],
           ),
@@ -1756,6 +1767,43 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             _CountdownUnit(value: minutes, label: 'MIN'),
             const SizedBox(width: 10),
             _CountdownUnit(value: seconds, label: 'SEC'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPrizePoolHeader() {
+    final potCoins = _race!['projectedPotCoins'] as int? ?? 0;
+    final payouts = _race!['payouts'] as Map<String, dynamic>?;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 8),
+      child: GameContainer(
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+        child: Column(
+          children: [
+            Text(
+              'PRIZE POOL',
+              style: PixelText.title(size: 14, color: AppColors.textMid),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '$potCoins',
+              style: PixelText.number(size: 28, color: AppColors.coinDark),
+            ),
+            Text(
+              'gold',
+              style: PixelText.body(size: 12, color: AppColors.textMid),
+            ),
+            if (payouts != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                '1ST ${payouts['first']}  •  2ND ${payouts['second']}  •  3RD ${payouts['third']}',
+                style: PixelText.title(size: 11, color: AppColors.textMid),
+                textAlign: TextAlign.center,
+              ),
+            ],
           ],
         ),
       ),
@@ -1850,6 +1898,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     return LeaderboardPlank(
       rank: rank,
       name: name,
+      profilePhotoUrl: p['profilePhotoUrl'] as String?,
       steps: totalSteps,
       formattedSteps: _formatSteps(totalSteps),
       isUser: isMe,

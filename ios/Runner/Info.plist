@@ -31,10 +31,14 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Bara uses the camera so you can take a profile photo.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>This app needs access to your step count data to display your daily steps.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>This app needs access to update your health data.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Bara uses your photo library so you can choose a profile photo.</string>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>$(PRODUCT_BUNDLE_IDENTIFIER).periodicStepSync</string>

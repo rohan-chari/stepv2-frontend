@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
 import '../../styles.dart';
+import '../../widgets/app_avatar.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/pill_button.dart';
-import '../../widgets/pill_icon_button.dart';
 import '../create_race_screen.dart';
 import '../race_detail_screen.dart';
 
@@ -224,10 +224,9 @@ class _RacesTabState extends State<RacesTab> {
             ],
           ),
         ),
-        PillIconButton(
-          icon: Icons.person_rounded,
-          size: 36,
-          variant: PillButtonVariant.secondary,
+        ProfileAvatarButton(
+          name: widget.displayName ?? 'You',
+          imageUrl: widget.authService.profilePhotoUrl,
           onPressed: widget.onOpenProfile,
         ),
       ],

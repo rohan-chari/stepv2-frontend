@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
+import 'app_avatar.dart';
 import '../styles.dart';
 import '../utils/race_participant_display.dart';
 
@@ -15,6 +16,7 @@ class LeaderboardPlank extends StatelessWidget {
   final int? finishPlace;
   final String formattedSteps;
   final List<Widget> effectIcons;
+  final String? profilePhotoUrl;
 
   const LeaderboardPlank({
     super.key,
@@ -27,6 +29,7 @@ class LeaderboardPlank extends StatelessWidget {
     this.isFinished = false,
     this.finishPlace,
     this.effectIcons = const [],
+    this.profilePhotoUrl,
   });
 
   Color? get _medalColor {
@@ -88,6 +91,15 @@ class LeaderboardPlank extends StatelessWidget {
                   color: _medalColor ?? AppColors.woodMid,
                 ),
               ),
+            ),
+            const SizedBox(width: 8),
+            AppAvatar(
+              name: displayName,
+              imageUrl: isStealthed ? null : profilePhotoUrl,
+              size: 32,
+              isUser: isUser,
+              isStealthed: isStealthed,
+              borderColor: isUser ? AppColors.accent : Colors.white,
             ),
             const SizedBox(width: 8),
             // Name + effects

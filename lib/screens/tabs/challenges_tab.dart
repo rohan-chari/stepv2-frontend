@@ -6,12 +6,12 @@ import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
+import '../../widgets/app_avatar.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/info_toast.dart';
 import '../../widgets/pill_button.dart';
-import '../../widgets/pill_icon_button.dart';
 import '../challenge_detail_screen.dart';
 import '../friend_picker_screen.dart';
 import '../stake_picker_screen.dart';
@@ -471,10 +471,9 @@ class _ChallengesTabState extends State<ChallengesTab> {
             ],
           ),
         ),
-        PillIconButton(
-          icon: Icons.person_rounded,
-          size: 36,
-          variant: PillButtonVariant.secondary,
+        ProfileAvatarButton(
+          name: widget.displayName ?? 'You',
+          imageUrl: widget.authService.profilePhotoUrl,
           onPressed: widget.onOpenProfile,
         ),
       ],

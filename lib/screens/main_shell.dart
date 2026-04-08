@@ -1,7 +1,11 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:image_cropper/image_cropper.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../config/backend_config.dart';
 import '../models/step_data.dart';
@@ -14,6 +18,7 @@ import '../services/notification_service.dart';
 import '../styles.dart';
 import '../widgets/capybara.dart';
 import '../widgets/error_toast.dart';
+import '../widgets/info_toast.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/trail_sign.dart';
 import '../widgets/wooden_tab_bar.dart';
@@ -214,13 +219,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         await widget.authService.updateSessionToken(newToken);
       }
       if (user != null) {
-        await widget.authService.updateAdminAccess(
-          user['isAdmin'] as bool? ?? false,
-        );
-        await widget.authService.updateCoins(user['coins'] as int? ?? 0);
-        await widget.authService.updateHeldCoins(
-          user['heldCoins'] as int? ?? 0,
-        );
+        await widget.authService.syncFromBackendUser(user);
       }
       return true;
     } catch (error) {
@@ -456,6 +455,163 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _openLeaderboardTab();
   }
 
+  Future<ImageSource?> _showProfilePhotoSourceSheet() async {
+    return showCupertinoModalPopup<ImageSource>(
+      context: context,
+      builder: (sheetContext) => CupertinoActionSheet(
+        title: const Text('Add a profile photo'),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(sheetContext).pop(ImageSource.camera),
+            child: const Text('Take Photo'),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () =>
+                Navigator.of(sheetContext).pop(ImageSource.gallery),
+            child: const Text('Choose from Library'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.of(sheetContext).pop(),
+          isDefaultAction: true,
+          child: const Text('Cancel'),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _addOrChangeProfilePhoto() async {
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) return;
+
+    final source = await _showProfilePhotoSourceSheet();
+    if (source == null) return;
+
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: source,
+        preferredCameraDevice: CameraDevice.front,
+      );
+      if (picked == null) return;
+
+      final cropped = await ImageCropper().cropImage(
+        sourcePath: picked.path,
+        compressFormat: ImageCompressFormat.jpg,
+        compressQuality: 85,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+        uiSettings: [
+          IOSUiSettings(
+            title: 'Crop Photo',
+            aspectRatioLockEnabled: true,
+            aspectRatioPickerButtonHidden: true,
+            resetAspectRatioEnabled: false,
+          ),
+        ],
+      );
+      if (cropped == null) return;
+
+      final bytes = await cropped.readAsBytes();
+      const contentType = 'image/jpeg';
+      final upload = await _backendApiService.requestProfilePhotoUpload(
+        identityToken: token,
+        contentType: contentType,
+      );
+
+      await _backendApiService.uploadProfilePhotoBytes(
+        uploadUrl: upload['uploadUrl'] as String,
+        bytes: bytes,
+        contentType: contentType,
+      );
+
+      final user = await _backendApiService.saveProfilePhoto(
+        identityToken: token,
+        key: upload['key'] as String,
+        url: upload['publicUrl'] as String,
+      );
+
+      await widget.authService.syncFromBackendUser(user);
+      if (mounted) {
+        setState(() {});
+      }
+      await _refreshProfileSurfaces();
+
+      if (mounted) {
+        showInfoToast(context, 'Profile photo updated.');
+      }
+    } on PlatformException {
+      if (!mounted) return;
+      final message = source == ImageSource.camera
+          ? 'Camera access is off. Enable it in Settings to take a profile photo.'
+          : 'Photo access is off. Enable it in Settings to choose a profile photo.';
+      showErrorToast(context, message);
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      showErrorToast(context, error.message);
+    } catch (_) {
+      if (!mounted) return;
+      showErrorToast(
+        context,
+        'Couldn’t update your profile photo. Please try again.',
+      );
+    }
+  }
+
+  Future<void> _removeProfilePhoto() async {
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) return;
+
+    try {
+      final user = await _backendApiService.removeProfilePhoto(
+        identityToken: token,
+      );
+      await widget.authService.syncFromBackendUser(user);
+      if (mounted) {
+        setState(() {});
+      }
+      await _refreshProfileSurfaces();
+
+      if (mounted) {
+        showInfoToast(context, 'Profile photo removed.');
+      }
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      showErrorToast(context, error.message);
+    } catch (_) {
+      if (!mounted) return;
+      showErrorToast(
+        context,
+        'Couldn’t remove your profile photo. Please try again.',
+      );
+    }
+  }
+
+  Future<void> _dismissProfilePhotoPrompt() async {
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) return;
+
+    try {
+      final user = await _backendApiService.dismissProfilePhotoPrompt(
+        identityToken: token,
+      );
+      await widget.authService.syncFromBackendUser(user);
+      if (mounted) {
+        setState(() {});
+        showInfoToast(
+          context,
+          'No problem. You can add one anytime in Profile.',
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      showErrorToast(
+        context,
+        'Couldn’t save that preference. Please try again.',
+      );
+    }
+  }
+
   void _openProfile() {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -469,6 +625,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           backendApiService: _backendApiService,
           notificationService: widget.notificationService,
           stepData: _stepData,
+          onAddProfilePhoto: _addOrChangeProfilePhoto,
+          onRemoveProfilePhoto: _removeProfilePhoto,
         ),
       ),
     );
@@ -554,16 +712,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       final incoming = user['incomingFriendRequests'] as int? ?? 0;
       final displayName = user['displayName'] as String?;
       final email = user['email'] as String?;
-      final isAdmin = user['isAdmin'] as bool? ?? false;
-      await widget.authService.updateStepGoal(goal);
-      await widget.authService.updateDisplayName(displayName);
-      await widget.authService.updateAdminAccess(isAdmin);
-      await widget.authService.updateCoins(
-        user['coins'] as int? ?? widget.authService.coins,
-      );
-      await widget.authService.updateHeldCoins(
-        user['heldCoins'] as int? ?? widget.authService.heldCoins,
-      );
+      await widget.authService.syncFromBackendUser(user);
       if (mounted) {
         setState(() {
           _stepGoal = goal;
@@ -573,6 +722,21 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         });
       }
     } catch (_) {}
+  }
+
+  Future<void> _refreshProfileSurfaces() async {
+    await Future.wait([
+      _refreshStepGoal(),
+      _fetchFriendsSteps(),
+      _fetchCurrentChallenge(),
+      _fetchRaces(),
+    ]);
+
+    if (mounted) {
+      setState(() {
+        _leaderboardSelectionNonce += 1;
+      });
+    }
   }
 
   Future<void> _showStepGoalDialog() async {
@@ -786,6 +950,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   onOpenLeaderboardTab: _openLeaderboardTab,
                   onOpenLeaderboardHighlight: _openLeaderboardHighlight,
                   onOpenProfile: _openProfile,
+                  onAddProfilePhoto: _addOrChangeProfilePhoto,
+                  onDismissProfilePhotoPrompt: _dismissProfilePhotoPrompt,
                 ),
                 ChallengesTab(
                   authService: widget.authService,

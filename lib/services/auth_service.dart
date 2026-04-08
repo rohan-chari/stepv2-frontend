@@ -18,6 +18,9 @@ class AuthService {
   static const _keyBackendUserId = 'auth_backend_user_id';
   static const _keyStepGoal = 'auth_step_goal';
   static const _keyDisplayName = 'auth_display_name';
+  static const _keyProfilePhotoUrl = 'auth_profile_photo_url';
+  static const _keyProfilePhotoPromptDismissedAt =
+      'auth_profile_photo_prompt_dismissed_at';
   static const _keySessionToken = 'auth_session_token';
   static const _keyIsAdmin = 'auth_is_admin';
   static const _keyCoins = 'auth_coins';
@@ -30,6 +33,8 @@ class AuthService {
   String? _lastErrorMessage;
   int? _stepGoal;
   String? _displayName;
+  String? _profilePhotoUrl;
+  String? _profilePhotoPromptDismissedAt;
   String? _sessionToken;
   bool _isAdmin = false;
   int _coins = 0;
@@ -42,6 +47,8 @@ class AuthService {
   String? get lastErrorMessage => _lastErrorMessage;
   int? get stepGoal => _stepGoal;
   String? get displayName => _displayName;
+  String? get profilePhotoUrl => _profilePhotoUrl;
+  String? get profilePhotoPromptDismissedAt => _profilePhotoPromptDismissedAt;
   bool get isAdmin => _isAdmin;
   int get coins => _coins;
   int get heldCoins => _heldCoins;
@@ -57,6 +64,10 @@ class AuthService {
     _backendUserId = prefs.getString(_keyBackendUserId);
     _stepGoal = prefs.getInt(_keyStepGoal);
     _displayName = prefs.getString(_keyDisplayName);
+    _profilePhotoUrl = prefs.getString(_keyProfilePhotoUrl);
+    _profilePhotoPromptDismissedAt = prefs.getString(
+      _keyProfilePhotoPromptDismissedAt,
+    );
     _sessionToken = prefs.getString(_keySessionToken);
     _isAdmin = prefs.getBool(_keyIsAdmin) ?? false;
     _coins = prefs.getInt(_keyCoins) ?? 0;
@@ -101,11 +112,8 @@ class AuthService {
       _identityToken = identityToken;
       _userIdentifier = userIdentifier;
       _backendUserId = backendUser['id'] as String?;
-      _displayName = backendUser['displayName'] as String?;
       _sessionToken = response['sessionToken'] as String?;
-      _isAdmin = backendUser['isAdmin'] as bool? ?? false;
-      _coins = backendUser['coins'] as int? ?? 0;
-      _heldCoins = backendUser['heldCoins'] as int? ?? 0;
+      applyBackendUser(backendUser);
       _lastErrorMessage = null;
 
       await _persist();
@@ -139,6 +147,59 @@ class AuthService {
     }
   }
 
+  Future<void> updateProfilePhotoUrl(String? profilePhotoUrl) async {
+    _profilePhotoUrl = profilePhotoUrl;
+    final prefs = await SharedPreferences.getInstance();
+    if (profilePhotoUrl != null) {
+      await prefs.setString(_keyProfilePhotoUrl, profilePhotoUrl);
+    } else {
+      await prefs.remove(_keyProfilePhotoUrl);
+    }
+  }
+
+  Future<void> updateProfilePhotoPromptDismissedAt(String? value) async {
+    _profilePhotoPromptDismissedAt = value;
+    final prefs = await SharedPreferences.getInstance();
+    if (value != null) {
+      await prefs.setString(_keyProfilePhotoPromptDismissedAt, value);
+    } else {
+      await prefs.remove(_keyProfilePhotoPromptDismissedAt);
+    }
+  }
+
+  void applyBackendUser(Map<String, dynamic> backendUser) {
+    if (backendUser.containsKey('id')) {
+      _backendUserId = backendUser['id'] as String?;
+    }
+    if (backendUser.containsKey('stepGoal')) {
+      _stepGoal = backendUser['stepGoal'] as int?;
+    }
+    if (backendUser.containsKey('displayName')) {
+      _displayName = backendUser['displayName'] as String?;
+    }
+    if (backendUser.containsKey('profilePhotoUrl')) {
+      _profilePhotoUrl = backendUser['profilePhotoUrl'] as String?;
+    }
+    if (backendUser.containsKey('profilePhotoPromptDismissedAt')) {
+      _profilePhotoPromptDismissedAt =
+          backendUser['profilePhotoPromptDismissedAt'] as String?;
+    }
+    if (backendUser.containsKey('isAdmin')) {
+      _isAdmin = backendUser['isAdmin'] as bool? ?? false;
+    }
+    if (backendUser.containsKey('coins')) {
+      _coins = backendUser['coins'] as int? ?? 0;
+    }
+    if (backendUser.containsKey('heldCoins')) {
+      _heldCoins = backendUser['heldCoins'] as int? ?? 0;
+    }
+  }
+
+  Future<void> syncFromBackendUser(Map<String, dynamic> backendUser) async {
+    applyBackendUser(backendUser);
+    await _persist();
+  }
+
   Future<void> signOut() async {
     _identityToken = null;
     _userIdentifier = null;
@@ -146,6 +207,8 @@ class AuthService {
     _lastErrorMessage = null;
     _stepGoal = null;
     _displayName = null;
+    _profilePhotoUrl = null;
+    _profilePhotoPromptDismissedAt = null;
     _sessionToken = null;
     _coins = 0;
     _heldCoins = 0;
@@ -157,6 +220,8 @@ class AuthService {
     await prefs.remove(_keyBackendUserId);
     await prefs.remove(_keyStepGoal);
     await prefs.remove(_keyDisplayName);
+    await prefs.remove(_keyProfilePhotoUrl);
+    await prefs.remove(_keyProfilePhotoPromptDismissedAt);
     await prefs.remove(_keySessionToken);
     await prefs.remove(_keyIsAdmin);
     await prefs.remove(_keyHeldCoins);
@@ -203,6 +268,15 @@ class AuthService {
     }
     if (_displayName != null) {
       await prefs.setString(_keyDisplayName, _displayName!);
+    }
+    if (_profilePhotoUrl != null) {
+      await prefs.setString(_keyProfilePhotoUrl, _profilePhotoUrl!);
+    }
+    if (_profilePhotoPromptDismissedAt != null) {
+      await prefs.setString(
+        _keyProfilePhotoPromptDismissedAt,
+        _profilePhotoPromptDismissedAt!,
+      );
     }
     if (_sessionToken != null) {
       await prefs.setString(_keySessionToken, _sessionToken!);
