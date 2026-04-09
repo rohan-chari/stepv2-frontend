@@ -113,8 +113,6 @@ void main() {
         home: Scaffold(
           body: FriendsTab(
             authService: authService,
-            friendsSteps: const [],
-            currentChallenge: const {'instances': []},
             onFriendsChanged: () {},
             onRefresh: () async {
               shellRefreshCalls += 1;

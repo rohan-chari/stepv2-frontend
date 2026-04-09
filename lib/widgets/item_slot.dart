@@ -1,5 +1,7 @@
 import 'dart:math';
+
 import 'package:flutter/material.dart';
+
 import '../styles.dart';
 import 'powerup_icon.dart';
 import 'spinning_crate.dart';
@@ -28,6 +30,7 @@ class ItemSlot extends StatefulWidget {
   final String? rarity;
   final bool isExtraSlot;
   final VoidCallback? onTap;
+  final Key? shellKey;
 
   const ItemSlot({
     super.key,
@@ -36,6 +39,7 @@ class ItemSlot extends StatefulWidget {
     this.rarity,
     this.isExtraSlot = false,
     this.onTap,
+    this.shellKey,
   });
 
   @override
@@ -64,156 +68,175 @@ class _ItemSlotState extends State<ItemSlot>
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedBuilder(
-          animation: _controller,
-          builder: (context, child) {
-            final t = _controller.value;
-            switch (widget.state) {
-              case ItemSlotState.empty:
-                return _buildEmpty(t);
-              case ItemSlotState.held:
-                return _buildHeld();
-              case ItemSlotState.mysteryBox:
-                return _buildMysteryBox(t);
-            }
-          },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 3),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final slotHeight = min(constraints.maxWidth, 82.0);
+              return SizedBox(
+                height: slotHeight,
+                child: AnimatedBuilder(
+                  animation: _controller,
+                  builder: (context, child) {
+                    final t = _controller.value;
+                    switch (widget.state) {
+                      case ItemSlotState.empty:
+                        return _buildEmpty(t);
+                      case ItemSlotState.held:
+                        return _buildHeld();
+                      case ItemSlotState.mysteryBox:
+                        return _buildMysteryBox();
+                    }
+                  },
+                ),
+              );
+            },
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildSlotShell({
+    required Widget child,
+    required Color color,
+    required Color borderColor,
+    required double borderWidth,
+    required List<BoxShadow> boxShadow,
+  }) {
+    return Container(
+      key: widget.shellKey,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: borderColor, width: borderWidth),
+        boxShadow: boxShadow,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
+        child: child,
       ),
     );
   }
 
   Widget _buildEmpty(double t) {
-    // 3D Y-axis rotation for the "?"
     final rotationY = t * 2 * pi;
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 3),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: const Color(0xFFC48C3C),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: const Color(0xFF6B4420), width: 2),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.woodShadow.withValues(alpha: 0.3),
-              offset: const Offset(0, 3),
-              blurRadius: 6,
-            ),
-          ],
+    return _buildSlotShell(
+      color: const Color(0xFFC48C3C),
+      borderColor: const Color(0xFF6B4420),
+      borderWidth: 2,
+      boxShadow: [
+        BoxShadow(
+          color: AppColors.woodShadow.withValues(alpha: 0.3),
+          offset: const Offset(0, 3),
+          blurRadius: 6,
         ),
-        child: Column(
-          children: [
-            SizedBox(
-              height: 32,
-              child: Center(
-                child: Transform(
-                  alignment: Alignment.center,
-                  transform: Matrix4.identity()
-                    ..setEntry(3, 2, 0.003)
-                    ..rotateY(rotationY),
-                  child: Text(
-                    '?',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
-                      color: const Color(0xFFFFD740),
-                      shadows: const [
-                        Shadow(
-                          color: Color(0xFF6B4420),
-                          offset: Offset(1.5, 1.5),
-                          blurRadius: 0,
-                        ),
-                      ],
-                    ),
+      ],
+      child: Column(
+        children: [
+          Expanded(
+            child: Center(
+              child: Transform(
+                alignment: Alignment.center,
+                transform: Matrix4.identity()
+                  ..setEntry(3, 2, 0.003)
+                  ..rotateY(rotationY),
+                child: const Text(
+                  '?',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFFFFD740),
+                    shadows: [
+                      Shadow(
+                        color: Color(0xFF6B4420),
+                        offset: Offset(1.5, 1.5),
+                        blurRadius: 0,
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 2),
-            Text(
-              widget.isExtraSlot ? 'Bonus' : 'Empty',
-              style: PixelText.title(
-                size: 9,
-                color: AppColors.textMid.withValues(alpha: 0.5),
-              ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            widget.isExtraSlot ? 'Bonus' : 'Empty',
+            style: PixelText.title(
+              size: 9,
+              color: AppColors.textMid.withValues(alpha: 0.5),
             ),
-          ],
-        ),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildHeld() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 3),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: AppColors.parchment,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: AppColors.parchmentBorder,
-            width: widget.isExtraSlot ? 2.5 : 2,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.woodShadow.withValues(alpha: 0.25),
-              offset: const Offset(0, 3),
-              blurRadius: 6,
-            ),
-          ],
+    return _buildSlotShell(
+      color: AppColors.parchmentLight,
+      borderColor: AppColors.parchmentBorder,
+      borderWidth: widget.isExtraSlot ? 2.5 : 2,
+      boxShadow: [
+        BoxShadow(
+          color: AppColors.woodShadow.withValues(alpha: 0.25),
+          offset: const Offset(0, 3),
+          blurRadius: 6,
         ),
-        child: Column(
-          children: [
-            SizedBox(
-              height: 32,
+      ],
+      child: Column(
+        children: [
+          Expanded(
+            child: Center(
               child: PowerupIcon(type: widget.powerupType ?? '', size: 24),
             ),
-            const SizedBox(height: 2),
-            Text(
-              _powerupNames[widget.powerupType] ?? widget.powerupType ?? '',
-              style: PixelText.title(size: 8, color: AppColors.textDark),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _powerupNames[widget.powerupType] ?? widget.powerupType ?? '',
+            style: PixelText.title(size: 8, color: AppColors.textDark),
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildMysteryBox(double t) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 3),
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.parchmentDark,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.coinMid, width: 2),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.coinMid.withValues(alpha: 0.35),
-            spreadRadius: 1,
-            blurRadius: 8,
-          ),
-          BoxShadow(
-            color: AppColors.woodShadow.withValues(alpha: 0.25),
-            offset: const Offset(0, 3),
-            blurRadius: 6,
-          ),
-        ],
-      ),
+  Widget _buildMysteryBox() {
+    return _buildSlotShell(
+      color: AppColors.parchmentDark,
+      borderColor: AppColors.coinMid,
+      borderWidth: 2,
+      boxShadow: [
+        BoxShadow(
+          color: AppColors.coinMid.withValues(alpha: 0.35),
+          spreadRadius: 1,
+          blurRadius: 8,
+        ),
+        BoxShadow(
+          color: AppColors.woodShadow.withValues(alpha: 0.25),
+          offset: const Offset(0, 3),
+          blurRadius: 6,
+        ),
+      ],
       child: Column(
         children: [
-          const SizedBox(height: 28, child: SpinningCrate(size: 22)),
-          const SizedBox(height: 2),
+          const Expanded(child: Center(child: SpinningCrate(size: 22))),
+          const SizedBox(height: 4),
           Text(
             'Open',
             style: PixelText.title(size: 9, color: AppColors.coinDark),
             textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),

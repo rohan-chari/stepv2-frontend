@@ -11,7 +11,6 @@ import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/pill_button.dart';
-import '../../widgets/pill_icon_button.dart';
 
 class FriendsTab extends StatefulWidget {
   final AuthService authService;
@@ -596,11 +595,7 @@ class _FriendsTabState extends State<FriendsTab> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
           children: [
-            AppAvatar(
-              name: displayName,
-              imageUrl: profilePhotoUrl,
-              size: 34,
-            ),
+            AppAvatar(name: displayName, imageUrl: profilePhotoUrl, size: 34),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -626,11 +621,7 @@ class _FriendsTabState extends State<FriendsTab> {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Row(
         children: [
-          AppAvatar(
-            name: displayName,
-            imageUrl: profilePhotoUrl,
-            size: 34,
-          ),
+          AppAvatar(name: displayName, imageUrl: profilePhotoUrl, size: 34),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -668,11 +659,7 @@ class _FriendsTabState extends State<FriendsTab> {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       child: Row(
         children: [
-          AppAvatar(
-            name: displayName,
-            imageUrl: profilePhotoUrl,
-            size: 34,
-          ),
+          AppAvatar(name: displayName, imageUrl: profilePhotoUrl, size: 34),
           const SizedBox(width: 10),
           Expanded(
             child: Text(

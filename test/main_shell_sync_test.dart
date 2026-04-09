@@ -48,7 +48,7 @@ class _FakeBackendApiService extends BackendApiService {
   }) async {
     return {
       'sessionToken': authToken,
-      'user': {'isAdmin': false, 'coins': 60},
+      'user': {'isAdmin': false, 'coins': 70},
     };
   }
 
@@ -106,46 +106,45 @@ Future<AuthService> _createAuthService() async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('coins are refreshed from fetchMe after step sync', (
-    WidgetTester tester,
-  ) async {
-    SharedPreferences.setMockInitialValues({
-      'auth_identity_token': 'apple-token',
-      'auth_user_identifier': 'apple-user-123',
-      'auth_session_token': 'session-token',
-      'auth_backend_user_id': 'user-1',
-      'auth_coins': 60,
-    });
+  testWidgets(
+    'coins are refreshed from backend user payloads during startup sync',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({
+        'auth_identity_token': 'apple-token',
+        'auth_user_identifier': 'apple-user-123',
+        'auth_session_token': 'session-token',
+        'auth_backend_user_id': 'user-1',
+        'auth_coins': 60,
+      });
 
-    final authService = AuthService();
-    await authService.restoreSession();
-    expect(authService.coins, 60);
+      final authService = AuthService();
+      await authService.restoreSession();
+      expect(authService.coins, 60);
 
-    final backendApiService = _FakeBackendApiService();
-    final challengeWeekStepSyncService = _FakeChallengeWeekStepSyncService([
-      StepData(steps: 9000, date: DateTime.utc(2026, 3, 29)),
-    ]);
+      final backendApiService = _FakeBackendApiService();
+      final challengeWeekStepSyncService = _FakeChallengeWeekStepSyncService([
+        StepData(steps: 9000, date: DateTime.utc(2026, 3, 29)),
+      ]);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: MainShell(
-          authService: authService,
-          healthService: _FakeHealthService(),
-          backendApiService: backendApiService,
-          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
-          challengeWeekStepSyncService: challengeWeekStepSyncService,
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MainShell(
+            authService: authService,
+            healthService: _FakeHealthService(),
+            backendApiService: backendApiService,
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+            challengeWeekStepSyncService: challengeWeekStepSyncService,
+          ),
         ),
-      ),
-    );
+      );
 
-    // Let _restoreAndFetch complete including fire-and-forget _refreshStepGoal
-    await tester.pump();
-    await tester.pump();
-    await tester.pump();
+      await tester.pump();
+      await tester.pump();
 
-    // fetchMe returned coins: 70 — _refreshStepGoal should have updated them
-    expect(authService.coins, 70);
-  });
+      expect(authService.coins, 70);
+    },
+  );
 
   testWidgets('MainShell posts the full challenge week on initial sync', (
     WidgetTester tester,

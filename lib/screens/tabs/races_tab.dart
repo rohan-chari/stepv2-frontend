@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
 import '../../styles.dart';
+import '../../utils/race_participant_display.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/game_container.dart';
@@ -300,6 +301,8 @@ class _RacesTabState extends State<RacesTab> {
     final creatorName = creator?['displayName'] as String? ?? '';
     final winner = race['winner'] as Map<String, dynamic>?;
     final isCreator = race['isCreator'] as bool? ?? false;
+    final myPlacement = race['myPlacement'] as int?;
+    final queuedBoxCount = race['queuedBoxCount'] as int? ?? 0;
 
     String statusLabel;
     Color badgeColor;
@@ -352,6 +355,31 @@ class _RacesTabState extends State<RacesTab> {
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
                   ),
+                  if (myPlacement != null || queuedBoxCount > 0) ...[
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        if (myPlacement != null)
+                          _buildMetaChip(
+                            '${formatOrdinal(myPlacement)} PLACE',
+                            backgroundColor: AppColors.pillGreenDark.withValues(
+                              alpha: 0.16,
+                            ),
+                            textColor: AppColors.pillGreenDark,
+                          ),
+                        if (queuedBoxCount > 0)
+                          _buildMetaChip(
+                            '$queuedBoxCount QUEUED',
+                            backgroundColor: AppColors.coinLight.withValues(
+                              alpha: 0.18,
+                            ),
+                            textColor: AppColors.coinDark,
+                          ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -370,6 +398,21 @@ class _RacesTabState extends State<RacesTab> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildMetaChip(
+    String label, {
+    required Color backgroundColor,
+    required Color textColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(label, style: PixelText.title(size: 11, color: textColor)),
     );
   }
 }

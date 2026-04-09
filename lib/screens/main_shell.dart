@@ -83,6 +83,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   Timer? _foregroundPollTimer;
   static const Duration _foregroundPollInterval = Duration(minutes: 5);
 
+  void _handleAuthServiceChanged() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
@@ -99,6 +104,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         );
     _pageController = PageController();
     WidgetsBinding.instance.addObserver(this);
+    widget.authService.addListener(_handleAuthServiceChanged);
     widget.notificationService?.pendingAction.addListener(
       _onNotificationAction,
     );
@@ -106,7 +112,16 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   @override
+  void didUpdateWidget(covariant MainShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.authService == widget.authService) return;
+    oldWidget.authService.removeListener(_handleAuthServiceChanged);
+    widget.authService.addListener(_handleAuthServiceChanged);
+  }
+
+  @override
   void dispose() {
+    widget.authService.removeListener(_handleAuthServiceChanged);
     widget.notificationService?.pendingAction.removeListener(
       _onNotificationAction,
     );
@@ -587,9 +602,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _dismissProfilePhotoPrompt() async {
+  Future<bool> _dismissProfilePhotoPrompt() async {
     final token = widget.authService.authToken;
-    if (token == null || token.isEmpty) return;
+    if (token == null || token.isEmpty) return false;
 
     try {
       final user = await _backendApiService.dismissProfilePhotoPrompt(
@@ -598,17 +613,15 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       await widget.authService.syncFromBackendUser(user);
       if (mounted) {
         setState(() {});
-        showInfoToast(
-          context,
-          'No problem. You can add one anytime in Profile.',
-        );
       }
+      return true;
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted) return false;
       showErrorToast(
         context,
         'Couldn’t save that preference. Please try again.',
       );
+      return false;
     }
   }
 

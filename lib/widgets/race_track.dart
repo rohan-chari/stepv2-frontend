@@ -1,6 +1,8 @@
 import 'dart:math' as math;
-import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+
+import 'app_avatar.dart';
 import '../styles.dart';
 import '../utils/race_positions.dart';
 
@@ -9,6 +11,8 @@ class RaceTrack extends StatefulWidget {
   final int theirSteps;
   final String myName;
   final String theirName;
+  final String? myProfilePhotoUrl;
+  final String? theirProfilePhotoUrl;
   final double height;
 
   const RaceTrack({
@@ -17,17 +21,13 @@ class RaceTrack extends StatefulWidget {
     required this.theirSteps,
     required this.myName,
     required this.theirName,
+    this.myProfilePhotoUrl,
+    this.theirProfilePhotoUrl,
     this.height = 240,
   });
 
   @override
   State<RaceTrack> createState() => _RaceTrackState();
-
-  static String _initials(String name) {
-    final trimmed = name.trim();
-    if (trimmed.isEmpty) return '??';
-    return trimmed.substring(0, trimmed.length.clamp(0, 2)).toUpperCase();
-  }
 }
 
 class _RaceTrackState extends State<RaceTrack>
@@ -69,40 +69,87 @@ class _RaceTrackState extends State<RaceTrack>
         animation: _animation,
         builder: (context, child) {
           final t = _animation.value;
-          return CustomPaint(
-            painter: _RaceTrackPainter(
-              myPosition: myTarget * t,
-              theirPosition: theirTarget * t,
-              myInitials: RaceTrack._initials(widget.myName),
-              theirInitials: RaceTrack._initials(widget.theirName),
-            ),
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final size = Size(constraints.maxWidth, widget.height);
+              final positions = _computeAvatarPositions(
+                size: size,
+                myPosition: myTarget * t,
+                theirPosition: theirTarget * t,
+              );
+
+              return Stack(
+                children: [
+                  const Positioned.fill(
+                    child: CustomPaint(
+                      painter: _RaceTrackPainter(),
+                    ),
+                  ),
+                  Positioned(
+                    left: positions.$1.dx - _RaceTrackPainter.avatarRadius,
+                    top: positions.$1.dy - _RaceTrackPainter.avatarRadius,
+                    child: AppAvatar(
+                      name: widget.myName,
+                      imageUrl: widget.myProfilePhotoUrl,
+                      size: _RaceTrackPainter.avatarRadius * 2,
+                      isUser: true,
+                      borderColor: Colors.white,
+                      borderWidth: _RaceTrackPainter.avatarBorder,
+                    ),
+                  ),
+                  Positioned(
+                    left: positions.$2.dx - _RaceTrackPainter.avatarRadius,
+                    top: positions.$2.dy - _RaceTrackPainter.avatarRadius,
+                    child: AppAvatar(
+                      name: widget.theirName,
+                      imageUrl: widget.theirProfilePhotoUrl,
+                      size: _RaceTrackPainter.avatarRadius * 2,
+                      borderColor: Colors.white,
+                      borderWidth: _RaceTrackPainter.avatarBorder,
+                    ),
+                  ),
+                ],
+              );
+            },
           );
         },
       ),
     );
   }
+
+  (Offset, Offset) _computeAvatarPositions({
+    required Size size,
+    required double myPosition,
+    required double theirPosition,
+  }) {
+    final trackPath = _buildRaceTrackPath(size);
+    final metrics = trackPath.computeMetrics().first;
+    final totalLength = metrics.length;
+
+    final myTangent = metrics.getTangentForOffset(
+      myPosition.clamp(0.0, 0.999) * totalLength,
+    );
+    final theirTangent = metrics.getTangentForOffset(
+      theirPosition.clamp(0.0, 0.999) * totalLength,
+    );
+
+    return (
+      myTangent?.position ?? Offset.zero,
+      theirTangent?.position ?? Offset.zero,
+    );
+  }
 }
 
 class _RaceTrackPainter extends CustomPainter {
-  final double myPosition;
-  final double theirPosition;
-  final String myInitials;
-  final String theirInitials;
+  static const double trackWidth = 32.0;
+  static const double avatarRadius = 18.0;
+  static const double avatarBorder = 2.5;
 
-  static const double _trackWidth = 32.0;
-  static const double _avatarRadius = 18.0;
-  static const double _avatarBorder = 2.5;
-
-  _RaceTrackPainter({
-    required this.myPosition,
-    required this.theirPosition,
-    required this.myInitials,
-    required this.theirInitials,
-  });
+  const _RaceTrackPainter();
 
   @override
   void paint(Canvas canvas, Size size) {
-    final trackPath = _buildWindingPath(size);
+    final trackPath = _buildRaceTrackPath(size);
 
     _drawGrass(canvas, size);
     _drawTrees(canvas, size);
@@ -110,21 +157,6 @@ class _RaceTrackPainter extends CustomPainter {
     _drawTrackSurface(canvas, trackPath);
     _drawDashedCenterLine(canvas, trackPath);
     _drawFinishLine(canvas, trackPath);
-    _drawAvatars(canvas, trackPath);
-  }
-
-  Path _buildWindingPath(Size size) {
-    final w = size.width;
-    final h = size.height;
-    final m = _trackWidth + 20;
-
-    final path = Path();
-    path.moveTo(w / 2, h - m);
-    path.cubicTo(w - m, h - m, w - m, h * 0.6, w - m, h * 0.55);
-    path.cubicTo(w - m, h * 0.4, m, h * 0.45, m, h * 0.35);
-    path.cubicTo(m, h * 0.2, w - m, h * 0.15, w * 0.6, m);
-
-    return path;
   }
 
   void _drawGrass(Canvas canvas, Size size) {
@@ -162,12 +194,12 @@ class _RaceTrackPainter extends CustomPainter {
     final redPaint = Paint()
       ..color = AppColors.accent
       ..style = PaintingStyle.stroke
-      ..strokeWidth = _trackWidth + 10
+      ..strokeWidth = trackWidth + 10
       ..strokeCap = StrokeCap.round;
     final whitePaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = _trackWidth + 10
+      ..strokeWidth = trackWidth + 10
       ..strokeCap = StrokeCap.round;
 
     for (double d = 0; d < totalLength; d += stripeLen * 2) {
@@ -187,7 +219,7 @@ class _RaceTrackPainter extends CustomPainter {
       Paint()
         ..color = const Color(0xFF9E9E9E)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = _trackWidth
+        ..strokeWidth = trackWidth
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round,
     );
@@ -219,7 +251,7 @@ class _RaceTrackPainter extends CustomPainter {
 
     const cs = 3.0;
     const rows = 3;
-    final totalSpan = _trackWidth + 16;
+    final totalSpan = trackWidth + 16;
     final cols = (totalSpan / cs).floor();
     final sx = -rows * cs / 2;
     final sy = -totalSpan / 2;
@@ -235,47 +267,19 @@ class _RaceTrackPainter extends CustomPainter {
     canvas.restore();
   }
 
-  void _drawAvatars(Canvas canvas, Path trackPath) {
-    final metrics = trackPath.computeMetrics().first;
-    final totalLength = metrics.length;
-
-    final myFrac = myPosition.clamp(0.0, 0.999);
-    final theirFrac = theirPosition.clamp(0.0, 0.999);
-
-    final myTangent = metrics.getTangentForOffset(myFrac * totalLength);
-    final theirTangent = metrics.getTangentForOffset(theirFrac * totalLength);
-
-    if (myTangent == null || theirTangent == null) return;
-
-    if (myPosition >= theirPosition) {
-      _drawAvatar(canvas, theirTangent.position, theirInitials, AppColors.pillGold);
-      _drawAvatar(canvas, myTangent.position, myInitials, AppColors.pillGreen);
-    } else {
-      _drawAvatar(canvas, myTangent.position, myInitials, AppColors.pillGreen);
-      _drawAvatar(canvas, theirTangent.position, theirInitials, AppColors.pillGold);
-    }
-  }
-
-  void _drawAvatar(Canvas canvas, Offset center, String initials, Color color) {
-    canvas.drawCircle(center, _avatarRadius + _avatarBorder, Paint()..color = Colors.white);
-    canvas.drawCircle(center, _avatarRadius, Paint()..color = color);
-
-    final builder = ui.ParagraphBuilder(ui.ParagraphStyle(
-      textAlign: TextAlign.center, fontSize: 14, fontWeight: FontWeight.bold,
-    ))
-      ..pushStyle(ui.TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
-      ..addText(initials);
-
-    final paragraph = builder.build()
-      ..layout(const ui.ParagraphConstraints(width: _avatarRadius * 2));
-
-    canvas.drawParagraph(paragraph,
-      Offset(center.dx - _avatarRadius, center.dy - paragraph.height / 2));
-  }
-
   @override
-  bool shouldRepaint(covariant _RaceTrackPainter oldDelegate) {
-    return oldDelegate.myPosition != myPosition ||
-        oldDelegate.theirPosition != theirPosition;
-  }
+  bool shouldRepaint(covariant _RaceTrackPainter oldDelegate) => false;
+}
+
+Path _buildRaceTrackPath(Size size) {
+  final w = size.width;
+  final h = size.height;
+  final m = _RaceTrackPainter.trackWidth + 20;
+
+  final path = Path();
+  path.moveTo(w / 2, h - m);
+  path.cubicTo(w - m, h - m, w - m, h * 0.6, w - m, h * 0.55);
+  path.cubicTo(w - m, h * 0.4, m, h * 0.45, m, h * 0.35);
+  path.cubicTo(m, h * 0.2, w - m, h * 0.15, w * 0.6, m);
+  return path;
 }

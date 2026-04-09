@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
@@ -9,7 +10,7 @@ bool isAuthenticationFailure(Object error) {
   return error is ApiException && error.statusCode == 401;
 }
 
-class AuthService {
+class AuthService extends ChangeNotifier {
   AuthService({BackendApiService? backendApiService})
     : _backendApiService = backendApiService ?? BackendApiService();
 
@@ -72,6 +73,7 @@ class AuthService {
     _isAdmin = prefs.getBool(_keyIsAdmin) ?? false;
     _coins = prefs.getInt(_keyCoins) ?? 0;
     _heldCoins = prefs.getInt(_keyHeldCoins) ?? 0;
+    notifyListeners();
     return isSignedIn && hasSessionToken;
   }
 
@@ -117,12 +119,14 @@ class AuthService {
       _lastErrorMessage = null;
 
       await _persist();
+      notifyListeners();
       return true;
     } catch (e) {
       _identityToken = null;
       _userIdentifier = null;
       _backendUserId = null;
       _lastErrorMessage = e.toString();
+      notifyListeners();
       return false;
     }
   }
@@ -135,6 +139,7 @@ class AuthService {
     } else {
       await prefs.remove(_keyStepGoal);
     }
+    notifyListeners();
   }
 
   Future<void> updateDisplayName(String? displayName) async {
@@ -145,6 +150,7 @@ class AuthService {
     } else {
       await prefs.remove(_keyDisplayName);
     }
+    notifyListeners();
   }
 
   Future<void> updateProfilePhotoUrl(String? profilePhotoUrl) async {
@@ -155,6 +161,7 @@ class AuthService {
     } else {
       await prefs.remove(_keyProfilePhotoUrl);
     }
+    notifyListeners();
   }
 
   Future<void> updateProfilePhotoPromptDismissedAt(String? value) async {
@@ -165,6 +172,7 @@ class AuthService {
     } else {
       await prefs.remove(_keyProfilePhotoPromptDismissedAt);
     }
+    notifyListeners();
   }
 
   void applyBackendUser(Map<String, dynamic> backendUser) {
@@ -198,6 +206,7 @@ class AuthService {
   Future<void> syncFromBackendUser(Map<String, dynamic> backendUser) async {
     applyBackendUser(backendUser);
     await _persist();
+    notifyListeners();
   }
 
   Future<void> signOut() async {
@@ -225,6 +234,7 @@ class AuthService {
     await prefs.remove(_keySessionToken);
     await prefs.remove(_keyIsAdmin);
     await prefs.remove(_keyHeldCoins);
+    notifyListeners();
   }
 
   Future<void> updateSessionToken(String? token) async {
@@ -235,24 +245,28 @@ class AuthService {
     } else {
       await prefs.remove(_keySessionToken);
     }
+    notifyListeners();
   }
 
   Future<void> updateCoins(int coins) async {
     _coins = coins;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_keyCoins, coins);
+    notifyListeners();
   }
 
   Future<void> updateHeldCoins(int heldCoins) async {
     _heldCoins = heldCoins;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_keyHeldCoins, heldCoins);
+    notifyListeners();
   }
 
   Future<void> updateAdminAccess(bool isAdmin) async {
     _isAdmin = isAdmin;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyIsAdmin, isAdmin);
+    notifyListeners();
   }
 
   Future<void> _persist() async {

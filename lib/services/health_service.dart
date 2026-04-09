@@ -14,6 +14,11 @@ class HealthService {
   bool _authorized = false;
   bool get isAuthorized => _authorized;
 
+  String? _nonEmptyString(String? value) {
+    if (value == null || value.isEmpty) return null;
+    return value;
+  }
+
   /// Loads persisted health auth state. Returns true if previously authorized.
   Future<bool> restoreHealthAuthState() async {
     final prefs = await SharedPreferences.getInstance();
@@ -60,6 +65,7 @@ class HealthService {
       final steps = await _health.getTotalStepsInInterval(
         syncDay.startsAt,
         syncDay.endsAt,
+        includeManualEntry: false,
       );
 
       entries.add(StepData(steps: steps ?? 0, date: syncDay.date));
@@ -96,6 +102,7 @@ class HealthService {
       final steps = await _health.getTotalStepsInInterval(
         currentDate,
         intervalEnd,
+        includeManualEntry: false,
       );
 
       entries.add(StepData(steps: steps ?? 0, date: currentDate));
@@ -114,20 +121,33 @@ class HealthService {
       types: [HealthDataType.STEPS],
       startTime: startTime,
       endTime: endTime,
+      recordingMethodsToFilter: const [RecordingMethod.manual],
     );
 
     // Remove duplicates (e.g. from multiple sources like Apple Watch + iPhone)
-    final unique = Health().removeDuplicates(dataPoints);
+    final unique = _health.removeDuplicates(dataPoints);
 
     return unique
-        .where((dp) =>
-            dp.value is NumericHealthValue &&
-            (dp.value as NumericHealthValue).numericValue > 0)
-        .map((dp) => StepSampleData(
-              periodStart: dp.dateFrom.toUtc(),
-              periodEnd: dp.dateTo.toUtc(),
-              steps: (dp.value as NumericHealthValue).numericValue.toInt(),
-            ))
+        .where(
+          (dp) =>
+              dp.value is NumericHealthValue &&
+              (dp.value as NumericHealthValue).numericValue > 0,
+        )
+        .map(
+          (dp) => StepSampleData(
+            periodStart: dp.dateFrom.toUtc(),
+            periodEnd: dp.dateTo.toUtc(),
+            steps: (dp.value as NumericHealthValue).numericValue.toInt(),
+            sourceName: _nonEmptyString(dp.sourceName),
+            sourceId: _nonEmptyString(dp.sourceId),
+            sourceDeviceId: _nonEmptyString(dp.sourceDeviceId),
+            deviceModel: _nonEmptyString(dp.deviceModel),
+            recordingMethod: dp.recordingMethod.name,
+            metadata: dp.metadata == null
+                ? null
+                : Map<String, dynamic>.from(dp.metadata!),
+          ),
+        )
         .toList();
   }
 }

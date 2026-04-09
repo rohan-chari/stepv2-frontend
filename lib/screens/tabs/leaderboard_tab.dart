@@ -9,7 +9,6 @@ import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/filter_dropdown.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/pill_button.dart';
-import '../../widgets/pill_icon_button.dart';
 
 enum _LeaderboardType { steps, challenges, races }
 
@@ -775,15 +774,9 @@ class _RacePodiumBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            label,
-            style: PixelText.title(size: 8.5, color: textColor),
-          ),
+          Text(label, style: PixelText.title(size: 8.5, color: textColor)),
           const SizedBox(width: 4),
-          Text(
-            '$count',
-            style: PixelText.number(size: 11, color: textColor),
-          ),
+          Text('$count', style: PixelText.number(size: 11, color: textColor)),
         ],
       ),
     );

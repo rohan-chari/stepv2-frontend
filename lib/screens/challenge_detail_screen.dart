@@ -56,6 +56,15 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
     return userB?['displayName'] as String? ?? '???';
   }
 
+  String? _friendProfilePhotoUrl() {
+    final userA = _instance['userA'] as Map<String, dynamic>?;
+    final userB = _instance['userB'] as Map<String, dynamic>?;
+    if (userA != null && userA['id'] != _myUserId) {
+      return userA['profilePhotoUrl'] as String?;
+    }
+    return userB?['profilePhotoUrl'] as String?;
+  }
+
   bool _isMyProposal() {
     final proposedById = _instance['proposedById'] as String?;
     return proposedById == _myUserId;
@@ -462,6 +471,9 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
       theirSteps: theirData['totalSteps'] as int? ?? 0,
       myName: widget.authService.displayName ?? 'You',
       theirName: _friendName(),
+      myProfilePhotoUrl: widget.authService.profilePhotoUrl,
+      theirProfilePhotoUrl:
+          theirData['profilePhotoUrl'] as String? ?? _friendProfilePhotoUrl(),
       height: 250,
     );
   }

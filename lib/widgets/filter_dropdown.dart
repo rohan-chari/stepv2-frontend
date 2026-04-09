@@ -16,9 +16,6 @@ class FilterDropdown<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final selectedLabel =
-        options.firstWhere((o) => o.$1 == value, orElse: () => options.first).$2;
-
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       decoration: BoxDecoration(

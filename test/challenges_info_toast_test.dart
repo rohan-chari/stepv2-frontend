@@ -54,6 +54,42 @@ void main() {
     },
   );
 
+  testWidgets('showInfoToast dismisses when swiped up', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) {
+              return TextButton(
+                onPressed: () =>
+                    showInfoToast(context, 'Add some friends first'),
+                child: const Text('Show info'),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Show info'));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('info-toast-shell')), findsOneWidget);
+
+    await tester.fling(
+      find.byKey(const Key('info-toast-shell')),
+      const Offset(0, -300),
+      1000,
+    );
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('info-toast-shell')), findsNothing);
+  });
+
   testWidgets(
     'ChallengesTab redirects to Friends with info toast when no friends exist',
     (WidgetTester tester) async {

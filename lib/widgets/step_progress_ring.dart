@@ -79,72 +79,69 @@ class _StepProgressRingState extends State<StepProgressRing>
         width: widget.width,
         height: widget.height,
         child: AnimatedBuilder(
-        animation: Listenable.merge([_fillAnimation, _spriteController]),
-        builder: (context, _) {
-          final currentProgress = targetProgress * _fillAnimation.value;
+          animation: Listenable.merge([_fillAnimation, _spriteController]),
+          builder: (context, _) {
+            final currentProgress = targetProgress * _fillAnimation.value;
 
-          // Capybara position on the ellipse
-          final angle = -pi / 2 + (2 * pi * currentProgress);
-          final rx = (widget.width - widget.trackWidth) / 2;
-          final ry = (widget.height - widget.trackWidth) / 2;
-          final cx = widget.width / 2 + rx * cos(angle) - capySize / 2;
-          final cy = widget.height / 2 + ry * sin(angle) - capySize / 2;
+            // Capybara position on the ellipse
+            final angle = -pi / 2 + (2 * pi * currentProgress);
+            final rx = (widget.width - widget.trackWidth) / 2;
+            final ry = (widget.height - widget.trackWidth) / 2;
+            final cx = widget.width / 2 + rx * cos(angle) - capySize / 2;
+            final cy = widget.height / 2 + ry * sin(angle) - capySize / 2;
 
-          // Sprite frame — always animate walk cycle
-          final frameIndex =
-              (_spriteController.value * _frameCount).floor() % _frameCount;
+            // Sprite frame — always animate walk cycle
+            final frameIndex =
+                (_spriteController.value * _frameCount).floor() % _frameCount;
 
-          // Flip based on travel direction
-          final goingLeft = cos(angle) < 0;
+            // Flip based on travel direction
+            final goingLeft = cos(angle) < 0;
 
-          return Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.center,
-            children: [
-              CustomPaint(
-                size: Size(widget.width, widget.height),
-                painter: _RingPainter(
-                  progress: currentProgress,
-                  trackWidth: widget.trackWidth,
+            return Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.center,
+              children: [
+                CustomPaint(
+                  size: Size(widget.width, widget.height),
+                  painter: _RingPainter(
+                    progress: currentProgress,
+                    trackWidth: widget.trackWidth,
+                  ),
                 ),
-              ),
-              widget.child,
-              if (currentProgress > 0)
-                Positioned(
-                  left: cx,
-                  top: cy,
-                  child: Transform(
-                    alignment: Alignment.center,
-                    transform: goingLeft
-                        ? (Matrix4.identity()..scale(-1.0, 1.0, 1.0))
-                        : Matrix4.identity(),
-                    child: SizedBox(
-                      width: capySize,
-                      height: capySize,
-                      child: ClipRect(
-                        child: OverflowBox(
-                          maxWidth: double.infinity,
-                          alignment: Alignment.topLeft,
-                          child: Transform.translate(
-                            offset: Offset(-frameIndex * capySize, 0),
-                            child: Image.asset(
-                              'assets/images/capybara_walk_right.png',
-                              width: capySize * _frameCount,
-                              height: capySize,
-                              filterQuality: FilterQuality.none,
-                              fit: BoxFit.contain,
+                widget.child,
+                if (currentProgress > 0)
+                  Positioned(
+                    left: cx,
+                    top: cy,
+                    child: Transform.flip(
+                      flipX: goingLeft,
+                      child: SizedBox(
+                        width: capySize,
+                        height: capySize,
+                        child: ClipRect(
+                          child: OverflowBox(
+                            maxWidth: double.infinity,
+                            alignment: Alignment.topLeft,
+                            child: Transform.translate(
+                              offset: Offset(-frameIndex * capySize, 0),
+                              child: Image.asset(
+                                'assets/images/capybara_walk_right.png',
+                                width: capySize * _frameCount,
+                                height: capySize,
+                                filterQuality: FilterQuality.none,
+                                fit: BoxFit.contain,
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
-    ),
     );
   }
 }
@@ -153,10 +150,7 @@ class _RingPainter extends CustomPainter {
   final double progress;
   final double trackWidth;
 
-  _RingPainter({
-    required this.progress,
-    required this.trackWidth,
-  });
+  _RingPainter({required this.progress, required this.trackWidth});
 
   @override
   void paint(Canvas canvas, Size size) {

@@ -871,12 +871,18 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                   children: [
                     Text(
                       'TARGET',
-                      style: PixelText.title(size: 11, color: AppColors.textMid),
+                      style: PixelText.title(
+                        size: 11,
+                        color: AppColors.textMid,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       _formatSteps(targetSteps),
-                      style: PixelText.number(size: 22, color: AppColors.accent),
+                      style: PixelText.number(
+                        size: 22,
+                        color: AppColors.accent,
+                      ),
                     ),
                     Text(
                       'steps',
@@ -892,12 +898,18 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                   children: [
                     Text(
                       'DURATION',
-                      style: PixelText.title(size: 11, color: AppColors.textMid),
+                      style: PixelText.title(
+                        size: 11,
+                        color: AppColors.textMid,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       '$maxDays',
-                      style: PixelText.number(size: 22, color: AppColors.textDark),
+                      style: PixelText.number(
+                        size: 22,
+                        color: AppColors.textDark,
+                      ),
                     ),
                     Text(
                       'days',
@@ -943,7 +955,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                     ],
                   ),
                 ),
-                Container(width: 1, height: 40, color: AppColors.parchmentBorder),
+                Container(
+                  width: 1,
+                  height: 40,
+                  color: AppColors.parchmentBorder,
+                ),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -1066,26 +1082,38 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             onPressed: _isActing ? null : () => _respondToInvite(false),
           ),
         ] else if (myStatus == 'ACCEPTED') ...[
-          SizedBox(
-            width: double.infinity,
-            child: RetroCard(
-              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.hourglass_top_rounded,
-                    size: 32,
-                    color: AppColors.textMid.withValues(alpha: 0.6),
+          Row(
+            children: [
+              Expanded(
+                child: RetroCard(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 16,
+                    horizontal: 16,
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Waiting for the creator to start the race',
-                    style: PixelText.body(size: 14, color: AppColors.textMid),
-                    textAlign: TextAlign.center,
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.hourglass_top_rounded,
+                          size: 32,
+                          color: AppColors.textMid.withValues(alpha: 0.6),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Waiting for the creator to start the race',
+                          style: PixelText.body(
+                            size: 14,
+                            color: AppColors.textMid,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
                   ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
         ],
         const SizedBox(height: 24),
@@ -1154,6 +1182,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         .length;
     final targetSteps = _race!['targetSteps'] as int? ?? 0;
     final buyInAmount = _race!['buyInAmount'] as int? ?? 0;
+    final payouts = _race!['payouts'] as Map<String, dynamic>?;
     final endsAtRaw = _race!['endsAt'] as String?;
     final endsAt = endsAtRaw != null
         ? DateTime.tryParse(endsAtRaw)?.toLocal()
@@ -1201,21 +1230,59 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
               // Leaderboard header
               Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Text(
-                    'RACE TO ',
-                    style: PixelText.title(size: 18, color: AppColors.textMid),
+                  Expanded(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'RACE TO ',
+                            style: PixelText.title(
+                              size: 18,
+                              color: AppColors.textMid,
+                            ),
+                          ),
+                          Text(
+                            _formatSteps(targetSteps),
+                            style: PixelText.title(
+                              size: 18,
+                              color: AppColors.accent,
+                            ),
+                          ),
+                          Text(
+                            ' STEPS',
+                            style: PixelText.title(
+                              size: 18,
+                              color: AppColors.textMid,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                  Text(
-                    _formatSteps(targetSteps),
-                    style: PixelText.title(size: 18, color: AppColors.accent),
-                  ),
-                  Text(
-                    ' STEPS',
-                    style: PixelText.title(size: 18, color: AppColors.textMid),
-                  ),
+                  if (buyInAmount > 0 && payouts != null) ...[
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: _buildPayoutInlineSummary(payouts),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
+              if (_buildNextPowerupHelper() case final helper?) ...[
+                const SizedBox(height: 6),
+                helper,
+              ],
               if (finishedCount > 0) ...[
                 const SizedBox(height: 10),
                 RaceFinishersBanner(
@@ -1274,6 +1341,24 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
         const SizedBox(height: 24),
       ],
+    );
+  }
+
+  Widget? _buildNextPowerupHelper() {
+    final powerupStepInterval = _powerupData?['powerupStepInterval'] as int?;
+    final stepsUntilNextPowerup =
+        _powerupData?['stepsUntilNextPowerup'] as int?;
+
+    if (powerupStepInterval == null ||
+        powerupStepInterval <= 0 ||
+        stepsUntilNextPowerup == null ||
+        stepsUntilNextPowerup <= 0) {
+      return null;
+    }
+
+    return Text(
+      'You earn a powerup every ${_formatSteps(powerupStepInterval)} steps this race. ${_formatSteps(stepsUntilNextPowerup)} to go.',
+      style: PixelText.body(size: 13, color: AppColors.textMid),
     );
   }
 
@@ -1775,7 +1860,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
   Widget _buildPrizePoolHeader() {
     final potCoins = _race!['projectedPotCoins'] as int? ?? 0;
-    final payouts = _race!['payouts'] as Map<String, dynamic>?;
 
     return Padding(
       padding: const EdgeInsets.only(top: 4, bottom: 8),
@@ -1796,17 +1880,39 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               'gold',
               style: PixelText.body(size: 12, color: AppColors.textMid),
             ),
-            if (payouts != null) ...[
-              const SizedBox(height: 10),
-              Text(
-                '1ST ${payouts['first']}  •  2ND ${payouts['second']}  •  3RD ${payouts['third']}',
-                style: PixelText.title(size: 11, color: AppColors.textMid),
-                textAlign: TextAlign.center,
-              ),
-            ],
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildPayoutInlineSummary(Map<String, dynamic> payouts) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildPayoutInlineValue(label: '1ST', amount: payouts['first']),
+        const SizedBox(width: 8),
+        _buildPayoutInlineValue(label: '2ND', amount: payouts['second']),
+        const SizedBox(width: 8),
+        _buildPayoutInlineValue(label: '3RD', amount: payouts['third']),
+      ],
+    );
+  }
+
+  Widget _buildPayoutInlineValue({
+    required String label,
+    required Object? amount,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: PixelText.title(size: 10, color: AppColors.textMid)),
+        const SizedBox(width: 3),
+        Text(
+          '$amount',
+          style: PixelText.title(size: 10, color: AppColors.coinDark),
+        ),
+      ],
     );
   }
 

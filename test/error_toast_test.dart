@@ -33,4 +33,39 @@ void main() {
       await tester.pumpAndSettle();
     },
   );
+
+  testWidgets('showErrorToast dismisses when swiped up', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) {
+              return TextButton(
+                onPressed: () => showErrorToast(context, 'Something broke'),
+                child: const Text('Show error'),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Show error'));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('error-toast-shell')), findsOneWidget);
+
+    await tester.fling(
+      find.byKey(const Key('error-toast-shell')),
+      const Offset(0, -300),
+      1000,
+    );
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('error-toast-shell')), findsNothing);
+  });
 }

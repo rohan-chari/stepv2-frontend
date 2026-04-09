@@ -38,19 +38,15 @@ class GoalTrackRunner {
   Color get color => isStealthed
       ? const Color(0xFF9E9E9E)
       : isUser
-          ? AppColors.pillGreen
-          : _friendColors[name.hashCode.abs() % _friendColors.length];
+      ? AppColors.pillGreen
+      : _friendColors[name.hashCode.abs() % _friendColors.length];
 }
 
 class GoalTrack extends StatefulWidget {
   final List<GoalTrackRunner> runners;
   final double height;
 
-  const GoalTrack({
-    super.key,
-    required this.runners,
-    this.height = 240,
-  });
+  const GoalTrack({super.key, required this.runners, this.height = 240});
 
   @override
   State<GoalTrack> createState() => _GoalTrackState();
@@ -104,9 +100,7 @@ class _GoalTrackState extends State<GoalTrack>
                     clipBehavior: Clip.none,
                     children: [
                       const Positioned.fill(
-                        child: CustomPaint(
-                          painter: _GoalTrackPainter(),
-                        ),
+                        child: CustomPaint(painter: _GoalTrackPainter()),
                       ),
                       for (final layout in layouts)
                         Positioned(
@@ -115,7 +109,8 @@ class _GoalTrackState extends State<GoalTrack>
                           child: GestureDetector(
                             onTap: () {
                               setState(() {
-                                _selectedRunner = _selectedRunner == layout.target
+                                _selectedRunner =
+                                    _selectedRunner == layout.target
                                     ? null
                                     : layout.target;
                               });
@@ -130,7 +125,8 @@ class _GoalTrackState extends State<GoalTrack>
                             ),
                           ),
                         ),
-                      if (_selectedRunner != null) _buildTooltip(_selectedRunner!),
+                      if (_selectedRunner != null)
+                        _buildTooltip(_selectedRunner!),
                     ],
                   );
                 },
@@ -198,7 +194,9 @@ class _GoalTrackState extends State<GoalTrack>
               ),
               const SizedBox(width: 4),
               Text(
-                runner.isStealthed ? '???' : (runner.isUser ? 'You' : runner.name),
+                runner.isStealthed
+                    ? '???'
+                    : (runner.isUser ? 'You' : runner.name),
                 style: PixelText.body(size: 12, color: AppColors.textMid),
               ),
             ],
@@ -207,17 +205,13 @@ class _GoalTrackState extends State<GoalTrack>
     );
   }
 
-  static String _initials(String name) {
-    final trimmed = name.trim();
-    if (trimmed.isEmpty) return '??';
-    return trimmed.substring(0, trimmed.length.clamp(0, 2)).toUpperCase();
-  }
-
   List<_GoalTrackLayoutRunner> _buildRunnerLayouts(Size size, double t) {
     final painted = widget.runners
         .map(
           (runner) => _PaintedRunner(
-            name: runner.isStealthed ? '???' : (runner.isUser ? 'You' : runner.name),
+            name: runner.isStealthed
+                ? '???'
+                : (runner.isUser ? 'You' : runner.name),
             profilePhotoUrl: runner.profilePhotoUrl,
             position: runner.progress.clamp(0.0, 1.0) * t,
             rawProgress: runner.progress,
@@ -232,7 +226,8 @@ class _GoalTrackState extends State<GoalTrack>
     final metrics = trackPath.computeMetrics().first;
     final totalLength = metrics.length;
     final count = painted.length;
-    final usableWidth = _GoalTrackPainter._trackWidth -
+    final usableWidth =
+        _GoalTrackPainter._trackWidth -
         _GoalTrackPainter._friendAvatarRadius * 2;
 
     final sorted = List.generate(count, (index) => index)
@@ -256,8 +251,12 @@ class _GoalTrackState extends State<GoalTrack>
               ? (index / (count - 1) - 0.5) * usableWidth
               : 0.0;
           final angle = tangent.angle;
-          final center = tangent.position +
-              Offset(-math.sin(angle) * laneOffset, math.cos(angle) * laneOffset);
+          final center =
+              tangent.position +
+              Offset(
+                -math.sin(angle) * laneOffset,
+                math.cos(angle) * laneOffset,
+              );
           final radius = runner.isUser
               ? _GoalTrackPainter._avatarRadius
               : _GoalTrackPainter._friendAvatarRadius;
@@ -342,6 +341,7 @@ class _GoalTrackPainter extends CustomPainter {
     final trackPath = _buildGoalTrackPath(size);
 
     _drawGrass(canvas, size);
+    _drawTrees(canvas, size);
     _drawCurbs(canvas, trackPath);
     _drawTrackSurface(canvas, trackPath);
     _drawDashedCenterLine(canvas, trackPath);
@@ -354,11 +354,7 @@ class _GoalTrackPainter extends CustomPainter {
       ..shader = const LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [
-          Color(0xFF8BC34A),
-          Color(0xFF7CB342),
-          Color(0xFF689F38),
-        ],
+        colors: [Color(0xFF8BC34A), Color(0xFF7CB342), Color(0xFF689F38)],
       ).createShader(Offset.zero & size);
 
     canvas.drawRRect(
@@ -372,7 +368,8 @@ class _GoalTrackPainter extends CustomPainter {
 
   void _drawTrees(Canvas canvas, Size size) {
     final rng = math.Random(77);
-    final treePaint = Paint()..color = AppColors.grassDark.withValues(alpha: 0.5);
+    final treePaint = Paint()
+      ..color = AppColors.grassDark.withValues(alpha: 0.5);
 
     // Scatter some tree blobs
     for (int i = 0; i < 8; i++) {
@@ -501,30 +498,9 @@ Path _buildGoalTrackPath(Size size) {
   final path = Path();
   path.moveTo(m, h - m);
   path.lineTo(w / 2, h - m);
-  path.cubicTo(
-    w - m,
-    h - m,
-    w - m,
-    h * 0.6,
-    w - m,
-    h * 0.55,
-  );
-  path.cubicTo(
-    w - m,
-    h * 0.4,
-    m,
-    h * 0.45,
-    m,
-    h * 0.35,
-  );
-  path.cubicTo(
-    m,
-    h * 0.2,
-    w * 0.35,
-    m,
-    w * 0.5,
-    m,
-  );
+  path.cubicTo(w - m, h - m, w - m, h * 0.6, w - m, h * 0.55);
+  path.cubicTo(w - m, h * 0.4, m, h * 0.45, m, h * 0.35);
+  path.cubicTo(m, h * 0.2, w * 0.35, m, w * 0.5, m);
   path.lineTo(w - m, m);
   return path;
 }

@@ -78,8 +78,18 @@ class StepCalendarState extends State<StepCalendar> {
 
   String _monthLabel() {
     const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December',
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
     ];
     return '${months[_currentMonth.month - 1]} ${_currentMonth.year}';
   }
@@ -126,7 +136,9 @@ class StepCalendarState extends State<StepCalendar> {
                     child: Text(
                       d,
                       style: PixelText.title(
-                          size: 12, color: AppColors.textMid),
+                        size: 12,
+                        color: AppColors.textMid,
+                      ),
                     ),
                   ),
                 ),
@@ -227,7 +239,7 @@ class StepCalendarState extends State<StepCalendar> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    '${dayIndex}',
+                    '$dayIndex',
                     style: PixelText.title(size: 12, color: textColor),
                   ),
                   if (!isInactive)
@@ -235,17 +247,16 @@ class StepCalendarState extends State<StepCalendar> {
                       _formatSteps(steps),
                       style: PixelText.body(
                         size: 10,
-                        color: goalMet
-                            ? AppColors.grassMid
-                            : AppColors.textMid,
+                        color: goalMet ? AppColors.grassMid : AppColors.textMid,
                       ),
                     )
                   else
                     Text(
                       '-',
                       style: PixelText.body(
-                          size: 10,
-                          color: AppColors.textMid.withValues(alpha: 0.3)),
+                        size: 10,
+                        color: AppColors.textMid.withValues(alpha: 0.3),
+                      ),
                     ),
                 ],
               ),

@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:step_tracker/widgets/content_board.dart';
 import 'package:step_tracker/widgets/tab_layout.dart';
-import 'package:step_tracker/widgets/trail_sign.dart';
 
 void main() {
-  testWidgets('TabLayout uses narrower horizontal margins for boards', (
+  testWidgets('TabLayout stretches the board across the available width', (
     WidgetTester tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(400, 900));
@@ -26,8 +25,7 @@ void main() {
     );
 
     expect(find.byType(ContentBoard), findsOneWidget);
-    expect(find.byType(TrailSign), findsOneWidget);
-    expect(tester.getSize(find.byType(ContentBoard)).width, 368);
-    expect(tester.getSize(find.byType(TrailSign)).width, 368);
+    expect(find.text('HOME'), findsOneWidget);
+    expect(tester.getSize(find.byType(ContentBoard)).width, 400);
   });
 }

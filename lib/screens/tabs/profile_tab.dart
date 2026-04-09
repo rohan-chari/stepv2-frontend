@@ -58,10 +58,30 @@ class _ProfileTabState extends State<ProfileTab> {
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
 
+  void _handleAuthServiceChanged() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
     _api = widget.backendApiService ?? BackendApiService();
+    widget.authService.addListener(_handleAuthServiceChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant ProfileTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.authService == widget.authService) return;
+    oldWidget.authService.removeListener(_handleAuthServiceChanged);
+    widget.authService.addListener(_handleAuthServiceChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.authService.removeListener(_handleAuthServiceChanged);
+    super.dispose();
   }
 
   Future<void> _showStepGoalDialog() async {
@@ -110,7 +130,8 @@ class _ProfileTabState extends State<ProfileTab> {
   }
 
   static String _formatCompact(int n) {
-    if (n >= 1000) return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}k';
+    if (n >= 1000)
+      return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}k';
     return '$n';
   }
 
@@ -147,7 +168,10 @@ class _ProfileTabState extends State<ProfileTab> {
                         _buildTopStatusBar(),
                         const SizedBox(height: 16),
                         RetroCard(
-                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 12,
+                            horizontal: 14,
+                          ),
                           child: Row(
                             children: [
                               AppAvatar(
@@ -164,17 +188,25 @@ class _ProfileTabState extends State<ProfileTab> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     if (widget.email != null &&
-                                        !widget.email!.endsWith('@privaterelay.appleid.com')) ...[
+                                        !widget.email!.endsWith(
+                                          '@privaterelay.appleid.com',
+                                        )) ...[
                                       Text(
                                         widget.email!,
-                                        style: PixelText.body(size: 14, color: AppColors.textMid),
+                                        style: PixelText.body(
+                                          size: 14,
+                                          color: AppColors.textMid,
+                                        ),
                                       ),
                                       const SizedBox(height: 4),
                                     ],
                                     if (widget.stepGoal != null)
                                       Text(
                                         'Goal: ${widget.stepGoal} steps/day',
-                                        style: PixelText.body(size: 14, color: AppColors.textMid),
+                                        style: PixelText.body(
+                                          size: 14,
+                                          color: AppColors.textMid,
+                                        ),
                                       ),
                                   ],
                                 ),
@@ -183,7 +215,10 @@ class _ProfileTabState extends State<ProfileTab> {
                                 label: 'SETTINGS',
                                 variant: PillButtonVariant.secondary,
                                 fontSize: 12,
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 8,
+                                ),
                                 onPressed: _openSettings,
                               ),
                             ],
@@ -196,7 +231,8 @@ class _ProfileTabState extends State<ProfileTab> {
                             children: [
                               Expanded(
                                 child: PillButton(
-                                  label: widget.authService.profilePhotoUrl == null
+                                  label:
+                                      widget.authService.profilePhotoUrl == null
                                       ? 'ADD PHOTO'
                                       : 'CHANGE PHOTO',
                                   variant: PillButtonVariant.primary,
@@ -205,10 +241,12 @@ class _ProfileTabState extends State<ProfileTab> {
                                     horizontal: 12,
                                     vertical: 10,
                                   ),
-                                  onPressed: () => widget.onAddProfilePhoto?.call(),
+                                  onPressed: () =>
+                                      widget.onAddProfilePhoto?.call(),
                                 ),
                               ),
-                              if (widget.authService.profilePhotoUrl != null) ...[
+                              if (widget.authService.profilePhotoUrl !=
+                                  null) ...[
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: PillButton(
@@ -219,7 +257,8 @@ class _ProfileTabState extends State<ProfileTab> {
                                       horizontal: 12,
                                       vertical: 10,
                                     ),
-                                    onPressed: () => widget.onRemoveProfilePhoto?.call(),
+                                    onPressed: () =>
+                                        widget.onRemoveProfilePhoto?.call(),
                                   ),
                                 ),
                               ],
@@ -236,12 +275,18 @@ class _ProfileTabState extends State<ProfileTab> {
                         ),
                         const SizedBox(height: 16),
                         RetroCard(
-                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 12,
+                            horizontal: 8,
+                          ),
                           child: Column(
                             children: [
                               Text(
                                 'STATS',
-                                style: PixelText.title(size: 16, color: AppColors.textMid),
+                                style: PixelText.title(
+                                  size: 16,
+                                  color: AppColors.textMid,
+                                ),
                                 textAlign: TextAlign.center,
                               ),
                               const SizedBox(height: 12),
@@ -296,8 +341,10 @@ class _ProfileTabState extends State<ProfileTab> {
               Expanded(
                 child: Text(
                   widget.displayName!,
-                  style: PixelText.title(size: 26, color: AppColors.textDark)
-                      .copyWith(shadows: _textShadows),
+                  style: PixelText.title(
+                    size: 26,
+                    color: AppColors.textDark,
+                  ).copyWith(shadows: _textShadows),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -312,14 +359,18 @@ class _ProfileTabState extends State<ProfileTab> {
         if (goalStr != null)
           Text(
             '$stepsStr / $goalStr',
-            style: PixelText.number(size: 20, color: AppColors.accent)
-                .copyWith(shadows: _textShadows),
+            style: PixelText.number(
+              size: 20,
+              color: AppColors.accent,
+            ).copyWith(shadows: _textShadows),
           )
         else
           Text(
             stepsStr,
-            style: PixelText.number(size: 20, color: AppColors.accent)
-                .copyWith(shadows: _textShadows),
+            style: PixelText.number(
+              size: 20,
+              color: AppColors.accent,
+            ).copyWith(shadows: _textShadows),
           ),
       ],
     );
@@ -414,7 +465,11 @@ class _StatsSectionState extends State<_StatsSection> {
         _buildStatRow('This Month', _formatSteps(_thisMonth), 1),
         _buildStatRow('This Year', _formatSteps(_thisYear), 2),
         _buildStatRow('All Time', _formatSteps(_allTime), 3),
-        _buildStatRow('Goal Streak', '$_streak day${_streak == 1 ? '' : 's'}', 4),
+        _buildStatRow(
+          'Goal Streak',
+          '$_streak day${_streak == 1 ? '' : 's'}',
+          4,
+        ),
       ],
     );
   }
@@ -530,15 +585,13 @@ class _SettingsSheetState extends State<_SettingsSheet> {
               variant: PillButtonVariant.secondary,
               fontSize: 13,
               fullWidth: true,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               onPressed: () async {
                 Navigator.of(context).pop();
                 await Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (context) => AdminChallengeScreen(
-                      authService: widget.authService,
-                    ),
+                    builder: (context) =>
+                        AdminChallengeScreen(authService: widget.authService),
                   ),
                 );
               },

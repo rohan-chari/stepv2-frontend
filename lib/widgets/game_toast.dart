@@ -79,10 +79,15 @@ class _GameToastOverlay extends StatefulWidget {
 
 class _GameToastOverlayState extends State<_GameToastOverlay>
     with SingleTickerProviderStateMixin {
+  static const double _dismissDragThreshold = 48;
+  static const double _dismissVelocityThreshold = -500;
+  static const double _maxDragOffset = -96;
+
   late final AnimationController _controller;
   late final Animation<Offset> _slideAnimation;
   Timer? _dismissTimer;
   bool _dismissed = false;
+  double _dragOffset = 0;
 
   @override
   void initState() {
@@ -99,7 +104,7 @@ class _GameToastOverlayState extends State<_GameToastOverlay>
       CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
     );
     _controller.forward();
-    _dismissTimer = Timer(widget.duration, _dismiss);
+    _startDismissTimer();
   }
 
   @override
@@ -121,6 +126,42 @@ class _GameToastOverlayState extends State<_GameToastOverlay>
     }
   }
 
+  void _startDismissTimer() {
+    _dismissTimer?.cancel();
+    _dismissTimer = Timer(widget.duration, _dismiss);
+  }
+
+  void _handleVerticalDragUpdate(DragUpdateDetails details) {
+    if (_dismissed) return;
+    _dismissTimer?.cancel();
+    setState(() {
+      _dragOffset = (_dragOffset + details.delta.dy).clamp(_maxDragOffset, 0.0);
+    });
+  }
+
+  Future<void> _handleVerticalDragEnd(DragEndDetails details) async {
+    final velocity = details.primaryVelocity ?? 0;
+    if (velocity <= _dismissVelocityThreshold ||
+        _dragOffset <= -_dismissDragThreshold) {
+      await _dismiss();
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _dragOffset = 0;
+    });
+    _startDismissTimer();
+  }
+
+  void _handleVerticalDragCancel() {
+    if (_dismissed || !mounted) return;
+    setState(() {
+      _dragOffset = 0;
+    });
+    _startDismissTimer();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Positioned(
@@ -130,76 +171,84 @@ class _GameToastOverlayState extends State<_GameToastOverlay>
       child: SlideTransition(
         position: _slideAnimation,
         child: GestureDetector(
+          onVerticalDragUpdate: _handleVerticalDragUpdate,
+          onVerticalDragEnd: _handleVerticalDragEnd,
+          onVerticalDragCancel: _handleVerticalDragCancel,
           onTap: _dismiss,
-          child: Container(
-            key: widget.shellKey,
-            decoration: BoxDecoration(
-              color: AppColors.woodDark,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.woodShadow, width: 2.5),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.26),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-                BoxShadow(
-                  color: widget.palette.face.withValues(alpha: 0.20),
-                  blurRadius: 12,
-                ),
-              ],
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(6),
-              child: SizedBox(
-                width: double.infinity,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [widget.palette.face, widget.palette.dark],
-                      ),
-                      border: Border.all(
-                        color: widget.palette.shadow,
-                        width: 2,
-                      ),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(3),
-                      child: Container(
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          color: AppColors.parchmentLight,
-                          borderRadius: BorderRadius.circular(5),
+          child: AnimatedSlide(
+            offset: Offset(0, _dragOffset / 120),
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOutCubic,
+            child: Container(
+              key: widget.shellKey,
+              decoration: BoxDecoration(
+                color: AppColors.woodDark,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.woodShadow, width: 2.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.26),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                  BoxShadow(
+                    color: widget.palette.face.withValues(alpha: 0.20),
+                    blurRadius: 12,
+                  ),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [widget.palette.face, widget.palette.dark],
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              _ToastBadge(
-                                key: widget.badgeKey,
-                                palette: widget.palette,
-                              ),
-                              const SizedBox(height: 10),
-                              SizedBox(
-                                width: double.infinity,
-                                child: Text(
-                                  widget.message,
-                                  style: PixelText.body(
-                                    size: 14,
-                                    color: widget.palette.messageColor,
-                                  ),
-                                  textAlign: TextAlign.center,
+                        border: Border.all(
+                          color: widget.palette.shadow,
+                          width: 2,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(3),
+                        child: Container(
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: AppColors.parchmentLight,
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                _ToastBadge(
+                                  key: widget.badgeKey,
+                                  palette: widget.palette,
                                 ),
-                              ),
-                            ],
+                                const SizedBox(height: 10),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: Text(
+                                    widget.message,
+                                    style: PixelText.body(
+                                      size: 14,
+                                      color: widget.palette.messageColor,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),

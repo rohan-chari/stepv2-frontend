@@ -8,7 +8,6 @@ import '../../styles.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/feature_highlights_row.dart';
 import '../../widgets/pill_button.dart';
-import '../../widgets/pill_icon_button.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/goal_track.dart';
 import '../../widgets/game_container.dart';
@@ -42,7 +41,7 @@ class HomeTab extends StatelessWidget {
   onOpenLeaderboardHighlight;
   final VoidCallback? onOpenProfile;
   final Future<void> Function()? onAddProfilePhoto;
-  final Future<void> Function()? onDismissProfilePhotoPrompt;
+  final Future<bool> Function()? onDismissProfilePhotoPrompt;
 
   const HomeTab({
     super.key,
@@ -91,11 +90,6 @@ class HomeTab extends StatelessWidget {
     final hasProfilePhoto =
         authService.profilePhotoUrl != null &&
         authService.profilePhotoUrl!.isNotEmpty;
-    final showProfilePhotoPrompt =
-        displayName != null &&
-        !hasProfilePhoto &&
-        authService.profilePhotoPromptDismissedAt == null;
-
     return Padding(
       padding: EdgeInsets.only(top: topInset + 12, bottom: bottomPadding),
       child: RefreshIndicator(
@@ -112,14 +106,14 @@ class HomeTab extends StatelessWidget {
                   children: [
                     _buildTopStatusBar(),
                     const SizedBox(height: 12),
-
-                    if (displayName == null || showProfilePhotoPrompt) ...[
-                      _buildSetupPrompts(
-                        context,
-                        showProfilePhotoPrompt: showProfilePhotoPrompt,
-                      ),
-                      const SizedBox(height: 12),
-                    ],
+                    _SetupPromptsSection(
+                      displayName: displayName,
+                      hasProfilePhoto: hasProfilePhoto,
+                      authService: authService,
+                      onDisplayNameChanged: onDisplayNameChanged,
+                      onAddProfilePhoto: onAddProfilePhoto,
+                      onDismissProfilePhotoPrompt: onDismissProfilePhotoPrompt,
+                    ),
 
                     _buildGoalTrackSection(context),
                     const SizedBox(height: 16),
@@ -366,86 +360,6 @@ class HomeTab extends StatelessWidget {
     );
   }
 
-  // -- Setup prompts (kept from original) --
-
-  Widget _buildSetupPrompts(
-    BuildContext context, {
-    required bool showProfilePhotoPrompt,
-  }) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (displayName == null)
-          PillButton(
-            label: 'SET DISPLAY NAME',
-            variant: PillButtonVariant.secondary,
-            fontSize: 14,
-            fullWidth: true,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            onPressed: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) =>
-                      DisplayNameScreen(authService: authService),
-                ),
-              );
-              onDisplayNameChanged();
-            },
-          ),
-        if (showProfilePhotoPrompt) ...[
-          GameContainer(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                Text(
-                  'ADD A PROFILE PHOTO?',
-                  style: PixelText.title(size: 16, color: AppColors.textDark),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Make it easier for friends to spot you in races, challenges, and leaderboards.',
-                  style: PixelText.body(size: 13, color: AppColors.textMid),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: PillButton(
-                        label: 'ADD PHOTO',
-                        variant: PillButtonVariant.primary,
-                        fontSize: 13,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        onPressed: () => onAddProfilePhoto?.call(),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: PillButton(
-                        label: 'NO THANKS',
-                        variant: PillButtonVariant.secondary,
-                        fontSize: 13,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        onPressed: () => onDismissProfilePhotoPrompt?.call(),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
   // -- Permission / notification prompts --
 
   Widget _buildPermissionPrompt(BuildContext context) {
@@ -583,6 +497,193 @@ class HomeTab extends StatelessWidget {
   static const _textShadows = [
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
+}
+
+class _SetupPromptsSection extends StatefulWidget {
+  const _SetupPromptsSection({
+    required this.displayName,
+    required this.hasProfilePhoto,
+    required this.authService,
+    required this.onDisplayNameChanged,
+    this.onAddProfilePhoto,
+    this.onDismissProfilePhotoPrompt,
+  });
+
+  final String? displayName;
+  final bool hasProfilePhoto;
+  final AuthService authService;
+  final VoidCallback onDisplayNameChanged;
+  final Future<void> Function()? onAddProfilePhoto;
+  final Future<bool> Function()? onDismissProfilePhotoPrompt;
+
+  @override
+  State<_SetupPromptsSection> createState() => _SetupPromptsSectionState();
+}
+
+class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
+  Timer? _dismissTimer;
+  bool _showDismissedConfirmation = false;
+  bool _isSavingDismissal = false;
+
+  bool get _promptDismissed =>
+      widget.authService.profilePhotoPromptDismissedAt != null;
+
+  @override
+  void didUpdateWidget(covariant _SetupPromptsSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.displayName == null || widget.hasProfilePhoto) {
+      _dismissTimer?.cancel();
+      _dismissTimer = null;
+      _showDismissedConfirmation = false;
+      _isSavingDismissal = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _dismissTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _openDisplayNameScreen() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => DisplayNameScreen(authService: widget.authService),
+      ),
+    );
+    widget.onDisplayNameChanged();
+  }
+
+  Future<void> _dismissProfilePhotoPrompt() async {
+    if (_isSavingDismissal) return;
+
+    setState(() {
+      _isSavingDismissal = true;
+    });
+
+    final dismissed = await widget.onDismissProfilePhotoPrompt?.call() ?? false;
+    if (!mounted) return;
+
+    if (!dismissed) {
+      setState(() {
+        _isSavingDismissal = false;
+      });
+      return;
+    }
+
+    _dismissTimer?.cancel();
+    setState(() {
+      _isSavingDismissal = false;
+      _showDismissedConfirmation = true;
+    });
+
+    _dismissTimer = Timer(const Duration(seconds: 3), () {
+      if (!mounted) return;
+      setState(() {
+        _showDismissedConfirmation = false;
+      });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final showDisplayNamePrompt = widget.displayName == null;
+    final showProfilePhotoPrompt =
+        widget.displayName != null &&
+        !widget.hasProfilePhoto &&
+        !_showDismissedConfirmation &&
+        !_promptDismissed;
+    final showDismissedConfirmation =
+        widget.displayName != null &&
+        !widget.hasProfilePhoto &&
+        _showDismissedConfirmation;
+
+    if (!showDisplayNamePrompt &&
+        !showProfilePhotoPrompt &&
+        !showDismissedConfirmation) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (showDisplayNamePrompt)
+          PillButton(
+            label: 'SET DISPLAY NAME',
+            variant: PillButtonVariant.secondary,
+            fontSize: 14,
+            fullWidth: true,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            onPressed: _openDisplayNameScreen,
+          ),
+        if (showDisplayNamePrompt &&
+            (showProfilePhotoPrompt || showDismissedConfirmation))
+          const SizedBox(height: 12),
+        if (showProfilePhotoPrompt)
+          GameContainer(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Text(
+                  'ADD A PROFILE PHOTO?',
+                  style: PixelText.title(size: 16, color: AppColors.textDark),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Make it easier for friends to spot you in races, challenges, and leaderboards.',
+                  style: PixelText.body(size: 13, color: AppColors.textMid),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: PillButton(
+                        label: 'ADD PHOTO',
+                        variant: PillButtonVariant.primary,
+                        fontSize: 13,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        onPressed: _isSavingDismissal
+                            ? null
+                            : () => widget.onAddProfilePhoto?.call(),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: PillButton(
+                        label: 'NO THANKS',
+                        variant: PillButtonVariant.secondary,
+                        fontSize: 13,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        onPressed: _dismissProfilePhotoPrompt,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        if (showDismissedConfirmation)
+          GameContainer(
+            key: const Key('profile-photo-dismissed-confirmation'),
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              'You can add one anytime in Profile.',
+              style: PixelText.body(size: 13, color: AppColors.textMid),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        const SizedBox(height: 12),
+      ],
+    );
+  }
 }
 
 // -- Daily reward card widget --
