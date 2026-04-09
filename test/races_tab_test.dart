@@ -24,7 +24,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
-    'RacesTab shows placement and queued boxes on active race cards',
+    'RacesTab keeps placement and queued boxes aligned with the race title',
     (WidgetTester tester) async {
       final authService = await _createAuthService();
 
@@ -59,8 +59,21 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.text('1ST PLACE'), findsOneWidget);
-      expect(find.text('2 QUEUED'), findsOneWidget);
+      final headerRow = find.byKey(const Key('race-card-header-race-1'));
+
+      expect(headerRow, findsOneWidget);
+      expect(
+        find.descendant(of: headerRow, matching: find.text('Morning Dash')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: headerRow, matching: find.text('1ST PLACE')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: headerRow, matching: find.text('2 QUEUED')),
+        findsOneWidget,
+      );
     },
   );
 }

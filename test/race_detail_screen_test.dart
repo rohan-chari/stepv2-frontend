@@ -274,25 +274,46 @@ void main() {
 
       expect(find.text('PRIZE POOL'), findsOneWidget);
       expect(find.text('600'), findsOneWidget);
-      expect(find.text('1ST'), findsOneWidget);
-      expect(find.text('420'), findsOneWidget);
-      expect(find.text('2ND'), findsOneWidget);
-      expect(find.text('120'), findsOneWidget);
-      expect(find.text('3RD'), findsOneWidget);
-      expect(find.text('60'), findsOneWidget);
+      final prizePoolBoard = find.byKey(const Key('race-prize-pool-board'));
+      final prizePoolSummary = find.byKey(const Key('race-prize-pool-summary'));
+      expect(prizePoolBoard, findsOneWidget);
+      expect(prizePoolSummary, findsOneWidget);
       expect(
-        _rowContainsTexts(tester, [
-          'RACE TO ',
-          '100,000',
-          ' STEPS',
-          '1ST',
-          '420',
-          '2ND',
-          '120',
-          '3RD',
-          '60',
-        ]),
-        isTrue,
+        (tester.getRect(prizePoolSummary).center.dx -
+                tester.getRect(prizePoolBoard).center.dx)
+            .abs(),
+        lessThanOrEqualTo(1),
+      );
+      expect(
+        find.descendant(of: prizePoolSummary, matching: find.text('1ST')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: prizePoolSummary, matching: find.text('420')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: prizePoolSummary, matching: find.text('2ND')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: prizePoolSummary, matching: find.text('120')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: prizePoolSummary, matching: find.text('3RD')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: prizePoolSummary, matching: find.text('60')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('race-target-header')),
+          matching: find.text('1ST'),
+        ),
+        findsNothing,
       );
 
       await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));

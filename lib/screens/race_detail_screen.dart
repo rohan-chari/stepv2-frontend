@@ -1182,7 +1182,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         .length;
     final targetSteps = _race!['targetSteps'] as int? ?? 0;
     final buyInAmount = _race!['buyInAmount'] as int? ?? 0;
-    final payouts = _race!['payouts'] as Map<String, dynamic>?;
     final endsAtRaw = _race!['endsAt'] as String?;
     final endsAt = endsAtRaw != null
         ? DateTime.tryParse(endsAtRaw)?.toLocal()
@@ -1230,6 +1229,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
               // Leaderboard header
               Row(
+                key: const Key('race-target-header'),
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Expanded(
@@ -1264,19 +1264,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                       ),
                     ),
                   ),
-                  if (buyInAmount > 0 && payouts != null) ...[
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerRight,
-                          child: _buildPayoutInlineSummary(payouts),
-                        ),
-                      ),
-                    ),
-                  ],
                 ],
               ),
               if (_buildNextPowerupHelper() case final helper?) ...[
@@ -1860,34 +1847,54 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
   Widget _buildPrizePoolHeader() {
     final potCoins = _race!['projectedPotCoins'] as int? ?? 0;
+    final payouts = _race!['payouts'] as Map<String, dynamic>?;
 
     return Padding(
       padding: const EdgeInsets.only(top: 4, bottom: 8),
       child: GameContainer(
+        key: const Key('race-prize-pool-board'),
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-        child: Column(
-          children: [
-            Text(
-              'PRIZE POOL',
-              style: PixelText.title(size: 14, color: AppColors.textMid),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '$potCoins',
-              style: PixelText.number(size: 28, color: AppColors.coinDark),
-            ),
-            Text(
-              'gold',
-              style: PixelText.body(size: 12, color: AppColors.textMid),
-            ),
-          ],
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                'PRIZE POOL',
+                style: PixelText.title(size: 14, color: AppColors.textMid),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '$potCoins',
+                style: PixelText.number(size: 28, color: AppColors.coinDark),
+                textAlign: TextAlign.center,
+              ),
+              Text(
+                'gold',
+                style: PixelText.body(size: 12, color: AppColors.textMid),
+                textAlign: TextAlign.center,
+              ),
+              if (payouts != null) ...[
+                const SizedBox(height: 10),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: _buildPayoutInlineSummary(
+                    payouts,
+                    key: const Key('race-prize-pool-summary'),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildPayoutInlineSummary(Map<String, dynamic> payouts) {
+  Widget _buildPayoutInlineSummary(Map<String, dynamic> payouts, {Key? key}) {
     return Row(
+      key: key,
       mainAxisSize: MainAxisSize.min,
       children: [
         _buildPayoutInlineValue(label: '1ST', amount: payouts['first']),

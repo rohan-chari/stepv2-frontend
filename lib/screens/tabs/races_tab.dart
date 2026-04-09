@@ -337,30 +337,29 @@ class _RacesTabState extends State<RacesTab> {
       child: GameContainer(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    name,
-                    style: PixelText.title(size: 18, color: AppColors.textDark),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    '$stepsLabel \u2022 $participantCount runner${participantCount == 1 ? '' : 's'}${isInvite && creatorName.isNotEmpty ? ' \u2022 by $creatorName' : ''}',
-                    style: PixelText.body(size: 14, color: AppColors.textMid),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
-                  if (myPlacement != null || queuedBoxCount > 0) ...[
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
+                  Row(
+                    key: Key('race-card-header-$raceId'),
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          name,
+                          style: PixelText.title(
+                            size: 18,
+                            color: AppColors.textDark,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                      if (myPlacement != null || queuedBoxCount > 0) ...[
+                        const SizedBox(width: 8),
                         if (myPlacement != null)
                           _buildMetaChip(
                             '${formatOrdinal(myPlacement)} PLACE',
@@ -369,7 +368,8 @@ class _RacesTabState extends State<RacesTab> {
                             ),
                             textColor: AppColors.pillGreenDark,
                           ),
-                        if (queuedBoxCount > 0)
+                        if (queuedBoxCount > 0) ...[
+                          if (myPlacement != null) const SizedBox(width: 6),
                           _buildMetaChip(
                             '$queuedBoxCount QUEUED',
                             backgroundColor: AppColors.coinLight.withValues(
@@ -377,9 +377,17 @@ class _RacesTabState extends State<RacesTab> {
                             ),
                             textColor: AppColors.coinDark,
                           ),
+                        ],
                       ],
-                    ),
-                  ],
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '$stepsLabel \u2022 $participantCount runner${participantCount == 1 ? '' : 's'}${isInvite && creatorName.isNotEmpty ? ' \u2022 by $creatorName' : ''}',
+                    style: PixelText.body(size: 14, color: AppColors.textMid),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
                 ],
               ),
             ),
