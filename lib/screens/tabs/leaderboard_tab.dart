@@ -305,7 +305,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                       badgeLabel: 'RANKING',
                       padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
                       children: [
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 14),
                         _buildTypeTabs(),
                         if (_selectedType == _LeaderboardType.steps) ...[
                           const SizedBox(height: 10),
@@ -447,9 +447,9 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
               variant: types[i] == _selectedType
                   ? PillButtonVariant.secondary
                   : PillButtonVariant.accent,
-              fontSize: 12,
+              fontSize: 11,
               fullWidth: true,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
             ),
           ),
         ],
