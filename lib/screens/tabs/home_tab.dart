@@ -758,7 +758,8 @@ class _ClimbingBoardsSkeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     return GameContainer(
       key: const Key('climbing-boards-skeleton'),
-      padding: const EdgeInsets.all(0),
+      padding: EdgeInsets.zero,
+      surfaceColor: AppColors.pillGreenDark,
       child: Container(
         height: 146,
         decoration: BoxDecoration(
@@ -872,7 +873,8 @@ class _ClimbingBoardsCarouselState extends State<_ClimbingBoardsCarousel> {
   @override
   Widget build(BuildContext context) {
     return GameContainer(
-      padding: const EdgeInsets.all(0),
+      padding: EdgeInsets.zero,
+      surfaceColor: AppColors.pillGreenDark,
       child: SizedBox(
         height: 146,
         child: DecoratedBox(

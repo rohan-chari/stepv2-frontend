@@ -10,6 +10,7 @@ import '../../widgets/app_avatar.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/game_container.dart';
+import '../../widgets/info_board_card.dart';
 import '../../widgets/info_toast.dart';
 import '../../widgets/pill_button.dart';
 import '../challenge_detail_screen.dart';
@@ -337,23 +338,12 @@ class _ChallengesTabState extends State<ChallengesTab> {
     return Column(
       children: [
         _buildTopStatusBar(),
-        _buildRecordBadge(),
         const SizedBox(height: 16),
-        _buildCountdownCenterpiece(challenge),
-        const SizedBox(height: 16),
-        if (allInstances.isNotEmpty)
+        _buildChallengeBoard(challenge, hasActive: true),
+        if (allInstances.isNotEmpty) ...[
+          const SizedBox(height: 16),
           _buildChallengeTiles(allInstances, challenge),
-        if (allInstances.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 24),
-            child: Text(
-              'No challenges yet \u2014 time to start one!',
-              style: PixelText.body(
-                color: AppColors.textMid,
-              ).copyWith(shadows: _textShadows),
-              textAlign: TextAlign.center,
-            ),
-          ),
+        ],
       ],
     );
   }
@@ -362,57 +352,9 @@ class _ChallengesTabState extends State<ChallengesTab> {
     return Column(
       children: [
         _buildTopStatusBar(),
-        _buildRecordBadge(),
-        const SizedBox(height: 48),
-        Icon(
-          Icons.emoji_events,
-          size: 48,
-          color: AppColors.textMid.withValues(alpha: 0.6),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'No active challenges',
-          style: PixelText.title(
-            size: 18,
-            color: AppColors.textMid,
-          ).copyWith(shadows: _textShadows),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Challenge a friend to a weekly step battle!',
-          style: PixelText.body(
-            size: 14,
-            color: AppColors.textMid,
-          ).copyWith(shadows: _textShadows),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 24),
-        if (widget.authService.displayName != null)
-          PillButton(
-            label: 'NEW CHALLENGE',
-            variant: PillButtonVariant.primary,
-            fontSize: 14,
-            fullWidth: true,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-            onPressed: _navigateToFriendPicker,
-          ),
+        const SizedBox(height: 16),
+        _buildChallengeBoard(const {}, hasActive: false),
       ],
-    );
-  }
-
-  Widget _buildRecordBadge() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: Center(
-        child: Text(
-          '$_wins W - $_losses L',
-          style: PixelText.title(
-            size: 22,
-            color: AppColors.textDark,
-          ).copyWith(shadows: _textShadows),
-        ),
-      ),
     );
   }
 
@@ -480,9 +422,12 @@ class _ChallengesTabState extends State<ChallengesTab> {
     );
   }
 
-  // -- Countdown centerpiece --
+  // -- Weekly challenge green board --
 
-  Widget _buildCountdownCenterpiece(Map<String, dynamic> challenge) {
+  Widget _buildChallengeBoard(
+    Map<String, dynamic> challenge, {
+    required bool hasActive,
+  }) {
     final challengeEndsAt = _challengeEndsAt;
     final remaining = challengeEndsAt != null
         ? challengeEndsAt.difference(_countdownNow)
@@ -494,89 +439,110 @@ class _ChallengesTabState extends State<ChallengesTab> {
     final minutes = safeDuration.inMinutes.remainder(60);
     final seconds = safeDuration.inSeconds.remainder(60);
 
+    final title = hasActive
+        ? (challenge['title'] as String? ?? '')
+        : 'No active challenges';
+    final description = hasActive
+        ? (challenge['description'] as String?)
+        : 'Challenge a friend to a weekly step battle!';
+
+    return InfoBoardCard(
+      badgeLabel: 'THIS WEEK\u2019S CHALLENGE',
+      title: title,
+      subtitle: (description?.isNotEmpty ?? false) ? description : null,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      children: [
+        if (hasActive && challengeEndsAt != null) ...[
+          const SizedBox(height: 14),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _CountdownUnit(value: days, label: 'DAYS'),
+              const SizedBox(width: 8),
+              _CountdownUnit(value: hours, label: 'HRS'),
+              const SizedBox(width: 8),
+              _CountdownUnit(value: minutes, label: 'MIN'),
+              const SizedBox(width: 8),
+              _CountdownUnit(value: seconds, label: 'SEC'),
+            ],
+          ),
+        ],
+        const SizedBox(height: 14),
+        _buildRecordRow(),
+        if (widget.authService.displayName != null) ...[
+          const SizedBox(height: 14),
+          PillButton(
+            label: _isInitiating ? 'STARTING...' : 'NEW CHALLENGE',
+            variant: PillButtonVariant.secondary,
+            fontSize: 13,
+            fullWidth: true,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            onPressed: _isInitiating ? null : _navigateToFriendPicker,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildRecordRow() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        _RecordStat(value: _wins, label: 'WINS'),
+        Container(
+          width: 1,
+          height: 28,
+          margin: const EdgeInsets.symmetric(horizontal: 18),
+          color: AppColors.parchment.withValues(alpha: 0.4),
+        ),
+        _RecordStat(value: _losses, label: 'LOSSES'),
+      ],
+    );
+  }
+
+  // -- Challenge list (single consolidated card) --
+
+  Widget _buildChallengeTiles(
+    List<Map<String, dynamic>> instances,
+    Map<String, dynamic> challenge,
+  ) {
     return GameContainer(
-      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 0),
       child: Column(
         children: [
-          Text(
-            'THIS WEEK\u2019S CHALLENGE',
-            style: PixelText.title(size: 11, color: AppColors.textMid),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            challenge['title'] as String? ?? '',
-            style: PixelText.title(size: 18, color: AppColors.textDark),
-            textAlign: TextAlign.center,
-          ),
-          if ((challenge['description'] as String?)?.isNotEmpty ?? false) ...[
-            const SizedBox(height: 4),
-            Text(
-              challenge['description'] as String,
-              style: PixelText.body(size: 12, color: AppColors.textMid),
-              textAlign: TextAlign.center,
-            ),
-          ],
-          if (challengeEndsAt != null) ...[
-            const SizedBox(height: 14),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _CountdownUnit(value: days, label: 'DAYS'),
-                const SizedBox(width: 8),
-                _CountdownUnit(value: hours, label: 'HRS'),
-                const SizedBox(width: 8),
-                _CountdownUnit(value: minutes, label: 'MIN'),
-                const SizedBox(width: 8),
-                _CountdownUnit(value: seconds, label: 'SEC'),
-              ],
-            ),
-          ],
-          if (widget.authService.displayName != null) ...[
-            const SizedBox(height: 14),
-            PillButton(
-              label: _isInitiating ? 'STARTING...' : 'NEW CHALLENGE',
-              variant: PillButtonVariant.primary,
-              fontSize: 13,
-              fullWidth: true,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              onPressed: _isInitiating ? null : _navigateToFriendPicker,
-            ),
+          for (int i = 0; i < instances.length; i++) ...[
+            if (i > 0)
+              Container(
+                height: 1,
+                margin: const EdgeInsets.symmetric(horizontal: 14),
+                color: AppColors.parchmentBorder.withValues(alpha: 0.45),
+              ),
+            _buildChallengeRow(instances[i], challenge, i),
           ],
         ],
       ),
     );
   }
 
-  // -- Challenge tiles grid --
-
-  Widget _buildChallengeTiles(
-    List<Map<String, dynamic>> instances,
-    Map<String, dynamic> challenge,
-  ) {
-    return Column(
-      children: [
-        for (int i = 0; i < instances.length; i++) ...[
-          _buildChallengeTile(instances[i], challenge),
-          if (i < instances.length - 1) const SizedBox(height: 10),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildChallengeTile(
+  Widget _buildChallengeRow(
     Map<String, dynamic> instance,
     Map<String, dynamic> challenge,
+    int index,
   ) {
     final instanceId = instance['id'] as String? ?? '';
     final userA = instance['userA'] as Map<String, dynamic>?;
     final userB = instance['userB'] as Map<String, dynamic>?;
 
-    String friendName = '???';
+    Map<String, dynamic>? opponent;
     if (userA != null && userA['id'] != _myUserId) {
-      friendName = userA['displayName'] as String? ?? '???';
-    } else if (userB != null) {
-      friendName = userB['displayName'] as String? ?? '???';
+      opponent = userA;
+    } else if (userB != null && userB['id'] != _myUserId) {
+      opponent = userB;
     }
+
+    final friendName = opponent?['displayName'] as String? ?? '???';
+    final friendPhotoUrl = opponent?['profilePhotoUrl'] as String?;
 
     final status = instance['status'] as String? ?? '';
     final stakeStatus = instance['stakeStatus'] as String? ?? '';
@@ -615,60 +581,76 @@ class _ChallengesTabState extends State<ChallengesTab> {
       badgeColor = AppColors.textMid;
     }
 
-    return GestureDetector(
-      onTap: () {
-        Navigator.of(context)
-            .push<bool>(
-              MaterialPageRoute(
-                builder: (context) => ChallengeDetailScreen(
-                  authService: widget.authService,
-                  instance: instance,
-                  challenge: challenge,
-                ),
-              ),
-            )
-            .then((_) => widget.onChallengeChanged());
-      },
-      onLongPress: () => _showChallengeMenu(instanceId, friendName),
-      child: GameContainer(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'vs $friendName',
-                    style: PixelText.title(size: 16, color: AppColors.textDark),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
+    return Material(
+      color: index.isOdd
+          ? AppColors.parchmentDark.withValues(alpha: 0.25)
+          : Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          Navigator.of(context)
+              .push<bool>(
+                MaterialPageRoute(
+                  builder: (context) => ChallengeDetailScreen(
+                    authService: widget.authService,
+                    instance: instance,
+                    challenge: challenge,
                   ),
-                  if (stakeName.isNotEmpty) ...[
-                    const SizedBox(height: 3),
+                ),
+              )
+              .then((_) => widget.onChallengeChanged());
+        },
+        onLongPress: () => _showChallengeMenu(instanceId, friendName),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            children: [
+              AppAvatar(name: friendName, imageUrl: friendPhotoUrl, size: 34),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      stakeName,
-                      style: PixelText.body(size: 12, color: AppColors.textMid),
+                      'vs $friendName',
+                      style: PixelText.title(
+                        size: 16,
+                        color: AppColors.textDark,
+                      ),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
                     ),
+                    if (stakeName.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        stakeName,
+                        style: PixelText.body(
+                          size: 12,
+                          color: AppColors.textMid,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-            const SizedBox(width: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: badgeColor,
-                borderRadius: BorderRadius.circular(6),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: badgeColor,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  statusLabel,
+                  style: PixelText.title(size: 11, color: Colors.white),
+                ),
               ),
-              child: Text(
-                statusLabel,
-                style: PixelText.title(size: 11, color: Colors.white),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -706,6 +688,10 @@ class _CountdownUnit extends StatelessWidget {
 
   const _CountdownUnit({required this.value, required this.label});
 
+  static const _textShadows = [
+    Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
+  ];
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -713,16 +699,62 @@ class _CountdownUnit extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: AppColors.woodDark,
+            color: AppColors.pillGreenShadow.withValues(alpha: 0.7),
             borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: AppColors.parchment.withValues(alpha: 0.35),
+              width: 1,
+            ),
           ),
           child: Text(
             value.toString().padLeft(2, '0'),
-            style: PixelText.number(size: 28, color: AppColors.parchment),
+            style: PixelText.number(size: 28, color: AppColors.parchmentLight),
           ),
         ),
         const SizedBox(height: 4),
-        Text(label, style: PixelText.title(size: 9, color: AppColors.textMid)),
+        Text(
+          label,
+          style: PixelText.title(
+            size: 9,
+            color: AppColors.parchment,
+          ).copyWith(shadows: _textShadows),
+        ),
+      ],
+    );
+  }
+}
+
+// -- Record stat widget (wins / losses inside the green board) --
+
+class _RecordStat extends StatelessWidget {
+  final int value;
+  final String label;
+
+  const _RecordStat({required this.value, required this.label});
+
+  static const _textShadows = [
+    Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '$value',
+          style: PixelText.number(
+            size: 26,
+            color: AppColors.parchmentLight,
+          ).copyWith(shadows: _textShadows),
+        ),
+        Text(
+          label,
+          style: PixelText.title(
+            size: 10,
+            color: AppColors.parchment,
+          ).copyWith(shadows: _textShadows),
+        ),
       ],
     );
   }

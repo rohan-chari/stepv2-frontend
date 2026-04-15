@@ -330,8 +330,8 @@ class _RunnerHitTarget {
 
 class _GoalTrackPainter extends CustomPainter {
   static const double _trackWidth = 54.0;
-  static const double _avatarRadius = 18.0;
-  static const double _friendAvatarRadius = 14.0;
+  static const double _avatarRadius = 14.0;
+  static const double _friendAvatarRadius = 11.0;
   static const double _avatarBorder = 2.5;
 
   const _GoalTrackPainter();

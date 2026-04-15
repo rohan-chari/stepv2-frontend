@@ -8,6 +8,7 @@ import '../../widgets/app_avatar.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/filter_dropdown.dart';
 import '../../widgets/game_container.dart';
+import '../../widgets/info_board_card.dart';
 import '../../widgets/pill_button.dart';
 
 enum _LeaderboardType { steps, challenges, races }
@@ -300,31 +301,30 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                   children: [
                     _buildTopStatusBar(),
                     const SizedBox(height: 12),
-                    Text(
-                      'RANKING',
-                      style: PixelText.title(
-                        size: 18,
-                        color: AppColors.textMid,
-                      ).copyWith(shadows: _textShadows),
-                    ),
-                    const SizedBox(height: 8),
-                    _buildTypeTabs(),
-                    if (_selectedType == _LeaderboardType.steps) ...[
-                      const SizedBox(height: 10),
-                      FilterDropdown<String>(
-                        value: _selectedPeriod,
-                        options: [
-                          for (final (val, label) in _periods) (val, label),
+                    InfoBoardCard(
+                      badgeLabel: 'RANKING',
+                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                      children: [
+                        const SizedBox(height: 4),
+                        _buildTypeTabs(),
+                        if (_selectedType == _LeaderboardType.steps) ...[
+                          const SizedBox(height: 10),
+                          FilterDropdown<String>(
+                            value: _selectedPeriod,
+                            options: [
+                              for (final (val, label) in _periods) (val, label),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) _selectPeriod(val);
+                            },
+                          ),
                         ],
-                        onChanged: (val) {
-                          if (val != null) _selectPeriod(val);
-                        },
-                      ),
-                    ],
-                    if (_selectedType == _LeaderboardType.challenges) ...[
-                      const SizedBox(height: 10),
-                      _buildChallengeQualificationBanner(),
-                    ],
+                        if (_selectedType == _LeaderboardType.challenges) ...[
+                          const SizedBox(height: 10),
+                          _buildChallengeQualificationBanner(),
+                        ],
+                      ],
+                    ),
                     const SizedBox(height: 16),
                     if (_isLoading)
                       const Padding(
@@ -445,8 +445,8 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
               label: types[i].label,
               onPressed: () => _selectType(types[i]),
               variant: types[i] == _selectedType
-                  ? PillButtonVariant.primary
-                  : PillButtonVariant.secondary,
+                  ? PillButtonVariant.secondary
+                  : PillButtonVariant.accent,
               fontSize: 12,
               fullWidth: true,
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
@@ -464,7 +464,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
         'MINIMUM $_minimumCompletedChallenges COMPLETED CHALLENGES TO QUALIFY',
         style: PixelText.body(
           size: 13,
-          color: AppColors.textMid,
+          color: AppColors.parchment,
         ).copyWith(shadows: _textShadows),
         textAlign: TextAlign.center,
       ),

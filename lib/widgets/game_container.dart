@@ -10,6 +10,7 @@ class GameContainer extends StatelessWidget {
   final Color? frameColor;
   final Color? glowColor;
   final double borderRadius;
+  final Color? surfaceColor;
 
   const GameContainer({
     super.key,
@@ -18,12 +19,15 @@ class GameContainer extends StatelessWidget {
     this.frameColor,
     this.glowColor,
     this.borderRadius = 10,
+    this.surfaceColor,
   });
 
   @override
   Widget build(BuildContext context) {
     const px = 2.5;
     final frame = frameColor ?? AppColors.woodDark;
+    final surface = surfaceColor ?? AppColors.parchment;
+    final surfaceBorder = surfaceColor ?? AppColors.parchmentBorder;
 
     return Container(
       decoration: BoxDecoration(
@@ -62,10 +66,10 @@ class GameContainer extends StatelessWidget {
               padding: const EdgeInsets.all(px * 2.5),
               child: Container(
                 decoration: BoxDecoration(
-                  color: AppColors.parchment,
+                  color: surface,
                   borderRadius: BorderRadius.circular(borderRadius - 2),
                   border: Border.all(
-                    color: AppColors.parchmentBorder,
+                    color: surfaceBorder,
                     width: px * 0.6,
                   ),
                 ),
@@ -73,15 +77,17 @@ class GameContainer extends StatelessWidget {
                   width: double.infinity,
                   child: Stack(
                     children: [
-                      // Parchment texture
-                      Positioned.fill(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(borderRadius - 3),
-                          child: CustomPaint(
-                            painter: _ParchmentTexturePainter(px: px),
+                      // Parchment texture (only on parchment surface)
+                      if (surfaceColor == null)
+                        Positioned.fill(
+                          child: ClipRRect(
+                            borderRadius:
+                                BorderRadius.circular(borderRadius - 3),
+                            child: CustomPaint(
+                              painter: _ParchmentTexturePainter(px: px),
+                            ),
                           ),
                         ),
-                      ),
                       // Top-edge bevel highlight
                       Positioned(
                         top: 0,

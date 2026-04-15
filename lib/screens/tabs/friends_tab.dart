@@ -10,6 +10,7 @@ import '../../widgets/app_avatar.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/game_container.dart';
+import '../../widgets/info_board_card.dart';
 import '../../widgets/pill_button.dart';
 
 class FriendsTab extends StatefulWidget {
@@ -298,6 +299,9 @@ class _FriendsTabState extends State<FriendsTab> {
                       _buildTopStatusBar(),
                       const SizedBox(height: 12),
 
+                      _buildFriendsHeader(),
+                      const SizedBox(height: 12),
+
                       // Search bar
                       Column(
                         children: [
@@ -351,53 +355,23 @@ class _FriendsTabState extends State<FriendsTab> {
                       if (_incomingRequests.isNotEmpty) ...[
                         _buildSectionHeader('INCOMING REQUESTS'),
                         const SizedBox(height: 8),
-                        for (final req in _incomingRequests) ...[
-                          _buildIncomingCard(req),
-                          const SizedBox(height: 8),
-                        ],
-                        const SizedBox(height: 8),
+                        _buildIncomingList(),
+                        const SizedBox(height: 16),
                       ],
 
                       // Outgoing requests
                       if (_outgoingRequests.isNotEmpty) ...[
                         _buildSectionHeader('SENT REQUESTS'),
                         const SizedBox(height: 8),
-                        for (final req in _outgoingRequests) ...[
-                          _buildOutgoingCard(req),
-                          const SizedBox(height: 8),
-                        ],
-                        const SizedBox(height: 8),
+                        _buildOutgoingList(),
+                        const SizedBox(height: 16),
                       ],
 
                       // Friends list
-                      _buildSectionHeader('YOUR FRIENDS'),
-                      const SizedBox(height: 8),
                       if (_friends.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 24),
-                          child: Column(
-                            children: [
-                              Icon(
-                                Icons.group_add,
-                                size: 32,
-                                color: AppColors.textMid.withValues(alpha: 0.6),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'No adventurers yet \u2014 invite some friends!',
-                                style: PixelText.body(
-                                  color: AppColors.textMid,
-                                ).copyWith(shadows: _textShadows),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        )
+                        _buildFriendsEmptyState()
                       else
-                        for (final friend in _friends) ...[
-                          _buildFriendCard(friend),
-                          const SizedBox(height: 8),
-                        ],
+                        _buildFriendsList(),
                     ],
                   ),
                 ),
@@ -405,6 +379,103 @@ class _FriendsTabState extends State<FriendsTab> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildFriendsHeader() {
+    final count = _friends.length;
+    final hasFriends = count > 0;
+    final subtitle = hasFriends
+        ? (count == 1
+              ? '1 adventurer in your crew'
+              : '$count adventurers in your crew')
+        : 'Search above to start your crew.';
+
+    return InfoBoardCard(
+      badgeLabel: 'YOUR FRIENDS',
+      title: hasFriends ? 'Tap a friend for options.' : 'No friends yet',
+      subtitle: subtitle,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+    );
+  }
+
+  Widget _buildFriendsEmptyState() {
+    return GameContainer(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 22),
+      child: Column(
+        children: [
+          Icon(
+            Icons.group_add,
+            size: 32,
+            color: AppColors.textMid.withValues(alpha: 0.6),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'No adventurers yet \u2014 invite some friends!',
+            style: PixelText.body(
+              color: AppColors.textMid,
+            ).copyWith(shadows: _textShadows),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFriendsList() {
+    return GameContainer(
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 0),
+      child: Column(
+        children: [
+          for (int i = 0; i < _friends.length; i++) ...[
+            if (i > 0)
+              Container(
+                height: 1,
+                margin: const EdgeInsets.symmetric(horizontal: 14),
+                color: AppColors.parchmentBorder.withValues(alpha: 0.45),
+              ),
+            _buildFriendRow(_friends[i], i),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIncomingList() {
+    return GameContainer(
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 0),
+      child: Column(
+        children: [
+          for (int i = 0; i < _incomingRequests.length; i++) ...[
+            if (i > 0)
+              Container(
+                height: 1,
+                margin: const EdgeInsets.symmetric(horizontal: 14),
+                color: AppColors.parchmentBorder.withValues(alpha: 0.45),
+              ),
+            _buildIncomingRow(_incomingRequests[i], i),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOutgoingList() {
+    return GameContainer(
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 0),
+      child: Column(
+        children: [
+          for (int i = 0; i < _outgoingRequests.length; i++) ...[
+            if (i > 0)
+              Container(
+                height: 1,
+                margin: const EdgeInsets.symmetric(horizontal: 14),
+                color: AppColors.parchmentBorder.withValues(alpha: 0.45),
+              ),
+            _buildOutgoingRow(_outgoingRequests[i], i),
+          ],
+        ],
       ),
     );
   }
@@ -584,40 +655,48 @@ class _FriendsTabState extends State<FriendsTab> {
     );
   }
 
-  Widget _buildFriendCard(Map<String, dynamic> friend) {
+  Widget _buildFriendRow(Map<String, dynamic> friend, int index) {
     final displayName = friend['displayName'] as String? ?? '???';
     final profilePhotoUrl = friend['profilePhotoUrl'] as String?;
     final friendshipId = friend['friendshipId'] as String? ?? '';
 
-    return GestureDetector(
-      onTap: () => _showFriendMenu(friendshipId, displayName),
-      child: GameContainer(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Row(
-          children: [
-            AppAvatar(name: displayName, imageUrl: profilePhotoUrl, size: 34),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                displayName,
-                style: PixelText.body(size: 16, color: AppColors.textDark),
-                overflow: TextOverflow.ellipsis,
+    return Material(
+      color: index.isOdd
+          ? AppColors.parchmentDark.withValues(alpha: 0.25)
+          : Colors.transparent,
+      child: InkWell(
+        onTap: () => _showFriendMenu(friendshipId, displayName),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              AppAvatar(name: displayName, imageUrl: profilePhotoUrl, size: 34),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  displayName,
+                  style: PixelText.body(size: 16, color: AppColors.textDark),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            ),
-            const Icon(Icons.more_horiz, size: 22, color: AppColors.textMid),
-          ],
+              const Icon(Icons.more_horiz, size: 22, color: AppColors.textMid),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildIncomingCard(Map<String, dynamic> req) {
+  Widget _buildIncomingRow(Map<String, dynamic> req, int index) {
     final user = (req['user'] as Map<String, dynamic>?) ?? const {};
     final displayName = user['displayName'] as String? ?? '';
     final profilePhotoUrl = user['profilePhotoUrl'] as String?;
     final friendshipId = req['friendshipId'] as String;
 
-    return GameContainer(
+    return Container(
+      color: index.isOdd
+          ? AppColors.parchmentDark.withValues(alpha: 0.25)
+          : Colors.transparent,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Row(
         children: [
@@ -650,12 +729,15 @@ class _FriendsTabState extends State<FriendsTab> {
     );
   }
 
-  Widget _buildOutgoingCard(Map<String, dynamic> req) {
+  Widget _buildOutgoingRow(Map<String, dynamic> req, int index) {
     final user = (req['user'] as Map<String, dynamic>?) ?? const {};
     final displayName = user['displayName'] as String? ?? '';
     final profilePhotoUrl = user['profilePhotoUrl'] as String?;
 
-    return GameContainer(
+    return Container(
+      color: index.isOdd
+          ? AppColors.parchmentDark.withValues(alpha: 0.25)
+          : Colors.transparent,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       child: Row(
         children: [

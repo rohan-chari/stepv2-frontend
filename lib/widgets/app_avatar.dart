@@ -93,10 +93,15 @@ class AppAvatar extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: _hasImage
-          ? Image.network(
-              imageUrl!.trim(),
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => _buildFallback(),
+          ? ClipOval(
+              child: Image.network(
+                imageUrl!.trim(),
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) =>
+                    _buildFallback(),
+              ),
             )
           : _buildFallback(),
     );

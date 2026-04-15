@@ -119,10 +119,15 @@ class _PillButtonState extends State<PillButton> {
                 Icon(widget.icon, size: widget.fontSize + 2, color: textColor),
                 const SizedBox(width: 8),
               ],
-              Text(
-                widget.label,
-                textAlign: TextAlign.center,
-                style: PixelText.pill(size: widget.fontSize, color: textColor),
+              Flexible(
+                child: Text(
+                  widget.label,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style:
+                      PixelText.pill(size: widget.fontSize, color: textColor),
+                ),
               ),
             ],
           ),
