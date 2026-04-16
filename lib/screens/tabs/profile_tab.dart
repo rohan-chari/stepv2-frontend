@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../config/backend_config.dart';
 import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
@@ -518,6 +520,11 @@ class _SettingsSheet extends StatefulWidget {
 }
 
 class _SettingsSheetState extends State<_SettingsSheet> {
+  Future<void> _openUrl(String path) async {
+    final uri = Uri.parse('${BackendConfig.baseUrl}$path');
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
   Future<void> _signOut() async {
     await widget.notificationService?.unregisterDeviceToken(
       widget.authService.authToken,
@@ -598,6 +605,24 @@ class _SettingsSheetState extends State<_SettingsSheet> {
             ),
             const SizedBox(height: 10),
           ],
+          PillButton(
+            label: 'SUPPORT',
+            variant: PillButtonVariant.secondary,
+            fontSize: 13,
+            fullWidth: true,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            onPressed: () => _openUrl('/support.html'),
+          ),
+          const SizedBox(height: 10),
+          PillButton(
+            label: 'PRIVACY POLICY',
+            variant: PillButtonVariant.secondary,
+            fontSize: 13,
+            fullWidth: true,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            onPressed: () => _openUrl('/privacy.html'),
+          ),
+          const SizedBox(height: 10),
           PillButton(
             label: 'SIGN OUT',
             variant: PillButtonVariant.accent,
