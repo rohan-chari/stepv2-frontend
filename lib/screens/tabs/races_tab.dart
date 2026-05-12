@@ -40,7 +40,8 @@ class _RacesTabState extends State<RacesTab> {
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
 
-  final Set<String> _collapsedSections = {};
+  // Completed races default to collapsed; users can expand to view history.
+  final Set<String> _collapsedSections = {'completed'};
 
   void _toggleSection(String sectionKey) {
     setState(() {

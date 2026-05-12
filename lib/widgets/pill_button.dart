@@ -11,6 +11,7 @@ class PillButton extends StatefulWidget {
   final EdgeInsets padding;
   final bool fullWidth;
   final IconData? icon;
+  final Widget? trailing;
 
   const PillButton({
     super.key,
@@ -21,6 +22,7 @@ class PillButton extends StatefulWidget {
     this.padding = const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
     this.fullWidth = false,
     this.icon,
+    this.trailing,
   });
 
   @override
@@ -116,6 +118,10 @@ class _PillButtonState extends State<PillButton> {
                 style: PixelText.pill(size: widget.fontSize, color: textColor),
               ),
             ),
+            if (widget.trailing != null) ...[
+              const SizedBox(width: 8),
+              widget.trailing!,
+            ],
           ],
         ),
       ),

@@ -340,14 +340,47 @@ class _ChallengesTabState extends State<ChallengesTab> {
         ),
         const SizedBox(height: 16),
         _buildChallengeBoard(challenge, hasActive: true),
-        if (allInstances.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: _buildChallengeTiles(allInstances, challenge),
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: allInstances.isNotEmpty
+              ? _buildChallengeTiles(allInstances, challenge)
+              : _buildChallengesEmptyState(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChallengesEmptyState() {
+    return GameContainer(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 22),
+      child: Column(
+        children: [
+          Icon(
+            Icons.flag_outlined,
+            size: 32,
+            color: AppColors.textMid.withValues(alpha: 0.6),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'No active challenges',
+            style: PixelText.title(
+              size: 14,
+              color: AppColors.textDark,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Tap NEW CHALLENGE above to challenge a friend.',
+            style: PixelText.body(
+              size: 12,
+              color: AppColors.textMid,
+            ).copyWith(shadows: _textShadows),
+            textAlign: TextAlign.center,
           ),
         ],
-      ],
+      ),
     );
   }
 

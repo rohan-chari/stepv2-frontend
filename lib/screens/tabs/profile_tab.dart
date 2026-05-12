@@ -11,7 +11,6 @@ import '../../widgets/arcade_page.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/pill_button.dart';
-import '../../widgets/pill_icon_button.dart';
 import '../../widgets/retro_card.dart';
 import '../../widgets/step_calendar.dart';
 import '../admin_challenge_screen.dart';
@@ -147,6 +146,7 @@ class _ProfileTabState extends State<ProfileTab> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: ArcadePageBackground(
+        showHeader: false,
         child: Padding(
           padding: EdgeInsets.only(top: topInset + 12, bottom: bottomInset),
           child: RefreshIndicator(
@@ -316,15 +316,20 @@ class _ProfileTabState extends State<ProfileTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        PillIconButton(
-          icon: Icons.arrow_back_rounded,
-          size: 36,
-          variant: PillButtonVariant.secondary,
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        const SizedBox(height: 8),
         Row(
           children: [
+            GestureDetector(
+              onTap: () => Navigator.of(context).pop(),
+              child: const Padding(
+                padding: EdgeInsets.all(8),
+                child: Icon(
+                  Icons.arrow_back,
+                  color: AppColors.textDark,
+                  size: 24,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
             AppAvatar(
               name: widget.displayName ?? 'You',
               imageUrl: widget.authService.profilePhotoUrl,

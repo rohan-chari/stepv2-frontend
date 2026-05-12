@@ -11,6 +11,7 @@ class ArcadePageBackground extends StatelessWidget {
     this.backgroundColor = AppColors.parchmentLight,
     this.headerColor = AppColors.accent,
     this.showHeader = true,
+    this.headerChecker = true,
   });
 
   final Widget? child;
@@ -18,6 +19,7 @@ class ArcadePageBackground extends StatelessWidget {
   final Color backgroundColor;
   final Color headerColor;
   final bool showHeader;
+  final bool headerChecker;
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +40,9 @@ class ArcadePageBackground extends StatelessWidget {
               height: topInset + headerHeight,
               child: ColoredBox(
                 color: headerColor,
-                child: const CustomPaint(painter: ArcadeCheckerPainter()),
+                child: headerChecker
+                    ? const CustomPaint(painter: ArcadeCheckerPainter())
+                    : null,
               ),
             ),
           if (child != null) Positioned.fill(child: child!),
