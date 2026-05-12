@@ -7,9 +7,11 @@ import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
 import '../utils/race_participant_display.dart';
+import '../widgets/arcade_page.dart';
 import '../widgets/app_avatar.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/goal_track.dart';
+import '../widgets/home_course_track.dart';
 import '../widgets/info_toast.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/retro_card.dart';
@@ -732,14 +734,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF87CEEB), Color(0xFFB0E0F0), Color(0xFFD4F1F9)],
-          ),
-        ),
+      body: ArcadePageBackground(
         child: SafeArea(
           bottom: false,
           child: Column(
@@ -750,16 +745,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                   horizontal: 16,
                   vertical: 8,
                 ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF87CEEB),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF87CEEB).withValues(alpha: 0.8),
-                      offset: const Offset(0, 2),
-                      blurRadius: 4,
-                    ),
-                  ],
-                ),
+                decoration: const BoxDecoration(color: Colors.transparent),
                 child: Row(
                   children: [
                     GestureDetector(
@@ -768,7 +754,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                         padding: EdgeInsets.all(8),
                         child: Icon(
                           Icons.arrow_back,
-                          color: AppColors.textDark,
+                          color: AppColors.parchmentLight,
                           size: 24,
                         ),
                       ),
@@ -779,7 +765,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                         _race?['name'] as String? ?? 'Race',
                         style: PixelText.title(
                           size: 22,
-                          color: AppColors.textDark,
+                          color: AppColors.parchmentLight,
                         ).copyWith(shadows: _textShadows),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -794,7 +780,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                           padding: EdgeInsets.all(8),
                           child: Icon(
                             Icons.more_horiz,
-                            color: AppColors.textDark,
+                            color: AppColors.parchmentLight,
                             size: 24,
                           ),
                         ),
@@ -1188,10 +1174,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         : null;
     return Column(
       children: [
-        // Countdown
-        if (endsAt != null) _buildCountdown(endsAt),
-        if (buyInAmount > 0) _buildPrizePoolHeader(),
-        const SizedBox(height: 12),
+        if (endsAt != null || buyInAmount > 0) ...[
+          _buildRaceStatusBoard(endsAt: endsAt, showPrizePool: buyInAmount > 0),
+          const SizedBox(height: 12),
+        ],
 
         // Single card for everything
         GameContainer(
@@ -1199,31 +1185,29 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Race track
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: GoalTrack(
-                  height: 300,
-                  runners: [
-                    for (final p in participants)
-                      GoalTrackRunner(
-                        name: p['stealthed'] == true
-                            ? '???'
-                            : (p['displayName'] as String? ?? '???'),
-                        progress: p['stealthed'] == true
-                            ? _jitterProgress(
-                                p['userId'] as String? ?? '',
-                                targetSteps,
-                              )
-                            : targetSteps > 0 && p['totalSteps'] != null
-                            ? ((p['totalSteps'] as int) / targetSteps)
-                            : 0.0,
-                        isUser: (p['userId'] as String?) == _myUserId,
-                        isStealthed: p['stealthed'] == true,
-                        profilePhotoUrl: p['profilePhotoUrl'] as String?,
-                      ),
-                  ],
-                ),
+              // Race progress
+              HomeCourseTrack(
+                height: 236,
+                goalSteps: targetSteps,
+                runners: [
+                  for (final p in participants)
+                    GoalTrackRunner(
+                      name: p['stealthed'] == true
+                          ? '???'
+                          : (p['displayName'] as String? ?? '???'),
+                      progress: p['stealthed'] == true
+                          ? _jitterProgress(
+                              p['userId'] as String? ?? '',
+                              targetSteps,
+                            )
+                          : targetSteps > 0 && p['totalSteps'] != null
+                          ? ((p['totalSteps'] as int) / targetSteps)
+                          : 0.0,
+                      isUser: (p['userId'] as String?) == _myUserId,
+                      isStealthed: p['stealthed'] == true,
+                      profilePhotoUrl: p['profilePhotoUrl'] as String?,
+                    ),
+                ],
               ),
               const SizedBox(height: 14),
 
@@ -1760,9 +1744,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
         // Final standings - track
         RetroCard(
-          padding: const EdgeInsets.all(6),
-          child: GoalTrack(
-            height: 300,
+          padding: const EdgeInsets.all(10),
+          child: HomeCourseTrack(
+            height: 236,
+            goalSteps: targetSteps,
             runners: [
               for (final p in participants)
                 GoalTrackRunner(
@@ -1817,7 +1802,46 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     );
   }
 
-  Widget _buildCountdown(DateTime endsAt) {
+  Widget _buildRaceStatusBoard({
+    required DateTime? endsAt,
+    required bool showPrizePool,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 8),
+      child: GameContainer(
+        key: showPrizePool
+            ? const Key('race-prize-pool-board')
+            : const Key('race-status-board'),
+        padding: EdgeInsets.zero,
+        frameColor: AppColors.accent,
+        surfaceColor: AppColors.accent,
+        child: CustomPaint(
+          painter: const ArcadeCheckerPainter(tile: 20),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  if (endsAt != null) _buildCountdownSummary(endsAt),
+                  if (endsAt != null && showPrizePool)
+                    Container(
+                      height: 2,
+                      margin: const EdgeInsets.symmetric(vertical: 14),
+                      color: AppColors.parchmentLight.withValues(alpha: 0.18),
+                    ),
+                  if (showPrizePool) _buildPrizePoolSummary(),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCountdownSummary(DateTime endsAt) {
     final remaining = endsAt.difference(_countdownNow);
     final safe = remaining.isNegative ? Duration.zero : remaining;
     final days = safe.inDays;
@@ -1825,83 +1849,120 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     final minutes = safe.inMinutes.remainder(60);
     final seconds = safe.inSeconds.remainder(60);
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: GameContainer(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _CountdownUnit(value: days, label: 'DAYS'),
-            const SizedBox(width: 10),
-            _CountdownUnit(value: hours, label: 'HRS'),
-            const SizedBox(width: 10),
-            _CountdownUnit(value: minutes, label: 'MIN'),
-            const SizedBox(width: 10),
-            _CountdownUnit(value: seconds, label: 'SEC'),
-          ],
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'TIME LEFT',
+          style: PixelText.title(size: 13, color: AppColors.parchmentLight),
+          textAlign: TextAlign.center,
         ),
-      ),
-    );
-  }
-
-  Widget _buildPrizePoolHeader() {
-    final potCoins = _race!['projectedPotCoins'] as int? ?? 0;
-    final payouts = _race!['payouts'] as Map<String, dynamic>?;
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 4, bottom: 8),
-      child: GameContainer(
-        key: const Key('race-prize-pool-board'),
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
+        const SizedBox(height: 10),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                'PRIZE POOL',
-                style: PixelText.title(size: 14, color: AppColors.textMid),
-                textAlign: TextAlign.center,
+              _CountdownUnit(
+                value: days,
+                label: 'DAYS',
+                labelColor: AppColors.parchment,
               ),
-              const SizedBox(height: 6),
-              Text(
-                '$potCoins',
-                style: PixelText.number(size: 28, color: AppColors.coinDark),
-                textAlign: TextAlign.center,
+              const SizedBox(width: 10),
+              _CountdownUnit(
+                value: hours,
+                label: 'HRS',
+                labelColor: AppColors.parchment,
               ),
-              Text(
-                'gold',
-                style: PixelText.body(size: 12, color: AppColors.textMid),
-                textAlign: TextAlign.center,
+              const SizedBox(width: 10),
+              _CountdownUnit(
+                value: minutes,
+                label: 'MIN',
+                labelColor: AppColors.parchment,
               ),
-              if (payouts != null) ...[
-                const SizedBox(height: 10),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: _buildPayoutInlineSummary(
-                    payouts,
-                    key: const Key('race-prize-pool-summary'),
-                  ),
-                ),
-              ],
+              const SizedBox(width: 10),
+              _CountdownUnit(
+                value: seconds,
+                label: 'SEC',
+                labelColor: AppColors.parchment,
+              ),
             ],
           ),
         ),
-      ),
+      ],
     );
   }
 
-  Widget _buildPayoutInlineSummary(Map<String, dynamic> payouts, {Key? key}) {
+  Widget _buildPrizePoolSummary() {
+    final potCoins = _race!['projectedPotCoins'] as int? ?? 0;
+    final payouts = _race!['payouts'] as Map<String, dynamic>?;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          'PRIZE POOL',
+          style: PixelText.title(size: 14, color: AppColors.parchmentLight),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 6),
+        Text(
+          '$potCoins',
+          style: PixelText.number(size: 30, color: AppColors.pillGold),
+          textAlign: TextAlign.center,
+        ),
+        Text(
+          'gold',
+          style: PixelText.body(size: 12, color: AppColors.parchment),
+          textAlign: TextAlign.center,
+        ),
+        if (payouts != null) ...[
+          const SizedBox(height: 10),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: _buildPayoutInlineSummary(
+              payouts,
+              key: const Key('race-prize-pool-summary'),
+              labelColor: AppColors.parchment,
+              amountColor: AppColors.pillGold,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildPayoutInlineSummary(
+    Map<String, dynamic> payouts, {
+    Key? key,
+    Color labelColor = AppColors.textMid,
+    Color amountColor = AppColors.coinDark,
+  }) {
     return Row(
       key: key,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _buildPayoutInlineValue(label: '1ST', amount: payouts['first']),
+        _buildPayoutInlineValue(
+          label: '1ST',
+          amount: payouts['first'],
+          labelColor: labelColor,
+          amountColor: amountColor,
+        ),
         const SizedBox(width: 8),
-        _buildPayoutInlineValue(label: '2ND', amount: payouts['second']),
+        _buildPayoutInlineValue(
+          label: '2ND',
+          amount: payouts['second'],
+          labelColor: labelColor,
+          amountColor: amountColor,
+        ),
         const SizedBox(width: 8),
-        _buildPayoutInlineValue(label: '3RD', amount: payouts['third']),
+        _buildPayoutInlineValue(
+          label: '3RD',
+          amount: payouts['third'],
+          labelColor: labelColor,
+          amountColor: amountColor,
+        ),
       ],
     );
   }
@@ -1909,16 +1970,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   Widget _buildPayoutInlineValue({
     required String label,
     required Object? amount,
+    Color labelColor = AppColors.textMid,
+    Color amountColor = AppColors.coinDark,
   }) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label, style: PixelText.title(size: 10, color: AppColors.textMid)),
+        Text(label, style: PixelText.title(size: 10, color: labelColor)),
         const SizedBox(width: 3),
-        Text(
-          '$amount',
-          style: PixelText.title(size: 10, color: AppColors.coinDark),
-        ),
+        Text('$amount', style: PixelText.title(size: 10, color: amountColor)),
       ],
     );
   }
@@ -2049,8 +2109,19 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 class _CountdownUnit extends StatelessWidget {
   final int value;
   final String label;
+  final Color boxColor;
+  final Color shadowColor;
+  final Color numberColor;
+  final Color labelColor;
 
-  const _CountdownUnit({required this.value, required this.label});
+  const _CountdownUnit({
+    required this.value,
+    required this.label,
+    this.boxColor = AppColors.woodDark,
+    this.shadowColor = AppColors.woodShadow,
+    this.numberColor = AppColors.parchment,
+    this.labelColor = AppColors.textMid,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -2059,11 +2130,11 @@ class _CountdownUnit extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: AppColors.woodDark,
+            color: boxColor,
             borderRadius: BorderRadius.circular(8),
             boxShadow: [
               BoxShadow(
-                color: AppColors.woodShadow.withValues(alpha: 0.5),
+                color: shadowColor.withValues(alpha: 0.5),
                 offset: const Offset(0, 3),
                 blurRadius: 6,
               ),
@@ -2071,11 +2142,11 @@ class _CountdownUnit extends StatelessWidget {
           ),
           child: Text(
             value.toString().padLeft(2, '0'),
-            style: PixelText.number(size: 26, color: AppColors.parchment),
+            style: PixelText.number(size: 26, color: numberColor),
           ),
         ),
         const SizedBox(height: 4),
-        Text(label, style: PixelText.title(size: 11, color: AppColors.textMid)),
+        Text(label, style: PixelText.title(size: 11, color: labelColor)),
       ],
     );
   }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
+import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/filter_dropdown.dart';
 import '../widgets/pill_button.dart';
@@ -148,24 +149,16 @@ class _StakePickerScreenState extends State<StakePickerScreen> {
         : 'PROPOSE STAKE';
 
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF87CEEB),
-              Color(0xFFB0E0F0),
-              Color(0xFFD4F1F9),
-            ],
-          ),
-        ),
+      body: ArcadePageBackground(
         child: SafeArea(
           child: Column(
             children: [
               // Header
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 child: Row(
                   children: [
                     GestureDetector(
@@ -174,7 +167,7 @@ class _StakePickerScreenState extends State<StakePickerScreen> {
                         padding: const EdgeInsets.all(8),
                         child: const Icon(
                           Icons.arrow_back,
-                          color: AppColors.textDark,
+                          color: AppColors.parchmentLight,
                           size: 24,
                         ),
                       ),
@@ -186,14 +179,18 @@ class _StakePickerScreenState extends State<StakePickerScreen> {
                         children: [
                           Text(
                             'vs ${widget.friendName}',
-                            style: PixelText.title(size: 22, color: AppColors.textDark)
-                                .copyWith(shadows: _textShadows),
+                            style: PixelText.title(
+                              size: 22,
+                              color: AppColors.parchmentLight,
+                            ).copyWith(shadows: _textShadows),
                           ),
                           const SizedBox(height: 2),
                           Text(
                             'What does the loser owe?',
-                            style: PixelText.body(size: 13, color: AppColors.textMid)
-                                .copyWith(shadows: _textShadows),
+                            style: PixelText.body(
+                              size: 13,
+                              color: AppColors.parchment,
+                            ).copyWith(shadows: _textShadows),
                           ),
                         ],
                       ),
@@ -204,7 +201,10 @@ class _StakePickerScreenState extends State<StakePickerScreen> {
 
               // Filter dropdown
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 4,
+                ),
                 child: FilterDropdown<String>(
                   value: _selectedRelationshipType,
                   options: [
@@ -221,30 +221,39 @@ class _StakePickerScreenState extends State<StakePickerScreen> {
               Expanded(
                 child: _isLoading
                     ? const Center(
-                        child: CircularProgressIndicator(color: AppColors.accent),
+                        child: CircularProgressIndicator(
+                          color: AppColors.accent,
+                        ),
                       )
                     : _stakes.isEmpty
-                        ? Center(
-                            child: Text(
-                              'No stakes found',
-                              style: PixelText.body(size: 13, color: AppColors.textMid)
-                                  .copyWith(shadows: _textShadows),
-                            ),
-                          )
-                        : ListView.builder(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            itemCount: _stakes.length,
-                            itemBuilder: (context, index) =>
-                                _buildStakeCard(_stakes[index]),
-                          ),
+                    ? Center(
+                        child: Text(
+                          'No stakes found',
+                          style: PixelText.body(
+                            size: 13,
+                            color: AppColors.textMid,
+                          ).copyWith(shadows: _textShadows),
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: _stakes.length,
+                        itemBuilder: (context, index) =>
+                            _buildStakeCard(_stakes[index]),
+                      ),
               ),
 
               // Submit button
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 16,
+                ),
                 child: _isSubmitting
                     ? const Center(
-                        child: CircularProgressIndicator(color: AppColors.accent),
+                        child: CircularProgressIndicator(
+                          color: AppColors.accent,
+                        ),
                       )
                     : PillButton(
                         label: buttonLabel,
@@ -252,9 +261,12 @@ class _StakePickerScreenState extends State<StakePickerScreen> {
                         fontSize: 16,
                         fullWidth: true,
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 48, vertical: 16),
-                        onPressed:
-                            _selectedStakeId != null ? _submitProposal : null,
+                          horizontal: 48,
+                          vertical: 16,
+                        ),
+                        onPressed: _selectedStakeId != null
+                            ? _submitProposal
+                            : null,
                       ),
               ),
             ],
@@ -292,20 +304,30 @@ class _StakePickerScreenState extends State<StakePickerScreen> {
                   children: [
                     Text(
                       name,
-                      style: PixelText.title(size: 14, color: AppColors.textDark),
+                      style: PixelText.title(
+                        size: 14,
+                        color: AppColors.textDark,
+                      ),
                     ),
                     if (desc.isNotEmpty) ...[
                       const SizedBox(height: 2),
                       Text(
                         desc,
-                        style: PixelText.body(size: 12, color: AppColors.textMid),
+                        style: PixelText.body(
+                          size: 12,
+                          color: AppColors.textMid,
+                        ),
                       ),
                     ],
                   ],
                 ),
               ),
               if (selected)
-                const Icon(Icons.check_circle, color: AppColors.pillGreen, size: 22),
+                const Icon(
+                  Icons.check_circle,
+                  color: AppColors.pillGreen,
+                  size: 22,
+                ),
             ],
           ),
         ),

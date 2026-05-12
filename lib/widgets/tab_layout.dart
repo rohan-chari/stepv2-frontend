@@ -2,10 +2,7 @@ import 'package:flutter/material.dart';
 import 'content_board.dart';
 import '../styles.dart';
 
-/// Single full-screen board layout for tabs.
-/// Sky background shows above the board (behind the notch/status bar).
-/// The wood frame starts below the safe area, contains the title + content,
-/// and its bottom rests on the nav bar.
+/// Single full-screen section layout for non-home tabs.
 class TabLayout extends StatelessWidget {
   final String title;
   final Widget child;
@@ -47,21 +44,25 @@ class TabLayout extends StatelessWidget {
                             child: Text(
                               title,
                               style: PixelText.title(
-                                  size: 24, color: AppColors.textDark),
+                                size: 24,
+                                color: AppColors.textDark,
+                              ),
                               textAlign: TextAlign.center,
                             ),
                           ),
                           Container(
                             height: 1,
-                            color: AppColors.parchmentBorder
-                                .withValues(alpha: 0.5),
+                            color: AppColors.parchmentBorder.withValues(
+                              alpha: 0.5,
+                            ),
                           ),
                         ],
                         Expanded(
                           child: Center(
                             child: Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 16),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
                               child: child,
                             ),
                           ),

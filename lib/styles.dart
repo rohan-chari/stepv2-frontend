@@ -2,46 +2,46 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 abstract final class AppColors {
-  // === Pixel Art Hiking Trail Palette ===
+  // === Arcade UI palette ===
 
-  // Wood (posts, board frame)
-  static const woodLight = Color(0xFFD4A574);
-  static const woodMid = Color(0xFFB8834A);
-  static const woodDark = Color(0xFF8B5E34);
-  static const woodDarker = Color(0xFF6B4423);
-  static const woodShadow = Color(0xFF4A2F17);
-  static const woodHighlight = Color(0xFFE8C49A);
-  static const woodGrain = Color(0xFFA07040);
+  // Legacy names are kept so older screens inherit the new visual system.
+  static const woodLight = Color(0xFFF8F2E7);
+  static const woodMid = Color(0xFF4F8A6A);
+  static const woodDark = Color(0xFF213128);
+  static const woodDarker = Color(0xFF17231C);
+  static const woodShadow = Color(0xFF213128);
+  static const woodHighlight = Color(0xFFFFFFFF);
+  static const woodGrain = Color(0xFFD0C5B4);
 
-  // Parchment (board inner surface)
-  static const parchment = Color(0xFFF5E6C8);
-  static const parchmentLight = Color(0xFFFAF0DC);
-  static const parchmentDark = Color(0xFFE0D0B0);
-  static const parchmentBorder = Color(0xFFC0A878);
+  // Main surfaces
+  static const parchment = Color(0xFFFFFBF5);
+  static const parchmentLight = Color(0xFFF8F2E7);
+  static const parchmentDark = Color(0xFFF3EBDD);
+  static const parchmentBorder = Color(0xFFD0C5B4);
 
-  // Roof (corrugated green metal)
-  static const roofLight = Color(0xFF7A9E68);
-  static const roofMid = Color(0xFF5A7E48);
-  static const roofDark = Color(0xFF3D5830);
-  static const roofRidge = Color(0xFF8BAF78);
-  static const roofEdge = Color(0xFF2D4220);
+  // Primary green
+  static const roofLight = Color(0xFF4F8A6A);
+  static const roofMid = Color(0xFF2E5D47);
+  static const roofDark = Color(0xFF213128);
+  static const roofRidge = Color(0xFF77A98B);
+  static const roofEdge = Color(0xFF17231C);
 
   // Pixel sky bands (stepped gradient)
-  static const skyBand1 = Color(0xFF4A7FB5);
-  static const skyBand2 = Color(0xFF5B90C2);
-  static const skyBand3 = Color(0xFF6FA4D0);
-  static const skyBand4 = Color(0xFF82B8DE);
-  static const skyBand5 = Color(0xFF97CCE8);
-  static const skyBand6 = Color(0xFFADD8EE);
-  static const skyBand7 = Color(0xFFC0E4F4);
+  static const skyBand1 = Color(0xFF1E9AE8);
+  static const skyBand2 = Color(0xFF25A7ED);
+  static const skyBand3 = Color(0xFF35B5F0);
+  static const skyBand4 = Color(0xFF53C3F2);
+  static const skyBand5 = Color(0xFF73CEF2);
+  static const skyBand6 = Color(0xFFA5DEF0);
+  static const skyBand7 = Color(0xFFDDF2F6);
 
   // Pixel nature – grass & dirt
-  static const grassBright = Color(0xFF5DBE4D);
-  static const grassMid = Color(0xFF3DA83D);
-  static const grassDark = Color(0xFF2D8830);
-  static const dirtLight = Color(0xFFA07850);
-  static const dirtMid = Color(0xFF886840);
-  static const dirtDark = Color(0xFF685030);
+  static const grassBright = Color(0xFF63C55B);
+  static const grassMid = Color(0xFF2FA84A);
+  static const grassDark = Color(0xFF23783D);
+  static const dirtLight = Color(0xFFC68A4F);
+  static const dirtMid = Color(0xFF9F693A);
+  static const dirtDark = Color(0xFF6E4428);
 
   // Pine trees
   static const pineLight = Color(0xFF4A8848);
@@ -64,21 +64,21 @@ abstract final class AppColors {
   static const pinShadow = Color(0xFF555555);
 
   // Text
-  static const textDark = Color(0xFF3B2816);
-  static const textMid = Color(0xFF6B5030);
-  static const textLight = Color(0xFFF5E6C8);
-  static const textAccent = Color(0xFFB5763E);
+  static const textDark = Color(0xFF213128);
+  static const textMid = Color(0xFF66796F);
+  static const textLight = Color(0xFFFFFBF5);
+  static const textAccent = Color(0xFF2E5D47);
 
-  // Button (wooden plaque)
-  static const buttonFace = Color(0xFFCB9860);
-  static const buttonLight = Color(0xFFDEB47A);
-  static const buttonDark = Color(0xFF8B5E34);
-  static const buttonShadow = Color(0xFF5A3820);
-  static const buttonText = Color(0xFF3B2816);
+  // Buttons
+  static const buttonFace = Color(0xFF4F8A6A);
+  static const buttonLight = Color(0xFF77A98B);
+  static const buttonDark = Color(0xFF213128);
+  static const buttonShadow = Color(0xFF17231C);
+  static const buttonText = Color(0xFFFFFBF5);
 
   // Accent
-  static const accent = Color(0xFFB5763E);
-  static const accentLight = Color(0xFFD39B69);
+  static const accent = Color(0xFF2E5D47);
+  static const accentLight = Color(0xFF4F8A6A);
 
   // Error
   static const error = Color(0xFFB8604C);
@@ -110,47 +110,110 @@ abstract final class AppColors {
   static const pillGreenDark = roofMid;
   static const pillGreenShadow = roofDark;
   // Secondary – trail ochre
-  static const pillGold = Color(0xFFE2C66F);
-  static const pillGoldDark = Color(0xFFC39A43);
-  static const pillGoldShadow = Color(0xFF8A672B);
+  static const pillGold = Color(0xFFECC86A);
+  static const pillGoldDark = Color(0xFFD8B54E);
+  static const pillGoldShadow = Color(0xFF9A7A2D);
   // Accent – campfire clay
-  static const pillTerra = Color(0xFFB86A50);
-  static const pillTerraDark = Color(0xFF8E4D3A);
-  static const pillTerraShadow = Color(0xFF633326);
+  static const pillTerra = Color(0xFFD47C52);
+  static const pillTerraDark = Color(0xFFB76442);
+  static const pillTerraShadow = Color(0xFF7F3E26);
 }
 
 /// Game-themed text styles — bold and clean, not arcade-pixel.
 abstract final class PixelText {
   static TextStyle title({double size = 30, Color color = AppColors.textDark}) {
-    return GoogleFonts.russoOne(fontSize: size, color: color, height: 1.3);
+    return GoogleFonts.spaceGrotesk(
+      fontSize: size,
+      color: color,
+      height: 1.08,
+      fontWeight: FontWeight.w800,
+      letterSpacing: 0,
+    );
   }
 
   static TextStyle body({
     double size = 17.5,
     Color color = AppColors.textDark,
   }) {
-    return GoogleFonts.chakraPetch(fontSize: size, color: color, height: 1.5);
+    return GoogleFonts.dmSans(
+      fontSize: size,
+      color: color,
+      height: 1.35,
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0,
+    );
   }
 
   static TextStyle number({
     double size = 45,
     Color color = AppColors.textAccent,
   }) {
-    return GoogleFonts.russoOne(fontSize: size, color: color, height: 1.2);
+    return GoogleFonts.spaceGrotesk(
+      fontSize: size,
+      color: color,
+      height: 1.0,
+      fontWeight: FontWeight.w800,
+      letterSpacing: 0,
+    );
   }
 
   static TextStyle button({
     double size = 20,
     Color color = AppColors.buttonText,
   }) {
-    return GoogleFonts.russoOne(fontSize: size, color: color, letterSpacing: 2);
+    return GoogleFonts.spaceGrotesk(
+      fontSize: size,
+      color: color,
+      fontWeight: FontWeight.w800,
+      letterSpacing: 0,
+    );
   }
 
   static TextStyle pill({double size = 19, Color color = Colors.white}) {
-    return GoogleFonts.russoOne(
+    return GoogleFonts.dmSans(
       fontSize: size,
       color: color,
-      letterSpacing: 1.5,
+      fontWeight: FontWeight.w800,
+      letterSpacing: 0,
     );
   }
+}
+
+class ArcadeCheckerPainter extends CustomPainter {
+  const ArcadeCheckerPainter({
+    this.tileColor = const Color(0x09FFFFFF),
+    this.stripeColor = const Color(0x14000000),
+    this.tile = 18,
+    this.drawBottomStripe = true,
+  });
+
+  final Color tileColor;
+  final Color stripeColor;
+  final double tile;
+  final bool drawBottomStripe;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final tilePaint = Paint()..color = tileColor;
+
+    for (var y = 0.0; y < size.height; y += tile) {
+      for (var x = 0.0; x < size.width; x += tile) {
+        final row = (y / tile).floor();
+        final col = (x / tile).floor();
+        if ((row + col) % 3 == 0) {
+          canvas.drawRect(Rect.fromLTWH(x, y, tile, tile), tilePaint);
+        }
+      }
+    }
+
+    if (drawBottomStripe) {
+      canvas.drawRect(
+        Rect.fromLTWH(0, size.height - 8, size.width, 8),
+        Paint()..color = stripeColor,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

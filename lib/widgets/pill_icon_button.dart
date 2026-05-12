@@ -28,21 +28,35 @@ class _PillIconButtonState extends State<PillIconButton> {
   (Color, Color, Color) _colors() {
     switch (widget.variant) {
       case PillButtonVariant.primary:
-        return (AppColors.pillGreen, AppColors.pillGreenDark, AppColors.pillGreenShadow);
+        return (
+          AppColors.pillGreen,
+          AppColors.pillGreenDark,
+          AppColors.pillGreenShadow,
+        );
       case PillButtonVariant.secondary:
-        return (AppColors.pillGold, AppColors.pillGoldDark, AppColors.pillGoldShadow);
+        return (
+          AppColors.pillGold,
+          AppColors.pillGoldDark,
+          AppColors.pillGoldShadow,
+        );
       case PillButtonVariant.accent:
-        return (AppColors.pillTerra, AppColors.pillTerraDark, AppColors.pillTerraShadow);
+        return (
+          AppColors.pillTerra,
+          AppColors.pillTerraDark,
+          AppColors.pillTerraShadow,
+        );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final (face, dark, shadow) = _colors();
+    final (face, dark, _) = _colors();
     final bool darkIcon = widget.variant == PillButtonVariant.secondary;
     final iconColor = _enabled
         ? (darkIcon ? AppColors.textDark : Colors.white)
-        : (darkIcon ? AppColors.textDark.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.5));
+        : (darkIcon
+              ? AppColors.textDark.withValues(alpha: 0.5)
+              : Colors.white.withValues(alpha: 0.5));
 
     return GestureDetector(
       onTapDown: _enabled ? (_) => setState(() => _pressed = true) : null,
@@ -59,33 +73,20 @@ class _PillIconButtonState extends State<PillIconButton> {
         width: widget.size,
         height: widget.size,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          color: dark,
+          borderRadius: BorderRadius.circular(8),
+          color: face,
+          border: Border.all(color: dark, width: 2),
           boxShadow: _pressed
               ? []
               : [
                   BoxShadow(
-                    color: shadow,
-                    offset: const Offset(0, 3),
+                    color: dark.withValues(alpha: 0.24),
+                    offset: const Offset(3, 3),
                     blurRadius: 0,
                   ),
                 ],
         ),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [face, dark],
-            ),
-          ),
-          child: Icon(
-            widget.icon,
-            size: widget.size * 0.5,
-            color: iconColor,
-          ),
-        ),
+        child: Icon(widget.icon, size: widget.size * 0.5, color: iconColor),
       ),
     );
   }

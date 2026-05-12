@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/race_detail_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/widgets/home_course_track.dart';
 import 'package:step_tracker/widgets/retro_card.dart';
 
 class _FakeBackendApiService extends BackendApiService {
@@ -178,26 +179,6 @@ class _PendingAcceptedRaceBackendApiService extends BackendApiService {
   }
 }
 
-bool _rowContainsTexts(WidgetTester tester, List<String> texts) {
-  for (final rowElement in find.byType(Row).evaluate()) {
-    final rowFinder = find.byElementPredicate(
-      (element) => element == rowElement,
-    );
-    final containsAllTexts = texts.every(
-      (text) => find
-          .descendant(of: rowFinder, matching: find.text(text))
-          .evaluate()
-          .isNotEmpty,
-    );
-
-    if (containsAllTexts) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
 Future<AuthService> _createAuthService() async {
   SharedPreferences.setMockInitialValues({
     'auth_identity_token': 'apple-token',
@@ -315,6 +296,7 @@ void main() {
         ),
         findsNothing,
       );
+      expect(find.byType(HomeCourseTrack), findsOneWidget);
 
       await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
       await tester.pumpAndSettle();

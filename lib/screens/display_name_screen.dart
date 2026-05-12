@@ -7,9 +7,9 @@ import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../services/notification_service.dart';
 import '../styles.dart';
+import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/pill_button.dart';
-import '../widgets/wooden_tab_bar.dart';
 
 const _minDisplayNameLength = 8;
 
@@ -98,8 +98,9 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
         setState(() {
           _isAvailable = available;
           _isChecking = false;
-          _availabilityMessage =
-              available ? null : (result['reason'] as String? ?? 'That name is taken');
+          _availabilityMessage = available
+              ? null
+              : (result['reason'] as String? ?? 'That name is taken');
         });
       } catch (_) {
         if (!mounted) return;
@@ -121,7 +122,10 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
     }
 
     if (displayName.length < _minDisplayNameLength) {
-      showErrorToast(context, 'Must be at least $_minDisplayNameLength characters.');
+      showErrorToast(
+        context,
+        'Must be at least $_minDisplayNameLength characters.',
+      );
       return;
     }
 
@@ -176,169 +180,170 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      resizeToAvoidBottomInset: false,
-      body: Stack(
-        children: [
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFF87CEEB),
-                  Color(0xFFB0E0F0),
-                  Color(0xFFD4F1F9),
-                ],
-              ),
-            ),
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  children: [
-                    // Header
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Row(
-                        children: [
-                          if (Navigator.of(context).canPop())
-                            GestureDetector(
-                              onTap: () => Navigator.of(context).pop(),
-                              child: Container(
-                                padding: const EdgeInsets.all(8),
-                                child: const Icon(Icons.arrow_back,
-                                    color: AppColors.textDark, size: 24),
-                              ),
-                            ),
-                          Expanded(
-                            child: Text(
-                              'CHOOSE A DISPLAY NAME',
-                              style: PixelText.title(size: 20, color: AppColors.textDark)
-                                  .copyWith(shadows: _textShadows),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                          if (Navigator.of(context).canPop())
-                            const SizedBox(width: 40),
-                        ],
-                      ),
-                    ),
+      resizeToAvoidBottomInset: true,
+      body: ArcadePageBackground(
+        child: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final canPop = Navigator.of(context).canPop();
+              final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
 
-                    // Content
-                    Expanded(
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
+              return SingleChildScrollView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: EdgeInsets.fromLTRB(24, 8, 24, bottomInset + 24),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
                           children: [
-                            Text(
-                              'This is how friends will find you',
-                              style: PixelText.body(color: AppColors.textMid)
-                                  .copyWith(shadows: _textShadows),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 20),
-                            TextField(
-                              controller: _controller,
-                              textAlign: TextAlign.center,
-                              textCapitalization: TextCapitalization.words,
-                              style: PixelText.body(size: 18, color: AppColors.textDark),
-                              decoration: InputDecoration(
-                                filled: true,
-                                fillColor: AppColors.parchmentLight,
-                                hintText: 'Choose your name',
-                                hintStyle: PixelText.body(
-                                    size: 18, color: AppColors.parchmentBorder),
-                                border: OutlineInputBorder(
-                                  borderSide: BorderSide(color: AppColors.parchmentBorder),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(color: AppColors.parchmentBorder),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(color: AppColors.accent, width: 2),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 12),
-                              ),
-                            ),
-                            if (_isChecking ||
-                                _availabilityMessage != null ||
-                                _isAvailable == true)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: _isChecking
-                                    ? Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          const SizedBox(
-                                            width: 12,
-                                            height: 12,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              color: AppColors.textMid,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 6),
-                                          Text('Checking...',
-                                              style: PixelText.body(
-                                                  color: AppColors.textMid)),
-                                        ],
-                                      )
-                                    : _isAvailable == true
-                                        ? Text('Name is available!',
-                                            style: PixelText.body(
-                                                color: Colors.green.shade700))
-                                        : Text(_availabilityMessage ?? '',
-                                            style: PixelText.body(
-                                                color: Colors.red.shade700)),
-                              ),
-                            const SizedBox(height: 24),
-                            _isSaving
-                                ? const CircularProgressIndicator(
-                                    color: AppColors.accent)
-                                : PillButton(
-                                    label: 'CONTINUE',
-                                    variant: PillButtonVariant.primary,
-                                    fontSize: 16,
-                                    fullWidth: true,
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 48, vertical: 16),
-                                    onPressed: _onContinue,
+                            if (canPop)
+                              GestureDetector(
+                                onTap: () => Navigator.of(context).pop(),
+                                child: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  child: const Icon(
+                                    Icons.arrow_back,
+                                    color: AppColors.parchmentLight,
+                                    size: 24,
                                   ),
+                                ),
+                              ),
+                            Expanded(
+                              child: Text(
+                                'CHOOSE A DISPLAY NAME',
+                                style: PixelText.title(
+                                  size: 20,
+                                  color: AppColors.parchmentLight,
+                                ).copyWith(shadows: _textShadows),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                            if (canPop) const SizedBox(width: 40),
                           ],
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 28),
+                      Text(
+                        'This is how friends will find you',
+                        style: PixelText.body(
+                          color: AppColors.textMid,
+                        ).copyWith(shadows: _textShadows),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 20),
+                      TextField(
+                        controller: _controller,
+                        textAlign: TextAlign.center,
+                        textCapitalization: TextCapitalization.words,
+                        style: PixelText.body(
+                          size: 18,
+                          color: AppColors.textDark,
+                        ),
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: AppColors.parchmentLight,
+                          hintText: 'Choose your name',
+                          hintStyle: PixelText.body(
+                            size: 18,
+                            color: AppColors.parchmentBorder,
+                          ),
+                          border: OutlineInputBorder(
+                            borderSide: BorderSide(
+                              color: AppColors.parchmentBorder,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderSide: BorderSide(
+                              color: AppColors.parchmentBorder,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderSide: BorderSide(
+                              color: AppColors.accent,
+                              width: 2,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                        ),
+                      ),
+                      if (_isChecking ||
+                          _availabilityMessage != null ||
+                          _isAvailable == true)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: _isChecking
+                              ? Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const SizedBox(
+                                      width: 12,
+                                      height: 12,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: AppColors.textMid,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Checking...',
+                                      style: PixelText.body(
+                                        color: AppColors.textMid,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : _isAvailable == true
+                              ? Text(
+                                  'Name is available!',
+                                  style: PixelText.body(
+                                    color: Colors.green.shade700,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                )
+                              : Text(
+                                  _availabilityMessage ?? '',
+                                  style: PixelText.body(
+                                    color: Colors.red.shade700,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                        ),
+                      const SizedBox(height: 24),
+                      _isSaving
+                          ? const Center(
+                              child: CircularProgressIndicator(
+                                color: AppColors.accent,
+                              ),
+                            )
+                          : PillButton(
+                              label: 'CONTINUE',
+                              variant: PillButtonVariant.primary,
+                              fontSize: 16,
+                              fullWidth: true,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 48,
+                                vertical: 16,
+                              ),
+                              onPressed: _onContinue,
+                            ),
+                    ],
+                  ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
-
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: WoodenTabBar(
-              currentIndex: 0,
-              onTap: (_) {
-                if (Navigator.of(context).canPop()) {
-                  Navigator.of(context).pop();
-                }
-              },
-              items: const [
-                WoodenTabItem(icon: Icons.home_rounded, label: 'Home'),
-                WoodenTabItem(icon: Icons.emoji_events_rounded, label: 'Challenges'),
-                WoodenTabItem(icon: Icons.people_rounded, label: 'Friends'),
-                WoodenTabItem(icon: Icons.leaderboard_rounded, label: 'Leaderboard'),
-                WoodenTabItem(icon: Icons.person_rounded, label: 'Profile'),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

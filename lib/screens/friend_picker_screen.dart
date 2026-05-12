@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../styles.dart';
+import '../widgets/arcade_page.dart';
 import '../widgets/retro_card.dart';
 
 class FriendPickerScreen extends StatelessWidget {
   final List<Map<String, dynamic>> friends;
 
-  const FriendPickerScreen({
-    super.key,
-    required this.friends,
-  });
+  const FriendPickerScreen({super.key, required this.friends});
 
   static const _textShadows = [
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
@@ -18,24 +16,16 @@ class FriendPickerScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF87CEEB),
-              Color(0xFFB0E0F0),
-              Color(0xFFD4F1F9),
-            ],
-          ),
-        ),
+      body: ArcadePageBackground(
         child: SafeArea(
           child: Column(
             children: [
               // Header
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 child: Row(
                   children: [
                     GestureDetector(
@@ -44,7 +34,7 @@ class FriendPickerScreen extends StatelessWidget {
                         padding: const EdgeInsets.all(8),
                         child: Icon(
                           Icons.arrow_back,
-                          color: AppColors.textDark,
+                          color: AppColors.parchmentLight,
                           size: 24,
                         ),
                       ),
@@ -56,14 +46,18 @@ class FriendPickerScreen extends StatelessWidget {
                         children: [
                           Text(
                             'CHALLENGE A FRIEND',
-                            style: PixelText.title(size: 22, color: AppColors.textDark)
-                                .copyWith(shadows: _textShadows),
+                            style: PixelText.title(
+                              size: 22,
+                              color: AppColors.parchmentLight,
+                            ).copyWith(shadows: _textShadows),
                           ),
                           const SizedBox(height: 2),
                           Text(
                             'Pick someone to battle this week',
-                            style: PixelText.body(size: 13, color: AppColors.textMid)
-                                .copyWith(shadows: _textShadows),
+                            style: PixelText.body(
+                              size: 13,
+                              color: AppColors.parchment,
+                            ).copyWith(shadows: _textShadows),
                           ),
                         ],
                       ),

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
+import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/retro_card.dart';
@@ -111,36 +112,36 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF87CEEB), Color(0xFFB0E0F0), Color(0xFFD4F1F9)],
-          ),
-        ),
+      body: ArcadePageBackground(
         child: SafeArea(
           child: Column(
             children: [
               // Header
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 child: Row(
                   children: [
                     GestureDetector(
                       onTap: () => Navigator.of(context).pop(),
                       child: const Padding(
                         padding: EdgeInsets.all(8),
-                        child: Icon(Icons.arrow_back,
-                            color: AppColors.textDark, size: 24),
+                        child: Icon(
+                          Icons.arrow_back,
+                          color: AppColors.parchmentLight,
+                          size: 24,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Text(
                       'NEW RACE',
-                      style: PixelText.title(size: 22, color: AppColors.textDark)
-                          .copyWith(shadows: _textShadows),
+                      style: PixelText.title(
+                        size: 22,
+                        color: AppColors.parchmentLight,
+                      ).copyWith(shadows: _textShadows),
                     ),
                   ],
                 ),
@@ -159,19 +160,29 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('RACE NAME',
-                                style: PixelText.title(
-                                    size: 13, color: AppColors.textMid)),
+                            Text(
+                              'RACE NAME',
+                              style: PixelText.title(
+                                size: 13,
+                                color: AppColors.textMid,
+                              ),
+                            ),
                             const SizedBox(height: 8),
                             TextField(
                               controller: _nameController,
                               maxLength: 50,
                               style: PixelText.body(
-                                  size: 16, color: AppColors.textDark),
+                                size: 16,
+                                color: AppColors.textDark,
+                              ),
                               decoration: InputDecoration(
                                 hintText: 'e.g. Weekend Warriors',
                                 hintStyle: PixelText.body(
-                                    size: 16, color: AppColors.textMid.withValues(alpha: 0.5)),
+                                  size: 16,
+                                  color: AppColors.textMid.withValues(
+                                    alpha: 0.5,
+                                  ),
+                                ),
                                 counterText: '',
                                 border: InputBorder.none,
                                 isDense: true,
@@ -189,24 +200,32 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('TARGET STEPS',
-                                style: PixelText.title(
-                                    size: 13, color: AppColors.textMid)),
+                            Text(
+                              'TARGET STEPS',
+                              style: PixelText.title(
+                                size: 13,
+                                color: AppColors.textMid,
+                              ),
+                            ),
                             const SizedBox(height: 8),
                             TextField(
                               controller: _stepsController,
                               keyboardType: TextInputType.number,
                               inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly
+                                FilteringTextInputFormatter.digitsOnly,
                               ],
                               style: PixelText.number(
-                                  size: 28, color: AppColors.accent),
+                                size: 28,
+                                color: AppColors.accent,
+                              ),
                               decoration: InputDecoration(
                                 hintText: '50000',
                                 hintStyle: PixelText.number(
-                                    size: 28,
-                                    color:
-                                        AppColors.accent.withValues(alpha: 0.3)),
+                                  size: 28,
+                                  color: AppColors.accent.withValues(
+                                    alpha: 0.3,
+                                  ),
+                                ),
                                 border: InputBorder.none,
                                 isDense: true,
                                 contentPadding: EdgeInsets.zero,
@@ -220,19 +239,24 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
                                     ? '${(preset / 1000).toStringAsFixed(preset % 1000 == 0 ? 0 : 0)}k'
                                     : '$preset';
                                 return GestureDetector(
-                                  onTap: () => _stepsController.text =
-                                      preset.toString(),
+                                  onTap: () =>
+                                      _stepsController.text = preset.toString(),
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 12, vertical: 6),
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: AppColors.parchmentDark,
                                       borderRadius: BorderRadius.circular(6),
                                     ),
-                                    child: Text(label,
-                                        style: PixelText.title(
-                                            size: 13,
-                                            color: AppColors.textDark)),
+                                    child: Text(
+                                      label,
+                                      style: PixelText.title(
+                                        size: 13,
+                                        color: AppColors.textDark,
+                                      ),
+                                    ),
                                   ),
                                 );
                               }).toList(),
@@ -248,22 +272,29 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('DURATION',
-                                style: PixelText.title(
-                                    size: 13, color: AppColors.textMid)),
+                            Text(
+                              'DURATION',
+                              style: PixelText.title(
+                                size: 13,
+                                color: AppColors.textMid,
+                              ),
+                            ),
                             const SizedBox(height: 10),
                             Row(
                               children: _durationOptions.map((days) {
                                 final selected = _selectedDuration == days;
                                 return Expanded(
                                   child: GestureDetector(
-                                    onTap: () =>
-                                        setState(() => _selectedDuration = days),
+                                    onTap: () => setState(
+                                      () => _selectedDuration = days,
+                                    ),
                                     child: Container(
                                       margin: const EdgeInsets.symmetric(
-                                          horizontal: 3),
+                                        horizontal: 3,
+                                      ),
                                       padding: const EdgeInsets.symmetric(
-                                          vertical: 10),
+                                        vertical: 10,
+                                      ),
                                       decoration: BoxDecoration(
                                         color: selected
                                             ? AppColors.pillGreenDark
@@ -299,9 +330,13 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text('POWERUPS',
-                                    style: PixelText.title(
-                                        size: 13, color: AppColors.textMid)),
+                                Text(
+                                  'POWERUPS',
+                                  style: PixelText.title(
+                                    size: 13,
+                                    color: AppColors.textMid,
+                                  ),
+                                ),
                                 SizedBox(
                                   height: 28,
                                   child: Switch.adaptive(
@@ -318,31 +353,36 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
                               Text(
                                 'POWERUP EVERY',
                                 style: PixelText.body(
-                                    size: 11, color: AppColors.textMid),
+                                  size: 11,
+                                  color: AppColors.textMid,
+                                ),
                               ),
                               const SizedBox(height: 8),
                               Row(
                                 children: _intervalPresets.map((interval) {
-                                  final selected =
-                                      _powerupInterval == interval;
+                                  final selected = _powerupInterval == interval;
                                   final label = interval >= 1000
                                       ? '${(interval / 1000).toStringAsFixed(interval % 1000 == 0 ? 0 : 1)}k'
                                       : '$interval';
                                   return Expanded(
                                     child: GestureDetector(
                                       onTap: () => setState(
-                                          () => _powerupInterval = interval),
+                                        () => _powerupInterval = interval,
+                                      ),
                                       child: Container(
                                         margin: const EdgeInsets.symmetric(
-                                            horizontal: 3),
+                                          horizontal: 3,
+                                        ),
                                         padding: const EdgeInsets.symmetric(
-                                            vertical: 10),
+                                          vertical: 10,
+                                        ),
                                         decoration: BoxDecoration(
                                           color: selected
                                               ? AppColors.pillGreenDark
                                               : AppColors.parchmentDark,
-                                          borderRadius:
-                                              BorderRadius.circular(8),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
                                         ),
                                         alignment: Alignment.center,
                                         child: Text(
@@ -408,11 +448,9 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
                                   height: 28,
                                   child: Switch.adaptive(
                                     value: _buyInEnabled,
-                                    activeTrackColor:
-                                        AppColors.pillGreenDark,
-                                    onChanged: (value) => setState(
-                                      () => _buyInEnabled = value,
-                                    ),
+                                    activeTrackColor: AppColors.pillGreenDark,
+                                    onChanged: (value) =>
+                                        setState(() => _buyInEnabled = value),
                                   ),
                                 ),
                               ],
@@ -433,9 +471,8 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
                                 children: _buyInPresets.map((preset) {
                                   final selected = _buyInAmount == preset;
                                   return GestureDetector(
-                                    onTap: () => setState(
-                                      () => _buyInAmount = preset,
-                                    ),
+                                    onTap: () =>
+                                        setState(() => _buyInAmount = preset),
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 14,
@@ -488,7 +525,9 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
                                           color: selected
                                               ? AppColors.pillGreenDark
                                               : AppColors.parchmentDark,
-                                          borderRadius: BorderRadius.circular(8),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
                                         ),
                                         child: Text(
                                           option.$1,
@@ -531,7 +570,9 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
                         fontSize: 15,
                         fullWidth: true,
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 24, vertical: 14),
+                          horizontal: 24,
+                          vertical: 14,
+                        ),
                         onPressed: _isCreating ? null : _create,
                       ),
                       const SizedBox(height: 24),

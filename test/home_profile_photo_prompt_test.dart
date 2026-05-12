@@ -70,6 +70,8 @@ void main() {
   testWidgets(
     'HomeTab shows the profile photo prompt when display name exists and no photo is set',
     (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       final authService = await _createAuthService();
 
       await tester.pumpWidget(_buildHome(authService));
@@ -89,6 +91,8 @@ void main() {
   testWidgets('HomeTab hides the profile photo prompt after dismissal', (
     WidgetTester tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final authService = await _createAuthService(
       profilePhotoPromptDismissedAt: '2026-04-08T12:00:00.000Z',
     );
@@ -103,6 +107,8 @@ void main() {
   testWidgets('HomeTab wires add photo and no thanks actions', (
     WidgetTester tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final authService = await _createAuthService();
     var addCalls = 0;
     var dismissCalls = 0;
@@ -120,8 +126,18 @@ void main() {
       ),
     );
 
+    await tester.dragUntilVisible(
+      find.text('ADD PHOTO'),
+      find.byType(CustomScrollView).first,
+      const Offset(0, -240),
+    );
     await tester.tap(find.text('ADD PHOTO'));
     await tester.pump();
+    await tester.dragUntilVisible(
+      find.text('NO THANKS'),
+      find.byType(CustomScrollView).first,
+      const Offset(0, -240),
+    );
     await tester.tap(find.text('NO THANKS'));
     await tester.pump();
 
@@ -132,6 +148,8 @@ void main() {
   testWidgets(
     'HomeTab keeps the profile photo prompt confirmation in place for 3 seconds after dismissal',
     (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       final authService = await _createAuthService();
 
       await tester.pumpWidget(
@@ -146,6 +164,11 @@ void main() {
         ),
       );
 
+      await tester.dragUntilVisible(
+        find.text('NO THANKS'),
+        find.byType(CustomScrollView).first,
+        const Offset(0, -240),
+      );
       await tester.tap(find.text('NO THANKS'));
       await tester.pump();
 

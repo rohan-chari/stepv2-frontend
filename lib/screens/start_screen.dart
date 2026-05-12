@@ -6,6 +6,7 @@ import '../services/auth_service.dart';
 import '../services/notification_service.dart';
 import '../styles.dart';
 import '../widgets/capybara.dart';
+import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/feature_highlights_row.dart';
 import '../widgets/pill_button.dart';
@@ -83,14 +84,7 @@ class _StartScreenState extends State<StartScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF87CEEB), Color(0xFFB0E0F0), Color(0xFFD4F1F9)],
-          ),
-        ),
+      body: ArcadePageBackground(
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),

@@ -1,6 +1,6 @@
 # Bara
 
-Bara is a Flutter app for iOS-focused daily step competition. It signs users in with Apple, reads the current day's steps from HealthKit, syncs them to a backend API, supports friend discovery and weekly challenge matchups with negotiated stakes, and includes admin tools for weekly challenge operations. The app boots background sync and push-notification plumbing at launch, all wrapped in a custom hiking-game themed UI built from reusable Flutter widgets, Google Fonts typography, and an animated capybara sprite.
+Bara is a Flutter app for iOS-focused daily step competition. It signs users in with Apple, reads the current day's steps from HealthKit, syncs them to a backend API, supports friend discovery and weekly challenge matchups with negotiated stakes, and includes admin tools for weekly challenge operations. The app boots background sync and push-notification plumbing at launch, all wrapped in a custom arcade-themed UI built from reusable Flutter widgets, Google Fonts typography, and capybara race art.
 
 ## Tech Stack
 
@@ -29,7 +29,37 @@ Bara is a Flutter app for iOS-focused daily step competition. It signs users in 
 - **Friends workflow** - users can search by display name with a 2-character minimum and 300 ms debounce, send requests, accept or decline incoming requests, track outgoing requests, and load friends' current-day step totals.
 - **Weekly challenges and stakes** - the app loads the current weekly challenge, initiates friend matchups, lets users propose, edit, accept, or counter stakes, and shows live head-to-head progress for active challenge instances.
 - **Admin challenge tools** - admin users get a Settings entry for loading weekly challenge state and running ensure, resolve, and reset actions against the backend admin endpoints.
-- **Hiking-game UI system** - reusable trail signs, parchment boards, pill buttons, a custom wooden tab bar, overlay toasts, and an animated capybara give the app its hiking-game presentation.
+- **Arcade UI system** - reusable section panels, blocky controls, themed tab navigation, overlay toasts, and capybara race art give the app its game-like presentation.
+
+## UI Redesign Baseline
+
+The homepage is the source of truth for the new visual direction, and the same treatment should carry through every screen, modal, and repeated component. The goal is not to make every screen look identical, but to make every screen feel like it belongs to the same game-like product.
+
+### What Changed on the Homepage
+
+- **Edge-to-edge layout** - sections now run full width instead of floating in isolated cards with heavy side gutters.
+- **Cleaner section hierarchy** - the home screen is organized into readable sections instead of stacked decorative containers.
+- **Simplified hero** - the top area focuses on the username, step count, and a short status line without extra stat pills.
+- **Platformer-style race** - the daily goal comparison uses a flat 2D capybara track instead of a generic racetrack or profile-photo lineup.
+- **Consistent typography** - headings and body copy use a clean sans serif system so the UI feels arcade-inspired without becoming unreadable.
+- **Theme-matched controls** - buttons, pills, and nav elements share the same cream/green palette and border treatment.
+- **Keyboard-safe onboarding** - display name and step-goal flows scroll above the keyboard instead of trapping the submit button behind it.
+
+### How to Replicate the Style
+
+- Use the homepage as the reference for spacing, color, borders, and section rhythm.
+- Prefer large, readable sections over nested framed cards.
+- Keep pixel art in the world layer only: track art, capybara sprites, tiny icons, and background details. Do not make the text itself pixelated.
+- Use one clear headline, one short supporting sentence, and one primary action per section or modal.
+- Match button heights, pill shape, and border strength across screens so controls feel like one system.
+- Keep modals and text-entry screens keyboard-safe with scrollable content and `viewInsets`-aware padding.
+- Use the same visual language on empty states, settings, onboarding, profile edits, and challenge dialogs so the app feels cohesive outside the homepage.
+
+### Reusable UI Pieces
+
+- `lib/widgets/home_chrome.dart` defines the shared color and text primitives used by the redesigned home surface.
+- `lib/widgets/home_course_track.dart` contains the platformer-style step-goal race and capybara runner overlay.
+- `lib/widgets/pill_button.dart`, `lib/widgets/trail_sign.dart`, and `lib/widgets/wooden_tab_bar.dart` provide the reusable control, modal, and nav treatments that should stay visually aligned with the home baseline.
 
 ## Platform Support
 
@@ -189,6 +219,8 @@ No required environment variables are defined in source.
 
   flutter run --dart-define=BACKEND_BASE_URL=http://172.20.10.2:3000      
   flutter run -d 00008150-000171DE2638401C --device-connection=attached --debug --dart-define=BACKEND_BASE_URL=http://172.20.10.2:3000
+```
+
 ### Production
 
 ```bash
@@ -240,7 +272,7 @@ On iOS, the app treats `health_authorized` as a cached best-effort flag because 
 | `health` | HealthKit authorization and step-count reads. |
 | `sign_in_with_apple` | Native Apple ID authentication flow. |
 | `shared_preferences` | Local storage for session, display-name, step-goal, and health-auth state. |
-| `google_fonts` | Loads the Russo One and Chakra Petch fonts used by the UI system. |
+| `google_fonts` | Loads the clean display/body font stack used by the UI system. |
 | `workmanager` | Schedules the app's hourly background step-sync task. |
 | `flutter_local_notifications` | Declared notification-support dependency; the current permission and APNs token bridge is implemented natively in `ios/Runner/AppDelegate.swift`. |
 
@@ -257,7 +289,7 @@ On iOS, the app treats `health_authorized` as a cached best-effort flag because 
 flutter test
 ```
 
-Current automated coverage includes 12 Dart tests across auth/session behavior, backend error messaging, background sync scheduling, admin challenge tooling, and app boot. The repository also still contains 2 placeholder native XCTest files in the iOS and macOS host projects. `flutter test` passed during this documentation refresh.
+Current automated coverage includes 15 Dart tests across auth/session behavior, backend error messaging, background sync scheduling, onboarding keyboard access, admin challenge tooling, and app boot. The repository also still contains 2 placeholder native XCTest files in the iOS and macOS host projects. `flutter test` passed during this documentation refresh.
 
 ### Test Coverage
 
@@ -285,6 +317,12 @@ Current automated coverage includes 12 Dart tests across auth/session behavior, 
 |-------|-------|----------------|
 | `top-level` | 1 | Loading admin challenge state, showing the reset action, and reloading state after resetting the current week. |
 
+#### Onboarding keyboard-access widget tests - 3 tests (`test/onboarding_keyboard_access_test.dart`)
+
+| Group | Tests | What's covered |
+|-------|-------|----------------|
+| `top-level` | 3 | Display-name flow keeps the continue button reachable, step-goal onboarding keeps the continue button reachable, and the profile step-goal screen keeps the save button reachable after scrolling. |
+
 #### Widget smoke test - 1 test (`test/widget_test.dart`)
 
 | Group | Tests | What's covered |
@@ -311,6 +349,7 @@ test/
   auth_service_test.dart            # Session restore and admin/auth helper coverage (5 tests)
   backend_api_service_test.dart    # Verifies backend transport failures map to actionable user-facing messages
   background_sync_manager_test.dart # Verifies Workmanager task scheduling behavior (2 tests)
+  onboarding_keyboard_access_test.dart # Verifies keyboard-safe scrolling for display-name and step-goal screens (3 tests)
   widget_test.dart                 # Boots `StepTrackerApp` and verifies the root app widget builds
 ios/
   RunnerTests/
@@ -349,7 +388,7 @@ The iOS host project is the only platform configured for live step tracking, bac
 - [x] Weekly challenge initiation, stake negotiation, and active challenge progress views
 - [x] Admin weekly challenge tools
 - [x] Notification permission flow and device-token registration for challenge alerts
-- [x] Custom hiking-game UI system with reusable widgets and animated capybara art
+- [x] Custom arcade UI system with reusable widgets and capybara race art
 - [ ] Historical step views and real stats screens
 - [ ] Challenge history and past-week results
 - [ ] Android Health Connect support

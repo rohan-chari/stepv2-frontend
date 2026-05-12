@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
+import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/game_container.dart';
 import '../widgets/pill_button.dart';
@@ -272,18 +273,7 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFF87CEEB),
-                  Color(0xFFB0E0F0),
-                  Color(0xFFD4F1F9),
-                ],
-              ),
-            ),
+          ArcadePageBackground(
             child: SafeArea(
               bottom: false,
               child: Column(
@@ -294,16 +284,7 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
                       horizontal: 16,
                       vertical: 8,
                     ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF87CEEB),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF87CEEB).withValues(alpha: 0.8),
-                          offset: const Offset(0, 2),
-                          blurRadius: 4,
-                        ),
-                      ],
-                    ),
+                    decoration: const BoxDecoration(color: Colors.transparent),
                     child: Row(
                       children: [
                         GestureDetector(
@@ -312,7 +293,7 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
                             padding: EdgeInsets.all(8),
                             child: Icon(
                               Icons.arrow_back,
-                              color: AppColors.textDark,
+                              color: AppColors.parchmentLight,
                               size: 24,
                             ),
                           ),
@@ -324,7 +305,7 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
                                 'You vs. ${_friendName()}',
                                 style: PixelText.title(
                                   size: 22,
-                                  color: AppColors.textDark,
+                                  color: AppColors.parchmentLight,
                                 ).copyWith(shadows: _textShadows),
                                 textAlign: TextAlign.center,
                               ),
@@ -333,7 +314,7 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
                                 widget.challenge['title'] as String? ?? '',
                                 style: PixelText.title(
                                   size: 16,
-                                  color: AppColors.textMid,
+                                  color: AppColors.parchment,
                                 ).copyWith(shadows: _textShadows),
                                 textAlign: TextAlign.center,
                               ),

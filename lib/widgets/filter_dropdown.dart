@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../styles.dart';
 
-/// A reusable dropdown filter styled to match the app's parchment/wood theme.
+/// A reusable dropdown filter styled to match the app's arcade theme.
 class FilterDropdown<T> extends StatelessWidget {
   final T? value;
   final List<(T?, String)> options;
@@ -28,7 +28,7 @@ class FilterDropdown<T> extends StatelessWidget {
           value: value,
           isExpanded: true,
           icon: Icon(Icons.expand_more, color: AppColors.textMid, size: 22),
-          dropdownColor: AppColors.parchmentLight,
+          dropdownColor: AppColors.parchment,
           borderRadius: BorderRadius.circular(8),
           alignment: AlignmentDirectional.bottomStart,
           style: PixelText.title(size: 16, color: AppColors.textDark),

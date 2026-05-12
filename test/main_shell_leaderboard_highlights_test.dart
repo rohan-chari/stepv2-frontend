@@ -167,6 +167,8 @@ void main() {
   testWidgets(
     'MainShell taps a home highlight and opens the matching leaderboard state',
     (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       final authService = await _createAuthService();
       final backendApiService = _FakeBackendApiService();
 
@@ -195,6 +197,11 @@ void main() {
         findsOneWidget,
       );
 
+      await tester.dragUntilVisible(
+        find.text("You're 8th all time in challenges. Keep climbing."),
+        find.byType(CustomScrollView).first,
+        const Offset(0, -240),
+      );
       await tester.tap(
         find.text("You're 8th all time in challenges. Keep climbing."),
       );

@@ -7,6 +7,7 @@ import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../services/notification_service.dart';
 import '../../styles.dart';
+import '../../widgets/arcade_page.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/pill_button.dart';
@@ -132,8 +133,9 @@ class _ProfileTabState extends State<ProfileTab> {
   }
 
   static String _formatCompact(int n) {
-    if (n >= 1000)
+    if (n >= 1000) {
       return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}k';
+    }
     return '$n';
   }
 
@@ -144,14 +146,7 @@ class _ProfileTabState extends State<ProfileTab> {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF87CEEB), Color(0xFFB0E0F0), Color(0xFFD4F1F9)],
-          ),
-        ),
+      body: ArcadePageBackground(
         child: Padding(
           padding: EdgeInsets.only(top: topInset + 12, bottom: bottomInset),
           child: RefreshIndicator(

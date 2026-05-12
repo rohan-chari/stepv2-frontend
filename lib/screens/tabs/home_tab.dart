@@ -1,16 +1,15 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../styles.dart';
 import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
-import '../../styles.dart';
 import '../../widgets/app_avatar.dart';
-import '../../widgets/feature_highlights_row.dart';
-import '../../widgets/pill_button.dart';
-import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/goal_track.dart';
-import '../../widgets/game_container.dart';
+import '../../widgets/home_chrome.dart';
+import '../../widgets/home_course_track.dart';
 import '../../widgets/spinning_coin.dart';
 import '../display_name_screen.dart';
 
@@ -76,7 +75,7 @@ class HomeTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!healthAuthorized) {
-      return _buildPermissionPrompt(context);
+      return _buildPermissionPrompt();
     }
 
     if (notificationsState == null) {
@@ -90,22 +89,24 @@ class HomeTab extends StatelessWidget {
     final hasProfilePhoto =
         authService.profilePhotoUrl != null &&
         authService.profilePhotoUrl!.isNotEmpty;
+
     return Padding(
-      padding: EdgeInsets.only(top: topInset + 12, bottom: bottomPadding),
+      padding: EdgeInsets.only(top: topInset, bottom: bottomPadding),
       child: RefreshIndicator(
         onRefresh: onRefresh,
-        color: AppColors.accent,
-        backgroundColor: AppColors.parchment,
+        color: HomeColors.sageDeep,
+        backgroundColor: HomeColors.surface,
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.only(bottom: 24),
               sliver: SliverToBoxAdapter(
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _buildTopStatusBar(),
-                    const SizedBox(height: 12),
+                    _buildHeroSection(context),
+                    const SizedBox(height: 16),
                     _SetupPromptsSection(
                       displayName: displayName,
                       hasProfilePhoto: hasProfilePhoto,
@@ -114,18 +115,10 @@ class HomeTab extends StatelessWidget {
                       onAddProfilePhoto: onAddProfilePhoto,
                       onDismissProfilePhotoPrompt: onDismissProfilePhotoPrompt,
                     ),
-
-                    _buildGoalTrackSection(context),
-                    const SizedBox(height: 16),
-
                     _buildLeaderboardHighlightsSection(),
                     if (leaderboardHighlightsLoading ||
                         leaderboardHighlights.isNotEmpty)
                       const SizedBox(height: 16),
-
-                    _buildActionButtons(),
-                    const SizedBox(height: 16),
-
                     _buildDailyRewardSlots(),
                   ],
                 ),
@@ -133,6 +126,295 @@ class HomeTab extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildHeroSection(BuildContext context) {
+    if (isLoading && stepData == null) {
+      return const HomePanel(
+        radius: 0,
+        child: SizedBox(
+          height: 320,
+          child: Center(
+            child: SizedBox(
+              width: 36,
+              height: 36,
+              child: CircularProgressIndicator(
+                color: HomeColors.sageDeep,
+                strokeWidth: 3,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (error != null) {
+      return HomePanel(
+        radius: 0,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('TODAY', style: HomeText.label()),
+            const SizedBox(height: 10),
+            Text('Couldn’t load your pace', style: HomeText.title(size: 26)),
+            const SizedBox(height: 8),
+            Text(
+              error!,
+              style: HomeText.body(
+                size: 14,
+                color: HomeColors.clay,
+                weight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final steps = stepData?.steps ?? 0;
+    final goal = stepGoal ?? 0;
+    final progress = goal > 0 ? (steps / goal).clamp(0.0, 1.0) : 0.0;
+    final stepsStr = _formatNumber(steps);
+    final goalStr = goal > 0 ? _formatCompact(goal) : null;
+    final remainingSteps = goal > 0 ? math.max(goal - steps, 0) : 0;
+    final friendsAhead = friendsSteps.where((friend) {
+      final friendSteps = friend['steps'] as int? ?? 0;
+      return friendSteps > steps;
+    }).length;
+    final friendsOnTrack = friendsSteps.where((friend) {
+      final friendGoal = friend['stepGoal'] as int?;
+      return friendGoal != null && friendGoal > 0;
+    }).length;
+    final viewportHeight = MediaQuery.of(context).size.height;
+    final trackHeight = viewportHeight < 760 ? 204.0 : 236.0;
+
+    return HomePanel(
+      padding: EdgeInsets.zero,
+      radius: 0,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          DecoratedBox(
+            decoration: const BoxDecoration(color: HomeColors.sageDeep),
+            child: CustomPaint(
+              painter: const ArcadeCheckerPainter(),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(22, 22, 22, 22),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              HomePill(
+                                label: 'TODAY',
+                                backgroundColor: Colors.white.withValues(
+                                  alpha: 0.14,
+                                ),
+                                foregroundColor: Colors.white,
+                              ),
+                              const SizedBox(height: 14),
+                              Text(
+                                displayName ?? 'You',
+                                style: HomeText.title(
+                                  size: 30,
+                                  color: Colors.white,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                goalStr == null
+                                    ? stepsStr
+                                    : '$stepsStr / $goalStr',
+                                style: HomeText.body(
+                                  size: 15,
+                                  color: Colors.white,
+                                  weight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Steps today',
+                                style: HomeText.body(
+                                  size: 14,
+                                  color: Colors.white.withValues(alpha: 0.78),
+                                  weight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            _CoinsPill(
+                              coins: authService.coins,
+                              heldCoins: authService.heldCoins,
+                            ),
+                            const SizedBox(height: 12),
+                            _ProfileAvatarChip(
+                              name: displayName ?? 'You',
+                              imageUrl: authService.profilePhotoUrl,
+                              onPressed: onOpenProfile,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      stepsStr,
+                      style: HomeText.display(size: 54, color: Colors.white),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _heroSummary(
+                        steps: steps,
+                        goal: goal,
+                        friendsAhead: friendsAhead,
+                      ),
+                      style: HomeText.body(
+                        size: 14,
+                        color: Colors.white.withValues(alpha: 0.82),
+                        weight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: HomePill(
+                        label: _goalMomentumLabel(
+                          goal: goal,
+                          remainingSteps: remainingSteps,
+                          steps: steps,
+                        ),
+                        icon: goal > 0 && remainingSteps == 0
+                            ? Icons.check_circle_rounded
+                            : Icons.flag_rounded,
+                        fullWidth: true,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: HomePillButton(
+                        label: goal > 0 ? 'EDIT GOAL' : 'SET GOAL',
+                        icon: Icons.tune_rounded,
+                        onPressed: onSetStepGoal,
+                      ),
+                    ),
+                  ],
+                ),
+                if (goal > 0) ...[
+                  const SizedBox(height: 14),
+                  _GoalProgressBar(
+                    progress: progress,
+                    status: remainingSteps == 0
+                        ? 'Goal complete'
+                        : '${_formatNumber(remainingSteps)} to go',
+                  ),
+                  const SizedBox(height: 22),
+                  Row(
+                    children: [
+                      Text('Step goal race', style: HomeText.title(size: 22)),
+                      const Spacer(),
+                      Flexible(
+                        child: Text(
+                          _goalTrackCaption(friendsOnTrack),
+                          textAlign: TextAlign.right,
+                          style: HomeText.body(
+                            size: 13,
+                            color: HomeColors.muted,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  HomeCourseTrack(
+                    height: trackHeight,
+                    goalSteps: goal,
+                    runners: [
+                      GoalTrackRunner(
+                        name: displayName ?? 'You',
+                        progress: progress,
+                        isUser: true,
+                        profilePhotoUrl: authService.profilePhotoUrl,
+                      ),
+                      for (final friend in friendsSteps)
+                        GoalTrackRunner(
+                          name: friend['displayName'] as String? ?? '???',
+                          progress: _friendGoalProgress(friend),
+                          profilePhotoUrl: friend['profilePhotoUrl'] as String?,
+                        ),
+                    ],
+                  ),
+                ] else ...[
+                  const SizedBox(height: 14),
+                  HomeInsetPanel(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Set your daily goal to unlock the live goal race and reward bonuses.',
+                          style: HomeText.body(
+                            size: 14,
+                            color: HomeColors.muted,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        HomeButton(
+                          label: 'SET STEP GOAL',
+                          icon: Icons.flag_rounded,
+                          compact: true,
+                          onPressed: onSetStepGoal,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: HomeButton(
+                        label: 'CHALLENGES',
+                        icon: Icons.emoji_events_rounded,
+                        onPressed: () => onOpenChallengesTab?.call(),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: HomeButton(
+                        label: 'LEADERBOARD',
+                        icon: Icons.insights_rounded,
+                        isPrimary: false,
+                        onPressed: () => onOpenLeaderboardTab?.call(),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -146,14 +428,11 @@ class HomeTab extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'CLIMBING THE BOARDS',
-          style: PixelText.title(
-            size: 18,
-            color: AppColors.textMid,
-          ).copyWith(shadows: _textShadows),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 22),
+          child: Text('CLIMBING THE BOARDS', style: HomeText.label(size: 13)),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         if (leaderboardHighlightsLoading && cards.isEmpty)
           const _ClimbingBoardsSkeleton()
         else
@@ -165,310 +444,120 @@ class HomeTab extends StatelessWidget {
     );
   }
 
-  // -- Top status bar: name | steps | streak | coins --
-
-  Widget _buildTopStatusBar() {
-    final steps = stepData?.steps ?? 0;
-    final goal = stepGoal ?? 0;
-    final stepsStr = _formatNumber(steps);
-    final goalStr = goal > 0 ? _formatCompact(goal) : null;
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  if (displayName != null)
-                    Flexible(
-                      child: Text(
-                        displayName!,
-                        style: PixelText.title(
-                          size: 26,
-                          color: AppColors.textDark,
-                        ).copyWith(shadows: _textShadows),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  const SizedBox(width: 8),
-                  CoinBalanceBadge(
-                    coins: authService.coins,
-                    heldCoins: authService.heldCoins,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 2),
-              if (goalStr != null)
-                Text(
-                  '$stepsStr / $goalStr',
-                  style: PixelText.number(
-                    size: 20,
-                    color: AppColors.accent,
-                  ).copyWith(shadows: _textShadows),
-                )
-              else
-                Text(
-                  stepsStr,
-                  style: PixelText.number(
-                    size: 20,
-                    color: AppColors.accent,
-                  ).copyWith(shadows: _textShadows),
-                ),
-            ],
-          ),
-        ),
-        ProfileAvatarButton(
-          name: displayName ?? 'You',
-          imageUrl: authService.profilePhotoUrl,
-          onPressed: onOpenProfile,
-        ),
-      ],
-    );
-  }
-
-  // -- GoalTrack centerpiece --
-
-  Widget _buildGoalTrackSection(BuildContext context) {
-    if (isLoading && stepData == null) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 32),
-        child: Center(
-          child: SizedBox(
-            width: 36,
-            height: 36,
-            child: CircularProgressIndicator(
-              color: AppColors.accent,
-              strokeWidth: 3,
-            ),
-          ),
-        ),
-      );
-    }
-
-    if (error != null) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        child: Text(
-          error!,
-          style: PixelText.body(size: 13, color: AppColors.error),
-          textAlign: TextAlign.center,
-        ),
-      );
-    }
-
-    final steps = stepData?.steps ?? 0;
-    final goal = stepGoal ?? 0;
-    final progress = goal > 0 ? steps / goal : 0.0;
-    final viewportHeight = MediaQuery.of(context).size.height;
-    final trackHeight = viewportHeight < 760 ? 236.0 : 300.0;
-
-    if (goal <= 0) {
-      return Column(
-        children: [
-          Text(
-            '$steps',
-            style: PixelText.number(size: 36, color: AppColors.accent),
-            textAlign: TextAlign.center,
-          ),
-          Text(
-            'steps today',
-            style: PixelText.body(size: 14, color: AppColors.textMid),
-          ),
-        ],
-      );
-    }
-
-    return GameContainer(
-      padding: const EdgeInsets.all(6),
-      child: GoalTrack(
-        height: trackHeight,
-        runners: [
-          GoalTrackRunner(
-            name: displayName ?? 'You',
-            progress: progress,
-            isUser: true,
-            profilePhotoUrl: authService.profilePhotoUrl,
-          ),
-          for (final friend in friendsSteps)
-            GoalTrackRunner(
-              name: friend['displayName'] as String? ?? '???',
-              progress: _friendGoalProgress(friend),
-              profilePhotoUrl: friend['profilePhotoUrl'] as String?,
-            ),
-        ],
-      ),
-    );
-  }
-
-  // -- Action buttons: CHALLENGE + LEADERBOARD --
-
-  Widget _buildActionButtons() {
-    return Row(
-      children: [
-        Expanded(
-          child: PillButton(
-            label: 'CHALLENGES',
-            variant: PillButtonVariant.accent,
-            fontSize: 14,
-            fullWidth: true,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-            onPressed: () => onOpenChallengesTab?.call(),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: PillButton(
-            label: 'LEADERBOARD',
-            variant: PillButtonVariant.secondary,
-            fontSize: 14,
-            fullWidth: true,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-            onPressed: () => onOpenLeaderboardTab?.call(),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // -- Daily reward slots --
-
   Widget _buildDailyRewardSlots() {
     final steps = stepData?.steps ?? 0;
     final goal = stepGoal ?? 0;
     final hitGoal = goal > 0 && steps >= goal;
     final hitDoubleGoal = goal > 0 && steps >= goal * 2;
 
-    return Column(
-      children: [
-        _DailyRewardCard(
-          label: '1x GOAL',
-          description: 'Hit your daily step goal',
-          reward: '+10 coins',
-          unlocked: hitGoal,
-        ),
-        const SizedBox(height: 10),
-        _DailyRewardCard(
-          label: '2x GOAL',
-          description: 'Double your daily step goal',
-          reward: '+10 coins',
-          unlocked: hitDoubleGoal,
-        ),
-      ],
+    return HomePanel(
+      radius: 0,
+      padding: const EdgeInsets.fromLTRB(22, 22, 22, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('DAILY REWARDS', style: HomeText.label(size: 13)),
+          const SizedBox(height: 8),
+          Text('Coin bonuses for today', style: HomeText.title(size: 26)),
+          const SizedBox(height: 6),
+          Text(
+            'Hit your target once, then double it for the extra reward.',
+            style: HomeText.body(size: 14, color: HomeColors.muted),
+          ),
+          const SizedBox(height: 16),
+          _DailyRewardCard(
+            label: '1x GOAL',
+            description: 'Hit your daily step goal',
+            reward: '+10 coins',
+            unlocked: hitGoal,
+          ),
+          const SizedBox(height: 12),
+          Divider(height: 1, color: HomeColors.line.withValues(alpha: 0.10)),
+          const SizedBox(height: 12),
+          _DailyRewardCard(
+            label: '2x GOAL',
+            description: 'Double your daily step goal',
+            reward: '+10 coins',
+            unlocked: hitDoubleGoal,
+          ),
+        ],
+      ),
     );
   }
 
-  // -- Permission / notification prompts --
-
-  Widget _buildPermissionPrompt(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Column(
-          children: [
-            const Spacer(flex: 2),
-            Icon(Icons.favorite_rounded, size: 48, color: AppColors.accent),
-            const SizedBox(height: 16),
-            Text(
-              'HEALTH DATA',
-              style: PixelText.title(
-                size: 24,
-                color: AppColors.textDark,
-              ).copyWith(shadows: _textShadows),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Bara needs access to your health data to count your daily steps.\n\n'
-              "That's all we use - just your step count.",
-              style: PixelText.body(
-                color: AppColors.textMid,
-              ).copyWith(shadows: _textShadows),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            const FeatureHighlightsRow(),
-            if (error != null) ...[
-              const SizedBox(height: 14),
-              Text(
-                error!,
-                style: PixelText.body(color: AppColors.error),
-                textAlign: TextAlign.center,
-              ),
-            ],
-            const SizedBox(height: 32),
-            if (isLoading)
-              const CircularProgressIndicator(color: AppColors.accent)
-            else
-              PillButton(
-                label: 'ENABLE HEALTH DATA',
-                variant: PillButtonVariant.primary,
-                fontSize: 16,
-                fullWidth: true,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 48,
-                  vertical: 16,
-                ),
-                onPressed: onEnableHealth,
-              ),
-            const Spacer(flex: 3),
-          ],
-        ),
-      ),
+  Widget _buildPermissionPrompt() {
+    return _PermissionGate(
+      icon: Icons.favorite_rounded,
+      title: 'HEALTH DATA',
+      body:
+          'Bara needs access to your health data to count your daily steps.\n\n'
+          "That's all we use - just your step count.",
+      actionLabel: 'ENABLE HEALTH DATA',
+      action: onEnableHealth,
+      error: error,
+      isLoading: isLoading,
     );
   }
 
   Widget _buildNotificationPrompt() {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Column(
-          children: [
-            const Spacer(flex: 2),
-            Icon(
-              Icons.notifications_rounded,
-              size: 48,
-              color: AppColors.accent,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'NOTIFICATIONS',
-              style: PixelText.title(
-                size: 24,
-                color: AppColors.textDark,
-              ).copyWith(shadows: _textShadows),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Get notified when a friend challenges you to a step battle!\n\n'
-              'We\u2019ll only send important updates \u2014 no spam.',
-              style: PixelText.body(
-                color: AppColors.textMid,
-              ).copyWith(shadows: _textShadows),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            const FeatureHighlightsRow(),
-            const SizedBox(height: 32),
-            PillButton(
-              label: 'ENABLE NOTIFICATIONS',
-              variant: PillButtonVariant.primary,
-              fontSize: 16,
-              fullWidth: true,
-              padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
-              onPressed: onEnableNotifications,
-            ),
-            const Spacer(flex: 3),
-          ],
-        ),
-      ),
+    return _PermissionGate(
+      icon: Icons.notifications_rounded,
+      title: 'NOTIFICATIONS',
+      body:
+          'Get notified when a friend challenges you to a step battle!\n\n'
+          'We’ll only send important updates — no spam.',
+      actionLabel: 'ENABLE NOTIFICATIONS',
+      action: onEnableNotifications,
     );
   }
 
-  // -- Helpers --
+  String _heroSummary({
+    required int steps,
+    required int goal,
+    required int friendsAhead,
+  }) {
+    if (goal <= 0) {
+      return 'Set a target so your pace, rewards, and races have something to chase.';
+    }
+    if (steps >= goal * 2) {
+      return 'Double goal hit. You cleared every reward for the day.';
+    }
+    if (steps >= goal) {
+      return 'Goal hit. Keep walking to lock in the double-goal bonus.';
+    }
+    if (friendsAhead > 1) {
+      return '$friendsAhead friends are ahead of your pace right now.';
+    }
+    if (friendsAhead == 1) {
+      return '1 friend is ahead of your pace right now.';
+    }
+    return 'Clean pace so far. You are tracking toward your target.';
+  }
+
+  String _goalMomentumLabel({
+    required int goal,
+    required int remainingSteps,
+    required int steps,
+  }) {
+    if (goal <= 0) {
+      return 'Set your first daily goal';
+    }
+    if (remainingSteps == 0) {
+      if (steps >= goal * 2) return 'Double reward unlocked';
+      return 'Daily goal complete';
+    }
+    return '${_formatNumber(remainingSteps)} steps left today';
+  }
+
+  String _goalTrackCaption(int friendsOnTrack) {
+    if (friendsOnTrack == 0) {
+      return 'Compare with friends\' goals';
+    }
+    if (friendsOnTrack == 1) {
+      return 'You vs 1 friend\'s goal';
+    }
+    return 'You vs $friendsOnTrack friends\' goals';
+  }
 
   static double _friendGoalProgress(Map<String, dynamic> friend) {
     final steps = friend['steps'] as int? ?? 0;
@@ -493,10 +582,303 @@ class HomeTab extends StatelessWidget {
     }
     return '$n';
   }
+}
 
-  static const _textShadows = [
-    Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
-  ];
+class _GoalProgressBar extends StatelessWidget {
+  const _GoalProgressBar({required this.progress, required this.status});
+
+  final double progress;
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              'GOAL PROGRESS',
+              style: HomeText.label(color: HomeColors.muted),
+            ),
+            const Spacer(),
+            Text(
+              status,
+              style: HomeText.body(size: 12, color: HomeColors.muted),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(0),
+          child: Container(
+            height: 14,
+            color: HomeColors.surfaceMuted,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: FractionallySizedBox(
+                widthFactor: progress.clamp(0.0, 1.0),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: HomeColors.gold,
+                    border: Border.all(
+                      color: HomeColors.clay.withValues(alpha: 0.5),
+                      width: 2,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PermissionGate extends StatelessWidget {
+  const _PermissionGate({
+    required this.icon,
+    required this.title,
+    required this.body,
+    required this.actionLabel,
+    required this.action,
+    this.error,
+    this.isLoading = false,
+  });
+
+  final IconData icon;
+  final String title;
+  final String body;
+  final String actionLabel;
+  final VoidCallback action;
+  final String? error;
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+          child: HomePanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: HomeColors.surfaceMuted,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: HomeColors.line.withValues(alpha: 0.10),
+                    ),
+                  ),
+                  child: Icon(icon, size: 34, color: HomeColors.sageDeep),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  title,
+                  style: HomeText.label(),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  title == 'HEALTH DATA'
+                      ? 'Let Bara read your daily steps'
+                      : 'Stay in the loop',
+                  style: HomeText.title(size: 28),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  body,
+                  style: HomeText.body(size: 15, color: HomeColors.muted),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 18),
+                const Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    _PermissionFeature(
+                      icon: Icons.directions_walk_rounded,
+                      title: 'TRACK',
+                      detail: 'Daily steps',
+                    ),
+                    _PermissionFeature(
+                      icon: Icons.emoji_events_rounded,
+                      title: 'COMPETE',
+                      detail: 'Friend challenges',
+                    ),
+                    _PermissionFeature(
+                      icon: Icons.payments_rounded,
+                      title: 'EARN',
+                      detail: 'Goal coins',
+                    ),
+                  ],
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    error!,
+                    style: HomeText.body(
+                      size: 14,
+                      color: HomeColors.clay,
+                      weight: FontWeight.w700,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+                const SizedBox(height: 22),
+                if (isLoading)
+                  const SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: CircularProgressIndicator(
+                      color: HomeColors.sageDeep,
+                      strokeWidth: 3,
+                    ),
+                  )
+                else
+                  SizedBox(
+                    width: double.infinity,
+                    child: HomeButton(
+                      label: actionLabel,
+                      icon: icon,
+                      onPressed: action,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PermissionFeature extends StatelessWidget {
+  const _PermissionFeature({
+    required this.icon,
+    required this.title,
+    required this.detail,
+  });
+
+  final IconData icon;
+  final String title;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    return HomeInsetPanel(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: HomeColors.sageDeep),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(title, style: HomeText.label(color: HomeColors.ink)),
+              const SizedBox(height: 4),
+              Text(
+                detail,
+                style: HomeText.body(size: 12, color: HomeColors.muted),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CoinsPill extends StatelessWidget {
+  const _CoinsPill({required this.coins, required this.heldCoins});
+
+  final int coins;
+  final int heldCoins;
+
+  @override
+  Widget build(BuildContext context) {
+    final holdLabel = heldCoins > 0 ? '  HOLD $heldCoins' : '';
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.22),
+          width: 2,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SpinningCoin(size: 16),
+            const SizedBox(width: 6),
+            Text(
+              '$coins$holdLabel',
+              style: HomeText.body(
+                size: 12,
+                color: Colors.white,
+                weight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileAvatarChip extends StatelessWidget {
+  const _ProfileAvatarChip({
+    required this.name,
+    required this.imageUrl,
+    this.onPressed,
+  });
+
+  final String name;
+  final String? imageUrl;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.26),
+              width: 2,
+            ),
+          ),
+          child: AppAvatar(
+            name: name,
+            imageUrl: imageUrl,
+            size: 40,
+            isUser: true,
+            borderColor: Colors.white,
+            borderWidth: 1.8,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _SetupPromptsSection extends StatefulWidget {
@@ -548,7 +930,8 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
   Future<void> _openDisplayNameScreen() async {
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => DisplayNameScreen(authService: widget.authService),
+        builder: (context) =>
+            DisplayNameScreen(authService: widget.authService),
       ),
     );
     widget.onDisplayNameChanged();
@@ -605,48 +988,57 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
     }
 
     return Column(
-      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (showDisplayNamePrompt)
-          PillButton(
-            label: 'SET DISPLAY NAME',
-            variant: PillButtonVariant.secondary,
-            fontSize: 14,
-            fullWidth: true,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            onPressed: _openDisplayNameScreen,
-          ),
-        if (showDisplayNamePrompt &&
-            (showProfilePhotoPrompt || showDismissedConfirmation))
-          const SizedBox(height: 12),
-        if (showProfilePhotoPrompt)
-          GameContainer(
-            padding: const EdgeInsets.all(16),
+        if (showDisplayNamePrompt) ...[
+          HomePanel(
+            radius: 0,
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'ADD A PROFILE PHOTO?',
-                  style: PixelText.title(size: 16, color: AppColors.textDark),
-                  textAlign: TextAlign.center,
-                ),
+                Text('SETUP', style: HomeText.label()),
                 const SizedBox(height: 8),
+                Text('Add your display name', style: HomeText.title(size: 24)),
+                const SizedBox(height: 6),
+                Text(
+                  'Your friends need something better than a blank avatar to look for.',
+                  style: HomeText.body(size: 14, color: HomeColors.muted),
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: HomeButton(
+                    label: 'SET DISPLAY NAME',
+                    icon: Icons.edit_rounded,
+                    onPressed: _openDisplayNameScreen,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (showProfilePhotoPrompt) ...[
+          HomePanel(
+            radius: 0,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('PROFILE', style: HomeText.label()),
+                const SizedBox(height: 8),
+                Text('ADD A PROFILE PHOTO?', style: HomeText.title(size: 24)),
+                const SizedBox(height: 6),
                 Text(
                   'Make it easier for friends to spot you in races, challenges, and leaderboards.',
-                  style: PixelText.body(size: 13, color: AppColors.textMid),
-                  textAlign: TextAlign.center,
+                  style: HomeText.body(size: 14, color: HomeColors.muted),
                 ),
                 const SizedBox(height: 14),
                 Row(
                   children: [
                     Expanded(
-                      child: PillButton(
+                      child: HomeButton(
                         label: 'ADD PHOTO',
-                        variant: PillButtonVariant.primary,
-                        fontSize: 13,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
+                        icon: Icons.add_a_photo_rounded,
                         onPressed: _isSavingDismissal
                             ? null
                             : () => widget.onAddProfilePhoto?.call(),
@@ -654,14 +1046,10 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: PillButton(
+                      child: HomeButton(
                         label: 'NO THANKS',
-                        variant: PillButtonVariant.secondary,
-                        fontSize: 13,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
+                        icon: Icons.close_rounded,
+                        isPrimary: false,
                         onPressed: _dismissProfilePhotoPrompt,
                       ),
                     ),
@@ -670,23 +1058,22 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
               ],
             ),
           ),
+          const SizedBox(height: 12),
+        ],
         if (showDismissedConfirmation)
-          GameContainer(
+          HomePanel(
             key: const Key('profile-photo-dismissed-confirmation'),
-            padding: const EdgeInsets.all(16),
+            radius: 0,
             child: Text(
               'You can add one anytime in Profile.',
-              style: PixelText.body(size: 13, color: AppColors.textMid),
+              style: HomeText.body(size: 14, color: HomeColors.muted),
               textAlign: TextAlign.center,
             ),
           ),
-        const SizedBox(height: 12),
       ],
     );
   }
 }
-
-// -- Daily reward card widget --
 
 class _DailyRewardCard extends StatelessWidget {
   final String label;
@@ -703,50 +1090,63 @@ class _DailyRewardCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GameContainer(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-      child: Row(
-        children: [
-          if (unlocked)
-            const SpinningCoin(size: 28)
-          else
-            Icon(
-              Icons.lock_rounded,
-              size: 28,
-              color: AppColors.textMid.withValues(alpha: 0.5),
-            ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: PixelText.title(
-                    size: 14,
-                    color: unlocked ? AppColors.textDark : AppColors.textMid,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  description,
-                  style: PixelText.body(
-                    size: 12,
-                    color: unlocked ? AppColors.textDark : AppColors.textMid,
-                  ),
-                ),
-              ],
+    return Row(
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: unlocked ? HomeColors.cream : HomeColors.surfaceMuted,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: unlocked
+                  ? HomeColors.gold.withValues(alpha: 0.55)
+                  : HomeColors.line.withValues(alpha: 0.10),
+              width: 2,
             ),
           ),
-          Text(
-            reward,
-            style: PixelText.title(
-              size: 14,
-              color: unlocked ? AppColors.coinDark : AppColors.textMid,
-            ),
+          child: Center(
+            child: unlocked
+                ? const SpinningCoin(size: 24)
+                : Icon(
+                    Icons.lock_rounded,
+                    size: 22,
+                    color: HomeColors.muted.withValues(alpha: 0.65),
+                  ),
           ),
-        ],
-      ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: HomeText.title(
+                  size: 17,
+                  color: unlocked ? HomeColors.ink : HomeColors.muted,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                description,
+                style: HomeText.body(
+                  size: 13,
+                  color: unlocked ? HomeColors.muted : HomeColors.muted,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          reward,
+          style: HomeText.title(
+            size: 16,
+            color: unlocked ? HomeColors.success : HomeColors.muted,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -756,36 +1156,31 @@ class _ClimbingBoardsSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GameContainer(
+    return HomePanel(
       key: const Key('climbing-boards-skeleton'),
       padding: EdgeInsets.zero,
-      surfaceColor: AppColors.pillGreenDark,
+      backgroundColor: HomeColors.sageDeep,
+      borderColor: HomeColors.lineSoft,
+      radius: 0,
       child: Container(
-        height: 146,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          gradient: const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [AppColors.pillGreen, AppColors.pillGreenDark],
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 14, 14, 18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _SkeletonBar(width: 126, height: 18),
-              const SizedBox(height: 16),
-              _SkeletonBar(width: 240, height: 20),
-              const SizedBox(height: 10),
-              _SkeletonBar(width: 190, height: 14),
-              const Spacer(),
-              Align(
-                alignment: Alignment.center,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
+        height: 170,
+        decoration: const BoxDecoration(color: HomeColors.sageDeep),
+        child: CustomPaint(
+          painter: const ArcadeCheckerPainter(),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(22, 20, 22, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                _SkeletonBar(width: 132, height: 28),
+                SizedBox(height: 18),
+                _SkeletonBar(width: 228, height: 24),
+                SizedBox(height: 10),
+                _SkeletonBar(width: 176, height: 16),
+                Spacer(),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
                     _SkeletonDot(active: true),
                     SizedBox(width: 6),
                     _SkeletonDot(),
@@ -793,8 +1188,8 @@ class _ClimbingBoardsSkeleton extends StatelessWidget {
                     _SkeletonDot(),
                   ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -872,27 +1267,31 @@ class _ClimbingBoardsCarouselState extends State<_ClimbingBoardsCarousel> {
 
   @override
   Widget build(BuildContext context) {
-    return GameContainer(
+    return HomePanel(
       padding: EdgeInsets.zero,
-      surfaceColor: AppColors.pillGreenDark,
+      backgroundColor: HomeColors.sageDeep,
+      borderColor: HomeColors.lineSoft,
+      radius: 0,
       child: SizedBox(
-        height: 146,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            gradient: const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [AppColors.pillGreen, AppColors.pillGreenDark],
-            ),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Stack(
-              children: [
-                NotificationListener<ScrollStartNotification>(
+        height: 170,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(0),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: ColoredBox(
+                  color: HomeColors.sageDeep,
+                  child: CustomPaint(painter: const ArcadeCheckerPainter()),
+                ),
+              ),
+              NotificationListener<ScrollStartNotification>(
+                onNotification: (_) {
+                  _stopAutoAdvance();
+                  return false;
+                },
+                child: NotificationListener<ScrollEndNotification>(
                   onNotification: (_) {
-                    _stopAutoAdvance();
+                    _restartAutoAdvance();
                     return false;
                   },
                   child: PageView.builder(
@@ -910,123 +1309,68 @@ class _ClimbingBoardsCarouselState extends State<_ClimbingBoardsCarousel> {
                           card['leaderboardType'] as String? ?? 'steps';
                       final period = card['period'] as String? ?? 'today';
 
-                      return GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () {
-                          _stopAutoAdvance();
-                          widget.onOpenLeaderboardHighlight?.call(
-                            leaderboardType,
-                            period,
-                          );
-                        },
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(8),
-                            gradient: const LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                AppColors.pillGreen,
-                                AppColors.pillGreenDark,
-                              ],
-                            ),
-                          ),
-                          child: Stack(
-                            children: [
-                              Positioned.fill(
-                                child: DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(8),
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                      colors: [
-                                        Colors.white.withValues(alpha: 0.10),
-                                        Colors.transparent,
-                                      ],
-                                    ),
+                      return Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () {
+                            _stopAutoAdvance();
+                            widget.onOpenLeaderboardHighlight?.call(
+                              leaderboardType,
+                              period,
+                            );
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(22, 20, 22, 20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _ClimbingBoardsBadge(
+                                  label: _badgeLabel(leaderboardType, period),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  title,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: HomeText.title(
+                                    size: 22,
+                                    color: Colors.white,
                                   ),
                                 ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                  14,
-                                  10,
-                                  14,
-                                  16,
+                                const SizedBox(height: 8),
+                                Text(
+                                  subtitle,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: HomeText.body(
+                                    size: 14,
+                                    color: Colors.white.withValues(alpha: 0.78),
+                                  ),
                                 ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    _ClimbingBoardsBadge(
-                                      label: _badgeLabel(
-                                        leaderboardType,
-                                        period,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Text(
-                                            title,
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                            style:
-                                                PixelText.title(
-                                                  size: 16,
-                                                  color:
-                                                      AppColors.parchmentLight,
-                                                ).copyWith(
-                                                  shadows: HomeTab._textShadows,
-                                                ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            subtitle,
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                            style:
-                                                PixelText.body(
-                                                  size: 12.5,
-                                                  color: AppColors.parchment,
-                                                ).copyWith(
-                                                  shadows: HomeTab._textShadows,
-                                                ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       );
                     },
                   ),
                 ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 10,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      for (int i = 0; i < widget.cards.length; i++) ...[
-                        if (i > 0) const SizedBox(width: 6),
-                        _ClimbingBoardsDot(active: i == _currentPage),
-                      ],
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 12,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (int i = 0; i < widget.cards.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 6),
+                      _ClimbingBoardsDot(active: i == _currentPage),
                     ],
-                  ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1056,28 +1400,10 @@ class _ClimbingBoardsBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [AppColors.pillGold, AppColors.pillGoldDark],
-        ),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.pillGoldShadow, width: 1.5),
-        boxShadow: const [
-          BoxShadow(
-            color: AppColors.pillGoldShadow,
-            offset: Offset(0, 2),
-            blurRadius: 0,
-          ),
-        ],
-      ),
-      child: Text(
-        label,
-        style: PixelText.pill(size: 10, color: AppColors.textDark),
-      ),
+    return HomePill(
+      label: label,
+      backgroundColor: HomeColors.gold,
+      foregroundColor: HomeColors.ink,
     );
   }
 }
@@ -1095,10 +1421,7 @@ class _ClimbingBoardsDot extends StatelessWidget {
       height: 8,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(999),
-        color: active ? AppColors.pillGold : AppColors.parchmentDark,
-        border: Border.all(
-          color: active ? AppColors.pillGoldShadow : AppColors.parchmentBorder,
-        ),
+        color: active ? HomeColors.gold : Colors.white.withValues(alpha: 0.28),
       ),
     );
   }
@@ -1116,8 +1439,8 @@ class _SkeletonBar extends StatelessWidget {
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.22),
-        borderRadius: BorderRadius.circular(10),
+        color: Colors.white.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(999),
       ),
     );
   }
@@ -1135,8 +1458,8 @@ class _SkeletonDot extends StatelessWidget {
       height: 8,
       decoration: BoxDecoration(
         color: active
-            ? AppColors.pillGold.withValues(alpha: 0.85)
-            : Colors.white.withValues(alpha: 0.24),
+            ? HomeColors.gold.withValues(alpha: 0.85)
+            : Colors.white.withValues(alpha: 0.20),
         borderRadius: BorderRadius.circular(999),
       ),
     );

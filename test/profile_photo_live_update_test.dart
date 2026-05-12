@@ -134,7 +134,7 @@ Future<AuthService> _createAuthService({String? profilePhotoUrl}) async {
     'auth_backend_user_id': 'user-1',
     'auth_display_name': 'Trail Walker',
     'auth_step_goal': 8000,
-    if (profilePhotoUrl != null) 'auth_profile_photo_url': profilePhotoUrl,
+    'auth_profile_photo_url': ?profilePhotoUrl,
   });
 
   final authService = AuthService();

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -16,7 +15,7 @@ import '../services/challenge_week_step_sync_service.dart';
 import '../services/health_service.dart';
 import '../services/notification_service.dart';
 import '../styles.dart';
-import '../widgets/capybara.dart';
+import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/info_toast.dart';
 import '../widgets/pill_button.dart';
@@ -758,92 +757,110 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     final result = await showDialog<int>(
       context: context,
       builder: (context) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          child: TrailSign(
-            width: 300,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'STEP GOAL',
-                  style: PixelText.title(size: 18, color: AppColors.textDark),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'How many steps per day?',
-                  style: PixelText.body(size: 14, color: AppColors.textMid),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: controller,
-                  keyboardType: TextInputType.number,
-                  textAlign: TextAlign.center,
-                  style: PixelText.number(size: 24, color: AppColors.textDark),
-                  decoration: InputDecoration(
-                    filled: true,
-                    fillColor: AppColors.parchmentLight,
-                    border: OutlineInputBorder(
-                      borderSide: BorderSide(color: AppColors.parchmentBorder),
-                      borderRadius: BorderRadius.circular(8),
+        final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+
+        return AnimatedPadding(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          padding: EdgeInsets.fromLTRB(16, 24, 16, bottomInset + 24),
+          child: Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: EdgeInsets.zero,
+            child: TrailSign(
+              width: 300,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'STEP GOAL',
+                    style: PixelText.title(size: 18, color: AppColors.textDark),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'How many steps per day?',
+                    style: PixelText.body(size: 14, color: AppColors.textMid),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: controller,
+                    keyboardType: TextInputType.number,
+                    textAlign: TextAlign.center,
+                    style: PixelText.number(
+                      size: 24,
+                      color: AppColors.textDark,
                     ),
-                    enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: AppColors.parchmentBorder),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: AppColors.accent, width: 2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: AppColors.parchmentLight,
+                      border: OutlineInputBorder(
+                        borderSide: BorderSide(
+                          color: AppColors.parchmentBorder,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderSide: BorderSide(
+                          color: AppColors.parchmentBorder,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderSide: BorderSide(
+                          color: AppColors.accent,
+                          width: 2,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Minimum: 5,000 steps',
-                  style: PixelText.body(size: 12, color: AppColors.textMid),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: PillButton(
-                        label: 'CANCEL',
-                        variant: PillButtonVariant.secondary,
-                        fontSize: 13,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
+                  const SizedBox(height: 8),
+                  Text(
+                    'Minimum: 5,000 steps',
+                    style: PixelText.body(size: 12, color: AppColors.textMid),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: PillButton(
+                          label: 'CANCEL',
+                          variant: PillButtonVariant.secondary,
+                          fontSize: 13,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          onPressed: () => Navigator.of(context).pop(),
                         ),
-                        onPressed: () => Navigator.of(context).pop(),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: PillButton(
-                        label: 'SAVE',
-                        variant: PillButtonVariant.primary,
-                        fontSize: 13,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: PillButton(
+                          label: 'SAVE',
+                          variant: PillButtonVariant.primary,
+                          fontSize: 13,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          onPressed: () {
+                            final value = int.tryParse(controller.text);
+                            if (value != null &&
+                                value >= BackendConfig.minStepGoal) {
+                              Navigator.of(context).pop(value);
+                            }
+                          },
                         ),
-                        onPressed: () {
-                          final value = int.tryParse(controller.text);
-                          if (value != null &&
-                              value >= BackendConfig.minStepGoal) {
-                            Navigator.of(context).pop(value);
-                          }
-                        },
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -883,52 +900,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
-    // Tab bar height: top border(2) + bevel(1.5) + grain(2) + padding(8) + board(54) + padding(10) + safe area
-    final tabBarHeight = 77.5 + bottomPadding;
-
     return Scaffold(
       resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
-          // Sky gradient background
-          Positioned.fill(
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Color(0xFF87CEEB),
-                    Color(0xFFB0E0F0),
-                    Color(0xFFD4F1F9),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          // Grass ground strip above the nav bar
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: tabBarHeight,
-            height: 110,
-            child: CustomPaint(painter: _GrassStripPainter()),
-          ),
+          const Positioned.fill(child: ArcadePageBackground()),
 
-          // Capybara walking on the grass
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: tabBarHeight + 10,
-            height: 112,
-            child: const WalkingCapybara(
-              walkDuration: Duration(seconds: 10),
-              size: 112,
-            ),
-          ),
-
-          // Tab content — swipeable (above grass/capybara so content scrolls over them)
           Positioned.fill(
             child: PageView(
               controller: _pageController,
@@ -1055,77 +1032,4 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       ),
     );
   }
-}
-
-class _GrassStripPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    // Dirt layer
-    final dirtPath = Path()..moveTo(0, size.height * 0.3);
-    for (double x = 0; x <= size.width; x += 4) {
-      final y = size.height * 0.3 + sin(x * 0.008) * 6 + cos(x * 0.015) * 4;
-      dirtPath.lineTo(x, y);
-    }
-    dirtPath.lineTo(size.width, size.height);
-    dirtPath.lineTo(0, size.height);
-    dirtPath.close();
-
-    canvas.drawPath(
-      dirtPath,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [AppColors.dirtLight, AppColors.dirtMid, AppColors.dirtDark],
-        ).createShader(Offset.zero & size),
-    );
-
-    // Grass layer
-    final grassPath = Path()..moveTo(0, size.height * 0.2);
-    for (double x = 0; x <= size.width; x += 4) {
-      final y = size.height * 0.2 + sin(x * 0.008) * 6 + cos(x * 0.015) * 4;
-      grassPath.lineTo(x, y);
-    }
-    grassPath.lineTo(size.width, size.height * 0.4);
-    for (double x = size.width; x >= 0; x -= 4) {
-      final y = size.height * 0.4 + sin(x * 0.008) * 4 + cos(x * 0.015) * 3;
-      grassPath.lineTo(x, y);
-    }
-    grassPath.close();
-
-    canvas.drawPath(
-      grassPath,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            AppColors.grassBright,
-            AppColors.grassMid,
-            AppColors.grassDark,
-          ],
-        ).createShader(Offset.zero & size),
-    );
-
-    // Grass highlight line
-    final highlightPath = Path();
-    for (double x = 0; x <= size.width; x += 4) {
-      final y = size.height * 0.2 + sin(x * 0.008) * 6 + cos(x * 0.015) * 4;
-      if (x == 0) {
-        highlightPath.moveTo(x, y);
-      } else {
-        highlightPath.lineTo(x, y);
-      }
-    }
-    canvas.drawPath(
-      highlightPath,
-      Paint()
-        ..color = const Color(0xFFA5D6A7)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
