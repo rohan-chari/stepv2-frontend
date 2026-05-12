@@ -122,12 +122,7 @@ class _RacesTabState extends State<RacesTab> {
         backgroundColor: AppColors.parchment,
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              sliver: SliverToBoxAdapter(child: _buildContent()),
-            ),
-          ],
+          slivers: [SliverToBoxAdapter(child: _buildContent())],
         ),
       ),
     );
@@ -146,7 +141,10 @@ class _RacesTabState extends State<RacesTab> {
 
     return Column(
       children: [
-        _buildTopBar(),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: _buildTopBar(),
+        ),
         const SizedBox(height: 16),
 
         // Races explainer + CTA
@@ -156,6 +154,7 @@ class _RacesTabState extends State<RacesTab> {
           subtitle:
               'Set a step target, invite friends, and race. The first runner to hit the target takes the pot.',
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          borderRadius: 0,
           children: [
             if (widget.displayName != null) ...[
               const SizedBox(height: 14),
@@ -175,35 +174,40 @@ class _RacesTabState extends State<RacesTab> {
         ),
         const SizedBox(height: 16),
 
-        if (!hasRaces)
-          _buildEmptyState()
-        else ...[
-          if (invites.isNotEmpty)
-            _buildRaceSection(
-              title: 'INVITES',
-              sectionKey: 'invites',
-              races: invites,
-              isInvite: true,
-            ),
-          if (waiting.isNotEmpty)
-            _buildRaceSection(
-              title: 'WAITING TO START',
-              sectionKey: 'waiting',
-              races: waiting,
-            ),
-          if (active.isNotEmpty)
-            _buildRaceSection(
-              title: 'ACTIVE RACES',
-              sectionKey: 'active',
-              races: active,
-            ),
-          if (completed.isNotEmpty)
-            _buildRaceSection(
-              title: 'COMPLETED',
-              sectionKey: 'completed',
-              races: completed,
-            ),
-        ],
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: !hasRaces
+              ? _buildEmptyState()
+              : Column(
+                  children: [
+                    if (invites.isNotEmpty)
+                      _buildRaceSection(
+                        title: 'INVITES',
+                        sectionKey: 'invites',
+                        races: invites,
+                        isInvite: true,
+                      ),
+                    if (waiting.isNotEmpty)
+                      _buildRaceSection(
+                        title: 'WAITING TO START',
+                        sectionKey: 'waiting',
+                        races: waiting,
+                      ),
+                    if (active.isNotEmpty)
+                      _buildRaceSection(
+                        title: 'ACTIVE RACES',
+                        sectionKey: 'active',
+                        races: active,
+                      ),
+                    if (completed.isNotEmpty)
+                      _buildRaceSection(
+                        title: 'COMPLETED',
+                        sectionKey: 'completed',
+                        races: completed,
+                      ),
+                  ],
+                ),
+        ),
       ],
     );
   }
@@ -416,72 +420,74 @@ class _RacesTabState extends State<RacesTab> {
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    key: Key('race-card-header-$raceId'),
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          name,
-                          style: PixelText.title(
-                            size: 18,
-                            color: AppColors.textDark,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      key: Key('race-card-header-$raceId'),
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            name,
+                            style: PixelText.title(
+                              size: 18,
+                              color: AppColors.textDark,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
                           ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
                         ),
-                      ),
-                      if (myPlacement != null || queuedBoxCount > 0) ...[
-                        const SizedBox(width: 8),
-                        if (myPlacement != null)
-                          _buildMetaChip(
-                            '${formatOrdinal(myPlacement)} PLACE',
-                            backgroundColor: AppColors.pillGreenDark.withValues(
-                              alpha: 0.16,
+                        if (myPlacement != null || queuedBoxCount > 0) ...[
+                          const SizedBox(width: 8),
+                          if (myPlacement != null)
+                            _buildMetaChip(
+                              '${formatOrdinal(myPlacement)} PLACE',
+                              backgroundColor: AppColors.pillGreenDark
+                                  .withValues(alpha: 0.16),
+                              textColor: AppColors.pillGreenDark,
                             ),
-                            textColor: AppColors.pillGreenDark,
-                          ),
-                        if (queuedBoxCount > 0) ...[
-                          if (myPlacement != null) const SizedBox(width: 6),
-                          _buildMetaChip(
-                            '$queuedBoxCount QUEUED',
-                            backgroundColor: AppColors.coinLight.withValues(
-                              alpha: 0.18,
+                          if (queuedBoxCount > 0) ...[
+                            if (myPlacement != null) const SizedBox(width: 6),
+                            _buildMetaChip(
+                              '$queuedBoxCount QUEUED',
+                              backgroundColor: AppColors.coinLight.withValues(
+                                alpha: 0.18,
+                              ),
+                              textColor: AppColors.coinDark,
                             ),
-                            textColor: AppColors.coinDark,
-                          ),
+                          ],
                         ],
                       ],
-                    ],
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    '$stepsLabel \u2022 $participantCount runner${participantCount == 1 ? '' : 's'}${isInvite && creatorName.isNotEmpty ? ' \u2022 by $creatorName' : ''}',
-                    style: PixelText.body(size: 14, color: AppColors.textMid),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
-                ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '$stepsLabel \u2022 $participantCount runner${participantCount == 1 ? '' : 's'}${isInvite && creatorName.isNotEmpty ? ' \u2022 by $creatorName' : ''}',
+                      style: PixelText.body(size: 14, color: AppColors.textMid),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: badgeColor,
-                borderRadius: BorderRadius.circular(6),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: badgeColor,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  statusLabel,
+                  style: PixelText.title(size: 13, color: Colors.white),
+                ),
               ),
-              child: Text(
-                statusLabel,
-                style: PixelText.title(size: 13, color: Colors.white),
-              ),
-            ),
-          ],
+            ],
           ),
         ),
       ),
@@ -525,10 +531,7 @@ class _SectionToggleButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.parchmentLight,
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: AppColors.parchmentBorder,
-            width: 1.2,
-          ),
+          border: Border.all(color: AppColors.parchmentBorder, width: 1.2),
         ),
         alignment: Alignment.center,
         child: Icon(

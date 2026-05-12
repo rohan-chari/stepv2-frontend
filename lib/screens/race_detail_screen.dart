@@ -88,6 +88,34 @@ const _rarityColors = {
   'RARE': Color(0xFFD4A017),
 };
 
+// Powerup upgrade tables — must match backend src/utils/powerupUpgrades.js
+const _upgradeCosts = {
+  'COMMON': [0, 25, 75, 225],
+  'UNCOMMON': [0, 45, 135, 400],
+  'RARE': [0, 50, 150, 450],
+};
+
+// Per-tier effect labels for the use-modal. Index 0 = base.
+const _upgradeEffectLabels = {
+  'PROTEIN_SHAKE': ['+1,500 steps', '+2,250 steps', '+3,000 steps', '+4,500 steps'],
+  'SHORTCUT': ['Steal up to 1,000', 'Steal up to 1,500', 'Steal up to 2,000', 'Steal up to 3,000'],
+  'DETOUR_SIGN': ['Hide leaderboard 3h', 'Hide leaderboard 4h', 'Hide leaderboard 5h', 'Hide leaderboard 7h'],
+  'TRAIL_MIX': ['+100 per unique type', '+150 per unique type', '+200 per unique type', '+300 per unique type'],
+  'RUNNERS_HIGH': ['2x for 3h', '2x for 4h', '2x for 5h', '2x for 7h'],
+  'LEG_CRAMP': ['Freeze 2h', 'Freeze 3h', 'Freeze 4h', 'Freeze 6h'],
+  'STEALTH_MODE': ['Hide 4h', 'Hide 5h', 'Hide 6.5h', 'Hide 8h'],
+  'WRONG_TURN': ['Reverse 1h', 'Reverse 1.5h', 'Reverse 2h', 'Reverse 3h'],
+  'COMPRESSION_SOCKS': ['Shield 24h', 'Shield 30h', 'Shield 36h', 'Shield 48h'],
+};
+
+bool _isUpgradeable(String? type) => _upgradeEffectLabels.containsKey(type);
+
+int _upgradeCost(String rarity, int level) {
+  final tiers = _upgradeCosts[rarity];
+  if (tiers == null || level < 0 || level >= tiers.length) return 0;
+  return tiers[level];
+}
+
 class _RaceDetailScreenState extends State<RaceDetailScreen> {
   Map<String, dynamic>? _race;
   Map<String, dynamic>? _progress;
@@ -468,7 +496,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     }
   }
 
-  Future<void> _usePowerup(Map<String, dynamic> powerup) async {
+  Future<void> _usePowerup(Map<String, dynamic> powerup, {int upgradeLevel = 0}) async {
     final type = powerup['type'] as String;
 
     // For targeted powerups, show target picker
@@ -504,15 +532,22 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         raceId: widget.raceId,
         powerupId: powerup['id'] as String,
         targetUserId: targetUserId,
+        upgradeLevel: upgradeLevel,
       );
+
+      final res = result['result'] as Map<String, dynamic>?;
+      final coinsSpent = (res?['coinsSpent'] as int?) ?? 0;
+      if (coinsSpent > 0) {
+        await widget.authService.updateCoins(widget.authService.coins - coinsSpent);
+      }
 
       if (!mounted) return;
 
-      final res = result['result'] as Map<String, dynamic>?;
       if (res?['blocked'] == true) {
         showInfoToast(context, 'Blocked by Compression Socks!');
       } else {
-        showInfoToast(context, '${_powerupNames[type]} activated!');
+        final tierTag = upgradeLevel > 0 ? ' (Lvl $upgradeLevel)' : '';
+        showInfoToast(context, '${_powerupNames[type]}$tierTag activated!');
       }
 
       _loadProgress();
@@ -622,6 +657,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
   void _showPowerupActions(Map<String, dynamic> powerup) {
     final type = powerup['type'] as String;
+    final rarity = (powerup['rarity'] as String?) ?? 'COMMON';
+    final upgradeable = _isUpgradeable(type);
+    final tierLabels = _upgradeEffectLabels[type];
+    final myCoins = widget.authService.coins;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.parchment,
@@ -656,12 +696,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color:
-                        _rarityColors[powerup['rarity']] ?? AppColors.textMid,
+                    color: _rarityColors[rarity] ?? AppColors.textMid,
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
-                    (powerup['rarity'] as String?) ?? '',
+                    rarity,
                     style: PixelText.title(size: 9, color: Colors.white),
                   ),
                 ),
@@ -671,23 +710,36 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                   style: PixelText.body(size: 13, color: AppColors.textMid),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 16),
-                PillButton(
-                  label: 'USE',
-                  variant: PillButtonVariant.primary,
-                  fontSize: 14,
-                  fullWidth: true,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 12,
+                if (upgradeable) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'YOUR COINS: $myCoins',
+                    style: PixelText.title(size: 10, color: AppColors.textMid),
                   ),
-                  onPressed: _isActing
-                      ? null
-                      : () {
-                          Navigator.of(ctx).pop();
-                          _usePowerup(powerup);
-                        },
-                ),
+                ],
+                const SizedBox(height: 12),
+
+                // Tier options for upgradeable powerups; single USE button otherwise.
+                if (upgradeable && tierLabels != null)
+                  ..._buildTierButtons(ctx, powerup, rarity, tierLabels, myCoins)
+                else
+                  PillButton(
+                    label: 'USE',
+                    variant: PillButtonVariant.primary,
+                    fontSize: 14,
+                    fullWidth: true,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
+                    onPressed: _isActing
+                        ? null
+                        : () {
+                            Navigator.of(ctx).pop();
+                            _usePowerup(powerup);
+                          },
+                  ),
+
                 const SizedBox(height: 8),
                 PillButton(
                   label: 'DISCARD',
@@ -711,6 +763,47 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         );
       },
     );
+  }
+
+  List<Widget> _buildTierButtons(
+    BuildContext ctx,
+    Map<String, dynamic> powerup,
+    String rarity,
+    List<String> tierLabels,
+    int myCoins,
+  ) {
+    final buttons = <Widget>[];
+    for (int level = 0; level <= 3; level++) {
+      final cost = _upgradeCost(rarity, level);
+      final affordable = myCoins >= cost;
+      final isBase = level == 0;
+      final label = isBase
+          ? 'USE BASE — ${tierLabels[0]}'
+          : 'LVL $level — ${tierLabels[level]}  ·  $cost ¢';
+
+      buttons.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: PillButton(
+            label: label,
+            variant: isBase ? PillButtonVariant.secondary : PillButtonVariant.primary,
+            fontSize: 12,
+            fullWidth: true,
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 10,
+            ),
+            onPressed: (_isActing || !affordable)
+                ? null
+                : () {
+                    Navigator.of(ctx).pop();
+                    _usePowerup(powerup, upgradeLevel: level);
+                  },
+          ),
+        ),
+      );
+    }
+    return buttons;
   }
 
   Future<void> _loadFeed() async {

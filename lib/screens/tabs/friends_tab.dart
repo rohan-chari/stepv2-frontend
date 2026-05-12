@@ -291,89 +291,96 @@ class _FriendsTabState extends State<FriendsTab> {
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                sliver: SliverToBoxAdapter(
-                  child: Column(
-                    children: [
-                      _buildTopStatusBar(),
-                      const SizedBox(height: 12),
+              SliverToBoxAdapter(
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: _buildTopStatusBar(),
+                    ),
+                    const SizedBox(height: 12),
 
-                      _buildFriendsHeader(),
-                      const SizedBox(height: 12),
+                    _buildFriendsHeader(),
+                    const SizedBox(height: 12),
 
-                      // Search bar
-                      Column(
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
                         children: [
-                          TextField(
-                            controller: _searchController,
-                            onChanged: _onSearchChanged,
-                            textAlign: TextAlign.center,
-                            style: PixelText.body(
-                              size: 16,
-                              color: AppColors.textDark,
-                            ),
-                            decoration: InputDecoration(
-                              filled: true,
-                              fillColor: AppColors.parchmentLight,
-                              hintText: 'Search by display name',
-                              hintStyle: PixelText.body(
-                                size: 16,
-                                color: AppColors.parchmentBorder,
-                              ),
-                              border: OutlineInputBorder(
-                                borderSide: BorderSide(
-                                  color: AppColors.parchmentBorder,
+                          // Search bar
+                          Column(
+                            children: [
+                              TextField(
+                                controller: _searchController,
+                                onChanged: _onSearchChanged,
+                                textAlign: TextAlign.center,
+                                style: PixelText.body(
+                                  size: 16,
+                                  color: AppColors.textDark,
                                 ),
-                                borderRadius: searchBorderRadius,
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderSide: BorderSide(
-                                  color: AppColors.parchmentBorder,
+                                decoration: InputDecoration(
+                                  filled: true,
+                                  fillColor: AppColors.parchmentLight,
+                                  hintText: 'Search by display name',
+                                  hintStyle: PixelText.body(
+                                    size: 16,
+                                    color: AppColors.parchmentBorder,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: AppColors.parchmentBorder,
+                                    ),
+                                    borderRadius: searchBorderRadius,
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: AppColors.parchmentBorder,
+                                    ),
+                                    borderRadius: searchBorderRadius,
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: AppColors.accent,
+                                      width: 2,
+                                    ),
+                                    borderRadius: searchBorderRadius,
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
+                                  ),
                                 ),
-                                borderRadius: searchBorderRadius,
                               ),
-                              focusedBorder: OutlineInputBorder(
-                                borderSide: BorderSide(
-                                  color: AppColors.accent,
-                                  width: 2,
-                                ),
-                                borderRadius: searchBorderRadius,
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
-                              ),
-                            ),
+                              if (_showDropdown) _buildSearchDropdown(),
+                            ],
                           ),
-                          if (_showDropdown) _buildSearchDropdown(),
+                          const SizedBox(height: 16),
+
+                          // Incoming requests
+                          if (_incomingRequests.isNotEmpty) ...[
+                            _buildSectionHeader('INCOMING REQUESTS'),
+                            const SizedBox(height: 8),
+                            _buildIncomingList(),
+                            const SizedBox(height: 16),
+                          ],
+
+                          // Outgoing requests
+                          if (_outgoingRequests.isNotEmpty) ...[
+                            _buildSectionHeader('SENT REQUESTS'),
+                            const SizedBox(height: 8),
+                            _buildOutgoingList(),
+                            const SizedBox(height: 16),
+                          ],
+
+                          // Friends list
+                          if (_friends.isEmpty)
+                            _buildFriendsEmptyState()
+                          else
+                            _buildFriendsList(),
                         ],
                       ),
-                      const SizedBox(height: 16),
-
-                      // Incoming requests
-                      if (_incomingRequests.isNotEmpty) ...[
-                        _buildSectionHeader('INCOMING REQUESTS'),
-                        const SizedBox(height: 8),
-                        _buildIncomingList(),
-                        const SizedBox(height: 16),
-                      ],
-
-                      // Outgoing requests
-                      if (_outgoingRequests.isNotEmpty) ...[
-                        _buildSectionHeader('SENT REQUESTS'),
-                        const SizedBox(height: 8),
-                        _buildOutgoingList(),
-                        const SizedBox(height: 16),
-                      ],
-
-                      // Friends list
-                      if (_friends.isEmpty)
-                        _buildFriendsEmptyState()
-                      else
-                        _buildFriendsList(),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -397,6 +404,7 @@ class _FriendsTabState extends State<FriendsTab> {
       title: hasFriends ? 'Tap a friend for options.' : 'No friends yet',
       subtitle: subtitle,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+      borderRadius: 0,
     );
   }
 

@@ -765,9 +765,11 @@ class BackendApiService {
     required String raceId,
     required String powerupId,
     String? targetUserId,
+    int upgradeLevel = 0,
   }) async {
     final body = <String, dynamic>{};
     if (targetUserId != null) body['targetUserId'] = targetUserId;
+    if (upgradeLevel > 0) body['upgradeLevel'] = upgradeLevel;
 
     final response = await _sendJsonRequest(
       method: 'POST',

@@ -311,13 +311,10 @@ class _ChallengesTabState extends State<ChallengesTab> {
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              sliver: SliverToBoxAdapter(
-                child: _hasActiveChallenge
-                    ? _buildActiveContent()
-                    : _buildEmptyContent(),
-              ),
+            SliverToBoxAdapter(
+              child: _hasActiveChallenge
+                  ? _buildActiveContent()
+                  : _buildEmptyContent(),
             ),
           ],
         ),
@@ -337,12 +334,18 @@ class _ChallengesTabState extends State<ChallengesTab> {
 
     return Column(
       children: [
-        _buildTopStatusBar(),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: _buildTopStatusBar(),
+        ),
         const SizedBox(height: 16),
         _buildChallengeBoard(challenge, hasActive: true),
         if (allInstances.isNotEmpty) ...[
           const SizedBox(height: 16),
-          _buildChallengeTiles(allInstances, challenge),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _buildChallengeTiles(allInstances, challenge),
+          ),
         ],
       ],
     );
@@ -351,7 +354,10 @@ class _ChallengesTabState extends State<ChallengesTab> {
   Widget _buildEmptyContent() {
     return Column(
       children: [
-        _buildTopStatusBar(),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: _buildTopStatusBar(),
+        ),
         const SizedBox(height: 16),
         _buildChallengeBoard(const {}, hasActive: false),
       ],
@@ -451,6 +457,7 @@ class _ChallengesTabState extends State<ChallengesTab> {
       title: title,
       subtitle: (description?.isNotEmpty ?? false) ? description : null,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      borderRadius: 0,
       children: [
         if (hasActive && challengeEndsAt != null) ...[
           const SizedBox(height: 14),

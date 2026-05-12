@@ -16,6 +16,7 @@ class InfoBoardCard extends StatelessWidget {
     this.subtitleSize = 13,
     this.textAlign = TextAlign.center,
     this.crossAxisAlignment = CrossAxisAlignment.center,
+    this.borderRadius = 8,
   });
 
   final String? badgeLabel;
@@ -27,6 +28,7 @@ class InfoBoardCard extends StatelessWidget {
   final double subtitleSize;
   final TextAlign textAlign;
   final CrossAxisAlignment crossAxisAlignment;
+  final double borderRadius;
 
   @override
   Widget build(BuildContext context) {
@@ -36,6 +38,7 @@ class InfoBoardCard extends StatelessWidget {
       padding: EdgeInsets.zero,
       frameColor: AppColors.accent,
       surfaceColor: AppColors.accent,
+      borderRadius: borderRadius,
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(),
         child: Padding(

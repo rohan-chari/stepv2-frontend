@@ -904,7 +904,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
-          const Positioned.fill(child: ArcadePageBackground()),
+          Positioned.fill(
+            child: ArcadePageBackground(showHeader: _currentTab == 0),
+          ),
 
           Positioned.fill(
             child: PageView(

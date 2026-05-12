@@ -294,58 +294,61 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              sliver: SliverToBoxAdapter(
-                child: Column(
-                  children: [
-                    _buildTopStatusBar(),
-                    const SizedBox(height: 12),
-                    InfoBoardCard(
-                      badgeLabel: 'RANKING',
-                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-                      children: [
-                        const SizedBox(height: 14),
-                        _buildTypeTabs(),
-                        if (_selectedType == _LeaderboardType.steps) ...[
-                          const SizedBox(height: 10),
-                          FilterDropdown<String>(
-                            value: _selectedPeriod,
-                            options: [
-                              for (final (val, label) in _periods) (val, label),
-                            ],
-                            onChanged: (val) {
-                              if (val != null) _selectPeriod(val);
-                            },
-                          ),
-                        ],
-                        if (_selectedType == _LeaderboardType.challenges) ...[
-                          const SizedBox(height: 10),
-                          _buildChallengeQualificationBanner(),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    if (_isLoading)
-                      const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: Center(
-                          child: SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              color: AppColors.accent,
-                              strokeWidth: 2,
-                            ),
-                          ),
+            SliverToBoxAdapter(
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: _buildTopStatusBar(),
+                  ),
+                  const SizedBox(height: 12),
+                  InfoBoardCard(
+                    badgeLabel: 'RANKING',
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                    borderRadius: 0,
+                    children: [
+                      const SizedBox(height: 14),
+                      _buildTypeTabs(),
+                      if (_selectedType == _LeaderboardType.steps) ...[
+                        const SizedBox(height: 10),
+                        FilterDropdown<String>(
+                          value: _selectedPeriod,
+                          options: [
+                            for (final (val, label) in _periods) (val, label),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) _selectPeriod(val);
+                          },
                         ),
-                      )
-                    else if (_top10.isEmpty)
-                      _buildEmptyState()
-                    else
-                      _buildLeaderboardTable(),
-                  ],
-                ),
+                      ],
+                      if (_selectedType == _LeaderboardType.challenges) ...[
+                        const SizedBox(height: 10),
+                        _buildChallengeQualificationBanner(),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: _isLoading
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: Center(
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  color: AppColors.accent,
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            ),
+                          )
+                        : _top10.isEmpty
+                        ? _buildEmptyState()
+                        : _buildLeaderboardTable(),
+                  ),
+                ],
               ),
             ),
           ],
