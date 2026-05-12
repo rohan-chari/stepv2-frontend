@@ -2109,17 +2109,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 class _CountdownUnit extends StatelessWidget {
   final int value;
   final String label;
-  final Color boxColor;
-  final Color shadowColor;
-  final Color numberColor;
   final Color labelColor;
 
   const _CountdownUnit({
     required this.value,
     required this.label,
-    this.boxColor = AppColors.woodDark,
-    this.shadowColor = AppColors.woodShadow,
-    this.numberColor = AppColors.parchment,
     this.labelColor = AppColors.textMid,
   });
 
@@ -2130,11 +2124,11 @@ class _CountdownUnit extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: boxColor,
+            color: AppColors.woodDark,
             borderRadius: BorderRadius.circular(8),
             boxShadow: [
               BoxShadow(
-                color: shadowColor.withValues(alpha: 0.5),
+                color: AppColors.woodShadow.withValues(alpha: 0.5),
                 offset: const Offset(0, 3),
                 blurRadius: 6,
               ),
@@ -2142,7 +2136,7 @@ class _CountdownUnit extends StatelessWidget {
           ),
           child: Text(
             value.toString().padLeft(2, '0'),
-            style: PixelText.number(size: 26, color: numberColor),
+            style: PixelText.number(size: 26, color: AppColors.parchment),
           ),
         ),
         const SizedBox(height: 4),
