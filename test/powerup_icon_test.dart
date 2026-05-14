@@ -17,6 +17,13 @@ void main() {
     'FANNY_PACK',
     'TRAIL_MIX',
     'DETOUR_SIGN',
+    'LUCKY_HORSESHOE',
+    'CAMPFIRE_REST',
+    'TRAIL_MAGNET',
+    'POCKET_WATCH',
+    'TRAIL_MINE',
+    'PINECONE_TOSS',
+    'SNEAKY_SWAP',
   ]) {
     testWidgets('PowerupIcon renders the image asset for $type', (
       tester,

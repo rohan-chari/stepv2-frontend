@@ -73,6 +73,41 @@ const _powerupEntries = [
     name: 'Detour Sign',
     description: 'Hide the entire leaderboard from a rival for 3 hours',
   ),
+  (
+    type: 'LUCKY_HORSESHOE',
+    name: 'Lucky Horseshoe',
+    description: 'Guarantee a better next mystery box',
+  ),
+  (
+    type: 'CAMPFIRE_REST',
+    name: 'Campfire Rest',
+    description: 'Freeze briefly, then get a step multiplier',
+  ),
+  (
+    type: 'TRAIL_MAGNET',
+    name: 'Trail Magnet',
+    description: 'Pull your next mystery box closer',
+  ),
+  (
+    type: 'POCKET_WATCH',
+    name: 'Pocket Watch',
+    description: 'Extend all active timed buffs',
+  ),
+  (
+    type: 'TRAIL_MINE',
+    name: 'Trail Mine',
+    description: 'Drop a trap at your current steps',
+  ),
+  (
+    type: 'PINECONE_TOSS',
+    name: 'Pinecone Toss',
+    description: 'Hit the runner ahead or behind',
+  ),
+  (
+    type: 'SNEAKY_SWAP',
+    name: 'Sneaky Swap',
+    description: 'View and swap a rival powerup',
+  ),
 ];
 
 class AdminChallengeScreen extends StatefulWidget {

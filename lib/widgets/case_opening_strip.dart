@@ -53,6 +53,13 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip>
     'FANNY_PACK': 'RARE',
     'TRAIL_MIX': 'COMMON',
     'DETOUR_SIGN': 'COMMON',
+    'LUCKY_HORSESHOE': 'RARE',
+    'CAMPFIRE_REST': 'UNCOMMON',
+    'TRAIL_MAGNET': 'COMMON',
+    'POCKET_WATCH': 'RARE',
+    'TRAIL_MINE': 'RARE',
+    'PINECONE_TOSS': 'UNCOMMON',
+    'SNEAKY_SWAP': 'RARE',
   };
 
   // Weighted random: common 50%, uncommon 35%, rare 15%
@@ -61,18 +68,25 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip>
     'SHORTCUT',
     'TRAIL_MIX',
     'DETOUR_SIGN',
+    'TRAIL_MAGNET',
   ];
   static const _uncommonTypes = [
     'RUNNERS_HIGH',
     'LEG_CRAMP',
     'STEALTH_MODE',
     'WRONG_TURN',
+    'CAMPFIRE_REST',
+    'PINECONE_TOSS',
   ];
   static const _rareTypes = [
     'RED_CARD',
     'SECOND_WIND',
     'COMPRESSION_SOCKS',
     'FANNY_PACK',
+    'LUCKY_HORSESHOE',
+    'POCKET_WATCH',
+    'TRAIL_MINE',
+    'SNEAKY_SWAP',
   ];
 
   @override
@@ -364,6 +378,13 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip>
     'FANNY_PACK': 'Fanny Pack',
     'TRAIL_MIX': 'Trail Mix',
     'DETOUR_SIGN': 'Detour Sign',
+    'LUCKY_HORSESHOE': 'Lucky\nHorseshoe',
+    'CAMPFIRE_REST': 'Campfire Rest',
+    'TRAIL_MAGNET': 'Trail Magnet',
+    'POCKET_WATCH': 'Pocket Watch',
+    'TRAIL_MINE': 'Trail Mine',
+    'PINECONE_TOSS': 'Pinecone Toss',
+    'SNEAKY_SWAP': 'Sneaky Swap',
   };
 
   static String _typeName(String type) {

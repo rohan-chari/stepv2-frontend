@@ -58,6 +58,13 @@ const _powerupNames = {
   'FANNY_PACK': 'Fanny Pack',
   'TRAIL_MIX': 'Trail Mix',
   'DETOUR_SIGN': 'Detour Sign',
+  'LUCKY_HORSESHOE': 'Lucky Horseshoe',
+  'CAMPFIRE_REST': 'Campfire Rest',
+  'TRAIL_MAGNET': 'Trail Magnet',
+  'POCKET_WATCH': 'Pocket Watch',
+  'TRAIL_MINE': 'Trail Mine',
+  'PINECONE_TOSS': 'Pinecone Toss',
+  'SNEAKY_SWAP': 'Sneaky Swap',
 };
 
 const _powerupDescriptions = {
@@ -74,6 +81,13 @@ const _powerupDescriptions = {
   'FANNY_PACK': 'Unlock an extra powerup slot',
   'TRAIL_MIX': '+100 steps per unique powerup type used',
   'DETOUR_SIGN': 'Hide the entire leaderboard from a rival for 3 hours',
+  'LUCKY_HORSESHOE': 'Guarantee a better next mystery box',
+  'CAMPFIRE_REST': 'Freeze briefly, then get a stronger step multiplier',
+  'TRAIL_MAGNET': 'Pull your next mystery box 1,000 steps closer',
+  'POCKET_WATCH': 'Extend all active timed buffs',
+  'TRAIL_MINE': 'Drop a hidden trap at your current step position',
+  'PINECONE_TOSS': 'Hit the runner directly ahead or behind you',
+  'SNEAKY_SWAP': 'View and swap a powerup with a rival',
 };
 
 // Short-form descriptions used in the active-effects list, where the
@@ -86,6 +100,10 @@ const _powerupShortDescriptions = {
   'WRONG_TURN': 'Steps reversed',
   'FANNY_PACK': 'Extra powerup slot',
   'DETOUR_SIGN': 'Leaderboard hidden',
+  'LUCKY_HORSESHOE': 'Next box boosted',
+  'CAMPFIRE_REST': 'Resting, then boosted',
+  'POCKET_WATCH': 'Buffs extended',
+  'TRAIL_MINE': 'Mine planted',
 };
 
 const _targetedPowerups = [
@@ -93,6 +111,7 @@ const _targetedPowerups = [
   'SHORTCUT',
   'WRONG_TURN',
   'DETOUR_SIGN',
+  'SNEAKY_SWAP',
 ];
 
 const _rarityColors = {
@@ -106,6 +125,10 @@ const _upgradeCosts = {
   'COMMON': [0, 25, 75, 225],
   'UNCOMMON': [0, 45, 135, 400],
   'RARE': [0, 50, 150, 450],
+};
+
+const _upgradeCostsByType = {
+  'LUCKY_HORSESHOE': [0, 250, 600, 1200],
 };
 
 // Per-tier effect labels for the use-modal. Index 0 = base.
@@ -139,11 +162,36 @@ const _upgradeEffectLabels = {
   'STEALTH_MODE': ['Hide 4h', 'Hide 5h', 'Hide 6.5h', 'Hide 8h'],
   'WRONG_TURN': ['Reverse 1h', 'Reverse 1.5h', 'Reverse 2h', 'Reverse 3h'],
   'COMPRESSION_SOCKS': ['Shield 24h', 'Shield 30h', 'Shield 36h', 'Shield 48h'],
+  'LUCKY_HORSESHOE': [
+    'Next box uncommon+',
+    'Better rare odds',
+    'Strong rare odds',
+    'Next box rare',
+  ],
+  'CAMPFIRE_REST': ['2.25x boost', '2.5x boost', '2.75x boost', '3x boost'],
+  'TRAIL_MAGNET': [
+    'Box 1,000 steps closer',
+    'Box 1,500 steps closer',
+    'Box 2,000 steps closer',
+    'Box 3,000 steps closer',
+  ],
+  'POCKET_WATCH': ['Extend 1h', 'Extend 1.5h', 'Extend 2h', 'Extend 3h'],
+  'TRAIL_MINE': ['3% penalty', '5% penalty', '8% penalty', '12% penalty'],
+  'PINECONE_TOSS': [
+    '-750 steps',
+    '-1,000 steps',
+    '-1,500 steps',
+    '-2,250 steps',
+  ],
 };
 
 bool _isUpgradeable(String? type) => _upgradeEffectLabels.containsKey(type);
 
-int _upgradeCost(String rarity, int level) {
+int _upgradeCostForType(String? type, String rarity, int level) {
+  final typeTiers = _upgradeCostsByType[type];
+  if (typeTiers != null && level >= 0 && level < typeTiers.length) {
+    return typeTiers[level];
+  }
   final tiers = _upgradeCosts[rarity];
   if (tiers == null || level < 0 || level >= tiers.length) return 0;
   return tiers[level];
@@ -530,10 +578,62 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     int upgradeLevel = 0,
   }) async {
     final type = powerup['type'] as String;
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) return;
 
-    // For targeted powerups, show target picker
     String? targetUserId;
-    if (_targetedPowerups.contains(type)) {
+    String? targetDirection;
+    String? swapOfferedPowerupId;
+    String? swapRequestedPowerupId;
+
+    final participants =
+        (_progress?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
+        [];
+    final targets = participants
+        .where(
+          (p) =>
+              (p['userId'] as String?) != _myUserId && (p['stealthed'] != true),
+        )
+        .toList();
+
+    if (type == 'PINECONE_TOSS') {
+      targetDirection = await _showPineconeDirectionPicker();
+      if (targetDirection == null) return;
+    } else if (type == 'SNEAKY_SWAP') {
+      if (targets.isEmpty) {
+        if (mounted) showErrorToast(context, 'No targets available');
+        return;
+      }
+      targetUserId = await _showTargetPicker(targets, type);
+      if (targetUserId == null) return;
+
+      final options = await _api.fetchSneakySwapOptions(
+        identityToken: token,
+        raceId: widget.raceId,
+        targetUserId: targetUserId,
+      );
+      final ownPowerups =
+          (options['ownPowerups'] as List?)?.cast<Map<String, dynamic>>() ??
+          const [];
+      final targetPowerups =
+          (options['targetPowerups'] as List?)?.cast<Map<String, dynamic>>() ??
+          const [];
+      if (ownPowerups.isEmpty || targetPowerups.isEmpty) {
+        if (mounted) showErrorToast(context, 'No swappable powerups available');
+        return;
+      }
+
+      swapOfferedPowerupId = await _showPowerupPicker(
+        title: 'SWAP AWAY',
+        powerups: ownPowerups,
+      );
+      if (swapOfferedPowerupId == null) return;
+      swapRequestedPowerupId = await _showPowerupPicker(
+        title: 'TAKE FROM TARGET',
+        powerups: targetPowerups,
+      );
+      if (swapRequestedPowerupId == null) return;
+    } else if (_targetedPowerups.contains(type)) {
       final participants =
           (_progress?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
           [];
@@ -556,14 +656,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
     setState(() => _isActing = true);
     try {
-      final token = widget.authService.authToken;
-      if (token == null || token.isEmpty) return;
-
       final result = await _api.usePowerup(
         identityToken: token,
         raceId: widget.raceId,
         powerupId: powerup['id'] as String,
         targetUserId: targetUserId,
+        targetDirection: targetDirection,
+        swapOfferedPowerupId: swapOfferedPowerupId,
+        swapRequestedPowerupId: swapRequestedPowerupId,
         upgradeLevel: upgradeLevel,
       );
 
@@ -689,6 +789,128 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     );
   }
 
+  Future<String?> _showPineconeDirectionPicker() async {
+    return showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.parchment,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'PINECONE TARGET',
+                  style: PixelText.title(size: 16, color: AppColors.textMid),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: PillButton(
+                        label: 'FRONT',
+                        variant: PillButtonVariant.primary,
+                        onPressed: () => Navigator.of(ctx).pop('FRONT'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: PillButton(
+                        label: 'BEHIND',
+                        variant: PillButtonVariant.secondary,
+                        onPressed: () => Navigator.of(ctx).pop('BEHIND'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<String?> _showPowerupPicker({
+    required String title,
+    required List<Map<String, dynamic>> powerups,
+  }) async {
+    return showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.parchment,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: PixelText.title(size: 16, color: AppColors.textMid),
+                ),
+                const SizedBox(height: 12),
+                for (final powerup in powerups)
+                  GestureDetector(
+                    onTap: () =>
+                        Navigator.of(ctx).pop(powerup['id'] as String?),
+                    child: Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.parchmentDark,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          PowerupIcon(
+                            type: powerup['type'] as String? ?? '',
+                            size: 28,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _powerupNames[powerup['type']] ??
+                                  powerup['type'] as String? ??
+                                  'Powerup',
+                              style: PixelText.body(
+                                size: 14,
+                                color: AppColors.textDark,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            powerup['rarity'] as String? ?? '',
+                            style: PixelText.title(
+                              size: 10,
+                              color: AppColors.textMid,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _showPowerupActions(Map<String, dynamic> powerup) {
     final type = powerup['type'] as String;
     final rarity = (powerup['rarity'] as String?) ?? 'COMMON';
@@ -758,6 +980,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                   ..._buildTierButtons(
                     ctx,
                     powerup,
+                    type,
                     rarity,
                     tierLabels,
                     myCoins,
@@ -808,13 +1031,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   List<Widget> _buildTierButtons(
     BuildContext ctx,
     Map<String, dynamic> powerup,
+    String type,
     String rarity,
     List<String> tierLabels,
     int myCoins,
   ) {
     final buttons = <Widget>[];
     for (int level = 0; level <= 3; level++) {
-      final cost = _upgradeCost(rarity, level);
+      final cost = _upgradeCostForType(type, rarity, level);
       final affordable = myCoins >= cost;
       final isBase = level == 0;
       final label = isBase
@@ -1501,35 +1725,29 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     setState(() => _isActing = true);
     try {
       final token = widget.authService.authToken;
-      if (token == null) return;
-
-      final result = await _api.openMysteryBox(
-        identityToken: token,
-        raceId: widget.raceId,
-        powerupId: boxId,
-      );
-
-      if (!mounted) return;
-      setState(() => _isActing = false);
-
-      final openResult = result['result'] as Map<String, dynamic>? ?? result;
-      final type = openResult['type'] as String? ?? '';
-      final rarity = openResult['rarity'] as String? ?? 'COMMON';
-      final autoActivated = openResult['autoActivated'] == true;
+      if (token == null) {
+        setState(() => _isActing = false);
+        return;
+      }
 
       await Navigator.of(context).push(
         PageRouteBuilder(
           opaque: false,
           pageBuilder: (_, _, _) => CaseOpeningScreen(
-            resultType: type,
-            resultRarity: rarity,
-            autoActivated: autoActivated,
+            openMysteryBox: () => _api.openMysteryBox(
+              identityToken: token,
+              raceId: widget.raceId,
+              powerupId: boxId,
+            ),
           ),
           transitionsBuilder: (_, anim, _, child) =>
               FadeTransition(opacity: anim, child: child),
           transitionDuration: const Duration(milliseconds: 300),
         ),
       );
+
+      if (!mounted) return;
+      setState(() => _isActing = false);
 
       // Refresh after closing
       _loadProgress();

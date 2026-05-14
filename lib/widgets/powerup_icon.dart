@@ -30,6 +30,13 @@ class PowerupIcon extends StatelessWidget {
     'FANNY_PACK': 'fanny_pack',
     'TRAIL_MIX': 'trail_mix',
     'DETOUR_SIGN': 'detour_sign',
+    'LUCKY_HORSESHOE': 'lucky_horseshoe',
+    'CAMPFIRE_REST': 'campfire_rest',
+    'TRAIL_MAGNET': 'trail_magnet',
+    'POCKET_WATCH': 'pocket_watch',
+    'TRAIL_MINE': 'trail_mine',
+    'PINECONE_TOSS': 'pinecone_toss',
+    'SNEAKY_SWAP': 'sneaky_swap',
   };
 
   @override

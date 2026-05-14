@@ -765,16 +765,39 @@ class BackendApiService {
     required String raceId,
     required String powerupId,
     String? targetUserId,
+    String? targetDirection,
+    String? swapOfferedPowerupId,
+    String? swapRequestedPowerupId,
     int upgradeLevel = 0,
   }) async {
     final body = <String, dynamic>{};
     if (targetUserId != null) body['targetUserId'] = targetUserId;
+    if (targetDirection != null) body['targetDirection'] = targetDirection;
+    if (swapOfferedPowerupId != null) {
+      body['swapOfferedPowerupId'] = swapOfferedPowerupId;
+    }
+    if (swapRequestedPowerupId != null) {
+      body['swapRequestedPowerupId'] = swapRequestedPowerupId;
+    }
     if (upgradeLevel > 0) body['upgradeLevel'] = upgradeLevel;
 
     final response = await _sendJsonRequest(
       method: 'POST',
       path: '/races/$raceId/powerups/$powerupId/use',
       body: body,
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> fetchSneakySwapOptions({
+    required String identityToken,
+    required String raceId,
+    required String targetUserId,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/races/$raceId/powerups/sneaky-swap-options/$targetUserId',
       identityToken: identityToken,
     );
 

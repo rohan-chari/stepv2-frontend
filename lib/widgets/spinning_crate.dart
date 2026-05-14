@@ -1,6 +1,8 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 
+import '../styles.dart';
+
 class SpinningCrate extends StatefulWidget {
   final double size;
 
@@ -37,8 +39,6 @@ class _SpinningCrateState extends State<SpinningCrate>
       animation: _controller,
       builder: (context, child) {
         final t = _controller.value;
-        // Gentle float up and down
-        final floatY = sin(t * 2 * pi) * 6;
         // Subtle rock side to side
         final rock = sin(t * 2 * pi) * 0.05;
 
@@ -46,12 +46,9 @@ class _SpinningCrateState extends State<SpinningCrate>
           width: s * 1.5,
           height: s * 1.8,
           child: Center(
-            child: Transform.translate(
-              offset: Offset(0, floatY),
-              child: Transform.rotate(
-                angle: rock,
-                child: _CrateFace(size: s),
-              ),
+            child: Transform.rotate(
+              angle: rock,
+              child: _CrateFace(size: s),
             ),
           ),
         );
@@ -66,69 +63,83 @@ class _CrateFace extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: size,
       height: size,
-      decoration: BoxDecoration(
-        color: const Color(0xFFC48C3C),
-        border: Border.all(color: const Color(0xFF6B4420), width: 2.5),
-        borderRadius: BorderRadius.circular(size * 0.06),
-      ),
-      child: Stack(
-        children: [
-          // Horizontal plank lines
-          for (final y in [0.3, 0.7])
-            Positioned(
-              top: size * y - 1,
-              left: 0,
-              right: 0,
-              child: Container(
-                height: 2,
-                color: const Color(0xFF6B4420).withValues(alpha: 0.3),
-              ),
-            ),
-          // Corner brackets
-          ..._buildBrackets(size),
-          // Yellow question mark
-          Center(
-            child: Text(
-              '?',
-              style: TextStyle(
-                fontSize: size * 0.45,
-                fontWeight: FontWeight.w900,
-                color: const Color(0xFFFFD740),
-                shadows: const [
-                  Shadow(
-                    color: Color(0xFF6B4420),
-                    offset: Offset(1.5, 1.5),
-                    blurRadius: 0,
-                  ),
-                ],
-              ),
-            ),
+      child: CustomPaint(
+        painter: _PixelCratePainter(),
+        child: Center(
+          child: Text(
+            '?',
+            style:
+                PixelText.title(
+                  size: size * 0.42,
+                  color: AppColors.coinLight,
+                ).copyWith(
+                  shadows: [
+                    Shadow(
+                      color: AppColors.dirtDark,
+                      offset: Offset(size * 0.035, size * 0.035),
+                      blurRadius: 0,
+                    ),
+                  ],
+                ),
           ),
-        ],
+        ),
       ),
     );
   }
+}
 
-  List<Widget> _buildBrackets(double s) {
-    const color = Color(0xFF8B6914);
-    final bSize = s * 0.14;
-    const bWidth = 2.5;
-    final inset = s * 0.05;
-    const solid = BorderSide(color: color, width: bWidth);
-    const none = BorderSide.none;
+class _PixelCratePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final unit = size.shortestSide / 16;
 
-    return [
-      Positioned(top: inset, left: inset, child: Container(width: bSize, height: bSize,
-        decoration: const BoxDecoration(border: Border(top: solid, left: solid, bottom: none, right: none)))),
-      Positioned(top: inset, right: inset, child: Container(width: bSize, height: bSize,
-        decoration: const BoxDecoration(border: Border(top: solid, right: solid, bottom: none, left: none)))),
-      Positioned(bottom: inset, left: inset, child: Container(width: bSize, height: bSize,
-        decoration: const BoxDecoration(border: Border(bottom: solid, left: solid, top: none, right: none)))),
-      Positioned(bottom: inset, right: inset, child: Container(width: bSize, height: bSize,
-        decoration: const BoxDecoration(border: Border(bottom: solid, right: solid, top: none, left: none)))),
-    ];
+    Rect r(double x, double y, double w, double h) =>
+        Rect.fromLTWH(x * unit, y * unit, w * unit, h * unit);
+
+    void fill(double x, double y, double w, double h, Color color) {
+      canvas.drawRect(r(x, y, w, h), Paint()..color = color);
+    }
+
+    void stroke(double x, double y, double w, double h, Color color) {
+      canvas.drawRect(
+        r(x, y, w, h),
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = max(1.5, unit * 0.7),
+      );
+    }
+
+    fill(2, 2, 12, 12, AppColors.dirtMid);
+    fill(2, 2, 12, 2, AppColors.dirtLight);
+    fill(2, 12, 12, 2, AppColors.dirtDark);
+    fill(2, 2, 2, 12, AppColors.dirtLight);
+    fill(12, 2, 2, 12, AppColors.dirtDark);
+
+    fill(3, 3, 10, 3, const Color(0xFFD79855));
+    fill(3, 7, 10, 2, AppColors.dirtLight);
+    fill(3, 10, 10, 3, const Color(0xFF8E5A32));
+
+    fill(2, 6, 12, 1, AppColors.dirtDark);
+    fill(2, 9, 12, 1, AppColors.dirtDark);
+    fill(6, 2, 1, 12, AppColors.dirtDark);
+    fill(9, 2, 1, 12, AppColors.dirtDark);
+
+    fill(1, 1, 2, 2, AppColors.grassBright);
+    fill(13, 1, 2, 2, AppColors.grassBright);
+    fill(1, 13, 2, 2, AppColors.grassDark);
+    fill(13, 13, 2, 2, AppColors.grassDark);
+
+    fill(4, 4, 2, 1, const Color(0xFFFFC878));
+    fill(10, 4, 1, 1, const Color(0xFFFFC878));
+    fill(4, 11, 2, 1, const Color(0xFF6E4428));
+
+    stroke(2, 2, 12, 12, AppColors.roofDark);
   }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

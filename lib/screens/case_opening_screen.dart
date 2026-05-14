@@ -1,12 +1,12 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import '../styles.dart';
-import '../widgets/arcade_page.dart';
 import '../widgets/case_opening_strip.dart';
 import '../widgets/game_container.dart';
 import '../widgets/home_chrome.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/powerup_icon.dart';
-import '../widgets/spinning_crate.dart';
 
 const _powerupNames = {
   'LEG_CRAMP': 'Leg Cramp',
@@ -21,6 +21,13 @@ const _powerupNames = {
   'FANNY_PACK': 'Fanny Pack',
   'TRAIL_MIX': 'Trail Mix',
   'DETOUR_SIGN': 'Detour Sign',
+  'LUCKY_HORSESHOE': 'Lucky Horseshoe',
+  'CAMPFIRE_REST': 'Campfire Rest',
+  'TRAIL_MAGNET': 'Trail Magnet',
+  'POCKET_WATCH': 'Pocket Watch',
+  'TRAIL_MINE': 'Trail Mine',
+  'PINECONE_TOSS': 'Pinecone Toss',
+  'SNEAKY_SWAP': 'Sneaky Swap',
 };
 
 const _powerupEntries = [
@@ -84,20 +91,48 @@ const _powerupEntries = [
     name: 'Detour Sign',
     description: 'Hide the entire leaderboard from a rival for 3 hours',
   ),
+  (
+    type: 'LUCKY_HORSESHOE',
+    name: 'Lucky Horseshoe',
+    description: 'Guarantee a better next mystery box',
+  ),
+  (
+    type: 'CAMPFIRE_REST',
+    name: 'Campfire Rest',
+    description: 'Freeze briefly, then get a step multiplier',
+  ),
+  (
+    type: 'TRAIL_MAGNET',
+    name: 'Trail Magnet',
+    description: 'Pull your next mystery box closer',
+  ),
+  (
+    type: 'POCKET_WATCH',
+    name: 'Pocket Watch',
+    description: 'Extend all active timed buffs',
+  ),
+  (
+    type: 'TRAIL_MINE',
+    name: 'Trail Mine',
+    description: 'Drop a trap at your current steps',
+  ),
+  (
+    type: 'PINECONE_TOSS',
+    name: 'Pinecone Toss',
+    description: 'Hit the runner ahead or behind',
+  ),
+  (
+    type: 'SNEAKY_SWAP',
+    name: 'Sneaky Swap',
+    description: 'View and swap a rival powerup',
+  ),
 ];
 
 /// Full-screen overlay for opening a mystery box with CSGO-style animation.
 class CaseOpeningScreen extends StatefulWidget {
-  final String resultType;
-  final String resultRarity;
-  final bool autoActivated;
+  final Future<Map<String, dynamic>> Function() openMysteryBox;
 
-  const CaseOpeningScreen({
-    super.key,
-    required this.resultType,
-    required this.resultRarity,
-    this.autoActivated = false,
-  });
+  const CaseOpeningScreen({super.key, required this.openMysteryBox});
 
   @override
   State<CaseOpeningScreen> createState() => _CaseOpeningScreenState();
@@ -105,25 +140,65 @@ class CaseOpeningScreen extends StatefulWidget {
 
 class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
   bool _revealed = false;
+  bool _opening = false;
+  String _resultType = '';
+  String _resultRarity = 'COMMON';
+  bool _autoActivated = false;
 
   void _onStripComplete() {
-    if (mounted) {
-      setState(() => _revealed = true);
+    if (_opening || _revealed) {
+      return;
     }
+
+    setState(() => _opening = true);
+    widget
+        .openMysteryBox()
+        .then((result) {
+          if (!mounted) return;
+          final openResult =
+              result['result'] as Map<String, dynamic>? ?? result;
+          setState(() {
+            _resultType = openResult['type'] as String? ?? '';
+            _resultRarity = openResult['rarity'] as String? ?? 'COMMON';
+            _autoActivated = openResult['autoActivated'] == true;
+            _revealed = true;
+            _opening = false;
+          });
+        })
+        .catchError((_) {
+          if (!mounted) return;
+          setState(() => _opening = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to open mystery box')),
+          );
+        });
+  }
+
+  void _closeOverlay() {
+    if (_opening) return;
+    Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.parchmentLight,
-      body: ArcadePageBackground(
-        showHeader: false,
-        child: SafeArea(
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
+    return Material(
+      color: Colors.transparent,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 2.5),
+              child: ColoredBox(
+                color: AppColors.roofDark.withValues(alpha: 0.54),
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(14, 18, 14, 24),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 460),
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 280),
                     switchInCurve: Curves.easeOutCubic,
@@ -134,69 +209,149 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
                   ),
                 ),
               ),
-              Positioned(
-                top: 4,
-                right: 10,
-                child: _GuideButton(onTap: () => _showPowerupGuide(context)),
-              ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 
   Widget _buildOpeningContent() {
-    return Column(
+    return GameContainer(
       key: const ValueKey('opening'),
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SizedBox(height: 28),
-        Text(
-          'MYSTERY BOX',
-          textAlign: TextAlign.center,
-          style: HomeText.display(size: 32, color: HomeColors.ink),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Swipe the reel to crack it open',
-          textAlign: TextAlign.center,
-          style: HomeText.body(
-            size: 15,
-            color: HomeColors.muted,
-            weight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 18),
-        GameContainer(
-          padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
-          frameColor: AppColors.accent,
-          surfaceColor: AppColors.accent,
-          glowColor: AppColors.coinMid,
-          child: CustomPaint(
-            painter: const ArcadeCheckerPainter(),
-            child: Column(
-              children: [
-                const SpinningCrate(size: 92),
-                const SizedBox(height: 6),
-                Text(
-                  'READY TO OPEN',
-                  style: PixelText.title(
-                    size: 16,
-                    color: AppColors.parchmentLight,
-                  ),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
+      frameColor: AppColors.accent,
+      surfaceColor: AppColors.parchmentLight,
+      glowColor: AppColors.coinMid,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'MYSTERY BOX',
+                  style: HomeText.display(size: 28, color: HomeColors.ink),
                 ),
-              ],
+              ),
+              _GuideButton(onTap: () => _showPowerupGuide(context)),
+              const SizedBox(width: 8),
+              _CloseButton(onTap: _closeOverlay),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Swipe the reel to crack it open',
+            style: HomeText.body(
+              size: 14,
+              color: HomeColors.muted,
+              weight: FontWeight.w800,
             ),
           ),
+          const SizedBox(height: 14),
+          CaseOpeningStrip(
+            resultType: _resultType.isEmpty ? 'PROTEIN_SHAKE' : _resultType,
+            resultRarity: _resultRarity,
+            onComplete: _onStripComplete,
+          ),
+          if (_opening) ...[
+            const SizedBox(height: 14),
+            Text(
+              'OPENING...',
+              textAlign: TextAlign.center,
+              style: PixelText.title(size: 14, color: AppColors.textMid),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRevealCard() {
+    final rarityColor = _rarityColor(_resultRarity);
+    final name = _powerupNames[_resultType] ?? _resultType;
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeOutBack,
+      builder: (context, value, child) {
+        return Transform.scale(
+          scale: value,
+          child: Opacity(opacity: value.clamp(0.0, 1.0), child: child),
+        );
+      },
+      child: GameContainer(
+        key: const ValueKey('reveal'),
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+        frameColor: rarityColor,
+        surfaceColor: AppColors.parchmentLight,
+        glowColor: rarityColor,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'UNBOXED',
+              textAlign: TextAlign.center,
+              style: HomeText.display(size: 32, color: HomeColors.ink),
+            ),
+            const SizedBox(height: 14),
+            Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: rarityColor,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  _resultRarity.toUpperCase(),
+                  style: PixelText.pill(size: 12, color: Colors.white),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Center(
+              child: Container(
+                width: 112,
+                height: 112,
+                decoration: BoxDecoration(
+                  color: AppColors.parchmentDark,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: rarityColor, width: 2),
+                ),
+                alignment: Alignment.center,
+                child: PowerupIcon(type: _resultType, size: 82, spinning: true),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              name,
+              style: PixelText.title(size: 24, color: AppColors.textDark),
+              textAlign: TextAlign.center,
+            ),
+            if (_autoActivated) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Auto-activated. Extra slot unlocked.',
+                style: PixelText.body(size: 14, color: AppColors.pillGreen),
+                textAlign: TextAlign.center,
+              ),
+            ],
+            const SizedBox(height: 22),
+            PillButton(
+              label: 'Continue',
+              icon: Icons.check_rounded,
+              onPressed: () => Navigator.of(context).pop(),
+              fullWidth: true,
+            ),
+          ],
         ),
-        const SizedBox(height: 18),
-        CaseOpeningStrip(
-          resultType: widget.resultType,
-          resultRarity: widget.resultRarity,
-          onComplete: _onStripComplete,
-        ),
-      ],
+      ),
     );
   }
 
@@ -288,97 +443,6 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
     );
   }
 
-  Widget _buildRevealCard() {
-    final rarityColor = _rarityColor(widget.resultRarity);
-    final name = _powerupNames[widget.resultType] ?? widget.resultType;
-
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0.0, end: 1.0),
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.easeOutBack,
-      builder: (context, value, child) {
-        return Transform.scale(
-          scale: value,
-          child: Opacity(opacity: value.clamp(0.0, 1.0), child: child),
-        );
-      },
-      child: Column(
-        key: const ValueKey('reveal'),
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: 52),
-          Text(
-            'UNBOXED',
-            textAlign: TextAlign.center,
-            style: HomeText.display(size: 34, color: HomeColors.ink),
-          ),
-          const SizedBox(height: 18),
-          GameContainer(
-            padding: const EdgeInsets.fromLTRB(18, 20, 18, 20),
-            frameColor: rarityColor,
-            glowColor: rarityColor,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: rarityColor,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    widget.resultRarity.toUpperCase(),
-                    style: PixelText.pill(size: 12, color: Colors.white),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Container(
-                  width: 112,
-                  height: 112,
-                  decoration: BoxDecoration(
-                    color: AppColors.parchmentDark,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: rarityColor, width: 2),
-                  ),
-                  alignment: Alignment.center,
-                  child: PowerupIcon(
-                    type: widget.resultType,
-                    size: 82,
-                    spinning: true,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  name,
-                  style: PixelText.title(size: 24, color: AppColors.textDark),
-                  textAlign: TextAlign.center,
-                ),
-                if (widget.autoActivated) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'Auto-activated. Extra slot unlocked.',
-                    style: PixelText.body(size: 14, color: AppColors.pillGreen),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-                const SizedBox(height: 22),
-                PillButton(
-                  label: 'Continue',
-                  icon: Icons.check_rounded,
-                  onPressed: () => Navigator.of(context).pop(),
-                  fullWidth: true,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   static Color _rarityColor(String rarity) {
     switch (rarity.toUpperCase()) {
       case 'RARE':
@@ -422,6 +486,46 @@ class _GuideButton extends StatelessWidget {
             child: Text(
               '?',
               style: PixelText.pill(size: 18, color: AppColors.textDark),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CloseButton extends StatelessWidget {
+  const _CloseButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Ink(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: AppColors.errorLight,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppColors.error, width: 2),
+            boxShadow: const [
+              BoxShadow(
+                color: AppColors.error,
+                offset: Offset(3, 3),
+                blurRadius: 0,
+              ),
+            ],
+          ),
+          child: const Center(
+            child: Icon(
+              Icons.close_rounded,
+              size: 20,
+              color: AppColors.textDark,
             ),
           ),
         ),
