@@ -29,6 +29,7 @@ import 'tabs/leaderboard_tab.dart';
 import 'tabs/profile_tab.dart';
 import 'race_detail_screen.dart';
 import 'tabs/races_tab.dart';
+import 'tabs/shop_tab.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({
@@ -74,6 +75,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   Map<String, dynamic>? _currentChallenge;
   Map<String, dynamic>? _activeChallengeProgress;
   Map<String, dynamic>? _racesData;
+  List<Map<String, dynamic>> _equippedAccessories = const [];
   List<Map<String, dynamic>> _leaderboardHighlights = const [];
   bool _leaderboardHighlightsLoading = true;
   String _requestedLeaderboardType = 'steps';
@@ -157,7 +159,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         _pageController.jumpToPage(1);
         break;
       case NotificationRoute.friends:
-        _pageController.jumpToPage(3);
+        _pageController.jumpToPage(4);
         break;
       case NotificationRoute.home:
         _pageController.jumpToPage(0);
@@ -173,6 +175,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _fetchFriendsSteps();
       _fetchCurrentChallenge();
       _fetchRaces();
+      _fetchShopCatalog();
       _fetchLeaderboardHighlights();
       _startForegroundPolling();
     } else if (state == AppLifecycleState.paused) {
@@ -216,6 +219,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _fetchFriendsSteps();
     _fetchCurrentChallenge();
     _fetchRaces();
+    _fetchShopCatalog();
     _startForegroundPolling();
   }
 
@@ -416,12 +420,44 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     } catch (_) {}
   }
 
+  Future<void> _fetchShopCatalog() async {
+    try {
+      final identityToken = widget.authService.authToken;
+      if (identityToken == null || identityToken.isEmpty) return;
+
+      final data = await _backendApiService.fetchShopCatalog(
+        identityToken: identityToken,
+      );
+      _applyShopCatalog(data);
+    } catch (_) {}
+  }
+
+  void _applyShopCatalog(Map<String, dynamic> catalog) {
+    final equipped = catalog['equipped'] as Map<String, dynamic>? ?? {};
+    final accessories = equipped.values
+        .whereType<Map<String, dynamic>>()
+        .toList(growable: false);
+    final coins = catalog['coins'] as int?;
+
+    if (coins != null) {
+      widget.authService.updateCoins(coins);
+    }
+
+    if (mounted) {
+      setState(() => _equippedAccessories = accessories);
+    }
+  }
+
   Future<void> _refreshRacesTab() async {
     await Future.wait([_fetchRaces(), _fetchFriendsSteps()]);
   }
 
   Future<void> _refreshHomeTab() async {
-    await Future.wait([_fetchSteps(), _fetchLeaderboardHighlights()]);
+    await Future.wait([
+      _fetchSteps(),
+      _fetchLeaderboardHighlights(),
+      _fetchShopCatalog(),
+    ]);
   }
 
   Future<void> _refreshChallengesTab() async {
@@ -446,7 +482,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   void _openFriendsTab() {
     _pageController.animateToPage(
-      3,
+      4,
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOutCubic,
     );
@@ -454,7 +490,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   void _openLeaderboardTab() {
     _pageController.animateToPage(
-      4,
+      5,
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOutCubic,
     );
@@ -904,9 +940,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
-          Positioned.fill(
-            child: const ArcadePageBackground(showHeader: false),
-          ),
+          Positioned.fill(child: const ArcadePageBackground(showHeader: false)),
 
           Positioned.fill(
             child: PageView(
@@ -933,6 +967,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   onDisplayNameChanged: _syncSettingsState,
                   currentChallenge: _currentChallenge,
                   friendsSteps: _friendsSteps,
+                  equippedAccessories: _equippedAccessories,
                   activeChallengeProgress: _activeChallengeProgress,
                   leaderboardHighlights: _leaderboardHighlights,
                   leaderboardHighlightsLoading: _leaderboardHighlightsLoading,
@@ -965,6 +1000,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   onRefresh: _refreshRacesTab,
                   displayName: _displayName,
                   onOpenProfile: _openProfile,
+                ),
+                ShopTab(
+                  authService: widget.authService,
+                  backendApiService: _backendApiService,
+                  onShopChanged: _applyShopCatalog,
                 ),
                 FriendsTab(
                   authService: widget.authService,
@@ -1017,6 +1057,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                 const WoodenTabItem(
                   icon: Icons.directions_run_rounded,
                   label: 'Races',
+                ),
+                const WoodenTabItem(
+                  icon: Icons.storefront_rounded,
+                  label: 'Shop',
                 ),
                 WoodenTabItem(
                   icon: Icons.people_rounded,

@@ -8,12 +8,17 @@ void main() {
     'LEG_CRAMP',
     'RED_CARD',
     'SHORTCUT',
+    'COMPRESSION_SOCKS',
     'PROTEIN_SHAKE',
     'RUNNERS_HIGH',
-    'COMPRESSION_SOCKS',
     'SECOND_WIND',
+    'STEALTH_MODE',
+    'WRONG_TURN',
+    'FANNY_PACK',
+    'TRAIL_MIX',
+    'DETOUR_SIGN',
   ]) {
-    testWidgets('PowerupIcon renders the redesigned $type badge', (
+    testWidgets('PowerupIcon renders the image asset for $type', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -28,7 +33,7 @@ void main() {
       expect(
         find.descendant(
           of: find.byType(PowerupIcon),
-          matching: find.byType(CustomPaint),
+          matching: find.byType(Image),
         ),
         findsOneWidget,
       );
@@ -57,7 +62,7 @@ void main() {
     expect(
       find.descendant(
         of: find.byType(PowerupIcon),
-        matching: find.byType(CustomPaint),
+        matching: find.byType(Image),
       ),
       findsOneWidget,
     );

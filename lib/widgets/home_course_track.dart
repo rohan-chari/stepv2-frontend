@@ -9,7 +9,7 @@ class HomeCourseTrack extends StatefulWidget {
   const HomeCourseTrack({
     super.key,
     required this.runners,
-    this.height = 236,
+    this.height = 268,
     this.goalSteps,
   });
 
@@ -285,7 +285,8 @@ class _HomeCourseTrackState extends State<HomeCourseTrack>
             progress: animatedProgress,
             layout: layout,
           );
-          final capybaraSize = runner.isUser ? 46.0 : 40.0;
+          final sizeScale = (widget.height / 236.0).clamp(1.0, 1.16);
+          final capybaraSize = (runner.isUser ? 50.0 : 44.0) * sizeScale;
           final overlayOffset = runner.isUser
               ? const Offset(0, -1)
               : _friendOverlayOffset(
@@ -395,7 +396,23 @@ class _HomeCourseTrackState extends State<HomeCourseTrack>
       if (previous[i].name != next[i].name ||
           previous[i].progress != next[i].progress ||
           previous[i].isUser != next[i].isUser ||
-          previous[i].profilePhotoUrl != next[i].profilePhotoUrl) {
+          previous[i].profilePhotoUrl != next[i].profilePhotoUrl ||
+          !_sameAccessories(previous[i].accessories, next[i].accessories)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool _sameAccessories(
+    List<Map<String, dynamic>> previous,
+    List<Map<String, dynamic>> next,
+  ) {
+    if (previous.length != next.length) return false;
+    for (var i = 0; i < previous.length; i++) {
+      if (previous[i]['id'] != next[i]['id'] ||
+          previous[i]['slot'] != next[i]['slot'] ||
+          previous[i]['assetKey'] != next[i]['assetKey']) {
         return false;
       }
     }
@@ -435,28 +452,318 @@ class _CapybaraRunnerMarker extends StatelessWidget {
           SizedBox(
             width: capybaraSize,
             height: capybaraSize,
-            child: ClipRect(
-              child: OverflowBox(
-                maxWidth: double.infinity,
-                alignment: Alignment.topLeft,
-                child: Transform.translate(
-                  offset: Offset(-frameIndex * capybaraSize, 0),
-                  child: Image.asset(
-                    _HomeCourseTrackState._capybaraAsset,
-                    width:
-                        capybaraSize *
-                        _HomeCourseTrackState._capybaraFrameCount,
-                    height: capybaraSize,
-                    filterQuality: FilterQuality.none,
-                    fit: BoxFit.contain,
-                  ),
-                ),
-              ),
+            child: _CapybaraSpriteWithAccessories(
+              accessories: runner.accessories,
+              capybaraSize: capybaraSize,
+              frameIndex: frameIndex,
             ),
           ),
         ],
       ),
     );
+  }
+}
+
+class CapybaraCustomizationPreview extends StatefulWidget {
+  const CapybaraCustomizationPreview({
+    super.key,
+    required this.accessories,
+    this.size = 118,
+  });
+
+  final List<Map<String, dynamic>> accessories;
+  final double size;
+
+  @override
+  State<CapybaraCustomizationPreview> createState() =>
+      _CapybaraCustomizationPreviewState();
+}
+
+class _CapybaraCustomizationPreviewState
+    extends State<CapybaraCustomizationPreview>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 720),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Customized capybara preview',
+      image: true,
+      child: SizedBox(
+        width: widget.size * 1.18,
+        height: widget.size * 1.02,
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) {
+            final frameIndex =
+                (_controller.value * _HomeCourseTrackState._capybaraFrameCount)
+                    .floor() %
+                _HomeCourseTrackState._capybaraFrameCount;
+
+            return Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.bottomCenter,
+              children: [
+                Positioned(
+                  bottom: widget.size * 0.08,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: HomeColors.ink.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(widget.size * 0.08),
+                    ),
+                    child: SizedBox(
+                      width: widget.size * 0.78,
+                      height: widget.size * 0.08,
+                    ),
+                  ),
+                ),
+                Positioned(
+                  bottom: 0,
+                  child: _CapybaraSpriteWithAccessories(
+                    accessories: widget.accessories,
+                    capybaraSize: widget.size,
+                    frameIndex: frameIndex,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _CapybaraSpriteWithAccessories extends StatelessWidget {
+  const _CapybaraSpriteWithAccessories({
+    required this.accessories,
+    required this.capybaraSize,
+    required this.frameIndex,
+  });
+
+  final List<Map<String, dynamic>> accessories;
+  final double capybaraSize;
+  final int frameIndex;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: capybaraSize,
+      height: capybaraSize,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          ClipRect(
+            child: OverflowBox(
+              maxWidth: double.infinity,
+              alignment: Alignment.topLeft,
+              child: Transform.translate(
+                offset: Offset(-frameIndex * capybaraSize, 0),
+                child: Image.asset(
+                  _HomeCourseTrackState._capybaraAsset,
+                  width:
+                      capybaraSize * _HomeCourseTrackState._capybaraFrameCount,
+                  height: capybaraSize,
+                  filterQuality: FilterQuality.none,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+          ),
+          for (final accessory in accessories)
+            _AccessoryOverlay(
+              accessory: accessory,
+              capybaraSize: capybaraSize,
+              frameIndex: frameIndex,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AccessoryOverlay extends StatelessWidget {
+  const _AccessoryOverlay({
+    required this.accessory,
+    required this.capybaraSize,
+    required this.frameIndex,
+  });
+
+  final Map<String, dynamic> accessory;
+  final double capybaraSize;
+  final int frameIndex;
+
+  @override
+  Widget build(BuildContext context) {
+    final slot = accessory['slot'] as String? ?? '';
+    final assetKey = accessory['assetKey'] as String? ?? '';
+    final isHeadSlot = slot == 'HEAD';
+    final rect = _rectForSlot(slot, capybaraSize).shift(
+      isHeadSlot ? Offset(-1, 2 + _headBobOffset(capybaraSize)) : Offset.zero,
+    );
+
+    return Positioned.fromRect(
+      rect: rect,
+      child: Transform.rotate(
+        angle: isHeadSlot ? -0.14 : 0,
+        alignment: Alignment.center,
+        child: Image.asset(
+          'assets/images/accessories/$assetKey.png',
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.none,
+          errorBuilder: (context, error, stackTrace) => CustomPaint(
+            painter: _AccessoryPainter(slot: slot, assetKey: assetKey),
+          ),
+        ),
+      ),
+    );
+  }
+
+  double _headBobOffset(double size) {
+    const frameOffsets = <double>[0, -1, 0, 1, 0, -1];
+    final pixelScale = (size / 58).clamp(0.85, 1.2);
+    return frameOffsets[frameIndex % frameOffsets.length] * pixelScale;
+  }
+
+  Rect _rectForSlot(String slot, double size) {
+    switch (slot) {
+      case 'HEAD':
+        return Rect.fromLTWH(
+          size * 0.37,
+          size * 0.04,
+          size * 0.46,
+          size * 0.26,
+        );
+      case 'FACE':
+        return Rect.fromLTWH(
+          size * 0.60,
+          size * 0.28,
+          size * 0.22,
+          size * 0.14,
+        );
+      case 'NECK':
+        return Rect.fromLTWH(
+          size * 0.46,
+          size * 0.44,
+          size * 0.32,
+          size * 0.16,
+        );
+      case 'BACK':
+        return Rect.fromLTWH(
+          size * 0.16,
+          size * 0.30,
+          size * 0.28,
+          size * 0.26,
+        );
+      default:
+        return Rect.fromLTWH(
+          size * 0.37,
+          size * 0.04,
+          size * 0.46,
+          size * 0.26,
+        );
+    }
+  }
+}
+
+class _AccessoryPainter extends CustomPainter {
+  const _AccessoryPainter({required this.slot, required this.assetKey});
+
+  final String slot;
+  final String assetKey;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = _colorForAsset(assetKey);
+    final outline = Paint()
+      ..color = HomeColors.ink.withValues(alpha: 0.55)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4;
+
+    switch (slot) {
+      case 'FACE':
+        final y = size.height * 0.48;
+        canvas.drawLine(
+          Offset(size.width * 0.18, y),
+          Offset(size.width * 0.82, y),
+          outline,
+        );
+        canvas.drawCircle(
+          Offset(size.width * 0.32, y),
+          size.height * 0.28,
+          outline,
+        );
+        canvas.drawCircle(
+          Offset(size.width * 0.68, y),
+          size.height * 0.28,
+          outline,
+        );
+        break;
+      case 'NECK':
+        final rect = RRect.fromRectAndRadius(
+          Offset.zero & size,
+          Radius.circular(size.height * 0.45),
+        );
+        canvas.drawRRect(rect, paint);
+        canvas.drawRRect(rect, outline);
+        break;
+      case 'BACK':
+        final rect = RRect.fromRectAndRadius(
+          Offset.zero & size,
+          Radius.circular(size.width * 0.18),
+        );
+        canvas.drawRRect(rect, paint);
+        canvas.drawRRect(rect, outline);
+        break;
+      case 'HEAD':
+      default:
+        final brim = RRect.fromRectAndRadius(
+          Rect.fromLTWH(0, size.height * 0.58, size.width, size.height * 0.22),
+          Radius.circular(size.height * 0.12),
+        );
+        final crown = RRect.fromRectAndRadius(
+          Rect.fromLTWH(
+            size.width * 0.18,
+            0,
+            size.width * 0.64,
+            size.height * 0.68,
+          ),
+          Radius.circular(size.width * 0.14),
+        );
+        canvas.drawRRect(crown, paint);
+        canvas.drawRRect(crown, outline);
+        canvas.drawRRect(brim, paint);
+        canvas.drawRRect(brim, outline);
+        break;
+    }
+  }
+
+  Color _colorForAsset(String assetKey) {
+    if (assetKey.contains('gold')) return HomeColors.gold;
+    if (assetKey.contains('red')) return HomeColors.clay;
+    if (assetKey.contains('green')) return HomeColors.sage;
+    if (assetKey.contains('blue')) return HomeColors.inkSoft;
+    return HomeColors.surfaceMuted;
+  }
+
+  @override
+  bool shouldRepaint(covariant _AccessoryPainter oldDelegate) {
+    return oldDelegate.slot != slot || oldDelegate.assetKey != assetKey;
   }
 }
 

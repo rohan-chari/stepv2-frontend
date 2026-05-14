@@ -20,121 +20,113 @@ void main() {
     );
   });
 
-  testWidgets(
-    'HomeTab shows action buttons for challenge and leaderboard',
-    (WidgetTester tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: HomeTab(
-              stepData: StepData(steps: 2388, date: DateTime(2026, 3, 19)),
-              isLoading: false,
-              error: null,
-              stepGoal: 5000,
-              healthAuthorized: true,
-              notificationsState: true,
-              displayName: 'Trail Walker',
-              authService: AuthService(),
-              onRefresh: () async {},
-              onEnableHealth: () {},
-              onEnableNotifications: () {},
-              onSetStepGoal: () {},
-              onDisplayNameChanged: () {},
-              currentChallenge: null,
-              friendsSteps: const [],
-              onChallengeChanged: () {},
-            ),
+  testWidgets('HomeTab shows action buttons for challenge and leaderboard', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HomeTab(
+            stepData: StepData(steps: 2388, date: DateTime(2026, 3, 19)),
+            isLoading: false,
+            error: null,
+            stepGoal: 5000,
+            healthAuthorized: true,
+            notificationsState: true,
+            displayName: 'Trail Walker',
+            authService: AuthService(),
+            onRefresh: () async {},
+            onEnableHealth: () {},
+            onEnableNotifications: () {},
+            onSetStepGoal: () {},
+            onDisplayNameChanged: () {},
+            currentChallenge: null,
+            friendsSteps: const [],
+            onChallengeChanged: () {},
           ),
         ),
-      );
+      ),
+    );
 
-      expect(find.text('CHALLENGES'), findsOneWidget);
-      expect(find.text('LEADERBOARD'), findsOneWidget);
-    },
-  );
+    expect(find.text('CHALLENGES'), findsOneWidget);
+    expect(find.text('LEADERBOARD'), findsOneWidget);
+  });
 
-  testWidgets(
-    'HomeTab shows daily reward slots',
-    (WidgetTester tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: HomeTab(
-              stepData: StepData(steps: 2388, date: DateTime(2026, 3, 19)),
-              isLoading: false,
-              error: null,
-              stepGoal: 5000,
-              healthAuthorized: true,
-              notificationsState: true,
-              displayName: 'Trail Walker',
-              authService: AuthService(),
-              onRefresh: () async {},
-              onEnableHealth: () {},
-              onEnableNotifications: () {},
-              onSetStepGoal: () {},
-              onDisplayNameChanged: () {},
-              currentChallenge: null,
-              friendsSteps: const [],
-              onChallengeChanged: () {},
-            ),
+  testWidgets('HomeTab shows daily reward slots', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HomeTab(
+            stepData: StepData(steps: 2388, date: DateTime(2026, 3, 19)),
+            isLoading: false,
+            error: null,
+            stepGoal: 5000,
+            healthAuthorized: true,
+            notificationsState: true,
+            displayName: 'Trail Walker',
+            authService: AuthService(),
+            onRefresh: () async {},
+            onEnableHealth: () {},
+            onEnableNotifications: () {},
+            onSetStepGoal: () {},
+            onDisplayNameChanged: () {},
+            currentChallenge: null,
+            friendsSteps: const [],
+            onChallengeChanged: () {},
           ),
         ),
-      );
+      ),
+    );
 
-      expect(find.text('1x GOAL'), findsOneWidget);
-      expect(find.text('2x GOAL'), findsOneWidget);
-    },
-  );
+    expect(find.text('1x GOAL'), findsOneWidget);
+    expect(find.text('2x GOAL'), findsOneWidget);
+  });
 
-  testWidgets(
-    'HomeTab displays username and step count in status bar',
-    (WidgetTester tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: HomeTab(
-              stepData: StepData(steps: 2388, date: DateTime(2026, 3, 19)),
-              isLoading: false,
-              error: null,
-              stepGoal: 5000,
-              healthAuthorized: true,
-              notificationsState: true,
-              displayName: 'Trail Walker',
-              authService: AuthService(),
-              onRefresh: () async {},
-              onEnableHealth: () {},
-              onEnableNotifications: () {},
-              onSetStepGoal: () {},
-              onDisplayNameChanged: () {},
-              currentChallenge: {
-                'challenge': {
-                  'title': 'Summit Sprint',
-                  'description': 'Outwalk your friend this week.',
-                },
-                'instances': [
-                  {
-                    'status': 'ACTIVE',
-                    'stakeStatus': 'AGREED',
-                    'userA': {'id': 'friend-1', 'displayName': 'Summit Buddy'},
-                    'userB': {'id': 'user-1', 'displayName': 'Trail Walker'},
-                  },
-                ],
+  testWidgets('HomeTab displays username and step count in status bar', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HomeTab(
+            stepData: StepData(steps: 2388, date: DateTime(2026, 3, 19)),
+            isLoading: false,
+            error: null,
+            stepGoal: 5000,
+            healthAuthorized: true,
+            notificationsState: true,
+            displayName: 'Trail Walker',
+            authService: AuthService(),
+            onRefresh: () async {},
+            onEnableHealth: () {},
+            onEnableNotifications: () {},
+            onSetStepGoal: () {},
+            onDisplayNameChanged: () {},
+            currentChallenge: {
+              'challenge': {
+                'title': 'Summit Sprint',
+                'description': 'Outwalk your friend this week.',
               },
-              friendsSteps: const [
+              'instances': [
                 {
-                  'displayName': 'Summit Buddy',
-                  'steps': 6200,
-                  'stepGoal': 7000,
+                  'status': 'ACTIVE',
+                  'stakeStatus': 'AGREED',
+                  'userA': {'id': 'friend-1', 'displayName': 'Summit Buddy'},
+                  'userB': {'id': 'user-1', 'displayName': 'Trail Walker'},
                 },
               ],
-              onChallengeChanged: () {},
-            ),
+            },
+            friendsSteps: const [
+              {'displayName': 'Summit Buddy', 'steps': 6200, 'stepGoal': 7000},
+            ],
+            onChallengeChanged: () {},
           ),
         ),
-      );
+      ),
+    );
 
-      expect(find.text('Trail Walker'), findsOneWidget);
-      expect(find.text('2,388 / 5k'), findsOneWidget);
-    },
-  );
+    expect(find.text('Trail Walker'), findsOneWidget);
+    expect(find.text('2,388'), findsOneWidget);
+    expect(find.text('out of 5k'), findsOneWidget);
+  });
 }

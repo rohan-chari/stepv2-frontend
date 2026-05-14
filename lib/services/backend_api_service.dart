@@ -839,6 +839,50 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  // -- Shop --
+
+  Future<Map<String, dynamic>> fetchShopCatalog({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/shop/catalog',
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> purchaseShopItem({
+    required String identityToken,
+    required String itemId,
+    required String idempotencyKey,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/shop/items/$itemId/purchase',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+      headers: {'Idempotency-Key': idempotencyKey},
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> equipAccessory({
+    required String identityToken,
+    required String slot,
+    required String? itemId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'PUT',
+      path: '/shop/equipment/$slot',
+      body: {'itemId': itemId},
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
   Future<void> unregisterDeviceToken({
     required String identityToken,
     required String deviceToken,
@@ -885,6 +929,7 @@ class BackendApiService {
     required String path,
     required Map<String, dynamic> body,
     String? identityToken,
+    Map<String, String>? headers,
   }) async {
     final uri = Uri.parse('${BackendConfig.baseUrl}$path');
 
@@ -900,6 +945,7 @@ class BackendApiService {
         );
       }
       request.headers.set('X-Timezone', await _getTimeZone());
+      headers?.forEach(request.headers.set);
 
       request.write(jsonEncode(body));
 

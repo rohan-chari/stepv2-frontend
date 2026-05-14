@@ -1,6 +1,8 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../styles.dart';
+import 'game_container.dart';
+import 'home_chrome.dart';
 import 'powerup_icon.dart';
 
 /// CSGO-style horizontal scrolling strip of powerup icons.
@@ -16,7 +18,7 @@ class CaseOpeningStrip extends StatefulWidget {
     required this.resultType,
     required this.resultRarity,
     required this.onComplete,
-    this.height = 90,
+    this.height = 116,
   });
 
   @override
@@ -31,8 +33,8 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip>
   late final int _resultIndex;
   bool _waitingForSwipe = false;
 
-  static const _itemWidth = 80.0;
-  static const _itemSpacing = 6.0;
+  static const _itemWidth = 86.0;
+  static const _itemSpacing = 8.0;
   static const _totalItemWidth = _itemWidth + _itemSpacing;
   static const _itemCount = 45;
   // Place result near the end so there's a long scroll
@@ -54,9 +56,24 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip>
   };
 
   // Weighted random: common 50%, uncommon 35%, rare 15%
-  static const _commonTypes = ['PROTEIN_SHAKE', 'SHORTCUT', 'TRAIL_MIX', 'DETOUR_SIGN'];
-  static const _uncommonTypes = ['RUNNERS_HIGH', 'LEG_CRAMP', 'STEALTH_MODE', 'WRONG_TURN'];
-  static const _rareTypes = ['RED_CARD', 'SECOND_WIND', 'COMPRESSION_SOCKS', 'FANNY_PACK'];
+  static const _commonTypes = [
+    'PROTEIN_SHAKE',
+    'SHORTCUT',
+    'TRAIL_MIX',
+    'DETOUR_SIGN',
+  ];
+  static const _uncommonTypes = [
+    'RUNNERS_HIGH',
+    'LEG_CRAMP',
+    'STEALTH_MODE',
+    'WRONG_TURN',
+  ];
+  static const _rareTypes = [
+    'RED_CARD',
+    'SECOND_WIND',
+    'COMPRESSION_SOCKS',
+    'FANNY_PACK',
+  ];
 
   @override
   void initState() {
@@ -129,103 +146,196 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip>
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
+      onTap: _waitingForSwipe ? _startSpin : null,
       onHorizontalDragEnd: _waitingForSwipe ? (_) => _startSpin() : null,
       child: LayoutBuilder(
-          builder: (context, constraints) {
-            final viewportWidth = constraints.maxWidth;
-            final centerX = viewportWidth / 2;
+        builder: (context, constraints) {
+          final viewportWidth = constraints.maxWidth;
+          final centerX = viewportWidth / 2;
 
-            // The result item's left edge position in the full strip
-            final resultItemCenter = _resultIndex * _totalItemWidth + _itemWidth / 2;
+          // The result item's left edge position in the full strip
+          final resultItemCenter =
+              _resultIndex * _totalItemWidth + _itemWidth / 2;
 
-            // We want to scroll so the result ends up at centerX
-            final totalScroll = resultItemCenter - centerX;
+          // We want to scroll so the result ends up at centerX
+          final totalScroll = resultItemCenter - centerX;
 
-            return Column(
+          return GameContainer(
+            padding: const EdgeInsets.fromLTRB(10, 12, 10, 14),
+            frameColor: AppColors.textDark,
+            surfaceColor: AppColors.parchment,
+            child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Pointer triangle
-                CustomPaint(
-                  size: const Size(20, 12),
-                  painter: _PointerPainter(),
+                Text(
+                  _waitingForSwipe ? 'SWIPE OR TAP' : 'OPENING...',
+                  style: PixelText.title(size: 14, color: AppColors.textMid),
                 ),
-                const SizedBox(height: 2),
-                // Strip viewport
-                SizedBox(
-                  height: widget.height,
-                  width: viewportWidth,
-                  child: ClipRect(
-                    child: OverflowBox(
-                      maxWidth: double.infinity,
-                      alignment: Alignment.centerLeft,
-                      child: AnimatedBuilder(
-                        animation: _animation,
-                        builder: (context, child) {
-                          final scrollOffset = _animation.value * totalScroll;
-                          return Transform.translate(
-                            offset: Offset(-scrollOffset, 0),
-                            child: child,
-                          );
-                        },
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            for (int i = 0; i < _items.length; i++) ...[
-                              if (i > 0) SizedBox(width: _itemSpacing),
-                              _buildItem(_items[i], i == _resultIndex),
-                            ],
-                          ],
+                const SizedBox(height: 8),
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    SizedBox(
+                      height: widget.height,
+                      width: viewportWidth,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: ColoredBox(
+                          color: AppColors.parchmentDark,
+                          child: ClipRect(
+                            child: OverflowBox(
+                              maxWidth: double.infinity,
+                              alignment: Alignment.centerLeft,
+                              child: AnimatedBuilder(
+                                animation: _animation,
+                                builder: (context, child) {
+                                  final scrollOffset =
+                                      _animation.value * totalScroll;
+                                  return Transform.translate(
+                                    offset: Offset(-scrollOffset, 0),
+                                    child: child,
+                                  );
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 8,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      for (
+                                        int i = 0;
+                                        i < _items.length;
+                                        i++
+                                      ) ...[
+                                        if (i > 0)
+                                          const SizedBox(width: _itemSpacing),
+                                        _buildItem(
+                                          _items[i],
+                                          i == _resultIndex,
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(painter: _CenterMarkerPainter()),
+                      ),
+                    ),
+                    Positioned(
+                      top: 0,
+                      child: CustomPaint(
+                        size: const Size(24, 14),
+                        painter: _PointerPainter(),
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      child: Transform.rotate(
+                        angle: pi,
+                        child: CustomPaint(
+                          size: const Size(24, 14),
+                          painter: _PointerPainter(),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                // Swipe hint
                 if (_waitingForSwipe) ...[
                   const SizedBox(height: 10),
-                  Text(
-                    '\u2190  SWIPE TO SPIN  \u2192',
-                    style: PixelText.body(
-                      size: 14,
-                      color: AppColors.coinLight,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.swipe_rounded,
+                        size: 18,
+                        color: AppColors.accent,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'drag across the reel',
+                        style: HomeText.body(
+                          size: 13,
+                          color: HomeColors.muted,
+                          weight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ],
-            );
-          },
-        ),
-      );
+            ),
+          );
+        },
+      ),
+    );
   }
-
 
   Widget _buildItem(_StripItem item, bool isResult) {
     final borderColor = _rarityColor(item.rarity);
 
-    return Container(
-      width: _itemWidth,
-      height: widget.height,
-      decoration: BoxDecoration(
-        color: AppColors.parchment,
-        border: Border.all(color: borderColor, width: 2.5),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          PowerupIcon(type: item.type, size: 36),
-          const SizedBox(height: 4),
-          Text(
-            _typeName(item.type),
-            style: PixelText.body(
-              size: 10,
-              color: borderColor,
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        final lift = isResult && _animation.value > 0.985 ? -4.0 : 0.0;
+        return Transform.translate(offset: Offset(0, lift), child: child);
+      },
+      child: Container(
+        width: _itemWidth,
+        height: widget.height - 16,
+        decoration: BoxDecoration(
+          color: AppColors.parchment,
+          border: Border.all(color: borderColor, width: 2.5),
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: [
+            BoxShadow(
+              color: borderColor.withValues(alpha: 0.18),
+              offset: const Offset(3, 3),
+              blurRadius: 0,
             ),
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
+          ],
+        ),
+        child: Stack(
+          children: [
+            const Positioned.fill(
+              child: CustomPaint(
+                painter: ArcadeCheckerPainter(
+                  tileColor: Color(0x08FFFFFF),
+                  stripeColor: Color(0x08000000),
+                  drawBottomStripe: false,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(6, 7, 6, 6),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Center(
+                      child: PowerupIcon(type: item.type, size: 46),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    _typeName(item.type),
+                    style: PixelText.body(size: 10, color: AppColors.textDark),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -281,6 +391,27 @@ class _PointerPainter extends CustomPainter {
       ..close();
 
     canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _CenterMarkerPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final x = size.width / 2;
+    final paint = Paint()
+      ..color = AppColors.coinDark.withValues(alpha: 0.7)
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.square;
+
+    canvas.drawLine(Offset(x, 8), Offset(x, size.height - 8), paint);
+    canvas.drawLine(
+      Offset(x - 5, size.height / 2),
+      Offset(x + 5, size.height / 2),
+      paint,
+    );
   }
 
   @override

@@ -25,6 +25,7 @@ class GoalTrackRunner {
   final double progress;
   final bool isUser;
   final bool isStealthed;
+  final List<Map<String, dynamic>> accessories;
 
   const GoalTrackRunner({
     required this.name,
@@ -32,6 +33,7 @@ class GoalTrackRunner {
     required this.progress,
     this.isUser = false,
     this.isStealthed = false,
+    this.accessories = const [],
   });
 
   /// Deterministic color based on name hash.

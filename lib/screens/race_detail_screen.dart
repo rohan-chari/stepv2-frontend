@@ -110,10 +110,30 @@ const _upgradeCosts = {
 
 // Per-tier effect labels for the use-modal. Index 0 = base.
 const _upgradeEffectLabels = {
-  'PROTEIN_SHAKE': ['+1,500 steps', '+2,250 steps', '+3,000 steps', '+4,500 steps'],
-  'SHORTCUT': ['Steal up to 1,000 steps', 'Steal up to 1,500 steps', 'Steal up to 2,000 steps', 'Steal up to 3,000 steps'],
-  'DETOUR_SIGN': ['Hide leaderboard 3h', 'Hide leaderboard 4h', 'Hide leaderboard 5h', 'Hide leaderboard 7h'],
-  'TRAIL_MIX': ['+100 steps per unique type', '+150 steps per unique type', '+200 steps per unique type', '+300 steps per unique type'],
+  'PROTEIN_SHAKE': [
+    '+1,500 steps',
+    '+2,250 steps',
+    '+3,000 steps',
+    '+4,500 steps',
+  ],
+  'SHORTCUT': [
+    'Steal up to 1,000 steps',
+    'Steal up to 1,500 steps',
+    'Steal up to 2,000 steps',
+    'Steal up to 3,000 steps',
+  ],
+  'DETOUR_SIGN': [
+    'Hide leaderboard 3h',
+    'Hide leaderboard 4h',
+    'Hide leaderboard 5h',
+    'Hide leaderboard 7h',
+  ],
+  'TRAIL_MIX': [
+    '+100 steps per unique type',
+    '+150 steps per unique type',
+    '+200 steps per unique type',
+    '+300 steps per unique type',
+  ],
   'RUNNERS_HIGH': ['2x for 3h', '2x for 4h', '2x for 5h', '2x for 7h'],
   'LEG_CRAMP': ['Freeze 2h', 'Freeze 3h', 'Freeze 4h', 'Freeze 6h'],
   'STEALTH_MODE': ['Hide 4h', 'Hide 5h', 'Hide 6.5h', 'Hide 8h'],
@@ -505,7 +525,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     }
   }
 
-  Future<void> _usePowerup(Map<String, dynamic> powerup, {int upgradeLevel = 0}) async {
+  Future<void> _usePowerup(
+    Map<String, dynamic> powerup, {
+    int upgradeLevel = 0,
+  }) async {
     final type = powerup['type'] as String;
 
     // For targeted powerups, show target picker
@@ -547,7 +570,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       final res = result['result'] as Map<String, dynamic>?;
       final coinsSpent = (res?['coinsSpent'] as int?) ?? 0;
       if (coinsSpent > 0) {
-        await widget.authService.updateCoins(widget.authService.coins - coinsSpent);
+        await widget.authService.updateCoins(
+          widget.authService.coins - coinsSpent,
+        );
       }
 
       if (!mounted) return;
@@ -730,7 +755,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
                 // Tier options for upgradeable powerups; single USE button otherwise.
                 if (upgradeable && tierLabels != null)
-                  ..._buildTierButtons(ctx, powerup, rarity, tierLabels, myCoins)
+                  ..._buildTierButtons(
+                    ctx,
+                    powerup,
+                    rarity,
+                    tierLabels,
+                    myCoins,
+                  )
                 else
                   PillButton(
                     label: 'USE',
@@ -795,10 +826,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         trailing = Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              '$cost',
-              style: PixelText.pill(size: 12, color: Colors.white),
-            ),
+            Text('$cost', style: PixelText.pill(size: 12, color: Colors.white)),
             const SizedBox(width: 4),
             const SpinningCoin(size: 14),
           ],
@@ -810,13 +838,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
           padding: const EdgeInsets.only(bottom: 6),
           child: PillButton(
             label: label,
-            variant: isBase ? PillButtonVariant.secondary : PillButtonVariant.primary,
+            variant: isBase
+                ? PillButtonVariant.secondary
+                : PillButtonVariant.primary,
             fontSize: 12,
             fullWidth: true,
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 10,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             trailing: trailing,
             onPressed: (_isActing || !affordable)
                 ? null
@@ -1314,28 +1341,19 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       children: [
         if (endsAt != null || buyInAmount > 0) ...[
           // Full-width: parent scroll view has no horizontal padding.
-          _buildRaceStatusBoard(
-            endsAt: endsAt,
-            showPrizePool: buyInAmount > 0,
-          ),
+          _buildRaceStatusBoard(endsAt: endsAt, showPrizePool: buyInAmount > 0),
           const SizedBox(height: 12),
         ],
 
-        // Everything below is inset to a tighter horizontal margin so the
-        // main content card has more breathing room than the standard 16px.
+        // Match the home tab's open spacing: content is inset, but the whole
+        // active race surface is not wrapped in a framed card.
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Column(
-            children: [
-        // Single card for everything
-        GameContainer(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Race progress
               HomeCourseTrack(
-                height: 236,
+                height: 268,
                 goalSteps: targetSteps,
                 runners: [
                   for (final p in participants)
@@ -1354,12 +1372,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                       isUser: (p['userId'] as String?) == _myUserId,
                       isStealthed: p['stealthed'] == true,
                       profilePhotoUrl: p['profilePhotoUrl'] as String?,
+                      accessories:
+                          (p['accessories'] as List?)
+                              ?.cast<Map<String, dynamic>>() ??
+                          const [],
                     ),
                 ],
               ),
               const SizedBox(height: 14),
 
-              // Leaderboard header
               Row(
                 key: const Key('race-target-header'),
                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -1412,7 +1433,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               const SizedBox(height: 10),
               ..._buildLeaderboardRows(participants),
 
-              // Divider
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Divider(
@@ -1421,7 +1441,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                 ),
               ),
 
-              // Powerups
               if (_powerupData != null && _powerupData!['enabled'] == true)
                 _buildInventoryContent()
               else
@@ -1440,7 +1459,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                   ],
                 ),
 
-              // Divider
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Divider(
@@ -1449,16 +1467,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                 ),
               ),
 
-              // Active effects on current user
               _buildActiveEffectsSection(),
-
-              // Activity feed
               _buildFeedSection(),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 24),
+              const SizedBox(height: 24),
             ],
           ),
         ),
@@ -1557,7 +1568,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         ...effects.map((e) {
           final type = e['type'] as String?;
           final name = _powerupNames[type] ?? type ?? 'Unknown';
-          final desc = _powerupShortDescriptions[type] ??
+          final desc =
+              _powerupShortDescriptions[type] ??
               _powerupDescriptions[type] ??
               '';
           final expiresAtStr = e['expiresAt'] as String?;
@@ -1899,7 +1911,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         RetroCard(
           padding: const EdgeInsets.all(10),
           child: HomeCourseTrack(
-            height: 236,
+            height: 268,
             goalSteps: targetSteps,
             runners: [
               for (final p in participants)
@@ -1910,6 +1922,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                       : 0.0,
                   isUser: (p['userId'] as String?) == _myUserId,
                   profilePhotoUrl: p['profilePhotoUrl'] as String?,
+                  accessories:
+                      (p['accessories'] as List?)
+                          ?.cast<Map<String, dynamic>>() ??
+                      const [],
                 ),
             ],
           ),

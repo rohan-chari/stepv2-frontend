@@ -7,6 +7,7 @@ import '../../styles.dart';
 import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/app_avatar.dart';
+import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/goal_track.dart';
 import '../../widgets/home_chrome.dart';
 import '../../widgets/home_course_track.dart';
@@ -29,6 +30,7 @@ class HomeTab extends StatelessWidget {
   final VoidCallback onDisplayNameChanged;
   final Map<String, dynamic>? currentChallenge;
   final List<Map<String, dynamic>> friendsSteps;
+  final List<Map<String, dynamic>> equippedAccessories;
   final Map<String, dynamic>? activeChallengeProgress;
   final List<Map<String, dynamic>> leaderboardHighlights;
   final bool leaderboardHighlightsLoading;
@@ -59,6 +61,7 @@ class HomeTab extends StatelessWidget {
     required this.onDisplayNameChanged,
     required this.currentChallenge,
     required this.friendsSteps,
+    this.equippedAccessories = const [],
     this.activeChallengeProgress,
     this.leaderboardHighlights = const [],
     this.leaderboardHighlightsLoading = false,
@@ -188,7 +191,7 @@ class HomeTab extends StatelessWidget {
       return friendGoal != null && friendGoal > 0;
     }).length;
     final viewportHeight = MediaQuery.of(context).size.height;
-    final trackHeight = viewportHeight < 760 ? 204.0 : 236.0;
+    final trackHeight = viewportHeight < 760 ? 226.0 : 268.0;
 
     return HomePanel(
       padding: EdgeInsets.zero,
@@ -202,89 +205,112 @@ class HomeTab extends StatelessWidget {
               painter: const ArcadeCheckerPainter(),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(22, 22, 22, 22),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Stack(
+                  clipBehavior: Clip.none,
                   children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              HomePill(
-                                label: 'TODAY',
-                                backgroundColor: Colors.white.withValues(
-                                  alpha: 0.14,
-                                ),
-                                foregroundColor: Colors.white,
-                              ),
-                              const SizedBox(height: 14),
-                              Text(
-                                displayName ?? 'You',
-                                style: HomeText.title(
-                                  size: 30,
-                                  color: Colors.white,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                goalStr == null
-                                    ? stepsStr
-                                    : '$stepsStr / $goalStr',
-                                style: HomeText.body(
-                                  size: 15,
-                                  color: Colors.white,
-                                  weight: FontWeight.w800,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Steps today',
-                                style: HomeText.body(
-                                  size: 14,
-                                  color: Colors.white.withValues(alpha: 0.78),
-                                  weight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            _CoinsPill(
-                              coins: authService.coins,
-                              heldCoins: authService.heldCoins,
-                            ),
-                            const SizedBox(height: 12),
-                            _ProfileAvatarChip(
-                              name: displayName ?? 'You',
-                              imageUrl: authService.profilePhotoUrl,
-                              onPressed: onOpenProfile,
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-                    Text(
-                      stepsStr,
-                      style: HomeText.display(size: 54, color: Colors.white),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      _heroSummary(
-                        steps: steps,
-                        goal: goal,
-                        friendsAhead: friendsAhead,
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: ProfileAvatarButton(
+                        name: displayName ?? 'You',
+                        imageUrl: authService.profilePhotoUrl,
+                        onPressed: onOpenProfile,
+                        size: 42,
                       ),
-                      style: HomeText.body(
-                        size: 14,
-                        color: Colors.white.withValues(alpha: 0.82),
-                        weight: FontWeight.w700,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 52),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    displayName ?? 'You',
+                                    textAlign: TextAlign.center,
+                                    style: HomeText.title(
+                                      size: 30,
+                                      color: Colors.white,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                CoinBalanceBadge(
+                                  coins: authService.coins,
+                                  heldCoins: authService.heldCoins,
+                                  coinSize: 16,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Center(
+                            child: CapybaraCustomizationPreview(
+                              accessories: equippedAccessories,
+                              size: viewportHeight < 760 ? 104 : 122,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Steps today',
+                            textAlign: TextAlign.center,
+                            style: HomeText.body(
+                              size: 14,
+                              color: Colors.white.withValues(alpha: 0.78),
+                              weight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.baseline,
+                              textBaseline: TextBaseline.alphabetic,
+                              children: [
+                                Text(
+                                  stepsStr,
+                                  style: HomeText.display(
+                                    size: 58,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                if (goalStr != null) ...[
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    'out of $goalStr',
+                                    style: HomeText.body(
+                                      size: 18,
+                                      color: Colors.white.withValues(
+                                        alpha: 0.82,
+                                      ),
+                                      weight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _heroSummary(
+                              steps: steps,
+                              goal: goal,
+                              friendsAhead: friendsAhead,
+                            ),
+                            textAlign: TextAlign.center,
+                            style: HomeText.body(
+                              size: 14,
+                              color: Colors.white.withValues(alpha: 0.82),
+                              weight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -357,12 +383,17 @@ class HomeTab extends StatelessWidget {
                         progress: progress,
                         isUser: true,
                         profilePhotoUrl: authService.profilePhotoUrl,
+                        accessories: equippedAccessories,
                       ),
                       for (final friend in friendsSteps)
                         GoalTrackRunner(
                           name: friend['displayName'] as String? ?? '???',
                           progress: _friendGoalProgress(friend),
                           profilePhotoUrl: friend['profilePhotoUrl'] as String?,
+                          accessories:
+                              (friend['accessories'] as List?)
+                                  ?.cast<Map<String, dynamic>>() ??
+                              const [],
                         ),
                     ],
                   ),
@@ -793,89 +824,6 @@ class _PermissionFeature extends StatelessWidget {
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _CoinsPill extends StatelessWidget {
-  const _CoinsPill({required this.coins, required this.heldCoins});
-
-  final int coins;
-  final int heldCoins;
-
-  @override
-  Widget build(BuildContext context) {
-    final holdLabel = heldCoins > 0 ? '  HOLD $heldCoins' : '';
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.22),
-          width: 2,
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SpinningCoin(size: 16),
-            const SizedBox(width: 6),
-            Text(
-              '$coins$holdLabel',
-              style: HomeText.body(
-                size: 12,
-                color: Colors.white,
-                weight: FontWeight.w800,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ProfileAvatarChip extends StatelessWidget {
-  const _ProfileAvatarChip({
-    required this.name,
-    required this.imageUrl,
-    this.onPressed,
-  });
-
-  final String name;
-  final String? imageUrl;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.all(3),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.26),
-              width: 2,
-            ),
-          ),
-          child: AppAvatar(
-            name: name,
-            imageUrl: imageUrl,
-            size: 40,
-            isUser: true,
-            borderColor: Colors.white,
-            borderWidth: 1.8,
-          ),
-        ),
       ),
     );
   }

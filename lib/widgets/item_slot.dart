@@ -194,7 +194,7 @@ class _ItemSlotState extends State<ItemSlot>
         children: [
           Expanded(
             child: Center(
-              child: PowerupIcon(type: widget.powerupType ?? '', size: 24),
+              child: PowerupIcon(type: widget.powerupType ?? '', size: 40),
             ),
           ),
           const SizedBox(height: 4),
