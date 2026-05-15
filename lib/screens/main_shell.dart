@@ -807,15 +807,13 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     final result = await showDialog<int>(
       context: context,
       builder: (context) {
-        final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
-
-        return AnimatedPadding(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-          padding: EdgeInsets.fromLTRB(16, 24, 16, bottomInset + 24),
-          child: Dialog(
-            backgroundColor: Colors.transparent,
-            insetPadding: EdgeInsets.zero,
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 24,
+          ),
+          child: SingleChildScrollView(
             child: TrailSign(
               width: 300,
               child: Column(
