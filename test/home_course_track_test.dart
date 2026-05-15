@@ -11,12 +11,27 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(
-      const MaterialApp(
+      MaterialApp(
         home: Scaffold(
           body: HomeCourseTrack(
             goalSteps: 8000,
             runners: [
-              GoalTrackRunner(name: 'You', progress: 0.58, isUser: true),
+              GoalTrackRunner(
+                name: 'You',
+                progress: 0.58,
+                isUser: true,
+                accessories: [
+                  {
+                    'slot': 'HEAD',
+                    'assetKey': 'baseball_cap',
+                    'renderMetadata': {
+                      'offsetX': -0.01,
+                      'offsetY': 0.02,
+                      'rotation': -0.08,
+                    },
+                  },
+                ],
+              ),
               GoalTrackRunner(name: 'Maya', progress: 0.33),
               GoalTrackRunner(name: 'Chris', progress: 0.81),
             ],
@@ -34,6 +49,13 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('You'), findsWidgets);
-    expect(find.byType(Image), findsWidgets);
+    expect(
+      find.byWidgetPredicate((widget) {
+        return widget is Image &&
+            widget.image is AssetImage &&
+            (widget.image as AssetImage).assetName.contains('baseball_cap.png');
+      }),
+      findsOneWidget,
+    );
   });
 }

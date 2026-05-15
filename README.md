@@ -26,6 +26,7 @@ Bara is a Flutter app for iOS-focused daily step competition. It signs users in 
 - **Hourly background sync** - `BackgroundSyncManager` and `background_sync_service.dart` schedule a connected-network sync every hour and post today's steps to `POST /steps` when a session token and cached health authorization are present.
 - **Notification opt-in and device-token registration** - `NotificationService` uses an iOS method channel to request push permission, capture APNs device tokens, register and unregister them with the backend, and route challenge notification taps back into the app.
 - **Home dashboard and goal progress** - the Home tab shows today's steps, optional daily-goal progress, pull-to-refresh loading, and setup prompts for missing display names, missing step goals, health access, or notifications.
+- **Accessory shop and capybara cosmetics** - the app now exposes a shop flow for buying and equipping capybara accessories, and the track renderer uses accessory metadata so hats and other items stay placed correctly across devices.
 - **Friends workflow** - users can search by display name with a 2-character minimum and 300 ms debounce, send requests, accept or decline incoming requests, track outgoing requests, and load friends' current-day step totals.
 - **Weekly challenges and stakes** - the app loads the current weekly challenge, initiates friend matchups, lets users propose, edit, accept, or counter stakes, and shows live head-to-head progress for active challenge instances.
 - **Admin challenge tools** - admin users get a Settings entry for loading weekly challenge state and running ensure, resolve, and reset actions against the backend admin endpoints.
@@ -77,6 +78,7 @@ The homepage is the source of truth for the new visual direction, and the same t
 ```text
 assets/
   images/capybara_walk_right.png   # 6-frame walking sprite used across screens
+  images/accessories/baseball_cap.png # transparent pixel accessory asset used by the shop
 
 lib/
   main.dart                        # App entry point, Workmanager init, notification init, session gate
@@ -184,6 +186,14 @@ The Flutter app expects the following backend routes to exist at `BACKEND_BASE_U
 | GET | `/stakes` | Required | Loads the stake catalog used when initiating or countering challenge stakes. |
 | GET | `/stakes?relationship_type=...` | Required | Optionally filters the stake catalog by relationship type before stake selection. |
 
+### Shop
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/shop/catalog` | Required | Loads the accessory catalog, ownership state, equipped accessories, and current coin balance. |
+| POST | `/shop/items/:itemId/purchase` | Required | Purchases an accessory using an `Idempotency-Key` header to prevent duplicate charges. |
+| PUT | `/shop/equipment/:slot` | Required | Equips or clears an owned accessory for the requested slot. |
+
 ### Notifications
 
 | Method | Path | Auth | Description |
@@ -289,7 +299,7 @@ On iOS, the app treats `health_authorized` as a cached best-effort flag because 
 flutter test
 ```
 
-Current automated coverage includes 15 Dart tests across auth/session behavior, backend error messaging, background sync scheduling, onboarding keyboard access, admin challenge tooling, and app boot. The repository also still contains 2 placeholder native XCTest files in the iOS and macOS host projects. `flutter test` passed during this documentation refresh.
+Current automated coverage includes 16 Dart tests across auth/session behavior, backend error messaging, background sync scheduling, onboarding keyboard access, home-track accessory rendering, admin challenge tooling, and app boot. The repository also still contains 2 placeholder native XCTest files in the iOS and macOS host projects. `flutter test` passed during this documentation refresh.
 
 ### Test Coverage
 
@@ -328,6 +338,12 @@ Current automated coverage includes 15 Dart tests across auth/session behavior, 
 | Group | Tests | What's covered |
 |-------|-------|----------------|
 | `top-level` | 1 | `StepTrackerApp` pumps successfully and builds the root `MaterialApp`. |
+
+#### Home course track widget test - 1 test (`test/home_course_track_test.dart`)
+
+| Group | Tests | What's covered |
+|-------|-------|----------------|
+| `top-level` | 1 | Horizontal course track renders runner accessories, including a metadata-backed baseball cap asset. |
 
 #### iOS host XCTest placeholder - 1 test (`ios/RunnerTests/RunnerTests.swift`)
 

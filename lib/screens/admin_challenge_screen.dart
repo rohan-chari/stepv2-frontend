@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
+import 'admin_accessory_tuner_screen.dart';
 import '../styles.dart';
 import '../widgets/content_board.dart';
 import '../widgets/error_toast.dart';
@@ -561,6 +562,40 @@ class _AdminChallengeScreenState extends State<AdminChallengeScreen> {
                             ],
                           ),
                         ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                ContentBoard(
+                  width: boardWidth,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'COSMETICS',
+                        style: PixelText.title(
+                          size: 16,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      PillButton(
+                        label: 'ACCESSORY RENDER TUNER',
+                        variant: PillButtonVariant.primary,
+                        fontSize: 13,
+                        fullWidth: true,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 12,
+                        ),
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => AdminAccessoryTunerScreen(
+                              authService: widget.authService,
+                            ),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),

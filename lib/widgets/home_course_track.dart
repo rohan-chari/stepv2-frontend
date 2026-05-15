@@ -452,7 +452,7 @@ class _CapybaraRunnerMarker extends StatelessWidget {
           SizedBox(
             width: capybaraSize,
             height: capybaraSize,
-            child: _CapybaraSpriteWithAccessories(
+            child: CapybaraSpriteWithAccessories(
               accessories: runner.accessories,
               capybaraSize: capybaraSize,
               frameIndex: frameIndex,
@@ -534,7 +534,7 @@ class _CapybaraCustomizationPreviewState
                 ),
                 Positioned(
                   bottom: 0,
-                  child: _CapybaraSpriteWithAccessories(
+                  child: CapybaraSpriteWithAccessories(
                     accessories: widget.accessories,
                     capybaraSize: widget.size,
                     frameIndex: frameIndex,
@@ -549,8 +549,9 @@ class _CapybaraCustomizationPreviewState
   }
 }
 
-class _CapybaraSpriteWithAccessories extends StatelessWidget {
-  const _CapybaraSpriteWithAccessories({
+class CapybaraSpriteWithAccessories extends StatelessWidget {
+  const CapybaraSpriteWithAccessories({
+    super.key,
     required this.accessories,
     required this.capybaraSize,
     required this.frameIndex,
@@ -613,14 +614,39 @@ class _AccessoryOverlay extends StatelessWidget {
     final slot = accessory['slot'] as String? ?? '';
     final assetKey = accessory['assetKey'] as String? ?? '';
     final isHeadSlot = slot == 'HEAD';
-    final rect = _rectForSlot(slot, capybaraSize).shift(
-      isHeadSlot ? Offset(-1, 2 + _headBobOffset(capybaraSize)) : Offset.zero,
+    final renderMetadata = accessory['renderMetadata'];
+    final metadata = renderMetadata is Map<String, dynamic>
+        ? renderMetadata
+        : const <String, dynamic>{};
+    final offsetX = _metadataOffset(
+      _metadataDouble(metadata, 'offsetX'),
+      capybaraSize,
+      fallback: isHeadSlot ? -1 : 0,
+    );
+    final offsetY = _metadataOffset(
+      _metadataDouble(metadata, 'offsetY'),
+      capybaraSize,
+      fallback: isHeadSlot ? 2 : 0,
+    );
+    final rotation =
+        _metadataDouble(metadata, 'rotation') ?? (isHeadSlot ? -0.14 : 0.0);
+    final scale = _metadataDouble(metadata, 'scale') ?? 1.0;
+    final baseRect = _rectForSlot(slot, capybaraSize).shift(
+      Offset(
+        offsetX,
+        offsetY + (isHeadSlot ? _headBobOffset(capybaraSize) : 0),
+      ),
+    );
+    final rect = Rect.fromCenter(
+      center: baseRect.center,
+      width: baseRect.width * scale,
+      height: baseRect.height * scale,
     );
 
     return Positioned.fromRect(
       rect: rect,
       child: Transform.rotate(
-        angle: isHeadSlot ? -0.14 : 0,
+        angle: rotation,
         alignment: Alignment.center,
         child: Image.asset(
           'assets/images/accessories/$assetKey.png',
@@ -638,6 +664,23 @@ class _AccessoryOverlay extends StatelessWidget {
     const frameOffsets = <double>[0, -1, 0, 1, 0, -1];
     final pixelScale = (size / 58).clamp(0.85, 1.2);
     return frameOffsets[frameIndex % frameOffsets.length] * pixelScale;
+  }
+
+  double? _metadataDouble(Map<String, dynamic> metadata, String key) {
+    final value = metadata[key];
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+
+  double _metadataOffset(
+    double? value,
+    double size, {
+    required double fallback,
+  }) {
+    if (value == null) return fallback;
+    if (value.abs() <= 1) return value * size;
+    return value;
   }
 
   Rect _rectForSlot(String slot, double size) {

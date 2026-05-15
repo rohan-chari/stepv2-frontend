@@ -159,7 +159,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         _pageController.jumpToPage(1);
         break;
       case NotificationRoute.friends:
-        _pageController.jumpToPage(4);
+        _openFriendsTab();
         break;
       case NotificationRoute.home:
         _pageController.jumpToPage(0);
@@ -481,16 +481,28 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   void _openFriendsTab() {
-    _pageController.animateToPage(
-      4,
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOutCubic,
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => FriendsTab(
+          authService: widget.authService,
+          onFriendsChanged: () {
+            _refreshStepGoal();
+            _fetchFriendsSteps();
+          },
+          onRefresh: _refreshFriendsTab,
+          backendApiService: _backendApiService,
+          stepData: _stepData,
+          stepGoal: _stepGoal,
+          displayName: _displayName,
+          onOpenProfile: _openProfile,
+        ),
+      ),
     );
   }
 
   void _openLeaderboardTab() {
     _pageController.animateToPage(
-      5,
+      4,
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOutCubic,
     );
@@ -675,6 +687,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           stepData: _stepData,
           onAddProfilePhoto: _addOrChangeProfilePhoto,
           onRemoveProfilePhoto: _removeProfilePhoto,
+          onOpenFriends: _openFriendsTab,
+          incomingFriendRequests: _incomingFriendRequests,
         ),
       ),
     );
@@ -1006,19 +1020,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   backendApiService: _backendApiService,
                   onShopChanged: _applyShopCatalog,
                 ),
-                FriendsTab(
-                  authService: widget.authService,
-                  onFriendsChanged: () {
-                    _refreshStepGoal();
-                    _fetchFriendsSteps();
-                  },
-                  onRefresh: _refreshFriendsTab,
-                  backendApiService: _backendApiService,
-                  stepData: _stepData,
-                  stepGoal: _stepGoal,
-                  displayName: _displayName,
-                  onOpenProfile: _openProfile,
-                ),
                 LeaderboardTab(
                   authService: widget.authService,
                   backendApiService: _backendApiService,
@@ -1061,11 +1062,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                 const WoodenTabItem(
                   icon: Icons.storefront_rounded,
                   label: 'Shop',
-                ),
-                WoodenTabItem(
-                  icon: Icons.people_rounded,
-                  label: 'Friends',
-                  badgeCount: _incomingFriendRequests,
                 ),
                 const WoodenTabItem(
                   icon: Icons.leaderboard_rounded,

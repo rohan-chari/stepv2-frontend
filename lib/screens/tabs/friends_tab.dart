@@ -267,7 +267,8 @@ class _FriendsTabState extends State<FriendsTab> {
   Widget build(BuildContext context) {
     final topInset = MediaQuery.of(context).padding.top;
     final bottomInset = MediaQuery.of(context).padding.bottom;
-    final tabBarHeight = 77.5 + bottomInset;
+    final canPop = Navigator.of(context).canPop();
+    final tabBarHeight = canPop ? bottomInset : 77.5 + bottomInset;
 
     if (_isLoading) {
       return const Center(
@@ -494,9 +495,25 @@ class _FriendsTabState extends State<FriendsTab> {
     final stepsStr = _formatNumber(steps);
     final goalStr = goal > 0 ? _formatCompact(goal) : null;
 
+    final canPop = Navigator.of(context).canPop();
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
+        if (canPop) ...[
+          GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: const Padding(
+              padding: EdgeInsets.all(8),
+              child: Icon(
+                Icons.arrow_back,
+                color: AppColors.textDark,
+                size: 24,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+        ],
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

@@ -13,9 +13,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: DisplayNameScreen(authService: AuthService()),
-      ),
+      MaterialApp(home: DisplayNameScreen(authService: AuthService())),
     );
 
     expect(find.byType(SingleChildScrollView), findsOneWidget);
@@ -29,6 +27,34 @@ void main() {
     expect(tester.getTopLeft(find.text('CONTINUE')).dy, lessThan(360));
   });
 
+  testWidgets('DisplayNameScreen centers the prompt and dismisses keyboard', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(360, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(home: DisplayNameScreen(authService: AuthService())),
+    );
+
+    final prompt = find.text('This is how friends will find you');
+    final input = find.byType(TextField);
+
+    expect(tester.getCenter(prompt).dy, inInclusiveRange(200, 460));
+    expect(tester.getCenter(input).dy, inInclusiveRange(250, 520));
+
+    await tester.showKeyboard(input);
+    await tester.pump();
+
+    final editable = tester.state<EditableTextState>(find.byType(EditableText));
+    expect(editable.widget.focusNode.hasFocus, isTrue);
+
+    await tester.tapAt(const Offset(8, 8));
+    await tester.pump();
+
+    expect(editable.widget.focusNode.hasFocus, isFalse);
+  });
+
   testWidgets('StepGoalOnboardingScreen keeps continue button reachable', (
     WidgetTester tester,
   ) async {
@@ -36,9 +62,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: StepGoalOnboardingScreen(authService: AuthService()),
-      ),
+      MaterialApp(home: StepGoalOnboardingScreen(authService: AuthService())),
     );
 
     expect(find.byType(SingleChildScrollView), findsOneWidget);
@@ -59,9 +83,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: StepGoalScreen(authService: AuthService()),
-      ),
+      MaterialApp(home: StepGoalScreen(authService: AuthService())),
     );
 
     expect(find.byType(SingleChildScrollView), findsOneWidget);
@@ -73,5 +95,33 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.getTopLeft(find.text('SAVE')).dy, lessThan(360));
+  });
+
+  testWidgets('StepGoalScreen centers the prompt and dismisses keyboard', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(360, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(home: StepGoalScreen(authService: AuthService())),
+    );
+
+    final prompt = find.text('How many steps per day?');
+    final input = find.byType(TextField);
+
+    expect(tester.getCenter(prompt).dy, inInclusiveRange(200, 460));
+    expect(tester.getCenter(input).dy, inInclusiveRange(250, 520));
+
+    await tester.showKeyboard(input);
+    await tester.pump();
+
+    final editable = tester.state<EditableTextState>(find.byType(EditableText));
+    expect(editable.widget.focusNode.hasFocus, isTrue);
+
+    await tester.tapAt(const Offset(8, 8));
+    await tester.pump();
+
+    expect(editable.widget.focusNode.hasFocus, isFalse);
   });
 }

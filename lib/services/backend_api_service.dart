@@ -606,6 +606,38 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  Future<Map<String, dynamic>> fetchAdminShopItems({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/admin/shop/items',
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> updateAdminShopItem({
+    required String identityToken,
+    required String itemId,
+    Map<String, double>? renderMetadata,
+    bool? active,
+    int? priceCoins,
+  }) async {
+    final body = <String, dynamic>{};
+    if (renderMetadata != null) body['renderMetadata'] = renderMetadata;
+    if (active != null) body['active'] = active;
+    if (priceCoins != null) body['priceCoins'] = priceCoins;
+    final response = await _sendJsonRequest(
+      method: 'PATCH',
+      path: '/admin/shop/items/$itemId',
+      body: body,
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
   Future<Map<String, dynamic>> resetAdminWeeklyChallenge({
     required String identityToken,
   }) async {

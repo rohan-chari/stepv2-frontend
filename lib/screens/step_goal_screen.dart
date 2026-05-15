@@ -74,6 +74,10 @@ class _StepGoalScreenState extends State<StepGoalScreen> {
     }
   }
 
+  void _dismissKeyboard() {
+    FocusManager.instance.primaryFocus?.unfocus();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -82,127 +86,167 @@ class _StepGoalScreenState extends State<StepGoalScreen> {
         children: [
           ArcadePageBackground(
             child: SafeArea(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _dismissKeyboard,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
 
-                  return SingleChildScrollView(
-                    keyboardDismissBehavior:
-                        ScrollViewKeyboardDismissBehavior.onDrag,
-                    padding: EdgeInsets.fromLTRB(24, 8, 24, bottomInset + 136),
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minHeight: constraints.maxHeight,
+                    return SingleChildScrollView(
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      padding: EdgeInsets.fromLTRB(
+                        24,
+                        8,
+                        24,
+                        bottomInset + 136,
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            child: Row(
-                              children: [
-                                GestureDetector(
-                                  onTap: () => Navigator.of(context).pop(),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(8),
-                                    child: const Icon(
-                                      Icons.arrow_back,
-                                      color: AppColors.parchmentLight,
-                                      size: 24,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minHeight: constraints.maxHeight,
+                        ),
+                        child: IntrinsicHeight(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                ),
+                                child: Row(
+                                  children: [
+                                    GestureDetector(
+                                      onTap: () => Navigator.of(context).pop(),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(8),
+                                        child: const Icon(
+                                          Icons.arrow_back,
+                                          color: AppColors.parchmentLight,
+                                          size: 24,
+                                        ),
+                                      ),
                                     ),
+                                    Expanded(
+                                      child: Text(
+                                        'SET STEP GOAL',
+                                        style: PixelText.title(
+                                          size: 20,
+                                          color: AppColors.parchmentLight,
+                                        ).copyWith(shadows: _textShadows),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 40),
+                                  ],
+                                ),
+                              ),
+                              const Spacer(),
+                              Center(
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 420,
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      Text(
+                                        'How many steps per day?',
+                                        style: PixelText.body(
+                                          color: AppColors.textMid,
+                                        ).copyWith(shadows: _textShadows),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                      const SizedBox(height: 20),
+                                      TextField(
+                                        controller: _controller,
+                                        keyboardType: TextInputType.number,
+                                        textInputAction: TextInputAction.done,
+                                        onSubmitted: (_) => _dismissKeyboard(),
+                                        onTapOutside: (_) => _dismissKeyboard(),
+                                        scrollPadding: EdgeInsets.only(
+                                          bottom: bottomInset + 120,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                        style: PixelText.number(
+                                          size: 28,
+                                          color: AppColors.textDark,
+                                        ),
+                                        decoration: InputDecoration(
+                                          filled: true,
+                                          fillColor: AppColors.parchmentLight,
+                                          border: OutlineInputBorder(
+                                            borderSide: BorderSide(
+                                              color: AppColors.parchmentBorder,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderSide: BorderSide(
+                                              color: AppColors.parchmentBorder,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderSide: BorderSide(
+                                              color: AppColors.accent,
+                                              width: 2,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                          ),
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                horizontal: 16,
+                                                vertical: 14,
+                                              ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'Minimum: 5,000 steps',
+                                        style: PixelText.body(
+                                          size: 12,
+                                          color: AppColors.textMid,
+                                        ).copyWith(shadows: _textShadows),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                Expanded(
-                                  child: Text(
-                                    'SET STEP GOAL',
-                                    style: PixelText.title(
-                                      size: 20,
-                                      color: AppColors.parchmentLight,
-                                    ).copyWith(shadows: _textShadows),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ),
-                                const SizedBox(width: 40),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 28),
-                          Text(
-                            'How many steps per day?',
-                            style: PixelText.body(
-                              color: AppColors.textMid,
-                            ).copyWith(shadows: _textShadows),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 20),
-                          TextField(
-                            controller: _controller,
-                            keyboardType: TextInputType.number,
-                            textAlign: TextAlign.center,
-                            style: PixelText.number(
-                              size: 28,
-                              color: AppColors.textDark,
-                            ),
-                            decoration: InputDecoration(
-                              filled: true,
-                              fillColor: AppColors.parchmentLight,
-                              border: OutlineInputBorder(
-                                borderSide: BorderSide(
-                                  color: AppColors.parchmentBorder,
-                                ),
-                                borderRadius: BorderRadius.circular(8),
                               ),
-                              enabledBorder: OutlineInputBorder(
-                                borderSide: BorderSide(
-                                  color: AppColors.parchmentBorder,
-                                ),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderSide: BorderSide(
-                                  color: AppColors.accent,
-                                  width: 2,
-                                ),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 14,
-                              ),
-                            ),
+                              const Spacer(),
+                              _isSaving
+                                  ? const Center(
+                                      child: CircularProgressIndicator(
+                                        color: AppColors.accent,
+                                      ),
+                                    )
+                                  : PillButton(
+                                      label: 'SAVE',
+                                      variant: PillButtonVariant.primary,
+                                      fontSize: 16,
+                                      fullWidth: true,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 48,
+                                        vertical: 16,
+                                      ),
+                                      onPressed: _onSave,
+                                    ),
+                            ],
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Minimum: 5,000 steps',
-                            style: PixelText.body(
-                              size: 12,
-                              color: AppColors.textMid,
-                            ).copyWith(shadows: _textShadows),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 16),
-                          _isSaving
-                              ? const Center(
-                                  child: CircularProgressIndicator(
-                                    color: AppColors.accent,
-                                  ),
-                                )
-                              : PillButton(
-                                  label: 'SAVE',
-                                  variant: PillButtonVariant.primary,
-                                  fontSize: 16,
-                                  fullWidth: true,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 48,
-                                    vertical: 16,
-                                  ),
-                                  onPressed: _onSave,
-                                ),
-                        ],
+                        ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
             ),
           ),
