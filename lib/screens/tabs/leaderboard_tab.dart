@@ -245,7 +245,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   String _displayValue(Map<String, dynamic> entry) {
     switch (_selectedType) {
       case _LeaderboardType.steps:
-        return _formatSteps(entry['totalSteps'] as int? ?? 0);
+        return _formatSteps((entry['totalSteps'] as num?)?.toInt() ?? 0);
       case _LeaderboardType.challenges:
         final wins = entry['wins'] as int? ?? 0;
         final losses = entry['losses'] as int? ?? 0;

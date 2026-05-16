@@ -771,7 +771,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                           ),
                           if (t['totalSteps'] != null)
                             Text(
-                              '${_formatSteps(t['totalSteps'] as int)} steps',
+                              '${_formatSteps((t['totalSteps'] as num).toInt())} steps',
                               style: PixelText.number(
                                 size: 12,
                                 color: AppColors.textMid,
@@ -1591,7 +1591,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                               targetSteps,
                             )
                           : targetSteps > 0 && p['totalSteps'] != null
-                          ? ((p['totalSteps'] as int) / targetSteps)
+                          ? ((p['totalSteps'] as num).toInt() / targetSteps)
                           : 0.0,
                       isUser: (p['userId'] as String?) == _myUserId,
                       isStealthed: p['stealthed'] == true,
@@ -2136,7 +2136,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                 GoalTrackRunner(
                   name: p['displayName'] as String? ?? '???',
                   progress: targetSteps > 0
-                      ? ((p['totalSteps'] as int? ?? 0) / targetSteps)
+                      ? (((p['totalSteps'] as num?)?.toInt() ?? 0) /
+                            targetSteps)
                       : 0.0,
                   isUser: (p['userId'] as String?) == _myUserId,
                   profilePhotoUrl: p['profilePhotoUrl'] as String?,
@@ -2442,7 +2443,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     int? finishPlace,
   }) {
     final name = p['displayName'] as String? ?? '???';
-    final totalSteps = p['totalSteps'] as int? ?? 0;
+    final totalSteps = (p['totalSteps'] as num?)?.toInt() ?? 0;
     final userId = p['userId'] as String? ?? '';
     final isMe = userId == _myUserId;
     final isStealthed = p['stealthed'] == true;

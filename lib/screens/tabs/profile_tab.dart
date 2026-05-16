@@ -446,11 +446,11 @@ class _StatsSectionState extends State<_StatsSection> {
 
       if (mounted) {
         setState(() {
-          _thisWeek = stats['thisWeek'] as int? ?? 0;
-          _thisMonth = stats['thisMonth'] as int? ?? 0;
-          _thisYear = stats['thisYear'] as int? ?? 0;
-          _allTime = stats['allTime'] as int? ?? 0;
-          _streak = stats['streak'] as int? ?? 0;
+          _thisWeek = (stats['thisWeek'] as num?)?.toInt() ?? 0;
+          _thisMonth = (stats['thisMonth'] as num?)?.toInt() ?? 0;
+          _thisYear = (stats['thisYear'] as num?)?.toInt() ?? 0;
+          _allTime = (stats['allTime'] as num?)?.toInt() ?? 0;
+          _streak = (stats['streak'] as num?)?.toInt() ?? 0;
           _isLoading = false;
         });
       }

@@ -196,7 +196,7 @@ class StepCalendarState extends State<StepCalendar> {
         final day = _days[dayIndex];
         dayIndex++;
 
-        final steps = day['steps'] as int? ?? 0;
+        final steps = (day['steps'] as num?)?.toInt() ?? 0;
         final goalMet = day['goalMet'] as bool? ?? false;
         final isFuture = day['future'] as bool? ?? false;
         final isToday = day['isToday'] as bool? ?? false;

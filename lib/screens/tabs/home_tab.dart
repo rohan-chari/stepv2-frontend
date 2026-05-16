@@ -183,7 +183,7 @@ class HomeTab extends StatelessWidget {
     final goalStr = goal > 0 ? _formatCompact(goal) : null;
     final remainingSteps = goal > 0 ? math.max(goal - steps, 0) : 0;
     final friendsAhead = friendsSteps.where((friend) {
-      final friendSteps = friend['steps'] as int? ?? 0;
+      final friendSteps = (friend['steps'] as num?)?.toInt() ?? 0;
       return friendSteps > steps;
     }).length;
     final friendsOnTrack = friendsSteps.where((friend) {
@@ -591,7 +591,7 @@ class HomeTab extends StatelessWidget {
   }
 
   static double _friendGoalProgress(Map<String, dynamic> friend) {
-    final steps = friend['steps'] as int? ?? 0;
+    final steps = (friend['steps'] as num?)?.toInt() ?? 0;
     final goal = friend['stepGoal'] as int?;
     if (goal != null && goal > 0) return (steps / goal).clamp(0.0, 1.0);
     return 0.0;

@@ -140,17 +140,18 @@ class CaseOpeningScreen extends StatefulWidget {
 
 class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
   bool _revealed = false;
-  bool _opening = false;
+  bool _resultReady = false;
   String _resultType = '';
   String _resultRarity = 'COMMON';
   bool _autoActivated = false;
 
-  void _onStripComplete() {
-    if (_opening || _revealed) {
-      return;
-    }
+  @override
+  void initState() {
+    super.initState();
+    _rollResult();
+  }
 
-    setState(() => _opening = true);
+  void _rollResult() {
     widget
         .openMysteryBox()
         .then((result) {
@@ -161,21 +162,24 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
             _resultType = openResult['type'] as String? ?? '';
             _resultRarity = openResult['rarity'] as String? ?? 'COMMON';
             _autoActivated = openResult['autoActivated'] == true;
-            _revealed = true;
-            _opening = false;
+            _resultReady = true;
           });
         })
         .catchError((_) {
           if (!mounted) return;
-          setState(() => _opening = false);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Failed to open mystery box')),
           );
+          Navigator.of(context).pop();
         });
   }
 
+  void _onStripComplete() {
+    if (_revealed || !_resultReady) return;
+    setState(() => _revealed = true);
+  }
+
   void _closeOverlay() {
-    if (_opening) return;
     Navigator.of(context).pop();
   }
 
@@ -250,19 +254,33 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
             ),
           ),
           const SizedBox(height: 14),
-          CaseOpeningStrip(
-            resultType: _resultType.isEmpty ? 'PROTEIN_SHAKE' : _resultType,
-            resultRarity: _resultRarity,
-            onComplete: _onStripComplete,
-          ),
-          if (_opening) ...[
-            const SizedBox(height: 14),
-            Text(
-              'OPENING...',
-              textAlign: TextAlign.center,
-              style: PixelText.title(size: 14, color: AppColors.textMid),
+          if (_resultReady)
+            CaseOpeningStrip(
+              resultType: _resultType,
+              resultRarity: _resultRarity,
+              onComplete: _onStripComplete,
+            )
+          else
+            const SizedBox(
+              height: 160,
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(color: AppColors.accent),
+                    SizedBox(height: 12),
+                    Text(
+                      'PREPARING...',
+                      style: TextStyle(
+                        color: AppColors.textMid,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ],
         ],
       ),
     );

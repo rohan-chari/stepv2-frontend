@@ -30,8 +30,8 @@ List<Map<String, dynamic>> sortRaceParticipantsForDisplay(
       if (finishedCompare != 0) return finishedCompare;
     }
 
-    final aSteps = a.participant['totalSteps'] as int? ?? 0;
-    final bSteps = b.participant['totalSteps'] as int? ?? 0;
+    final aSteps = (a.participant['totalSteps'] as num?)?.toInt() ?? 0;
+    final bSteps = (b.participant['totalSteps'] as num?)?.toInt() ?? 0;
     final stepCompare = bSteps.compareTo(aSteps);
     if (stepCompare != 0) return stepCompare;
 

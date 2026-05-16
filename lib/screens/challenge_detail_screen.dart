@@ -448,8 +448,8 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
     final theirData = iAmA ? userB : userA;
 
     return RaceTrack(
-      mySteps: myData['totalSteps'] as int? ?? 0,
-      theirSteps: theirData['totalSteps'] as int? ?? 0,
+      mySteps: (myData['totalSteps'] as num?)?.toInt() ?? 0,
+      theirSteps: (theirData['totalSteps'] as num?)?.toInt() ?? 0,
       myName: widget.authService.displayName ?? 'You',
       theirName: _friendName(),
       myProfilePhotoUrl: widget.authService.profilePhotoUrl,
@@ -469,8 +469,8 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
     final myData = iAmA ? userA : userB;
     final theirData = iAmA ? userB : userA;
 
-    final myTotal = myData['totalSteps'] as int? ?? 0;
-    final theirTotal = theirData['totalSteps'] as int? ?? 0;
+    final myTotal = (myData['totalSteps'] as num?)?.toInt() ?? 0;
+    final theirTotal = (theirData['totalSteps'] as num?)?.toInt() ?? 0;
     final myDaily =
         (myData['dailySteps'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final theirDaily =
@@ -596,8 +596,10 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
         for (int i = 0; i < 7 && i < myDaily.length; i++)
           _buildDayRow(
             dayLabels[i],
-            myDaily[i]['steps'] as int? ?? 0,
-            i < theirDaily.length ? theirDaily[i]['steps'] as int? ?? 0 : 0,
+            (myDaily[i]['steps'] as num?)?.toInt() ?? 0,
+            i < theirDaily.length
+                ? (theirDaily[i]['steps'] as num?)?.toInt() ?? 0
+                : 0,
           ),
       ],
     );

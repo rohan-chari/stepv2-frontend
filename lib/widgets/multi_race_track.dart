@@ -40,7 +40,7 @@ class MultiRaceTrack extends StatelessWidget {
   }
 
   Widget _buildLane(Map<String, dynamic> participant, int index) {
-    final totalSteps = participant['totalSteps'] as int? ?? 0;
+    final totalSteps = (participant['totalSteps'] as num?)?.toInt() ?? 0;
     final progress = targetSteps > 0
         ? (totalSteps / targetSteps).clamp(0.0, 1.0)
         : 0.0;
