@@ -6,7 +6,9 @@ import 'package:flutter/material.dart';
 import '../../styles.dart';
 import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
+import '../../services/backend_api_service.dart';
 import '../../widgets/app_avatar.dart';
+import '../../widgets/daily_reward_trigger.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/goal_track.dart';
 import '../../widgets/home_chrome.dart';
@@ -23,6 +25,7 @@ class HomeTab extends StatelessWidget {
   final bool? notificationsState;
   final String? displayName;
   final AuthService authService;
+  final BackendApiService backendApiService;
   final Future<void> Function() onRefresh;
   final VoidCallback onEnableHealth;
   final VoidCallback onEnableNotifications;
@@ -54,6 +57,7 @@ class HomeTab extends StatelessWidget {
     required this.notificationsState,
     required this.displayName,
     required this.authService,
+    required this.backendApiService,
     required this.onRefresh,
     required this.onEnableHealth,
     required this.onEnableNotifications,
@@ -216,6 +220,14 @@ class HomeTab extends StatelessWidget {
                         imageUrl: authService.profilePhotoUrl,
                         onPressed: onOpenProfile,
                         size: 42,
+                      ),
+                    ),
+                    Positioned(
+                      top: 4,
+                      left: 0,
+                      child: DailyRewardTrigger(
+                        authService: authService,
+                        backendApiService: backendApiService,
                       ),
                     ),
                     Padding(

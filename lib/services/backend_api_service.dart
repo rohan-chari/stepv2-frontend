@@ -896,6 +896,32 @@ class BackendApiService {
 
   // -- Shop --
 
+  Future<Map<String, dynamic>> fetchDailyRewardStatus({
+    required String identityToken,
+    required String localDate,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/daily-reward/status?localDate=$localDate',
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> claimDailyReward({
+    required String identityToken,
+    required String localDate,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/daily-reward/claim',
+      body: {'localDate': localDate},
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
   Future<Map<String, dynamic>> fetchShopCatalog({
     required String identityToken,
   }) async {

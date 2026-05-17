@@ -968,6 +968,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   isLoading: _isLoading,
                   error: _error,
                   stepGoal: _stepGoal,
+                  backendApiService: _backendApiService,
                   healthAuthorized: _healthAuthorized,
                   notificationsState: _notificationsState,
                   displayName: _displayName,
