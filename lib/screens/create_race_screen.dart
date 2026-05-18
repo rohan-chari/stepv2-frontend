@@ -33,6 +33,8 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
   bool _buyInEnabled = false;
   int _buyInAmount = 100;
   String _payoutPreset = 'WINNER_TAKES_ALL';
+  bool _isPublic = false;
+  int _maxParticipants = 10;
 
   static const _textShadows = [
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
@@ -40,8 +42,9 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
 
   static const _durationOptions = [3, 5, 7, 14];
   static const _stepPresets = [25000, 50000, 100000, 250000];
-  static const _intervalPresets = [2500, 5000, 10000, 25000];
+  static const _intervalPresets = [1000, 2000, 3000, 4000, 5000, 10000, 25000];
   static const _buyInPresets = [50, 100, 250, 500];
+  static const _maxParticipantsPresets = [5, 10, 25, 50, 100];
   static const _payoutOptions = [
     ('WINNER TAKE ALL', 'WINNER_TAKES_ALL'),
     ('TOP 3 70/20/10', 'TOP3_70_20_10'),
@@ -88,6 +91,8 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
         powerupStepInterval: _powerupsEnabled ? _powerupInterval : null,
         buyInAmount: _buyInEnabled ? _buyInAmount : 0,
         payoutPreset: _buyInEnabled ? _payoutPreset : 'WINNER_TAKES_ALL',
+        isPublic: _isPublic,
+        maxParticipants: _maxParticipants,
       );
 
       final user = await widget.backendApiService.fetchMe(identityToken: token);
@@ -556,6 +561,100 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
                                   ),
                                   textAlign: TextAlign.center,
                                 ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Public race
+                      RetroCard(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'PUBLIC RACE',
+                                      style: PixelText.title(
+                                        size: 13,
+                                        color: AppColors.textMid,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      _isPublic
+                                          ? 'ANYONE CAN JOIN'
+                                          : 'INVITE ONLY',
+                                      style: PixelText.body(
+                                        size: 11,
+                                        color: _isPublic
+                                            ? AppColors.pillGreenDark
+                                            : AppColors.textMid,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(
+                                  height: 28,
+                                  child: Switch.adaptive(
+                                    value: _isPublic,
+                                    activeTrackColor: AppColors.pillGreenDark,
+                                    onChanged: (v) =>
+                                        setState(() => _isPublic = v),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (_isPublic) ...[
+                              const SizedBox(height: 12),
+                              Text(
+                                'MAX RUNNERS',
+                                style: PixelText.body(
+                                  size: 11,
+                                  color: AppColors.textMid,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: _maxParticipantsPresets.map((preset) {
+                                  final selected = _maxParticipants == preset;
+                                  return GestureDetector(
+                                    onTap: () => setState(
+                                      () => _maxParticipants = preset,
+                                    ),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 8,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: selected
+                                            ? AppColors.pillGreenDark
+                                            : AppColors.parchmentDark,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        '$preset',
+                                        style: PixelText.title(
+                                          size: 13,
+                                          color: selected
+                                              ? Colors.white
+                                              : AppColors.textDark,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
                               ),
                             ],
                           ],

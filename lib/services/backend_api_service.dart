@@ -677,6 +677,8 @@ class BackendApiService {
     int? powerupStepInterval,
     int buyInAmount = 0,
     String payoutPreset = 'WINNER_TAKES_ALL',
+    bool isPublic = false,
+    int maxParticipants = 10,
   }) async {
     final body = <String, dynamic>{
       'name': name,
@@ -684,6 +686,8 @@ class BackendApiService {
       'maxDurationDays': maxDurationDays,
       'buyInAmount': buyInAmount,
       'payoutPreset': payoutPreset,
+      'isPublic': isPublic,
+      'maxParticipants': maxParticipants,
     };
     if (powerupsEnabled) {
       body['powerupsEnabled'] = true;
@@ -751,6 +755,45 @@ class BackendApiService {
     );
 
     return _decodeJsonResponse(response);
+  }
+
+  Future<List<Map<String, dynamic>>> fetchPublicRaces({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/races/public',
+      identityToken: identityToken,
+    );
+    final decoded = await _decodeJsonResponse(response);
+    final races = decoded['races'] as List? ?? [];
+    return races.cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> joinPublicRace({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races/$raceId/join',
+      body: const {},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<void> kickRaceParticipant({
+    required String identityToken,
+    required String raceId,
+    required String userId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'DELETE',
+      path: '/races/$raceId/participants/$userId',
+      body: const {},
+      identityToken: identityToken,
+    );
+    _decodeJsonResponse(response);
   }
 
   Future<Map<String, dynamic>> startRace({
@@ -891,6 +934,80 @@ class BackendApiService {
       identityToken: identityToken,
     );
 
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> fetchRaceMessages({
+    required String identityToken,
+    required String raceId,
+    String? cursor,
+    int? limit,
+  }) async {
+    final params = <String, String>{};
+    if (cursor != null) params['cursor'] = cursor;
+    if (limit != null) params['limit'] = '$limit';
+    final query = params.isEmpty
+        ? ''
+        : '?${params.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&')}';
+    final response = await _sendGetRequest(
+      path: '/races/$raceId/messages$query',
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> sendRaceMessage({
+    required String identityToken,
+    required String raceId,
+    required String body,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races/$raceId/messages',
+      body: {'body': body},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> deleteRaceMessage({
+    required String identityToken,
+    required String raceId,
+    required String messageId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'DELETE',
+      path: '/races/$raceId/messages/$messageId',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> setRaceChatMute({
+    required String identityToken,
+    required String raceId,
+    required bool muted,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'PUT',
+      path: '/races/$raceId/chat/mute',
+      body: {'muted': muted},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> markRaceChatRead({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races/$raceId/chat/read',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
     return _decodeJsonResponse(response);
   }
 

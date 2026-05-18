@@ -18,6 +18,8 @@ class _FakeBackendApiService extends BackendApiService {
     int? powerupStepInterval,
     int buyInAmount = 0,
     String payoutPreset = 'WINNER_TAKES_ALL',
+    bool isPublic = false,
+    int maxParticipants = 10,
   }) async {
     lastCreateRaceCall = {
       'identityToken': identityToken,
@@ -28,6 +30,8 @@ class _FakeBackendApiService extends BackendApiService {
       'powerupStepInterval': powerupStepInterval,
       'buyInAmount': buyInAmount,
       'payoutPreset': payoutPreset,
+      'isPublic': isPublic,
+      'maxParticipants': maxParticipants,
     };
 
     return {

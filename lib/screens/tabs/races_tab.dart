@@ -9,6 +9,7 @@ import '../../widgets/game_container.dart';
 import '../../widgets/info_board_card.dart';
 import '../../widgets/pill_button.dart';
 import '../create_race_screen.dart';
+import '../public_races_screen.dart';
 import '../race_detail_screen.dart';
 
 class RacesTab extends StatefulWidget {
@@ -93,6 +94,21 @@ class _RacesTabState extends State<RacesTab> {
         });
   }
 
+  void _navigateToPublicRaces() {
+    Navigator.of(context)
+        .push<bool>(
+          MaterialPageRoute(
+            builder: (context) =>
+                PublicRacesScreen(authService: widget.authService),
+          ),
+        )
+        .then((joined) {
+          if (joined == true && mounted) {
+            widget.onRacesChanged();
+          }
+        });
+  }
+
   void _navigateToRaceDetail(String raceId) {
     Navigator.of(context)
         .push<bool>(
@@ -169,6 +185,18 @@ class _RacesTabState extends State<RacesTab> {
                   vertical: 12,
                 ),
                 onPressed: _navigateToCreateRace,
+              ),
+              const SizedBox(height: 8),
+              PillButton(
+                label: 'BROWSE PUBLIC',
+                variant: PillButtonVariant.secondary,
+                fontSize: 14,
+                fullWidth: true,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                onPressed: _navigateToPublicRaces,
               ),
             ],
           ],

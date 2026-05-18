@@ -25,6 +25,7 @@ import '../widgets/race_finishers_banner.dart';
 import '../widgets/item_slot.dart';
 import '../widgets/feed_bubble.dart';
 import 'case_opening_screen.dart';
+import 'race_chat_screen.dart';
 import 'race_invite_screen.dart';
 
 class RaceDetailScreen extends StatefulWidget {
@@ -1167,6 +1168,18 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    if (_race != null)
+                      GestureDetector(
+                        onTap: _openChat,
+                        child: const Padding(
+                          padding: EdgeInsets.all(8),
+                          child: Icon(
+                            Icons.chat_bubble_outline,
+                            color: AppColors.textDark,
+                            size: 22,
+                          ),
+                        ),
+                      ),
                     if (_race != null &&
                         (_race!['isCreator'] as bool? ?? false) &&
                         (_race!['status'] == 'PENDING' ||
@@ -1996,6 +2009,25 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     return '${(diff.inDays / 7).floor()}w';
   }
 
+  void _openChat() {
+    final race = _race;
+    if (race == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => RaceChatScreen(
+          authService: widget.authService,
+          raceId: widget.raceId,
+          raceName: race['name'] as String? ?? 'Race',
+          raceStatus: race['status'] as String? ?? '',
+          myStatus: race['myStatus'] as String? ?? '',
+          myUserId: _myUserId,
+          initialMuted: race['myChatMuted'] as bool? ?? false,
+          backendApiService: widget.backendApiService,
+        ),
+      ),
+    );
+  }
+
   void _showRaceOptionsSheet() {
     final status = _race?['status'] as String? ?? '';
     showModalBottomSheet(
@@ -2409,6 +2441,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     final status = p['status'] as String? ?? '';
     final userId = p['userId'] as String? ?? '';
     final isMe = userId == _myUserId;
+    final isCreator = _race?['isCreator'] as bool? ?? false;
+    final raceStatus = _race?['status'] as String? ?? '';
+    final canKick = isCreator &&
+        !isMe &&
+        (raceStatus == 'PENDING' || raceStatus == 'ACTIVE');
 
     Color badgeColor;
     String badgeText;
@@ -2448,9 +2485,62 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               style: PixelText.title(size: 12, color: Colors.white),
             ),
           ),
+          if (canKick) ...[
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () => _confirmKick(userId, name),
+              child: const Padding(
+                padding: EdgeInsets.all(4),
+                child: Icon(
+                  Icons.person_remove,
+                  size: 18,
+                  color: AppColors.error,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  Future<void> _confirmKick(String userId, String displayName) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Remove $displayName?'),
+        content: const Text(
+          'They will be removed from the race. Any held buy-in will be refunded.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) return;
+
+    try {
+      await _api.kickRaceParticipant(
+        identityToken: token,
+        raceId: widget.raceId,
+        userId: userId,
+      );
+      if (!mounted) return;
+      await _loadDetails();
+    } catch (e) {
+      if (!mounted) return;
+      showErrorToast(context, e.toString());
+    }
   }
 
   List<Widget> _buildLeaderboardRows(List<Map<String, dynamic>> participants) {

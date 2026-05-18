@@ -126,6 +126,7 @@ class NotificationService {
       case 'RACE_STARTED':
       case 'RACE_COMPLETED':
       case 'POWERUP_USED':
+      case 'race_message':
         return NotificationRoute.raceDetail;
       case 'RACE_CANCELLED':
         return NotificationRoute.races;
