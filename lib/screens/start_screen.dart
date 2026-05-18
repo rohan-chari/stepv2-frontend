@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart' as apple;
 
 import 'display_name_screen.dart';
 import 'main_shell.dart';
@@ -9,7 +10,6 @@ import '../widgets/capybara.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/feature_highlights_row.dart';
-import '../widgets/pill_button.dart';
 import '../widgets/retro_card.dart';
 import '../widgets/spinning_coin.dart';
 
@@ -152,19 +152,17 @@ class _StartScreenState extends State<StartScreen> {
 
                 const SizedBox(height: 16),
 
-                // Start button
+                // Sign in with Apple button
                 _isSigningIn
                     ? const CircularProgressIndicator(color: AppColors.accent)
-                    : PillButton(
-                        label: 'GET STARTED',
-                        variant: PillButtonVariant.primary,
-                        fontSize: 18,
-                        fullWidth: true,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 48,
-                          vertical: 18,
+                    : SizedBox(
+                        width: double.infinity,
+                        child: apple.SignInWithAppleButton(
+                          onPressed: _onStart,
+                          height: 54,
+                          borderRadius: BorderRadius.circular(8),
+                          iconAlignment: apple.IconAlignment.left,
                         ),
-                        onPressed: _onStart,
                       ),
 
                 const Spacer(flex: 1),

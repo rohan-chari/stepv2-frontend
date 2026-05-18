@@ -29,6 +29,8 @@ void main() {
       ),
       findsOneWidget,
     );
+    expect(find.text('Sign in with Apple'), findsOneWidget);
+    expect(find.text('GET STARTED'), findsNothing);
   });
 
   testWidgets('HomeTab shows action buttons for challenge and leaderboard', (

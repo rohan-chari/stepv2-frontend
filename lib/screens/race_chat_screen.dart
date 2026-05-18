@@ -185,7 +185,9 @@ class _RaceChatScreenState extends State<RaceChatScreen>
                               child: SizedBox(
                                 width: 16,
                                 height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               ),
                             ),
                           );
@@ -221,10 +223,10 @@ class _RaceChatScreenState extends State<RaceChatScreen>
       final reason = widget.raceStatus == 'COMPLETED'
           ? 'This race is finished. Chat is read-only.'
           : widget.raceStatus == 'CANCELLED'
-              ? 'This race was cancelled. Chat is read-only.'
-              : widget.myStatus == 'INVITED'
-                  ? 'Accept the invite to post in chat.'
-                  : 'You can\'t post in this chat.';
+          ? 'This race was cancelled. Chat is read-only.'
+          : widget.myStatus == 'INVITED'
+          ? 'Accept the invite to post in chat.'
+          : 'You can\'t post in this chat.';
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(12),
@@ -353,20 +355,21 @@ class _ChatBubble extends StatelessWidget {
     }
 
     final bubbleColor = isMine ? AppColors.accent : Colors.white;
-    final textColor = AppColors.textDark;
+    final textColor = isMine ? Colors.white : AppColors.textDark;
+    final metaColor = isMine
+        ? Colors.white.withValues(alpha: 0.72)
+        : AppColors.textMid.withValues(alpha: 0.8);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment:
-            isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isMine
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         children: [
           if (!isMine) ...[
-            PlayerAvatar(
-              name: message.senderName ?? '?',
-              size: 28,
-            ),
+            PlayerAvatar(name: message.senderName ?? '?', size: 28),
             const SizedBox(width: 6),
           ],
           Flexible(
@@ -405,18 +408,11 @@ class _ChatBubble extends StatelessWidget {
                       children: [
                         Text(
                           _formatTime(message.createdAt),
-                          style: PixelText.body(
-                            size: 11,
-                            color: AppColors.textMid.withValues(alpha: 0.8),
-                          ),
+                          style: PixelText.body(size: 11, color: metaColor),
                         ),
                         if (message.pending) ...[
                           const SizedBox(width: 4),
-                          Icon(
-                            Icons.access_time,
-                            size: 11,
-                            color: AppColors.textMid.withValues(alpha: 0.8),
-                          ),
+                          Icon(Icons.access_time, size: 11, color: metaColor),
                         ],
                         if (message.failed) ...[
                           const SizedBox(width: 4),
