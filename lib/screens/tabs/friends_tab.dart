@@ -311,44 +311,47 @@ class _FriendsTabState extends State<FriendsTab> {
                           // Search bar
                           Column(
                             children: [
-                              TextField(
-                                controller: _searchController,
-                                onChanged: _onSearchChanged,
-                                textAlign: TextAlign.center,
-                                style: PixelText.body(
-                                  size: 16,
-                                  color: AppColors.textDark,
-                                ),
-                                decoration: InputDecoration(
-                                  filled: true,
-                                  fillColor: AppColors.parchmentLight,
-                                  hintText: 'Search by display name',
-                                  hintStyle: PixelText.body(
+                              Material(
+                                color: Colors.transparent,
+                                child: TextField(
+                                  controller: _searchController,
+                                  onChanged: _onSearchChanged,
+                                  textAlign: TextAlign.center,
+                                  style: PixelText.body(
                                     size: 16,
-                                    color: AppColors.parchmentBorder,
+                                    color: AppColors.textDark,
                                   ),
-                                  border: OutlineInputBorder(
-                                    borderSide: BorderSide(
+                                  decoration: InputDecoration(
+                                    filled: true,
+                                    fillColor: AppColors.parchmentLight,
+                                    hintText: 'Search by display name',
+                                    hintStyle: PixelText.body(
+                                      size: 16,
                                       color: AppColors.parchmentBorder,
                                     ),
-                                    borderRadius: searchBorderRadius,
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: AppColors.parchmentBorder,
+                                    border: OutlineInputBorder(
+                                      borderSide: BorderSide(
+                                        color: AppColors.parchmentBorder,
+                                      ),
+                                      borderRadius: searchBorderRadius,
                                     ),
-                                    borderRadius: searchBorderRadius,
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: AppColors.accent,
-                                      width: 2,
+                                    enabledBorder: OutlineInputBorder(
+                                      borderSide: BorderSide(
+                                        color: AppColors.parchmentBorder,
+                                      ),
+                                      borderRadius: searchBorderRadius,
                                     ),
-                                    borderRadius: searchBorderRadius,
-                                  ),
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 12,
+                                    focusedBorder: OutlineInputBorder(
+                                      borderSide: BorderSide(
+                                        color: AppColors.accent,
+                                        width: 2,
+                                      ),
+                                      borderRadius: searchBorderRadius,
+                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 12,
+                                    ),
                                   ),
                                 ),
                               ),

@@ -12,8 +12,7 @@ String _todayLocalDate() {
 }
 
 /// Stateful wrapper around [DailyRewardButton] that fetches its own status,
-/// triggers the modal, and refreshes after a claim. Drop-in widget — no
-/// parent state changes required.
+/// triggers the modal, and refreshes after a claim.
 class DailyRewardTrigger extends StatefulWidget {
   const DailyRewardTrigger({
     super.key,
@@ -100,7 +99,7 @@ class _DailyRewardTriggerState extends State<DailyRewardTrigger>
   @override
   Widget build(BuildContext context) {
     if (!_loaded) {
-      return const SizedBox(width: 96, height: 36);
+      return const SizedBox(width: double.infinity, height: 62);
     }
     return DailyRewardButton(unclaimed: _unclaimed, onPressed: _open);
   }

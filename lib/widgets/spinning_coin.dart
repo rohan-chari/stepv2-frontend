@@ -21,34 +21,39 @@ class _CoinFace extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: size,
       height: size,
+      child: Image.asset(
+        'assets/images/coin.png',
+        width: size,
+        height: size,
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.high,
+        errorBuilder: (context, error, stackTrace) => _CoinFallback(size: size),
+      ),
+    );
+  }
+}
+
+class _CoinFallback extends StatelessWidget {
+  const _CoinFallback({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.coinLight, AppColors.coinMid, AppColors.coinDark],
-        ),
+        color: AppColors.coinLight,
         border: Border.all(color: AppColors.coinEdge, width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.coinMid.withValues(alpha: 0.4),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
-        ],
       ),
       child: Center(
-        child: Text(
-          '\$',
-          style: TextStyle(
-            fontSize: size * 0.5,
-            fontWeight: FontWeight.w900,
-            color: AppColors.coinEdge,
-            height: 1,
-          ),
+        child: Icon(
+          Icons.pets_rounded,
+          size: size * 0.54,
+          color: AppColors.coinEdge,
         ),
       ),
     );

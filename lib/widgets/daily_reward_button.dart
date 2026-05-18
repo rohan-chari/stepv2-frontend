@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../styles.dart';
+import 'home_chrome.dart';
 import 'spinning_coin.dart';
 
-/// Flashy pill button that calls attention to itself when the user hasn't
-/// claimed their daily reward yet. When [unclaimed] is false, it renders
-/// muted and non-pulsing.
+/// Home-style entry point for the daily reward flow.
 class DailyRewardButton extends StatefulWidget {
   const DailyRewardButton({
     super.key,
@@ -57,19 +55,18 @@ class _DailyRewardButtonState extends State<DailyRewardButton>
       animation: _pulse,
       builder: (context, child) {
         final t = Curves.easeInOut.transform(_pulse.value);
-        final glowAlpha = widget.unclaimed ? (0.25 + 0.5 * t) : 0.0;
-        final scale = widget.unclaimed ? (1.0 + 0.04 * t) : 1.0;
+        final glowAlpha = widget.unclaimed ? (0.08 + 0.12 * t) : 0.0;
         return Transform.scale(
-          scale: scale,
+          scale: 1,
           child: DecoratedBox(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: BorderRadius.circular(8),
               boxShadow: glowAlpha > 0
                   ? [
                       BoxShadow(
-                        color: AppColors.coinDark.withValues(alpha: glowAlpha),
-                        blurRadius: 14,
-                        spreadRadius: 1.5,
+                        color: HomeColors.gold.withValues(alpha: glowAlpha),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
                       ),
                     ]
                   : const [],
@@ -82,44 +79,100 @@ class _DailyRewardButtonState extends State<DailyRewardButton>
         color: Colors.transparent,
         child: InkWell(
           onTap: widget.onPressed,
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: BorderRadius.circular(8),
           child: Ink(
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: widget.unclaimed
-                    ? const [AppColors.coinLight, AppColors.coinDark]
-                    : const [
-                        AppColors.parchmentDark,
-                        AppColors.parchmentBorder,
-                      ],
-              ),
-              borderRadius: BorderRadius.circular(999),
+              color: widget.unclaimed
+                  ? HomeColors.cream
+                  : HomeColors.surfaceMuted,
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: widget.unclaimed
-                    ? AppColors.coinDark
-                    : AppColors.parchmentBorder,
+                color: widget.unclaimed ? HomeColors.gold : HomeColors.lineSoft,
                 width: 2,
               ),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SpinningCoin(size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  widget.unclaimed ? 'DAILY!' : 'DAILY',
-                  style: PixelText.title(
-                    size: 13,
-                    color: widget.unclaimed
-                        ? AppColors.textDark
-                        : AppColors.textMid,
-                  ),
+              boxShadow: [
+                BoxShadow(
+                  color: (widget.unclaimed ? HomeColors.gold : HomeColors.line)
+                      .withValues(alpha: widget.unclaimed ? 0.18 : 0.10),
+                  offset: const Offset(0, 3),
+                  blurRadius: 0,
                 ),
               ],
             ),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.max,
+              children: [
+                const SpinningCoin(size: 30),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Daily reward',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: HomeText.body(
+                          size: 14,
+                          color: HomeColors.ink,
+                          weight: FontWeight.w800,
+                          height: 1.0,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        widget.unclaimed
+                            ? 'Ready to open'
+                            : 'Today is already claimed',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: HomeText.body(
+                          size: 12,
+                          color: HomeColors.muted,
+                          weight: FontWeight.w700,
+                          height: 1.0,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                _RewardStatusBadge(unclaimed: widget.unclaimed),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RewardStatusBadge extends StatelessWidget {
+  const _RewardStatusBadge({required this.unclaimed});
+
+  final bool unclaimed;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: unclaimed ? HomeColors.ink : HomeColors.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: unclaimed ? HomeColors.ink : HomeColors.lineSoft,
+          width: 2,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        child: Text(
+          unclaimed ? 'CLAIM' : 'VIEW',
+          maxLines: 1,
+          style: HomeText.label(
+            size: 10,
+            color: unclaimed ? Colors.white : HomeColors.ink,
           ),
         ),
       ),

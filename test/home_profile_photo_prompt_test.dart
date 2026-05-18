@@ -4,6 +4,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/models/step_data.dart';
 import 'package:step_tracker/screens/tabs/home_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
+import 'package:step_tracker/services/backend_api_service.dart';
+
+class _FakeBackendApiService extends BackendApiService {
+  @override
+  Future<Map<String, dynamic>> fetchDailyRewardStatus({
+    required String identityToken,
+    required String localDate,
+  }) async {
+    return const {'claimedToday': true};
+  }
+}
 
 Future<AuthService> _createAuthService({
   String? profilePhotoUrl,
@@ -49,6 +60,7 @@ Widget _buildHome(
         notificationsState: true,
         displayName: 'Trail Walker',
         authService: authService,
+        backendApiService: _FakeBackendApiService(),
         onRefresh: () async {},
         onEnableHealth: () {},
         onEnableNotifications: () {},

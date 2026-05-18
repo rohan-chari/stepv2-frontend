@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:step_tracker/widgets/goal_track.dart';
@@ -30,6 +32,26 @@ void main() {
                       'rotation': -0.08,
                     },
                   },
+                  {
+                    'slot': 'FACE',
+                    'assetKey': 'sunglasses',
+                    'renderMetadata': {
+                      'offsetX': 0.025,
+                      'offsetY': -0.04,
+                      'rotation': -0.08,
+                      'scale': 1.65,
+                    },
+                  },
+                  {
+                    'slot': 'FEET',
+                    'assetKey': 'shoes',
+                    'renderMetadata': {
+                      'offsetX': 0.03,
+                      'offsetY': 0.02,
+                      'rotation': -0.03,
+                      'scale': 1.1,
+                    },
+                  },
                 ],
               ),
               GoalTrackRunner(name: 'Maya', progress: 0.33),
@@ -57,5 +79,86 @@ void main() {
       }),
       findsOneWidget,
     );
+    expect(
+      find.byWidgetPredicate((widget) {
+        return widget is Image &&
+            widget.image is AssetImage &&
+            (widget.image as AssetImage).assetName.contains('sunglasses.png');
+      }),
+      findsOneWidget,
+    );
+    expect(
+      find.byWidgetPredicate((widget) {
+        return widget is Image &&
+            widget.image is AssetImage &&
+            (widget.image as AssetImage).assetName.contains('shoes.png');
+      }),
+      findsNWidgets(4),
+    );
+  });
+
+  testWidgets('animates feet accessories with gait-aware shoe rotation', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(_feetSpriteForFrame(2));
+
+    final angles = _shoeRotationAngles(tester);
+    final centers = _shoeCenters(tester);
+    final highestShoe = centers.map((center) => center.dy).reduce(math.min);
+    final lowestShoe = centers.map((center) => center.dy).reduce(math.max);
+
+    expect(angles, hasLength(4));
+    expect(angles.any((angle) => angle > 0.05), isTrue);
+    expect(angles.any((angle) => angle < -0.12), isTrue);
+    expect(lowestShoe - highestShoe, greaterThan(5));
+  });
+}
+
+Widget _feetSpriteForFrame(int frameIndex) {
+  return MaterialApp(
+    home: Center(
+      child: CapybaraSpriteWithAccessories(
+        capybaraSize: 96,
+        frameIndex: frameIndex,
+        accessories: const [
+          {
+            'slot': 'FEET',
+            'assetKey': 'shoes',
+            'renderMetadata': {
+              'offsetX': 0.03,
+              'offsetY': 0.02,
+              'rotation': -0.03,
+              'scale': 1.1,
+            },
+          },
+        ],
+      ),
+    ),
+  );
+}
+
+Finder _shoeImageFinder() {
+  return find.byWidgetPredicate((widget) {
+    return widget is Image &&
+        widget.image is AssetImage &&
+        (widget.image as AssetImage).assetName.contains('shoes.png');
+  });
+}
+
+List<double> _shoeRotationAngles(WidgetTester tester) {
+  final transformFinder = find.ancestor(
+    of: _shoeImageFinder(),
+    matching: find.byType(Transform),
+  );
+  return tester.widgetList<Transform>(transformFinder).map((transform) {
+    final storage = transform.transform.storage;
+    return math.atan2(storage[1], storage[0]);
+  }).toList();
+}
+
+List<Offset> _shoeCenters(WidgetTester tester) {
+  final shoes = _shoeImageFinder();
+  return List.generate(shoes.evaluate().length, (index) {
+    return tester.getCenter(shoes.at(index));
   });
 }

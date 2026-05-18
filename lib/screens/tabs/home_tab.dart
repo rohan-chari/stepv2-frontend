@@ -222,14 +222,6 @@ class HomeTab extends StatelessWidget {
                         size: 42,
                       ),
                     ),
-                    Positioned(
-                      top: 4,
-                      left: 0,
-                      child: DailyRewardTrigger(
-                        authService: authService,
-                        backendApiService: backendApiService,
-                      ),
-                    ),
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
                       child: Column(
@@ -359,6 +351,11 @@ class HomeTab extends StatelessWidget {
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 12),
+                DailyRewardTrigger(
+                  authService: authService,
+                  backendApiService: backendApiService,
                 ),
                 if (goal > 0) ...[
                   const SizedBox(height: 14),

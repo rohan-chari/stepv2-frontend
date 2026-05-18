@@ -212,6 +212,27 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   String get _myUserId => widget.authService.userId ?? '';
   BackendApiService get _api => widget.backendApiService;
 
+  int _readInt(dynamic value, {required int fallback}) {
+    if (value is num) return value.toInt();
+    if (value is String) {
+      return int.tryParse(value) ?? double.tryParse(value)?.toInt() ?? fallback;
+    }
+    return fallback;
+  }
+
+  int? _readNullableInt(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toInt();
+    if (value is String) {
+      return int.tryParse(value) ?? double.tryParse(value)?.toInt();
+    }
+    return null;
+  }
+
+  String _formatCoinAmount(dynamic value) {
+    return (_readNullableInt(value) ?? value ?? 0).toString();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -277,9 +298,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       if (_powerupData?['enabled'] == true) {
         _loadFeed();
 
-        _queuedBoxCount = (_powerupData?['queuedBoxCount'] as int?) ?? 0;
+        _queuedBoxCount = _readInt(
+          _powerupData?['queuedBoxCount'],
+          fallback: 0,
+        );
         final newBoxes = (_powerupData?['newMysteryBoxes'] as List?) ?? [];
-        final newQueued = (_powerupData?['newQueuedBoxes'] as int?) ?? 0;
+        final newQueued = _readInt(
+          _powerupData?['newQueuedBoxes'],
+          fallback: 0,
+        );
         if (newBoxes.length == 1) {
           showInfoToast(context, 'You earned a mystery box!');
         } else if (newBoxes.length > 1) {
@@ -310,10 +337,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
     final user = await _api.fetchMe(identityToken: token);
     await widget.authService.updateCoins(
-      user['coins'] as int? ?? widget.authService.coins,
+      _readInt(user['coins'], fallback: widget.authService.coins),
     );
     await widget.authService.updateHeldCoins(
-      user['heldCoins'] as int? ?? widget.authService.heldCoins,
+      _readInt(user['heldCoins'], fallback: widget.authService.heldCoins),
     );
   }
 
@@ -333,7 +360,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   }
 
   Future<bool> _confirmPaidInvite({required bool activeRace}) async {
-    final buyInAmount = _race?['buyInAmount'] as int? ?? 0;
+    final buyInAmount = _readInt(_race?['buyInAmount'], fallback: 0);
     if (buyInAmount <= 0) {
       return true;
     }
@@ -668,7 +695,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       );
 
       final res = result['result'] as Map<String, dynamic>?;
-      final coinsSpent = (res?['coinsSpent'] as int?) ?? 0;
+      final coinsSpent = _readInt(res?['coinsSpent'], fallback: 0);
       if (coinsSpent > 0) {
         await widget.authService.updateCoins(
           widget.authService.coins - coinsSpent,
@@ -1228,10 +1255,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   }
 
   Widget _buildRaceInfoCard() {
-    final targetSteps = _race!['targetSteps'] as int? ?? 0;
-    final maxDays = _race!['maxDurationDays'] as int? ?? 7;
-    final buyInAmount = _race!['buyInAmount'] as int? ?? 0;
-    final potCoins = _race!['projectedPotCoins'] as int? ?? 0;
+    final targetSteps = _readInt(_race!['targetSteps'], fallback: 0);
+    final maxDays = _readInt(_race!['maxDurationDays'], fallback: 7);
+    final buyInAmount = _readInt(_race!['buyInAmount'], fallback: 0);
+    final potCoins = _readInt(_race!['projectedPotCoins'], fallback: 0);
     final payouts = _race!['payouts'] as Map<String, dynamic>?;
 
     return RetroCard(
@@ -1369,7 +1396,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             if (payouts != null) ...[
               const SizedBox(height: 10),
               Text(
-                '1ST ${payouts['first']}  •  2ND ${payouts['second']}  •  3RD ${payouts['third']}',
+                '1ST ${_formatCoinAmount(payouts['first'])}  •  2ND ${_formatCoinAmount(payouts['second'])}  •  3RD ${_formatCoinAmount(payouts['third'])}',
                 style: PixelText.title(size: 11, color: AppColors.textMid),
                 textAlign: TextAlign.center,
               ),
@@ -1555,8 +1582,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     final finishedCount = participants
         .where((p) => p['finishedAt'] != null)
         .length;
-    final targetSteps = _race!['targetSteps'] as int? ?? 0;
-    final buyInAmount = _race!['buyInAmount'] as int? ?? 0;
+    final targetSteps = _readInt(_race!['targetSteps'], fallback: 0);
+    final buyInAmount = _readInt(_race!['buyInAmount'], fallback: 0);
     final endsAtRaw = _race!['endsAt'] as String?;
     final endsAt = endsAtRaw != null
         ? DateTime.tryParse(endsAtRaw)?.toLocal()
@@ -1702,9 +1729,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   }
 
   Widget? _buildNextPowerupHelper() {
-    final powerupStepInterval = _powerupData?['powerupStepInterval'] as int?;
-    final stepsUntilNextPowerup =
-        _powerupData?['stepsUntilNextPowerup'] as int?;
+    final powerupStepInterval = _readNullableInt(
+      _powerupData?['powerupStepInterval'],
+    );
+    final stepsUntilNextPowerup = _readNullableInt(
+      _powerupData?['stepsUntilNextPowerup'],
+    );
 
     if (powerupStepInterval == null ||
         powerupStepInterval <= 0 ||
@@ -1876,7 +1906,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     final inventory =
         (_powerupData?['inventory'] as List?)?.cast<Map<String, dynamic>>() ??
         [];
-    final slotCount = (_powerupData?['powerupSlots'] as int?) ?? 3;
+    final slotCount = _readInt(_powerupData?['powerupSlots'], fallback: 3);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2087,7 +2117,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
           (_race!['participants'] as List?)?.cast<Map<String, dynamic>>() ??
           [],
     );
-    final targetSteps = _race!['targetSteps'] as int? ?? 0;
+    final targetSteps = _readInt(_race!['targetSteps'], fallback: 0);
 
     return Column(
       children: [
@@ -2282,7 +2312,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   }
 
   Widget _buildPrizePoolSummary() {
-    final potCoins = _race!['projectedPotCoins'] as int? ?? 0;
+    final potCoins = _readInt(_race!['projectedPotCoins'], fallback: 0);
     final payouts = _race!['payouts'] as Map<String, dynamic>?;
 
     return Column(
@@ -2366,7 +2396,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       children: [
         Text(label, style: PixelText.title(size: 10, color: labelColor)),
         const SizedBox(width: 3),
-        Text('$amount', style: PixelText.title(size: 10, color: amountColor)),
+        Text(
+          _formatCoinAmount(amount),
+          style: PixelText.title(size: 10, color: amountColor),
+        ),
       ],
     );
   }

@@ -132,6 +132,27 @@ void main() {
     expect(shellRefreshCalls, 1);
   });
 
+  testWidgets('FriendsTab search field has material when opened as a route', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _createAuthService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: FriendsTab(
+          authService: authService,
+          onFriendsChanged: () {},
+          backendApiService: _FakeFriendsApi(),
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(TextField), findsOneWidget);
+  });
+
   testWidgets(
     'ProfileTab pull-to-refresh reloads profile shell data and stats',
     (WidgetTester tester) async {

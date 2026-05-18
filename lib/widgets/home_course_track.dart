@@ -614,6 +614,7 @@ class _AccessoryOverlay extends StatelessWidget {
     final slot = accessory['slot'] as String? ?? '';
     final assetKey = accessory['assetKey'] as String? ?? '';
     final isHeadSlot = slot == 'HEAD';
+    final bobsWithHead = slot == 'HEAD' || slot == 'FACE';
     final renderMetadata = accessory['renderMetadata'];
     final metadata = renderMetadata is Map<String, dynamic>
         ? renderMetadata
@@ -631,10 +632,22 @@ class _AccessoryOverlay extends StatelessWidget {
     final rotation =
         _metadataDouble(metadata, 'rotation') ?? (isHeadSlot ? -0.14 : 0.0);
     final scale = _metadataDouble(metadata, 'scale') ?? 1.0;
+
+    if (slot == 'FEET') {
+      return _FeetAccessoryOverlay(
+        assetKey: assetKey,
+        capybaraSize: capybaraSize,
+        frameIndex: frameIndex,
+        offset: Offset(offsetX, offsetY),
+        rotation: rotation,
+        scale: scale,
+      );
+    }
+
     final baseRect = _rectForSlot(slot, capybaraSize).shift(
       Offset(
         offsetX,
-        offsetY + (isHeadSlot ? _headBobOffset(capybaraSize) : 0),
+        offsetY + (bobsWithHead ? _headBobOffset(capybaraSize) : 0),
       ),
     );
     final rect = Rect.fromCenter(
@@ -713,6 +726,13 @@ class _AccessoryOverlay extends StatelessWidget {
           size * 0.28,
           size * 0.26,
         );
+      case 'FEET':
+        return Rect.fromLTWH(
+          size * 0.41,
+          size * 0.72,
+          size * 0.40,
+          size * 0.16,
+        );
       default:
         return Rect.fromLTWH(
           size * 0.37,
@@ -722,6 +742,115 @@ class _AccessoryOverlay extends StatelessWidget {
         );
     }
   }
+}
+
+class _FeetAccessoryOverlay extends StatelessWidget {
+  const _FeetAccessoryOverlay({
+    required this.assetKey,
+    required this.capybaraSize,
+    required this.frameIndex,
+    required this.offset,
+    required this.rotation,
+    required this.scale,
+  });
+
+  final String assetKey;
+  final double capybaraSize;
+  final int frameIndex;
+  final Offset offset;
+  final double rotation;
+  final double scale;
+
+  static const _placements = <List<_ShoePlacement>>[
+    [
+      _ShoePlacement(0.27, 0.73, scale: 0.82, rotation: -0.11),
+      _ShoePlacement(0.38, 0.79, rotation: 0.05),
+      _ShoePlacement(0.56, 0.73, scale: 0.82, rotation: -0.1),
+      _ShoePlacement(0.69, 0.79, rotation: 0.04),
+    ],
+    [
+      _ShoePlacement(0.30, 0.71, scale: 0.78, rotation: -0.2),
+      _ShoePlacement(0.42, 0.8, rotation: 0.09),
+      _ShoePlacement(0.6, 0.71, scale: 0.78, rotation: -0.18),
+      _ShoePlacement(0.7, 0.78, rotation: 0.07),
+    ],
+    [
+      _ShoePlacement(0.31, 0.8, rotation: 0.13),
+      _ShoePlacement(0.43, 0.72, scale: 0.8, rotation: -0.19),
+      _ShoePlacement(0.54, 0.8, rotation: 0.11),
+      _ShoePlacement(0.66, 0.71, scale: 0.8, rotation: -0.2),
+    ],
+    [
+      _ShoePlacement(0.28, 0.73, scale: 0.82, rotation: -0.12),
+      _ShoePlacement(0.39, 0.79, rotation: 0.06),
+      _ShoePlacement(0.55, 0.73, scale: 0.82, rotation: -0.11),
+      _ShoePlacement(0.68, 0.79, rotation: 0.05),
+    ],
+    [
+      _ShoePlacement(0.25, 0.79, rotation: 0.09),
+      _ShoePlacement(0.38, 0.72, scale: 0.8, rotation: -0.18),
+      _ShoePlacement(0.56, 0.79, rotation: 0.1),
+      _ShoePlacement(0.66, 0.72, scale: 0.8, rotation: -0.18),
+    ],
+    [
+      _ShoePlacement(0.23, 0.8, rotation: 0.11),
+      _ShoePlacement(0.37, 0.71, scale: 0.78, rotation: -0.21),
+      _ShoePlacement(0.52, 0.8, rotation: 0.1),
+      _ShoePlacement(0.64, 0.71, scale: 0.78, rotation: -0.2),
+    ],
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final placements = _placements[frameIndex % _placements.length];
+    final shoeWidth = capybaraSize * 0.18 * scale;
+    final shoeHeight = capybaraSize * 0.12 * scale;
+
+    return Positioned.fill(
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          for (final placement in placements)
+            Positioned.fromRect(
+              rect: Rect.fromCenter(
+                center:
+                    Offset(
+                      placement.x * capybaraSize,
+                      placement.y * capybaraSize,
+                    ) +
+                    offset,
+                width: shoeWidth * placement.scale,
+                height: shoeHeight * placement.scale,
+              ),
+              child: Transform.rotate(
+                angle: rotation + placement.rotation,
+                alignment: Alignment.center,
+                child: Image.asset(
+                  'assets/images/accessories/$assetKey.png',
+                  fit: BoxFit.contain,
+                  filterQuality: FilterQuality.none,
+                  errorBuilder: (context, error, stackTrace) => CustomPaint(
+                    painter: _AccessoryPainter(
+                      slot: 'FEET',
+                      assetKey: assetKey,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ShoePlacement {
+  const _ShoePlacement(this.x, this.y, {this.scale = 1, this.rotation = 0});
+
+  final double x;
+  final double y;
+  final double scale;
+  final double rotation;
 }
 
 class _AccessoryPainter extends CustomPainter {
@@ -772,6 +901,30 @@ class _AccessoryPainter extends CustomPainter {
         );
         canvas.drawRRect(rect, paint);
         canvas.drawRRect(rect, outline);
+        break;
+      case 'FEET':
+        final sole = RRect.fromRectAndRadius(
+          Rect.fromLTWH(
+            size.width * 0.04,
+            size.height * 0.58,
+            size.width * 0.92,
+            size.height * 0.24,
+          ),
+          Radius.circular(size.height * 0.12),
+        );
+        final upper = RRect.fromRectAndRadius(
+          Rect.fromLTWH(
+            size.width * 0.16,
+            size.height * 0.22,
+            size.width * 0.54,
+            size.height * 0.42,
+          ),
+          Radius.circular(size.width * 0.14),
+        );
+        canvas.drawRRect(upper, paint);
+        canvas.drawRRect(upper, outline);
+        canvas.drawRRect(sole, paint);
+        canvas.drawRRect(sole, outline);
         break;
       case 'HEAD':
       default:

@@ -64,6 +64,7 @@ class _FakeBackendApiService extends BackendApiService {
 
 class _ActivePaidRaceBackendApiService extends BackendApiService {
   _ActivePaidRaceBackendApiService({
+    this.numericValuesAsDouble = false,
     this.powerupData = const {
       'enabled': false,
       'inventory': [],
@@ -73,7 +74,12 @@ class _ActivePaidRaceBackendApiService extends BackendApiService {
     },
   });
 
+  final bool numericValuesAsDouble;
   final Map<String, dynamic> powerupData;
+
+  num _number(int value) {
+    return numericValuesAsDouble ? value.toDouble() : value;
+  }
 
   @override
   Future<Map<String, dynamic>> fetchRaceDetails({
@@ -84,14 +90,18 @@ class _ActivePaidRaceBackendApiService extends BackendApiService {
       'id': raceId,
       'name': 'Gold Sprint',
       'status': 'ACTIVE',
-      'targetSteps': 100000,
-      'maxDurationDays': 7,
-      'buyInAmount': 100,
+      'targetSteps': _number(100000),
+      'maxDurationDays': _number(7),
+      'buyInAmount': _number(100),
       'payoutPreset': 'TOP3_70_20_10',
-      'potCoins': 600,
-      'heldPotCoins': 0,
-      'projectedPotCoins': 600,
-      'payouts': {'first': 420, 'second': 120, 'third': 60},
+      'potCoins': _number(600),
+      'heldPotCoins': _number(0),
+      'projectedPotCoins': _number(600),
+      'payouts': {
+        'first': _number(420),
+        'second': _number(120),
+        'third': _number(60),
+      },
       'myStatus': 'ACCEPTED',
       'isCreator': false,
       'powerupsEnabled': false,
@@ -122,13 +132,13 @@ class _ActivePaidRaceBackendApiService extends BackendApiService {
         {
           'userId': 'user-1',
           'displayName': 'Trail Walker',
-          'totalSteps': 42000,
+          'totalSteps': 42000.0,
           'finishedAt': null,
         },
         {
           'userId': 'user-2',
           'displayName': 'Hill Climber',
-          'totalSteps': 38000,
+          'totalSteps': 38000.0,
           'finishedAt': null,
         },
       ],
@@ -300,6 +310,47 @@ void main() {
 
       await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
       await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'RaceDetailScreen accepts active race numeric fields as doubles',
+    (WidgetTester tester) async {
+      final authService = await _createAuthService();
+      final backendApiService = _ActivePaidRaceBackendApiService(
+        numericValuesAsDouble: true,
+        powerupData: const {
+          'enabled': true,
+          'inventory': [],
+          'powerupSlots': 3.0,
+          'queuedBoxCount': 0.0,
+          'activeEffects': [],
+          'powerupStepInterval': 5000.0,
+          'stepsUntilNextPowerup': 1240.0,
+        },
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RaceDetailScreen(
+            authService: authService,
+            raceId: 'race-double-values',
+            backendApiService: backendApiService,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(HomeCourseTrack), findsOneWidget);
+      expect(find.text('PRIZE POOL'), findsOneWidget);
+      expect(
+        find.text(
+          'You earn a powerup every 5,000 steps this race. 1,240 to go.',
+        ),
+        findsOneWidget,
+      );
     },
   );
 

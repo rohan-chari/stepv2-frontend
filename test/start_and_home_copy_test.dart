@@ -4,6 +4,17 @@ import 'package:step_tracker/models/step_data.dart';
 import 'package:step_tracker/screens/start_screen.dart';
 import 'package:step_tracker/screens/tabs/home_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
+import 'package:step_tracker/services/backend_api_service.dart';
+
+class _FakeBackendApiService extends BackendApiService {
+  @override
+  Future<Map<String, dynamic>> fetchDailyRewardStatus({
+    required String identityToken,
+    required String localDate,
+  }) async {
+    return const {'claimedToday': true};
+  }
+}
 
 void main() {
   testWidgets('StartScreen describes Bara as a social step challenge app', (
@@ -35,6 +46,7 @@ void main() {
             notificationsState: true,
             displayName: 'Trail Walker',
             authService: AuthService(),
+            backendApiService: _FakeBackendApiService(),
             onRefresh: () async {},
             onEnableHealth: () {},
             onEnableNotifications: () {},
@@ -65,6 +77,7 @@ void main() {
             notificationsState: true,
             displayName: 'Trail Walker',
             authService: AuthService(),
+            backendApiService: _FakeBackendApiService(),
             onRefresh: () async {},
             onEnableHealth: () {},
             onEnableNotifications: () {},
@@ -97,6 +110,7 @@ void main() {
             notificationsState: true,
             displayName: 'Trail Walker',
             authService: AuthService(),
+            backendApiService: _FakeBackendApiService(),
             onRefresh: () async {},
             onEnableHealth: () {},
             onEnableNotifications: () {},
