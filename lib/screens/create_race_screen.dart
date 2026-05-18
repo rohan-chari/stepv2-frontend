@@ -363,23 +363,24 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
                                 ),
                               ),
                               const SizedBox(height: 8),
-                              Row(
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
                                 children: _intervalPresets.map((interval) {
                                   final selected = _powerupInterval == interval;
                                   final label = interval >= 1000
                                       ? '${(interval / 1000).toStringAsFixed(interval % 1000 == 0 ? 0 : 1)}k'
                                       : '$interval';
-                                  return Expanded(
+                                  return SizedBox(
+                                    width: 72,
                                     child: GestureDetector(
                                       onTap: () => setState(
                                         () => _powerupInterval = interval,
                                       ),
                                       child: Container(
-                                        margin: const EdgeInsets.symmetric(
-                                          horizontal: 3,
-                                        ),
                                         padding: const EdgeInsets.symmetric(
                                           vertical: 10,
+                                          horizontal: 6,
                                         ),
                                         decoration: BoxDecoration(
                                           color: selected
@@ -391,7 +392,7 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
                                         ),
                                         alignment: Alignment.center,
                                         child: Text(
-                                          '$label steps',
+                                          label,
                                           style: PixelText.title(
                                             size: 11,
                                             color: selected
@@ -578,8 +579,7 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
                                       'PUBLIC RACE',

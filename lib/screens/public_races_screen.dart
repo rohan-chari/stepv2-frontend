@@ -75,6 +75,17 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
         identityToken: token,
         raceId: raceId,
       );
+      try {
+        final user = await widget.backendApiService.fetchMe(
+          identityToken: token,
+        );
+        await widget.authService.updateCoins(
+          user['coins'] as int? ?? widget.authService.coins,
+        );
+        await widget.authService.updateHeldCoins(
+          user['heldCoins'] as int? ?? widget.authService.heldCoins,
+        );
+      } catch (_) {}
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (e) {
@@ -214,10 +225,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
               variant: PillButtonVariant.primary,
               fontSize: 13,
               fullWidth: true,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 12,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               onPressed: isJoining ? null : () => _join(race),
             ),
           ],
@@ -230,10 +238,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: PixelText.body(size: 10, color: AppColors.textMid),
-        ),
+        Text(label, style: PixelText.body(size: 10, color: AppColors.textMid)),
         const SizedBox(height: 2),
         Text(
           value,

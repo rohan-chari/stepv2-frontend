@@ -87,6 +87,7 @@ class RaceChatService extends ChangeNotifier {
   bool _hasMore = true;
   bool _loading = false;
   bool _muted = false;
+  bool _disposed = false;
   Object? _lastError;
   Timer? _pollTimer;
 
@@ -98,11 +99,15 @@ class RaceChatService extends ChangeNotifier {
 
   String? get _token => authService.identityToken;
 
+  void _safeNotify() {
+    if (!_disposed) notifyListeners();
+  }
+
   Future<void> loadInitial() async {
-    if (_loading) return;
+    if (_disposed || _loading) return;
     _loading = true;
     _lastError = null;
-    notifyListeners();
+    _safeNotify();
     try {
       final token = _token;
       if (token == null) throw const ApiException('Not signed in');
@@ -111,6 +116,7 @@ class RaceChatService extends ChangeNotifier {
         raceId: raceId,
         limit: 50,
       );
+      if (_disposed) return;
       final list =
           (result['messages'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       _messages
@@ -122,14 +128,14 @@ class RaceChatService extends ChangeNotifier {
       _lastError = e;
     } finally {
       _loading = false;
-      notifyListeners();
+      _safeNotify();
     }
   }
 
   Future<void> loadMore() async {
-    if (_loading || !_hasMore || _cursor == null) return;
+    if (_disposed || _loading || !_hasMore || _cursor == null) return;
     _loading = true;
-    notifyListeners();
+    _safeNotify();
     try {
       final token = _token;
       if (token == null) throw const ApiException('Not signed in');
@@ -139,6 +145,7 @@ class RaceChatService extends ChangeNotifier {
         cursor: _cursor,
         limit: 50,
       );
+      if (_disposed) return;
       final list =
           (result['messages'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       _messages.addAll(list.map(RaceChatMessage.fromJson));
@@ -148,12 +155,13 @@ class RaceChatService extends ChangeNotifier {
       _lastError = e;
     } finally {
       _loading = false;
-      notifyListeners();
+      _safeNotify();
     }
   }
 
   /// Polls newest messages, merging by id.
   Future<void> refreshTop() async {
+    if (_disposed) return;
     try {
       final token = _token;
       if (token == null) return;
@@ -162,6 +170,7 @@ class RaceChatService extends ChangeNotifier {
         raceId: raceId,
         limit: 50,
       );
+      if (_disposed) return;
       final list =
           (result['messages'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       final fresh = list.map(RaceChatMessage.fromJson).toList();
@@ -170,7 +179,7 @@ class RaceChatService extends ChangeNotifier {
       if (newMessages.isEmpty) return;
       _messages.insertAll(0, newMessages);
       _messages.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      notifyListeners();
+      _safeNotify();
     } catch (_) {
       // Silent — polling.
     }
@@ -187,6 +196,7 @@ class RaceChatService extends ChangeNotifier {
   }
 
   Future<void> send(String text) async {
+    if (_disposed) return;
     final trimmed = text.trim();
     if (trimmed.isEmpty) return;
     final tempId = 'tmp_${DateTime.now().microsecondsSinceEpoch}';
@@ -200,7 +210,7 @@ class RaceChatService extends ChangeNotifier {
       pending: true,
     );
     _messages.insert(0, optimistic);
-    notifyListeners();
+    _safeNotify();
     try {
       final token = _token;
       if (token == null) throw const ApiException('Not signed in');
@@ -209,11 +219,22 @@ class RaceChatService extends ChangeNotifier {
         raceId: raceId,
         body: trimmed,
       );
+      if (_disposed) return;
       final msgJson = result['message'] as Map<String, dynamic>?;
       if (msgJson != null) {
         final created = RaceChatMessage.fromJson(msgJson);
+        final existingServerIdx = _messages.indexWhere(
+          (m) => m.id == created.id,
+        );
         final idx = _messages.indexWhere((m) => m.id == tempId);
-        if (idx != -1) _messages[idx] = created;
+        if (existingServerIdx != -1) {
+          _messages[existingServerIdx] = created;
+          if (idx != -1 && idx != existingServerIdx) {
+            _messages.removeAt(idx);
+          }
+        } else if (idx != -1) {
+          _messages[idx] = created;
+        }
       } else {
         final idx = _messages.indexWhere((m) => m.id == tempId);
         if (idx != -1) {
@@ -221,17 +242,19 @@ class RaceChatService extends ChangeNotifier {
         }
       }
     } catch (e) {
+      if (_disposed) return;
       final idx = _messages.indexWhere((m) => m.id == tempId);
       if (idx != -1) {
         _messages[idx] = _messages[idx].copyWith(pending: false, failed: true);
       }
       _lastError = e;
     } finally {
-      notifyListeners();
+      _safeNotify();
     }
   }
 
   Future<void> deleteMessage(String messageId) async {
+    if (_disposed) return;
     final token = _token;
     if (token == null) return;
     try {
@@ -240,20 +263,23 @@ class RaceChatService extends ChangeNotifier {
         raceId: raceId,
         messageId: messageId,
       );
+      if (_disposed) return;
       _messages.removeWhere((m) => m.id == messageId);
-      notifyListeners();
+      _safeNotify();
     } catch (e) {
+      if (_disposed) return;
       _lastError = e;
-      notifyListeners();
+      _safeNotify();
     }
   }
 
   Future<void> setMuted(bool muted) async {
+    if (_disposed) return;
     final token = _token;
     if (token == null) return;
     final previous = _muted;
     _muted = muted;
-    notifyListeners();
+    _safeNotify();
     try {
       await api.setRaceChatMute(
         identityToken: token,
@@ -261,19 +287,21 @@ class RaceChatService extends ChangeNotifier {
         muted: muted,
       );
     } catch (e) {
+      if (_disposed) return;
       _muted = previous;
       _lastError = e;
-      notifyListeners();
+      _safeNotify();
     }
   }
 
   void setMutedFromServer(bool muted) {
-    if (_muted == muted) return;
+    if (_disposed || _muted == muted) return;
     _muted = muted;
-    notifyListeners();
+    _safeNotify();
   }
 
   Future<void> markRead() async {
+    if (_disposed) return;
     final token = _token;
     if (token == null) return;
     try {
@@ -283,6 +311,7 @@ class RaceChatService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     stopPolling();
     super.dispose();
   }
