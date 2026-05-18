@@ -118,10 +118,10 @@ class _RaceChatScreenState extends State<RaceChatScreen>
       backgroundColor: AppColors.parchmentLight,
       appBar: AppBar(
         backgroundColor: AppColors.accent,
-        foregroundColor: AppColors.textDark,
+        foregroundColor: AppColors.parchment,
         title: Text(
           widget.raceName,
-          style: PixelText.title(size: 18, color: AppColors.textDark),
+          style: PixelText.title(size: 18, color: AppColors.parchment),
           overflow: TextOverflow.ellipsis,
         ),
         actions: [
@@ -339,13 +339,13 @@ class _ChatBubble extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: AppColors.parchmentDark.withValues(alpha: 0.3),
+              color: AppColors.parchmentDark,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
               message.body,
               textAlign: TextAlign.center,
-              style: PixelText.body(size: 14, color: AppColors.textMid),
+              style: PixelText.body(size: 14, color: AppColors.textDark),
             ),
           ),
         ),
