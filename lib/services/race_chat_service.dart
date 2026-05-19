@@ -97,7 +97,7 @@ class RaceChatService extends ChangeNotifier {
   bool get isMuted => _muted;
   Object? get lastError => _lastError;
 
-  String? get _token => authService.identityToken;
+  String? get _token => authService.authToken;
 
   void _safeNotify() {
     if (!_disposed) notifyListeners();

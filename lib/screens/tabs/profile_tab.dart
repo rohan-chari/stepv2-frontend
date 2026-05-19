@@ -548,6 +548,49 @@ class _SettingsSheetState extends State<_SettingsSheet> {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
+  Future<void> _confirmDeleteAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete account?'),
+        content: const Text(
+          'This permanently deletes your account, step history, '
+          'friends, and coins. Coins held in active races are forfeited '
+          'to the race pot. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await widget.notificationService?.unregisterDeviceToken(
+        widget.authService.authToken,
+      );
+      await widget.authService.deleteAccount();
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const StartScreen()),
+        (route) => false,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete account: $error')),
+      );
+    }
+  }
+
   Future<void> _signOut() async {
     await widget.notificationService?.unregisterDeviceToken(
       widget.authService.authToken,
@@ -653,6 +696,15 @@ class _SettingsSheetState extends State<_SettingsSheet> {
             fullWidth: true,
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             onPressed: _signOut,
+          ),
+          const SizedBox(height: 10),
+          PillButton(
+            label: 'DELETE ACCOUNT',
+            variant: PillButtonVariant.accent,
+            fontSize: 13,
+            fullWidth: true,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            onPressed: _confirmDeleteAccount,
           ),
         ],
       ),

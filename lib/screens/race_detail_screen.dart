@@ -1143,7 +1143,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                   horizontal: 16,
                   vertical: 8,
                 ),
-                decoration: const BoxDecoration(color: Colors.transparent),
+                decoration: const BoxDecoration(
+                  color: AppColors.parchmentLight,
+                ),
                 child: Row(
                   children: [
                     GestureDetector(
@@ -1213,7 +1215,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                         color: AppColors.accent,
                         backgroundColor: AppColors.parchment,
                         child: SingleChildScrollView(
-                          clipBehavior: Clip.none,
                           physics: const AlwaysScrollableScrollPhysics(),
                           padding: EdgeInsets.zero,
                           child: _buildContent(),

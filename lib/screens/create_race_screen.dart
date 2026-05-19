@@ -26,6 +26,7 @@ class CreateRaceScreen extends StatefulWidget {
 class _CreateRaceScreenState extends State<CreateRaceScreen> {
   final _nameController = TextEditingController();
   final _stepsController = TextEditingController();
+  final _buyInController = TextEditingController(text: '100');
   int _selectedDuration = 7;
   bool _isCreating = false;
   bool _powerupsEnabled = false;
@@ -43,7 +44,6 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
   static const _durationOptions = [3, 5, 7, 14];
   static const _stepPresets = [25000, 50000, 100000, 250000];
   static const _intervalPresets = [1000, 2000, 3000, 4000, 5000, 10000, 25000];
-  static const _buyInPresets = [50, 100, 250, 500];
   static const _maxParticipantsPresets = [5, 10, 25, 50, 100];
   static const _payoutOptions = [
     ('WINNER TAKE ALL', 'WINNER_TAKES_ALL'),
@@ -55,6 +55,7 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
   void dispose() {
     _nameController.dispose();
     _stepsController.dispose();
+    _buyInController.dispose();
     super.dispose();
   }
 
@@ -68,6 +69,16 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
     final steps = int.tryParse(_stepsController.text.replaceAll(',', ''));
     if (steps == null || steps < 1000) {
       showErrorToast(context, 'Target must be at least 1,000 steps');
+      return;
+    }
+
+    if (_buyInEnabled && _buyInAmount > 0 && _buyInAmount < 10) {
+      showErrorToast(context, 'Buy-in must be at least 10 coins');
+      return;
+    }
+
+    if (_buyInEnabled && _buyInAmount > 200) {
+      showErrorToast(context, 'Buy-in cannot exceed 200 coins');
       return;
     }
 
@@ -117,7 +128,10 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: ArcadePageBackground(
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: ArcadePageBackground(
         child: SafeArea(
           child: Column(
             children: [
@@ -155,6 +169,8 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
 
               Expanded(
                 child: SingleChildScrollView(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -471,37 +487,67 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
                                 ),
                               ),
                               const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: _buyInPresets.map((preset) {
-                                  final selected = _buyInAmount == preset;
-                                  return GestureDetector(
-                                    onTap: () =>
-                                        setState(() => _buyInAmount = preset),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 14,
-                                        vertical: 8,
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: AppColors.parchment,
+                                  border: Border.all(
+                                    color: AppColors.parchmentBorder,
+                                    width: 2,
+                                  ),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.edit_outlined,
+                                      size: 16,
+                                      color: AppColors.textMid.withValues(
+                                        alpha: 0.6,
                                       ),
-                                      decoration: BoxDecoration(
-                                        color: selected
-                                            ? AppColors.coinMid
-                                            : AppColors.parchmentDark,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Text(
-                                        '$preset',
-                                        style: PixelText.title(
-                                          size: 13,
-                                          color: selected
-                                              ? Colors.white
-                                              : AppColors.textDark,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: TextField(
+                                        controller: _buyInController,
+                                        keyboardType: TextInputType.number,
+                                        inputFormatters: [
+                                          FilteringTextInputFormatter
+                                              .digitsOnly,
+                                        ],
+                                        onChanged: (value) {
+                                          setState(() {
+                                            _buyInAmount =
+                                                int.tryParse(value) ?? 0;
+                                          });
+                                        },
+                                        style: PixelText.number(
+                                          size: 24,
+                                          color: AppColors.coinDark,
+                                        ),
+                                        decoration: InputDecoration(
+                                          hintText: '0',
+                                          hintStyle: PixelText.number(
+                                            size: 24,
+                                            color: AppColors.coinDark
+                                                .withValues(alpha: 0.3),
+                                          ),
+                                          border: InputBorder.none,
+                                          isDense: true,
+                                          contentPadding: EdgeInsets.zero,
+                                          suffixText: 'coins',
+                                          suffixStyle: PixelText.body(
+                                            size: 12,
+                                            color: AppColors.textMid,
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  );
-                                }).toList(),
+                                  ],
+                                ),
                               ),
                               const SizedBox(height: 12),
                               Text(
@@ -682,6 +728,7 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

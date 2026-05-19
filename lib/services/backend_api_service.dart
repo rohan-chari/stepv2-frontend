@@ -256,6 +256,15 @@ class BackendApiService {
     return user;
   }
 
+  Future<void> deleteAccount({required String identityToken}) async {
+    await _sendJsonRequest(
+      method: 'DELETE',
+      path: '/auth/account',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+  }
+
   Future<Map<String, dynamic>> dismissProfilePhotoPrompt({
     required String identityToken,
   }) async {

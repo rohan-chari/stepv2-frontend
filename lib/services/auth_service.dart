@@ -209,6 +209,15 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> deleteAccount() async {
+    final token = authToken;
+    if (token == null || token.isEmpty) {
+      throw const ApiException('Not signed in.');
+    }
+    await _backendApiService.deleteAccount(identityToken: token);
+    await signOut();
+  }
+
   Future<void> signOut() async {
     _identityToken = null;
     _userIdentifier = null;

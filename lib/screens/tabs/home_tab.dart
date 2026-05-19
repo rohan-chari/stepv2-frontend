@@ -532,7 +532,7 @@ class HomeTab extends StatelessWidget {
       body:
           'Bara needs access to your health data to count your daily steps.\n\n'
           "That's all we use - just your step count.",
-      actionLabel: 'ENABLE HEALTH DATA',
+      actionLabel: 'CONTINUE',
       action: onEnableHealth,
       error: error,
       isLoading: isLoading,
@@ -546,7 +546,7 @@ class HomeTab extends StatelessWidget {
       body:
           'Get notified when a friend challenges you to a step battle!\n\n'
           'We’ll only send important updates — no spam.',
-      actionLabel: 'ENABLE NOTIFICATIONS',
+      actionLabel: 'CONTINUE',
       action: onEnableNotifications,
     );
   }

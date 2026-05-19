@@ -188,7 +188,7 @@ class _RacesTabState extends State<RacesTab> {
               ),
               const SizedBox(height: 8),
               PillButton(
-                label: 'BROWSE PUBLIC',
+                label: 'BROWSE PUBLIC RACES',
                 variant: PillButtonVariant.secondary,
                 fontSize: 14,
                 fullWidth: true,

@@ -7,6 +7,7 @@ import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/retro_card.dart';
+import 'create_race_screen.dart';
 
 class PublicRacesScreen extends StatefulWidget {
   final AuthService authService;
@@ -58,6 +59,15 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
       setState(() => _loading = false);
       showErrorToast(context, e.toString());
     }
+  }
+
+  void _navigateToCreateRace() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) =>
+            CreateRaceScreen(authService: widget.authService),
+      ),
+    );
   }
 
   Future<void> _join(Map<String, dynamic> race) async {
@@ -154,17 +164,59 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
       );
     }
     if (_races.isEmpty) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          const SizedBox(height: 80),
-          Center(
-            child: Text(
-              'NO PUBLIC RACES RIGHT NOW',
-              style: PixelText.title(size: 14, color: AppColors.parchmentLight),
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 48,
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.flag_outlined,
+                        size: 48,
+                        color: AppColors.textMid.withValues(alpha: 0.6),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'NO PUBLIC RACES',
+                        textAlign: TextAlign.center,
+                        style: PixelText.title(
+                          size: 18,
+                          color: AppColors.textMid,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Check back later or start your own.',
+                        textAlign: TextAlign.center,
+                        style: PixelText.body(
+                          size: 14,
+                          color: AppColors.textMid,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      PillButton(
+                        label: 'CREATE A RACE',
+                        variant: PillButtonVariant.primary,
+                        fontSize: 13,
+                        onPressed: _navigateToCreateRace,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
-          ),
-        ],
+          );
+        },
       );
     }
     return ListView.builder(
