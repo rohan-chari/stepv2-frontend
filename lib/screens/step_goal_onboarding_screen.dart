@@ -138,7 +138,7 @@ class _StepGoalOnboardingScreenState extends State<StepGoalOnboardingScreen> {
                           Text(
                             'How many steps will you aim for each day?',
                             style: PixelText.body(
-                              color: AppColors.textMid,
+                              color: AppColors.parchmentLight,
                             ).copyWith(shadows: _textShadows),
                             textAlign: TextAlign.center,
                           ),

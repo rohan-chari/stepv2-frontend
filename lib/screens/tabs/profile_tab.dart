@@ -12,6 +12,7 @@ import '../../widgets/app_avatar.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/retro_card.dart';
+import '../../widgets/trail_sign.dart';
 import '../../widgets/step_calendar.dart';
 import '../admin_challenge_screen.dart';
 import '../display_name_screen.dart';
@@ -551,23 +552,57 @@ class _SettingsSheetState extends State<_SettingsSheet> {
   Future<void> _confirmDeleteAccount() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete account?'),
-        content: const Text(
-          'This permanently deletes your account, step history, '
-          'friends, and coins. Coins held in active races are forfeited '
-          'to the race pot. This cannot be undone.',
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: TrailSign(
+          width: 320,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'DELETE ACCOUNT?',
+                style: PixelText.title(size: 18, color: AppColors.textDark),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'This permanently deletes your account, step history, '
+                'friends, and coins.',
+                style: PixelText.body(size: 14, color: AppColors.textMid),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Coins held in active races are forfeited to the race pot. '
+                'This cannot be undone.',
+                style: PixelText.body(size: 13, color: AppColors.textMid),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              PillButton(
+                label: 'DELETE',
+                variant: PillButtonVariant.accent,
+                fullWidth: true,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                onPressed: () => Navigator.of(ctx).pop(true),
+              ),
+              const SizedBox(height: 10),
+              PillButton(
+                label: 'CANCEL',
+                variant: PillButtonVariant.secondary,
+                fullWidth: true,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                onPressed: () => Navigator.of(ctx).pop(false),
+              ),
+            ],
+          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
-          ),
-        ],
       ),
     );
 

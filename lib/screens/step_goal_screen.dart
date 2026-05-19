@@ -155,7 +155,7 @@ class _StepGoalScreenState extends State<StepGoalScreen> {
                                       Text(
                                         'How many steps per day?',
                                         style: PixelText.body(
-                                          color: AppColors.textMid,
+                                          color: AppColors.parchmentLight,
                                         ).copyWith(shadows: _textShadows),
                                         textAlign: TextAlign.center,
                                       ),
