@@ -6,8 +6,20 @@ import 'package:step_tracker/screens/tabs/friends_tab.dart';
 import 'package:step_tracker/screens/tabs/profile_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/widgets/arcade_page.dart';
 
 class _FakeFriendsApi extends BackendApiService {
+  _FakeFriendsApi({
+    this.friends = const [],
+    this.incoming = const [],
+    this.outgoing = const [],
+    this.searchResults = const [],
+  });
+
+  final List<Map<String, dynamic>> friends;
+  final List<Map<String, dynamic>> incoming;
+  final List<Map<String, dynamic>> outgoing;
+  final List<Map<String, dynamic>> searchResults;
   int fetchFriendsCalls = 0;
 
   @override
@@ -16,9 +28,17 @@ class _FakeFriendsApi extends BackendApiService {
   }) async {
     fetchFriendsCalls += 1;
     return {
-      'friends': const [],
-      'pending': {'incoming': const [], 'outgoing': const []},
+      'friends': friends,
+      'pending': {'incoming': incoming, 'outgoing': outgoing},
     };
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> searchUsers({
+    required String identityToken,
+    required String query,
+  }) async {
+    return searchResults;
   }
 }
 
@@ -132,7 +152,7 @@ void main() {
     expect(shellRefreshCalls, 1);
   });
 
-  testWidgets('FriendsTab search field has material when opened as a route', (
+  testWidgets('FriendsTab has route chrome when opened directly', (
     WidgetTester tester,
   ) async {
     final authService = await _createAuthService();
@@ -143,6 +163,7 @@ void main() {
           authService: authService,
           onFriendsChanged: () {},
           backendApiService: _FakeFriendsApi(),
+          displayName: 'Trail Walker',
         ),
       ),
     );
@@ -150,7 +171,84 @@ void main() {
     await tester.pump();
 
     expect(tester.takeException(), isNull);
+    expect(find.byType(ArcadePageBackground), findsOneWidget);
     expect(find.byType(TextField), findsOneWidget);
+
+    final displayNameContext = tester.element(find.text('Trail Walker').first);
+    expect(
+      DefaultTextStyle.of(displayNameContext).style.decoration,
+      isNot(TextDecoration.underline),
+    );
+  });
+
+  testWidgets('FriendsTab labels existing friends in search results', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _createAuthService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: FriendsTab(
+          authService: authService,
+          onFriendsChanged: () {},
+          backendApiService: _FakeFriendsApi(
+            friends: const [
+              {
+                'id': 'friend-1',
+                'displayName': 'Hill Climber',
+                'friendshipId': 'friendship-1',
+              },
+            ],
+            searchResults: const [
+              {'id': 'friend-1', 'displayName': 'Hill Climber'},
+            ],
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), 'Hill');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump();
+
+    expect(find.text('FRIENDS'), findsOneWidget);
+    expect(find.text('ADD'), findsNothing);
+  });
+
+  testWidgets('FriendsTab labels pending requests in search results', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _createAuthService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: FriendsTab(
+          authService: authService,
+          onFriendsChanged: () {},
+          backendApiService: _FakeFriendsApi(
+            incoming: const [
+              {
+                'friendshipId': 'friendship-1',
+                'user': {'id': 'friend-1', 'displayName': 'Hill Climber'},
+              },
+            ],
+            outgoing: const [],
+            searchResults: const [
+              {'id': 'friend-1', 'displayName': 'Hill Climber'},
+            ],
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), 'Walk');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump();
+
+    expect(find.text('PENDING'), findsOneWidget);
+    expect(find.text('ADD'), findsNothing);
   });
 
   testWidgets(

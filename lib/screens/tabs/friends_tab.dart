@@ -8,12 +8,15 @@ import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
 import '../../widgets/app_avatar.dart';
+import '../../widgets/arcade_page.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/info_board_card.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
+
+enum _SearchResultState { addable, friends, pending }
 
 class FriendsTab extends StatefulWidget {
   final AuthService authService;
@@ -316,37 +319,49 @@ class _FriendsTabState extends State<FriendsTab> {
     final tabBarHeight = canPop ? bottomInset : 77.5 + bottomInset;
     final state = _friendsState;
 
+    Widget pageChrome(Widget child) {
+      return ArcadePageBackground(
+        showHeader: false,
+        child: Material(type: MaterialType.transparency, child: child),
+      );
+    }
+
     if (state.shouldShowInitialLoading || (_isLoading && !state.hasData)) {
-      return Padding(
-        padding: EdgeInsets.only(top: topInset + 12, bottom: tabBarHeight),
-        child: const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16),
-          child: Column(
-            children: [
-              _FriendsTopSkeleton(),
-              SizedBox(height: 12),
-              ListSkeleton(itemCount: 4, showAvatar: true),
-            ],
+      return pageChrome(
+        Padding(
+          padding: EdgeInsets.only(top: topInset + 12, bottom: tabBarHeight),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              children: [
+                _FriendsTopSkeleton(),
+                SizedBox(height: 12),
+                ListSkeleton(itemCount: 4, showAvatar: true),
+              ],
+            ),
           ),
         ),
       );
     }
 
     if (state.isError && !state.hasData) {
-      return Padding(
-        padding: EdgeInsets.only(top: topInset + 12, bottom: tabBarHeight),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(
-            children: [
-              _buildTopStatusBar(),
-              const SizedBox(height: 12),
-              LoadErrorPanel(
-                title: 'Couldn’t load friends',
-                message: state.error ?? 'Check your connection and try again.',
-                onRetry: _loadFriends,
-              ),
-            ],
+      return pageChrome(
+        Padding(
+          padding: EdgeInsets.only(top: topInset + 12, bottom: tabBarHeight),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              children: [
+                _buildTopStatusBar(),
+                const SizedBox(height: 12),
+                LoadErrorPanel(
+                  title: 'Couldn’t load friends',
+                  message:
+                      state.error ?? 'Check your connection and try again.',
+                  onRetry: _loadFriends,
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -356,123 +371,126 @@ class _FriendsTabState extends State<FriendsTab> {
         ? const BorderRadius.vertical(top: Radius.circular(8))
         : BorderRadius.circular(8);
 
-    return GestureDetector(
-      onTap: () => FocusScope.of(context).unfocus(),
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: EdgeInsets.only(top: topInset + 12, bottom: tabBarHeight),
-        child: RefreshIndicator(
-          onRefresh: _handleRefresh,
-          color: AppColors.accent,
-          backgroundColor: AppColors.parchment,
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverToBoxAdapter(
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: _buildTopStatusBar(),
-                    ),
-                    const SizedBox(height: 12),
+    return pageChrome(
+      GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        behavior: HitTestBehavior.opaque,
+        child: Padding(
+          padding: EdgeInsets.only(top: topInset + 12, bottom: tabBarHeight),
+          child: RefreshIndicator(
+            onRefresh: _handleRefresh,
+            color: AppColors.accent,
+            backgroundColor: AppColors.parchment,
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: _buildTopStatusBar(),
+                      ),
+                      const SizedBox(height: 12),
 
-                    _buildFriendsHeader(),
-                    const SizedBox(height: 12),
+                      _buildFriendsHeader(),
+                      const SizedBox(height: 12),
 
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Column(
-                        children: [
-                          // Search bar
-                          Column(
-                            children: [
-                              Material(
-                                color: Colors.transparent,
-                                child: TextField(
-                                  controller: _searchController,
-                                  onChanged: _onSearchChanged,
-                                  textAlign: TextAlign.center,
-                                  style: PixelText.body(
-                                    size: 16,
-                                    color: AppColors.textDark,
-                                  ),
-                                  decoration: InputDecoration(
-                                    filled: true,
-                                    fillColor: AppColors.parchmentLight,
-                                    hintText: 'Search by display name',
-                                    hintStyle: PixelText.body(
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Column(
+                          children: [
+                            // Search bar
+                            Column(
+                              children: [
+                                Material(
+                                  color: Colors.transparent,
+                                  child: TextField(
+                                    controller: _searchController,
+                                    onChanged: _onSearchChanged,
+                                    textAlign: TextAlign.center,
+                                    style: PixelText.body(
                                       size: 16,
-                                      color: AppColors.parchmentBorder,
+                                      color: AppColors.textDark,
                                     ),
-                                    border: OutlineInputBorder(
-                                      borderSide: BorderSide(
+                                    decoration: InputDecoration(
+                                      filled: true,
+                                      fillColor: AppColors.parchmentLight,
+                                      hintText: 'Search by display name',
+                                      hintStyle: PixelText.body(
+                                        size: 16,
                                         color: AppColors.parchmentBorder,
                                       ),
-                                      borderRadius: searchBorderRadius,
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: AppColors.parchmentBorder,
+                                      border: OutlineInputBorder(
+                                        borderSide: BorderSide(
+                                          color: AppColors.parchmentBorder,
+                                        ),
+                                        borderRadius: searchBorderRadius,
                                       ),
-                                      borderRadius: searchBorderRadius,
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: AppColors.accent,
-                                        width: 2,
+                                      enabledBorder: OutlineInputBorder(
+                                        borderSide: BorderSide(
+                                          color: AppColors.parchmentBorder,
+                                        ),
+                                        borderRadius: searchBorderRadius,
                                       ),
-                                      borderRadius: searchBorderRadius,
-                                    ),
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 12,
+                                      focusedBorder: OutlineInputBorder(
+                                        borderSide: BorderSide(
+                                          color: AppColors.accent,
+                                          width: 2,
+                                        ),
+                                        borderRadius: searchBorderRadius,
+                                      ),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 12,
+                                          ),
                                     ),
                                   ),
                                 ),
-                              ),
-                              if (_showDropdown) _buildSearchDropdown(),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          if (state.isRefreshing)
-                            const Padding(
-                              padding: EdgeInsets.only(bottom: 8),
-                              child: LinearProgressIndicator(
-                                minHeight: 2,
-                                color: AppColors.accent,
-                                backgroundColor: Colors.transparent,
-                              ),
+                                if (_showDropdown) _buildSearchDropdown(),
+                              ],
                             ),
-
-                          // Incoming requests
-                          if (_incomingRequests.isNotEmpty) ...[
-                            _buildSectionHeader('INCOMING REQUESTS'),
-                            const SizedBox(height: 8),
-                            _buildIncomingList(),
                             const SizedBox(height: 16),
-                          ],
+                            if (state.isRefreshing)
+                              const Padding(
+                                padding: EdgeInsets.only(bottom: 8),
+                                child: LinearProgressIndicator(
+                                  minHeight: 2,
+                                  color: AppColors.accent,
+                                  backgroundColor: Colors.transparent,
+                                ),
+                              ),
 
-                          // Outgoing requests
-                          if (_outgoingRequests.isNotEmpty) ...[
-                            _buildSectionHeader('SENT REQUESTS'),
-                            const SizedBox(height: 8),
-                            _buildOutgoingList(),
-                            const SizedBox(height: 16),
-                          ],
+                            // Incoming requests
+                            if (_incomingRequests.isNotEmpty) ...[
+                              _buildSectionHeader('INCOMING REQUESTS'),
+                              const SizedBox(height: 8),
+                              _buildIncomingList(),
+                              const SizedBox(height: 16),
+                            ],
 
-                          // Friends list
-                          if (_friends.isEmpty)
-                            _buildFriendsEmptyState()
-                          else
-                            _buildFriendsList(),
-                        ],
+                            // Outgoing requests
+                            if (_outgoingRequests.isNotEmpty) ...[
+                              _buildSectionHeader('SENT REQUESTS'),
+                              const SizedBox(height: 8),
+                              _buildOutgoingList(),
+                              const SizedBox(height: 16),
+                            ],
+
+                            // Friends list
+                            if (_friends.isEmpty)
+                              _buildFriendsEmptyState()
+                            else
+                              _buildFriendsList(),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -741,17 +759,7 @@ class _FriendsTabState extends State<FriendsTab> {
                     style: PixelText.body(size: 15, color: AppColors.textDark),
                   ),
                 ),
-                PillButton(
-                  label: 'ADD',
-                  variant: PillButtonVariant.primary,
-                  fontSize: 11,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  onPressed: () =>
-                      _sendRequest(_searchResults[i]['id'] as String),
-                ),
+                _buildSearchResultAction(_searchResults[i]),
               ],
             ),
           ),
@@ -766,6 +774,112 @@ class _FriendsTabState extends State<FriendsTab> {
       ),
       child: Column(mainAxisSize: MainAxisSize.min, children: items),
     );
+  }
+
+  Widget _buildSearchResultAction(Map<String, dynamic> user) {
+    final state = _searchResultState(user);
+
+    switch (state) {
+      case _SearchResultState.friends:
+        return const PillButton(
+          label: 'FRIENDS',
+          variant: PillButtonVariant.secondary,
+          fontSize: 11,
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          onPressed: null,
+        );
+      case _SearchResultState.pending:
+        return const PillButton(
+          label: 'PENDING',
+          variant: PillButtonVariant.secondary,
+          fontSize: 11,
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          onPressed: null,
+        );
+      case _SearchResultState.addable:
+        return PillButton(
+          label: 'ADD',
+          variant: PillButtonVariant.primary,
+          fontSize: 11,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          onPressed: () => _sendRequest(user['id'] as String),
+        );
+    }
+  }
+
+  _SearchResultState _searchResultState(Map<String, dynamic> user) {
+    if (_friends.any((friend) => _matchesSearchUser(friend, user))) {
+      return _SearchResultState.friends;
+    }
+
+    final hasPendingRequest =
+        _incomingRequests.any((request) => _matchesSearchUser(request, user)) ||
+        _outgoingRequests.any((request) => _matchesSearchUser(request, user));
+
+    return hasPendingRequest
+        ? _SearchResultState.pending
+        : _SearchResultState.addable;
+  }
+
+  bool _matchesSearchUser(
+    Map<String, dynamic> candidate,
+    Map<String, dynamic> user,
+  ) {
+    final userId = _extractUserId(user);
+    final candidateId = _extractUserId(candidate);
+
+    if (userId != null && candidateId != null) {
+      return userId == candidateId;
+    }
+
+    if (userId != null || candidateId != null) {
+      return false;
+    }
+
+    final displayName = _extractDisplayName(user);
+    return displayName != null &&
+        displayName.isNotEmpty &&
+        displayName == _extractDisplayName(candidate);
+  }
+
+  String? _extractUserId(Map<String, dynamic> data) {
+    for (final key in const [
+      'id',
+      'userId',
+      'friendId',
+      'requesterId',
+      'addresseeId',
+    ]) {
+      final value = data[key];
+      if (value is String && value.isNotEmpty) return value;
+    }
+
+    for (final key in const ['user', 'friend', 'requester', 'addressee']) {
+      final value = data[key];
+      if (value is Map<String, dynamic>) {
+        final nestedId = _extractUserId(value);
+        if (nestedId != null) return nestedId;
+      }
+    }
+
+    return null;
+  }
+
+  String? _extractDisplayName(Map<String, dynamic> data) {
+    final displayName = data['displayName'];
+    if (displayName is String && displayName.isNotEmpty) {
+      return displayName;
+    }
+
+    for (final key in const ['user', 'friend', 'requester', 'addressee']) {
+      final value = data[key];
+      if (value is Map<String, dynamic>) {
+        final nestedName = _extractDisplayName(value);
+        if (nestedName != null) return nestedName;
+      }
+    }
+
+    return null;
   }
 
   Widget _buildFriendRow(Map<String, dynamic> friend, int index) {

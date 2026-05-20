@@ -15,13 +15,18 @@ class FriendPickerScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final topInset = MediaQuery.of(context).padding.top;
+    final headerBottom = topInset + const ArcadePageBackground().headerHeight;
+
     return Scaffold(
       body: ArcadePageBackground(
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Header
-              Padding(
+        child: Stack(
+          children: [
+            Positioned(
+              top: topInset,
+              left: 0,
+              right: 0,
+              child: Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 8,
@@ -65,18 +70,20 @@ class FriendPickerScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: 8),
-              // Friend list
-              Expanded(
+            ),
+            Positioned.fill(
+              top: headerBottom,
+              child: SafeArea(
+                top: false,
                 child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                   itemCount: friends.length,
                   itemBuilder: (context, index) =>
                       _buildFriendCard(context, friends[index]),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
