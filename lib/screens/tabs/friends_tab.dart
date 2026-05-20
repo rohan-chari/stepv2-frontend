@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../models/loadable.dart';
 import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
@@ -11,6 +12,7 @@ import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/info_board_card.dart';
+import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
 
 class FriendsTab extends StatefulWidget {
@@ -47,6 +49,8 @@ class _FriendsTabState extends State<FriendsTab> {
   List<Map<String, dynamic>> _incomingRequests = [];
   List<Map<String, dynamic>> _outgoingRequests = [];
   List<Map<String, dynamic>> _searchResults = [];
+  Loadable<Map<String, List<Map<String, dynamic>>>> _friendsState =
+      const Loadable.initial();
   bool _isLoading = true;
   bool _isSearching = false;
   bool _showDropdown = false;
@@ -71,9 +75,39 @@ class _FriendsTabState extends State<FriendsTab> {
   }
 
   Future<void> _loadFriends() async {
+    final previous = <String, List<Map<String, dynamic>>>{
+      'friends': _friends,
+      'incoming': _incomingRequests,
+      'outgoing': _outgoingRequests,
+    };
+    final hasPreviousData =
+        _friends.isNotEmpty ||
+        _incomingRequests.isNotEmpty ||
+        _outgoingRequests.isNotEmpty;
+
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _friendsState = hasPreviousData
+            ? Loadable.refreshing(previous)
+            : const Loadable.loading();
+      });
+    }
+
     try {
       final identityToken = widget.authService.authToken;
-      if (identityToken == null || identityToken.isEmpty) return;
+      if (identityToken == null || identityToken.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _friendsState = Loadable.error(
+              'Not signed in.',
+              data: hasPreviousData ? previous : null,
+            );
+          });
+        }
+        return;
+      }
 
       final data = await _backendApiService.fetchFriends(
         identityToken: identityToken,
@@ -93,11 +127,22 @@ class _FriendsTabState extends State<FriendsTab> {
         _friends = friends;
         _incomingRequests = incoming;
         _outgoingRequests = outgoing;
+        _friendsState = Loadable.success({
+          'friends': friends,
+          'incoming': incoming,
+          'outgoing': outgoing,
+        });
         _isLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+        _friendsState = Loadable.error(
+          'Couldn’t load friends. Please try again.',
+          data: hasPreviousData ? previous : null,
+        );
+      });
       showErrorToast(context, 'Couldn\u2019t load friends. Please try again.');
     }
   }
@@ -269,10 +314,41 @@ class _FriendsTabState extends State<FriendsTab> {
     final bottomInset = MediaQuery.of(context).padding.bottom;
     final canPop = Navigator.of(context).canPop();
     final tabBarHeight = canPop ? bottomInset : 77.5 + bottomInset;
+    final state = _friendsState;
 
-    if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: AppColors.accent),
+    if (state.shouldShowInitialLoading || (_isLoading && !state.hasData)) {
+      return Padding(
+        padding: EdgeInsets.only(top: topInset + 12, bottom: tabBarHeight),
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            children: [
+              _FriendsTopSkeleton(),
+              SizedBox(height: 12),
+              ListSkeleton(itemCount: 4, showAvatar: true),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (state.isError && !state.hasData) {
+      return Padding(
+        padding: EdgeInsets.only(top: topInset + 12, bottom: tabBarHeight),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            children: [
+              _buildTopStatusBar(),
+              const SizedBox(height: 12),
+              LoadErrorPanel(
+                title: 'Couldn’t load friends',
+                message: state.error ?? 'Check your connection and try again.',
+                onRetry: _loadFriends,
+              ),
+            ],
+          ),
+        ),
       );
     }
 
@@ -359,6 +435,15 @@ class _FriendsTabState extends State<FriendsTab> {
                             ],
                           ),
                           const SizedBox(height: 16),
+                          if (state.isRefreshing)
+                            const Padding(
+                              padding: EdgeInsets.only(bottom: 8),
+                              child: LinearProgressIndicator(
+                                minHeight: 2,
+                                color: AppColors.accent,
+                                backgroundColor: Colors.transparent,
+                              ),
+                            ),
 
                           // Incoming requests
                           if (_incomingRequests.isNotEmpty) ...[
@@ -782,6 +867,31 @@ class _FriendsTabState extends State<FriendsTab> {
             'PENDING',
             style: PixelText.title(size: 13, color: AppColors.textMid),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FriendsTopSkeleton extends StatelessWidget {
+  const _FriendsTopSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return const LoadingSkeleton(
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SkeletonLine(width: 150, height: 22),
+                SizedBox(height: 8),
+                SkeletonLine(width: 96, height: 16),
+              ],
+            ),
+          ),
+          SkeletonCircle(size: 44),
         ],
       ),
     );

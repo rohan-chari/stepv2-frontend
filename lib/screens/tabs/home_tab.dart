@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../models/loadable.dart';
 import '../../styles.dart';
 import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
@@ -13,6 +14,7 @@ import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/goal_track.dart';
 import '../../widgets/home_chrome.dart';
 import '../../widgets/home_course_track.dart';
+import '../../widgets/loading_skeleton.dart';
 import '../../widgets/spinning_coin.dart';
 import '../display_name_screen.dart';
 
@@ -33,9 +35,12 @@ class HomeTab extends StatelessWidget {
   final VoidCallback onDisplayNameChanged;
   final Map<String, dynamic>? currentChallenge;
   final List<Map<String, dynamic>> friendsSteps;
+  final Loadable<List<Map<String, dynamic>>>? friendsStepsState;
   final List<Map<String, dynamic>> equippedAccessories;
+  final Loadable<Map<String, dynamic>>? shopCatalogState;
   final Map<String, dynamic>? activeChallengeProgress;
   final List<Map<String, dynamic>> leaderboardHighlights;
+  final Loadable<List<Map<String, dynamic>>>? leaderboardHighlightsState;
   final bool leaderboardHighlightsLoading;
   final VoidCallback onChallengeChanged;
   final VoidCallback? onOpenFriendsTab;
@@ -65,9 +70,12 @@ class HomeTab extends StatelessWidget {
     required this.onDisplayNameChanged,
     required this.currentChallenge,
     required this.friendsSteps,
+    this.friendsStepsState,
     this.equippedAccessories = const [],
+    this.shopCatalogState,
     this.activeChallengeProgress,
     this.leaderboardHighlights = const [],
+    this.leaderboardHighlightsState,
     this.leaderboardHighlightsLoading = false,
     required this.onChallengeChanged,
     this.onOpenFriendsTab,
@@ -194,6 +202,8 @@ class HomeTab extends StatelessWidget {
       final friendGoal = friend['stepGoal'] as int?;
       return friendGoal != null && friendGoal > 0;
     }).length;
+    final friendsLoading =
+        friendsStepsState?.shouldShowInitialLoading == true;
     final viewportHeight = MediaQuery.of(context).size.height;
     final trackHeight = viewportHeight < 760 ? 226.0 : 268.0;
 
@@ -383,29 +393,33 @@ class HomeTab extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  HomeCourseTrack(
-                    height: trackHeight,
-                    goalSteps: goal,
-                    runners: [
-                      GoalTrackRunner(
-                        name: displayName ?? 'You',
-                        progress: progress,
-                        isUser: true,
-                        profilePhotoUrl: authService.profilePhotoUrl,
-                        accessories: equippedAccessories,
-                      ),
-                      for (final friend in friendsSteps)
+                  if (friendsLoading)
+                    _HomeGoalRaceSkeleton(height: trackHeight)
+                  else
+                    HomeCourseTrack(
+                      height: trackHeight,
+                      goalSteps: goal,
+                      runners: [
                         GoalTrackRunner(
-                          name: friend['displayName'] as String? ?? '???',
-                          progress: _friendGoalProgress(friend),
-                          profilePhotoUrl: friend['profilePhotoUrl'] as String?,
-                          accessories:
-                              (friend['accessories'] as List?)
-                                  ?.cast<Map<String, dynamic>>() ??
-                              const [],
+                          name: displayName ?? 'You',
+                          progress: progress,
+                          isUser: true,
+                          profilePhotoUrl: authService.profilePhotoUrl,
+                          accessories: equippedAccessories,
                         ),
-                    ],
-                  ),
+                        for (final friend in friendsSteps)
+                          GoalTrackRunner(
+                            name: friend['displayName'] as String? ?? '???',
+                            progress: _friendGoalProgress(friend),
+                            profilePhotoUrl:
+                                friend['profilePhotoUrl'] as String?,
+                            accessories:
+                                (friend['accessories'] as List?)
+                                    ?.cast<Map<String, dynamic>>() ??
+                                const [],
+                          ),
+                      ],
+                    ),
                 ] else ...[
                   const SizedBox(height: 14),
                   HomeInsetPanel(
@@ -461,7 +475,12 @@ class HomeTab extends StatelessWidget {
 
   Widget _buildLeaderboardHighlightsSection() {
     final cards = leaderboardHighlights.take(3).toList(growable: false);
-    if (!leaderboardHighlightsLoading && cards.isEmpty) {
+    final state = leaderboardHighlightsState;
+    final isLoading =
+        leaderboardHighlightsLoading ||
+        state?.shouldShowInitialLoading == true;
+    final isError = state?.isError == true && state?.hasData != true;
+    if (!isLoading && !isError && cards.isEmpty) {
       return const SizedBox.shrink();
     }
 
@@ -473,8 +492,19 @@ class HomeTab extends StatelessWidget {
           child: Text('CLIMBING THE BOARDS', style: HomeText.label(size: 13)),
         ),
         const SizedBox(height: 10),
-        if (leaderboardHighlightsLoading && cards.isEmpty)
+        if (isLoading && cards.isEmpty)
           const _ClimbingBoardsSkeleton()
+        else if (isError)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 22),
+            child: LoadErrorPanel(
+              title: 'Couldn’t load leaderboard',
+              message: 'Check your connection and try again.',
+              onRetry: () {
+                onRefresh();
+              },
+            ),
+          )
         else
           _ClimbingBoardsCarousel(
             cards: cards,
@@ -1361,6 +1391,49 @@ class _ClimbingBoardsBadge extends StatelessWidget {
       label: label,
       backgroundColor: HomeColors.gold,
       foregroundColor: HomeColors.ink,
+    );
+  }
+}
+
+class _HomeGoalRaceSkeleton extends StatelessWidget {
+  const _HomeGoalRaceSkeleton({required this.height});
+
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return LoadingSkeleton(
+      child: Container(
+        height: height,
+        decoration: BoxDecoration(
+          color: HomeColors.sage.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: HomeColors.line.withValues(alpha: 0.16)),
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SkeletonLine(width: 150, height: 14),
+            const Spacer(),
+            SkeletonBox(
+              width: double.infinity,
+              height: 24,
+              radius: 12,
+              color: HomeColors.sage.withValues(alpha: 0.16),
+            ),
+            const SizedBox(height: 20),
+            const Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                SkeletonCircle(size: 40),
+                SkeletonCircle(size: 34),
+                SkeletonCircle(size: 34),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../models/loadable.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/game_container.dart';
+import '../widgets/loading_skeleton.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/pill_icon_button.dart';
 import '../widgets/race_track.dart';
@@ -32,6 +34,7 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
   final BackendApiService _api = BackendApiService();
   late Map<String, dynamic> _instance;
   Map<String, dynamic>? _progress;
+  Loadable<Map<String, dynamic>> _progressState = const Loadable.initial();
   bool _isLoading = false;
   bool _isAccepting = false;
 
@@ -161,10 +164,24 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
   }
 
   Future<void> _fetchProgress() async {
-    setState(() => _isLoading = true);
+    final previous = _progress;
+    setState(() {
+      _isLoading = true;
+      _progressState = previous == null
+          ? const Loadable.loading()
+          : Loadable.refreshing(previous);
+    });
     try {
       final token = widget.authService.authToken;
-      if (token == null || token.isEmpty) return;
+      if (token == null || token.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _progressState = Loadable.error('Not signed in.', data: previous);
+          });
+        }
+        return;
+      }
 
       final instanceId = _instance['id'] as String;
       final progress = await _api.fetchChallengeProgress(
@@ -175,11 +192,17 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
       if (mounted) {
         setState(() {
           _progress = progress;
+          _progressState = Loadable.success(progress);
           _isLoading = false;
         });
       }
-    } catch (_) {
-      if (mounted) setState(() => _isLoading = false);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _progressState = Loadable.error(e.toString(), data: previous);
+        });
+      }
     }
   }
 
@@ -409,12 +432,29 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
   // -- Track + progress section --
 
   Widget _buildTrackAndProgressSection() {
-    if (_isLoading && _progress == null) {
-      return const Padding(
-        padding: EdgeInsets.all(20),
-        child: Center(
-          child: CircularProgressIndicator(color: AppColors.accent),
+    final state = _progressState;
+    if (state.shouldShowInitialLoading || (_isLoading && _progress == null)) {
+      return const LoadingSkeleton(
+        child: GameContainer(
+          padding: EdgeInsets.all(12),
+          child: Column(
+            children: [
+              SkeletonBox(width: double.infinity, height: 150, radius: 8),
+              SizedBox(height: 12),
+              SkeletonLine(width: 180, height: 16),
+              SizedBox(height: 8),
+              SkeletonLine(width: 240, height: 12),
+            ],
+          ),
         ),
+      );
+    }
+
+    if (state.isError && !state.hasData) {
+      return LoadErrorPanel(
+        title: 'Couldn’t load challenge progress',
+        message: 'Check your connection and try again.',
+        onRetry: _fetchProgress,
       );
     }
 
@@ -424,6 +464,12 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
       padding: const EdgeInsets.all(12),
       child: Column(
         children: [
+          if (state.isRefreshing)
+            const LinearProgressIndicator(
+              minHeight: 2,
+              color: AppColors.accent,
+              backgroundColor: Colors.transparent,
+            ),
           _buildRaceTrackContent(),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),

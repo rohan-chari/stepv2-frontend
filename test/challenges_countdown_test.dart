@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:step_tracker/models/loadable.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/tabs/challenges_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
@@ -20,6 +21,32 @@ Future<AuthService> _createAuthService() async {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets(
+    'ChallengesTab shows a loading skeleton before challenge data loads',
+    (WidgetTester tester) async {
+      final authService = await _createAuthService();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ChallengesTab(
+              authService: authService,
+              currentChallengeState: const Loadable.loading(),
+              friendsSteps: const [],
+              onChallengeChanged: () {},
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        find.byKey(const Key('challenges-loading-skeleton')),
+        findsOneWidget,
+      );
+      expect(find.text('No active challenges'), findsNothing);
+    },
+  );
 
   testWidgets('ChallengesTab shows a live countdown for the weekly challenge', (
     WidgetTester tester,
@@ -51,8 +78,8 @@ void main() {
 
     // Countdown units: 01 days, 01 hours, 02 minutes, 05 seconds
     expect(find.text('01'), findsNWidgets(2)); // days and hours
-    expect(find.text('02'), findsOneWidget);   // minutes
-    expect(find.text('05'), findsOneWidget);   // seconds
+    expect(find.text('02'), findsOneWidget); // minutes
+    expect(find.text('05'), findsOneWidget); // seconds
     expect(find.text('DAYS'), findsOneWidget);
     expect(find.text('HRS'), findsOneWidget);
     expect(find.text('MIN'), findsOneWidget);

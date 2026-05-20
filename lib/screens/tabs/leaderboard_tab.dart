@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../models/loadable.dart';
 import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
@@ -9,6 +10,7 @@ import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/filter_dropdown.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/info_board_card.dart';
+import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
 
 enum _LeaderboardType { steps, challenges, races }
@@ -129,6 +131,8 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   bool _isLoading = true;
   List<Map<String, dynamic>> _top10 = [];
   Map<String, dynamic>? _currentUser;
+  Loadable<List<Map<String, dynamic>>> _leaderboardState =
+      const Loadable.initial();
 
   static const _periods = [
     ('today', 'TODAY'),
@@ -174,14 +178,26 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   }
 
   Future<void> _loadLeaderboard() async {
+    final previous = _top10;
     if (mounted) {
-      setState(() => _isLoading = true);
+      setState(() {
+        _isLoading = true;
+        _leaderboardState = previous.isEmpty
+            ? const Loadable.loading()
+            : Loadable.refreshing(previous);
+      });
     }
 
     final token = widget.authService.authToken;
     if (token == null || token.isEmpty) {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _isLoading = false;
+          _leaderboardState = Loadable.error(
+            'Not signed in.',
+            data: previous.isEmpty ? null : previous,
+          );
+        });
       }
       return;
     }
@@ -214,11 +230,18 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
         _minimumCompletedChallenges =
             data['minimumCompletedChallenges'] as int? ??
             _minimumCompletedChallenges;
+        _leaderboardState = Loadable.success(_top10);
         _isLoading = false;
       });
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _isLoading = false;
+          _leaderboardState = Loadable.error(
+            e.toString(),
+            data: previous.isEmpty ? null : previous,
+          );
+        });
       }
     }
   }
@@ -330,23 +353,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                   const SizedBox(height: 16),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: _isLoading
-                        ? const Padding(
-                            padding: EdgeInsets.all(12),
-                            child: Center(
-                              child: SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  color: AppColors.accent,
-                                  strokeWidth: 2,
-                                ),
-                              ),
-                            ),
-                          )
-                        : _top10.isEmpty
-                        ? _buildEmptyState()
-                        : _buildLeaderboardTable(),
+                    child: _buildLeaderboardState(),
                   ),
                 ],
               ),
@@ -354,6 +361,38 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildLeaderboardState() {
+    final state = _leaderboardState;
+    if (state.shouldShowInitialLoading || (_isLoading && _top10.isEmpty)) {
+      return const ListSkeleton(itemCount: 5, showAvatar: true);
+    }
+
+    if (state.isError && !state.hasData) {
+      return LoadErrorPanel(
+        title: 'Couldn’t load leaderboard',
+        message: 'Check your connection and try again.',
+        onRetry: _loadLeaderboard,
+      );
+    }
+
+    if (_top10.isEmpty) return _buildEmptyState();
+
+    return Column(
+      children: [
+        if (state.isRefreshing)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: LinearProgressIndicator(
+              minHeight: 2,
+              color: AppColors.accent,
+              backgroundColor: Colors.transparent,
+            ),
+          ),
+        _buildLeaderboardTable(),
+      ],
     );
   }
 

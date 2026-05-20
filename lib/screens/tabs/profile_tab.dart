@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/backend_config.dart';
+import '../../models/loadable.dart';
 import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
@@ -14,6 +15,7 @@ import '../../widgets/pill_button.dart';
 import '../../widgets/retro_card.dart';
 import '../../widgets/trail_sign.dart';
 import '../../widgets/step_calendar.dart';
+import '../../widgets/loading_skeleton.dart';
 import '../admin_challenge_screen.dart';
 import '../display_name_screen.dart';
 import '../start_screen.dart';
@@ -424,6 +426,7 @@ class _StatsSectionState extends State<_StatsSection> {
   int _thisYear = 0;
   int _allTime = 0;
   int _streak = 0;
+  Loadable<Map<String, dynamic>> _statsState = const Loadable.initial();
 
   @override
   void initState() {
@@ -432,11 +435,24 @@ class _StatsSectionState extends State<_StatsSection> {
   }
 
   Future<void> loadStats() async {
-    if (mounted) setState(() => _isLoading = true);
+    final previous = _statsState.data;
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _statsState = previous == null
+            ? const Loadable.loading()
+            : Loadable.refreshing(previous);
+      });
+    }
 
     final token = widget.authService.authToken;
     if (token == null || token.isEmpty) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _statsState = Loadable.error('Not signed in.', data: previous);
+        });
+      }
       return;
     }
 
@@ -452,11 +468,17 @@ class _StatsSectionState extends State<_StatsSection> {
           _thisYear = (stats['thisYear'] as num?)?.toInt() ?? 0;
           _allTime = (stats['allTime'] as num?)?.toInt() ?? 0;
           _streak = (stats['streak'] as num?)?.toInt() ?? 0;
+          _statsState = Loadable.success(stats);
           _isLoading = false;
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _statsState = Loadable.error('Couldn’t load stats.', data: previous);
+        });
+      }
     }
   }
 
@@ -469,24 +491,33 @@ class _StatsSectionState extends State<_StatsSection> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
+    final state = _statsState;
+    if (state.shouldShowInitialLoading || (_isLoading && !state.hasData)) {
       return const Padding(
         padding: EdgeInsets.all(12),
-        child: Center(
-          child: SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(
-              color: AppColors.accent,
-              strokeWidth: 2,
-            ),
-          ),
-        ),
+        child: ListSkeleton(itemCount: 5),
+      );
+    }
+
+    if (state.isError && !state.hasData) {
+      return LoadErrorPanel(
+        title: 'Couldn’t load stats',
+        message: 'Check your connection and try again.',
+        onRetry: loadStats,
       );
     }
 
     return Column(
       children: [
+        if (state.isRefreshing)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: LinearProgressIndicator(
+              minHeight: 2,
+              color: AppColors.accent,
+              backgroundColor: Colors.transparent,
+            ),
+          ),
         _buildStatRow('This Week', _formatSteps(_thisWeek), 0),
         _buildStatRow('This Month', _formatSteps(_thisMonth), 1),
         _buildStatRow('This Year', _formatSteps(_thisYear), 2),

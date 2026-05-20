@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../models/loadable.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
@@ -21,6 +22,7 @@ import '../widgets/spinning_coin.dart';
 import '../widgets/spinning_crate.dart';
 import '../widgets/game_container.dart';
 import '../widgets/leaderboard_plank.dart';
+import '../widgets/loading_skeleton.dart';
 import '../widgets/race_finishers_banner.dart';
 import '../widgets/item_slot.dart';
 import '../widgets/feed_bubble.dart';
@@ -202,6 +204,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   Map<String, dynamic>? _race;
   Map<String, dynamic>? _progress;
   Map<String, dynamic>? _powerupData;
+  Loadable<Map<String, dynamic>> _progressState = const Loadable.initial();
+  Loadable<List<Map<String, dynamic>>> _feedState = const Loadable.initial();
   List<Map<String, dynamic>> _feedEvents = [];
   int _queuedBoxCount = 0;
   bool _isLoading = true;
@@ -251,7 +255,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   Future<void> _loadDetails() async {
     try {
       final token = widget.authService.authToken;
-      if (token == null || token.isEmpty) return;
+      if (token == null || token.isEmpty) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
 
       final details = await _api.fetchRaceDetails(
         identityToken: token,
@@ -281,9 +288,25 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   }
 
   Future<void> _loadProgress() async {
+    final previous = _progress;
+    if (mounted) {
+      setState(() {
+        _progressState = previous == null
+            ? const Loadable.loading()
+            : Loadable.refreshing(previous);
+      });
+    }
+
     try {
       final token = widget.authService.authToken;
-      if (token == null || token.isEmpty) return;
+      if (token == null || token.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _progressState = Loadable.error('Not signed in.', data: previous);
+          });
+        }
+        return;
+      }
 
       final progress = await _api.fetchRaceProgress(
         identityToken: token,
@@ -294,6 +317,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       setState(() {
         _progress = progress;
         _powerupData = progress['powerupData'] as Map<String, dynamic>?;
+        _progressState = Loadable.success(progress);
       });
 
       if (_powerupData?['enabled'] == true) {
@@ -329,7 +353,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         _countdownTimer?.cancel();
         _loadDetails();
       }
-    } catch (_) {}
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _progressState = Loadable.error(e.toString(), data: previous);
+      });
+      if (previous != null) {
+        showErrorToast(context, 'Couldn’t refresh race progress.');
+      }
+    }
   }
 
   Future<void> _refreshWallet() async {
@@ -1111,9 +1143,28 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   }
 
   Future<void> _loadFeed() async {
+    final previous = _feedEvents;
+    if (mounted) {
+      setState(() {
+        _feedState = previous.isEmpty
+            ? const Loadable.loading()
+            : Loadable.refreshing(previous);
+      });
+    }
+
     try {
       final token = widget.authService.authToken;
-      if (token == null || token.isEmpty) return;
+      if (token == null || token.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _feedState = Loadable.error(
+              'Not signed in.',
+              data: previous.isEmpty ? null : previous,
+            );
+          });
+        }
+        return;
+      }
 
       final result = await _api.fetchRaceFeed(
         identityToken: token,
@@ -1121,11 +1172,21 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       );
 
       if (!mounted) return;
+      final events =
+          (result['events'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       setState(() {
-        _feedEvents =
-            (result['events'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        _feedEvents = events;
+        _feedState = Loadable.success(events);
       });
-    } catch (_) {}
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _feedState = Loadable.error(
+          e.toString(),
+          data: previous.isEmpty ? null : previous,
+        );
+      });
+    }
   }
 
   @override
@@ -1590,25 +1651,65 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   }
 
   Widget _buildActiveContent() {
-    final participants = sortRaceParticipantsForDisplay(
-      (_progress?['participants'] as List?)?.cast<Map<String, dynamic>>() ?? [],
-    );
-    final finishedCount = participants
-        .where((p) => p['finishedAt'] != null)
-        .length;
     final targetSteps = _readInt(_race!['targetSteps'], fallback: 0);
     final buyInAmount = _readInt(_race!['buyInAmount'], fallback: 0);
     final endsAtRaw = _race!['endsAt'] as String?;
     final endsAt = endsAtRaw != null
         ? DateTime.tryParse(endsAtRaw)?.toLocal()
         : null;
+
+    final header = <Widget>[
+      if (endsAt != null || buyInAmount > 0) ...[
+        _buildRaceStatusBoard(endsAt: endsAt, showPrizePool: buyInAmount > 0),
+        const SizedBox(height: 12),
+      ],
+    ];
+
+    if (_progressState.shouldShowInitialLoading) {
+      return Column(
+        children: [
+          ...header,
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: KeyedSubtree(
+              key: Key('race-detail-progress-skeleton'),
+              child: _RaceProgressSkeleton(),
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (_progressState.isError && !_progressState.hasData) {
+      return Column(
+        children: [
+          ...header,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: KeyedSubtree(
+              key: const Key('race-detail-progress-error'),
+              child: LoadErrorPanel(
+                title: 'Couldn’t load race progress',
+                message: 'Check your connection and try again.',
+                onRetry: _loadProgress,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    final progress = _progressState.data ?? _progress ?? const {};
+    final participants = sortRaceParticipantsForDisplay(
+      (progress['participants'] as List?)?.cast<Map<String, dynamic>>() ?? [],
+    );
+    final finishedCount = participants
+        .where((p) => p['finishedAt'] != null)
+        .length;
+
     return Column(
       children: [
-        if (endsAt != null || buyInAmount > 0) ...[
-          // Full-width: parent scroll view has no horizontal padding.
-          _buildRaceStatusBoard(endsAt: endsAt, showPrizePool: buyInAmount > 0),
-          const SizedBox(height: 12),
-        ],
+        ...header,
 
         // Match the home tab's open spacing: content is inset, but the whole
         // active race surface is not wrapped in a framed card.
@@ -1617,6 +1718,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (_progressState.isRefreshing)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 8),
+                  child: LinearProgressIndicator(
+                    minHeight: 2,
+                    color: AppColors.accent,
+                    backgroundColor: Colors.transparent,
+                  ),
+                ),
               HomeCourseTrack(
                 height: 268,
                 goalSteps: targetSteps,
@@ -2113,7 +2223,23 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
           ],
         ),
         const SizedBox(height: 8),
-        if (_feedEvents.isEmpty)
+        if (_feedState.shouldShowInitialLoading)
+          const LoadingSkeleton(
+            child: Column(
+              children: [
+                SkeletonLine(width: double.infinity, height: 14),
+                SizedBox(height: 8),
+                SkeletonLine(width: 220, height: 14),
+              ],
+            ),
+          )
+        else if (_feedState.isError && !_feedState.hasData)
+          LoadErrorPanel(
+            title: 'Couldn’t load activity',
+            message: 'Check your connection and try again.',
+            onRetry: _loadFeed,
+          )
+        else if (_feedEvents.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Text(
@@ -2124,7 +2250,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               ),
             ),
           )
-        else
+        else ...[
+          if (_feedState.isRefreshing)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: LinearProgressIndicator(
+                minHeight: 2,
+                color: AppColors.accent,
+                backgroundColor: Colors.transparent,
+              ),
+            ),
           for (int i = 0; i < _feedEvents.length && i < 10; i++)
             FeedBubble(
               eventType: _feedEvents[i]['eventType'] as String? ?? '',
@@ -2139,6 +2274,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               actorIsUser:
                   (_feedEvents[i]['actorUserId'] as String?) == _myUserId,
             ),
+        ],
       ],
     );
   }
@@ -2444,7 +2580,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     final isMe = userId == _myUserId;
     final isCreator = _race?['isCreator'] as bool? ?? false;
     final raceStatus = _race?['status'] as String? ?? '';
-    final canKick = isCreator &&
+    final canKick =
+        isCreator &&
         !isMe &&
         (raceStatus == 'PENDING' || raceStatus == 'ACTIVE');
 
@@ -2654,6 +2791,64 @@ class _CountdownUnit extends StatelessWidget {
         const SizedBox(height: 4),
         Text(label, style: PixelText.title(size: 11, color: labelColor)),
       ],
+    );
+  }
+}
+
+class _RaceProgressSkeleton extends StatelessWidget {
+  const _RaceProgressSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return LoadingSkeleton(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GameContainer(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SkeletonLine(width: 160, height: 18),
+                const SizedBox(height: 14),
+                Container(
+                  height: 170,
+                  decoration: BoxDecoration(
+                    color: AppColors.parchmentDark.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppColors.parchmentBorder.withValues(alpha: 0.45),
+                    ),
+                  ),
+                  child: const Center(
+                    child: SkeletonLine(width: 220, height: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          const SkeletonLine(width: 190, height: 18),
+          const SizedBox(height: 10),
+          const ListSkeleton(itemCount: 3, showAvatar: true),
+          const SizedBox(height: 14),
+          const SkeletonLine(width: 150, height: 18),
+          const SizedBox(height: 10),
+          const GameContainer(
+            padding: EdgeInsets.all(12),
+            child: Row(
+              children: [
+                SkeletonBox(width: 46, height: 46, radius: 8),
+                SizedBox(width: 10),
+                Expanded(child: SkeletonLine(height: 12)),
+                SizedBox(width: 10),
+                SkeletonBox(width: 46, height: 46, radius: 8),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
+      ),
     );
   }
 }

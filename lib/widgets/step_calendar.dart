@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../models/loadable.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
+import 'loading_skeleton.dart';
 import 'pill_icon_button.dart';
 import 'pill_button.dart';
 
@@ -24,6 +26,7 @@ class StepCalendarState extends State<StepCalendar> {
   late final BackendApiService _api;
   late DateTime _currentMonth;
   List<Map<String, dynamic>> _days = [];
+  Loadable<List<Map<String, dynamic>>> _daysState = const Loadable.initial();
   bool _isLoading = true;
 
   @override
@@ -35,11 +38,25 @@ class StepCalendarState extends State<StepCalendar> {
   }
 
   Future<void> _loadCalendar() async {
-    setState(() => _isLoading = true);
+    final previous = _days;
+    setState(() {
+      _isLoading = true;
+      _daysState = previous.isEmpty
+          ? const Loadable.loading()
+          : Loadable.refreshing(previous);
+    });
 
     final token = widget.authService.authToken;
     if (token == null || token.isEmpty) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _daysState = Loadable.error(
+            'Not signed in.',
+            data: previous.isEmpty ? null : previous,
+          );
+        });
+      }
       return;
     }
 
@@ -54,11 +71,20 @@ class StepCalendarState extends State<StepCalendar> {
       if (mounted) {
         setState(() {
           _days = (result['days'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+          _daysState = Loadable.success(_days);
           _isLoading = false;
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _daysState = Loadable.error(
+            'Couldn’t load calendar.',
+            data: previous.isEmpty ? null : previous,
+          );
+        });
+      }
     }
   }
 
@@ -147,22 +173,38 @@ class StepCalendarState extends State<StepCalendar> {
         ),
         const SizedBox(height: 6),
         // Calendar grid
-        if (_isLoading)
+        if (_daysState.shouldShowInitialLoading ||
+            (_isLoading && _days.isEmpty))
           const Padding(
             padding: EdgeInsets.all(20),
-            child: Center(
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  color: AppColors.accent,
-                  strokeWidth: 2,
-                ),
-              ),
+            child: LoadingSkeleton(
+              child: SkeletonBox(width: double.infinity, height: 190),
+            ),
+          )
+        else if (_daysState.isError && !_daysState.hasData)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: LoadErrorPanel(
+              title: 'Couldn’t load calendar',
+              message: 'Check your connection and try again.',
+              onRetry: _loadCalendar,
             ),
           )
         else
-          _buildGrid(),
+          Column(
+            children: [
+              if (_daysState.isRefreshing)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 8),
+                  child: LinearProgressIndicator(
+                    minHeight: 2,
+                    color: AppColors.accent,
+                    backgroundColor: Colors.transparent,
+                  ),
+                ),
+              _buildGrid(),
+            ],
+          ),
       ],
     );
   }

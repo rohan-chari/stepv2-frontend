@@ -7,6 +7,7 @@ import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../config/backend_config.dart';
+import '../models/loadable.dart';
 import '../models/step_data.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
@@ -72,11 +73,19 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   String? _displayName;
   String? _email;
   List<Map<String, dynamic>> _friendsSteps = [];
+  Loadable<List<Map<String, dynamic>>> _friendsStepsState =
+      const Loadable.initial();
   Map<String, dynamic>? _currentChallenge;
+  Loadable<Map<String, dynamic>> _currentChallengeState =
+      const Loadable.initial();
   Map<String, dynamic>? _activeChallengeProgress;
   Map<String, dynamic>? _racesData;
+  Loadable<Map<String, dynamic>> _racesState = const Loadable.initial();
   List<Map<String, dynamic>> _equippedAccessories = const [];
+  Loadable<Map<String, dynamic>> _shopCatalogState = const Loadable.initial();
   List<Map<String, dynamic>> _leaderboardHighlights = const [];
+  Loadable<List<Map<String, dynamic>>> _leaderboardHighlightsState =
+      const Loadable.loading();
   bool _leaderboardHighlightsLoading = true;
   String _requestedLeaderboardType = 'steps';
   String _requestedLeaderboardPeriod = 'today';
@@ -386,9 +395,28 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   Future<void> _fetchFriendsSteps() async {
+    final previous = _friendsSteps;
+    if (mounted) {
+      setState(() {
+        _friendsStepsState = previous.isEmpty
+            ? const Loadable.loading()
+            : Loadable.refreshing(previous);
+      });
+    }
+
     try {
       final identityToken = widget.authService.authToken;
-      if (identityToken == null || identityToken.isEmpty) return;
+      if (identityToken == null || identityToken.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _friendsStepsState = Loadable.error(
+              'Not signed in.',
+              data: previous,
+            );
+          });
+        }
+        return;
+      }
 
       final now = DateTime.now();
       final date =
@@ -400,36 +428,95 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       );
 
       if (mounted) {
-        setState(() => _friendsSteps = friends);
+        setState(() {
+          _friendsSteps = friends;
+          _friendsStepsState = Loadable.success(friends);
+        });
       }
-    } catch (_) {}
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _friendsStepsState = Loadable.error(e.toString(), data: previous);
+      });
+    }
   }
 
   Future<void> _fetchRaces() async {
+    final previous = _racesData;
+    if (mounted) {
+      setState(() {
+        _racesState = previous == null
+            ? const Loadable.loading()
+            : Loadable.refreshing(previous);
+      });
+    }
+
     try {
       final identityToken = widget.authService.authToken;
-      if (identityToken == null || identityToken.isEmpty) return;
+      if (identityToken == null || identityToken.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _racesState = Loadable.error('Not signed in.', data: previous);
+          });
+        }
+        return;
+      }
 
       final data = await _backendApiService.fetchRaces(
         identityToken: identityToken,
       );
 
       if (mounted) {
-        setState(() => _racesData = data);
+        setState(() {
+          _racesData = data;
+          _racesState = Loadable.success(data);
+        });
       }
-    } catch (_) {}
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _racesState = Loadable.error(e.toString(), data: previous);
+      });
+    }
   }
 
   Future<void> _fetchShopCatalog() async {
+    final previous = _shopCatalogState.data;
+    if (mounted) {
+      setState(() {
+        _shopCatalogState = previous == null
+            ? const Loadable.loading()
+            : Loadable.refreshing(previous);
+      });
+    }
+
     try {
       final identityToken = widget.authService.authToken;
-      if (identityToken == null || identityToken.isEmpty) return;
+      if (identityToken == null || identityToken.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _shopCatalogState = Loadable.error(
+              'Not signed in.',
+              data: previous,
+            );
+          });
+        }
+        return;
+      }
 
       final data = await _backendApiService.fetchShopCatalog(
         identityToken: identityToken,
       );
       _applyShopCatalog(data);
-    } catch (_) {}
+      if (mounted) {
+        setState(() => _shopCatalogState = Loadable.success(data));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _shopCatalogState = Loadable.error(e.toString(), data: previous);
+      });
+    }
   }
 
   void _applyShopCatalog(Map<String, dynamic> catalog) {
@@ -695,16 +782,39 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   Future<void> _fetchCurrentChallenge() async {
+    final previous = _currentChallenge;
+    if (mounted) {
+      setState(() {
+        _currentChallengeState = previous == null
+            ? const Loadable.loading()
+            : Loadable.refreshing(previous);
+      });
+    }
+
     try {
       final identityToken = widget.authService.authToken;
-      if (identityToken == null || identityToken.isEmpty) return;
+      if (identityToken == null || identityToken.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _currentChallengeState = Loadable.error(
+              'Not signed in.',
+              data: previous,
+            );
+          });
+        }
+        return;
+      }
 
       final data = await _backendApiService.fetchCurrentChallenge(
         identityToken: identityToken,
       );
 
       if (mounted) {
-        setState(() => _currentChallenge = data);
+        setState(() {
+          _currentChallenge = data;
+          _currentChallengeState = Loadable.success(data);
+          _activeChallengeProgress = null;
+        });
       }
 
       // Fetch progress for first active instance (for Home tab summary)
@@ -724,20 +834,38 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           break;
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _currentChallengeState = Loadable.error(e.toString(), data: previous);
+      });
+    }
   }
 
   Future<void> _fetchLeaderboardHighlights() async {
     final identityToken = widget.authService.authToken;
     if (identityToken == null || identityToken.isEmpty) {
       if (mounted) {
-        setState(() => _leaderboardHighlightsLoading = false);
+        setState(() {
+          _leaderboardHighlightsLoading = false;
+          _leaderboardHighlightsState = Loadable.error(
+            'Not signed in.',
+            data: _leaderboardHighlights.isEmpty
+                ? null
+                : _leaderboardHighlights,
+          );
+        });
       }
       return;
     }
 
     if (mounted) {
-      setState(() => _leaderboardHighlightsLoading = true);
+      setState(() {
+        _leaderboardHighlightsLoading = true;
+        _leaderboardHighlightsState = _leaderboardHighlights.isEmpty
+            ? const Loadable.loading()
+            : Loadable.refreshing(_leaderboardHighlights);
+      });
     }
 
     try {
@@ -753,11 +881,20 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         setState(() {
           _leaderboardHighlights = cards;
           _leaderboardHighlightsLoading = false;
+          _leaderboardHighlightsState = Loadable.success(cards);
         });
       }
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
-        setState(() => _leaderboardHighlightsLoading = false);
+        setState(() {
+          _leaderboardHighlightsLoading = false;
+          _leaderboardHighlightsState = Loadable.error(
+            e.toString(),
+            data: _leaderboardHighlights.isEmpty
+                ? null
+                : _leaderboardHighlights,
+          );
+        });
       }
     }
   }
@@ -980,9 +1117,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   onDisplayNameChanged: _syncSettingsState,
                   currentChallenge: _currentChallenge,
                   friendsSteps: _friendsSteps,
+                  friendsStepsState: _friendsStepsState,
                   equippedAccessories: _equippedAccessories,
+                  shopCatalogState: _shopCatalogState,
                   activeChallengeProgress: _activeChallengeProgress,
                   leaderboardHighlights: _leaderboardHighlights,
+                  leaderboardHighlightsState: _leaderboardHighlightsState,
                   leaderboardHighlightsLoading: _leaderboardHighlightsLoading,
                   onChallengeChanged: _fetchCurrentChallenge,
                   onOpenFriendsTab: _openFriendsTab,
@@ -996,6 +1136,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                 ChallengesTab(
                   authService: widget.authService,
                   currentChallenge: _currentChallenge,
+                  currentChallengeState: _currentChallengeState,
                   friendsSteps: _friendsSteps,
                   onChallengeChanged: _fetchCurrentChallenge,
                   onOpenFriendsTab: _openFriendsTab,
@@ -1008,6 +1149,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                 RacesTab(
                   authService: widget.authService,
                   racesData: _racesData,
+                  racesState: _racesState,
                   friendsSteps: _friendsSteps,
                   onRacesChanged: _fetchRaces,
                   onRefresh: _refreshRacesTab,

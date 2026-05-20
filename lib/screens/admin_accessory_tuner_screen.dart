@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/loadable.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
@@ -8,6 +9,7 @@ import '../widgets/error_toast.dart';
 import '../widgets/game_background.dart';
 import '../widgets/home_course_track.dart';
 import '../widgets/info_toast.dart';
+import '../widgets/loading_skeleton.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/trail_sign.dart';
 
@@ -25,6 +27,7 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
   final _api = BackendApiService();
 
   List<Map<String, dynamic>> _items = const [];
+  Loadable<List<Map<String, dynamic>>> _itemsState = const Loadable.initial();
   String? _selectedItemId;
   bool _isLoading = true;
   bool _isSaving = false;
@@ -49,10 +52,22 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
   }
 
   Future<void> _load() async {
-    setState(() => _isLoading = true);
+    final previous = _items;
+    setState(() {
+      _isLoading = true;
+      _itemsState = previous.isEmpty
+          ? const Loadable.loading()
+          : Loadable.refreshing(previous);
+    });
     final token = widget.authService.authToken;
     if (token == null || token.isEmpty) {
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+        _itemsState = Loadable.error(
+          'Not signed in.',
+          data: previous.isEmpty ? null : previous,
+        );
+      });
       return;
     }
     try {
@@ -68,10 +83,17 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
         } else {
           _selectedItemId = null;
         }
+        _itemsState = Loadable.success(items);
         _isLoading = false;
       });
     } catch (e) {
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+        _itemsState = Loadable.error(
+          e.toString(),
+          data: previous.isEmpty ? null : previous,
+        );
+      });
       if (mounted) {
         showErrorToast(context, 'Failed to load shop items: $e');
       }
@@ -189,168 +211,177 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
         onTap: () => FocusScope.of(context).unfocus(),
         behavior: HitTestBehavior.opaque,
         child: GameBackground(
-        child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 60, 24, 32),
-            child: Column(
-              children: [
-                TrailSign(
-                  width: boardWidth,
-                  child: Text(
-                    'ACCESSORY RENDER TUNER',
-                    style: PixelText.title(size: 18, color: AppColors.textDark),
-                    textAlign: TextAlign.center,
+          child: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 60, 24, 32),
+              child: Column(
+                children: [
+                  TrailSign(
+                    width: boardWidth,
+                    child: Text(
+                      'ACCESSORY RENDER TUNER',
+                      style: PixelText.title(
+                        size: 18,
+                        color: AppColors.textDark,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 24),
-                ContentBoard(
-                  width: boardWidth,
-                  child: _isLoading
-                      ? const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 24),
-                          child: Center(
-                            child: CircularProgressIndicator(
-                              color: AppColors.accent,
-                            ),
-                          ),
-                        )
-                      : _items.isEmpty
-                      ? Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Text(
-                            'No shop items found.',
-                            style: PixelText.body(
-                              size: 14,
-                              color: AppColors.textMid,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        )
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _buildPicker(),
-                            const SizedBox(height: 8),
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              dense: true,
-                              title: Text(
-                                _active ? 'Enabled' : 'Disabled',
-                                style: PixelText.body(
-                                  size: 14,
-                                  color: AppColors.textDark,
-                                ),
-                              ),
-                              subtitle: Text(
-                                _active
-                                    ? 'Visible in the shop'
-                                    : 'Hidden from the shop',
-                                style: PixelText.body(
-                                  size: 11,
-                                  color: AppColors.textMid,
-                                ),
-                              ),
-                              value: _active,
-                              activeThumbColor: AppColors.accent,
-                              onChanged: (v) => setState(() => _active = v),
-                            ),
-                            const SizedBox(height: 4),
-                            TextField(
-                              controller: _priceController,
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                labelText: 'Price (coins)',
-                                border: OutlineInputBorder(),
+                  const SizedBox(height: 24),
+                  ContentBoard(
+                    width: boardWidth,
+                    child: _itemsState.isError && !_itemsState.hasData
+                        ? LoadErrorPanel(
+                            title: 'Couldn’t load shop items',
+                            message: 'Check your connection and try again.',
+                            onRetry: _load,
+                          )
+                        : _isLoading
+                        ? const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 24),
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                color: AppColors.accent,
                               ),
                             ),
-                            const SizedBox(height: 16),
-                            Center(
-                              child: Container(
-                                width: 200,
-                                height: 180,
-                                decoration: BoxDecoration(
-                                  color: AppColors.parchmentDark.withValues(
-                                    alpha: 0.25,
+                          )
+                        : _items.isEmpty
+                        ? Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            child: Text(
+                              'No shop items found.',
+                              style: PixelText.body(
+                                size: 14,
+                                color: AppColors.textMid,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _buildPicker(),
+                              const SizedBox(height: 8),
+                              SwitchListTile(
+                                contentPadding: EdgeInsets.zero,
+                                dense: true,
+                                title: Text(
+                                  _active ? 'Enabled' : 'Disabled',
+                                  style: PixelText.body(
+                                    size: 14,
+                                    color: AppColors.textDark,
                                   ),
-                                  borderRadius: BorderRadius.circular(12),
                                 ),
-                                alignment: Alignment.bottomCenter,
-                                child: CapybaraCustomizationPreview(
-                                  accessories: [_previewAccessory()],
-                                  size: 140,
+                                subtitle: Text(
+                                  _active
+                                      ? 'Visible in the shop'
+                                      : 'Hidden from the shop',
+                                  style: PixelText.body(
+                                    size: 11,
+                                    color: AppColors.textMid,
+                                  ),
+                                ),
+                                value: _active,
+                                activeThumbColor: AppColors.accent,
+                                onChanged: (v) => setState(() => _active = v),
+                              ),
+                              const SizedBox(height: 4),
+                              TextField(
+                                controller: _priceController,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  labelText: 'Price (coins)',
+                                  border: OutlineInputBorder(),
                                 ),
                               ),
-                            ),
-                            const SizedBox(height: 16),
-                            _slider(
-                              'offsetX',
-                              _offsetX,
-                              -0.5,
-                              0.5,
-                              0.005,
-                              (v) => setState(() => _offsetX = v),
-                            ),
-                            _slider(
-                              'offsetY',
-                              _offsetY,
-                              -0.5,
-                              0.5,
-                              0.005,
-                              (v) => setState(() => _offsetY = v),
-                            ),
-                            _slider(
-                              'rotation (rad)',
-                              _rotation,
-                              -0.8,
-                              0.8,
-                              0.01,
-                              (v) => setState(() => _rotation = v),
-                            ),
-                            _slider(
-                              'scale',
-                              _scale,
-                              0.4,
-                              2.5,
-                              0.05,
-                              (v) => setState(() => _scale = v),
-                            ),
-                            const SizedBox(height: 16),
-                            PillButton(
-                              label: _isSaving
-                                  ? 'SAVING...'
-                                  : 'SAVE TO ALL USERS',
-                              variant: PillButtonVariant.accent,
-                              fontSize: 13,
-                              fullWidth: true,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 24,
-                                vertical: 12,
+                              const SizedBox(height: 16),
+                              Center(
+                                child: Container(
+                                  width: 200,
+                                  height: 180,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.parchmentDark.withValues(
+                                      alpha: 0.25,
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  alignment: Alignment.bottomCenter,
+                                  child: CapybaraCustomizationPreview(
+                                    accessories: [_previewAccessory()],
+                                    size: 140,
+                                  ),
+                                ),
                               ),
-                              onPressed: (_isSaving || item == null)
-                                  ? null
-                                  : _save,
-                            ),
-                            const SizedBox(height: 8),
-                            PillButton(
-                              label: 'RESET TO SAVED',
-                              variant: PillButtonVariant.secondary,
-                              fontSize: 12,
-                              fullWidth: true,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 24,
-                                vertical: 10,
+                              const SizedBox(height: 16),
+                              _slider(
+                                'offsetX',
+                                _offsetX,
+                                -0.5,
+                                0.5,
+                                0.005,
+                                (v) => setState(() => _offsetX = v),
                               ),
-                              onPressed: _selectedItemId == null
-                                  ? null
-                                  : () => _selectItem(_selectedItemId!),
-                            ),
-                          ],
-                        ),
-                ),
-              ],
+                              _slider(
+                                'offsetY',
+                                _offsetY,
+                                -0.5,
+                                0.5,
+                                0.005,
+                                (v) => setState(() => _offsetY = v),
+                              ),
+                              _slider(
+                                'rotation (rad)',
+                                _rotation,
+                                -0.8,
+                                0.8,
+                                0.01,
+                                (v) => setState(() => _rotation = v),
+                              ),
+                              _slider(
+                                'scale',
+                                _scale,
+                                0.4,
+                                2.5,
+                                0.05,
+                                (v) => setState(() => _scale = v),
+                              ),
+                              const SizedBox(height: 16),
+                              PillButton(
+                                label: _isSaving
+                                    ? 'SAVING...'
+                                    : 'SAVE TO ALL USERS',
+                                variant: PillButtonVariant.accent,
+                                fontSize: 13,
+                                fullWidth: true,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                  vertical: 12,
+                                ),
+                                onPressed: (_isSaving || item == null)
+                                    ? null
+                                    : _save,
+                              ),
+                              const SizedBox(height: 8),
+                              PillButton(
+                                label: 'RESET TO SAVED',
+                                variant: PillButtonVariant.secondary,
+                                fontSize: 12,
+                                fullWidth: true,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                  vertical: 10,
+                                ),
+                                onPressed: _selectedItemId == null
+                                    ? null
+                                    : () => _selectItem(_selectedItemId!),
+                              ),
+                            ],
+                          ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
         ),
       ),
     );

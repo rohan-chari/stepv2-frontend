@@ -4,6 +4,7 @@ import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../services/race_chat_service.dart';
 import '../styles.dart';
+import '../widgets/loading_skeleton.dart';
 import '../widgets/player_avatar.dart';
 
 class RaceChatScreen extends StatefulWidget {
@@ -150,7 +151,22 @@ class _RaceChatScreenState extends State<RaceChatScreen>
                 builder: (context, _) {
                   final messages = _chat.messages;
                   if (messages.isEmpty && _chat.isLoading) {
-                    return const Center(child: CircularProgressIndicator());
+                    return const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: ListSkeleton(itemCount: 5, showAvatar: true),
+                    );
+                  }
+                  if (messages.isEmpty && _chat.lastError != null) {
+                    return Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Center(
+                        child: LoadErrorPanel(
+                          title: 'Couldn’t load messages',
+                          message: 'Check your connection and try again.',
+                          onRetry: _chat.loadInitial,
+                        ),
+                      ),
+                    );
                   }
                   if (messages.isEmpty) {
                     return Center(

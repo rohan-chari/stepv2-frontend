@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../models/loadable.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
@@ -8,6 +9,7 @@ import '../../widgets/error_toast.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/info_board_card.dart';
 import '../../widgets/info_toast.dart';
+import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/tab_layout.dart';
 
@@ -30,6 +32,7 @@ class ShopTab extends StatefulWidget {
 class _ShopTabState extends State<ShopTab> {
   late final BackendApiService _backendApiService;
   Map<String, dynamic>? _catalog;
+  Loadable<Map<String, dynamic>> _catalogState = const Loadable.initial();
   bool _loading = true;
   bool _saving = false;
 
@@ -41,9 +44,27 @@ class _ShopTabState extends State<ShopTab> {
   }
 
   Future<void> _loadCatalog() async {
+    final previous = _catalog;
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _catalogState = previous == null
+            ? const Loadable.loading()
+            : Loadable.refreshing(previous);
+      });
+    }
+
     try {
       final token = widget.authService.authToken;
-      if (token == null || token.isEmpty) return;
+      if (token == null || token.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _loading = false;
+            _catalogState = Loadable.error('Not signed in.', data: previous);
+          });
+        }
+        return;
+      }
 
       final catalog = await _backendApiService.fetchShopCatalog(
         identityToken: token,
@@ -55,17 +76,27 @@ class _ShopTabState extends State<ShopTab> {
       if (mounted) {
         setState(() {
           _catalog = catalog;
+          _catalogState = Loadable.success(catalog);
           _loading = false;
         });
       }
       widget.onShopChanged?.call(catalog);
     } on ApiException catch (error) {
       if (!mounted) return;
-      setState(() => _loading = false);
+      setState(() {
+        _loading = false;
+        _catalogState = Loadable.error(error.message, data: previous);
+      });
       showErrorToast(context, error.message);
     } catch (_) {
       if (!mounted) return;
-      setState(() => _loading = false);
+      setState(() {
+        _loading = false;
+        _catalogState = Loadable.error(
+          'Could not load the shop. Please try again.',
+          data: previous,
+        );
+      });
       showErrorToast(context, 'Could not load the shop. Please try again.');
     }
   }
@@ -145,15 +176,29 @@ class _ShopTabState extends State<ShopTab> {
   }
 
   Widget _buildContent() {
-    if (_loading) {
+    final state = _catalogState;
+    if (state.shouldShowInitialLoading || (_loading && _catalog == null)) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 48),
-        child: Center(child: CircularProgressIndicator()),
+        child: ListSkeleton(itemCount: 3),
+      );
+    }
+
+    if (state.isError && !state.hasData) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: LoadErrorPanel(
+          title: 'Couldn’t load the shop',
+          message: state.error ?? 'Check your connection and try again.',
+          onRetry: _loadCatalog,
+        ),
       );
     }
 
     final items =
-        (_catalog?['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        (state.data?['items'] as List?)?.cast<Map<String, dynamic>>() ??
+        (_catalog?['items'] as List?)?.cast<Map<String, dynamic>>() ??
+        [];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -172,6 +217,15 @@ class _ShopTabState extends State<ShopTab> {
           ],
         ),
         const SizedBox(height: 12),
+        if (state.isRefreshing)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: LinearProgressIndicator(
+              minHeight: 2,
+              color: AppColors.accent,
+              backgroundColor: Colors.transparent,
+            ),
+          ),
         if (items.isEmpty)
           const InfoBoardCard(
             title: 'No accessories yet',

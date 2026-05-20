@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:step_tracker/models/loadable.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/models/step_data.dart';
 import 'package:step_tracker/screens/tabs/home_tab.dart';
@@ -35,6 +36,7 @@ Widget _buildHome({
   required AuthService authService,
   List<Map<String, dynamic>> leaderboardHighlights = const [],
   bool leaderboardHighlightsLoading = false,
+  Loadable<List<Map<String, dynamic>>>? leaderboardHighlightsState,
   void Function(String leaderboardType, String period)?
   onOpenLeaderboardHighlight,
 }) {
@@ -60,6 +62,7 @@ Widget _buildHome({
         onChallengeChanged: () {},
         leaderboardHighlights: leaderboardHighlights,
         leaderboardHighlightsLoading: leaderboardHighlightsLoading,
+        leaderboardHighlightsState: leaderboardHighlightsState,
         onOpenLeaderboardHighlight: onOpenLeaderboardHighlight,
       ),
     ),
@@ -138,6 +141,26 @@ void main() {
       );
 
       expect(find.byKey(const Key('climbing-boards-skeleton')), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'HomeTab shows a retry panel when leaderboard highlights fail before cards load',
+    (WidgetTester tester) async {
+      final authService = await _createAuthService();
+
+      await tester.pumpWidget(
+        _buildHome(
+          authService: authService,
+          leaderboardHighlightsState: const Loadable.error(
+            'Connection timed out.',
+          ),
+        ),
+      );
+
+      expect(find.text('CLIMBING THE BOARDS'), findsOneWidget);
+      expect(find.text('Couldn’t load leaderboard'), findsOneWidget);
+      expect(find.text('TRY AGAIN'), findsOneWidget);
     },
   );
 

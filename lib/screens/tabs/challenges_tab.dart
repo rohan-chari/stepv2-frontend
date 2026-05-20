@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../models/loadable.dart';
 import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
@@ -12,6 +13,7 @@ import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/info_board_card.dart';
 import '../../widgets/info_toast.dart';
+import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
 import '../challenge_detail_screen.dart';
 import '../friend_picker_screen.dart';
@@ -20,6 +22,7 @@ import '../stake_picker_screen.dart';
 class ChallengesTab extends StatefulWidget {
   final AuthService authService;
   final Map<String, dynamic>? currentChallenge;
+  final Loadable<Map<String, dynamic>>? currentChallengeState;
   final List<Map<String, dynamic>> friendsSteps;
   final VoidCallback onChallengeChanged;
   final VoidCallback? onOpenFriendsTab;
@@ -33,7 +36,8 @@ class ChallengesTab extends StatefulWidget {
   const ChallengesTab({
     super.key,
     required this.authService,
-    required this.currentChallenge,
+    this.currentChallenge,
+    this.currentChallengeState,
     required this.friendsSteps,
     required this.onChallengeChanged,
     this.onOpenFriendsTab,
@@ -58,13 +62,22 @@ class _ChallengesTabState extends State<ChallengesTab> {
   int _losses = 0;
 
   bool get _hasActiveChallenge =>
-      widget.currentChallenge != null &&
-      widget.currentChallenge!['challenge'] != null;
+      _challengeData != null && _challengeData!['challenge'] != null;
+
+  Loadable<Map<String, dynamic>> get _effectiveChallengeState {
+    final state = widget.currentChallengeState;
+    if (state != null) return state;
+    final data = widget.currentChallenge;
+    if (data != null) return Loadable.success(data);
+    return const Loadable.initial();
+  }
+
+  Map<String, dynamic>? get _challengeData => _effectiveChallengeState.data;
 
   DateTime get _now => (widget.now ?? DateTime.now).call();
 
   DateTime? get _challengeEndsAt {
-    final rawValue = widget.currentChallenge?['endsAt'] as String?;
+    final rawValue = _challengeData?['endsAt'] as String?;
     if (rawValue == null || rawValue.isEmpty) return null;
     return DateTime.tryParse(rawValue)?.toLocal();
   }
@@ -72,7 +85,7 @@ class _ChallengesTabState extends State<ChallengesTab> {
   String get _myUserId => widget.authService.userId ?? '';
 
   List<Map<String, dynamic>> _getAvailableFriends() {
-    final instances = widget.currentChallenge?['instances'] as List? ?? [];
+    final instances = _challengeData?['instances'] as List? ?? [];
     final challengedIds = <String>{};
     for (final i in instances) {
       final inst = i as Map<String, dynamic>;
@@ -116,7 +129,7 @@ class _ChallengesTabState extends State<ChallengesTab> {
   }
 
   Map<String, List<Map<String, dynamic>>> _categorizeInstances() {
-    final instances = widget.currentChallenge?['instances'] as List? ?? [];
+    final instances = _challengeData?['instances'] as List? ?? [];
     final incoming = <Map<String, dynamic>>[];
     final outgoing = <Map<String, dynamic>>[];
     final active = <Map<String, dynamic>>[];
@@ -310,21 +323,51 @@ class _ChallengesTabState extends State<ChallengesTab> {
         backgroundColor: AppColors.parchment,
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            SliverToBoxAdapter(
-              child: _hasActiveChallenge
-                  ? _buildActiveContent()
-                  : _buildEmptyContent(),
-            ),
-          ],
+          slivers: [SliverToBoxAdapter(child: _buildLoadAwareContent())],
         ),
       ),
     );
   }
 
+  Widget _buildLoadAwareContent() {
+    final state = _effectiveChallengeState;
+    if (state.shouldShowInitialLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 16),
+        child: KeyedSubtree(
+          key: Key('challenges-loading-skeleton'),
+          child: _ChallengesLoadingSkeleton(),
+        ),
+      );
+    }
+
+    if (state.isError && !state.hasData) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Column(
+          children: [
+            _buildTopStatusBar(),
+            const SizedBox(height: 16),
+            LoadErrorPanel(
+              title: 'Couldn’t load challenges',
+              message: state.error ?? 'Check your connection and try again.',
+              onRetry: widget.onRefresh == null
+                  ? null
+                  : () {
+                      widget.onRefresh!();
+                    },
+            ),
+          ],
+        ),
+      );
+    }
+
+    return _hasActiveChallenge ? _buildActiveContent() : _buildEmptyContent();
+  }
+
   Widget _buildActiveContent() {
     final challenge =
-        widget.currentChallenge!['challenge'] as Map<String, dynamic>? ?? {};
+        _challengeData!['challenge'] as Map<String, dynamic>? ?? {};
     final categories = _categorizeInstances();
     final allInstances = [
       ...categories['incoming']!,
@@ -364,10 +407,7 @@ class _ChallengesTabState extends State<ChallengesTab> {
           const SizedBox(height: 8),
           Text(
             'No active challenges',
-            style: PixelText.title(
-              size: 14,
-              color: AppColors.textDark,
-            ),
+            style: PixelText.title(size: 14, color: AppColors.textDark),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 4),
@@ -796,6 +836,56 @@ class _RecordStat extends StatelessWidget {
           ).copyWith(shadows: _textShadows),
         ),
       ],
+    );
+  }
+}
+
+class _ChallengesLoadingSkeleton extends StatelessWidget {
+  const _ChallengesLoadingSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: const [
+        _ChallengeTopBarSkeleton(),
+        SizedBox(height: 16),
+        LoadingSkeleton(
+          child: InfoBoardCard(
+            badgeLabel: 'THIS WEEK’S CHALLENGE',
+            title: 'Loading challenge',
+            subtitle: 'Checking this week’s matchup board.',
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 16),
+            borderRadius: 0,
+          ),
+        ),
+        SizedBox(height: 16),
+        ListSkeleton(itemCount: 2, showAvatar: true),
+      ],
+    );
+  }
+}
+
+class _ChallengeTopBarSkeleton extends StatelessWidget {
+  const _ChallengeTopBarSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return const LoadingSkeleton(
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SkeletonLine(width: 150, height: 22),
+                SizedBox(height: 8),
+                SkeletonLine(width: 96, height: 16),
+              ],
+            ),
+          ),
+          SkeletonCircle(size: 44),
+        ],
+      ),
     );
   }
 }

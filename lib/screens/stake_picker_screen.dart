@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../models/loadable.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/filter_dropdown.dart';
+import '../widgets/loading_skeleton.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/retro_card.dart';
 
@@ -30,6 +32,7 @@ class StakePickerScreen extends StatefulWidget {
 class _StakePickerScreenState extends State<StakePickerScreen> {
   final BackendApiService _api = BackendApiService();
   List<Map<String, dynamic>> _stakes = [];
+  Loadable<List<Map<String, dynamic>>> _stakesState = const Loadable.initial();
   bool _isLoading = true;
   bool _isSubmitting = false;
   String? _selectedStakeId;
@@ -55,10 +58,25 @@ class _StakePickerScreenState extends State<StakePickerScreen> {
   }
 
   Future<void> _fetchStakes() async {
-    setState(() => _isLoading = true);
+    final previous = _stakes;
+    setState(() {
+      _isLoading = true;
+      _stakesState = previous.isEmpty
+          ? const Loadable.loading()
+          : Loadable.refreshing(previous);
+    });
     try {
       final token = widget.authService.authToken;
-      if (token == null || token.isEmpty) return;
+      if (token == null || token.isEmpty) {
+        setState(() {
+          _isLoading = false;
+          _stakesState = Loadable.error(
+            'Not signed in.',
+            data: previous.isEmpty ? null : previous,
+          );
+        });
+        return;
+      }
 
       final stakes = await _api.fetchStakeCatalog(
         identityToken: token,
@@ -68,12 +86,19 @@ class _StakePickerScreenState extends State<StakePickerScreen> {
       if (mounted) {
         setState(() {
           _stakes = stakes;
+          _stakesState = Loadable.success(stakes);
           _isLoading = false;
         });
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _isLoading = false;
+          _stakesState = Loadable.error(
+            'Failed to load stakes',
+            data: previous.isEmpty ? null : previous,
+          );
+        });
         showErrorToast(context, 'Failed to load stakes');
       }
     }
@@ -218,30 +243,7 @@ class _StakePickerScreenState extends State<StakePickerScreen> {
               const SizedBox(height: 8),
 
               // Stakes list
-              Expanded(
-                child: _isLoading
-                    ? const Center(
-                        child: CircularProgressIndicator(
-                          color: AppColors.accent,
-                        ),
-                      )
-                    : _stakes.isEmpty
-                    ? Center(
-                        child: Text(
-                          'No stakes found',
-                          style: PixelText.body(
-                            size: 13,
-                            color: AppColors.textMid,
-                          ).copyWith(shadows: _textShadows),
-                        ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: _stakes.length,
-                        itemBuilder: (context, index) =>
-                            _buildStakeCard(_stakes[index]),
-                      ),
-              ),
+              Expanded(child: _buildStakeListState()),
 
               // Submit button
               Padding(
@@ -273,6 +275,45 @@ class _StakePickerScreenState extends State<StakePickerScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildStakeListState() {
+    final state = _stakesState;
+    if (state.shouldShowInitialLoading || (_isLoading && _stakes.isEmpty)) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 16),
+        child: ListSkeleton(itemCount: 5),
+      );
+    }
+
+    if (state.isError && !state.hasData) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        child: LoadErrorPanel(
+          title: 'Couldn’t load stakes',
+          message: 'Check your connection and try again.',
+          onRetry: _fetchStakes,
+        ),
+      );
+    }
+
+    if (_stakes.isEmpty) {
+      return Center(
+        child: Text(
+          'No stakes found',
+          style: PixelText.body(
+            size: 13,
+            color: AppColors.textMid,
+          ).copyWith(shadows: _textShadows),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      itemCount: _stakes.length,
+      itemBuilder: (context, index) => _buildStakeCard(_stakes[index]),
     );
   }
 

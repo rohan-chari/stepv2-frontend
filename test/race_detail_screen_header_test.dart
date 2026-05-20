@@ -142,7 +142,7 @@ void main() {
         reason: 'Header Container must have a background color set.',
       );
       expect(
-        bgColor!.alpha,
+        (bgColor!.a * 255.0).round().clamp(0, 255),
         equals(0xFF),
         reason:
             'Header Container background must be fully opaque so scrolled '

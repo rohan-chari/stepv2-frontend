@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../models/loadable.dart';
 import '../../services/auth_service.dart';
 import '../../styles.dart';
 import '../../utils/race_participant_display.dart';
@@ -7,6 +8,7 @@ import '../../widgets/app_avatar.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/info_board_card.dart';
+import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
 import '../create_race_screen.dart';
 import '../public_races_screen.dart';
@@ -15,6 +17,7 @@ import '../race_detail_screen.dart';
 class RacesTab extends StatefulWidget {
   final AuthService authService;
   final Map<String, dynamic>? racesData;
+  final Loadable<Map<String, dynamic>>? racesState;
   final List<Map<String, dynamic>> friendsSteps;
   final VoidCallback onRacesChanged;
   final Future<void> Function()? onRefresh;
@@ -24,7 +27,8 @@ class RacesTab extends StatefulWidget {
   const RacesTab({
     super.key,
     required this.authService,
-    required this.racesData,
+    this.racesData,
+    this.racesState,
     required this.friendsSteps,
     required this.onRacesChanged,
     this.onRefresh,
@@ -55,26 +59,34 @@ class _RacesTabState extends State<RacesTab> {
   }
 
   List<Map<String, dynamic>> get _active =>
-      (widget.racesData?['active'] as List?)?.cast<Map<String, dynamic>>() ??
-      [];
+      (_raceData?['active'] as List?)?.cast<Map<String, dynamic>>() ?? [];
 
   List<Map<String, dynamic>> get _invites =>
-      (widget.racesData?['pending'] as List?)
+      (_raceData?['pending'] as List?)
           ?.cast<Map<String, dynamic>>()
           .where((r) => r['myStatus'] == 'INVITED')
           .toList() ??
       [];
 
   List<Map<String, dynamic>> get _waiting =>
-      (widget.racesData?['pending'] as List?)
+      (_raceData?['pending'] as List?)
           ?.cast<Map<String, dynamic>>()
           .where((r) => r['myStatus'] != 'INVITED')
           .toList() ??
       [];
 
   List<Map<String, dynamic>> get _completed =>
-      (widget.racesData?['completed'] as List?)?.cast<Map<String, dynamic>>() ??
-      [];
+      (_raceData?['completed'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+
+  Loadable<Map<String, dynamic>> get _effectiveRacesState {
+    final state = widget.racesState;
+    if (state != null) return state;
+    final data = widget.racesData;
+    if (data != null) return Loadable.success(data);
+    return const Loadable.initial();
+  }
+
+  Map<String, dynamic>? get _raceData => _effectiveRacesState.data;
 
   String get _myUserId => widget.authService.userId ?? '';
 
@@ -205,38 +217,86 @@ class _RacesTabState extends State<RacesTab> {
 
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: !hasRaces
-              ? _buildEmptyState()
-              : Column(
-                  children: [
-                    if (invites.isNotEmpty)
-                      _buildRaceSection(
-                        title: 'INVITES',
-                        sectionKey: 'invites',
-                        races: invites,
-                        isInvite: true,
-                      ),
-                    if (waiting.isNotEmpty)
-                      _buildRaceSection(
-                        title: 'WAITING TO START',
-                        sectionKey: 'waiting',
-                        races: waiting,
-                      ),
-                    if (active.isNotEmpty)
-                      _buildRaceSection(
-                        title: 'ACTIVE RACES',
-                        sectionKey: 'active',
-                        races: active,
-                      ),
-                    if (completed.isNotEmpty)
-                      _buildRaceSection(
-                        title: 'COMPLETED',
-                        sectionKey: 'completed',
-                        races: completed,
-                      ),
-                  ],
-                ),
+          child: _buildRaceListState(
+            hasRaces: hasRaces,
+            invites: invites,
+            waiting: waiting,
+            active: active,
+            completed: completed,
+          ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildRaceListState({
+    required bool hasRaces,
+    required List<Map<String, dynamic>> invites,
+    required List<Map<String, dynamic>> waiting,
+    required List<Map<String, dynamic>> active,
+    required List<Map<String, dynamic>> completed,
+  }) {
+    final state = _effectiveRacesState;
+    if (state.shouldShowInitialLoading) {
+      return const KeyedSubtree(
+        key: Key('races-loading-skeleton'),
+        child: ListSkeleton(itemCount: 3),
+      );
+    }
+
+    if (state.isError && !state.hasData) {
+      return LoadErrorPanel(
+        title: 'Couldn’t load races',
+        message: state.error ?? 'Check your connection and try again.',
+        onRetry: () {
+          final refresh = widget.onRefresh;
+          if (refresh != null) {
+            refresh();
+          } else {
+            widget.onRacesChanged();
+          }
+        },
+      );
+    }
+
+    if (!hasRaces) return _buildEmptyState();
+
+    return Column(
+      children: [
+        if (state.isRefreshing)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: LinearProgressIndicator(
+              minHeight: 2,
+              color: AppColors.accent,
+              backgroundColor: Colors.transparent,
+            ),
+          ),
+        if (invites.isNotEmpty)
+          _buildRaceSection(
+            title: 'INVITES',
+            sectionKey: 'invites',
+            races: invites,
+            isInvite: true,
+          ),
+        if (waiting.isNotEmpty)
+          _buildRaceSection(
+            title: 'WAITING TO START',
+            sectionKey: 'waiting',
+            races: waiting,
+          ),
+        if (active.isNotEmpty)
+          _buildRaceSection(
+            title: 'ACTIVE RACES',
+            sectionKey: 'active',
+            races: active,
+          ),
+        if (completed.isNotEmpty)
+          _buildRaceSection(
+            title: 'COMPLETED',
+            sectionKey: 'completed',
+            races: completed,
+          ),
       ],
     );
   }

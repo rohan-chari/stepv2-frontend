@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -189,6 +191,31 @@ class _PendingAcceptedRaceBackendApiService extends BackendApiService {
   }
 }
 
+class _SlowProgressRaceBackendApiService
+    extends _ActivePaidRaceBackendApiService {
+  final Completer<Map<String, dynamic>> progressCompleter =
+      Completer<Map<String, dynamic>>();
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceProgress({
+    required String identityToken,
+    required String raceId,
+  }) {
+    return progressCompleter.future;
+  }
+}
+
+class _FailingProgressRaceBackendApiService
+    extends _ActivePaidRaceBackendApiService {
+  @override
+  Future<Map<String, dynamic>> fetchRaceProgress({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    throw const ApiException('Connection timed out.');
+  }
+}
+
 Future<AuthService> _createAuthService() async {
   SharedPreferences.setMockInitialValues({
     'auth_identity_token': 'apple-token',
@@ -205,8 +232,110 @@ Future<AuthService> _createAuthService() async {
   return authService;
 }
 
+Future<AuthService> _createSignedOutAuthService() async {
+  SharedPreferences.setMockInitialValues({});
+
+  final authService = AuthService();
+  await authService.restoreSession();
+  return authService;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('RaceDetailScreen stops loading without an auth token', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RaceDetailScreen(
+          authService: await _createSignedOutAuthService(),
+          raceId: 'race-no-token',
+          backendApiService: _ActivePaidRaceBackendApiService(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Failed to load race'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  testWidgets(
+    'RaceDetailScreen shows a progress skeleton while active race progress loads',
+    (WidgetTester tester) async {
+      final authService = await _createAuthService();
+      final backendApiService = _SlowProgressRaceBackendApiService();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RaceDetailScreen(
+            authService: authService,
+            raceId: 'race-loading-progress',
+            backendApiService: backendApiService,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        find.byKey(const Key('race-detail-progress-skeleton')),
+        findsOneWidget,
+      );
+      expect(find.text('Powerups are disabled for this race'), findsNothing);
+      expect(find.text('No powerup activity yet'), findsNothing);
+
+      backendApiService.progressCompleter.complete({
+        'status': 'ACTIVE',
+        'participants': const [
+          {
+            'userId': 'user-1',
+            'displayName': 'Trail Walker',
+            'totalSteps': 42000,
+            'finishedAt': null,
+          },
+        ],
+        'powerupData': const {
+          'enabled': false,
+          'inventory': [],
+          'powerupSlots': 3,
+          'queuedBoxCount': 0,
+          'activeEffects': [],
+        },
+      });
+      await tester.pump();
+
+      expect(find.byType(HomeCourseTrack), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'RaceDetailScreen shows a retry state when active race progress fails',
+    (WidgetTester tester) async {
+      final authService = await _createAuthService();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RaceDetailScreen(
+            authService: authService,
+            raceId: 'race-failing-progress',
+            backendApiService: _FailingProgressRaceBackendApiService(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        find.byKey(const Key('race-detail-progress-error')),
+        findsOneWidget,
+      );
+      expect(find.text('Couldn’t load race progress'), findsOneWidget);
+      expect(find.text('TRY AGAIN'), findsOneWidget);
+      expect(find.text('Powerups are disabled for this race'), findsNothing);
+    },
+  );
 
   testWidgets(
     'RaceDetailScreen confirms paid invite acceptance before joining',

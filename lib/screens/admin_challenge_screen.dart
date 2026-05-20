@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/loadable.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import 'admin_accessory_tuner_screen.dart';
@@ -8,6 +9,7 @@ import '../widgets/content_board.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/game_background.dart';
 import '../widgets/info_toast.dart';
+import '../widgets/loading_skeleton.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/powerup_icon.dart';
 import '../widgets/spinning_crate.dart';
@@ -140,6 +142,7 @@ class _AdminChallengeScreenState extends State<AdminChallengeScreen> {
   bool _isLoading = true;
   bool _isRunningAction = false;
   Map<String, dynamic>? _state;
+  Loadable<Map<String, dynamic>> _stateLoad = const Loadable.initial();
 
   @override
   void initState() {
@@ -152,10 +155,22 @@ class _AdminChallengeScreenState extends State<AdminChallengeScreen> {
   }
 
   Future<void> _loadState() async {
+    final previous = _state;
     final token = widget.authService.authToken;
-    if (token == null || token.isEmpty) return;
+    if (token == null || token.isEmpty) {
+      setState(() {
+        _isLoading = false;
+        _stateLoad = Loadable.error('Not signed in.', data: previous);
+      });
+      return;
+    }
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _stateLoad = previous == null
+          ? const Loadable.loading()
+          : Loadable.refreshing(previous);
+    });
 
     try {
       final data = await _backendApiService.fetchAdminWeeklyChallenge(
@@ -165,11 +180,15 @@ class _AdminChallengeScreenState extends State<AdminChallengeScreen> {
       if (!mounted) return;
       setState(() {
         _state = data;
+        _stateLoad = Loadable.success(data);
         _isLoading = false;
       });
     } catch (error) {
       if (!mounted) return;
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+        _stateLoad = Loadable.error(error.toString(), data: previous);
+      });
       _showErrorToast(context, error.toString());
     }
   }
@@ -321,7 +340,13 @@ class _AdminChallengeScreenState extends State<AdminChallengeScreen> {
                 const SizedBox(height: 24),
                 ContentBoard(
                   width: boardWidth,
-                  child: _isLoading
+                  child: _stateLoad.isError && !_stateLoad.hasData
+                      ? LoadErrorPanel(
+                          title: 'Couldn’t load admin state',
+                          message: 'Check your connection and try again.',
+                          onRetry: _loadState,
+                        )
+                      : _isLoading
                       ? const Padding(
                           padding: EdgeInsets.symmetric(vertical: 24),
                           child: Center(

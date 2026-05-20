@@ -35,6 +35,15 @@ class _NonEmptyPublicRacesApi extends BackendApiService {
   }
 }
 
+class _FailingPublicRacesApi extends BackendApiService {
+  @override
+  Future<List<Map<String, dynamic>>> fetchPublicRaces({
+    required String identityToken,
+  }) async {
+    throw const ApiException('Connection timed out.');
+  }
+}
+
 Future<AuthService> _authService() async {
   SharedPreferences.setMockInitialValues({
     'auth_identity_token': 'apple-token',
@@ -53,43 +62,66 @@ Future<AuthService> _authService() async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('empty public races shows placeholder with icon, heading, and CTA',
-      (WidgetTester tester) async {
+  testWidgets('failed public race load shows retry instead of empty state', (
+    WidgetTester tester,
+  ) async {
     final authService = await _authService();
-    final api = _EmptyPublicRacesApi();
 
     await tester.pumpWidget(
       MaterialApp(
         home: PublicRacesScreen(
           authService: authService,
-          backendApiService: api,
+          backendApiService: _FailingPublicRacesApi(),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    // Heading
-    expect(find.text('NO PUBLIC RACES'), findsOneWidget);
-
-    // CTA button
-    expect(find.text('CREATE A RACE'), findsOneWidget);
-
-    // An icon from the allowed set
-    final allowedIcons = {
-      Icons.flag_outlined,
-      Icons.directions_run_outlined,
-      Icons.emoji_events_outlined,
-    };
-    final iconWidgets = tester.widgetList<Icon>(find.byType(Icon));
-    expect(
-      iconWidgets.any((i) => allowedIcons.contains(i.icon)),
-      isTrue,
-      reason: 'Expected one of the suggested empty-state icons',
-    );
+    expect(find.text('Couldn’t load public races'), findsOneWidget);
+    expect(find.text('TRY AGAIN'), findsOneWidget);
+    expect(find.text('NO PUBLIC RACES'), findsNothing);
   });
 
-  testWidgets('tapping Create a Race CTA navigates to CreateRaceScreen',
-      (WidgetTester tester) async {
+  testWidgets(
+    'empty public races shows placeholder with icon, heading, and CTA',
+    (WidgetTester tester) async {
+      final authService = await _authService();
+      final api = _EmptyPublicRacesApi();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PublicRacesScreen(
+            authService: authService,
+            backendApiService: api,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Heading
+      expect(find.text('NO PUBLIC RACES'), findsOneWidget);
+
+      // CTA button
+      expect(find.text('CREATE A RACE'), findsOneWidget);
+
+      // An icon from the allowed set
+      final allowedIcons = {
+        Icons.flag_outlined,
+        Icons.directions_run_outlined,
+        Icons.emoji_events_outlined,
+      };
+      final iconWidgets = tester.widgetList<Icon>(find.byType(Icon));
+      expect(
+        iconWidgets.any((i) => allowedIcons.contains(i.icon)),
+        isTrue,
+        reason: 'Expected one of the suggested empty-state icons',
+      );
+    },
+  );
+
+  testWidgets('tapping Create a Race CTA navigates to CreateRaceScreen', (
+    WidgetTester tester,
+  ) async {
     final authService = await _authService();
     final api = _EmptyPublicRacesApi();
 
@@ -111,8 +143,9 @@ void main() {
     expect(find.byType(CreateRaceScreen), findsOneWidget);
   });
 
-  testWidgets('non-empty public races does not render placeholder',
-      (WidgetTester tester) async {
+  testWidgets('non-empty public races does not render placeholder', (
+    WidgetTester tester,
+  ) async {
     final authService = await _authService();
     final api = _NonEmptyPublicRacesApi();
 

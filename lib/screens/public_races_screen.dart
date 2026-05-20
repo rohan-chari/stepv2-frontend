@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../models/loadable.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
+import '../widgets/loading_skeleton.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/retro_card.dart';
 import 'create_race_screen.dart';
@@ -31,6 +33,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
   bool _loading = true;
   String? _joiningRaceId;
   List<Map<String, dynamic>> _races = const [];
+  Loadable<List<Map<String, dynamic>>> _racesState = const Loadable.initial();
 
   @override
   void initState() {
@@ -41,10 +44,18 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
   Future<void> _load() async {
     final token = widget.authService.authToken;
     if (token == null || token.isEmpty) {
-      setState(() => _loading = false);
+      setState(() {
+        _loading = false;
+        _racesState = const Loadable.error('Not signed in.');
+      });
       return;
     }
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _racesState = _races.isEmpty
+          ? const Loadable.loading()
+          : Loadable.refreshing(_races);
+    });
     try {
       final races = await widget.backendApiService.fetchPublicRaces(
         identityToken: token,
@@ -53,10 +64,17 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
       setState(() {
         _races = races;
         _loading = false;
+        _racesState = Loadable.success(races);
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _loading = false);
+      setState(() {
+        _loading = false;
+        _racesState = Loadable.error(
+          e.toString(),
+          data: _races.isEmpty ? null : _races,
+        );
+      });
       showErrorToast(context, e.toString());
     }
   }
@@ -64,8 +82,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
   void _navigateToCreateRace() {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) =>
-            CreateRaceScreen(authService: widget.authService),
+        builder: (context) => CreateRaceScreen(authService: widget.authService),
       ),
     );
   }
@@ -158,12 +175,43 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
   }
 
   Widget _buildBody() {
-    if (_loading) {
-      return const Center(
-        child: CircularProgressIndicator(color: AppColors.parchmentLight),
+    final state = _racesState;
+    final races = state.data ?? _races;
+
+    if (state.shouldShowInitialLoading || _loading && races.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: ListSkeleton(itemCount: 4),
       );
     }
-    if (_races.isEmpty) {
+
+    if (state.isError && !state.hasData) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 48,
+                  ),
+                  child: LoadErrorPanel(
+                    title: 'Couldn’t load public races',
+                    message: 'Check your connection and try again.',
+                    onRetry: _load,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    }
+
+    if (races.isEmpty) {
       return LayoutBuilder(
         builder: (context, constraints) {
           return SingleChildScrollView(
@@ -222,8 +270,8 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
     return ListView.builder(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      itemCount: _races.length,
-      itemBuilder: (context, i) => _buildRaceCard(_races[i]),
+      itemCount: races.length,
+      itemBuilder: (context, i) => _buildRaceCard(races[i]),
     );
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:step_tracker/models/loadable.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/tabs/races_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
@@ -22,6 +23,55 @@ Future<AuthService> _createAuthService() async {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('RacesTab shows a loading skeleton before race data loads', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _createAuthService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RacesTab(
+            authService: authService,
+            racesState: const Loadable.loading(),
+            friendsSteps: const [],
+            onRacesChanged: _noop,
+            displayName: 'Trail Walker',
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const Key('races-loading-skeleton')), findsOneWidget);
+    expect(find.text('No races yet'), findsNothing);
+  });
+
+  testWidgets('RacesTab shows a retry state when race data fails to load', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _createAuthService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RacesTab(
+            authService: authService,
+            racesState: const Loadable.error(
+              'Couldn’t load races. Check your connection and try again.',
+            ),
+            friendsSteps: const [],
+            onRacesChanged: _noop,
+            displayName: 'Trail Walker',
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Couldn’t load races'), findsOneWidget);
+    expect(find.text('TRY AGAIN'), findsOneWidget);
+    expect(find.text('No races yet'), findsNothing);
+  });
 
   testWidgets(
     'RacesTab keeps placement and queued boxes aligned with the race title',

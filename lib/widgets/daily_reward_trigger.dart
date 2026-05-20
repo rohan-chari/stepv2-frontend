@@ -4,6 +4,7 @@ import '../screens/daily_reward_screen.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import 'daily_reward_button.dart';
+import 'loading_skeleton.dart';
 
 String _todayLocalDate() {
   final now = DateTime.now();
@@ -58,7 +59,10 @@ class _DailyRewardTriggerState extends State<DailyRewardTrigger>
 
   Future<void> _refresh() async {
     final token = widget.authService.authToken;
-    if (token == null || token.isEmpty) return;
+    if (token == null || token.isEmpty) {
+      if (mounted) setState(() => _loaded = true);
+      return;
+    }
     final localDate = _todayLocalDate();
     try {
       final res = await widget.backendApiService.fetchDailyRewardStatus(
@@ -72,7 +76,8 @@ class _DailyRewardTriggerState extends State<DailyRewardTrigger>
         _lastFetchedDate = localDate;
       });
     } catch (_) {
-      // Silent — button just won't pulse if status check fails.
+      // Silent: fall back to the non-pulsing button if the status check fails.
+      if (mounted) setState(() => _loaded = true);
     }
   }
 
@@ -99,7 +104,9 @@ class _DailyRewardTriggerState extends State<DailyRewardTrigger>
   @override
   Widget build(BuildContext context) {
     if (!_loaded) {
-      return const SizedBox(width: double.infinity, height: 62);
+      return const LoadingSkeleton(
+        child: SkeletonBox(width: double.infinity, height: 62, radius: 8),
+      );
     }
     return DailyRewardButton(unclaimed: _unclaimed, onPressed: _open);
   }
