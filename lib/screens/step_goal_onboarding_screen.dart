@@ -223,10 +223,6 @@ class _StepGoalOnboardingScreenState extends State<StepGoalOnboardingScreen> {
               onTap: (_) {},
               items: const [
                 WoodenTabItem(icon: Icons.home_rounded, label: 'Home'),
-                WoodenTabItem(
-                  icon: Icons.emoji_events_rounded,
-                  label: 'Challenges',
-                ),
                 WoodenTabItem(icon: Icons.people_rounded, label: 'Friends'),
                 WoodenTabItem(
                   icon: Icons.leaderboard_rounded,

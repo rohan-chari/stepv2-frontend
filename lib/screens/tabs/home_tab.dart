@@ -16,6 +16,7 @@ import '../../widgets/home_chrome.dart';
 import '../../widgets/home_course_track.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/spinning_coin.dart';
+import '../../tutorial/tutorial_screen.dart';
 import '../display_name_screen.dart';
 
 class HomeTab extends StatelessWidget {
@@ -33,18 +34,14 @@ class HomeTab extends StatelessWidget {
   final VoidCallback onEnableNotifications;
   final VoidCallback onSetStepGoal;
   final VoidCallback onDisplayNameChanged;
-  final Map<String, dynamic>? currentChallenge;
   final List<Map<String, dynamic>> friendsSteps;
   final Loadable<List<Map<String, dynamic>>>? friendsStepsState;
   final List<Map<String, dynamic>> equippedAccessories;
   final Loadable<Map<String, dynamic>>? shopCatalogState;
-  final Map<String, dynamic>? activeChallengeProgress;
   final List<Map<String, dynamic>> leaderboardHighlights;
   final Loadable<List<Map<String, dynamic>>>? leaderboardHighlightsState;
   final bool leaderboardHighlightsLoading;
-  final VoidCallback onChallengeChanged;
   final VoidCallback? onOpenFriendsTab;
-  final VoidCallback? onOpenChallengesTab;
   final VoidCallback? onOpenLeaderboardTab;
   final void Function(String leaderboardType, String period)?
   onOpenLeaderboardHighlight;
@@ -68,18 +65,14 @@ class HomeTab extends StatelessWidget {
     required this.onEnableNotifications,
     required this.onSetStepGoal,
     required this.onDisplayNameChanged,
-    required this.currentChallenge,
     required this.friendsSteps,
     this.friendsStepsState,
     this.equippedAccessories = const [],
     this.shopCatalogState,
-    this.activeChallengeProgress,
     this.leaderboardHighlights = const [],
     this.leaderboardHighlightsState,
     this.leaderboardHighlightsLoading = false,
-    required this.onChallengeChanged,
     this.onOpenFriendsTab,
-    this.onOpenChallengesTab,
     this.onOpenLeaderboardTab,
     this.onOpenLeaderboardHighlight,
     this.onOpenProfile,
@@ -202,8 +195,7 @@ class HomeTab extends StatelessWidget {
       final friendGoal = friend['stepGoal'] as int?;
       return friendGoal != null && friendGoal > 0;
     }).length;
-    final friendsLoading =
-        friendsStepsState?.shouldShowInitialLoading == true;
+    final friendsLoading = friendsStepsState?.shouldShowInitialLoading == true;
     final viewportHeight = MediaQuery.of(context).size.height;
     final trackHeight = viewportHeight < 760 ? 226.0 : 268.0;
 
@@ -337,27 +329,41 @@ class HomeTab extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                HomePill(
+                  label: _goalMomentumLabel(
+                    goal: goal,
+                    remainingSteps: remainingSteps,
+                    steps: steps,
+                  ),
+                  icon: goal > 0 && remainingSteps == 0
+                      ? Icons.check_circle_rounded
+                      : Icons.flag_rounded,
+                  fullWidth: true,
+                ),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
-                      child: HomePill(
-                        label: _goalMomentumLabel(
-                          goal: goal,
-                          remainingSteps: remainingSteps,
-                          steps: steps,
-                        ),
-                        icon: goal > 0 && remainingSteps == 0
-                            ? Icons.check_circle_rounded
-                            : Icons.flag_rounded,
-                        fullWidth: true,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: HomePillButton(
+                      child: HomeButton(
                         label: goal > 0 ? 'EDIT GOAL' : 'SET GOAL',
                         icon: Icons.tune_rounded,
                         onPressed: onSetStepGoal,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: HomeButton(
+                        label: 'HOW TO',
+                        icon: Icons.help_outline_rounded,
+                        isPrimary: false,
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const TutorialScreen(),
+                              fullscreenDialog: true,
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ],
@@ -444,27 +450,6 @@ class HomeTab extends StatelessWidget {
                     ),
                   ),
                 ],
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: HomeButton(
-                        label: 'CHALLENGES',
-                        icon: Icons.emoji_events_rounded,
-                        onPressed: () => onOpenChallengesTab?.call(),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: HomeButton(
-                        label: 'LEADERBOARD',
-                        icon: Icons.insights_rounded,
-                        isPrimary: false,
-                        onPressed: () => onOpenLeaderboardTab?.call(),
-                      ),
-                    ),
-                  ],
-                ),
               ],
             ),
           ),
@@ -477,8 +462,7 @@ class HomeTab extends StatelessWidget {
     final cards = leaderboardHighlights.take(3).toList(growable: false);
     final state = leaderboardHighlightsState;
     final isLoading =
-        leaderboardHighlightsLoading ||
-        state?.shouldShowInitialLoading == true;
+        leaderboardHighlightsLoading || state?.shouldShowInitialLoading == true;
     final isError = state?.isError == true && state?.hasData != true;
     if (!isLoading && !isError && cards.isEmpty) {
       return const SizedBox.shrink();
@@ -574,7 +558,7 @@ class HomeTab extends StatelessWidget {
       icon: Icons.notifications_rounded,
       title: 'NOTIFICATIONS',
       body:
-          'Get notified when a friend challenges you to a step battle!\n\n'
+          'Get notified when a friend invites you to a race or sends a friend request.\n\n'
           'We’ll only send important updates — no spam.',
       actionLabel: 'CONTINUE',
       action: onEnableNotifications,
@@ -779,9 +763,9 @@ class _PermissionGate extends StatelessWidget {
                       detail: 'Daily steps',
                     ),
                     _PermissionFeature(
-                      icon: Icons.emoji_events_rounded,
+                      icon: Icons.directions_run_rounded,
                       title: 'COMPETE',
-                      detail: 'Friend challenges',
+                      detail: 'Friend races',
                     ),
                     _PermissionFeature(
                       icon: Icons.payments_rounded,
@@ -1016,7 +1000,7 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
                 Text('ADD A PROFILE PHOTO?', style: HomeText.title(size: 24)),
                 const SizedBox(height: 6),
                 Text(
-                  'Make it easier for friends to spot you in races, challenges, and leaderboards.',
+                  'Make it easier for friends to spot you in races and leaderboards.',
                   style: HomeText.body(size: 14, color: HomeColors.muted),
                 ),
                 const SizedBox(height: 14),
@@ -1366,7 +1350,6 @@ class _ClimbingBoardsCarouselState extends State<_ClimbingBoardsCarousel> {
 
   String _badgeLabel(String leaderboardType, String period) {
     final typeLabel = switch (leaderboardType) {
-      'challenges' => 'CHALLENGES',
       'races' => 'RACES',
       _ => 'STEPS',
     };

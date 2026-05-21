@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'backend_api_service.dart';
 
-enum NotificationRoute { home, friends, challengeDetail, raceDetail, races }
+enum NotificationRoute { home, friends, raceDetail, races }
 
 class NotificationAction {
   final NotificationRoute route;
@@ -107,9 +107,6 @@ class NotificationService {
         ? Map<String, dynamic>.from(payload['params'] as Map)
         : <String, dynamic>{};
     final params = <String, String>{};
-    if (nested['instanceId'] is String) {
-      params['challengeInstanceId'] = nested['instanceId'] as String;
-    }
     if (nested['raceId'] is String) {
       params['raceId'] = nested['raceId'] as String;
     }
@@ -119,8 +116,6 @@ class NotificationService {
 
   NotificationRoute? _routeFromType(String? type) {
     switch (type) {
-      case 'CHALLENGE_INITIATED':
-        return NotificationRoute.challengeDetail;
       case 'RACE_INVITE_SENT':
       case 'RACE_INVITE_ACCEPTED':
       case 'RACE_STARTED':
@@ -133,9 +128,10 @@ class NotificationService {
       case 'FRIEND_REQUEST_SENT':
       case 'FRIEND_REQUEST_ACCEPTED':
         return NotificationRoute.friends;
-      case 'STAKE_ACCEPTED':
-        return NotificationRoute.challengeDetail;
+      // Legacy challenge notifications still in user trays land on home.
+      case 'CHALLENGE_INITIATED':
       case 'CHALLENGE_DROPPED':
+      case 'STAKE_ACCEPTED':
         return NotificationRoute.home;
       default:
         return null;

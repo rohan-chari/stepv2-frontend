@@ -960,12 +960,13 @@ class _FriendsTabState extends State<FriendsTab> {
     final user = (req['user'] as Map<String, dynamic>?) ?? const {};
     final displayName = user['displayName'] as String? ?? '';
     final profilePhotoUrl = user['profilePhotoUrl'] as String?;
+    final friendshipId = req['friendshipId'] as String;
 
     return Container(
       color: index.isOdd
           ? AppColors.parchmentDark.withValues(alpha: 0.25)
           : Colors.transparent,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Row(
         children: [
           AppAvatar(name: displayName, imageUrl: profilePhotoUrl, size: 34),
@@ -977,13 +978,77 @@ class _FriendsTabState extends State<FriendsTab> {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          Text(
-            'PENDING',
-            style: PixelText.title(size: 13, color: AppColors.textMid),
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Text(
+              'PENDING',
+              style: PixelText.title(size: 11, color: AppColors.textMid),
+            ),
+          ),
+          PillButton(
+            label: 'CANCEL',
+            variant: PillButtonVariant.accent,
+            fontSize: 11,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            onPressed: () => _showCancelOutgoingMenu(friendshipId, displayName),
           ),
         ],
       ),
     );
+  }
+
+  void _showCancelOutgoingMenu(String friendshipId, String displayName) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.parchment,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Cancel request to $displayName?',
+              textAlign: TextAlign.center,
+              style: PixelText.title(size: 16, color: AppColors.textDark),
+            ),
+            const SizedBox(height: 16),
+            PillButton(
+              label: 'CANCEL REQUEST',
+              variant: PillButtonVariant.accent,
+              fontSize: 13,
+              fullWidth: true,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await _cancelOutgoingRequest(friendshipId);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _cancelOutgoingRequest(String friendshipId) async {
+    try {
+      final identityToken = widget.authService.authToken;
+      if (identityToken == null || identityToken.isEmpty) return;
+
+      await _backendApiService.removeFriend(
+        identityToken: identityToken,
+        friendshipId: friendshipId,
+      );
+
+      if (!mounted) return;
+      await _loadFriends();
+      widget.onFriendsChanged();
+    } catch (_) {
+      if (!mounted) return;
+      showErrorToast(context, 'Couldn’t cancel request. Please try again.');
+    }
   }
 }
 

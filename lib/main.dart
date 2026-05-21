@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'config/backend_config.dart';
 import 'screens/display_name_screen.dart';
 import 'screens/main_shell.dart';
 import 'screens/start_screen.dart';
@@ -31,6 +32,7 @@ class StepTrackerApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: AppColors.accent),
         useMaterial3: true,
       ),
+      builder: (context, child) => _EnvironmentBanner(child: child),
       home: _SessionGate(notificationService: notificationService),
     );
   }
@@ -87,5 +89,56 @@ class _SessionGateState extends State<_SessionGate> {
     }
 
     return StartScreen(notificationService: widget.notificationService);
+  }
+}
+
+class _EnvironmentBanner extends StatelessWidget {
+  const _EnvironmentBanner({required this.child});
+
+  final Widget? child;
+
+  @override
+  Widget build(BuildContext context) {
+    final env = BackendConfig.environment;
+    if (env == BackendEnvironment.production) {
+      return child ?? const SizedBox.shrink();
+    }
+
+    final isStaging = env == BackendEnvironment.staging;
+    final label = isStaging
+        ? 'This is the staging environment for Bara'
+        : 'This is the local environment for Bara';
+    final color = isStaging ? Colors.orange.shade700 : Colors.blue.shade700;
+
+    return Material(
+      color: color,
+      child: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              color: color,
+              padding: const EdgeInsets.symmetric(
+                vertical: 10,
+                horizontal: 16,
+              ),
+              child: Center(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ),
+            ),
+            if (child != null) Expanded(child: child!),
+          ],
+        ),
+      ),
+    );
   }
 }

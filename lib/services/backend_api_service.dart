@@ -405,113 +405,6 @@ class BackendApiService {
     return friends.cast<Map<String, dynamic>>();
   }
 
-  Future<Map<String, dynamic>> initiateChallenge({
-    required String identityToken,
-    required String friendUserId,
-    required String stakeId,
-  }) async {
-    final response = await _sendJsonRequest(
-      method: 'POST',
-      path: '/challenges/initiate',
-      body: {'friendUserId': friendUserId, 'stakeId': stakeId},
-      identityToken: identityToken,
-    );
-
-    return _decodeJsonResponse(response);
-  }
-
-  Future<List<Map<String, dynamic>>> fetchStakeCatalog({
-    required String identityToken,
-    String? relationshipType,
-  }) async {
-    final query = relationshipType != null
-        ? '?relationship_type=${Uri.encodeComponent(relationshipType)}'
-        : '';
-    final response = await _sendGetRequest(
-      path: '/stakes$query',
-      identityToken: identityToken,
-    );
-
-    final payload = await _decodeJsonResponse(response);
-    final stakes = payload['stakes'];
-
-    if (stakes is! List) {
-      throw const ApiException('Something went wrong. Please try again.');
-    }
-
-    return stakes.cast<Map<String, dynamic>>();
-  }
-
-  Future<Map<String, dynamic>> proposeStake({
-    required String identityToken,
-    required String instanceId,
-    required String stakeId,
-  }) async {
-    final response = await _sendJsonRequest(
-      method: 'POST',
-      path: '/challenges/$instanceId/propose-stake',
-      body: {'stakeId': stakeId},
-      identityToken: identityToken,
-    );
-
-    return _decodeJsonResponse(response);
-  }
-
-  Future<Map<String, dynamic>> respondToStake({
-    required String identityToken,
-    required String instanceId,
-    required bool accept,
-    String? counterStakeId,
-  }) async {
-    final body = <String, dynamic>{'accept': accept};
-    if (counterStakeId != null) body['counterStakeId'] = counterStakeId;
-
-    final response = await _sendJsonRequest(
-      method: 'PUT',
-      path: '/challenges/$instanceId/respond-stake',
-      body: body,
-      identityToken: identityToken,
-    );
-
-    return _decodeJsonResponse(response);
-  }
-
-  Future<Map<String, dynamic>> fetchChallengeProgress({
-    required String identityToken,
-    required String instanceId,
-  }) async {
-    final response = await _sendGetRequest(
-      path: '/challenges/$instanceId/progress',
-      identityToken: identityToken,
-    );
-
-    final payload = await _decodeJsonResponse(response);
-    return payload['progress'] as Map<String, dynamic>;
-  }
-
-  Future<void> cancelChallenge({
-    required String identityToken,
-    required String instanceId,
-  }) async {
-    await _sendJsonRequest(
-      method: 'DELETE',
-      path: '/challenges/$instanceId',
-      body: {},
-      identityToken: identityToken,
-    );
-  }
-
-  Future<Map<String, dynamic>> fetchCurrentChallenge({
-    required String identityToken,
-  }) async {
-    final response = await _sendGetRequest(
-      path: '/challenges/current',
-      identityToken: identityToken,
-    );
-
-    return _decodeJsonResponse(response);
-  }
-
   Future<Map<String, dynamic>> fetchLeaderboard({
     required String identityToken,
     String type = 'steps',
@@ -578,43 +471,6 @@ class BackendApiService {
     return records.cast<Map<String, dynamic>>();
   }
 
-  Future<Map<String, dynamic>> fetchAdminWeeklyChallenge({
-    required String identityToken,
-  }) async {
-    final response = await _sendGetRequest(
-      path: '/admin/weekly-challenge',
-      identityToken: identityToken,
-    );
-
-    return _decodeJsonResponse(response);
-  }
-
-  Future<Map<String, dynamic>> ensureAdminWeeklyChallenge({
-    required String identityToken,
-  }) async {
-    final response = await _sendJsonRequest(
-      method: 'POST',
-      path: '/admin/weekly-challenge/ensure-current',
-      body: const <String, dynamic>{},
-      identityToken: identityToken,
-    );
-
-    return _decodeJsonResponse(response);
-  }
-
-  Future<Map<String, dynamic>> resolveAdminWeeklyChallenge({
-    required String identityToken,
-  }) async {
-    final response = await _sendJsonRequest(
-      method: 'POST',
-      path: '/admin/weekly-challenge/resolve-current',
-      body: const <String, dynamic>{},
-      identityToken: identityToken,
-    );
-
-    return _decodeJsonResponse(response);
-  }
-
   Future<Map<String, dynamic>> fetchAdminShopItems({
     required String identityToken,
   }) async {
@@ -641,19 +497,6 @@ class BackendApiService {
       method: 'PATCH',
       path: '/admin/shop/items/$itemId',
       body: body,
-      identityToken: identityToken,
-    );
-
-    return _decodeJsonResponse(response);
-  }
-
-  Future<Map<String, dynamic>> resetAdminWeeklyChallenge({
-    required String identityToken,
-  }) async {
-    final response = await _sendJsonRequest(
-      method: 'POST',
-      path: '/admin/weekly-challenge/reset-current',
-      body: const <String, dynamic>{},
       identityToken: identityToken,
     );
 

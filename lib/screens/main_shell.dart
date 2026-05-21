@@ -12,7 +12,6 @@ import '../models/step_data.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../services/background_sync_bootstrap_service.dart';
-import '../services/challenge_week_step_sync_service.dart';
 import '../services/health_service.dart';
 import '../services/notification_service.dart';
 import '../styles.dart';
@@ -20,10 +19,10 @@ import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/info_toast.dart';
 import '../widgets/pill_button.dart';
+import '../widgets/sync_stale_chip.dart';
 import '../widgets/trail_sign.dart';
 import '../widgets/wooden_tab_bar.dart';
 import 'start_screen.dart';
-import 'tabs/challenges_tab.dart';
 import 'tabs/friends_tab.dart';
 import 'tabs/home_tab.dart';
 import 'tabs/leaderboard_tab.dart';
@@ -39,7 +38,6 @@ class MainShell extends StatefulWidget {
     this.healthService,
     this.backendApiService,
     this.backgroundSyncBootstrapService,
-    this.challengeWeekStepSyncService,
     this.notificationService,
   });
 
@@ -47,7 +45,6 @@ class MainShell extends StatefulWidget {
   final HealthService? healthService;
   final BackendApiService? backendApiService;
   final BackgroundSyncBootstrapService? backgroundSyncBootstrapService;
-  final ChallengeWeekStepSyncService? challengeWeekStepSyncService;
   final NotificationService? notificationService;
 
   @override
@@ -58,7 +55,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   late final HealthService _healthService;
   late final BackendApiService _backendApiService;
   late final BackgroundSyncBootstrapService _backgroundSyncBootstrapService;
-  late final ChallengeWeekStepSyncService _challengeWeekStepSyncService;
 
   int _currentTab = 0;
   late final PageController _pageController;
@@ -68,6 +64,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   bool _isLoading = false;
   String? _error;
   StepData? _stepData;
+  bool _syncStale = false;
   int? _stepGoal;
   int _incomingFriendRequests = 0;
   String? _displayName;
@@ -75,10 +72,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   List<Map<String, dynamic>> _friendsSteps = [];
   Loadable<List<Map<String, dynamic>>> _friendsStepsState =
       const Loadable.initial();
-  Map<String, dynamic>? _currentChallenge;
-  Loadable<Map<String, dynamic>> _currentChallengeState =
-      const Loadable.initial();
-  Map<String, dynamic>? _activeChallengeProgress;
   Map<String, dynamic>? _racesData;
   Loadable<Map<String, dynamic>> _racesState = const Loadable.initial();
   List<Map<String, dynamic>> _equippedAccessories = const [];
@@ -106,12 +99,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _backgroundSyncBootstrapService =
         widget.backgroundSyncBootstrapService ??
         BackgroundSyncBootstrapService();
-    _challengeWeekStepSyncService =
-        widget.challengeWeekStepSyncService ??
-        ChallengeWeekStepSyncService(
-          backendApiService: _backendApiService,
-          healthService: _healthService,
-        );
     _pageController = PageController();
     WidgetsBinding.instance.addObserver(this);
     widget.authService.addListener(_handleAuthServiceChanged);
@@ -162,9 +149,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         }
         break;
       case NotificationRoute.races:
-        _pageController.jumpToPage(2);
-        break;
-      case NotificationRoute.challengeDetail:
         _pageController.jumpToPage(1);
         break;
       case NotificationRoute.friends:
@@ -182,7 +166,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _fetchSteps();
       _refreshStepGoal();
       _fetchFriendsSteps();
-      _fetchCurrentChallenge();
       _fetchRaces();
       _fetchShopCatalog();
       _fetchLeaderboardHighlights();
@@ -226,7 +209,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     await _fetchSteps();
     _refreshStepGoal();
     _fetchFriendsSteps();
-    _fetchCurrentChallenge();
     _fetchRaces();
     _fetchShopCatalog();
     _startForegroundPolling();
@@ -334,24 +316,34 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
     try {
       final identityToken = widget.authService.authToken;
-      final stepEntries = identityToken != null && identityToken.isNotEmpty
-          ? await _challengeWeekStepSyncService.loadCurrentChallengeWeekSteps(
-              identityToken: identityToken,
-            )
-          : [await _healthService.getStepsToday()];
+      final stepEntries = [await _healthService.getStepsToday()];
       final stepData = stepEntries.last;
-      String? syncWarning;
+      bool syncFailed = false;
 
       if (identityToken != null && identityToken.isNotEmpty) {
-        try {
+        Future<void> pushSteps() async {
           for (final dailyStep in stepEntries) {
             await _backendApiService.recordSteps(
               identityToken: identityToken,
               stepData: dailyStep,
             );
           }
+        }
 
-          // Sync hourly step samples for today (for powerup accuracy)
+        try {
+          await pushSteps();
+        } catch (_) {
+          // Cold-start blip from background → foreground is common.
+          // Silently retry once before flagging the sync as stale.
+          await Future<void>.delayed(const Duration(seconds: 1));
+          try {
+            await pushSteps();
+          } catch (_) {
+            syncFailed = true;
+          }
+        }
+
+        if (!syncFailed) {
           try {
             final now = DateTime.now();
             final hourlySamples = await _healthService.getHourlySteps(
@@ -367,10 +359,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           } catch (_) {
             // Don't fail the main sync if hourly samples fail
           }
-        } catch (e) {
-          syncWarning = e is ApiException
-              ? 'Steps loaded, but sync failed: ${e.message}'
-              : 'Steps loaded, but sync failed. Check your connection.';
         }
       }
 
@@ -378,11 +366,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         _stepData = stepData;
         _isLoading = false;
         _error = null;
+        _syncStale = syncFailed;
       });
-
-      if (syncWarning != null && mounted) {
-        showErrorToast(context, syncWarning);
-      }
 
       _fetchFriendsSteps();
       _refreshStepGoal();
@@ -547,24 +532,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     ]);
   }
 
-  Future<void> _refreshChallengesTab() async {
-    await Future.wait([_fetchCurrentChallenge(), _fetchFriendsSteps()]);
-  }
-
   Future<void> _refreshFriendsTab() async {
     await _refreshStepGoal();
   }
 
   Future<void> _refreshProfileTab() async {
     await _refreshStepGoal();
-  }
-
-  void _openChallengesTab() {
-    _pageController.animateToPage(
-      1,
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOutCubic,
-    );
   }
 
   void _openFriendsTab() {
@@ -589,7 +562,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   void _openLeaderboardTab() {
     _pageController.animateToPage(
-      4,
+      3,
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOutCubic,
     );
@@ -781,67 +754,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _fetchCurrentChallenge() async {
-    final previous = _currentChallenge;
-    if (mounted) {
-      setState(() {
-        _currentChallengeState = previous == null
-            ? const Loadable.loading()
-            : Loadable.refreshing(previous);
-      });
-    }
-
-    try {
-      final identityToken = widget.authService.authToken;
-      if (identityToken == null || identityToken.isEmpty) {
-        if (mounted) {
-          setState(() {
-            _currentChallengeState = Loadable.error(
-              'Not signed in.',
-              data: previous,
-            );
-          });
-        }
-        return;
-      }
-
-      final data = await _backendApiService.fetchCurrentChallenge(
-        identityToken: identityToken,
-      );
-
-      if (mounted) {
-        setState(() {
-          _currentChallenge = data;
-          _currentChallengeState = Loadable.success(data);
-          _activeChallengeProgress = null;
-        });
-      }
-
-      // Fetch progress for first active instance (for Home tab summary)
-      final instances = data['instances'] as List? ?? [];
-      for (final i in instances) {
-        final inst = i as Map<String, dynamic>;
-        if (inst['status'] == 'ACTIVE') {
-          try {
-            final progress = await _backendApiService.fetchChallengeProgress(
-              identityToken: identityToken,
-              instanceId: inst['id'] as String,
-            );
-            if (mounted) {
-              setState(() => _activeChallengeProgress = progress);
-            }
-          } catch (_) {}
-          break;
-        }
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _currentChallengeState = Loadable.error(e.toString(), data: previous);
-      });
-    }
-  }
-
   Future<void> _fetchLeaderboardHighlights() async {
     final identityToken = widget.authService.authToken;
     if (identityToken == null || identityToken.isEmpty) {
@@ -927,7 +839,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     await Future.wait([
       _refreshStepGoal(),
       _fetchFriendsSteps(),
-      _fetchCurrentChallenge(),
       _fetchRaces(),
     ]);
 
@@ -1080,7 +991,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _stepGoal = widget.authService.stepGoal;
       _displayName = widget.authService.displayName;
     });
-    _fetchCurrentChallenge();
   }
 
   @override
@@ -1091,13 +1001,24 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         children: [
           Positioned.fill(child: const ArcadePageBackground(showHeader: false)),
 
+          if (_syncStale)
+            Positioned(
+              top: 0,
+              right: 0,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 8, right: 12),
+                  child: SyncStaleChip(onTap: _refreshHomeTab),
+                ),
+              ),
+            ),
+
           Positioned.fill(
             child: PageView(
               controller: _pageController,
               onPageChanged: (index) {
                 setState(() => _currentTab = index);
-                if (index == 1) _fetchCurrentChallenge();
-                if (index == 2) _fetchRaces();
+                if (index == 1) _fetchRaces();
               },
               children: [
                 HomeTab(
@@ -1115,36 +1036,19 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   onEnableNotifications: _enableNotifications,
                   onSetStepGoal: _showStepGoalDialog,
                   onDisplayNameChanged: _syncSettingsState,
-                  currentChallenge: _currentChallenge,
                   friendsSteps: _friendsSteps,
                   friendsStepsState: _friendsStepsState,
                   equippedAccessories: _equippedAccessories,
                   shopCatalogState: _shopCatalogState,
-                  activeChallengeProgress: _activeChallengeProgress,
                   leaderboardHighlights: _leaderboardHighlights,
                   leaderboardHighlightsState: _leaderboardHighlightsState,
                   leaderboardHighlightsLoading: _leaderboardHighlightsLoading,
-                  onChallengeChanged: _fetchCurrentChallenge,
                   onOpenFriendsTab: _openFriendsTab,
-                  onOpenChallengesTab: _openChallengesTab,
                   onOpenLeaderboardTab: _openLeaderboardTab,
                   onOpenLeaderboardHighlight: _openLeaderboardHighlight,
                   onOpenProfile: _openProfile,
                   onAddProfilePhoto: _addOrChangeProfilePhoto,
                   onDismissProfilePhotoPrompt: _dismissProfilePhotoPrompt,
-                ),
-                ChallengesTab(
-                  authService: widget.authService,
-                  currentChallenge: _currentChallenge,
-                  currentChallengeState: _currentChallengeState,
-                  friendsSteps: _friendsSteps,
-                  onChallengeChanged: _fetchCurrentChallenge,
-                  onOpenFriendsTab: _openFriendsTab,
-                  onRefresh: _refreshChallengesTab,
-                  stepData: _stepData,
-                  stepGoal: _stepGoal,
-                  displayName: _displayName,
-                  onOpenProfile: _openProfile,
                 ),
                 RacesTab(
                   authService: widget.authService,
@@ -1192,10 +1096,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
               },
               items: [
                 const WoodenTabItem(icon: Icons.home_rounded, label: 'Home'),
-                const WoodenTabItem(
-                  icon: Icons.emoji_events_rounded,
-                  label: 'Challenges',
-                ),
                 const WoodenTabItem(
                   icon: Icons.directions_run_rounded,
                   label: 'Races',

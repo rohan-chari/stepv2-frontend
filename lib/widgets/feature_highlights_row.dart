@@ -20,17 +20,17 @@ class FeatureHighlightsRow extends StatelessWidget {
         SizedBox(width: 10),
         Expanded(
           child: _FeatureCard(
-            icon: Icons.emoji_events_rounded,
+            icon: Icons.directions_run_rounded,
             label: 'COMPETE',
-            description: 'Weekly challenges',
+            description: 'Friend races',
           ),
         ),
         SizedBox(width: 10),
         Expanded(
           child: _FeatureCard(
-            icon: Icons.handshake_rounded,
-            label: 'STAKE',
-            description: 'Raise the stakes',
+            icon: Icons.leaderboard_rounded,
+            label: 'CLIMB',
+            description: 'Leaderboards',
           ),
         ),
       ],

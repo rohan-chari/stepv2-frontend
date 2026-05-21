@@ -13,12 +13,10 @@ import '../../widgets/info_board_card.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
 
-enum _LeaderboardType { steps, challenges, races }
+enum _LeaderboardType { steps, races }
 
 _LeaderboardType _leaderboardTypeFromApi(String apiValue) {
   switch (apiValue) {
-    case 'challenges':
-      return _LeaderboardType.challenges;
     case 'races':
       return _LeaderboardType.races;
     case 'steps':
@@ -32,8 +30,6 @@ extension on _LeaderboardType {
     switch (this) {
       case _LeaderboardType.steps:
         return 'steps';
-      case _LeaderboardType.challenges:
-        return 'challenges';
       case _LeaderboardType.races:
         return 'races';
     }
@@ -43,8 +39,6 @@ extension on _LeaderboardType {
     switch (this) {
       case _LeaderboardType.steps:
         return 'STEPS';
-      case _LeaderboardType.challenges:
-        return 'CHALLENGES';
       case _LeaderboardType.races:
         return 'RACES';
     }
@@ -54,8 +48,6 @@ extension on _LeaderboardType {
     switch (this) {
       case _LeaderboardType.steps:
         return 'STEPS';
-      case _LeaderboardType.challenges:
-        return 'W-L';
       case _LeaderboardType.races:
         return 'PODIUMS';
     }
@@ -65,8 +57,6 @@ extension on _LeaderboardType {
     switch (this) {
       case _LeaderboardType.steps:
         return 'No steps yet - get walking!';
-      case _LeaderboardType.challenges:
-        return 'No qualified challenge records yet';
       case _LeaderboardType.races:
         return 'No race records yet';
     }
@@ -76,8 +66,6 @@ extension on _LeaderboardType {
     switch (this) {
       case _LeaderboardType.steps:
         return null;
-      case _LeaderboardType.challenges:
-        return 'Finish more matchups to unlock the record board.';
       case _LeaderboardType.races:
         return 'Complete races to start building a podium record.';
     }
@@ -87,8 +75,6 @@ extension on _LeaderboardType {
     switch (this) {
       case _LeaderboardType.steps:
         return Icons.directions_walk;
-      case _LeaderboardType.challenges:
-        return Icons.emoji_events_rounded;
       case _LeaderboardType.races:
         return Icons.flag_rounded;
     }
@@ -127,7 +113,6 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   late final BackendApiService _api;
   _LeaderboardType _selectedType = _LeaderboardType.steps;
   String _selectedPeriod = 'today';
-  int _minimumCompletedChallenges = 5;
   bool _isLoading = true;
   List<Map<String, dynamic>> _top10 = [];
   Map<String, dynamic>? _currentUser;
@@ -227,9 +212,6 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
         final top10Raw = data['top10'] as List? ?? [];
         _top10 = top10Raw.cast<Map<String, dynamic>>();
         _currentUser = data['currentUser'] as Map<String, dynamic>?;
-        _minimumCompletedChallenges =
-            data['minimumCompletedChallenges'] as int? ??
-            _minimumCompletedChallenges;
         _leaderboardState = Loadable.success(_top10);
         _isLoading = false;
       });
@@ -269,10 +251,6 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     switch (_selectedType) {
       case _LeaderboardType.steps:
         return _formatSteps((entry['totalSteps'] as num?)?.toInt() ?? 0);
-      case _LeaderboardType.challenges:
-        final wins = entry['wins'] as int? ?? 0;
-        final losses = entry['losses'] as int? ?? 0;
-        return '$wins-$losses';
       case _LeaderboardType.races:
         final firsts = entry['firsts'] as int? ?? 0;
         final seconds = entry['seconds'] as int? ?? 0;
@@ -343,10 +321,6 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                             if (val != null) _selectPeriod(val);
                           },
                         ),
-                      ],
-                      if (_selectedType == _LeaderboardType.challenges) ...[
-                        const SizedBox(height: 10),
-                        _buildChallengeQualificationBanner(),
                       ],
                     ],
                   ),
@@ -499,26 +473,10 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     );
   }
 
-  Widget _buildChallengeQualificationBanner() {
-    return Align(
-      alignment: Alignment.center,
-      child: Text(
-        'MINIMUM $_minimumCompletedChallenges COMPLETED CHALLENGES TO QUALIFY',
-        style: PixelText.body(
-          size: 13,
-          color: AppColors.parchment,
-        ).copyWith(shadows: _textShadows),
-        textAlign: TextAlign.center,
-      ),
-    );
-  }
-
   double get _valueColumnWidth {
     switch (_selectedType) {
       case _LeaderboardType.steps:
         return 74;
-      case _LeaderboardType.challenges:
-        return 64;
       case _LeaderboardType.races:
         return 140;
     }

@@ -102,7 +102,7 @@ class _StartScreenState extends State<StartScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Track your steps, challenge friends,\nand put a stake on the week.',
+                  'Track your steps and race friends\nfor coins and bragging rights.',
                   style: PixelText.body(
                     size: 14,
                     color: AppColors.textMid,

@@ -1,6 +1,5 @@
 import 'package:health/health.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/challenge_sync_day.dart';
 import '../models/step_data.dart';
 import '../models/step_sample_data.dart';
 
@@ -54,24 +53,6 @@ class HealthService {
     );
 
     return stepData.last;
-  }
-
-  Future<List<StepData>> getStepsForSyncDays({
-    required List<ChallengeSyncDay> syncDays,
-  }) async {
-    final entries = <StepData>[];
-
-    for (final syncDay in syncDays) {
-      final steps = await _health.getTotalStepsInInterval(
-        syncDay.startsAt,
-        syncDay.endsAt,
-        includeManualEntry: false,
-      );
-
-      entries.add(StepData(steps: steps ?? 0, date: syncDay.date));
-    }
-
-    return entries;
   }
 
   Future<List<StepData>> getStepsForDateRange({
