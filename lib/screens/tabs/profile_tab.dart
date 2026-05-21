@@ -16,6 +16,7 @@ import '../../widgets/retro_card.dart';
 import '../../widgets/trail_sign.dart';
 import '../../widgets/step_calendar.dart';
 import '../../widgets/loading_skeleton.dart';
+import '../admin_screen.dart';
 import '../display_name_screen.dart';
 import '../start_screen.dart';
 import '../step_goal_screen.dart';
@@ -714,6 +715,25 @@ class _SettingsSheetState extends State<_SettingsSheet> {
             _NotificationToggle(
               notificationService: widget.notificationService!,
               authToken: widget.authService.authToken,
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (widget.authService.isAdmin) ...[
+            PillButton(
+              label: 'ADMIN TOOLS',
+              variant: PillButtonVariant.secondary,
+              fontSize: 13,
+              fullWidth: true,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        AdminScreen(authService: widget.authService),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 10),
           ],

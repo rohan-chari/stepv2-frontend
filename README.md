@@ -227,8 +227,7 @@ No required environment variables are defined in source.
 ```bash
 # Make sure your backend listens on 0.0.0.0:3000, not just localhost:3000
 
-  flutter run -d 00008150-000171DE2638401C --device-connection=attached --debug
-  --dart-define=BACKEND_BASE_URL=https://staging.steptracker-api.org
+flutter run -d 00008150-000171DE2638401C --device-connection=attached --debug --dart-define=BACKEND_BASE_URL=https://staging.steptracker-api.org
 ```
 
 ### Production
