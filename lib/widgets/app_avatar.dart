@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../styles.dart';
+import 'home_chrome.dart';
 
 const _avatarPalette = [
   Color(0xFFE57373),
@@ -125,6 +126,7 @@ class ProfileAvatarButton extends StatelessWidget {
   final String? imageUrl;
   final VoidCallback? onPressed;
   final double size;
+  final int badgeCount;
 
   const ProfileAvatarButton({
     super.key,
@@ -132,19 +134,61 @@ class ProfileAvatarButton extends StatelessWidget {
     this.imageUrl,
     this.onPressed,
     this.size = 36,
+    this.badgeCount = 0,
   });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onPressed,
-      child: AppAvatar(
-        name: name,
-        imageUrl: imageUrl,
-        size: size,
-        isUser: true,
-        borderColor: AppColors.parchment,
-        borderWidth: 2.25,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          AppAvatar(
+            name: name,
+            imageUrl: imageUrl,
+            size: size,
+            isUser: true,
+            borderColor: AppColors.parchment,
+            borderWidth: 2.25,
+          ),
+          if (badgeCount > 0)
+            Positioned(
+              top: -4,
+              right: -4,
+              child: _AvatarBadge(count: badgeCount),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AvatarBadge extends StatelessWidget {
+  const _AvatarBadge({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = count > 99 ? '99+' : '$count';
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: HomeColors.clay,
+        shape: BoxShape.circle,
+        border: Border.all(color: HomeColors.surface, width: 1.5),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+        child: Text(
+          label,
+          style: HomeText.body(
+            size: 10,
+            color: Colors.white,
+            weight: FontWeight.w900,
+            height: 1,
+          ),
+        ),
       ),
     );
   }

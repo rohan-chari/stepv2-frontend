@@ -21,7 +21,7 @@ class _FakeBackendApiService extends BackendApiService {
       case 'challenges':
         return {
           'minimumCompletedChallenges': 5,
-          'top10': [
+          'top100': [
             {
               'rank': 1,
               'userId': 'challenge-1',
@@ -48,13 +48,13 @@ class _FakeBackendApiService extends BackendApiService {
             'losses': 0,
             'completedCount': 4,
             'winPercentage': 1.0,
-            'inTop10': false,
+            'inTop100': false,
             'qualified': false,
           },
         };
       case 'races':
         return {
-          'top10': [
+          'top100': [
             {
               'rank': 1,
               'userId': 'race-1',
@@ -78,13 +78,13 @@ class _FakeBackendApiService extends BackendApiService {
             'firsts': 1,
             'seconds': 0,
             'thirds': 2,
-            'inTop10': true,
+            'inTop100': true,
           },
         };
       case 'steps':
       default:
         return {
-          'top10': [
+          'top100': [
             {
               'rank': 1,
               'userId': 'other-user',
@@ -102,7 +102,7 @@ class _FakeBackendApiService extends BackendApiService {
             'rank': 2,
             'displayName': 'Trail Walker',
             'totalSteps': 11000,
-            'inTop10': true,
+            'inTop100': true,
           },
         };
     }

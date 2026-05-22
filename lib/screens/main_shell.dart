@@ -27,6 +27,7 @@ import 'tabs/friends_tab.dart';
 import 'tabs/home_tab.dart';
 import 'tabs/leaderboard_tab.dart';
 import 'tabs/profile_tab.dart';
+import 'create_race_screen.dart';
 import 'race_detail_screen.dart';
 import 'tabs/races_tab.dart';
 import 'tabs/shop_tab.dart';
@@ -80,6 +81,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   Loadable<List<Map<String, dynamic>>> _leaderboardHighlightsState =
       const Loadable.loading();
   bool _leaderboardHighlightsLoading = true;
+  Map<String, dynamic>? _raceCard;
   String _requestedLeaderboardType = 'steps';
   String _requestedLeaderboardPeriod = 'today';
   int _leaderboardSelectionNonce = 0;
@@ -169,6 +171,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _fetchRaces();
       _fetchShopCatalog();
       _fetchLeaderboardHighlights();
+      _fetchRaceCard();
       _startForegroundPolling();
     } else if (state == AppLifecycleState.paused) {
       _stopForegroundPolling();
@@ -206,6 +209,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     await _backgroundSyncBootstrapService.enableHealthKitBackgroundDelivery();
     await _checkNotificationState();
     _fetchLeaderboardHighlights();
+    _fetchRaceCard();
     await _fetchSteps();
     _refreshStepGoal();
     _fetchFriendsSteps();
@@ -265,6 +269,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       await _backgroundSyncBootstrapService.enableHealthKitBackgroundDelivery();
       await _checkNotificationState();
       _fetchLeaderboardHighlights();
+      _fetchRaceCard();
       await _fetchSteps();
     } catch (e) {
       setState(() {
@@ -529,7 +534,100 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _fetchSteps(),
       _fetchLeaderboardHighlights(),
       _fetchShopCatalog(),
+      _fetchRaceCard(),
     ]);
+  }
+
+  Future<void> _fetchRaceCard() async {
+    final identityToken = widget.authService.authToken;
+    if (identityToken == null || identityToken.isEmpty) return;
+    try {
+      final data = await _backendApiService.fetchHomeRaceCard(
+        identityToken: identityToken,
+      );
+      if (mounted) {
+        setState(() => _raceCard = data);
+      }
+    } catch (_) {
+      // Card is non-critical; ignore fetch errors and keep last value.
+    }
+  }
+
+  void _openRaceFromCard(String raceId) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => RaceDetailScreen(
+          authService: widget.authService,
+          raceId: raceId,
+          friends: _friendsSteps,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _joinRaceFromCard(String raceId) async {
+    final identityToken = widget.authService.authToken;
+    if (identityToken == null || identityToken.isEmpty) return;
+    try {
+      await _backendApiService.joinPublicRace(
+        identityToken: identityToken,
+        raceId: raceId,
+      );
+      if (mounted) {
+        showInfoToast(context, 'Joined the race.');
+      }
+      await _fetchRaceCard();
+      _openRaceFromCard(raceId);
+    } catch (e) {
+      if (mounted) {
+        showErrorToast(context, 'Could not join: $e');
+      }
+    }
+  }
+
+  Future<void> _acceptRaceInviteFromCard(String raceId) async {
+    final identityToken = widget.authService.authToken;
+    if (identityToken == null || identityToken.isEmpty) return;
+    try {
+      await _backendApiService.respondToRaceInvite(
+        identityToken: identityToken,
+        raceId: raceId,
+        accept: true,
+      );
+      if (mounted) showInfoToast(context, 'Accepted.');
+      await _fetchRaceCard();
+      _openRaceFromCard(raceId);
+    } catch (e) {
+      if (mounted) showErrorToast(context, 'Could not accept: $e');
+    }
+  }
+
+  Future<void> _declineRaceInviteFromCard(String raceId) async {
+    final identityToken = widget.authService.authToken;
+    if (identityToken == null || identityToken.isEmpty) return;
+    try {
+      await _backendApiService.respondToRaceInvite(
+        identityToken: identityToken,
+        raceId: raceId,
+        accept: false,
+      );
+      if (mounted) showInfoToast(context, 'Declined.');
+      await _fetchRaceCard();
+    } catch (e) {
+      if (mounted) showErrorToast(context, 'Could not decline: $e');
+    }
+  }
+
+  void _challengeFriendBack(String friendUserId) {
+    // v1: just opens create-race; friend pre-selection can be wired up later.
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CreateRaceScreen(
+          authService: widget.authService,
+          backendApiService: _backendApiService,
+        ),
+      ),
+    );
   }
 
   Future<void> _refreshFriendsTab() async {
@@ -1022,6 +1120,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
               },
               children: [
                 HomeTab(
+                  incomingFriendRequests: _incomingFriendRequests,
                   stepData: _stepData,
                   isLoading: _isLoading,
                   error: _error,
@@ -1049,6 +1148,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   onOpenProfile: _openProfile,
                   onAddProfilePhoto: _addOrChangeProfilePhoto,
                   onDismissProfilePhotoPrompt: _dismissProfilePhotoPrompt,
+                  raceCard: _raceCard,
+                  onOpenRace: _openRaceFromCard,
+                  onJoinRaceFromCard: _joinRaceFromCard,
+                  onAcceptRaceInvite: _acceptRaceInviteFromCard,
+                  onDeclineRaceInvite: _declineRaceInviteFromCard,
+                  onChallengeFriendBack: _challengeFriendBack,
                 ),
                 RacesTab(
                   authService: widget.authService,

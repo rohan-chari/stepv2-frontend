@@ -114,7 +114,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   _LeaderboardType _selectedType = _LeaderboardType.steps;
   String _selectedPeriod = 'today';
   bool _isLoading = true;
-  List<Map<String, dynamic>> _top10 = [];
+  List<Map<String, dynamic>> _top100 = [];
   Map<String, dynamic>? _currentUser;
   Loadable<List<Map<String, dynamic>>> _leaderboardState =
       const Loadable.initial();
@@ -163,7 +163,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   }
 
   Future<void> _loadLeaderboard() async {
-    final previous = _top10;
+    final previous = _top100;
     if (mounted) {
       setState(() {
         _isLoading = true;
@@ -209,10 +209,10 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
       }
 
       setState(() {
-        final top10Raw = data['top10'] as List? ?? [];
-        _top10 = top10Raw.cast<Map<String, dynamic>>();
+        final top100Raw = data['top100'] as List? ?? [];
+        _top100 = top100Raw.cast<Map<String, dynamic>>();
         _currentUser = data['currentUser'] as Map<String, dynamic>?;
-        _leaderboardState = Loadable.success(_top10);
+        _leaderboardState = Loadable.success(_top100);
         _isLoading = false;
       });
     } catch (e) {
@@ -340,7 +340,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
 
   Widget _buildLeaderboardState() {
     final state = _leaderboardState;
-    if (state.shouldShowInitialLoading || (_isLoading && _top10.isEmpty)) {
+    if (state.shouldShowInitialLoading || (_isLoading && _top100.isEmpty)) {
       return const ListSkeleton(itemCount: 5, showAvatar: true);
     }
 
@@ -352,7 +352,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
       );
     }
 
-    if (_top10.isEmpty) return _buildEmptyState();
+    if (_top100.isEmpty) return _buildEmptyState();
 
     return Column(
       children: [
@@ -519,7 +519,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
 
   Widget _buildLeaderboardTable() {
     final rows = <_LeaderboardRow>[];
-    for (final entry in _top10) {
+    for (final entry in _top100) {
       rows.add(
         _LeaderboardRow(
           rank: entry['rank'] as int?,
@@ -535,7 +535,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     }
 
     final showCurrentUser =
-        _currentUser != null && _currentUser!['inTop10'] != true;
+        _currentUser != null && _currentUser!['inTop100'] != true;
 
     return GameContainer(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
@@ -597,7 +597,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                 seconds: _currentUser!['seconds'] as int?,
                 thirds: _currentUser!['thirds'] as int?,
               ),
-              _top10.length,
+              _top100.length,
             ),
           ],
         ],

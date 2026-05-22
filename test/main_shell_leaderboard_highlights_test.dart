@@ -114,7 +114,7 @@ class _FakeBackendApiService extends BackendApiService {
     if (type == 'challenges') {
       return {
         'minimumCompletedChallenges': 5,
-        'top10': const [
+        'top100': const [
           {
             'rank': 1,
             'userId': 'rival-1',
@@ -128,19 +128,19 @@ class _FakeBackendApiService extends BackendApiService {
           'displayName': 'Trail Walker',
           'wins': 4,
           'losses': 1,
-          'inTop10': false,
+          'inTop100': false,
           'qualified': true,
         },
       };
     }
 
     return {
-      'top10': const [],
+      'top100': const [],
       'currentUser': const {
         'rank': 1,
         'displayName': 'Trail Walker',
         'totalSteps': 1000,
-        'inTop10': true,
+        'inTop100': true,
       },
     };
   }

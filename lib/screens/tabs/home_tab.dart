@@ -15,6 +15,7 @@ import '../../widgets/goal_track.dart';
 import '../../widgets/home_chrome.dart';
 import '../../widgets/home_course_track.dart';
 import '../../widgets/loading_skeleton.dart';
+import '../../widgets/race_opportunity_card.dart';
 import '../../widgets/spinning_coin.dart';
 import '../../tutorial/tutorial_screen.dart';
 import '../display_name_screen.dart';
@@ -48,6 +49,13 @@ class HomeTab extends StatelessWidget {
   final VoidCallback? onOpenProfile;
   final Future<void> Function()? onAddProfilePhoto;
   final Future<bool> Function()? onDismissProfilePhotoPrompt;
+  final int incomingFriendRequests;
+  final Map<String, dynamic>? raceCard;
+  final void Function(String raceId)? onOpenRace;
+  final Future<void> Function(String raceId)? onJoinRaceFromCard;
+  final Future<void> Function(String raceId)? onAcceptRaceInvite;
+  final Future<void> Function(String raceId)? onDeclineRaceInvite;
+  final void Function(String friendUserId)? onChallengeFriendBack;
 
   const HomeTab({
     super.key,
@@ -78,6 +86,13 @@ class HomeTab extends StatelessWidget {
     this.onOpenProfile,
     this.onAddProfilePhoto,
     this.onDismissProfilePhotoPrompt,
+    this.incomingFriendRequests = 0,
+    this.raceCard,
+    this.onOpenRace,
+    this.onJoinRaceFromCard,
+    this.onAcceptRaceInvite,
+    this.onDeclineRaceInvite,
+    this.onChallengeFriendBack,
   });
 
   @override
@@ -114,6 +129,26 @@ class HomeTab extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _buildHeroSection(context),
+                    if (raceCard != null) ...[
+                      const SizedBox(height: 16),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: RaceOpportunityCard(
+                          data: RaceCardData.fromJson(raceCard!),
+                          onAccept: onAcceptRaceInvite == null
+                              ? null
+                              : (raceId) => onAcceptRaceInvite!(raceId),
+                          onDecline: onDeclineRaceInvite == null
+                              ? null
+                              : (raceId) => onDeclineRaceInvite!(raceId),
+                          onOpenRace: onOpenRace,
+                          onJoinRace: onJoinRaceFromCard == null
+                              ? null
+                              : (raceId) => onJoinRaceFromCard!(raceId),
+                          onChallengeBack: onChallengeFriendBack,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     _SetupPromptsSection(
                       displayName: displayName,
@@ -222,6 +257,7 @@ class HomeTab extends StatelessWidget {
                         imageUrl: authService.profilePhotoUrl,
                         onPressed: onOpenProfile,
                         size: 42,
+                        badgeCount: incomingFriendRequests,
                       ),
                     ),
                     Padding(
