@@ -324,13 +324,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
     try {
       final identityToken = widget.authService.authToken;
-      // TEMP: inner timing logs to narrow down _fetchSteps perf hot spot.
       // Pre-read both HealthKit windows in parallel so we know whether samples
       // will follow before posting /steps. When samples are coming, /steps can
       // skip race-state resolution (the samples endpoint will re-resolve with
       // fresher sample data).
       final now = DateTime.now();
-      final swReads = Stopwatch()..start();
       final results = await Future.wait([
         _healthService.getStepsToday(),
         _healthService.getHourlySteps(
@@ -338,13 +336,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           endTime: now,
         ),
       ]);
-      swReads.stop();
       final stepData = results[0] as StepData;
       final hourlySamples = results[1] as List<StepSampleData>;
-      debugPrint(
-        '[home-refresh]   healthkit reads ${swReads.elapsedMilliseconds}ms '
-        '(${hourlySamples.length} samples)',
-      );
       final stepEntries = [stepData];
       bool syncFailed = false;
 
@@ -362,43 +355,25 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         }
 
         try {
-          final swPush = Stopwatch()..start();
           await pushSteps();
-          swPush.stop();
-          debugPrint('[home-refresh]   POST /steps ${swPush.elapsedMilliseconds}ms');
-        } catch (e, st) {
-          // TEMP: surface the swallowed error so we can see what's failing.
-          debugPrint('[home-refresh]   POST /steps FAILED (attempt 1): $e');
-          debugPrint('[home-refresh]   stack: $st');
+        } catch (_) {
           // Cold-start blip from background → foreground is common.
           // Silently retry once before flagging the sync as stale.
           await Future<void>.delayed(const Duration(seconds: 1));
           try {
-            final swRetry = Stopwatch()..start();
             await pushSteps();
-            swRetry.stop();
-            debugPrint(
-              '[home-refresh]   POST /steps retry ${swRetry.elapsedMilliseconds}ms',
-            );
-          } catch (e2) {
-            debugPrint('[home-refresh]   POST /steps FAILED (attempt 2): $e2');
+          } catch (_) {
             syncFailed = true;
           }
         }
 
         if (!syncFailed && willPostSamples) {
           try {
-            final swSamples = Stopwatch()..start();
             await _backendApiService.recordStepSamples(
               identityToken: identityToken,
               samples: hourlySamples,
             );
-            swSamples.stop();
-            debugPrint(
-              '[home-refresh]   POST /steps/samples ${swSamples.elapsedMilliseconds}ms',
-            );
-          } catch (e) {
-            debugPrint('[home-refresh]   POST /steps/samples FAILED: $e');
+          } catch (_) {
             // Don't fail the main sync if hourly samples fail. Race resolution
             // will catch up on the next refresh because the next /steps call
             // will run with skipRaceResolution=false (no samples to follow) or
@@ -569,33 +544,14 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     await Future.wait([_fetchRaces(), _fetchFriendsSteps()]);
   }
 
-  Future<void> _timed(String label, Future<void> Function() task) async {
-    // TEMP DIAGNOSTIC: timing logs for home pull-to-refresh perf debugging.
-    // Remove once the slow call is identified and optimized.
-    final sw = Stopwatch()..start();
-    try {
-      await task();
-    } finally {
-      sw.stop();
-      debugPrint('[home-refresh] $label ${sw.elapsedMilliseconds}ms');
-    }
-  }
-
   Future<void> _refreshHomeTab() async {
-    final overall = Stopwatch()..start();
     await Future.wait([
-      _timed('_fetchSteps', _fetchSteps),
-      _timed('_fetchLeaderboardHighlights', _fetchLeaderboardHighlights),
-      _timed('_fetchShopCatalog', _fetchShopCatalog),
-      _timed('_fetchRaceCard', _fetchRaceCard),
-      _timed(
-        'StreakChip.refresh',
-        () async =>
-            _streakChipKey.currentState?.refresh() ?? Future<void>.value(),
-      ),
+      _fetchSteps(),
+      _fetchLeaderboardHighlights(),
+      _fetchShopCatalog(),
+      _fetchRaceCard(),
+      _streakChipKey.currentState?.refresh() ?? Future<void>.value(),
     ]);
-    overall.stop();
-    debugPrint('[home-refresh] total ${overall.elapsedMilliseconds}ms');
   }
 
   Future<void> _fetchRaceCard() async {
