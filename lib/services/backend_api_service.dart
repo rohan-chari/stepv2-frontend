@@ -99,11 +99,16 @@ class BackendApiService {
   Future<void> recordSteps({
     required String identityToken,
     required StepData stepData,
+    bool skipRaceResolution = false,
   }) async {
     final response = await _sendJsonRequest(
       method: 'POST',
       path: '/steps',
-      body: {'steps': stepData.steps, 'date': _formatDate(stepData.date)},
+      body: {
+        'steps': stepData.steps,
+        'date': _formatDate(stepData.date),
+        if (skipRaceResolution) 'skipRaceResolution': true,
+      },
       identityToken: identityToken,
     );
 

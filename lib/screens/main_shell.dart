@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import '../config/backend_config.dart';
 import '../models/loadable.dart';
 import '../models/step_data.dart';
+import '../models/step_sample_data.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../services/background_sync_bootstrap_service.dart';
@@ -324,19 +325,38 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     try {
       final identityToken = widget.authService.authToken;
       // TEMP: inner timing logs to narrow down _fetchSteps perf hot spot.
-      final swToday = Stopwatch()..start();
-      final stepEntries = [await _healthService.getStepsToday()];
-      swToday.stop();
-      debugPrint('[home-refresh]   healthkit.today ${swToday.elapsedMilliseconds}ms');
-      final stepData = stepEntries.last;
+      // Pre-read both HealthKit windows in parallel so we know whether samples
+      // will follow before posting /steps. When samples are coming, /steps can
+      // skip race-state resolution (the samples endpoint will re-resolve with
+      // fresher sample data).
+      final now = DateTime.now();
+      final swReads = Stopwatch()..start();
+      final results = await Future.wait([
+        _healthService.getStepsToday(),
+        _healthService.getHourlySteps(
+          startTime: DateTime(now.year, now.month, now.day),
+          endTime: now,
+        ),
+      ]);
+      swReads.stop();
+      final stepData = results[0] as StepData;
+      final hourlySamples = results[1] as List<StepSampleData>;
+      debugPrint(
+        '[home-refresh]   healthkit reads ${swReads.elapsedMilliseconds}ms '
+        '(${hourlySamples.length} samples)',
+      );
+      final stepEntries = [stepData];
       bool syncFailed = false;
 
       if (identityToken != null && identityToken.isNotEmpty) {
+        final willPostSamples = hourlySamples.isNotEmpty;
+
         Future<void> pushSteps() async {
           for (final dailyStep in stepEntries) {
             await _backendApiService.recordSteps(
               identityToken: identityToken,
               stepData: dailyStep,
+              skipRaceResolution: willPostSamples,
             );
           }
         }
@@ -366,32 +386,23 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           }
         }
 
-        if (!syncFailed) {
+        if (!syncFailed && willPostSamples) {
           try {
-            final now = DateTime.now();
-            final swHourly = Stopwatch()..start();
-            final hourlySamples = await _healthService.getHourlySteps(
-              startTime: DateTime(now.year, now.month, now.day),
-              endTime: now,
+            final swSamples = Stopwatch()..start();
+            await _backendApiService.recordStepSamples(
+              identityToken: identityToken,
+              samples: hourlySamples,
             );
-            swHourly.stop();
+            swSamples.stop();
             debugPrint(
-              '[home-refresh]   healthkit.hourly ${swHourly.elapsedMilliseconds}ms (${hourlySamples.length} samples)',
+              '[home-refresh]   POST /steps/samples ${swSamples.elapsedMilliseconds}ms',
             );
-            if (hourlySamples.isNotEmpty) {
-              final swSamples = Stopwatch()..start();
-              await _backendApiService.recordStepSamples(
-                identityToken: identityToken,
-                samples: hourlySamples,
-              );
-              swSamples.stop();
-              debugPrint(
-                '[home-refresh]   POST /steps/samples ${swSamples.elapsedMilliseconds}ms',
-              );
-            }
           } catch (e) {
-            debugPrint('[home-refresh]   hourly block FAILED: $e');
-            // Don't fail the main sync if hourly samples fail
+            debugPrint('[home-refresh]   POST /steps/samples FAILED: $e');
+            // Don't fail the main sync if hourly samples fail. Race resolution
+            // will catch up on the next refresh because the next /steps call
+            // will run with skipRaceResolution=false (no samples to follow) or
+            // be paired with a successful /steps/samples.
           }
         }
       }
