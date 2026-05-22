@@ -346,13 +346,22 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           await pushSteps();
           swPush.stop();
           debugPrint('[home-refresh]   POST /steps ${swPush.elapsedMilliseconds}ms');
-        } catch (_) {
+        } catch (e, st) {
+          // TEMP: surface the swallowed error so we can see what's failing.
+          debugPrint('[home-refresh]   POST /steps FAILED (attempt 1): $e');
+          debugPrint('[home-refresh]   stack: $st');
           // Cold-start blip from background → foreground is common.
           // Silently retry once before flagging the sync as stale.
           await Future<void>.delayed(const Duration(seconds: 1));
           try {
+            final swRetry = Stopwatch()..start();
             await pushSteps();
-          } catch (_) {
+            swRetry.stop();
+            debugPrint(
+              '[home-refresh]   POST /steps retry ${swRetry.elapsedMilliseconds}ms',
+            );
+          } catch (e2) {
+            debugPrint('[home-refresh]   POST /steps FAILED (attempt 2): $e2');
             syncFailed = true;
           }
         }
@@ -380,7 +389,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                 '[home-refresh]   POST /steps/samples ${swSamples.elapsedMilliseconds}ms',
               );
             }
-          } catch (_) {
+          } catch (e) {
+            debugPrint('[home-refresh]   hourly block FAILED: $e');
             // Don't fail the main sync if hourly samples fail
           }
         }
