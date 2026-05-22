@@ -5,14 +5,12 @@ import 'spinning_coin.dart';
 
 class CoinBalanceBadge extends StatefulWidget {
   final int coins;
-  final int heldCoins;
   final double coinSize;
   final VoidCallback? onTap;
 
   const CoinBalanceBadge({
     super.key,
     required this.coins,
-    this.heldCoins = 0,
     this.coinSize = 18,
     this.onTap,
   });
@@ -32,7 +30,7 @@ class _CoinBalanceBadgeState extends State<CoinBalanceBadge> {
   Widget build(BuildContext context) {
     final isTappable = widget.onTap != null;
 
-    final coinRow = Row(
+    final content = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         SpinningCoin(size: widget.coinSize),
@@ -53,39 +51,6 @@ class _CoinBalanceBadgeState extends State<CoinBalanceBadge> {
             shadows: _textShadows,
           ),
         ],
-      ],
-    );
-
-    final content = Wrap(
-      crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: 6,
-      runSpacing: 4,
-      children: [
-        coinRow,
-        if (widget.heldCoins > 0)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [AppColors.pillTerra, AppColors.pillTerraDark],
-              ),
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: AppColors.pillGoldDark, width: 1.2),
-              boxShadow: const [
-                BoxShadow(
-                  color: AppColors.pillTerraShadow,
-                  offset: Offset(0, 2),
-                  blurRadius: 0,
-                ),
-              ],
-            ),
-            child: Text(
-              'HOLD ${widget.heldCoins}',
-              style: PixelText.title(size: 10, color: Colors.white),
-            ),
-          ),
       ],
     );
 

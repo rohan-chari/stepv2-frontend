@@ -363,10 +363,7 @@ class _RacesTabState extends State<RacesTab> {
                   ),
                 ),
               const SizedBox(width: 8),
-              CoinBalanceBadge(
-                coins: widget.authService.coins,
-                heldCoins: widget.authService.heldCoins,
-              ),
+              CoinBalanceBadge(coins: widget.authService.coins),
             ],
           ),
         ),

@@ -378,10 +378,7 @@ class _ProfileTabState extends State<ProfileTab> {
                 ),
               ),
             const SizedBox(width: 8),
-            CoinBalanceBadge(
-              coins: widget.authService.coins,
-              heldCoins: widget.authService.heldCoins,
-            ),
+            CoinBalanceBadge(coins: widget.authService.coins),
           ],
         ),
         const SizedBox(height: 2),

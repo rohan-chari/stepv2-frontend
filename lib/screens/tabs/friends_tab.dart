@@ -638,10 +638,7 @@ class _FriendsTabState extends State<FriendsTab> {
                       ),
                     ),
                   const SizedBox(width: 8),
-                  CoinBalanceBadge(
-                    coins: widget.authService.coins,
-                    heldCoins: widget.authService.heldCoins,
-                  ),
+                  CoinBalanceBadge(coins: widget.authService.coins),
                 ],
               ),
               const SizedBox(height: 2),

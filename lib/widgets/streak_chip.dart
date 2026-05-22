@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../screens/daily_reward_screen.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
+import 'pill_button.dart';
 
 String _todayLocalDate() {
   final now = DateTime.now();
@@ -10,9 +11,9 @@ String _todayLocalDate() {
   return '${now.year}-${two(now.month)}-${two(now.day)}';
 }
 
-/// Compact streak indicator with a flame icon and the current streak day count.
-/// Lives in the home hero (next to the coin badge). Pulses gently when today's
-/// reward has not been claimed yet. Tapping opens [DailyRewardScreen].
+/// Full-width daily-reward button shown inside the home hero. Fetches its own
+/// claim status, pulses gently while unclaimed, and opens [DailyRewardScreen]
+/// on tap. Public [refresh] lets the parent (pull-to-refresh) re-sync.
 class StreakChip extends StatefulWidget {
   const StreakChip({
     super.key,
@@ -27,33 +28,23 @@ class StreakChip extends StatefulWidget {
   State<StreakChip> createState() => StreakChipState();
 }
 
-class StreakChipState extends State<StreakChip>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
-  /// Public entry point for parents (e.g. pull-to-refresh on the home tab).
+class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
   Future<void> refresh() => _refresh();
 
   bool _unclaimed = false;
-  int _currentDay = 0;
   bool _loaded = false;
   String _lastFetchedDate = '';
-
-  late final AnimationController _pulse;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _pulse = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1800),
-    )..repeat(reverse: true);
     _refresh();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _pulse.dispose();
     super.dispose();
   }
 
@@ -81,7 +72,6 @@ class StreakChipState extends State<StreakChip>
       if (!mounted) return;
       setState(() {
         _unclaimed = res['claimedToday'] != true;
-        _currentDay = (res['currentDay'] as num?)?.toInt() ?? 0;
         _loaded = true;
         _lastFetchedDate = localDate;
       });
@@ -113,65 +103,16 @@ class StreakChipState extends State<StreakChip>
   @override
   Widget build(BuildContext context) {
     if (!_loaded) {
-      return const SizedBox(width: 60, height: 30);
+      return const SizedBox(height: 48);
     }
-
-    final displayDay = _currentDay > 0 ? _currentDay : 1;
-    final chip = GestureDetector(
-      onTap: _open,
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: _unclaimed
-              ? const Color(0xFFFF7A2E).withValues(alpha: 0.22)
-              : Colors.white.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: _unclaimed
-                ? const Color(0xFFFFB37A)
-                : Colors.white.withValues(alpha: 0.35),
-            width: 1.25,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '🔥',
-              style: TextStyle(
-                fontSize: 14,
-                color: _unclaimed
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: 0.55),
-              ),
-            ),
-            const SizedBox(width: 4),
-            Text(
-              '$displayDay',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w900,
-                color: Colors.white.withValues(
-                  alpha: _unclaimed ? 1.0 : 0.85,
-                ),
-                height: 1,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (!_unclaimed) return chip;
-
-    return AnimatedBuilder(
-      animation: _pulse,
-      builder: (context, child) {
-        final scale = 1.0 + (_pulse.value * 0.06);
-        return Transform.scale(scale: scale, child: child);
-      },
-      child: chip,
+    return PillButton(
+      label: _unclaimed ? 'CLAIM YOUR DAILY REWARD' : 'DAILY REWARD CLAIMED',
+      icon: _unclaimed
+          ? Icons.card_giftcard_rounded
+          : Icons.check_box_rounded,
+      variant: PillButtonVariant.secondary,
+      fullWidth: true,
+      onPressed: _open,
     );
   }
 }

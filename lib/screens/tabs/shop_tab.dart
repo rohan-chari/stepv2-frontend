@@ -210,10 +210,7 @@ class _ShopTabState extends State<ShopTab> {
               style: PixelText.title(size: 16, color: AppColors.textMid),
             ),
             const Spacer(),
-            CoinBalanceBadge(
-              coins: widget.authService.coins,
-              heldCoins: widget.authService.heldCoins,
-            ),
+            CoinBalanceBadge(coins: widget.authService.coins),
           ],
         ),
         const SizedBox(height: 12),

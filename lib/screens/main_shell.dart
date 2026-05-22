@@ -21,7 +21,6 @@ import '../widgets/error_toast.dart';
 import '../widgets/info_toast.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/streak_chip.dart';
-import '../widgets/sync_stale_chip.dart';
 import '../widgets/trail_sign.dart';
 import '../widgets/wooden_tab_bar.dart';
 import 'start_screen.dart';
@@ -67,7 +66,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   bool _isLoading = false;
   String? _error;
   StepData? _stepData;
-  bool _syncStale = false;
   int? _stepGoal;
   int _incomingFriendRequests = 0;
   String? _displayName;
@@ -386,7 +384,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         _stepData = stepData;
         _isLoading = false;
         _error = null;
-        _syncStale = syncFailed;
       });
 
       _fetchFriendsSteps();
@@ -1115,19 +1112,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         children: [
           Positioned.fill(child: const ArcadePageBackground(showHeader: false)),
 
-          if (_syncStale)
-            Positioned(
-              top: 0,
-              right: 0,
-              child: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 8, right: 12),
-                  child: SyncStaleChip(onTap: _refreshHomeTab),
-                ),
-              ),
-            ),
-
-          Positioned.fill(
+Positioned.fill(
             child: PageView(
               controller: _pageController,
               onPageChanged: (index) {

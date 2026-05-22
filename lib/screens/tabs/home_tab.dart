@@ -275,14 +275,7 @@ class HomeTab extends StatelessWidget {
                                 const SizedBox(width: 8),
                                 CoinBalanceBadge(
                                   coins: authService.coins,
-                                  heldCoins: authService.heldCoins,
                                   coinSize: 16,
-                                ),
-                                const SizedBox(width: 8),
-                                StreakChip(
-                                  key: streakChipKey,
-                                  authService: authService,
-                                  backendApiService: backendApiService,
                                 ),
                               ],
                             ),
@@ -372,6 +365,12 @@ class HomeTab extends StatelessWidget {
                               color: Colors.white.withValues(alpha: 0.82),
                               weight: FontWeight.w700,
                             ),
+                          ),
+                          const SizedBox(height: 14),
+                          StreakChip(
+                            key: streakChipKey,
+                            authService: authService,
+                            backendApiService: backendApiService,
                           ),
                         ],
                       ),
