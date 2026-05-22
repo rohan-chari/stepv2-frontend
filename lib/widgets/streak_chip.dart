@@ -24,11 +24,14 @@ class StreakChip extends StatefulWidget {
   final BackendApiService backendApiService;
 
   @override
-  State<StreakChip> createState() => _StreakChipState();
+  State<StreakChip> createState() => StreakChipState();
 }
 
-class _StreakChipState extends State<StreakChip>
+class StreakChipState extends State<StreakChip>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  /// Public entry point for parents (e.g. pull-to-refresh on the home tab).
+  Future<void> refresh() => _refresh();
+
   bool _unclaimed = false;
   int _currentDay = 0;
   bool _loaded = false;

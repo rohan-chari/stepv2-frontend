@@ -19,6 +19,7 @@ import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/info_toast.dart';
 import '../widgets/pill_button.dart';
+import '../widgets/streak_chip.dart';
 import '../widgets/sync_stale_chip.dart';
 import '../widgets/trail_sign.dart';
 import '../widgets/wooden_tab_bar.dart';
@@ -86,6 +87,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   String _requestedLeaderboardPeriod = 'today';
   int _leaderboardSelectionNonce = 0;
   Timer? _foregroundPollTimer;
+  final GlobalKey<StreakChipState> _streakChipKey = GlobalKey<StreakChipState>();
   static const Duration _foregroundPollInterval = Duration(minutes: 5);
 
   void _handleAuthServiceChanged() {
@@ -529,13 +531,33 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     await Future.wait([_fetchRaces(), _fetchFriendsSteps()]);
   }
 
+  Future<void> _timed(String label, Future<void> Function() task) async {
+    // TEMP DIAGNOSTIC: timing logs for home pull-to-refresh perf debugging.
+    // Remove once the slow call is identified and optimized.
+    final sw = Stopwatch()..start();
+    try {
+      await task();
+    } finally {
+      sw.stop();
+      debugPrint('[home-refresh] $label ${sw.elapsedMilliseconds}ms');
+    }
+  }
+
   Future<void> _refreshHomeTab() async {
+    final overall = Stopwatch()..start();
     await Future.wait([
-      _fetchSteps(),
-      _fetchLeaderboardHighlights(),
-      _fetchShopCatalog(),
-      _fetchRaceCard(),
+      _timed('_fetchSteps', _fetchSteps),
+      _timed('_fetchLeaderboardHighlights', _fetchLeaderboardHighlights),
+      _timed('_fetchShopCatalog', _fetchShopCatalog),
+      _timed('_fetchRaceCard', _fetchRaceCard),
+      _timed(
+        'StreakChip.refresh',
+        () async =>
+            _streakChipKey.currentState?.refresh() ?? Future<void>.value(),
+      ),
     ]);
+    overall.stop();
+    debugPrint('[home-refresh] total ${overall.elapsedMilliseconds}ms');
   }
 
   Future<void> _fetchRaceCard() async {
@@ -1120,6 +1142,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
               },
               children: [
                 HomeTab(
+                  streakChipKey: _streakChipKey,
                   incomingFriendRequests: _incomingFriendRequests,
                   stepData: _stepData,
                   isLoading: _isLoading,

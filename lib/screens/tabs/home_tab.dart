@@ -9,7 +9,7 @@ import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/coin_balance_badge.dart';
-import '../../widgets/streak_chip.dart';
+import '../../widgets/streak_chip.dart' show StreakChip, StreakChipState;
 import '../../widgets/home_chrome.dart';
 import '../../widgets/home_course_track.dart' show CapybaraCustomizationPreview;
 import '../../widgets/loading_skeleton.dart';
@@ -48,6 +48,7 @@ class HomeTab extends StatelessWidget {
   final Future<bool> Function()? onDismissProfilePhotoPrompt;
   final int incomingFriendRequests;
   final Map<String, dynamic>? raceCard;
+  final GlobalKey<StreakChipState>? streakChipKey;
   final void Function(String raceId)? onOpenRace;
   final Future<void> Function(String raceId)? onJoinRaceFromCard;
   final Future<void> Function(String raceId)? onAcceptRaceInvite;
@@ -85,6 +86,7 @@ class HomeTab extends StatelessWidget {
     this.onDismissProfilePhotoPrompt,
     this.incomingFriendRequests = 0,
     this.raceCard,
+    this.streakChipKey,
     this.onOpenRace,
     this.onJoinRaceFromCard,
     this.onAcceptRaceInvite,
@@ -278,6 +280,7 @@ class HomeTab extends StatelessWidget {
                                 ),
                                 const SizedBox(width: 8),
                                 StreakChip(
+                                  key: streakChipKey,
                                   authService: authService,
                                   backendApiService: backendApiService,
                                 ),
