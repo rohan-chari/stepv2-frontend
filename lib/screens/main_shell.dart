@@ -323,7 +323,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
     try {
       final identityToken = widget.authService.authToken;
+      // TEMP: inner timing logs to narrow down _fetchSteps perf hot spot.
+      final swToday = Stopwatch()..start();
       final stepEntries = [await _healthService.getStepsToday()];
+      swToday.stop();
+      debugPrint('[home-refresh]   healthkit.today ${swToday.elapsedMilliseconds}ms');
       final stepData = stepEntries.last;
       bool syncFailed = false;
 
@@ -338,7 +342,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         }
 
         try {
+          final swPush = Stopwatch()..start();
           await pushSteps();
+          swPush.stop();
+          debugPrint('[home-refresh]   POST /steps ${swPush.elapsedMilliseconds}ms');
         } catch (_) {
           // Cold-start blip from background → foreground is common.
           // Silently retry once before flagging the sync as stale.
@@ -353,14 +360,24 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         if (!syncFailed) {
           try {
             final now = DateTime.now();
+            final swHourly = Stopwatch()..start();
             final hourlySamples = await _healthService.getHourlySteps(
               startTime: DateTime(now.year, now.month, now.day),
               endTime: now,
             );
+            swHourly.stop();
+            debugPrint(
+              '[home-refresh]   healthkit.hourly ${swHourly.elapsedMilliseconds}ms (${hourlySamples.length} samples)',
+            );
             if (hourlySamples.isNotEmpty) {
+              final swSamples = Stopwatch()..start();
               await _backendApiService.recordStepSamples(
                 identityToken: identityToken,
                 samples: hourlySamples,
+              );
+              swSamples.stop();
+              debugPrint(
+                '[home-refresh]   POST /steps/samples ${swSamples.elapsedMilliseconds}ms',
               );
             }
           } catch (_) {
