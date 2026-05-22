@@ -8,6 +8,7 @@ import '../styles.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/pill_button.dart';
+import '../tutorial/tutorial_screen.dart';
 import '../widgets/wooden_tab_bar.dart';
 import 'main_shell.dart';
 
@@ -86,10 +87,19 @@ class _StepGoalOnboardingScreenState extends State<StepGoalOnboardingScreen> {
 
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (context) => MainShell(
-          authService: widget.authService,
-          notificationService: widget.notificationService,
+        builder: (context) => TutorialScreen(
+          onComplete: () {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (_) => MainShell(
+                  authService: widget.authService,
+                  notificationService: widget.notificationService,
+                ),
+              ),
+            );
+          },
         ),
+        fullscreenDialog: true,
       ),
     );
   }

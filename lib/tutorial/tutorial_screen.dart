@@ -74,7 +74,11 @@ const List<TutorialStep> _steps = [
 ];
 
 class TutorialScreen extends StatefulWidget {
-  const TutorialScreen({super.key});
+  const TutorialScreen({super.key, this.onComplete});
+
+  /// Called when the user finishes or skips the tutorial. If null, the screen
+  /// is simply popped.
+  final VoidCallback? onComplete;
 
   @override
   State<TutorialScreen> createState() => _TutorialScreenState();
@@ -131,7 +135,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
 
   void _next() {
     if (_index == _steps.length - 1) {
-      Navigator.of(context).pop();
+      _finish();
       return;
     }
     setState(() {
@@ -151,7 +155,15 @@ class _TutorialScreenState extends State<TutorialScreen> {
   }
 
   void _skip() {
-    Navigator.of(context).pop();
+    _finish();
+  }
+
+  void _finish() {
+    if (widget.onComplete != null) {
+      widget.onComplete!();
+    } else {
+      Navigator.of(context).pop();
+    }
   }
 
   @override

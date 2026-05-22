@@ -8,6 +8,7 @@ import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../services/notification_service.dart';
 import '../../styles.dart';
+import '../../tutorial/tutorial_screen.dart';
 import '../../widgets/arcade_page.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/coin_balance_badge.dart';
@@ -737,6 +738,23 @@ class _SettingsSheetState extends State<_SettingsSheet> {
             ),
             const SizedBox(height: 10),
           ],
+          PillButton(
+            label: 'HOW IT WORKS',
+            variant: PillButtonVariant.secondary,
+            fontSize: 13,
+            fullWidth: true,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const TutorialScreen(),
+                  fullscreenDialog: true,
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 10),
           PillButton(
             label: 'SUPPORT',
             variant: PillButtonVariant.secondary,

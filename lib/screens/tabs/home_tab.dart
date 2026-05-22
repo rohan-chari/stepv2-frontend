@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -9,15 +8,13 @@ import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../widgets/app_avatar.dart';
-import '../../widgets/daily_reward_trigger.dart';
 import '../../widgets/coin_balance_badge.dart';
-import '../../widgets/goal_track.dart';
+import '../../widgets/streak_chip.dart';
 import '../../widgets/home_chrome.dart';
-import '../../widgets/home_course_track.dart';
+import '../../widgets/home_course_track.dart' show CapybaraCustomizationPreview;
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/race_opportunity_card.dart';
 import '../../widgets/spinning_coin.dart';
-import '../../tutorial/tutorial_screen.dart';
 import '../display_name_screen.dart';
 
 class HomeTab extends StatelessWidget {
@@ -218,21 +215,13 @@ class HomeTab extends StatelessWidget {
 
     final steps = stepData?.steps ?? 0;
     final goal = stepGoal ?? 0;
-    final progress = goal > 0 ? (steps / goal).clamp(0.0, 1.0) : 0.0;
     final stepsStr = _formatNumber(steps);
     final goalStr = goal > 0 ? _formatCompact(goal) : null;
-    final remainingSteps = goal > 0 ? math.max(goal - steps, 0) : 0;
     final friendsAhead = friendsSteps.where((friend) {
       final friendSteps = (friend['steps'] as num?)?.toInt() ?? 0;
       return friendSteps > steps;
     }).length;
-    final friendsOnTrack = friendsSteps.where((friend) {
-      final friendGoal = friend['stepGoal'] as int?;
-      return friendGoal != null && friendGoal > 0;
-    }).length;
-    final friendsLoading = friendsStepsState?.shouldShowInitialLoading == true;
     final viewportHeight = MediaQuery.of(context).size.height;
-    final trackHeight = viewportHeight < 760 ? 226.0 : 268.0;
 
     return HomePanel(
       padding: EdgeInsets.zero,
@@ -287,6 +276,11 @@ class HomeTab extends StatelessWidget {
                                   heldCoins: authService.heldCoins,
                                   coinSize: 16,
                                 ),
+                                const SizedBox(width: 8),
+                                StreakChip(
+                                  authService: authService,
+                                  backendApiService: backendApiService,
+                                ),
                               ],
                             ),
                           ),
@@ -334,6 +328,30 @@ class HomeTab extends StatelessWidget {
                                       weight: FontWeight.w800,
                                     ),
                                   ),
+                                  const SizedBox(width: 6),
+                                  GestureDetector(
+                                    onTap: onSetStepGoal,
+                                    behavior: HitTestBehavior.opaque,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(3),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: Colors.white.withValues(
+                                            alpha: 0.7,
+                                          ),
+                                          width: 1,
+                                        ),
+                                      ),
+                                      child: Icon(
+                                        Icons.edit_rounded,
+                                        size: 11,
+                                        color: Colors.white.withValues(
+                                          alpha: 0.9,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                                 ],
                               ],
                             ),
@@ -365,105 +383,7 @@ class HomeTab extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                HomePill(
-                  label: _goalMomentumLabel(
-                    goal: goal,
-                    remainingSteps: remainingSteps,
-                    steps: steps,
-                  ),
-                  icon: goal > 0 && remainingSteps == 0
-                      ? Icons.check_circle_rounded
-                      : Icons.flag_rounded,
-                  fullWidth: true,
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: HomeButton(
-                        label: goal > 0 ? 'EDIT GOAL' : 'SET GOAL',
-                        icon: Icons.tune_rounded,
-                        onPressed: onSetStepGoal,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: HomeButton(
-                        label: 'HOW TO',
-                        icon: Icons.help_outline_rounded,
-                        isPrimary: false,
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const TutorialScreen(),
-                              fullscreenDialog: true,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                DailyRewardTrigger(
-                  authService: authService,
-                  backendApiService: backendApiService,
-                ),
-                if (goal > 0) ...[
-                  const SizedBox(height: 14),
-                  _GoalProgressBar(
-                    progress: progress,
-                    status: remainingSteps == 0
-                        ? 'Goal complete'
-                        : '${_formatNumber(remainingSteps)} to go',
-                  ),
-                  const SizedBox(height: 22),
-                  Row(
-                    children: [
-                      Text('Step goal race', style: HomeText.title(size: 22)),
-                      const Spacer(),
-                      Flexible(
-                        child: Text(
-                          _goalTrackCaption(friendsOnTrack),
-                          textAlign: TextAlign.right,
-                          style: HomeText.body(
-                            size: 13,
-                            color: HomeColors.muted,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  if (friendsLoading)
-                    _HomeGoalRaceSkeleton(height: trackHeight)
-                  else
-                    HomeCourseTrack(
-                      height: trackHeight,
-                      goalSteps: goal,
-                      runners: [
-                        GoalTrackRunner(
-                          name: displayName ?? 'You',
-                          progress: progress,
-                          isUser: true,
-                          profilePhotoUrl: authService.profilePhotoUrl,
-                          accessories: equippedAccessories,
-                        ),
-                        for (final friend in friendsSteps)
-                          GoalTrackRunner(
-                            name: friend['displayName'] as String? ?? '???',
-                            progress: _friendGoalProgress(friend),
-                            profilePhotoUrl:
-                                friend['profilePhotoUrl'] as String?,
-                            accessories:
-                                (friend['accessories'] as List?)
-                                    ?.cast<Map<String, dynamic>>() ??
-                                const [],
-                          ),
-                      ],
-                    ),
-                ] else ...[
-                  const SizedBox(height: 14),
+                if (goal <= 0) ...[
                   HomeInsetPanel(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -624,38 +544,6 @@ class HomeTab extends StatelessWidget {
     return 'Clean pace so far. You are tracking toward your target.';
   }
 
-  String _goalMomentumLabel({
-    required int goal,
-    required int remainingSteps,
-    required int steps,
-  }) {
-    if (goal <= 0) {
-      return 'Set your first daily goal';
-    }
-    if (remainingSteps == 0) {
-      if (steps >= goal * 2) return 'Double reward unlocked';
-      return 'Daily goal complete';
-    }
-    return '${_formatNumber(remainingSteps)} steps left today';
-  }
-
-  String _goalTrackCaption(int friendsOnTrack) {
-    if (friendsOnTrack == 0) {
-      return 'Compare with friends\' goals';
-    }
-    if (friendsOnTrack == 1) {
-      return 'You vs 1 friend\'s goal';
-    }
-    return 'You vs $friendsOnTrack friends\' goals';
-  }
-
-  static double _friendGoalProgress(Map<String, dynamic> friend) {
-    final steps = (friend['steps'] as num?)?.toInt() ?? 0;
-    final goal = friend['stepGoal'] as int?;
-    if (goal != null && goal > 0) return (steps / goal).clamp(0.0, 1.0);
-    return 0.0;
-  }
-
   static String _formatNumber(int n) {
     final s = n.toString();
     final buf = StringBuffer();
@@ -671,58 +559,6 @@ class HomeTab extends StatelessWidget {
       return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}k';
     }
     return '$n';
-  }
-}
-
-class _GoalProgressBar extends StatelessWidget {
-  const _GoalProgressBar({required this.progress, required this.status});
-
-  final double progress;
-  final String status;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text(
-              'GOAL PROGRESS',
-              style: HomeText.label(color: HomeColors.muted),
-            ),
-            const Spacer(),
-            Text(
-              status,
-              style: HomeText.body(size: 12, color: HomeColors.muted),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(0),
-          child: Container(
-            height: 14,
-            color: HomeColors.surfaceMuted,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: FractionallySizedBox(
-                widthFactor: progress.clamp(0.0, 1.0),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: HomeColors.gold,
-                    border: Border.all(
-                      color: HomeColors.clay.withValues(alpha: 0.5),
-                      width: 2,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
   }
 }
 
@@ -1410,49 +1246,6 @@ class _ClimbingBoardsBadge extends StatelessWidget {
       label: label,
       backgroundColor: HomeColors.gold,
       foregroundColor: HomeColors.ink,
-    );
-  }
-}
-
-class _HomeGoalRaceSkeleton extends StatelessWidget {
-  const _HomeGoalRaceSkeleton({required this.height});
-
-  final double height;
-
-  @override
-  Widget build(BuildContext context) {
-    return LoadingSkeleton(
-      child: Container(
-        height: height,
-        decoration: BoxDecoration(
-          color: HomeColors.sage.withValues(alpha: 0.10),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: HomeColors.line.withValues(alpha: 0.16)),
-        ),
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SkeletonLine(width: 150, height: 14),
-            const Spacer(),
-            SkeletonBox(
-              width: double.infinity,
-              height: 24,
-              radius: 12,
-              color: HomeColors.sage.withValues(alpha: 0.16),
-            ),
-            const SizedBox(height: 20),
-            const Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                SkeletonCircle(size: 40),
-                SkeletonCircle(size: 34),
-                SkeletonCircle(size: 34),
-              ],
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
