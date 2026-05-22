@@ -12,11 +12,13 @@ import '../widgets/retro_card.dart';
 class CreateRaceScreen extends StatefulWidget {
   final AuthService authService;
   final BackendApiService backendApiService;
+  final List<String> presetInviteeIds;
 
   CreateRaceScreen({
     super.key,
     required this.authService,
     BackendApiService? backendApiService,
+    this.presetInviteeIds = const [],
   }) : backendApiService = backendApiService ?? BackendApiService();
 
   @override
@@ -105,6 +107,21 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
         isPublic: _isPublic,
         maxParticipants: _maxParticipants,
       );
+
+      final createdRace = result['race'] as Map<String, dynamic>?;
+      final createdRaceId = createdRace?['id'] as String?;
+      if (widget.presetInviteeIds.isNotEmpty && createdRaceId != null) {
+        try {
+          await widget.backendApiService.inviteToRace(
+            identityToken: token,
+            raceId: createdRaceId,
+            inviteeIds: widget.presetInviteeIds,
+          );
+        } catch (_) {
+          // Preset-invite send failure shouldn't block race creation. User can
+          // re-invite from the race detail screen.
+        }
+      }
 
       final user = await widget.backendApiService.fetchMe(identityToken: token);
       await widget.authService.updateCoins(

@@ -7,7 +7,7 @@ import 'home_chrome.dart';
 import 'pill_button.dart';
 
 const _inviteShareMessage =
-    "Race me on Bara — daily step competitions with friends. https://apps.apple.com/app/id000000";
+    "Race me on Bara — daily step challenges with friends. https://apps.apple.com/us/app/bara-step-challenges/id6760504694";
 
 enum RaceCardState {
   pendingInvite,
@@ -179,6 +179,10 @@ class _PendingInviteCardState extends State<_PendingInviteCard>
     final durationHours = (widget.data['durationHours'] as num?)?.toInt() ?? 0;
     final participantCount =
         (widget.data['participantCount'] as num?)?.toInt() ?? 0;
+    final expiresAt = DateTime.tryParse(
+      widget.data['expiresAt'] as String? ?? '',
+    );
+    final expiresText = _formatTimeLeft(expiresAt);
 
     final detailLine =
         "${_formatDuration(durationHours)} · ${_formatSteps(targetSteps)} steps total · $participantCount racers";
@@ -280,6 +284,19 @@ class _PendingInviteCardState extends State<_PendingInviteCard>
               ),
             ],
           ),
+          if (expiresText != null) ...[
+            const SizedBox(height: 10),
+            Center(
+              child: Text(
+                expiresText,
+                style: HomeText.body(
+                  size: 11,
+                  color: HomeColors.lineSoft,
+                  weight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -724,4 +741,19 @@ String _formatRelative(DateTime when) {
   if (hours < 1) return 'in ${diff.inMinutes}m';
   if (hours < 24) return 'in ${hours}h';
   return 'in ${diff.inDays}d';
+}
+
+String? _formatTimeLeft(DateTime? expiresAt) {
+  if (expiresAt == null) return null;
+  final diff = expiresAt.difference(DateTime.now());
+  if (diff.isNegative || diff.inSeconds == 0) {
+    return 'Invite expired';
+  }
+  if (diff.inHours < 1) {
+    return '${diff.inMinutes}m left to respond';
+  }
+  if (diff.inHours < 24) {
+    return '${diff.inHours}h left to respond';
+  }
+  return '${diff.inDays}d left to respond';
 }

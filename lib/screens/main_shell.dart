@@ -619,12 +619,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   void _challengeFriendBack(String friendUserId) {
-    // v1: just opens create-race; friend pre-selection can be wired up later.
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => CreateRaceScreen(
           authService: widget.authService,
           backendApiService: _backendApiService,
+          presetInviteeIds: [friendUserId],
         ),
       ),
     );
