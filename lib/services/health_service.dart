@@ -13,11 +13,6 @@ class HealthService {
   bool _authorized = false;
   bool get isAuthorized => _authorized;
 
-  String? _nonEmptyString(String? value) {
-    if (value == null || value.isEmpty) return null;
-    return value;
-  }
-
   /// Loads persisted health auth state. Returns true if previously authorized.
   Future<bool> restoreHealthAuthState() async {
     final prefs = await SharedPreferences.getInstance();
@@ -98,37 +93,49 @@ class HealthService {
     required DateTime startTime,
     required DateTime endTime,
   }) async {
-    final dataPoints = await _health.getHealthDataFromTypes(
-      types: [HealthDataType.STEPS],
-      startTime: startTime,
-      endTime: endTime,
-      recordingMethodsToFilter: const [RecordingMethod.manual],
+    // Bucket per hour and ask HealthKit for the aggregated total in each
+    // bucket. getTotalStepsInInterval is backed by HKStatisticsQuery with
+    // cumulativeSum, which dedupes across sources (iPhone + Watch + Oura +
+    // Garmin all reporting the same walk count once, not N times).
+    final samples = <StepSampleData>[];
+    var bucketStart = DateTime(
+      startTime.year,
+      startTime.month,
+      startTime.day,
+      startTime.hour,
     );
+    if (bucketStart.isBefore(startTime)) {
+      bucketStart = startTime;
+    }
 
-    // Remove duplicates (e.g. from multiple sources like Apple Watch + iPhone)
-    final unique = _health.removeDuplicates(dataPoints);
+    while (bucketStart.isBefore(endTime)) {
+      final nextHour = DateTime(
+        bucketStart.year,
+        bucketStart.month,
+        bucketStart.day,
+        bucketStart.hour,
+      ).add(const Duration(hours: 1));
+      final bucketEnd = nextHour.isBefore(endTime) ? nextHour : endTime;
 
-    return unique
-        .where(
-          (dp) =>
-              dp.value is NumericHealthValue &&
-              (dp.value as NumericHealthValue).numericValue > 0,
-        )
-        .map(
-          (dp) => StepSampleData(
-            periodStart: dp.dateFrom.toUtc(),
-            periodEnd: dp.dateTo.toUtc(),
-            steps: (dp.value as NumericHealthValue).numericValue.toInt(),
-            sourceName: _nonEmptyString(dp.sourceName),
-            sourceId: _nonEmptyString(dp.sourceId),
-            sourceDeviceId: _nonEmptyString(dp.sourceDeviceId),
-            deviceModel: _nonEmptyString(dp.deviceModel),
-            recordingMethod: dp.recordingMethod.name,
-            metadata: dp.metadata == null
-                ? null
-                : Map<String, dynamic>.from(dp.metadata!),
+      final steps = await _health.getTotalStepsInInterval(
+        bucketStart,
+        bucketEnd,
+        includeManualEntry: false,
+      );
+
+      if (steps != null && steps > 0) {
+        samples.add(
+          StepSampleData(
+            periodStart: bucketStart.toUtc(),
+            periodEnd: bucketEnd.toUtc(),
+            steps: steps,
           ),
-        )
-        .toList();
+        );
+      }
+
+      bucketStart = bucketEnd;
+    }
+
+    return samples;
   }
 }
