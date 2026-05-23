@@ -45,7 +45,7 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
 
   static const _durationOptions = [3, 5, 7, 14];
   static const _stepPresets = [25000, 50000, 100000, 250000];
-  static const _intervalPresets = [1000, 2000, 3000, 4000, 5000, 10000, 25000];
+  static const _intervalPresets = [2000, 3000, 4000, 5000, 10000, 25000];
   static const _maxParticipantsPresets = [5, 10, 25, 50, 100];
   static const _payoutOptions = [
     ('WINNER TAKE ALL', 'WINNER_TAKES_ALL'),
