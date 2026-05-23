@@ -21,6 +21,7 @@ import '../widgets/powerup_icon.dart';
 import '../widgets/spinning_coin.dart';
 import '../widgets/spinning_crate.dart';
 import '../widgets/game_container.dart';
+import '../widgets/friend_request_sheet.dart';
 import '../widgets/leaderboard_plank.dart';
 import '../widgets/loading_skeleton.dart';
 import '../widgets/race_finishers_banner.dart';
@@ -2717,7 +2718,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             .toList() ??
         [];
 
-    return LeaderboardPlank(
+    final plank = LeaderboardPlank(
       rank: rank,
       name: name,
       profilePhotoUrl: p['profilePhotoUrl'] as String?,
@@ -2731,6 +2732,21 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         for (final e in activeEffects)
           _EffectIconWithTooltip(type: e['type'] as String? ?? ''),
       ],
+    );
+
+    // Tap a non-self, non-stealthed runner to open a friend-request sheet.
+    if (isMe || isStealthed || userId.isEmpty) return plank;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => showFriendRequestSheet(
+        context: context,
+        authService: widget.authService,
+        backendApiService: _api,
+        userId: userId,
+        displayName: name,
+        profilePhotoUrl: p['profilePhotoUrl'] as String?,
+      ),
+      child: plank,
     );
   }
 

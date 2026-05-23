@@ -19,7 +19,7 @@ class RacesTab extends StatefulWidget {
   final Map<String, dynamic>? racesData;
   final Loadable<Map<String, dynamic>>? racesState;
   final List<Map<String, dynamic>> friendsSteps;
-  final VoidCallback onRacesChanged;
+  final Future<void> Function() onRacesChanged;
   final Future<void> Function()? onRefresh;
   final String? displayName;
   final VoidCallback? onOpenProfile;
@@ -98,11 +98,13 @@ class _RacesTabState extends State<RacesTab> {
                 CreateRaceScreen(authService: widget.authService),
           ),
         )
-        .then((race) {
-          if (race != null && mounted) {
-            widget.onRacesChanged();
-            _navigateToRaceDetail(race['id'] as String);
-          }
+        .then((race) async {
+          if (race == null || !mounted) return;
+          // Refetch the races list before opening detail so a back-out from
+          // detail lands on a fresh list that includes the new race.
+          await widget.onRacesChanged();
+          if (!mounted) return;
+          _navigateToRaceDetail(race['id'] as String);
         });
   }
 

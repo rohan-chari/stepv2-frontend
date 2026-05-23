@@ -102,7 +102,7 @@ class _ProfileTabState extends State<ProfileTab> {
     );
     if (result == true && mounted) {
       widget.onSettingsChanged();
-      _statsKey.currentState?.loadStats();
+      await _refreshAfterEdit();
     }
   }
 
@@ -113,8 +113,25 @@ class _ProfileTabState extends State<ProfileTab> {
     await _statsKey.currentState?.loadStats();
   }
 
-  void _openSettings() {
-    showModalBottomSheet(
+  Future<void> _refreshAfterEdit() async {
+    if (!mounted) return;
+    await _handleRefresh();
+  }
+
+  Future<void> _handleAddProfilePhoto() async {
+    if (widget.onAddProfilePhoto == null) return;
+    await widget.onAddProfilePhoto!.call();
+    await _refreshAfterEdit();
+  }
+
+  Future<void> _handleRemoveProfilePhoto() async {
+    if (widget.onRemoveProfilePhoto == null) return;
+    await widget.onRemoveProfilePhoto!.call();
+    await _refreshAfterEdit();
+  }
+
+  Future<void> _openSettings() async {
+    await showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.parchment,
       shape: const RoundedRectangleBorder(
@@ -127,6 +144,9 @@ class _ProfileTabState extends State<ProfileTab> {
         onShowStepGoalDialog: _showStepGoalDialog,
       ),
     );
+    // After the settings sheet closes, refetch so any edits inside it
+    // (e.g. display name change) are reflected on the profile page.
+    await _refreshAfterEdit();
   }
 
   static String _formatNumber(int n) {
@@ -246,8 +266,7 @@ class _ProfileTabState extends State<ProfileTab> {
                                     horizontal: 12,
                                     vertical: 10,
                                   ),
-                                  onPressed: () =>
-                                      widget.onAddProfilePhoto?.call(),
+                                  onPressed: _handleAddProfilePhoto,
                                 ),
                               ),
                               if (widget.authService.profilePhotoUrl !=
@@ -262,8 +281,7 @@ class _ProfileTabState extends State<ProfileTab> {
                                       horizontal: 12,
                                       vertical: 10,
                                     ),
-                                    onPressed: () =>
-                                        widget.onRemoveProfilePhoto?.call(),
+                                    onPressed: _handleRemoveProfilePhoto,
                                   ),
                                 ),
                               ],
