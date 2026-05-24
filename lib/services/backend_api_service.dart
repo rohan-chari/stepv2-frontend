@@ -85,6 +85,26 @@ class BackendApiService {
     return payload;
   }
 
+  Future<Map<String, dynamic>> signInAsReviewer({
+    required String email,
+    required String password,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/auth/review',
+      body: {'email': email, 'password': password},
+    );
+
+    final payload = await _decodeJsonResponse(response);
+    final user = payload['user'];
+
+    if (user is! Map<String, dynamic>) {
+      throw const ApiException('Something went wrong. Please try again.');
+    }
+
+    return payload;
+  }
+
   Future<Map<String, dynamic>> refreshSessionToken({
     required String authToken,
   }) async {

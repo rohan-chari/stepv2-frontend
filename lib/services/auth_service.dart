@@ -131,6 +131,38 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  /// Reviewer bypass: signs in via the backend /auth/review endpoint using
+  /// the email + password provided to Apple's review team. No Apple Sign-In
+  /// involved. Mirrors the same session-state effects as signInWithApple.
+  Future<bool> signInAsReviewer({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final response = await _backendApiService.signInAsReviewer(
+        email: email,
+        password: password,
+      );
+
+      final backendUser = response['user'] as Map<String, dynamic>;
+
+      _identityToken = null;
+      _userIdentifier = null;
+      _backendUserId = backendUser['id'] as String?;
+      _sessionToken = response['sessionToken'] as String?;
+      applyBackendUser(backendUser);
+      _lastErrorMessage = null;
+
+      await _persist();
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _lastErrorMessage = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<void> updateStepGoal(int? stepGoal) async {
     _stepGoal = stepGoal;
     final prefs = await SharedPreferences.getInstance();
