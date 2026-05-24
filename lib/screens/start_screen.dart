@@ -26,10 +26,10 @@ class _StartScreenState extends State<StartScreen> {
   final AuthService _authService = AuthService();
   bool _isSigningIn = false;
 
-  // Hidden 5-tap-in-3s gesture on the top-right corner opens a reviewer
+  // Hidden 6-tap-in-3s gesture on the "Bara" title opens a reviewer
   // sign-in modal. Apple reviewers are given the gesture + credentials in
   // App Store Connect; real users won't trigger it accidentally.
-  static const int _reviewerTapTarget = 5;
+  static const int _reviewerTapTarget = 6;
   static const Duration _reviewerTapWindow = Duration(seconds: 3);
   final List<DateTime> _reviewerTapTimestamps = [];
 
@@ -37,7 +37,7 @@ class _StartScreenState extends State<StartScreen> {
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
 
-  void _onReviewerCornerTap() {
+  void _onReviewerTitleTap() {
     final now = DateTime.now();
     _reviewerTapTimestamps
       ..add(now)
@@ -140,29 +140,13 @@ class _StartScreenState extends State<StartScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
-        children: [
-          ArcadePageBackground(
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: _buildContent(),
-              ),
-            ),
+      body: ArcadePageBackground(
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: _buildContent(),
           ),
-          // Invisible tap target for the reviewer-login gesture (top-right corner).
-          Positioned(
-            top: 0,
-            right: 0,
-            child: SafeArea(
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: _onReviewerCornerTap,
-                child: const SizedBox(width: 64, height: 64),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -171,12 +155,16 @@ class _StartScreenState extends State<StartScreen> {
     return Column(
       children: [
         const Spacer(flex: 2),
-        Text(
-          'Bara',
-          style: PixelText.title(
-            size: 48,
-            color: AppColors.textDark,
-          ).copyWith(shadows: _textShadows),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _onReviewerTitleTap,
+          child: Text(
+            'Bara',
+            style: PixelText.title(
+              size: 48,
+              color: AppColors.textDark,
+            ).copyWith(shadows: _textShadows),
+          ),
         ),
         const SizedBox(height: 8),
         Text(
