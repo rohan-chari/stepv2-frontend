@@ -29,7 +29,6 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
   final _nameController = TextEditingController();
   final _stepsController = TextEditingController();
   final _buyInController = TextEditingController(text: '100');
-  int _selectedDuration = 7;
   bool _isCreating = false;
   bool _powerupsEnabled = false;
   int _powerupInterval = 5000;
@@ -43,7 +42,6 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
 
-  static const _durationOptions = [3, 5, 7, 14];
   static const _stepPresets = [25000, 50000, 100000, 250000];
   static const _intervalPresets = [2000, 3000, 4000, 5000, 10000, 25000];
   static const _maxParticipantsPresets = [5, 10, 25, 50, 100];
@@ -99,7 +97,6 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
         identityToken: token,
         name: name,
         targetSteps: steps,
-        maxDurationDays: _selectedDuration,
         powerupsEnabled: _powerupsEnabled,
         powerupStepInterval: _powerupsEnabled ? _powerupInterval : null,
         buyInAmount: _buyInEnabled ? _buyInAmount : 0,
@@ -293,61 +290,6 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
                                       style: PixelText.title(
                                         size: 13,
                                         color: AppColors.textDark,
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Duration
-                      RetroCard(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'DURATION',
-                              style: PixelText.title(
-                                size: 13,
-                                color: AppColors.textMid,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Row(
-                              children: _durationOptions.map((days) {
-                                final selected = _selectedDuration == days;
-                                return Expanded(
-                                  child: GestureDetector(
-                                    onTap: () => setState(
-                                      () => _selectedDuration = days,
-                                    ),
-                                    child: Container(
-                                      margin: const EdgeInsets.symmetric(
-                                        horizontal: 3,
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 10,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: selected
-                                            ? AppColors.pillGreenDark
-                                            : AppColors.parchmentDark,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      alignment: Alignment.center,
-                                      child: Text(
-                                        '${days}d',
-                                        style: PixelText.title(
-                                          size: 15,
-                                          color: selected
-                                              ? Colors.white
-                                              : AppColors.textDark,
-                                        ),
                                       ),
                                     ),
                                   ),

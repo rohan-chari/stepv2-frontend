@@ -99,7 +99,7 @@ const _powerupEntries = [
   (
     type: 'CAMPFIRE_REST',
     name: 'Campfire Rest',
-    description: 'Freeze briefly, then get a step multiplier',
+    description: 'Freeze for 30 min, then multiply steps for up to 90 min',
   ),
   (
     type: 'TRAIL_MAGNET',

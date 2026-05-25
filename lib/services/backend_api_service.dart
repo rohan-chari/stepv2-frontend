@@ -560,7 +560,6 @@ class BackendApiService {
     required String identityToken,
     required String name,
     required int targetSteps,
-    int maxDurationDays = 7,
     bool powerupsEnabled = false,
     int? powerupStepInterval,
     int buyInAmount = 0,
@@ -571,7 +570,6 @@ class BackendApiService {
     final body = <String, dynamic>{
       'name': name,
       'targetSteps': targetSteps,
-      'maxDurationDays': maxDurationDays,
       'buyInAmount': buyInAmount,
       'payoutPreset': payoutPreset,
       'isPublic': isPublic,

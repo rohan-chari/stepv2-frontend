@@ -214,7 +214,7 @@ class _StepGoalScreenState extends State<StepGoalScreen> {
                                         'Minimum: 5,000 steps',
                                         style: PixelText.body(
                                           size: 12,
-                                          color: AppColors.textMid,
+                                          color: AppColors.parchmentLight,
                                         ).copyWith(shadows: _textShadows),
                                         textAlign: TextAlign.center,
                                       ),

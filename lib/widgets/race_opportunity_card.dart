@@ -176,7 +176,6 @@ class _PendingInviteCardState extends State<_PendingInviteCard>
     );
     final raceId = widget.data['raceId'] as String? ?? '';
     final targetSteps = (widget.data['targetSteps'] as num?)?.toInt() ?? 0;
-    final durationHours = (widget.data['durationHours'] as num?)?.toInt() ?? 0;
     final participantCount =
         (widget.data['participantCount'] as num?)?.toInt() ?? 0;
     final expiresAt = DateTime.tryParse(
@@ -185,7 +184,7 @@ class _PendingInviteCardState extends State<_PendingInviteCard>
     final expiresText = _formatTimeLeft(expiresAt);
 
     final detailLine =
-        "${_formatDuration(durationHours)} · ${_formatSteps(targetSteps)} steps total · $participantCount racers";
+        "${_formatSteps(targetSteps)} steps total · $participantCount racers";
 
     return AnimatedBuilder(
       animation: _pulse,
@@ -317,7 +316,6 @@ class _ActiveRaceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final raceId = data['raceId'] as String? ?? '';
     final name = data['name'] as String? ?? 'Race';
-    final endsAt = DateTime.tryParse(data['endsAt'] as String? ?? '');
     final me = data['me'] as Map<String, dynamic>?;
     final leader = data['leader'] as Map<String, dynamic>?;
     final myUserId = me?['userId'] as String?;
@@ -348,16 +346,6 @@ class _ActiveRaceCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (endsAt != null) ...[
-                  const SizedBox(width: 8),
-                  Text(
-                    'ends ${_formatRelative(endsAt)}',
-                    style: HomeText.body(
-                      size: 12,
-                      color: HomeColors.lineSoft,
-                    ),
-                  ),
-                ],
               ],
             ),
             const SizedBox(height: 12),
@@ -536,7 +524,6 @@ class _PublicRaceCard extends StatelessWidget {
     final targetSteps = (data['targetSteps'] as num?)?.toInt() ?? 0;
     final participantCount =
         (data['participantCount'] as num?)?.toInt() ?? 0;
-    final endsAt = DateTime.tryParse(data['endsAt'] as String? ?? '');
 
     return _CardShell(
       child: Column(
@@ -545,8 +532,7 @@ class _PublicRaceCard extends StatelessWidget {
           Text(name, style: HomeText.title(size: 16)),
           const SizedBox(height: 4),
           Text(
-            "${_formatSteps(targetSteps)} steps · $participantCount racing"
-            "${endsAt != null ? ' · ends ${_formatRelative(endsAt)}' : ''}",
+            "${_formatSteps(targetSteps)} steps · $participantCount racing",
             style: HomeText.body(size: 12, color: HomeColors.lineSoft),
           ),
           const SizedBox(height: 14),
@@ -723,24 +709,6 @@ String _formatSteps(int steps) {
     return '${(steps / 1000).toStringAsFixed(1)}k';
   }
   return steps.toString();
-}
-
-String _formatDuration(int hours) {
-  if (hours <= 0) return 'Race';
-  if (hours % 24 == 0) {
-    final days = hours ~/ 24;
-    return '$days-day race';
-  }
-  return '${hours}h race';
-}
-
-String _formatRelative(DateTime when) {
-  final diff = when.difference(DateTime.now());
-  if (diff.isNegative) return 'soon';
-  final hours = diff.inHours;
-  if (hours < 1) return 'in ${diff.inMinutes}m';
-  if (hours < 24) return 'in ${hours}h';
-  return 'in ${diff.inDays}d';
 }
 
 String? _formatTimeLeft(DateTime? expiresAt) {
