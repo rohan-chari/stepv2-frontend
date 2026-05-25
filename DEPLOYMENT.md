@@ -4,7 +4,7 @@ Two iOS app listings in App Store Connect, each pointed at a different backend. 
 
 | App           | Bundle ID                                  | Distribution | Backend                                |
 | ------------- | ------------------------------------------ | ------------ | -------------------------------------- |
-| Bara          | `com.rohanchari.steptracker`               | App Store + TestFlight | `https://api.steptracker-api.org` (prod) |
+| Bara          | `com.rohanchari.steptracker`               | App Store + TestFlight | `https://steptracker-api.org` (prod) |
 | Bara Staging  | `com.rohanchari.steptracker.staging`       | TestFlight only        | `https://staging.steptracker-api.org` (staging) |
 
 The same `--dart-define=BACKEND_BASE_URL=…` value is baked at build time; a built binary cannot accidentally hit the wrong env.
@@ -113,7 +113,7 @@ For most releases, you can deploy backend first because the old App Store binary
 
 ```bash
 flutter build ipa --flavor prod --release \
-  --dart-define=BACKEND_BASE_URL=https://api.steptracker-api.org
+  --dart-define=BACKEND_BASE_URL=https://steptracker-api.org
 ```
 
 Upload via Transporter to "Bara" in App Store Connect.
