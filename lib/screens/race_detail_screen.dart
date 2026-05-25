@@ -212,6 +212,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   bool _isLoading = true;
   bool _isActing = false;
   Timer? _pollTimer;
+  Timer? _countdownTimer;
+  late DateTime _countdownNow;
 
   // Merged activity (chat + powerup events) state.
   RaceChatService? _chat;
@@ -246,12 +248,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   @override
   void initState() {
     super.initState();
+    _countdownNow = DateTime.now();
     _loadDetails();
   }
 
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _countdownTimer?.cancel();
     _messageInput.dispose();
     final chat = _chat;
     if (chat != null) {
@@ -307,6 +311,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       if (details['status'] == 'ACTIVE') {
         _loadProgress();
         _startPolling();
+        _startCountdown();
         _ensureChatInitialized();
       }
     } catch (e) {
@@ -380,6 +385,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
       if (progress['status'] == 'COMPLETED') {
         _pollTimer?.cancel();
+        _countdownTimer?.cancel();
         _loadDetails();
       }
     } catch (e) {
@@ -410,6 +416,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     _pollTimer?.cancel();
     _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       _loadProgress();
+    });
+  }
+
+  void _startCountdown() {
+    _countdownTimer?.cancel();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() => _countdownNow = DateTime.now());
     });
   }
 
@@ -1318,7 +1332,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   }
 
   Widget _buildRaceInfoCard() {
-    final targetSteps = _readInt(_race!['targetSteps'], fallback: 0);
+    final maxDays = _readInt(_race!['maxDurationDays'], fallback: 7);
     final buyInAmount = _readInt(_race!['buyInAmount'], fallback: 0);
     final potCoins = _readInt(_race!['projectedPotCoins'], fallback: 0);
     final payouts = _race!['payouts'] as Map<String, dynamic>?;
@@ -1331,7 +1345,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Text(
-                'TARGET',
+                'DURATION',
                 style: PixelText.title(
                   size: 11,
                   color: AppColors.textMid,
@@ -1339,14 +1353,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                _formatSteps(targetSteps),
+                '$maxDays',
                 style: PixelText.number(
                   size: 22,
                   color: AppColors.accent,
                 ),
               ),
               Text(
-                'steps',
+                'days',
                 style: PixelText.body(size: 11, color: AppColors.textMid),
               ),
             ],
@@ -1607,10 +1621,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   Widget _buildActiveContent() {
     final targetSteps = _readInt(_race!['targetSteps'], fallback: 0);
     final buyInAmount = _readInt(_race!['buyInAmount'], fallback: 0);
+    final endsAtRaw = _race!['endsAt'] as String?;
+    final endsAt = endsAtRaw != null
+        ? DateTime.tryParse(endsAtRaw)?.toLocal()
+        : null;
 
     final header = <Widget>[
-      _buildRaceStatusBoard(showPrizePool: buyInAmount > 0),
-      const SizedBox(height: 12),
+      if (endsAt != null || buyInAmount > 0) ...[
+        _buildRaceStatusBoard(endsAt: endsAt, showPrizePool: buyInAmount > 0),
+        const SizedBox(height: 12),
+      ],
     ];
 
     if (_progressState.shouldShowInitialLoading) {
@@ -1897,7 +1917,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
           String timeLabel;
           if (expiresAtStr != null) {
             final expiresAt = DateTime.parse(expiresAtStr);
-            final remaining = expiresAt.difference(DateTime.now());
+            final remaining = expiresAt.difference(_countdownNow);
             if (remaining.isNegative) {
               timeLabel = 'Expiring...';
             } else if (remaining.inHours > 0) {
@@ -2487,6 +2507,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   }
 
   Widget _buildRaceStatusBoard({
+    required DateTime? endsAt,
     required bool showPrizePool,
   }) {
     return Padding(
@@ -2507,8 +2528,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  _buildRaceGoalSummary(),
-                  if (showPrizePool)
+                  if (endsAt != null) _buildCountdownSummary(endsAt),
+                  if (endsAt != null && showPrizePool)
                     Container(
                       height: 2,
                       margin: const EdgeInsets.symmetric(vertical: 14),
@@ -2524,21 +2545,53 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     );
   }
 
-  Widget _buildRaceGoalSummary() {
-    final targetSteps = _readInt(_race!['targetSteps'], fallback: 0);
+  Widget _buildCountdownSummary(DateTime endsAt) {
+    final remaining = endsAt.difference(_countdownNow);
+    final safe = remaining.isNegative ? Duration.zero : remaining;
+    final days = safe.inDays;
+    final hours = safe.inHours.remainder(24);
+    final minutes = safe.inMinutes.remainder(60);
+    final seconds = safe.inSeconds.remainder(60);
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          'GOAL',
+          'TIME LEFT',
           style: PixelText.title(size: 13, color: AppColors.parchmentLight),
           textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 8),
-        Text(
-          '${_formatSteps(targetSteps)} steps',
-          style: PixelText.title(size: 20, color: AppColors.parchment),
-          textAlign: TextAlign.center,
+        const SizedBox(height: 10),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _CountdownUnit(
+                value: days,
+                label: 'DAYS',
+                labelColor: AppColors.parchment,
+              ),
+              const SizedBox(width: 10),
+              _CountdownUnit(
+                value: hours,
+                label: 'HRS',
+                labelColor: AppColors.parchment,
+              ),
+              const SizedBox(width: 10),
+              _CountdownUnit(
+                value: minutes,
+                label: 'MIN',
+                labelColor: AppColors.parchment,
+              ),
+              const SizedBox(width: 10),
+              _CountdownUnit(
+                value: seconds,
+                label: 'SEC',
+                labelColor: AppColors.parchment,
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -2884,6 +2937,46 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       buf.write(s[i]);
     }
     return buf.toString();
+  }
+}
+
+class _CountdownUnit extends StatelessWidget {
+  final int value;
+  final String label;
+  final Color labelColor;
+
+  const _CountdownUnit({
+    required this.value,
+    required this.label,
+    this.labelColor = AppColors.textMid,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppColors.woodDark,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.woodShadow.withValues(alpha: 0.5),
+                offset: const Offset(0, 3),
+                blurRadius: 6,
+              ),
+            ],
+          ),
+          child: Text(
+            value.toString().padLeft(2, '0'),
+            style: PixelText.number(size: 26, color: AppColors.parchment),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(label, style: PixelText.title(size: 11, color: labelColor)),
+      ],
+    );
   }
 }
 

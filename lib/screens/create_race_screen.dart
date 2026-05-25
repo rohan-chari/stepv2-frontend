@@ -27,8 +27,8 @@ class CreateRaceScreen extends StatefulWidget {
 
 class _CreateRaceScreenState extends State<CreateRaceScreen> {
   final _nameController = TextEditingController();
-  final _stepsController = TextEditingController();
   final _buyInController = TextEditingController(text: '100');
+  int _selectedDuration = 7;
   bool _isCreating = false;
   bool _powerupsEnabled = false;
   int _powerupInterval = 5000;
@@ -42,7 +42,7 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
 
-  static const _stepPresets = [25000, 50000, 100000, 250000];
+  static const _durationOptions = [3, 5, 7, 14];
   static const _intervalPresets = [2000, 3000, 4000, 5000, 10000, 25000];
   static const _maxParticipantsPresets = [5, 10, 25, 50, 100];
   static const _payoutOptions = [
@@ -54,7 +54,6 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
   @override
   void dispose() {
     _nameController.dispose();
-    _stepsController.dispose();
     _buyInController.dispose();
     super.dispose();
   }
@@ -63,12 +62,6 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
       showErrorToast(context, 'Enter a race name');
-      return;
-    }
-
-    final steps = int.tryParse(_stepsController.text.replaceAll(',', ''));
-    if (steps == null || steps < 1000) {
-      showErrorToast(context, 'Target must be at least 1,000 steps');
       return;
     }
 
@@ -96,7 +89,7 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
       final result = await widget.backendApiService.createRace(
         identityToken: token,
         name: name,
-        targetSteps: steps,
+        maxDurationDays: _selectedDuration,
         powerupsEnabled: _powerupsEnabled,
         powerupStepInterval: _powerupsEnabled ? _powerupInterval : null,
         buyInAmount: _buyInEnabled ? _buyInAmount : 0,
@@ -229,67 +222,50 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
                       ),
                       const SizedBox(height: 12),
 
-                      // Target steps
+                      // Duration
                       RetroCard(
                         padding: const EdgeInsets.all(16),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'TARGET STEPS',
+                              'DURATION',
                               style: PixelText.title(
                                 size: 13,
                                 color: AppColors.textMid,
                               ),
                             ),
-                            const SizedBox(height: 8),
-                            TextField(
-                              controller: _stepsController,
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                              ],
-                              style: PixelText.number(
-                                size: 28,
-                                color: AppColors.accent,
-                              ),
-                              decoration: InputDecoration(
-                                hintText: '50000',
-                                hintStyle: PixelText.number(
-                                  size: 28,
-                                  color: AppColors.accent.withValues(
-                                    alpha: 0.3,
-                                  ),
-                                ),
-                                border: InputBorder.none,
-                                isDense: true,
-                                contentPadding: EdgeInsets.zero,
-                              ),
-                            ),
                             const SizedBox(height: 10),
-                            Wrap(
-                              spacing: 8,
-                              children: _stepPresets.map((preset) {
-                                final label = preset >= 1000
-                                    ? '${(preset / 1000).toStringAsFixed(preset % 1000 == 0 ? 0 : 0)}k'
-                                    : '$preset';
-                                return GestureDetector(
-                                  onTap: () =>
-                                      _stepsController.text = preset.toString(),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 6,
+                            Row(
+                              children: _durationOptions.map((days) {
+                                final selected = _selectedDuration == days;
+                                return Expanded(
+                                  child: GestureDetector(
+                                    onTap: () => setState(
+                                      () => _selectedDuration = days,
                                     ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.parchmentDark,
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text(
-                                      label,
-                                      style: PixelText.title(
-                                        size: 13,
-                                        color: AppColors.textDark,
+                                    child: Container(
+                                      margin: const EdgeInsets.symmetric(
+                                        horizontal: 3,
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 10,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: selected
+                                            ? AppColors.pillGreenDark
+                                            : AppColors.parchmentDark,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Text(
+                                        '${days}d',
+                                        style: PixelText.title(
+                                          size: 15,
+                                          color: selected
+                                              ? Colors.white
+                                              : AppColors.textDark,
+                                        ),
                                       ),
                                     ),
                                   ),

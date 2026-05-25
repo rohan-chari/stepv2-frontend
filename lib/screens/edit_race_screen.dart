@@ -32,14 +32,13 @@ class EditRaceScreen extends StatefulWidget {
 
 class _EditRaceScreenState extends State<EditRaceScreen> {
   late final TextEditingController _nameController;
-  late final TextEditingController _stepsController;
   late final TextEditingController _buyInController;
 
   bool _isSaving = false;
 
   // Initial values (used to compute "changed" diff for PATCH)
   late final String _initialName;
-  late final int _initialTargetSteps;
+  late final int _initialMaxDurationDays;
   late final bool _initialPowerupsEnabled;
   late final int _initialPowerupInterval;
   late final bool _initialBuyInEnabled;
@@ -49,6 +48,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
   late final int _initialMaxParticipants;
 
   // Live values
+  late int _maxDurationDays;
   late bool _powerupsEnabled;
   late int _powerupInterval;
   late bool _buyInEnabled;
@@ -65,7 +65,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
 
-  static const _stepPresets = [25000, 50000, 100000, 250000];
+  static const _durationOptions = [3, 5, 7, 14];
   static const _intervalPresets = [2000, 3000, 4000, 5000, 10000, 25000];
   static const _maxParticipantsPresets = [5, 10, 25, 50, 100];
   static const _payoutOptions = [
@@ -80,7 +80,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
     final race = widget.race;
 
     _initialName = (race['name'] as String?) ?? '';
-    _initialTargetSteps = _readInt(race['targetSteps'], 50000);
+    _initialMaxDurationDays = _readInt(race['maxDurationDays'], 7);
     _initialPowerupsEnabled = race['powerupsEnabled'] == true;
     _initialPowerupInterval =
         _readInt(race['powerupStepInterval'], 5000).clamp(2000, 50000);
@@ -102,12 +102,11 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
     });
 
     _nameController = TextEditingController(text: _initialName);
-    _stepsController =
-        TextEditingController(text: _initialTargetSteps.toString());
     _buyInController = TextEditingController(
       text: (_initialBuyInEnabled ? _initialBuyInAmount : 100).toString(),
     );
 
+    _maxDurationDays = _initialMaxDurationDays;
     _powerupsEnabled = _initialPowerupsEnabled;
     _powerupInterval = _initialPowerupInterval;
     _buyInEnabled = _initialBuyInEnabled;
@@ -127,7 +126,6 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
   @override
   void dispose() {
     _nameController.dispose();
-    _stepsController.dispose();
     _buyInController.dispose();
     super.dispose();
   }
@@ -135,8 +133,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
   bool get _hasChanges {
     final name = _nameController.text.trim();
     if (name != _initialName.trim()) return true;
-    final steps = int.tryParse(_stepsController.text.replaceAll(',', ''));
-    if (steps != _initialTargetSteps) return true;
+    if (_maxDurationDays != _initialMaxDurationDays) return true;
     if (_powerupsEnabled != _initialPowerupsEnabled) return true;
     if (_powerupsEnabled && _powerupInterval != _initialPowerupInterval) {
       return true;
@@ -164,13 +161,8 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
       return;
     }
 
-    final steps = int.tryParse(_stepsController.text.replaceAll(',', ''));
-    if (steps == null || steps < 1000) {
-      showErrorToast(context, 'Target must be at least 1,000 steps');
-      return;
-    }
-    if (steps > 1000000) {
-      showErrorToast(context, 'Target must be 1,000,000 steps or less');
+    if (_maxDurationDays < 1 || _maxDurationDays > 30) {
+      showErrorToast(context, 'Duration must be between 1 and 30 days');
       return;
     }
 
@@ -194,7 +186,9 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
     // Build a sparse PATCH body — only send changed fields.
     final updates = <String, dynamic>{};
     if (name != _initialName.trim()) updates['name'] = name;
-    if (steps != _initialTargetSteps) updates['targetSteps'] = steps;
+    if (_maxDurationDays != _initialMaxDurationDays) {
+      updates['maxDurationDays'] = _maxDurationDays;
+    }
     if (_powerupsEnabled != _initialPowerupsEnabled) {
       updates['powerupsEnabled'] = _powerupsEnabled;
     }
@@ -229,7 +223,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
         identityToken: token,
         raceId: widget.raceId,
         name: updates['name'] as String?,
-        targetSteps: updates['targetSteps'] as int?,
+        maxDurationDays: updates['maxDurationDays'] as int?,
         isPublic: updates['isPublic'] as bool?,
         powerupsEnabled: updates['powerupsEnabled'] as bool?,
         powerupStepInterval: updates['powerupStepInterval'] as int?,
@@ -340,71 +334,51 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                         ),
                         const SizedBox(height: 12),
 
-                        // Target steps
+                        // Duration
                         RetroCard(
                           padding: const EdgeInsets.all(16),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'TARGET STEPS',
+                                'DURATION',
                                 style: PixelText.title(
                                   size: 13,
                                   color: AppColors.textMid,
                                 ),
                               ),
-                              const SizedBox(height: 8),
-                              TextField(
-                                controller: _stepsController,
-                                keyboardType: TextInputType.number,
-                                onChanged: (_) => setState(() {}),
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                ],
-                                style: PixelText.number(
-                                  size: 28,
-                                  color: AppColors.accent,
-                                ),
-                                decoration: InputDecoration(
-                                  hintText: '50000',
-                                  hintStyle: PixelText.number(
-                                    size: 28,
-                                    color: AppColors.accent.withValues(
-                                      alpha: 0.3,
-                                    ),
-                                  ),
-                                  border: InputBorder.none,
-                                  isDense: true,
-                                  contentPadding: EdgeInsets.zero,
-                                ),
-                              ),
                               const SizedBox(height: 10),
-                              Wrap(
-                                spacing: 8,
-                                children: _stepPresets.map((preset) {
-                                  final label = preset >= 1000
-                                      ? '${(preset / 1000).toStringAsFixed(0)}k'
-                                      : '$preset';
-                                  return GestureDetector(
-                                    onTap: () => setState(() {
-                                      _stepsController.text =
-                                          preset.toString();
-                                    }),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 6,
+                              Row(
+                                children: _durationOptions.map((days) {
+                                  final selected = _maxDurationDays == days;
+                                  return Expanded(
+                                    child: GestureDetector(
+                                      onTap: () => setState(
+                                        () => _maxDurationDays = days,
                                       ),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.parchmentDark,
-                                        borderRadius:
-                                            BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        label,
-                                        style: PixelText.title(
-                                          size: 13,
-                                          color: AppColors.textDark,
+                                      child: Container(
+                                        margin: const EdgeInsets.symmetric(
+                                          horizontal: 3,
+                                        ),
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 10,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: selected
+                                              ? AppColors.pillGreenDark
+                                              : AppColors.parchmentDark,
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        alignment: Alignment.center,
+                                        child: Text(
+                                          '${days}d',
+                                          style: PixelText.title(
+                                            size: 15,
+                                            color: selected
+                                                ? Colors.white
+                                                : AppColors.textDark,
+                                          ),
                                         ),
                                       ),
                                     ),

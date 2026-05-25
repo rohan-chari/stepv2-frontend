@@ -460,7 +460,8 @@ class _RacesTabState extends State<RacesTab> {
   }) {
     final raceId = race['id'] as String? ?? '';
     final name = race['name'] as String? ?? 'Race';
-    final targetSteps = race['targetSteps'] as int? ?? 0;
+    final maxDurationDays = race['maxDurationDays'] as int? ?? 7;
+    final endsAt = DateTime.tryParse(race['endsAt'] as String? ?? '');
     final participantCount = race['participantCount'] as int? ?? 0;
     final status = race['status'] as String? ?? '';
     final creator = race['creator'] as Map<String, dynamic>?;
@@ -494,9 +495,21 @@ class _RacesTabState extends State<RacesTab> {
       badgeColor = AppColors.textMid;
     }
 
-    final stepsLabel = targetSteps >= 1000
-        ? '${(targetSteps / 1000).toStringAsFixed(targetSteps % 1000 == 0 ? 0 : 0)}k steps'
-        : '$targetSteps steps';
+    String timeLabel;
+    if (status == 'ACTIVE' && endsAt != null) {
+      final remaining = endsAt.difference(DateTime.now());
+      if (remaining.isNegative) {
+        timeLabel = 'ending soon';
+      } else if (remaining.inDays > 0) {
+        timeLabel = '${remaining.inDays}d ${remaining.inHours.remainder(24)}h left';
+      } else if (remaining.inHours > 0) {
+        timeLabel = '${remaining.inHours}h ${remaining.inMinutes.remainder(60)}m left';
+      } else {
+        timeLabel = '${remaining.inMinutes}m left';
+      }
+    } else {
+      timeLabel = '${maxDurationDays}d race';
+    }
 
     return Material(
       color: index.isOdd
@@ -552,7 +565,7 @@ class _RacesTabState extends State<RacesTab> {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      '$stepsLabel \u2022 $participantCount runner${participantCount == 1 ? '' : 's'}${isInvite && creatorName.isNotEmpty ? ' \u2022 by $creatorName' : ''}',
+                      '$timeLabel \u2022 $participantCount runner${participantCount == 1 ? '' : 's'}${isInvite && creatorName.isNotEmpty ? ' \u2022 by $creatorName' : ''}',
                       style: PixelText.body(size: 14, color: AppColors.textMid),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,

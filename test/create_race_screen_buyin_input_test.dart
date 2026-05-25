@@ -13,7 +13,6 @@ class _FakeBackendApiService extends BackendApiService {
   Future<Map<String, dynamic>> createRace({
     required String identityToken,
     required String name,
-    required int targetSteps,
     int maxDurationDays = 7,
     bool powerupsEnabled = false,
     int? powerupStepInterval,
@@ -25,7 +24,7 @@ class _FakeBackendApiService extends BackendApiService {
     lastCreateRaceCall = {
       'identityToken': identityToken,
       'name': name,
-      'targetSteps': targetSteps,
+
       'maxDurationDays': maxDurationDays,
       'powerupsEnabled': powerupsEnabled,
       'powerupStepInterval': powerupStepInterval,

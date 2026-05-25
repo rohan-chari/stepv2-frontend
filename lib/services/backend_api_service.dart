@@ -565,7 +565,7 @@ class BackendApiService {
   Future<Map<String, dynamic>> createRace({
     required String identityToken,
     required String name,
-    required int targetSteps,
+    int maxDurationDays = 7,
     bool powerupsEnabled = false,
     int? powerupStepInterval,
     int buyInAmount = 0,
@@ -575,7 +575,7 @@ class BackendApiService {
   }) async {
     final body = <String, dynamic>{
       'name': name,
-      'targetSteps': targetSteps,
+      'maxDurationDays': maxDurationDays,
       'buyInAmount': buyInAmount,
       'payoutPreset': payoutPreset,
       'isPublic': isPublic,
@@ -731,7 +731,7 @@ class BackendApiService {
     required String identityToken,
     required String raceId,
     String? name,
-    int? targetSteps,
+    int? maxDurationDays,
     bool? isPublic,
     bool? powerupsEnabled,
     int? powerupStepInterval,
@@ -741,7 +741,7 @@ class BackendApiService {
   }) async {
     final body = <String, dynamic>{};
     if (name != null) body['name'] = name;
-    if (targetSteps != null) body['targetSteps'] = targetSteps;
+    if (maxDurationDays != null) body['maxDurationDays'] = maxDurationDays;
     if (isPublic != null) body['isPublic'] = isPublic;
     if (powerupsEnabled != null) body['powerupsEnabled'] = powerupsEnabled;
     if (powerupStepInterval != null) {
