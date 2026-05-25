@@ -17,7 +17,6 @@ class AuthService extends ChangeNotifier {
   static const _keyIdentityToken = 'auth_identity_token';
   static const _keyUserIdentifier = 'auth_user_identifier';
   static const _keyBackendUserId = 'auth_backend_user_id';
-  static const _keyStepGoal = 'auth_step_goal';
   static const _keyDisplayName = 'auth_display_name';
   static const _keyProfilePhotoUrl = 'auth_profile_photo_url';
   static const _keyProfilePhotoPromptDismissedAt =
@@ -32,7 +31,6 @@ class AuthService extends ChangeNotifier {
   String? _userIdentifier;
   String? _backendUserId;
   String? _lastErrorMessage;
-  int? _stepGoal;
   String? _displayName;
   String? _profilePhotoUrl;
   String? _profilePhotoPromptDismissedAt;
@@ -46,7 +44,6 @@ class AuthService extends ChangeNotifier {
   String? get authToken => _sessionToken ?? _identityToken;
   String? get userId => _backendUserId;
   String? get lastErrorMessage => _lastErrorMessage;
-  int? get stepGoal => _stepGoal;
   String? get displayName => _displayName;
   String? get profilePhotoUrl => _profilePhotoUrl;
   String? get profilePhotoPromptDismissedAt => _profilePhotoPromptDismissedAt;
@@ -63,7 +60,6 @@ class AuthService extends ChangeNotifier {
     _identityToken = prefs.getString(_keyIdentityToken);
     _userIdentifier = prefs.getString(_keyUserIdentifier);
     _backendUserId = prefs.getString(_keyBackendUserId);
-    _stepGoal = prefs.getInt(_keyStepGoal);
     _displayName = prefs.getString(_keyDisplayName);
     _profilePhotoUrl = prefs.getString(_keyProfilePhotoUrl);
     _profilePhotoPromptDismissedAt = prefs.getString(
@@ -163,17 +159,6 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<void> updateStepGoal(int? stepGoal) async {
-    _stepGoal = stepGoal;
-    final prefs = await SharedPreferences.getInstance();
-    if (stepGoal != null) {
-      await prefs.setInt(_keyStepGoal, stepGoal);
-    } else {
-      await prefs.remove(_keyStepGoal);
-    }
-    notifyListeners();
-  }
-
   Future<void> updateDisplayName(String? displayName) async {
     _displayName = displayName;
     final prefs = await SharedPreferences.getInstance();
@@ -210,9 +195,6 @@ class AuthService extends ChangeNotifier {
   void applyBackendUser(Map<String, dynamic> backendUser) {
     if (backendUser.containsKey('id')) {
       _backendUserId = backendUser['id'] as String?;
-    }
-    if (backendUser.containsKey('stepGoal')) {
-      _stepGoal = backendUser['stepGoal'] as int?;
     }
     if (backendUser.containsKey('displayName')) {
       _displayName = backendUser['displayName'] as String?;
@@ -255,7 +237,6 @@ class AuthService extends ChangeNotifier {
     _userIdentifier = null;
     _backendUserId = null;
     _lastErrorMessage = null;
-    _stepGoal = null;
     _displayName = null;
     _profilePhotoUrl = null;
     _profilePhotoPromptDismissedAt = null;
@@ -268,7 +249,6 @@ class AuthService extends ChangeNotifier {
     await prefs.remove(_keyIdentityToken);
     await prefs.remove(_keyUserIdentifier);
     await prefs.remove(_keyBackendUserId);
-    await prefs.remove(_keyStepGoal);
     await prefs.remove(_keyDisplayName);
     await prefs.remove(_keyProfilePhotoUrl);
     await prefs.remove(_keyProfilePhotoPromptDismissedAt);

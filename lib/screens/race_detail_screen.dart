@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../models/loadable.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
+import '../services/race_chat_service.dart';
 import '../styles.dart';
 import '../utils/race_participant_display.dart';
 import '../widgets/arcade_page.dart';
@@ -27,8 +28,9 @@ import '../widgets/loading_skeleton.dart';
 import '../widgets/race_finishers_banner.dart';
 import '../widgets/item_slot.dart';
 import '../widgets/feed_bubble.dart';
+import '../widgets/player_avatar.dart';
 import 'case_opening_screen.dart';
-import 'race_chat_screen.dart';
+import 'edit_race_screen.dart';
 import 'race_invite_screen.dart';
 
 class RaceDetailScreen extends StatefulWidget {
@@ -206,12 +208,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   Map<String, dynamic>? _progress;
   Map<String, dynamic>? _powerupData;
   Loadable<Map<String, dynamic>> _progressState = const Loadable.initial();
-  Loadable<List<Map<String, dynamic>>> _feedState = const Loadable.initial();
-  List<Map<String, dynamic>> _feedEvents = [];
   int _queuedBoxCount = 0;
   bool _isLoading = true;
   bool _isActing = false;
   Timer? _pollTimer;
+
+  // Merged activity (chat + powerup events) state.
+  RaceChatService? _chat;
+  bool _chatInitialized = false;
+  final TextEditingController _messageInput = TextEditingController();
+  bool _sendingMessage = false;
 
   String get _myUserId => widget.authService.userId ?? '';
   BackendApiService get _api => widget.backendApiService;
@@ -246,7 +252,37 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _messageInput.dispose();
+    final chat = _chat;
+    if (chat != null) {
+      chat.markRead();
+      chat.dispose();
+    }
     super.dispose();
+  }
+
+  void _ensureChatInitialized() {
+    if (_chatInitialized) return;
+    final race = _race;
+    if (race == null) return;
+    _chatInitialized = true;
+    final chat = RaceChatService(
+      authService: widget.authService,
+      raceId: widget.raceId,
+      api: widget.backendApiService,
+    );
+    chat.setMutedFromServer(race['myChatMuted'] as bool? ?? false);
+    _chat = chat;
+    chat.addListener(_onChatChanged);
+    chat.loadInitial().then((_) {
+      if (!mounted) return;
+      chat.markRead();
+    });
+    chat.startPolling();
+  }
+
+  void _onChatChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadDetails() async {
@@ -271,9 +307,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       if (details['status'] == 'ACTIVE') {
         _loadProgress();
         _startPolling();
-        if (details['powerupsEnabled'] == true) {
-          _loadFeed();
-        }
+        _ensureChatInitialized();
       }
     } catch (e) {
       if (mounted) {
@@ -317,7 +351,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       });
 
       if (_powerupData?['enabled'] == true) {
-        _loadFeed();
+        _chat?.refreshTop();
 
         _queuedBoxCount = _readInt(
           _powerupData?['queuedBoxCount'],
@@ -559,6 +593,25 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _editRaceSettings() async {
+    final race = _race;
+    if (race == null) return;
+    final result = await Navigator.of(context).push<Map<String, dynamic>?>(
+      MaterialPageRoute(
+        builder: (_) => EditRaceScreen(
+          authService: widget.authService,
+          backendApiService: _api,
+          raceId: widget.raceId,
+          race: race,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (result != null) {
+      await _loadDetails();
+    }
   }
 
   Future<void> _cancelRace() async {
@@ -1135,52 +1188,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     return buttons;
   }
 
-  Future<void> _loadFeed() async {
-    final previous = _feedEvents;
-    if (mounted) {
-      setState(() {
-        _feedState = previous.isEmpty
-            ? const Loadable.loading()
-            : Loadable.refreshing(previous);
-      });
-    }
-
-    try {
-      final token = widget.authService.authToken;
-      if (token == null || token.isEmpty) {
-        if (mounted) {
-          setState(() {
-            _feedState = Loadable.error(
-              'Not signed in.',
-              data: previous.isEmpty ? null : previous,
-            );
-          });
-        }
-        return;
-      }
-
-      final result = await _api.fetchRaceFeed(
-        identityToken: token,
-        raceId: widget.raceId,
-      );
-
-      if (!mounted) return;
-      final events =
-          (result['events'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-      setState(() {
-        _feedEvents = events;
-        _feedState = Loadable.success(events);
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _feedState = Loadable.error(
-          e.toString(),
-          data: previous.isEmpty ? null : previous,
-        );
-      });
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1224,18 +1231,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (_race != null)
-                      GestureDetector(
-                        onTap: _openChat,
-                        child: const Padding(
-                          padding: EdgeInsets.all(8),
-                          child: Icon(
-                            Icons.chat_bubble_outline,
-                            color: AppColors.textDark,
-                            size: 22,
-                          ),
-                        ),
-                      ),
                     if (_race != null &&
                         (_race!['isCreator'] as bool? ?? false) &&
                         (_race!['status'] == 'PENDING' ||
@@ -1796,7 +1791,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               ),
 
               _buildActiveEffectsSection(),
-              _buildFeedSection(),
+              _buildMergedActivitySection(),
               const SizedBox(height: 24),
             ],
           ),
@@ -2073,25 +2068,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     return '${(diff.inDays / 7).floor()}w';
   }
 
-  void _openChat() {
-    final race = _race;
-    if (race == null) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => RaceChatScreen(
-          authService: widget.authService,
-          raceId: widget.raceId,
-          raceName: race['name'] as String? ?? 'Race',
-          raceStatus: race['status'] as String? ?? '',
-          myStatus: race['myStatus'] as String? ?? '',
-          myUserId: _myUserId,
-          initialMuted: race['myChatMuted'] as bool? ?? false,
-          backendApiService: widget.backendApiService,
-        ),
-      ),
-    );
-  }
-
   void _showRaceOptionsSheet() {
     final status = _race?['status'] as String? ?? '';
     showModalBottomSheet(
@@ -2124,6 +2100,23 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                     },
             ),
             const SizedBox(height: 10),
+            if (status == 'PENDING') ...[
+              PillButton(
+                label: 'EDIT SETTINGS',
+                variant: PillButtonVariant.secondary,
+                fontSize: 13,
+                fullWidth: true,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                onPressed: _isActing
+                    ? null
+                    : () {
+                        Navigator.of(context).pop();
+                        _editRaceSettings();
+                      },
+              ),
+            ],
+            const SizedBox(height: 10),
             PillButton(
               label: 'CANCEL RACE',
               variant: PillButtonVariant.accent,
@@ -2143,8 +2136,51 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     );
   }
 
-  Widget _buildFeedSection() {
-    // Build actor name lookup from participants
+  bool get _canPostMessage {
+    final race = _race;
+    if (race == null) return false;
+    return race['myStatus'] == 'ACCEPTED' &&
+        race['status'] != 'COMPLETED' &&
+        race['status'] != 'CANCELLED';
+  }
+
+  Future<void> _sendMessage() async {
+    final chat = _chat;
+    if (chat == null) return;
+    final text = _messageInput.text.trim();
+    if (text.isEmpty || _sendingMessage) return;
+    setState(() => _sendingMessage = true);
+    _messageInput.clear();
+    await chat.send(text);
+    if (mounted) setState(() => _sendingMessage = false);
+  }
+
+  Future<void> _confirmDeleteMessage(String messageId) async {
+    final chat = _chat;
+    if (chat == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete message?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await chat.deleteMessage(messageId);
+    }
+  }
+
+  Widget _buildMergedActivitySection() {
+    final chat = _chat;
     final participants =
         (_progress?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
         [];
@@ -2153,6 +2189,62 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       final uid = p['userId'] as String? ?? '';
       final name = p['displayName'] as String? ?? '???';
       if (uid.isNotEmpty) actorNames[uid] = name;
+    }
+
+    final messages = chat?.messages ?? const <RaceChatMessage>[];
+    final isLoading = chat?.isLoading ?? false;
+    final hasError = chat != null && chat.lastError != null && messages.isEmpty;
+
+    Widget body;
+    if (chat == null || (messages.isEmpty && isLoading)) {
+      body = const LoadingSkeleton(
+        child: Column(
+          children: [
+            SkeletonLine(width: double.infinity, height: 14),
+            SizedBox(height: 8),
+            SkeletonLine(width: 220, height: 14),
+          ],
+        ),
+      );
+    } else if (hasError) {
+      body = LoadErrorPanel(
+        title: 'Couldn’t load activity',
+        message: 'Check your connection and try again.',
+        onRetry: chat.loadInitial,
+      );
+    } else if (messages.isEmpty) {
+      body = Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Text(
+          'No activity yet. Say hi!',
+          style: PixelText.body(
+            size: 16,
+            color: AppColors.textMid.withValues(alpha: 0.6),
+          ),
+        ),
+      );
+    } else {
+      // Newest first (matches RaceChatService ordering).
+      final items = messages;
+      body = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final m in items) _buildMergedActivityItem(m, actorNames),
+          if (chat.hasMore)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Center(
+                child: TextButton(
+                  onPressed: isLoading ? null : chat.loadMore,
+                  child: Text(
+                    isLoading ? 'Loading…' : 'Load older',
+                    style: PixelText.body(size: 13, color: AppColors.accent),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
     }
 
     return Column(
@@ -2166,7 +2258,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               style: PixelText.title(size: 18, color: AppColors.textMid),
             ),
             GestureDetector(
-              onTap: _loadFeed,
+              onTap: chat?.refreshTop,
               child: Icon(
                 Icons.refresh,
                 size: 16,
@@ -2176,59 +2268,111 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
           ],
         ),
         const SizedBox(height: 8),
-        if (_feedState.shouldShowInitialLoading)
-          const LoadingSkeleton(
-            child: Column(
-              children: [
-                SkeletonLine(width: double.infinity, height: 14),
-                SizedBox(height: 8),
-                SkeletonLine(width: 220, height: 14),
-              ],
-            ),
-          )
-        else if (_feedState.isError && !_feedState.hasData)
-          LoadErrorPanel(
-            title: 'Couldn’t load activity',
-            message: 'Check your connection and try again.',
-            onRetry: _loadFeed,
-          )
-        else if (_feedEvents.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text(
-              'No powerup activity yet',
-              style: PixelText.body(
-                size: 16,
-                color: AppColors.textMid.withValues(alpha: 0.6),
-              ),
-            ),
-          )
-        else ...[
-          if (_feedState.isRefreshing)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 8),
-              child: LinearProgressIndicator(
-                minHeight: 2,
-                color: AppColors.accent,
-                backgroundColor: Colors.transparent,
-              ),
-            ),
-          for (int i = 0; i < _feedEvents.length && i < 10; i++)
-            FeedBubble(
-              eventType: _feedEvents[i]['eventType'] as String? ?? '',
-              powerupType: _feedEvents[i]['powerupType'] as String?,
-              description: _feedEvents[i]['description'] as String? ?? '',
-              actorName:
-                  actorNames[_feedEvents[i]['actorUserId'] as String? ?? ''] ??
-                  '???',
-              relativeTime: _relativeTime(
-                _feedEvents[i]['createdAt'] as String?,
-              ),
-              actorIsUser:
-                  (_feedEvents[i]['actorUserId'] as String?) == _myUserId,
-            ),
-        ],
+        body,
+        const SizedBox(height: 8),
+        _buildMessageComposer(),
       ],
+    );
+  }
+
+  Widget _buildMergedActivityItem(
+    RaceChatMessage m,
+    Map<String, String> actorNames,
+  ) {
+    if (m.kind == 'SYSTEM') {
+      final actorId = m.actorUserId ?? '';
+      return FeedBubble(
+        eventType: m.eventType ?? '',
+        powerupType: m.powerupType,
+        description: m.body,
+        actorName: actorNames[actorId] ?? '???',
+        relativeTime: _relativeTime(m.createdAt.toUtc().toIso8601String()),
+        actorIsUser: actorId == _myUserId,
+      );
+    }
+    final mine = m.senderId == null
+        ? (m.pending || m.failed)
+        : m.senderId == _myUserId;
+    return _ChatBubble(
+      message: m,
+      isMine: mine,
+      onLongPress: mine && !m.pending && !m.failed
+          ? () => _confirmDeleteMessage(m.id)
+          : null,
+    );
+  }
+
+  Widget _buildMessageComposer() {
+    final race = _race;
+    if (race == null) return const SizedBox.shrink();
+    if (!_canPostMessage) {
+      final status = race['status'] as String? ?? '';
+      final myStatus = race['myStatus'] as String? ?? '';
+      final reason = status == 'COMPLETED'
+          ? 'This race is finished. Chat is read-only.'
+          : status == 'CANCELLED'
+          ? 'This race was cancelled. Chat is read-only.'
+          : myStatus == 'INVITED'
+          ? 'Accept the invite to post in chat.'
+          : 'You can\'t post in this chat.';
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        color: AppColors.parchmentDark.withValues(alpha: 0.3),
+        child: Text(
+          reason,
+          style: PixelText.body(size: 14, color: AppColors.textMid),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          top: BorderSide(color: AppColors.textMid.withValues(alpha: 0.2)),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _messageInput,
+              minLines: 1,
+              maxLines: 4,
+              maxLength: 500,
+              textInputAction: TextInputAction.send,
+              onSubmitted: (_) => _sendMessage(),
+              decoration: InputDecoration(
+                hintText: 'Message…',
+                hintStyle: PixelText.body(size: 16, color: AppColors.textMid),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                counterText: '',
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          IconButton(
+            icon: _sendingMessage
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.send),
+            color: AppColors.accent,
+            onPressed: _sendingMessage ? null : _sendMessage,
+          ),
+        ],
+      ),
     );
   }
 
@@ -2563,24 +2707,77 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   }
 
   Future<void> _confirmKick(String userId, String displayName) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showModalBottomSheet<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Remove $displayName?'),
-        content: const Text(
-          'They will be removed from the race. Any held buy-in will be refunded.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Remove'),
-          ),
-        ],
+      backgroundColor: AppColors.parchment,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.person_remove,
+                      size: 22,
+                      color: AppColors.error,
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        'Remove $displayName?',
+                        style: PixelText.title(
+                          size: 18,
+                          color: AppColors.textDark,
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'They will be removed from the race. Any held buy-in will be refunded.',
+                  style: PixelText.body(size: 13, color: AppColors.textMid),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: PillButton(
+                        label: 'CANCEL',
+                        variant: PillButtonVariant.secondary,
+                        fontSize: 13,
+                        fullWidth: true,
+                        onPressed: () => Navigator.of(ctx).pop(false),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: PillButton(
+                        label: 'REMOVE',
+                        variant: PillButtonVariant.accent,
+                        fontSize: 13,
+                        fullWidth: true,
+                        onPressed: () => Navigator.of(ctx).pop(true),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
     if (confirmed != true) return;
 
@@ -2844,6 +3041,106 @@ class _EffectIconWithTooltipState extends State<_EffectIconWithTooltip> {
             child: PowerupIcon(type: widget.type, size: 18),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ChatBubble extends StatelessWidget {
+  final RaceChatMessage message;
+  final bool isMine;
+  final VoidCallback? onLongPress;
+
+  const _ChatBubble({
+    required this.message,
+    required this.isMine,
+    this.onLongPress,
+  });
+
+  String _formatTime(DateTime t) {
+    final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
+    final m = t.minute.toString().padLeft(2, '0');
+    final ampm = t.hour < 12 ? 'AM' : 'PM';
+    return '$h:$m $ampm';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bubbleColor = isMine ? AppColors.accent : Colors.white;
+    final textColor = isMine ? Colors.white : AppColors.textDark;
+    final metaColor = isMine
+        ? Colors.white.withValues(alpha: 0.72)
+        : AppColors.textMid.withValues(alpha: 0.8);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment:
+            isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+        children: [
+          if (!isMine) ...[
+            PlayerAvatar(name: message.senderName ?? '?', size: 28),
+            const SizedBox(width: 6),
+          ],
+          Flexible(
+            child: GestureDetector(
+              onLongPress: onLongPress,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: bubbleColor,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: AppColors.textMid.withValues(alpha: 0.2),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (!isMine && message.senderName != null)
+                      Text(
+                        message.senderName!,
+                        style: PixelText.title(
+                          size: 12,
+                          color: AppColors.textMid,
+                        ),
+                      ),
+                    Text(
+                      message.body,
+                      style: PixelText.body(size: 16, color: textColor),
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _formatTime(message.createdAt),
+                          style: PixelText.body(size: 11, color: metaColor),
+                        ),
+                        if (message.pending) ...[
+                          const SizedBox(width: 4),
+                          Icon(Icons.access_time, size: 11, color: metaColor),
+                        ],
+                        if (message.failed) ...[
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.error_outline,
+                            size: 11,
+                            color: AppColors.feedAttack,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

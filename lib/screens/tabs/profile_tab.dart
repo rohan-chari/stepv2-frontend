@@ -20,12 +20,10 @@ import '../../widgets/loading_skeleton.dart';
 import '../admin_screen.dart';
 import '../display_name_screen.dart';
 import '../start_screen.dart';
-import '../step_goal_screen.dart';
 
 class ProfileTab extends StatefulWidget {
   final AuthService authService;
   final String? displayName;
-  final int? stepGoal;
   final String? email;
   final VoidCallback onSettingsChanged;
   final Future<void> Function()? onRefresh;
@@ -42,7 +40,6 @@ class ProfileTab extends StatefulWidget {
     super.key,
     required this.authService,
     required this.displayName,
-    required this.stepGoal,
     required this.onSettingsChanged,
     this.email,
     this.onRefresh,
@@ -94,18 +91,6 @@ class _ProfileTabState extends State<ProfileTab> {
     super.dispose();
   }
 
-  Future<void> _showStepGoalDialog() async {
-    final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (context) => StepGoalScreen(authService: widget.authService),
-      ),
-    );
-    if (result == true && mounted) {
-      widget.onSettingsChanged();
-      await _refreshAfterEdit();
-    }
-  }
-
   Future<void> _handleRefresh() async {
     if (widget.onRefresh != null) {
       await widget.onRefresh!();
@@ -141,7 +126,6 @@ class _ProfileTabState extends State<ProfileTab> {
         authService: widget.authService,
         notificationService: widget.notificationService,
         onSettingsChanged: widget.onSettingsChanged,
-        onShowStepGoalDialog: _showStepGoalDialog,
       ),
     );
     // After the settings sheet closes, refetch so any edits inside it
@@ -157,13 +141,6 @@ class _ProfileTabState extends State<ProfileTab> {
       buf.write(s[i]);
     }
     return buf.toString();
-  }
-
-  static String _formatCompact(int n) {
-    if (n >= 1000) {
-      return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}k';
-    }
-    return '$n';
   }
 
   @override
@@ -225,14 +202,6 @@ class _ProfileTabState extends State<ProfileTab> {
                                       ),
                                       const SizedBox(height: 4),
                                     ],
-                                    if (widget.stepGoal != null)
-                                      Text(
-                                        'Goal: ${widget.stepGoal} steps/day',
-                                        style: PixelText.body(
-                                          size: 14,
-                                          color: AppColors.textMid,
-                                        ),
-                                      ),
                                   ],
                                 ),
                               ),
@@ -354,9 +323,7 @@ class _ProfileTabState extends State<ProfileTab> {
 
   Widget _buildTopStatusBar() {
     final steps = widget.stepData?.steps ?? 0;
-    final goal = widget.stepGoal ?? 0;
     final stepsStr = _formatNumber(steps);
-    final goalStr = goal > 0 ? _formatCompact(goal) : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -400,22 +367,13 @@ class _ProfileTabState extends State<ProfileTab> {
           ],
         ),
         const SizedBox(height: 2),
-        if (goalStr != null)
-          Text(
-            '$stepsStr / $goalStr',
-            style: PixelText.number(
-              size: 20,
-              color: AppColors.accent,
-            ).copyWith(shadows: _textShadows),
-          )
-        else
-          Text(
-            stepsStr,
-            style: PixelText.number(
-              size: 20,
-              color: AppColors.accent,
-            ).copyWith(shadows: _textShadows),
-          ),
+        Text(
+          stepsStr,
+          style: PixelText.number(
+            size: 20,
+            color: AppColors.accent,
+          ).copyWith(shadows: _textShadows),
+        ),
       ],
     );
   }
@@ -577,13 +535,11 @@ class _SettingsSheet extends StatefulWidget {
   final AuthService authService;
   final NotificationService? notificationService;
   final VoidCallback onSettingsChanged;
-  final VoidCallback onShowStepGoalDialog;
 
   const _SettingsSheet({
     required this.authService,
     this.notificationService,
     required this.onSettingsChanged,
-    required this.onShowStepGoalDialog,
   });
 
   @override
@@ -712,18 +668,6 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                 ),
               );
               widget.onSettingsChanged();
-            },
-          ),
-          const SizedBox(height: 10),
-          PillButton(
-            label: 'EDIT STEP GOAL',
-            variant: PillButtonVariant.secondary,
-            fontSize: 13,
-            fullWidth: true,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            onPressed: () {
-              Navigator.of(context).pop();
-              widget.onShowStepGoalDialog();
             },
           ),
           const SizedBox(height: 10),

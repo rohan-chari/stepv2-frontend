@@ -167,25 +167,31 @@ class BackendApiService {
     return user;
   }
 
-  Future<Map<String, dynamic>> setStepGoal({
+  Future<Map<String, dynamic>> fetchStepMilestonesToday({
     required String identityToken,
-    required int stepGoal,
+    required String localDate,
   }) async {
-    final response = await _sendJsonRequest(
-      method: 'PUT',
-      path: '/auth/me/step-goal',
-      body: {'stepGoal': stepGoal},
+    final response = await _sendGetRequest(
+      path: '/users/me/step-milestones/today?localDate=$localDate',
       identityToken: identityToken,
     );
 
-    final payload = await _decodeJsonResponse(response);
-    final user = payload['user'];
+    return _decodeJsonResponse(response);
+  }
 
-    if (user is! Map<String, dynamic>) {
-      throw const ApiException('Something went wrong. Please try again.');
-    }
+  Future<Map<String, dynamic>> claimStepMilestone({
+    required String identityToken,
+    required String localDate,
+    required int threshold,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/users/me/step-milestones/$threshold/claim',
+      body: {'localDate': localDate},
+      identityToken: identityToken,
+    );
 
-    return user;
+    return _decodeJsonResponse(response);
   }
 
   Future<Map<String, dynamic>> setDisplayName({
@@ -719,6 +725,40 @@ class BackendApiService {
       body: const <String, dynamic>{},
       identityToken: identityToken,
     );
+  }
+
+  Future<Map<String, dynamic>> updateRace({
+    required String identityToken,
+    required String raceId,
+    String? name,
+    int? targetSteps,
+    bool? isPublic,
+    bool? powerupsEnabled,
+    int? powerupStepInterval,
+    int? buyInAmount,
+    String? payoutPreset,
+    int? maxParticipants,
+  }) async {
+    final body = <String, dynamic>{};
+    if (name != null) body['name'] = name;
+    if (targetSteps != null) body['targetSteps'] = targetSteps;
+    if (isPublic != null) body['isPublic'] = isPublic;
+    if (powerupsEnabled != null) body['powerupsEnabled'] = powerupsEnabled;
+    if (powerupStepInterval != null) {
+      body['powerupStepInterval'] = powerupStepInterval;
+    }
+    if (buyInAmount != null) body['buyInAmount'] = buyInAmount;
+    if (payoutPreset != null) body['payoutPreset'] = payoutPreset;
+    if (maxParticipants != null) body['maxParticipants'] = maxParticipants;
+
+    final response = await _sendJsonRequest(
+      method: 'PATCH',
+      path: '/races/$raceId',
+      body: body,
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
   }
 
   Future<Map<String, dynamic>> usePowerup({

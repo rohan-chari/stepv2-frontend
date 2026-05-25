@@ -9,19 +9,18 @@ import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/coin_balance_badge.dart';
+import '../../widgets/step_milestones_section.dart';
 import '../../widgets/streak_chip.dart' show StreakChip, StreakChipState;
 import '../../widgets/home_chrome.dart';
 import '../../widgets/home_course_track.dart' show CapybaraCustomizationPreview;
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/race_opportunity_card.dart';
-import '../../widgets/spinning_coin.dart';
 import '../display_name_screen.dart';
 
 class HomeTab extends StatelessWidget {
   final StepData? stepData;
   final bool isLoading;
   final String? error;
-  final int? stepGoal;
   final bool healthAuthorized;
   final bool? notificationsState;
   final String? displayName;
@@ -30,7 +29,6 @@ class HomeTab extends StatelessWidget {
   final Future<void> Function() onRefresh;
   final VoidCallback onEnableHealth;
   final VoidCallback onEnableNotifications;
-  final VoidCallback onSetStepGoal;
   final VoidCallback onDisplayNameChanged;
   final List<Map<String, dynamic>> friendsSteps;
   final Loadable<List<Map<String, dynamic>>>? friendsStepsState;
@@ -49,6 +47,7 @@ class HomeTab extends StatelessWidget {
   final int incomingFriendRequests;
   final Map<String, dynamic>? raceCard;
   final GlobalKey<StreakChipState>? streakChipKey;
+  final GlobalKey<StepMilestonesSectionState>? stepMilestonesKey;
   final void Function(String raceId)? onOpenRace;
   final Future<void> Function(String raceId)? onJoinRaceFromCard;
   final Future<void> Function(String raceId)? onAcceptRaceInvite;
@@ -60,7 +59,6 @@ class HomeTab extends StatelessWidget {
     required this.stepData,
     required this.isLoading,
     required this.error,
-    required this.stepGoal,
     required this.healthAuthorized,
     required this.notificationsState,
     required this.displayName,
@@ -69,7 +67,6 @@ class HomeTab extends StatelessWidget {
     required this.onRefresh,
     required this.onEnableHealth,
     required this.onEnableNotifications,
-    required this.onSetStepGoal,
     required this.onDisplayNameChanged,
     required this.friendsSteps,
     this.friendsStepsState,
@@ -87,6 +84,7 @@ class HomeTab extends StatelessWidget {
     this.incomingFriendRequests = 0,
     this.raceCard,
     this.streakChipKey,
+    this.stepMilestonesKey,
     this.onOpenRace,
     this.onJoinRaceFromCard,
     this.onAcceptRaceInvite,
@@ -161,7 +159,12 @@ class HomeTab extends StatelessWidget {
                     if (leaderboardHighlightsLoading ||
                         leaderboardHighlights.isNotEmpty)
                       const SizedBox(height: 16),
-                    _buildDailyRewardSlots(),
+                    StepMilestonesSection(
+                      key: stepMilestonesKey,
+                      authService: authService,
+                      backendApiService: backendApiService,
+                      currentSteps: stepData?.steps,
+                    ),
                   ],
                 ),
               ),
@@ -216,9 +219,7 @@ class HomeTab extends StatelessWidget {
     }
 
     final steps = stepData?.steps ?? 0;
-    final goal = stepGoal ?? 0;
     final stepsStr = _formatNumber(steps);
-    final goalStr = goal > 0 ? _formatCompact(goal) : null;
     final friendsAhead = friendsSteps.where((friend) {
       final friendSteps = (friend['steps'] as num?)?.toInt() ?? 0;
       return friendSteps > steps;
@@ -300,63 +301,18 @@ class HomeTab extends StatelessWidget {
                           const SizedBox(height: 6),
                           FittedBox(
                             fit: BoxFit.scaleDown,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.baseline,
-                              textBaseline: TextBaseline.alphabetic,
-                              children: [
-                                Text(
-                                  stepsStr,
-                                  style: HomeText.display(
-                                    size: 58,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                if (goalStr != null) ...[
-                                  const SizedBox(width: 10),
-                                  Text(
-                                    'out of $goalStr',
-                                    style: HomeText.body(
-                                      size: 18,
-                                      color: Colors.white.withValues(
-                                        alpha: 0.82,
-                                      ),
-                                      weight: FontWeight.w800,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  GestureDetector(
-                                    onTap: onSetStepGoal,
-                                    behavior: HitTestBehavior.opaque,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(3),
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: Colors.white.withValues(
-                                            alpha: 0.7,
-                                          ),
-                                          width: 1,
-                                        ),
-                                      ),
-                                      child: Icon(
-                                        Icons.edit_rounded,
-                                        size: 11,
-                                        color: Colors.white.withValues(
-                                          alpha: 0.9,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ],
+                            child: Text(
+                              stepsStr,
+                              style: HomeText.display(
+                                size: 58,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 8),
                           Text(
                             _heroSummary(
                               steps: steps,
-                              goal: goal,
                               friendsAhead: friendsAhead,
                             ),
                             textAlign: TextAlign.center,
@@ -378,37 +334,6 @@ class HomeTab extends StatelessWidget {
                   ],
                 ),
               ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (goal <= 0) ...[
-                  HomeInsetPanel(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Set your daily goal to unlock the live goal race and reward bonuses.',
-                          style: HomeText.body(
-                            size: 14,
-                            color: HomeColors.muted,
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        HomeButton(
-                          label: 'SET STEP GOAL',
-                          icon: Icons.flag_rounded,
-                          compact: true,
-                          onPressed: onSetStepGoal,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
             ),
           ),
         ],
@@ -456,47 +381,6 @@ class HomeTab extends StatelessWidget {
     );
   }
 
-  Widget _buildDailyRewardSlots() {
-    final steps = stepData?.steps ?? 0;
-    final goal = stepGoal ?? 0;
-    final hitGoal = goal > 0 && steps >= goal;
-    final hitDoubleGoal = goal > 0 && steps >= goal * 2;
-
-    return HomePanel(
-      radius: 0,
-      padding: const EdgeInsets.fromLTRB(22, 22, 22, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('DAILY REWARDS', style: HomeText.label(size: 13)),
-          const SizedBox(height: 8),
-          Text('Coin bonuses for today', style: HomeText.title(size: 26)),
-          const SizedBox(height: 6),
-          Text(
-            'Hit your target once, then double it for the extra reward.',
-            style: HomeText.body(size: 14, color: HomeColors.muted),
-          ),
-          const SizedBox(height: 16),
-          _DailyRewardCard(
-            label: '1x GOAL',
-            description: 'Hit your daily step goal',
-            reward: '+10 coins',
-            unlocked: hitGoal,
-          ),
-          const SizedBox(height: 12),
-          Divider(height: 1, color: HomeColors.line.withValues(alpha: 0.10)),
-          const SizedBox(height: 12),
-          _DailyRewardCard(
-            label: '2x GOAL',
-            description: 'Double your daily step goal',
-            reward: '+10 coins',
-            unlocked: hitDoubleGoal,
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildPermissionPrompt() {
     return _PermissionGate(
       icon: Icons.favorite_rounded,
@@ -525,17 +409,13 @@ class HomeTab extends StatelessWidget {
 
   String _heroSummary({
     required int steps,
-    required int goal,
     required int friendsAhead,
   }) {
-    if (goal <= 0) {
-      return 'Set a target so your pace, rewards, and races have something to chase.';
+    if (steps >= 20000) {
+      return 'Huge day. You cleared every milestone — go claim those coins.';
     }
-    if (steps >= goal * 2) {
-      return 'Double goal hit. You cleared every reward for the day.';
-    }
-    if (steps >= goal) {
-      return 'Goal hit. Keep walking to lock in the double-goal bonus.';
+    if (steps >= 5000) {
+      return 'Nice pace. Tap the milestones below to claim your coins.';
     }
     if (friendsAhead > 1) {
       return '$friendsAhead friends are ahead of your pace right now.';
@@ -543,7 +423,7 @@ class HomeTab extends StatelessWidget {
     if (friendsAhead == 1) {
       return '1 friend is ahead of your pace right now.';
     }
-    return 'Clean pace so far. You are tracking toward your target.';
+    return 'Clean pace so far. Keep walking to hit your first milestone.';
   }
 
   static String _formatNumber(int n) {
@@ -556,12 +436,6 @@ class HomeTab extends StatelessWidget {
     return buf.toString();
   }
 
-  static String _formatCompact(int n) {
-    if (n >= 1000) {
-      return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}k';
-    }
-    return '$n';
-  }
 }
 
 class _PermissionGate extends StatelessWidget {
@@ -915,82 +789,6 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
               textAlign: TextAlign.center,
             ),
           ),
-      ],
-    );
-  }
-}
-
-class _DailyRewardCard extends StatelessWidget {
-  final String label;
-  final String description;
-  final String reward;
-  final bool unlocked;
-
-  const _DailyRewardCard({
-    required this.label,
-    required this.description,
-    required this.reward,
-    required this.unlocked,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: unlocked ? HomeColors.cream : HomeColors.surfaceMuted,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: unlocked
-                  ? HomeColors.gold.withValues(alpha: 0.55)
-                  : HomeColors.line.withValues(alpha: 0.10),
-              width: 2,
-            ),
-          ),
-          child: Center(
-            child: unlocked
-                ? const SpinningCoin(size: 24)
-                : Icon(
-                    Icons.lock_rounded,
-                    size: 22,
-                    color: HomeColors.muted.withValues(alpha: 0.65),
-                  ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: HomeText.title(
-                  size: 17,
-                  color: unlocked ? HomeColors.ink : HomeColors.muted,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                description,
-                style: HomeText.body(
-                  size: 13,
-                  color: unlocked ? HomeColors.muted : HomeColors.muted,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 12),
-        Text(
-          reward,
-          style: HomeText.title(
-            size: 16,
-            color: unlocked ? HomeColors.success : HomeColors.muted,
-          ),
-        ),
       ],
     );
   }

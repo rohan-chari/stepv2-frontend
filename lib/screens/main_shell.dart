@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 
-import '../config/backend_config.dart';
 import '../models/loadable.dart';
 import '../models/step_data.dart';
 import '../models/step_sample_data.dart';
@@ -15,13 +14,11 @@ import '../services/backend_api_service.dart';
 import '../services/background_sync_bootstrap_service.dart';
 import '../services/health_service.dart';
 import '../services/notification_service.dart';
-import '../styles.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/info_toast.dart';
-import '../widgets/pill_button.dart';
+import '../widgets/step_milestones_section.dart';
 import '../widgets/streak_chip.dart';
-import '../widgets/trail_sign.dart';
 import '../widgets/wooden_tab_bar.dart';
 import 'start_screen.dart';
 import 'tabs/friends_tab.dart';
@@ -66,7 +63,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   bool _isLoading = false;
   String? _error;
   StepData? _stepData;
-  int? _stepGoal;
   int _incomingFriendRequests = 0;
   String? _displayName;
   String? _email;
@@ -87,6 +83,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   int _leaderboardSelectionNonce = 0;
   Timer? _foregroundPollTimer;
   final GlobalKey<StreakChipState> _streakChipKey = GlobalKey<StreakChipState>();
+  final GlobalKey<StepMilestonesSectionState> _stepMilestonesKey =
+      GlobalKey<StepMilestonesSectionState>();
   static const Duration _foregroundPollInterval = Duration(minutes: 5);
 
   void _handleAuthServiceChanged() {
@@ -167,7 +165,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && _healthAuthorized) {
       _fetchSteps();
-      _refreshStepGoal();
+      _refreshMe();
       _fetchFriendsSteps();
       _fetchRaces();
       _fetchShopCatalog();
@@ -184,7 +182,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _foregroundPollTimer = Timer.periodic(_foregroundPollInterval, (_) {
       if (_healthAuthorized) {
         _fetchSteps();
-        _refreshStepGoal();
+        _refreshMe();
       }
     });
   }
@@ -196,7 +194,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   Future<void> _restoreAndFetch() async {
     setState(() {
-      _stepGoal = widget.authService.stepGoal;
       _displayName = widget.authService.displayName;
     });
 
@@ -212,7 +209,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _fetchLeaderboardHighlights();
     _fetchRaceCard();
     await _fetchSteps();
-    _refreshStepGoal();
+    _refreshMe();
     _fetchFriendsSteps();
     _fetchRaces();
     _fetchShopCatalog();
@@ -387,7 +384,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       });
 
       _fetchFriendsSteps();
-      _refreshStepGoal();
+      _refreshMe();
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -548,6 +545,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _fetchShopCatalog(),
       _fetchRaceCard(),
       _streakChipKey.currentState?.refresh() ?? Future<void>.value(),
+      _stepMilestonesKey.currentState?.refresh() ?? Future<void>.value(),
     ]);
   }
 
@@ -644,26 +642,28 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   Future<void> _refreshFriendsTab() async {
-    await _refreshStepGoal();
+    await _refreshMe();
   }
 
   Future<void> _refreshProfileTab() async {
-    await _refreshStepGoal();
+    await _refreshMe();
   }
 
   void _openFriendsTab() {
+    if (_incomingFriendRequests != 0) {
+      setState(() => _incomingFriendRequests = 0);
+    }
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => FriendsTab(
           authService: widget.authService,
           onFriendsChanged: () {
-            _refreshStepGoal();
+            _refreshMe();
             _fetchFriendsSteps();
           },
           onRefresh: _refreshFriendsTab,
           backendApiService: _backendApiService,
           stepData: _stepData,
-          stepGoal: _stepGoal,
           displayName: _displayName,
           onOpenProfile: _openProfile,
         ),
@@ -849,7 +849,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         builder: (context) => ProfileTab(
           authService: widget.authService,
           displayName: _displayName,
-          stepGoal: _stepGoal,
           email: _email,
           onSettingsChanged: _syncSettingsState,
           onRefresh: _refreshProfileTab,
@@ -922,7 +921,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _refreshStepGoal() async {
+  Future<void> _refreshMe() async {
     try {
       final identityToken = widget.authService.authToken;
       if (identityToken == null || identityToken.isEmpty) return;
@@ -930,14 +929,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       final user = await _backendApiService.fetchMe(
         identityToken: identityToken,
       );
-      final goal = user['stepGoal'] as int?;
       final incoming = user['incomingFriendRequests'] as int? ?? 0;
       final displayName = user['displayName'] as String?;
       final email = user['email'] as String?;
       await widget.authService.syncFromBackendUser(user);
       if (mounted) {
         setState(() {
-          _stepGoal = goal;
           _incomingFriendRequests = incoming;
           _displayName = displayName;
           _email = email;
@@ -948,7 +945,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   Future<void> _refreshProfileSurfaces() async {
     await Future.wait([
-      _refreshStepGoal(),
+      _refreshMe(),
       _fetchFriendsSteps(),
       _fetchRaces(),
     ]);
@@ -960,146 +957,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _showStepGoalDialog() async {
-    final controller = TextEditingController(text: _stepGoal?.toString() ?? '');
-
-    final result = await showDialog<int>(
-      context: context,
-      builder: (context) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 24,
-          ),
-          child: SingleChildScrollView(
-            child: TrailSign(
-              width: 300,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'STEP GOAL',
-                    style: PixelText.title(size: 18, color: AppColors.textDark),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'How many steps per day?',
-                    style: PixelText.body(size: 14, color: AppColors.textMid),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: controller,
-                    keyboardType: TextInputType.number,
-                    textAlign: TextAlign.center,
-                    style: PixelText.number(
-                      size: 24,
-                      color: AppColors.textDark,
-                    ),
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: AppColors.parchmentLight,
-                      border: OutlineInputBorder(
-                        borderSide: BorderSide(
-                          color: AppColors.parchmentBorder,
-                        ),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderSide: BorderSide(
-                          color: AppColors.parchmentBorder,
-                        ),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderSide: BorderSide(
-                          color: AppColors.accent,
-                          width: 2,
-                        ),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Minimum: 5,000 steps',
-                    style: PixelText.body(size: 12, color: AppColors.textMid),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: PillButton(
-                          label: 'CANCEL',
-                          variant: PillButtonVariant.secondary,
-                          fontSize: 13,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          onPressed: () => Navigator.of(context).pop(),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: PillButton(
-                          label: 'SAVE',
-                          variant: PillButtonVariant.primary,
-                          fontSize: 13,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          onPressed: () {
-                            final value = int.tryParse(controller.text);
-                            if (value != null &&
-                                value >= BackendConfig.minStepGoal) {
-                              Navigator.of(context).pop(value);
-                            }
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-
-    if (result == null || !mounted) return;
-
-    setState(() => _stepGoal = result);
-    await widget.authService.updateStepGoal(result);
-
-    try {
-      final identityToken = widget.authService.authToken;
-      if (identityToken != null && identityToken.isNotEmpty) {
-        await _backendApiService.setStepGoal(
-          identityToken: identityToken,
-          stepGoal: result,
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        showErrorToast(
-          context,
-          'Couldn\u2019t save your step goal. Please try again.',
-        );
-      }
-    }
-  }
-
   void _syncSettingsState() {
     setState(() {
-      _stepGoal = widget.authService.stepGoal;
       _displayName = widget.authService.displayName;
     });
   }
@@ -1122,11 +981,11 @@ Positioned.fill(
               children: [
                 HomeTab(
                   streakChipKey: _streakChipKey,
+                  stepMilestonesKey: _stepMilestonesKey,
                   incomingFriendRequests: _incomingFriendRequests,
                   stepData: _stepData,
                   isLoading: _isLoading,
                   error: _error,
-                  stepGoal: _stepGoal,
                   backendApiService: _backendApiService,
                   healthAuthorized: _healthAuthorized,
                   notificationsState: _notificationsState,
@@ -1135,7 +994,6 @@ Positioned.fill(
                   onRefresh: _refreshHomeTab,
                   onEnableHealth: _enableHealthData,
                   onEnableNotifications: _enableNotifications,
-                  onSetStepGoal: _showStepGoalDialog,
                   onDisplayNameChanged: _syncSettingsState,
                   friendsSteps: _friendsSteps,
                   friendsStepsState: _friendsStepsState,
@@ -1176,7 +1034,6 @@ Positioned.fill(
                   authService: widget.authService,
                   backendApiService: _backendApiService,
                   stepData: _stepData,
-                  stepGoal: _stepGoal,
                   displayName: _displayName,
                   requestedType: _requestedLeaderboardType,
                   requestedPeriod: _requestedLeaderboardPeriod,

@@ -85,7 +85,6 @@ class LeaderboardTab extends StatefulWidget {
   final AuthService authService;
   final BackendApiService? backendApiService;
   final StepData? stepData;
-  final int? stepGoal;
   final String? displayName;
   final String requestedType;
   final String requestedPeriod;
@@ -97,7 +96,6 @@ class LeaderboardTab extends StatefulWidget {
     required this.authService,
     this.backendApiService,
     this.stepData,
-    this.stepGoal,
     this.displayName,
     this.requestedType = 'steps',
     this.requestedPeriod = 'today',
@@ -372,9 +370,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
 
   Widget _buildTopStatusBar() {
     final steps = widget.stepData?.steps ?? 0;
-    final goal = widget.stepGoal ?? 0;
     final stepsStr = _formatNumber(steps);
-    final goalStr = goal > 0 ? _formatCompact(goal) : null;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -401,22 +397,13 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                 ],
               ),
               const SizedBox(height: 2),
-              if (goalStr != null)
-                Text(
-                  '$stepsStr / $goalStr',
-                  style: PixelText.number(
-                    size: 20,
-                    color: AppColors.accent,
-                  ).copyWith(shadows: _textShadows),
-                )
-              else
-                Text(
-                  stepsStr,
-                  style: PixelText.number(
-                    size: 20,
-                    color: AppColors.accent,
-                  ).copyWith(shadows: _textShadows),
-                ),
+              Text(
+                stepsStr,
+                style: PixelText.number(
+                  size: 20,
+                  color: AppColors.accent,
+                ).copyWith(shadows: _textShadows),
+              ),
             ],
           ),
         ),
@@ -437,13 +424,6 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
       buf.write(s[i]);
     }
     return buf.toString();
-  }
-
-  static String _formatCompact(int n) {
-    if (n >= 1000) {
-      return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}k';
-    }
-    return '$n';
   }
 
   Widget _buildTypeTabs() {
