@@ -11,6 +11,7 @@ import '../../widgets/app_avatar.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/step_milestones_section.dart';
 import '../../widgets/streak_chip.dart' show StreakChip, StreakChipState;
+import '../../widgets/active_race_card.dart';
 import '../../widgets/home_chrome.dart';
 import '../../widgets/home_course_track.dart' show CapybaraCustomizationPreview;
 import '../../widgets/loading_skeleton.dart';
@@ -128,23 +129,30 @@ class HomeTab extends StatelessWidget {
                     _buildHeroSection(context),
                     if (raceCard != null) ...[
                       const SizedBox(height: 16),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: RaceOpportunityCard(
-                          data: RaceCardData.fromJson(raceCard!),
-                          onAccept: onAcceptRaceInvite == null
-                              ? null
-                              : (raceId) => onAcceptRaceInvite!(raceId),
-                          onDecline: onDeclineRaceInvite == null
-                              ? null
-                              : (raceId) => onDeclineRaceInvite!(raceId),
-                          onOpenRace: onOpenRace,
-                          onJoinRace: onJoinRaceFromCard == null
-                              ? null
-                              : (raceId) => onJoinRaceFromCard!(raceId),
-                          onChallengeBack: onChallengeFriendBack,
+                      // New (opt-in) ACTIVE_RACES state → horizontal row of
+                      // active-race cards. Any other state keeps rendering the
+                      // existing RaceOpportunityCard exactly as before
+                      // (invites / friend racing / public / empty).
+                      if (raceCard!['state'] == 'ACTIVE_RACES')
+                        _buildActiveRacesRow(raceCard!)
+                      else
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: RaceOpportunityCard(
+                            data: RaceCardData.fromJson(raceCard!),
+                            onAccept: onAcceptRaceInvite == null
+                                ? null
+                                : (raceId) => onAcceptRaceInvite!(raceId),
+                            onDecline: onDeclineRaceInvite == null
+                                ? null
+                                : (raceId) => onDeclineRaceInvite!(raceId),
+                            onOpenRace: onOpenRace,
+                            onJoinRace: onJoinRaceFromCard == null
+                                ? null
+                                : (raceId) => onJoinRaceFromCard!(raceId),
+                            onChallengeBack: onChallengeFriendBack,
+                          ),
                         ),
-                      ),
                     ],
                     const SizedBox(height: 16),
                     _SetupPromptsSection(
@@ -171,6 +179,60 @@ class HomeTab extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Horizontally-scrollable row of [ActiveRaceCard]s, one per active race the
+  /// user is in. Driven by the opt-in `ACTIVE_RACES` backend state. Reads the
+  /// response defensively (missing/null fields default safely) so a backend on
+  /// a different version can't crash the row.
+  Widget _buildActiveRacesRow(Map<String, dynamic> cardData) {
+    final data = cardData['data'];
+    final races = (data is Map<String, dynamic>)
+        ? ((data['races'] as List?)
+                  ?.whereType<Map<String, dynamic>>()
+                  .toList() ??
+              const <Map<String, dynamic>>[])
+        : const <Map<String, dynamic>>[];
+
+    if (races.isEmpty) return const SizedBox.shrink();
+
+    return SizedBox(
+      height: 248,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: races.length,
+        itemBuilder: (context, index) {
+          final race = races[index];
+          final raceId = race['raceId'] as String? ?? '';
+          final endsAtRaw = race['endsAt'];
+          DateTime? endsAt;
+          if (endsAtRaw is String) {
+            endsAt = DateTime.tryParse(endsAtRaw);
+          }
+          final top3 =
+              (race['top3'] as List?)
+                  ?.whereType<Map<String, dynamic>>()
+                  .toList() ??
+              const <Map<String, dynamic>>[];
+          final placement = (race['userPlacement'] as num?)?.toInt();
+
+          return Padding(
+            padding: EdgeInsets.only(
+              right: index == races.length - 1 ? 0 : 10,
+            ),
+            child: ActiveRaceCard(
+              raceId: raceId,
+              raceName: race['name'] as String? ?? 'Race',
+              endsAt: endsAt,
+              top3: top3,
+              userPlacement: placement,
+              onTap: raceId.isEmpty ? null : () => onOpenRace?.call(raceId),
+            ),
+          );
+        },
       ),
     );
   }

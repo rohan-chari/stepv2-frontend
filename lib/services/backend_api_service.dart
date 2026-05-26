@@ -468,8 +468,11 @@ class BackendApiService {
   Future<Map<String, dynamic>> fetchHomeRaceCard({
     required String identityToken,
   }) async {
+    // Opt-in flag: tells the backend this build understands the new
+    // ACTIVE_RACES list state (horizontal row of active-race cards). Older app
+    // builds never send it and keep receiving the legacy single-state response.
     final response = await _sendGetRequest(
-      path: '/home/race-card',
+      path: '/home/race-card?homeActiveRaces=1',
       identityToken: identityToken,
     );
 

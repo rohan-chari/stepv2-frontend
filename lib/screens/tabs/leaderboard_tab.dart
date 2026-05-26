@@ -10,6 +10,7 @@ import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/filter_dropdown.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/info_board_card.dart';
+import '../../widgets/friend_request_sheet.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
 
@@ -500,6 +501,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
       rows.add(
         _LeaderboardRow(
           rank: entry['rank'] as int?,
+          userId: entry['userId'] as String?,
           displayName: entry['displayName'] as String? ?? 'Anonymous',
           profilePhotoUrl: entry['profilePhotoUrl'] as String?,
           valueLabel: _displayValue(entry),
@@ -591,12 +593,17 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
       _ => '${row.rank}',
     };
 
-    return Container(
-      color: row.isMe
-          ? AppColors.accent.withValues(alpha: 0.12)
-          : index.isOdd
-          ? AppColors.parchmentDark.withValues(alpha: 0.3)
-          : Colors.transparent,
+    final backgroundColor = row.isMe
+        ? AppColors.accent.withValues(alpha: 0.12)
+        : index.isOdd
+        ? AppColors.parchmentDark.withValues(alpha: 0.3)
+        : Colors.transparent;
+
+    final userId = row.userId;
+    final canAddFriend = !row.isMe && userId != null && userId.isNotEmpty;
+
+    final content = Container(
+      color: backgroundColor,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Row(
         children: [
@@ -652,11 +659,37 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
         ],
       ),
     );
+
+    if (!canAddFriend) return content;
+
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: () => _openFriendSheet(userId, row.displayName, row.profilePhotoUrl),
+        child: content,
+      ),
+    );
+  }
+
+  void _openFriendSheet(
+    String userId,
+    String displayName,
+    String? profilePhotoUrl,
+  ) {
+    showFriendRequestSheet(
+      context: context,
+      authService: widget.authService,
+      backendApiService: _api,
+      userId: userId,
+      displayName: displayName,
+      profilePhotoUrl: profilePhotoUrl,
+    );
   }
 }
 
 class _LeaderboardRow {
   final int? rank;
+  final String? userId;
   final String displayName;
   final String? profilePhotoUrl;
   final String valueLabel;
@@ -667,6 +700,7 @@ class _LeaderboardRow {
 
   const _LeaderboardRow({
     required this.rank,
+    this.userId,
     required this.displayName,
     this.profilePhotoUrl,
     required this.valueLabel,

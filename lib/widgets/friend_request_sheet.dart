@@ -89,7 +89,7 @@ class _FriendRequestSheetState extends State<_FriendRequestSheet> {
 
       final friends =
           (data['friends'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-      if (friends.any((f) => f['userId'] == widget.userId)) {
+      if (friends.any((f) => _matchesUser(f, widget.userId))) {
         setState(() => _status = _FriendStatus.friends);
         return;
       }
@@ -97,7 +97,7 @@ class _FriendRequestSheetState extends State<_FriendRequestSheet> {
       final pending = data['pending'] as Map<String, dynamic>? ?? {};
       final outgoing =
           (pending['outgoing'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-      if (outgoing.any((r) => r['userId'] == widget.userId)) {
+      if (outgoing.any((r) => _matchesUser(r, widget.userId))) {
         setState(() => _status = _FriendStatus.outgoing);
         return;
       }
@@ -105,7 +105,7 @@ class _FriendRequestSheetState extends State<_FriendRequestSheet> {
       final incoming =
           (pending['incoming'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       final incomingMatch = incoming.firstWhere(
-        (r) => r['userId'] == widget.userId,
+        (r) => _matchesUser(r, widget.userId),
         orElse: () => const {},
       );
       if (incomingMatch.isNotEmpty) {
@@ -121,6 +121,30 @@ class _FriendRequestSheetState extends State<_FriendRequestSheet> {
       if (!mounted) return;
       setState(() => _status = _FriendStatus.error);
     }
+  }
+
+  /// Whether [entry] (a friend or pending-request object from `/friends`)
+  /// refers to [userId]. The backend uses different shapes across collections:
+  /// friends carry a top-level `id`, while pending requests nest the other
+  /// person under `user: { id, ... }`. Match defensively across both so older
+  /// or newer backend payloads still resolve correctly.
+  static bool _matchesUser(Map<String, dynamic> entry, String userId) {
+    return _extractUserId(entry) == userId;
+  }
+
+  static String? _extractUserId(Map<String, dynamic> data) {
+    for (final key in const ['id', 'userId', 'friendId', 'addresseeId']) {
+      final value = data[key];
+      if (value is String && value.isNotEmpty) return value;
+    }
+    for (final key in const ['user', 'friend', 'addressee', 'requester']) {
+      final value = data[key];
+      if (value is Map<String, dynamic>) {
+        final nested = _extractUserId(value);
+        if (nested != null) return nested;
+      }
+    }
+    return null;
   }
 
   Future<void> _send() async {
@@ -193,14 +217,23 @@ class _FriendRequestSheetState extends State<_FriendRequestSheet> {
           style: PixelText.body(size: 13, color: AppColors.textMid),
         );
       case _FriendStatus.friends:
-        return Text(
-          'Already friends ✓',
-          style: PixelText.title(size: 13, color: AppColors.pillGreenDark),
+        return const PillButton(
+          label: 'FRIENDS',
+          icon: Icons.check,
+          variant: PillButtonVariant.primary,
+          fontSize: 13,
+          fullWidth: true,
+          padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          onPressed: null,
         );
       case _FriendStatus.outgoing:
-        return Text(
-          'Request pending',
-          style: PixelText.body(size: 13, color: AppColors.textMid),
+        return const PillButton(
+          label: 'REQUESTED',
+          variant: PillButtonVariant.secondary,
+          fontSize: 13,
+          fullWidth: true,
+          padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          onPressed: null,
         );
       case _FriendStatus.incoming:
         return PillButton(
