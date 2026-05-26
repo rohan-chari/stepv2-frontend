@@ -565,7 +565,10 @@ class _RacesTabState extends State<RacesTab> {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      '$timeLabel \u2022 $participantCount runner${participantCount == 1 ? '' : 's'}${isInvite && creatorName.isNotEmpty ? ' \u2022 by $creatorName' : ''}',
+                      // For ACTIVE races the countdown moves to the pill (the
+                      // section already says "ACTIVE"), so the subtitle drops
+                      // the time and shows just the runner count.
+                      '${status == 'ACTIVE' ? '' : '$timeLabel \u2022 '}$participantCount runner${participantCount == 1 ? '' : 's'}${isInvite && creatorName.isNotEmpty ? ' \u2022 by $creatorName' : ''}',
                       style: PixelText.body(size: 14, color: AppColors.textMid),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
@@ -584,7 +587,9 @@ class _RacesTabState extends State<RacesTab> {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  statusLabel,
+                  // In the ACTIVE section the "ACTIVE" label is redundant —
+                  // show the time remaining in the pill instead.
+                  status == 'ACTIVE' ? timeLabel : statusLabel,
                   style: PixelText.title(size: 13, color: Colors.white),
                 ),
               ),
