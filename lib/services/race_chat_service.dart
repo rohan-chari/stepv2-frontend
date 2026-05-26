@@ -90,12 +90,17 @@ class RaceChatService extends ChangeNotifier {
   bool _disposed = false;
   Object? _lastError;
   Timer? _pollTimer;
+  bool _hasUnread = false;
 
   List<RaceChatMessage> get messages => List.unmodifiable(_messages);
   bool get isLoading => _loading;
   bool get hasMore => _hasMore;
   bool get isMuted => _muted;
   Object? get lastError => _lastError;
+
+  /// True when new incoming messages arrived from polling while the chat was
+  /// not being viewed. Cleared via [markChatViewed].
+  bool get hasUnread => _hasUnread;
 
   String? get _token => authService.authToken;
 
@@ -115,6 +120,7 @@ class RaceChatService extends ChangeNotifier {
         identityToken: token,
         raceId: raceId,
         limit: 50,
+        kind: 'USER',
       );
       if (_disposed) return;
       final list =
@@ -144,6 +150,7 @@ class RaceChatService extends ChangeNotifier {
         raceId: raceId,
         cursor: _cursor,
         limit: 50,
+        kind: 'USER',
       );
       if (_disposed) return;
       final list =
@@ -169,14 +176,20 @@ class RaceChatService extends ChangeNotifier {
         identityToken: token,
         raceId: raceId,
         limit: 50,
+        kind: 'USER',
       );
       if (_disposed) return;
       final list =
           (result['messages'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       final fresh = list.map(RaceChatMessage.fromJson).toList();
       final existingIds = _messages.map((m) => m.id).toSet();
-      final newMessages = fresh.where((m) => !existingIds.contains(m.id));
+      final newMessages = fresh
+          .where((m) => !existingIds.contains(m.id))
+          .toList();
       if (newMessages.isEmpty) return;
+      // Incoming messages from polling (not the user's own optimistic sends)
+      // mark the chat as unread until the user views it.
+      _hasUnread = true;
       _messages.insertAll(0, newMessages);
       _messages.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       _safeNotify();
@@ -307,6 +320,16 @@ class RaceChatService extends ChangeNotifier {
     try {
       await api.markRaceChatRead(identityToken: token, raceId: raceId);
     } catch (_) {}
+  }
+
+  /// Clears the unread indicator and persists the read state on the server.
+  /// Call when the user opens/views the Chat tab.
+  void markChatViewed() {
+    if (_disposed) return;
+    final wasUnread = _hasUnread;
+    _hasUnread = false;
+    markRead();
+    if (wasUnread) _safeNotify();
   }
 
   @override

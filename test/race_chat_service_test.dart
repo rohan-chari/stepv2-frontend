@@ -17,6 +17,7 @@ class _FakeRaceChatApi extends BackendApiService {
     required String raceId,
     String? cursor,
     int? limit,
+    String? kind,
   }) {
     final completer = fetchCompleter;
     if (completer != null) return completer.future;

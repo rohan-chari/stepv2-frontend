@@ -7,9 +7,11 @@ import '../models/loadable.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../services/race_chat_service.dart';
+import '../services/race_feed_service.dart';
 import '../styles.dart';
 import '../utils/race_participant_display.dart';
 import '../widgets/arcade_page.dart';
+import '../widgets/arcade_tab_selector.dart';
 import '../widgets/app_avatar.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/goal_track.dart';
@@ -215,11 +217,20 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   Timer? _countdownTimer;
   late DateTime _countdownNow;
 
-  // Merged activity (chat + powerup events) state.
+  // Activity/Chat tabs state.
+  // 0 = Activity (system/powerup events, default), 1 = Chat (user messages).
+  int _activityTabIndex = 0;
+
+  // Chat tab (user messages).
   RaceChatService? _chat;
   bool _chatInitialized = false;
+  bool _chatHasUnread = false;
   final TextEditingController _messageInput = TextEditingController();
   bool _sendingMessage = false;
+
+  // Activity tab (system/powerup events).
+  RaceFeedService? _feed;
+  bool _feedInitialized = false;
 
   String get _myUserId => widget.authService.userId ?? '';
   BackendApiService get _api => widget.backendApiService;
@@ -262,6 +273,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       chat.markRead();
       chat.dispose();
     }
+    final feed = _feed;
+    if (feed != null) {
+      feed.dispose();
+    }
     super.dispose();
   }
 
@@ -280,13 +295,57 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     chat.addListener(_onChatChanged);
     chat.loadInitial().then((_) {
       if (!mounted) return;
-      chat.markRead();
+      // Initial chat load shouldn't count as unread; the user just opened the
+      // race. Clear any unread set during load if we're already on Chat.
+      if (_activityTabIndex == 1) {
+        chat.markChatViewed();
+      } else {
+        chat.markRead();
+      }
     });
     chat.startPolling();
   }
 
+  void _ensureFeedInitialized() {
+    if (_feedInitialized) return;
+    if (_race == null) return;
+    _feedInitialized = true;
+    final feed = RaceFeedService(
+      authService: widget.authService,
+      raceId: widget.raceId,
+      api: widget.backendApiService,
+    );
+    _feed = feed;
+    feed.addListener(_onFeedChanged);
+    feed.loadInitial();
+    feed.startPolling();
+  }
+
   void _onChatChanged() {
+    if (!mounted) return;
+    final chat = _chat;
+    // New incoming messages arrived while the user is not on the Chat tab.
+    if (chat != null && chat.hasUnread && _activityTabIndex != 1) {
+      _chatHasUnread = true;
+    }
+    setState(() {});
+  }
+
+  void _onFeedChanged() {
     if (mounted) setState(() {});
+  }
+
+  void _onTabChanged(int index) {
+    if (_activityTabIndex == index) return;
+    setState(() => _activityTabIndex = index);
+    if (index == 1) {
+      // Switched to Chat: clear unread + persist read state on the server.
+      _chatHasUnread = false;
+      _chat?.markChatViewed();
+    } else {
+      // Switched away from Chat: persist read state.
+      _chat?.markRead();
+    }
   }
 
   Future<void> _loadDetails() async {
@@ -313,6 +372,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         _startPolling();
         _startCountdown();
         _ensureChatInitialized();
+        _ensureFeedInitialized();
       }
     } catch (e) {
       if (mounted) {
@@ -357,6 +417,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
       if (_powerupData?['enabled'] == true) {
         _chat?.refreshTop();
+        _feed?.refreshTop();
 
         _queuedBoxCount = _readInt(
           _powerupData?['queuedBoxCount'],
@@ -1811,7 +1872,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               ),
 
               _buildActiveEffectsSection(),
-              _buildMergedActivitySection(),
+              _buildActivityTabsSection(),
               const SizedBox(height: 24),
             ],
           ),
@@ -2199,8 +2260,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     }
   }
 
-  Widget _buildMergedActivitySection() {
-    final chat = _chat;
+  Map<String, String> _participantNames() {
     final participants =
         (_progress?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
         [];
@@ -2210,7 +2270,94 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       final name = p['displayName'] as String? ?? '???';
       if (uid.isNotEmpty) actorNames[uid] = name;
     }
+    return actorNames;
+  }
 
+  /// Two-tab bounded panel replacing the old merged activity section.
+  Widget _buildActivityTabsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ArcadeTabSelector(
+          labels: const ['ACTIVITY', 'CHAT'],
+          activeIndex: _activityTabIndex,
+          onChanged: _onTabChanged,
+          unread: [false, _chatHasUnread],
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 400,
+          child: _activityTabIndex == 0
+              ? _buildActivityTab()
+              : _buildChatTab(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActivityTab() {
+    final feed = _feed;
+    final actorNames = _participantNames();
+    final events = feed?.events ?? const <RaceFeedEvent>[];
+    final isLoading = feed?.isLoading ?? false;
+    final hasError = feed != null && feed.lastError != null && events.isEmpty;
+
+    if (feed == null || (events.isEmpty && isLoading)) {
+      return const LoadingSkeleton(
+        child: Column(
+          children: [
+            SkeletonLine(width: double.infinity, height: 14),
+            SizedBox(height: 8),
+            SkeletonLine(width: 220, height: 14),
+          ],
+        ),
+      );
+    }
+    if (hasError) {
+      return LoadErrorPanel(
+        title: 'Couldn’t load activity',
+        message: 'Check your connection and try again.',
+        onRetry: feed.loadInitial,
+      );
+    }
+    if (events.isEmpty) {
+      return _buildTabEmptyState('No activity yet. Race is young!');
+    }
+    return ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        for (final e in events) _buildActivityItem(e, actorNames),
+        if (feed.hasMore)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Center(
+              child: TextButton(
+                onPressed: isLoading ? null : feed.loadMore,
+                child: Text(
+                  isLoading ? 'Loading…' : 'Load older',
+                  style: PixelText.body(size: 13, color: AppColors.accent),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildActivityItem(RaceFeedEvent e, Map<String, String> actorNames) {
+    final actorId = e.actorUserId ?? '';
+    return FeedBubble(
+      eventType: e.eventType,
+      powerupType: e.powerupType,
+      description: e.description,
+      actorName: actorNames[actorId] ?? '???',
+      relativeTime: _relativeTime(e.createdAt.toUtc().toIso8601String()),
+      actorIsUser: actorId == _myUserId,
+    );
+  }
+
+  Widget _buildChatTab() {
+    final chat = _chat;
     final messages = chat?.messages ?? const <RaceChatMessage>[];
     final isLoading = chat?.isLoading ?? false;
     final hasError = chat != null && chat.lastError != null && messages.isEmpty;
@@ -2228,28 +2375,17 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       );
     } else if (hasError) {
       body = LoadErrorPanel(
-        title: 'Couldn’t load activity',
+        title: 'Couldn’t load chat',
         message: 'Check your connection and try again.',
         onRetry: chat.loadInitial,
       );
     } else if (messages.isEmpty) {
-      body = Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Text(
-          'No activity yet. Say hi!',
-          style: PixelText.body(
-            size: 16,
-            color: AppColors.textMid.withValues(alpha: 0.6),
-          ),
-        ),
-      );
+      body = _buildTabEmptyState('No messages yet. Say hi!');
     } else {
-      // Newest first (matches RaceChatService ordering).
-      final items = messages;
-      body = Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      body = ListView(
+        padding: EdgeInsets.zero,
         children: [
-          for (final m in items) _buildMergedActivityItem(m, actorNames),
+          for (final m in messages) _buildChatItem(m),
           if (chat.hasMore)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
@@ -2268,48 +2404,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     }
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'ACTIVITY',
-              style: PixelText.title(size: 18, color: AppColors.textMid),
-            ),
-            GestureDetector(
-              onTap: chat?.refreshTop,
-              child: Icon(
-                Icons.refresh,
-                size: 16,
-                color: AppColors.textMid.withValues(alpha: 0.6),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        body,
-        const SizedBox(height: 8),
+        Expanded(child: body),
         _buildMessageComposer(),
       ],
     );
   }
 
-  Widget _buildMergedActivityItem(
-    RaceChatMessage m,
-    Map<String, String> actorNames,
-  ) {
-    if (m.kind == 'SYSTEM') {
-      final actorId = m.actorUserId ?? '';
-      return FeedBubble(
-        eventType: m.eventType ?? '',
-        powerupType: m.powerupType,
-        description: m.body,
-        actorName: actorNames[actorId] ?? '???',
-        relativeTime: _relativeTime(m.createdAt.toUtc().toIso8601String()),
-        actorIsUser: actorId == _myUserId,
-      );
-    }
+  Widget _buildChatItem(RaceChatMessage m) {
     final mine = m.senderId == null
         ? (m.pending || m.failed)
         : m.senderId == _myUserId;
@@ -2319,6 +2422,22 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       onLongPress: mine && !m.pending && !m.failed
           ? () => _confirmDeleteMessage(m.id)
           : null,
+    );
+  }
+
+  Widget _buildTabEmptyState(String text) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: PixelText.body(
+            size: 16,
+            color: AppColors.textMid.withValues(alpha: 0.6),
+          ),
+        ),
+      ),
     );
   }
 

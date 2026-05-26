@@ -15,6 +15,7 @@ class _CapturingChatApi extends BackendApiService {
     required String raceId,
     String? cursor,
     int? limit,
+    String? kind,
   }) async {
     lastFetchToken = identityToken;
     return {'messages': const [], 'nextCursor': null};

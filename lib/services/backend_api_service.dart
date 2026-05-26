@@ -868,10 +868,12 @@ class BackendApiService {
     required String raceId,
     String? cursor,
     int? limit,
+    String? kind, // 'USER' | 'SYSTEM'; omitted => merged feed (legacy).
   }) async {
     final params = <String, String>{};
     if (cursor != null) params['cursor'] = cursor;
     if (limit != null) params['limit'] = '$limit';
+    if (kind != null) params['kind'] = kind;
     final query = params.isEmpty
         ? ''
         : '?${params.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&')}';
