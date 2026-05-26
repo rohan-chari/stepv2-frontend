@@ -11,7 +11,8 @@ import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/pill_button.dart';
 
-const _minDisplayNameLength = 8;
+const _minDisplayNameLength = 4;
+const _maxDisplayNameLength = 30;
 
 class DisplayNameScreen extends StatefulWidget {
   const DisplayNameScreen({
@@ -61,6 +62,15 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
     _debounce?.cancel();
     final text = _controller.text.trim();
 
+    if (text.contains(RegExp(r'\s'))) {
+      setState(() {
+        _isAvailable = null;
+        _isChecking = false;
+        _availabilityMessage = 'Display name cannot contain spaces';
+      });
+      return;
+    }
+
     if (text.length < _minDisplayNameLength) {
       setState(() {
         _isAvailable = null;
@@ -68,6 +78,16 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
         _availabilityMessage = text.isEmpty
             ? null
             : 'Must be at least $_minDisplayNameLength characters';
+      });
+      return;
+    }
+
+    if (text.length > _maxDisplayNameLength) {
+      setState(() {
+        _isAvailable = null;
+        _isChecking = false;
+        _availabilityMessage =
+            'Must be no more than $_maxDisplayNameLength characters';
       });
       return;
     }
@@ -121,10 +141,23 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
       return;
     }
 
+    if (displayName.contains(RegExp(r'\s'))) {
+      showErrorToast(context, 'Display name cannot contain spaces.');
+      return;
+    }
+
     if (displayName.length < _minDisplayNameLength) {
       showErrorToast(
         context,
         'Must be at least $_minDisplayNameLength characters.',
+      );
+      return;
+    }
+
+    if (displayName.length > _maxDisplayNameLength) {
+      showErrorToast(
+        context,
+        'Must be no more than $_maxDisplayNameLength characters.',
       );
       return;
     }
@@ -163,6 +196,12 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
       final String message;
       if (raw.contains('already taken')) {
         message = 'That name is taken \u2014 try another!';
+      } else if (raw.contains('cannot contain spaces')) {
+        message = 'Display name cannot contain spaces.';
+      } else if (raw.contains('inappropriate')) {
+        message = 'Please choose a different display name.';
+      } else if (raw.contains('no more than')) {
+        message = 'Must be no more than $_maxDisplayNameLength characters.';
       } else if (raw.contains('at least')) {
         message = 'Must be at least $_minDisplayNameLength characters.';
       } else if (raw.contains('non-empty string')) {
