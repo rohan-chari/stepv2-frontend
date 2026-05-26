@@ -469,7 +469,6 @@ class _RacesTabState extends State<RacesTab> {
     final winner = race['winner'] as Map<String, dynamic>?;
     final isCreator = race['isCreator'] as bool? ?? false;
     final myPlacement = race['myPlacement'] as int?;
-    final queuedBoxCount = race['queuedBoxCount'] as int? ?? 0;
 
     String statusLabel;
     Color badgeColor;
@@ -541,25 +540,14 @@ class _RacesTabState extends State<RacesTab> {
                             maxLines: 1,
                           ),
                         ),
-                        if (myPlacement != null || queuedBoxCount > 0) ...[
+                        if (myPlacement != null) ...[
                           const SizedBox(width: 8),
-                          if (myPlacement != null)
-                            _buildMetaChip(
-                              '${formatOrdinal(myPlacement)} PLACE',
-                              backgroundColor: AppColors.pillGreenDark
-                                  .withValues(alpha: 0.16),
-                              textColor: AppColors.pillGreenDark,
-                            ),
-                          if (queuedBoxCount > 0) ...[
-                            if (myPlacement != null) const SizedBox(width: 6),
-                            _buildMetaChip(
-                              '$queuedBoxCount QUEUED',
-                              backgroundColor: AppColors.coinLight.withValues(
-                                alpha: 0.18,
-                              ),
-                              textColor: AppColors.coinDark,
-                            ),
-                          ],
+                          _buildMetaChip(
+                            '${formatOrdinal(myPlacement)} PLACE',
+                            backgroundColor: AppColors.pillGreenDark
+                                .withValues(alpha: 0.16),
+                            textColor: AppColors.pillGreenDark,
+                          ),
                         ],
                       ],
                     ),
