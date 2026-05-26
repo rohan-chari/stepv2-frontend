@@ -16,7 +16,9 @@ import '../../widgets/home_chrome.dart';
 import '../../widgets/home_course_track.dart' show CapybaraCustomizationPreview;
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/race_opportunity_card.dart';
+import '../../widgets/retro_card.dart';
 import '../display_name_screen.dart';
+import '../public_races_screen.dart';
 
 class HomeTab extends StatelessWidget {
   final StepData? stepData;
@@ -203,8 +205,12 @@ class HomeTab extends StatelessWidget {
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: races.length,
+        // +1 for the trailing "join a public race" card.
+        itemCount: races.length + 1,
         itemBuilder: (context, index) {
+          if (index == races.length) {
+            return _buildJoinPublicRaceCard(context);
+          }
           final race = races[index];
           final raceId = race['raceId'] as String? ?? '';
           final endsAtRaw = race['endsAt'];
@@ -220,9 +226,8 @@ class HomeTab extends StatelessWidget {
           final placement = (race['userPlacement'] as num?)?.toInt();
 
           return Padding(
-            padding: EdgeInsets.only(
-              right: index == races.length - 1 ? 0 : 10,
-            ),
+            // A card always follows (another race or the join card).
+            padding: const EdgeInsets.only(right: 10),
             child: ActiveRaceCard(
               raceId: raceId,
               raceName: race['name'] as String? ?? 'Race',
@@ -233,6 +238,51 @@ class HomeTab extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+
+  /// Trailing card in the active-races row: tap to browse/join a public race,
+  /// then refresh so a newly-joined race shows up in the row.
+  Widget _buildJoinPublicRaceCard(BuildContext context) {
+    return GestureDetector(
+      onTap: () async {
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => PublicRacesScreen(authService: authService),
+          ),
+        );
+        await onRefresh();
+      },
+      child: SizedBox(
+        width: 200,
+        child: RetroCard(
+          padding: const EdgeInsets.all(12),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.add_circle_outline,
+                  size: 44,
+                  color: AppColors.accent,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'JOIN A PUBLIC RACE',
+                  textAlign: TextAlign.center,
+                  style: PixelText.title(size: 14, color: AppColors.textDark),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Find an open race to enter',
+                  textAlign: TextAlign.center,
+                  style: PixelText.body(size: 11, color: AppColors.textMid),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

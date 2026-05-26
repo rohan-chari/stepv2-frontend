@@ -121,7 +121,6 @@ class _ActiveRaceCardState extends State<ActiveRaceCard> {
           padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 widget.raceName.toUpperCase(),
@@ -148,7 +147,9 @@ class _ActiveRaceCardState extends State<ActiveRaceCard> {
                 ),
               const SizedBox(height: 10),
               RaceCardCapybaraRow(top3: widget.top3),
-              const SizedBox(height: 10),
+              // Push the placement badge to the bottom so it lines up across
+              // cards regardless of how many racers (2 vs 3) are shown.
+              const Spacer(),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(
