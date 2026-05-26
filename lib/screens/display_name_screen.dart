@@ -71,6 +71,16 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
       return;
     }
 
+    if (text.isNotEmpty && !RegExp(r'^[A-Za-z0-9_]+$').hasMatch(text)) {
+      setState(() {
+        _isAvailable = null;
+        _isChecking = false;
+        _availabilityMessage =
+            'Only letters, numbers, and underscores allowed';
+      });
+      return;
+    }
+
     if (text.length < _minDisplayNameLength) {
       setState(() {
         _isAvailable = null;
@@ -146,6 +156,14 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
       return;
     }
 
+    if (!RegExp(r'^[A-Za-z0-9_]+$').hasMatch(displayName)) {
+      showErrorToast(
+        context,
+        'Only letters, numbers, and underscores allowed.',
+      );
+      return;
+    }
+
     if (displayName.length < _minDisplayNameLength) {
       showErrorToast(
         context,
@@ -198,6 +216,8 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
         message = 'That name is taken \u2014 try another!';
       } else if (raw.contains('cannot contain spaces')) {
         message = 'Display name cannot contain spaces.';
+      } else if (raw.contains('letters, numbers, and underscores')) {
+        message = 'Only letters, numbers, and underscores allowed.';
       } else if (raw.contains('inappropriate')) {
         message = 'Please choose a different display name.';
       } else if (raw.contains('no more than')) {
