@@ -158,7 +158,10 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 8),
+              // Clear the ArcadePageBackground green header band (~132px) so
+              // the first card sits on the parchment below it, not inside the
+              // header.
+              const SizedBox(height: 80),
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: _load,
@@ -278,7 +281,8 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
   Widget _buildRaceCard(Map<String, dynamic> race) {
     final raceId = race['id'] as String;
     final name = race['name'] as String? ?? 'Race';
-    final target = race['targetSteps'] as int? ?? 0;
+    final endsAt = DateTime.tryParse(race['endsAt'] as String? ?? '');
+    final maxDurationDays = race['maxDurationDays'] as int? ?? 7;
     final participantCount = race['participantCount'] as int? ?? 0;
     final maxParticipants = race['maxParticipants'] as int? ?? 10;
     final buyIn = race['buyInAmount'] as int? ?? 0;
@@ -286,6 +290,23 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
     final creatorName = creator?['displayName'] as String? ?? 'Someone';
     final powerupsEnabled = race['powerupsEnabled'] as bool? ?? false;
     final isJoining = _joiningRaceId == raceId;
+
+    // Races are time-based: show time remaining, not a step target.
+    String timeLeftLabel;
+    if (endsAt != null) {
+      final remaining = endsAt.difference(DateTime.now());
+      if (remaining.isNegative) {
+        timeLeftLabel = 'soon';
+      } else if (remaining.inDays > 0) {
+        timeLeftLabel = '${remaining.inDays}d ${remaining.inHours.remainder(24)}h';
+      } else if (remaining.inHours > 0) {
+        timeLeftLabel = '${remaining.inHours}h ${remaining.inMinutes.remainder(60)}m';
+      } else {
+        timeLeftLabel = '${remaining.inMinutes}m';
+      }
+    } else {
+      timeLeftLabel = '${maxDurationDays}d';
+    }
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -306,7 +327,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
             const SizedBox(height: 12),
             Row(
               children: [
-                _buildStat('TARGET', _formatSteps(target)),
+                _buildStat('ENDS IN', timeLeftLabel),
                 const SizedBox(width: 16),
                 _buildStat('RUNNERS', '$participantCount/$maxParticipants'),
                 if (buyIn > 0) ...[
@@ -348,11 +369,4 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
     );
   }
 
-  String _formatSteps(int steps) {
-    if (steps >= 1000) {
-      final k = steps / 1000;
-      return '${k.toStringAsFixed(k.truncateToDouble() == k ? 0 : 1)}k';
-    }
-    return '$steps';
-  }
 }
