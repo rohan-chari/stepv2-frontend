@@ -467,12 +467,14 @@ class _FriendFinishedCard extends StatelessWidget {
     );
     final placement = (data['placement'] as num?)?.toInt() ?? 1;
     final raceName = data['raceName'] as String? ?? 'a race';
-    final medal = switch (placement) {
-      1 => '🏆',
-      2 => '🥈',
-      3 => '🥉',
-      _ => '🎉',
+    final medalColor = switch (placement) {
+      1 => AppColors.medalGold,
+      2 => AppColors.medalSilver,
+      3 => AppColors.medalBronze,
+      _ => AppColors.accent,
     };
+    final medalIcon =
+        placement >= 1 && placement <= 3 ? Icons.military_tech : Icons.celebration;
     final placementText = switch (placement) {
       1 => 'just won',
       2 => 'just finished 2nd in',
@@ -494,10 +496,12 @@ class _FriendFinishedCard extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  "${friend?.displayName ?? 'A friend'} $placementText $raceName $medal",
+                  "${friend?.displayName ?? 'A friend'} $placementText $raceName",
                   style: HomeText.title(size: 15),
                 ),
               ),
+              const SizedBox(width: 8),
+              Icon(medalIcon, color: medalColor, size: 24),
             ],
           ),
           const SizedBox(height: 14),
