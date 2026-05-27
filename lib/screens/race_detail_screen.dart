@@ -2384,6 +2384,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     } else {
       body = ListView(
         padding: EdgeInsets.zero,
+        // IM-style: newest at the bottom, anchored there; scroll up for older.
+        // messages are newest-first, so reverse lays child 0 (newest) at the
+        // bottom and the "Load older" control ends up at the top.
+        reverse: true,
         children: [
           for (final m in messages) _buildChatItem(m),
           if (chat.hasMore)
@@ -2468,7 +2472,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.parchmentLight,
         border: Border(
           top: BorderSide(color: AppColors.textMid.withValues(alpha: 0.2)),
         ),
