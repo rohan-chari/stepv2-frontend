@@ -162,7 +162,9 @@ class _ActiveRaceCardState extends State<ActiveRaceCard> {
                   border: Border.all(color: placementColor, width: 1.5),
                 ),
                 child: Text(
-                  placement != null ? 'YOU: ${_ordinal(placement)}' : 'YOU: —',
+                  placement != null
+                      ? '${_ordinal(placement)} PLACE'.toUpperCase()
+                      : 'NOT RANKED',
                   textAlign: TextAlign.center,
                   style: PixelText.button(size: 11, color: AppColors.textDark),
                 ),
