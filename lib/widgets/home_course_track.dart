@@ -11,11 +11,22 @@ class HomeCourseTrack extends StatefulWidget {
     required this.runners,
     this.height = 268,
     this.goalSteps,
+    this.milestoneProgress,
+    this.milestoneLabel,
   });
 
   final List<GoalTrackRunner> runners;
   final double height;
   final int? goalSteps;
+
+  /// Position of a "goal" milestone marker along the track, in the same
+  /// leader-relative 0..1 space as runner progress. When null, no marker.
+  /// The track's finish line represents the current leader (1.0), so the
+  /// milestone may sit behind the leader if they've passed it.
+  final double? milestoneProgress;
+
+  /// Label rendered on the milestone marker (e.g. "50K").
+  final String? milestoneLabel;
 
   @override
   State<HomeCourseTrack> createState() => _HomeCourseTrackState();
@@ -120,6 +131,16 @@ class _HomeCourseTrackState extends State<HomeCourseTrack>
                                   cropTop: layout.cropTop,
                                 ),
                               ),
+                              if (_milestonePoint(layout) case final point?)
+                                Positioned(
+                                  left: point.dx - _MilestoneMarker.width / 2,
+                                  top: point.dy - _MilestoneMarker.height,
+                                  child: IgnorePointer(
+                                    child: _MilestoneMarker(
+                                      label: widget.milestoneLabel ?? 'GOAL',
+                                    ),
+                                  ),
+                                ),
                               for (final runner in runnerLayouts)
                                 Positioned(
                                   left:
@@ -330,6 +351,16 @@ class _HomeCourseTrackState extends State<HomeCourseTrack>
         ? _friendOffsetsNearUser
         : _friendClusterOffsets;
     return offsets[index % offsets.length];
+  }
+
+  /// Course point for the goal milestone marker, or null if none should show.
+  Offset? _milestonePoint(_CourseLayout layout) {
+    final milestone = widget.milestoneProgress;
+    if (milestone == null || !milestone.isFinite || milestone < 0) return null;
+    final clamped = milestone.clamp(0.0, 1.0).toDouble();
+    final point = _coursePointForProgress(progress: clamped, layout: layout);
+    // Anchor sits at the ground line; nudge up so the flag stands on the path.
+    return point + const Offset(0, 6);
   }
 
   Offset _coursePointForProgress({
@@ -1038,6 +1069,56 @@ class _CourseBackdrop extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _MilestoneMarker extends StatelessWidget {
+  const _MilestoneMarker({required this.label});
+
+  final String label;
+
+  static const double width = 64;
+  static const double height = 56;
+  static const double _poleHeight = 34;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      height: height,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: HomeColors.gold,
+              borderRadius: BorderRadius.circular(5),
+              border: Border.all(color: HomeColors.ink, width: 2),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: HomeText.body(
+                  size: 10,
+                  color: HomeColors.ink,
+                  weight: FontWeight.w800,
+                  height: 1,
+                ),
+              ),
+            ),
+          ),
+          Container(
+            width: 3,
+            height: _poleHeight,
+            color: HomeColors.ink,
+          ),
+        ],
       ),
     );
   }

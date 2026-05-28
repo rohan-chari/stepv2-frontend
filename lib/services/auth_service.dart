@@ -25,6 +25,7 @@ class AuthService extends ChangeNotifier {
   static const _keyIsAdmin = 'auth_is_admin';
   static const _keyCoins = 'auth_coins';
   static const _keyHeldCoins = 'auth_held_coins';
+  static const _keyFirstRaceOnboardingSeen = 'auth_first_race_onboarding_seen';
 
   final BackendApiService _backendApiService;
   String? _identityToken;
@@ -38,6 +39,7 @@ class AuthService extends ChangeNotifier {
   bool _isAdmin = false;
   int _coins = 0;
   int _heldCoins = 0;
+  bool _firstRaceOnboardingSeen = false;
 
   String? get identityToken => _identityToken;
   String? get sessionToken => _sessionToken;
@@ -50,6 +52,7 @@ class AuthService extends ChangeNotifier {
   bool get isAdmin => _isAdmin;
   int get coins => _coins;
   int get heldCoins => _heldCoins;
+  bool get firstRaceOnboardingSeen => _firstRaceOnboardingSeen;
   bool get isSignedIn => _identityToken != null && _userIdentifier != null;
   bool get hasSessionToken =>
       _sessionToken != null && _sessionToken!.isNotEmpty;
@@ -69,6 +72,8 @@ class AuthService extends ChangeNotifier {
     _isAdmin = prefs.getBool(_keyIsAdmin) ?? false;
     _coins = prefs.getInt(_keyCoins) ?? 0;
     _heldCoins = prefs.getInt(_keyHeldCoins) ?? 0;
+    _firstRaceOnboardingSeen =
+        prefs.getBool(_keyFirstRaceOnboardingSeen) ?? false;
     notifyListeners();
     return isSignedIn && hasSessionToken;
   }
@@ -215,6 +220,12 @@ class AuthService extends ChangeNotifier {
     if (backendUser.containsKey('heldCoins')) {
       _heldCoins = backendUser['heldCoins'] as int? ?? 0;
     }
+    // Defensive: older backend payloads may not include this field. Only
+    // override the local value when the key is present; default false.
+    if (backendUser.containsKey('firstRaceOnboardingSeen')) {
+      _firstRaceOnboardingSeen =
+          backendUser['firstRaceOnboardingSeen'] as bool? ?? false;
+    }
   }
 
   Future<void> syncFromBackendUser(Map<String, dynamic> backendUser) async {
@@ -244,6 +255,7 @@ class AuthService extends ChangeNotifier {
     _coins = 0;
     _heldCoins = 0;
     _isAdmin = false;
+    _firstRaceOnboardingSeen = false;
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyIdentityToken);
@@ -255,6 +267,7 @@ class AuthService extends ChangeNotifier {
     await prefs.remove(_keySessionToken);
     await prefs.remove(_keyIsAdmin);
     await prefs.remove(_keyHeldCoins);
+    await prefs.remove(_keyFirstRaceOnboardingSeen);
     notifyListeners();
   }
 
@@ -266,6 +279,17 @@ class AuthService extends ChangeNotifier {
     } else {
       await prefs.remove(_keySessionToken);
     }
+    notifyListeners();
+  }
+
+  /// Marks the first-race onboarding step as seen locally (after the user
+  /// joins a race or skips). The backend is the source of truth; this keeps
+  /// the in-memory + persisted value in sync so the step won't re-show this
+  /// session.
+  Future<void> markFirstRaceOnboardingSeenLocally() async {
+    _firstRaceOnboardingSeen = true;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyFirstRaceOnboardingSeen, true);
     notifyListeners();
   }
 
@@ -319,6 +343,7 @@ class AuthService extends ChangeNotifier {
     await prefs.setBool(_keyIsAdmin, _isAdmin);
     await prefs.setInt(_keyCoins, _coins);
     await prefs.setInt(_keyHeldCoins, _heldCoins);
+    await prefs.setBool(_keyFirstRaceOnboardingSeen, _firstRaceOnboardingSeen);
   }
 
   String? _buildDisplayName(AuthorizationCredentialAppleID credential) {

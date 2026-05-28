@@ -21,6 +21,7 @@ import '../widgets/step_milestones_section.dart';
 import '../widgets/streak_chip.dart';
 import '../widgets/wooden_tab_bar.dart';
 import 'start_screen.dart';
+import 'onboarding_flow.dart';
 import 'tabs/friends_tab.dart';
 import 'tabs/home_tab.dart';
 import 'tabs/leaderboard_tab.dart';
@@ -82,7 +83,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   String _requestedLeaderboardPeriod = 'today';
   int _leaderboardSelectionNonce = 0;
   Timer? _foregroundPollTimer;
-  final GlobalKey<StreakChipState> _streakChipKey = GlobalKey<StreakChipState>();
+  final GlobalKey<StreakChipState> _streakChipKey =
+      GlobalKey<StreakChipState>();
   final GlobalKey<StepMilestonesSectionState> _stepMilestonesKey =
       GlobalKey<StepMilestonesSectionState>();
   static const Duration _foregroundPollInterval = Duration(minutes: 5);
@@ -596,6 +598,64 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
   }
 
+  /// Fetches public races for the first-race onboarding step. Returns null on
+  /// error so the step can auto-skip rather than dead-end.
+  Future<List<Map<String, dynamic>>?> _fetchOnboardingRaces() async {
+    final identityToken = widget.authService.authToken;
+    if (identityToken == null || identityToken.isEmpty) return null;
+    try {
+      return await _backendApiService.fetchPublicRaces(
+        identityToken: identityToken,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Joins a race during onboarding (grants mystery boxes server-side). On
+  /// success: marks the step seen locally so onboarding exits, then navigates
+  /// to the race detail. Returns true on success.
+  Future<bool> _joinOnboardingRace(String raceId) async {
+    final identityToken = widget.authService.authToken;
+    if (identityToken == null || identityToken.isEmpty) return false;
+    try {
+      await _backendApiService.joinPublicRace(
+        identityToken: identityToken,
+        raceId: raceId,
+        onboarding: true,
+      );
+      await widget.authService.markFirstRaceOnboardingSeenLocally();
+      // Refresh surfaces that now include the joined race / new boxes.
+      _fetchRaces();
+      _fetchShopCatalog();
+      _refreshMe();
+      if (!mounted) return true;
+      // Exiting onboarding rebuilds into the tab PageView; open the race on top.
+      _openRaceFromCard(raceId);
+      return true;
+    } catch (e) {
+      if (mounted) showErrorToast(context, 'Could not join: $e');
+      return false;
+    }
+  }
+
+  /// Skips the first-race onboarding step: marks it seen on the backend
+  /// (idempotent) and locally so onboarding exits to home. Marks locally even
+  /// if the network call fails so the user isn't stuck on this step.
+  Future<void> _skipFirstRaceOnboarding() async {
+    final identityToken = widget.authService.authToken;
+    if (identityToken != null && identityToken.isNotEmpty) {
+      try {
+        await _backendApiService.markFirstRaceOnboardingSeen(
+          identityToken: identityToken,
+        );
+      } catch (_) {
+        // Best-effort: still advance locally below.
+      }
+    }
+    await widget.authService.markFirstRaceOnboardingSeenLocally();
+  }
+
   Future<void> _acceptRaceInviteFromCard(String raceId) async {
     final identityToken = widget.authService.authToken;
     if (identityToken == null || identityToken.isEmpty) return;
@@ -944,11 +1004,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   Future<void> _refreshProfileSurfaces() async {
-    await Future.wait([
-      _refreshMe(),
-      _fetchFriendsSteps(),
-      _fetchRaces(),
-    ]);
+    await Future.wait([_refreshMe(), _fetchFriendsSteps(), _fetchRaces()]);
 
     if (mounted) {
       setState(() {
@@ -965,15 +1021,38 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    final isOnboarding =
+        !_healthAuthorized ||
+        _notificationsState == null ||
+        !widget.authService.firstRaceOnboardingSeen;
+
     return Scaffold(
       resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
           Positioned.fill(child: const ArcadePageBackground(showHeader: false)),
 
-Positioned.fill(
-            child: PageView(
-              controller: _pageController,
+          if (isOnboarding)
+            Positioned.fill(
+              child: OnboardingFlow(
+                healthAuthorized: _healthAuthorized,
+                notificationsState: _notificationsState,
+                firstRaceOnboardingSeen:
+                    widget.authService.firstRaceOnboardingSeen,
+                onEnableHealth: _enableHealthData,
+                onEnableNotifications: _enableNotifications,
+                onFetchOnboardingRaces: _fetchOnboardingRaces,
+                onJoinOnboardingRace: _joinOnboardingRace,
+                onSkipFirstRace: _skipFirstRaceOnboarding,
+                error: _error,
+                isLoading: _isLoading,
+              ),
+            )
+          else
+            Positioned.fill(
+              child: PageView(
+                controller: _pageController,
+                physics: const PageScrollPhysics(),
               onPageChanged: (index) {
                 setState(() => _currentTab = index);
                 if (index == 1) _fetchRaces();
@@ -1044,37 +1123,37 @@ Positioned.fill(
             ),
           ),
 
-          // Bottom tab bar
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: WoodenTabBar(
-              currentIndex: _currentTab,
-              onTap: (index) {
-                _pageController.animateToPage(
-                  index,
-                  duration: const Duration(milliseconds: 250),
-                  curve: Curves.easeOutCubic,
-                );
-              },
-              items: [
-                const WoodenTabItem(icon: Icons.home_rounded, label: 'Home'),
-                const WoodenTabItem(
-                  icon: Icons.directions_run_rounded,
-                  label: 'Races',
-                ),
-                const WoodenTabItem(
-                  icon: Icons.storefront_rounded,
-                  label: 'Shop',
-                ),
-                const WoodenTabItem(
-                  icon: Icons.leaderboard_rounded,
-                  label: 'Leaderboard',
-                ),
-              ],
+          if (!isOnboarding)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: WoodenTabBar(
+                currentIndex: _currentTab,
+                onTap: (index) {
+                  _pageController.animateToPage(
+                    index,
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeOutCubic,
+                  );
+                },
+                items: [
+                  const WoodenTabItem(icon: Icons.home_rounded, label: 'Home'),
+                  const WoodenTabItem(
+                    icon: Icons.directions_run_rounded,
+                    label: 'Races',
+                  ),
+                  const WoodenTabItem(
+                    icon: Icons.storefront_rounded,
+                    label: 'Shop',
+                  ),
+                  const WoodenTabItem(
+                    icon: Icons.leaderboard_rounded,
+                    label: 'Leaderboard',
+                  ),
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );

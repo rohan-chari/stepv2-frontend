@@ -97,14 +97,9 @@ class HomeTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!healthAuthorized) {
-      return _buildPermissionPrompt();
-    }
-
-    if (notificationsState == null) {
-      return _buildNotificationPrompt();
-    }
-
+    // Onboarding (health + notification permission gates) is now rendered by
+    // OnboardingFlow in main_shell; HomeTab is only built once onboarding is
+    // complete, so it always renders the real home below.
     final topInset = MediaQuery.of(context).padding.top;
     final bottomInset = MediaQuery.of(context).padding.bottom;
     final tabBarHeight = 77.5 + bottomInset;
@@ -332,10 +327,6 @@ class HomeTab extends StatelessWidget {
 
     final steps = stepData?.steps ?? 0;
     final stepsStr = _formatNumber(steps);
-    final friendsAhead = friendsSteps.where((friend) {
-      final friendSteps = (friend['steps'] as num?)?.toInt() ?? 0;
-      return friendSteps > steps;
-    }).length;
     final viewportHeight = MediaQuery.of(context).size.height;
 
     return HomePanel(
@@ -423,10 +414,7 @@ class HomeTab extends StatelessWidget {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            _heroSummary(
-                              steps: steps,
-                              friendsAhead: friendsAhead,
-                            ),
+                            _heroSummary(steps: steps),
                             textAlign: TextAlign.center,
                             style: HomeText.body(
                               size: 14,
@@ -493,47 +481,12 @@ class HomeTab extends StatelessWidget {
     );
   }
 
-  Widget _buildPermissionPrompt() {
-    return _PermissionGate(
-      icon: Icons.favorite_rounded,
-      title: 'HEALTH DATA',
-      body:
-          'Bara needs access to your health data to count your daily steps.\n\n'
-          "That's all we use - just your step count.",
-      actionLabel: 'CONTINUE',
-      action: onEnableHealth,
-      error: error,
-      isLoading: isLoading,
-    );
-  }
-
-  Widget _buildNotificationPrompt() {
-    return _PermissionGate(
-      icon: Icons.notifications_rounded,
-      title: 'NOTIFICATIONS',
-      body:
-          'Get notified when a friend invites you to a race or sends a friend request.\n\n'
-          'We’ll only send important updates — no spam.',
-      actionLabel: 'CONTINUE',
-      action: onEnableNotifications,
-    );
-  }
-
-  String _heroSummary({
-    required int steps,
-    required int friendsAhead,
-  }) {
+  String _heroSummary({required int steps}) {
     if (steps >= 20000) {
       return 'Huge day. You cleared every milestone — go claim those coins.';
     }
     if (steps >= 5000) {
       return 'Nice pace. Tap the milestones below to claim your coins.';
-    }
-    if (friendsAhead > 1) {
-      return '$friendsAhead friends are ahead of your pace right now.';
-    }
-    if (friendsAhead == 1) {
-      return '1 friend is ahead of your pace right now.';
     }
     return 'Clean pace so far. Keep walking to hit your first milestone.';
   }
@@ -546,169 +499,6 @@ class HomeTab extends StatelessWidget {
       buf.write(s[i]);
     }
     return buf.toString();
-  }
-
-}
-
-class _PermissionGate extends StatelessWidget {
-  const _PermissionGate({
-    required this.icon,
-    required this.title,
-    required this.body,
-    required this.actionLabel,
-    required this.action,
-    this.error,
-    this.isLoading = false,
-  });
-
-  final IconData icon;
-  final String title;
-  final String body;
-  final String actionLabel;
-  final VoidCallback action;
-  final String? error;
-  final bool isLoading;
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-          child: HomePanel(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Container(
-                  width: 72,
-                  height: 72,
-                  decoration: BoxDecoration(
-                    color: HomeColors.surfaceMuted,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: HomeColors.line.withValues(alpha: 0.10),
-                    ),
-                  ),
-                  child: Icon(icon, size: 34, color: HomeColors.sageDeep),
-                ),
-                const SizedBox(height: 18),
-                Text(
-                  title,
-                  style: HomeText.label(),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  title == 'HEALTH DATA'
-                      ? 'Let Bara read your daily steps'
-                      : 'Stay in the loop',
-                  style: HomeText.title(size: 28),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  body,
-                  style: HomeText.body(size: 15, color: HomeColors.muted),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 18),
-                const Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  alignment: WrapAlignment.center,
-                  children: [
-                    _PermissionFeature(
-                      icon: Icons.directions_walk_rounded,
-                      title: 'TRACK',
-                      detail: 'Daily steps',
-                    ),
-                    _PermissionFeature(
-                      icon: Icons.directions_run_rounded,
-                      title: 'COMPETE',
-                      detail: 'Friend races',
-                    ),
-                    _PermissionFeature(
-                      icon: Icons.payments_rounded,
-                      title: 'EARN',
-                      detail: 'Goal coins',
-                    ),
-                  ],
-                ),
-                if (error != null) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    error!,
-                    style: HomeText.body(
-                      size: 14,
-                      color: HomeColors.clay,
-                      weight: FontWeight.w700,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-                const SizedBox(height: 22),
-                if (isLoading)
-                  const SizedBox(
-                    width: 32,
-                    height: 32,
-                    child: CircularProgressIndicator(
-                      color: HomeColors.sageDeep,
-                      strokeWidth: 3,
-                    ),
-                  )
-                else
-                  SizedBox(
-                    width: double.infinity,
-                    child: HomeButton(
-                      label: actionLabel,
-                      icon: icon,
-                      onPressed: action,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PermissionFeature extends StatelessWidget {
-  const _PermissionFeature({
-    required this.icon,
-    required this.title,
-    required this.detail,
-  });
-
-  final IconData icon;
-  final String title;
-  final String detail;
-
-  @override
-  Widget build(BuildContext context) {
-    return HomeInsetPanel(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: HomeColors.sageDeep),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(title, style: HomeText.label(color: HomeColors.ink)),
-              const SizedBox(height: 4),
-              Text(
-                detail,
-                style: HomeText.body(size: 12, color: HomeColors.muted),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
   }
 }
 

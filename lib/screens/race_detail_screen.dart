@@ -1736,6 +1736,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         .where((p) => p['finishedAt'] != null)
         .length;
 
+    // Position runners relative to the current leader so time-based races
+    // (no step target, or runners blowing past it) still show who's ahead.
+    final leaderSteps = _leaderSteps(participants);
+    final milestoneProgress = targetSteps > 0 && leaderSteps > 0
+        ? (targetSteps / leaderSteps).clamp(0.0, 1.0).toDouble()
+        : null;
+
     return Column(
       children: [
         ...header,
@@ -1759,6 +1766,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               HomeCourseTrack(
                 height: 268,
                 goalSteps: targetSteps,
+                milestoneProgress: milestoneProgress,
+                milestoneLabel: _formatStepsCompact(targetSteps),
                 runners: [
                   for (final p in participants)
                     GoalTrackRunner(
@@ -1770,9 +1779,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                               p['userId'] as String? ?? '',
                               targetSteps,
                             )
-                          : targetSteps > 0 && p['totalSteps'] != null
-                          ? ((p['totalSteps'] as num).toInt() / targetSteps)
-                          : 0.0,
+                          : _leaderRelativeProgress(
+                              p['totalSteps'],
+                              leaderSteps,
+                            ),
                       isUser: (p['userId'] as String?) == _myUserId,
                       isStealthed: p['stealthed'] == true,
                       profilePhotoUrl: p['profilePhotoUrl'] as String?,
@@ -1793,30 +1803,34 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
                       alignment: Alignment.centerLeft,
-                      child: Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            'RACE TO ',
-                            style: PixelText.title(
-                              size: 18,
-                              color: AppColors.textMid,
-                            ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                endsAt != null
+                                    ? '${_formatCountdownLabel(endsAt)} LEFT'
+                                    : 'RACE IN PROGRESS',
+                                style: PixelText.title(
+                                  size: 18,
+                                  color: AppColors.accent,
+                                ),
+                              ),
+                            ],
                           ),
-                          Text(
-                            _formatSteps(targetSteps),
-                            style: PixelText.title(
-                              size: 18,
-                              color: AppColors.accent,
+                          if (targetSteps > 0) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              'Goal: ${_formatStepsCompact(targetSteps)}',
+                              style: PixelText.body(
+                                size: 13,
+                                color: AppColors.textMid,
+                              ),
                             ),
-                          ),
-                          Text(
-                            ' STEPS',
-                            style: PixelText.title(
-                              size: 18,
-                              color: AppColors.textMid,
-                            ),
-                          ),
+                          ],
                         ],
                       ),
                     ),
@@ -2527,6 +2541,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
           [],
     );
     final targetSteps = _readInt(_race!['targetSteps'], fallback: 0);
+    final completedLeaderSteps = _leaderSteps(participants);
 
     return Column(
       children: [
@@ -2570,14 +2585,18 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
           child: HomeCourseTrack(
             height: 268,
             goalSteps: targetSteps,
+            milestoneProgress: targetSteps > 0 && completedLeaderSteps > 0
+                ? (targetSteps / completedLeaderSteps).clamp(0.0, 1.0).toDouble()
+                : null,
+            milestoneLabel: _formatStepsCompact(targetSteps),
             runners: [
               for (final p in participants)
                 GoalTrackRunner(
                   name: p['displayName'] as String? ?? '???',
-                  progress: targetSteps > 0
-                      ? (((p['totalSteps'] as num?)?.toInt() ?? 0) /
-                            targetSteps)
-                      : 0.0,
+                  progress: _leaderRelativeProgress(
+                    p['totalSteps'],
+                    completedLeaderSteps,
+                  ),
                   isUser: (p['userId'] as String?) == _myUserId,
                   profilePhotoUrl: p['profilePhotoUrl'] as String?,
                   accessories:
@@ -3060,6 +3079,48 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       buf.write(s[i]);
     }
     return buf.toString();
+  }
+
+  /// Highest step count among all participants. Used as the "finish line"
+  /// (1.0) so progress is measured relative to whoever is currently in front,
+  /// which works whether or not the race has a fixed step target.
+  static int _leaderSteps(List<Map<String, dynamic>> participants) {
+    var max = 0;
+    for (final p in participants) {
+      final steps = (p['totalSteps'] as num?)?.toInt() ?? 0;
+      if (steps > max) max = steps;
+    }
+    return max;
+  }
+
+  /// A runner's progress relative to the leader (0..1). If nobody has any
+  /// steps yet (leaderSteps == 0) everyone sits at the start. Guards against
+  /// division by zero and null/absent step fields from older backends.
+  static double _leaderRelativeProgress(dynamic totalSteps, int leaderSteps) {
+    if (leaderSteps <= 0) return 0.0;
+    final steps = (totalSteps as num?)?.toInt() ?? 0;
+    return (steps / leaderSteps).clamp(0.0, 1.0).toDouble();
+  }
+
+  /// Compact step label for milestone markers / subtitles (e.g. 50000 -> 50K).
+  static String _formatStepsCompact(int n) {
+    if (n >= 1000 && n % 1000 == 0) return '${n ~/ 1000}K';
+    if (n >= 10000) return '${(n / 1000).round()}K';
+    return _formatSteps(n);
+  }
+
+  /// Short remaining-time label for the race header, e.g. "2D 4H", "3H 12M",
+  /// "8M". Returns "DONE" once the race has ended.
+  String _formatCountdownLabel(DateTime endsAt) {
+    final remaining = endsAt.difference(_countdownNow);
+    if (remaining.isNegative || remaining == Duration.zero) return 'DONE';
+    final days = remaining.inDays;
+    final hours = remaining.inHours.remainder(24);
+    final minutes = remaining.inMinutes.remainder(60);
+    if (days > 0) return '${days}D ${hours}H';
+    if (hours > 0) return '${hours}H ${minutes}M';
+    if (minutes > 0) return '${minutes}M';
+    return '${remaining.inSeconds}S';
   }
 }
 

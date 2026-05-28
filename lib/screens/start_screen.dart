@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart' as apple;
 
 import 'display_name_screen.dart';
@@ -6,12 +7,7 @@ import 'main_shell.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
 import '../styles.dart';
-import '../widgets/capybara.dart';
-import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
-import '../widgets/feature_highlights_row.dart';
-import '../widgets/retro_card.dart';
-import '../widgets/spinning_coin.dart';
 
 class StartScreen extends StatefulWidget {
   const StartScreen({super.key, this.notificationService});
@@ -139,81 +135,208 @@ class _StartScreenState extends State<StartScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: ArcadePageBackground(
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: _buildContent(),
-          ),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: AppColors.roofLight,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+      ),
+      child: Scaffold(
+        backgroundColor: AppColors.roofLight,
+        body: Stack(
+          children: [
+            const Positioned.fill(
+              child: CustomPaint(
+                painter: ArcadeCheckerPainter(drawBottomStripe: false),
+              ),
+            ),
+            SafeArea(child: _buildContent()),
+          ],
         ),
       ),
     );
   }
 
   Widget _buildContent() {
-    return Column(
-      children: [
-        const Spacer(flex: 2),
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: _onReviewerTitleTap,
-          child: Text(
-            'Bara',
-            style: PixelText.title(
-              size: 48,
-              color: AppColors.textDark,
-            ).copyWith(shadows: _textShadows),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Track your steps and race friends\nfor coins and bragging rights.',
-          style: PixelText.body(
-            size: 14,
-            color: AppColors.textMid,
-          ).copyWith(shadows: _textShadows),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 32),
-        const FeatureHighlightsRow(),
-        const SizedBox(height: 16),
-        RetroCard(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxHeight < 680;
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(25, 12, 25, 28),
+          child: Stack(
             children: [
-              const SpinningCoin(size: 24),
-              const SizedBox(width: 8),
-              Text(
-                'Earn coins by hitting your daily goals',
-                style: PixelText.body(size: 13, color: AppColors.textDark),
+              Align(
+                alignment: Alignment(0, compact ? -0.12 : -0.06),
+                child: _buildBrandHero(compact: compact),
+              ),
+              Align(
+                alignment: Alignment(0, compact ? 0.84 : 0.88),
+                child: _buildAppleSignInPrompt(compact: compact),
               ),
             ],
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildBrandHero({required bool compact}) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _onReviewerTitleTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: compact ? 260 : 322,
+              height: compact ? 92 : 112,
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
+                children: [
+                  Positioned(
+                    left: compact ? -24 : -44,
+                    bottom: compact ? -12 : -18,
+                    child: _WalkingInPlaceCapybara(size: compact ? 92 : 112),
+                  ),
+                  Center(
+                    child: Text(
+                      'Bara',
+                      textAlign: TextAlign.center,
+                      style:
+                          PixelText.title(
+                            size: compact ? 66 : 82,
+                            color: AppColors.parchment,
+                          ).copyWith(
+                            height: 0.9,
+                            fontWeight: FontWeight.w800,
+                            shadows: _textShadows,
+                          ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 0),
+            Text(
+              'step races',
+              style:
+                  PixelText.body(
+                    size: compact ? 13 : 15,
+                    color: AppColors.parchment,
+                  ).copyWith(
+                    letterSpacing: 5.5,
+                    fontWeight: FontWeight.w500,
+                    shadows: _textShadows,
+                  ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
-        const Spacer(flex: 2),
-        const SizedBox(
-          height: 96,
-          child: WalkingCapybara(
-            walkDuration: Duration(seconds: 12),
-            size: 96,
-          ),
+      ),
+    );
+  }
+
+  Widget _buildAppleSignInPrompt({required bool compact}) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Race your friends, earn powerups,\nand climb the leaderboard.',
+          style: PixelText.body(
+            size: compact ? 13 : 14,
+            color: AppColors.parchmentLight.withValues(alpha: 0.9),
+          ).copyWith(shadows: _textShadows),
+          textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: compact ? 12 : 16),
         _isSigningIn
-            ? const CircularProgressIndicator(color: AppColors.accent)
+            ? const SizedBox(
+                height: 54,
+                child: Center(
+                  child: CircularProgressIndicator(color: AppColors.parchment),
+                ),
+              )
             : SizedBox(
                 width: double.infinity,
                 child: apple.SignInWithAppleButton(
                   onPressed: _onStart,
-                  height: 54,
+                  height: compact ? 52 : 54,
                   borderRadius: BorderRadius.circular(8),
                   iconAlignment: apple.IconAlignment.left,
                 ),
               ),
-        const Spacer(flex: 1),
       ],
+    );
+  }
+}
+
+class _WalkingInPlaceCapybara extends StatefulWidget {
+  const _WalkingInPlaceCapybara({required this.size});
+
+  final double size;
+
+  @override
+  State<_WalkingInPlaceCapybara> createState() =>
+      _WalkingInPlaceCapybaraState();
+}
+
+class _WalkingInPlaceCapybaraState extends State<_WalkingInPlaceCapybara>
+    with SingleTickerProviderStateMixin {
+  static const int _frameCount = 6;
+
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 760),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = widget.size;
+
+    return SizedBox(
+      width: size,
+      height: size,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          final frameIndex =
+              (_controller.value * _frameCount).floor() % _frameCount;
+
+          return ClipRect(
+            child: OverflowBox(
+              maxWidth: double.infinity,
+              alignment: Alignment.centerLeft,
+              child: Transform.translate(
+                offset: Offset(-frameIndex * size, 0),
+                child: Image.asset(
+                  'assets/images/capybara_walk_right.png',
+                  width: size * _frameCount,
+                  height: size,
+                  fit: BoxFit.contain,
+                  alignment: Alignment.centerLeft,
+                  filterQuality: FilterQuality.none,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -280,10 +403,7 @@ class _ReviewerSignInDialogState extends State<_ReviewerSignInDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        TextButton(
-          onPressed: _submit,
-          child: const Text('Sign in'),
-        ),
+        TextButton(onPressed: _submit, child: const Text('Sign in')),
       ],
     );
   }

@@ -667,14 +667,32 @@ class BackendApiService {
   Future<Map<String, dynamic>> joinPublicRace({
     required String identityToken,
     required String raceId,
+    bool onboarding = false,
   }) async {
     final response = await _sendJsonRequest(
       method: 'POST',
       path: '/races/$raceId/join',
-      body: const {},
+      // Only send the onboarding flag when set so older backends that ignore
+      // the body keep working; when true the backend grants mystery boxes if
+      // eligible (server-enforced).
+      body: onboarding ? const {'onboarding': true} : const {},
       identityToken: identityToken,
     );
     return _decodeJsonResponse(response);
+  }
+
+  /// Marks the first-race onboarding step as seen for the current user.
+  /// Idempotent; used by the skip path. No request body.
+  Future<void> markFirstRaceOnboardingSeen({
+    required String identityToken,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races/onboarding/first-race-seen',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+    _decodeJsonResponse(response);
   }
 
   Future<void> kickRaceParticipant({
