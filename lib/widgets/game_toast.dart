@@ -30,7 +30,7 @@ void showGameToast(
   required GameToastPalette palette,
   Duration duration = const Duration(seconds: 3),
 }) {
-  final overlay = Overlay.of(context);
+  final overlay = Overlay.of(context, rootOverlay: true);
   late final OverlayEntry entry;
   var removed = false;
 
@@ -100,9 +100,7 @@ class _GameToastOverlayState extends State<_GameToastOverlay>
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, -1),
       end: Offset.zero,
-    ).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
-    );
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
     _controller.forward();
     _startDismissTimer();
   }
@@ -165,9 +163,9 @@ class _GameToastOverlayState extends State<_GameToastOverlay>
   @override
   Widget build(BuildContext context) {
     return Positioned(
-      left: 24,
-      right: 24,
-      top: MediaQuery.of(context).padding.top + 56,
+      left: 18,
+      right: 18,
+      top: MediaQuery.of(context).padding.top + 42,
       child: SlideTransition(
         position: _slideAnimation,
         child: GestureDetector(
@@ -182,75 +180,75 @@ class _GameToastOverlayState extends State<_GameToastOverlay>
             child: Container(
               key: widget.shellKey,
               decoration: BoxDecoration(
-                color: AppColors.woodDark,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.woodShadow, width: 2.5),
+                color: widget.palette.shadow,
+                borderRadius: BorderRadius.circular(10),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.26),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
+                    color: Colors.black.withValues(alpha: 0.20),
+                    blurRadius: 14,
+                    offset: const Offset(0, 7),
                   ),
                   BoxShadow(
-                    color: widget.palette.face.withValues(alpha: 0.20),
-                    blurRadius: 12,
+                    color: widget.palette.face.withValues(alpha: 0.16),
+                    blurRadius: 18,
                   ),
                 ],
               ),
               child: Padding(
-                padding: const EdgeInsets.all(6),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [widget.palette.face, widget.palette.dark],
-                        ),
-                        border: Border.all(
-                          color: widget.palette.shadow,
-                          width: 2,
-                        ),
-                        borderRadius: BorderRadius.circular(8),
+                padding: const EdgeInsets.only(bottom: 4),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: AppColors.parchment,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: AppColors.parchmentBorder,
+                        width: 1.5,
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(3),
-                        child: Container(
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: AppColors.parchmentLight,
-                            borderRadius: BorderRadius.circular(5),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 11),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          _ToastBadge(
+                            key: widget.badgeKey,
+                            palette: widget.palette,
                           ),
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+                          const SizedBox(width: 11),
+                          Expanded(
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _ToastBadge(
-                                  key: widget.badgeKey,
-                                  palette: widget.palette,
+                                Text(
+                                  widget.palette.label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: PixelText.pill(
+                                    size: 11,
+                                    color: widget.palette.dark,
+                                  ).copyWith(decoration: TextDecoration.none),
                                 ),
-                                const SizedBox(height: 10),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: Text(
-                                    widget.message,
-                                    style: PixelText.body(
-                                      size: 14,
-                                      color: widget.palette.messageColor,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  widget.message,
+                                  maxLines: 3,
+                                  overflow: TextOverflow.ellipsis,
+                                  style:
+                                      PixelText.body(
+                                        size: 14.5,
+                                        color: widget.palette.messageColor,
+                                      ).copyWith(
+                                        height: 1.18,
+                                        decoration: TextDecoration.none,
+                                      ),
                                 ),
                               ],
                             ),
                           ),
-                        ),
+                        ],
                       ),
                     ),
                   ),
@@ -272,34 +270,25 @@ class _ToastBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      width: 34,
+      height: 34,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [palette.face, palette.dark],
         ),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: palette.shadow, width: 1.5),
         boxShadow: [
           BoxShadow(
             color: palette.shadow,
-            offset: const Offset(0, 2),
+            offset: const Offset(0, 3),
             blurRadius: 0,
           ),
         ],
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(palette.icon, size: 14, color: Colors.white),
-          const SizedBox(width: 6),
-          Text(
-            palette.label,
-            style: PixelText.pill(size: 11, color: Colors.white),
-          ),
-        ],
-      ),
+      child: Icon(palette.icon, size: 18, color: Colors.white),
     );
   }
 }
