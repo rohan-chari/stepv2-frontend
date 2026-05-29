@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
+import '../styles.dart';
 import '../widgets/home_chrome.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/spinning_coin.dart';
@@ -132,32 +133,28 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
 
   @override
   Widget build(BuildContext context) {
-    return HomePanel(
-      radius: 0,
-      padding: const EdgeInsets.fromLTRB(22, 22, 22, 24),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('STEP MILESTONES', style: HomeText.label(size: 13)),
-          const SizedBox(height: 8),
-          Text("Today's coin checkpoints", style: HomeText.title(size: 26)),
-          const SizedBox(height: 6),
+          Text(
+            "Today's coin checkpoints",
+            style: PixelText.title(size: 20, color: AppColors.textDark),
+          ),
+          const SizedBox(height: 4),
           Text(
             'Hit each step threshold today, then tap to claim. Up to 110 coins/day.',
-            style: HomeText.body(size: 14, color: HomeColors.muted),
+            style: PixelText.body(size: 13, color: AppColors.textMid),
           ),
           if (_totalCoinsClaimed > 0) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
               'Claimed today: $_totalCoinsClaimed / 110 coins',
-              style: HomeText.body(
-                size: 13,
-                color: HomeColors.sageDeep,
-                weight: FontWeight.w800,
-              ),
+              style: PixelText.body(size: 13, color: AppColors.accent),
             ),
           ],
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           if (_loading) ...[
             const SizedBox(
               height: 48,
@@ -167,7 +164,7 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
                   height: 22,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: HomeColors.sageDeep,
+                    color: AppColors.accent,
                   ),
                 ),
               ),
@@ -175,7 +172,7 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
           ] else if (_error.isNotEmpty && _tiles.isEmpty) ...[
             Text(
               "Couldn't load milestones.",
-              style: HomeText.body(size: 13, color: HomeColors.clay),
+              style: PixelText.body(size: 13, color: AppColors.textMid),
             ),
           ] else
             ..._buildRows(),

@@ -4,10 +4,6 @@ import '../../models/loadable.dart';
 import '../../services/auth_service.dart';
 import '../../styles.dart';
 import '../../utils/race_participant_display.dart';
-import '../../widgets/app_avatar.dart';
-import '../../widgets/coin_balance_badge.dart';
-import '../../widgets/game_container.dart';
-import '../../widgets/info_board_card.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
 import '../create_race_screen.dart';
@@ -88,8 +84,6 @@ class _RacesTabState extends State<RacesTab> {
 
   Map<String, dynamic>? get _raceData => _effectiveRacesState.data;
 
-  String get _myUserId => widget.authService.userId ?? '';
-
   void _navigateToCreateRace() {
     Navigator.of(context)
         .push<Map<String, dynamic>>(
@@ -145,17 +139,29 @@ class _RacesTabState extends State<RacesTab> {
     final bottomInset = MediaQuery.of(context).padding.bottom;
     final tabBarHeight = 77.5 + bottomInset;
 
-    return Padding(
-      padding: EdgeInsets.only(top: topInset + 12, bottom: tabBarHeight),
-      child: RefreshIndicator(
-        onRefresh: widget.onRefresh ?? () async {},
-        color: AppColors.accent,
-        backgroundColor: AppColors.parchment,
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [SliverToBoxAdapter(child: _buildContent())],
+    return Stack(
+      children: [
+        const Positioned.fill(
+          child: ColoredBox(
+            color: AppColors.roofLight,
+            child: CustomPaint(
+              painter: ArcadeCheckerPainter(drawBottomStripe: false),
+            ),
+          ),
         ),
-      ),
+        Padding(
+          padding: EdgeInsets.only(top: topInset + 14, bottom: tabBarHeight),
+          child: RefreshIndicator(
+            onRefresh: widget.onRefresh ?? () async {},
+            color: AppColors.accent,
+            backgroundColor: AppColors.parchment,
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [SliverToBoxAdapter(child: _buildContent())],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -172,62 +178,106 @@ class _RacesTabState extends State<RacesTab> {
 
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: _buildTopBar(),
+        _buildRacesHeader(
+          activeCount: active.length,
+          inviteCount: invites.length,
+          waitingCount: waiting.length,
         ),
-        const SizedBox(height: 16),
-
-        // Races explainer + CTA
-        InfoBoardCard(
-          badgeLabel: 'RACES',
-          title: 'First to the finish line wins.',
-          subtitle:
-              'Set a step target, invite friends, and race. The first runner to hit the target takes the pot.',
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-          borderRadius: 0,
-          children: [
-            if (widget.displayName != null) ...[
-              const SizedBox(height: 14),
-              PillButton(
-                label: 'NEW RACE',
-                variant: PillButtonVariant.secondary,
-                fontSize: 14,
-                fullWidth: true,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-                onPressed: _navigateToCreateRace,
-              ),
-              const SizedBox(height: 8),
-              PillButton(
-                label: 'BROWSE PUBLIC RACES',
-                variant: PillButtonVariant.secondary,
-                fontSize: 14,
-                fullWidth: true,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-                onPressed: _navigateToPublicRaces,
-              ),
-            ],
-          ],
-        ),
-        const SizedBox(height: 16),
-
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: _buildRaceListState(
-            hasRaces: hasRaces,
-            invites: invites,
-            waiting: waiting,
-            active: active,
-            completed: completed,
+        ColoredBox(
+          color: AppColors.parchment,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
+            child: _buildRaceListState(
+              hasRaces: hasRaces,
+              invites: invites,
+              waiting: waiting,
+              active: active,
+              completed: completed,
+            ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildRacesHeader({
+    required int activeCount,
+    required int inviteCount,
+    required int waitingCount,
+  }) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: AppColors.roofLight,
+        border: Border(bottom: BorderSide(color: AppColors.roofDark, width: 1)),
+      ),
+      child: CustomPaint(
+        painter: const ArcadeCheckerPainter(drawBottomStripe: false),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 15, 16, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'RACES',
+                style: PixelText.title(
+                  size: 30,
+                  color: AppColors.parchment,
+                ).copyWith(shadows: _textShadows),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                'Race friends, climb the board, and turn daily steps into wins.',
+                style: PixelText.body(
+                  size: 15,
+                  color: AppColors.parchment.withValues(alpha: 0.92),
+                ),
+              ),
+              const SizedBox(height: 14),
+              _RaceHeaderMetrics(
+                activeCount: activeCount,
+                inviteCount: inviteCount,
+                waitingCount: waitingCount,
+              ),
+              if (widget.displayName != null) ...[
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: PillButton(
+                        label: 'NEW RACE',
+                        icon: Icons.add_rounded,
+                        variant: PillButtonVariant.secondary,
+                        fontSize: 13,
+                        fullWidth: true,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        onPressed: _navigateToCreateRace,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: PillButton(
+                        label: 'PUBLIC RACES',
+                        icon: Icons.travel_explore_rounded,
+                        variant: PillButtonVariant.accent,
+                        fontSize: 13,
+                        fullWidth: true,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        onPressed: _navigateToPublicRaces,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -242,7 +292,10 @@ class _RacesTabState extends State<RacesTab> {
     if (state.shouldShowInitialLoading) {
       return const KeyedSubtree(
         key: Key('races-loading-skeleton'),
-        child: ListSkeleton(itemCount: 3),
+        child: Padding(
+          padding: EdgeInsets.only(top: 4),
+          child: ListSkeleton(itemCount: 4),
+        ),
       );
     }
 
@@ -264,6 +317,7 @@ class _RacesTabState extends State<RacesTab> {
     if (!hasRaces) return _buildEmptyState();
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (state.isRefreshing)
           const Padding(
@@ -283,7 +337,7 @@ class _RacesTabState extends State<RacesTab> {
           ),
         if (waiting.isNotEmpty)
           _buildRaceSection(
-            title: 'WAITING TO START',
+            title: 'PENDING',
             sectionKey: 'waiting',
             races: waiting,
           ),
@@ -292,12 +346,14 @@ class _RacesTabState extends State<RacesTab> {
             title: 'ACTIVE RACES',
             sectionKey: 'active',
             races: active,
+            showCount: false,
           ),
         if (completed.isNotEmpty)
           _buildRaceSection(
             title: 'COMPLETED',
             sectionKey: 'completed',
             races: completed,
+            showCount: false,
           ),
       ],
     );
@@ -308,17 +364,21 @@ class _RacesTabState extends State<RacesTab> {
     required String sectionKey,
     required List<Map<String, dynamic>> races,
     bool isInvite = false,
+    bool showCount = true,
   }) {
     final collapsed = _collapsedSections.contains(sectionKey);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 4),
       child: Column(
         children: [
-          _buildSectionHeader(title, races.length, sectionKey, collapsed),
-          if (!collapsed) ...[
-            const SizedBox(height: 8),
-            _buildRaceList(races, isInvite: isInvite),
-          ],
+          _buildSectionHeader(
+            title,
+            races.length,
+            sectionKey,
+            collapsed,
+            showCount: showCount,
+          ),
+          if (!collapsed) _buildRaceList(races, isInvite: isInvite),
         ],
       ),
     );
@@ -328,84 +388,54 @@ class _RacesTabState extends State<RacesTab> {
     List<Map<String, dynamic>> races, {
     bool isInvite = false,
   }) {
-    return GameContainer(
-      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 0),
-      child: Column(
-        children: [
-          for (int i = 0; i < races.length; i++) ...[
-            if (i > 0)
-              Container(
-                height: 1,
-                margin: const EdgeInsets.symmetric(horizontal: 14),
-                color: AppColors.parchmentBorder.withValues(alpha: 0.45),
-              ),
-            _buildRaceRow(races[i], i, isInvite: isInvite),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTopBar() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
+    return Column(
       children: [
-        Expanded(
-          child: Row(
-            children: [
-              if (widget.displayName != null)
-                Flexible(
-                  child: Text(
-                    widget.displayName!,
-                    style: PixelText.title(
-                      size: 26,
-                      color: AppColors.textDark,
-                    ).copyWith(shadows: _textShadows),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              const SizedBox(width: 8),
-              CoinBalanceBadge(coins: widget.authService.coins),
-            ],
-          ),
-        ),
-        ProfileAvatarButton(
-          name: widget.displayName ?? 'You',
-          imageUrl: widget.authService.profilePhotoUrl,
-          onPressed: widget.onOpenProfile,
-        ),
+        for (int i = 0; i < races.length; i++) ...[
+          _buildRaceRow(races[i], i, isInvite: isInvite),
+          if (i != races.length - 1)
+            Container(
+              height: 1,
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              color: AppColors.parchmentBorder.withValues(alpha: 0.56),
+            ),
+        ],
       ],
     );
   }
 
   Widget _buildEmptyState() {
-    return Column(
-      children: [
-        const SizedBox(height: 32),
-        Icon(
-          Icons.directions_run,
-          size: 48,
-          color: AppColors.textMid.withValues(alpha: 0.6),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'No races yet',
-          style: PixelText.title(
-            size: 18,
-            color: AppColors.textMid,
-          ).copyWith(shadows: _textShadows),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Create a race and invite friends!',
-          style: PixelText.body(
-            size: 14,
-            color: AppColors.textMid,
-          ).copyWith(shadows: _textShadows),
-          textAlign: TextAlign.center,
-        ),
-      ],
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(horizontal: 10),
+      padding: const EdgeInsets.fromLTRB(18, 34, 18, 36),
+      decoration: BoxDecoration(
+        color: AppColors.parchmentDark.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Icons.directions_run_rounded,
+            size: 48,
+            color: AppColors.roofMid.withValues(alpha: 0.78),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'No races yet',
+            style: PixelText.title(
+              size: 20,
+              color: AppColors.textDark,
+            ).copyWith(shadows: _textShadows),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Start one with friends or jump into a public race.',
+            style: PixelText.body(size: 14, color: AppColors.textMid),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 
@@ -413,34 +443,47 @@ class _RacesTabState extends State<RacesTab> {
     String title,
     int count,
     String sectionKey,
-    bool collapsed,
-  ) {
+    bool collapsed, {
+    bool showCount = true,
+  }) {
     return GestureDetector(
       onTap: () => _toggleSection(sectionKey),
       behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 14, 10, 7),
+        decoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(
+              color: AppColors.parchmentBorder.withValues(alpha: 0.72),
+            ),
+          ),
+        ),
         child: Row(
           children: [
             Text(
               title,
               style: PixelText.title(
-                size: 18,
-                color: AppColors.textMid,
+                size: 16,
+                color: AppColors.textDark,
               ).copyWith(shadows: _textShadows),
             ),
-            const SizedBox(width: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: AppColors.textMid.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(10),
+            if (showCount) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: AppColors.parchmentBorder.withValues(alpha: 0.9),
+                  ),
+                ),
+                child: Text(
+                  '$count',
+                  style: PixelText.title(size: 11, color: AppColors.textMid),
+                ),
               ),
-              child: Text(
-                '$count',
-                style: PixelText.title(size: 12, color: AppColors.textMid),
-              ),
-            ),
+            ],
             const Spacer(),
             _SectionToggleButton(
               key: Key('race-section-toggle-$sectionKey'),
@@ -466,9 +509,9 @@ class _RacesTabState extends State<RacesTab> {
     final status = race['status'] as String? ?? '';
     final creator = race['creator'] as Map<String, dynamic>?;
     final creatorName = creator?['displayName'] as String? ?? '';
-    final winner = race['winner'] as Map<String, dynamic>?;
     final isCreator = race['isCreator'] as bool? ?? false;
     final myPlacement = race['myPlacement'] as int?;
+    final queuedBoxCount = (race['queuedBoxCount'] as num?)?.toInt() ?? 0;
 
     String statusLabel;
     Color badgeColor;
@@ -479,13 +522,8 @@ class _RacesTabState extends State<RacesTab> {
       statusLabel = 'ACTIVE';
       badgeColor = AppColors.pillGreenDark;
     } else if (status == 'COMPLETED') {
-      if (winner != null && winner['id'] == _myUserId) {
-        statusLabel = 'WON';
-        badgeColor = AppColors.pillGreenDark;
-      } else {
-        statusLabel = 'DONE';
-        badgeColor = AppColors.textMid;
-      }
+      statusLabel = '';
+      badgeColor = AppColors.textMid;
     } else if (status == 'PENDING' && isCreator) {
       statusLabel = 'SETUP';
       badgeColor = AppColors.pillGoldDark;
@@ -494,15 +532,21 @@ class _RacesTabState extends State<RacesTab> {
       badgeColor = AppColors.textMid;
     }
 
+    final stripeColor = index.isOdd
+        ? AppColors.parchmentDark.withValues(alpha: 0.45)
+        : Colors.transparent;
+
     String timeLabel;
     if (status == 'ACTIVE' && endsAt != null) {
       final remaining = endsAt.difference(DateTime.now());
       if (remaining.isNegative) {
         timeLabel = 'ending soon';
       } else if (remaining.inDays > 0) {
-        timeLabel = '${remaining.inDays}d ${remaining.inHours.remainder(24)}h left';
+        timeLabel =
+            '${remaining.inDays}d ${remaining.inHours.remainder(24)}h left';
       } else if (remaining.inHours > 0) {
-        timeLabel = '${remaining.inHours}h ${remaining.inMinutes.remainder(60)}m left';
+        timeLabel =
+            '${remaining.inHours}h ${remaining.inMinutes.remainder(60)}m left';
       } else {
         timeLabel = '${remaining.inMinutes}m left';
       }
@@ -510,53 +554,35 @@ class _RacesTabState extends State<RacesTab> {
       timeLabel = '${maxDurationDays}d race';
     }
 
+    final showTrailingStatus =
+        status != 'ACTIVE' && status != 'COMPLETED' && statusLabel.isNotEmpty;
+
     return Material(
-      color: index.isOdd
-          ? AppColors.parchmentDark.withValues(alpha: 0.25)
-          : Colors.transparent,
+      color: stripeColor,
       child: InkWell(
-        onTap: () => _navigateToRaceDetail(raceId),
+        onTap: raceId.isEmpty ? null : () => _navigateToRaceDetail(raceId),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            key: Key('race-card-header-$raceId'),
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      key: Key('race-card-header-$raceId'),
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            name,
-                            style: PixelText.title(
-                              size: 18,
-                              color: AppColors.textDark,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                          ),
-                        ),
-                        if (myPlacement != null) ...[
-                          const SizedBox(width: 8),
-                          _buildMetaChip(
-                            '${formatOrdinal(myPlacement)} PLACE',
-                            backgroundColor: AppColors.pillGreenDark
-                                .withValues(alpha: 0.16),
-                            textColor: AppColors.pillGreenDark,
-                          ),
-                        ],
-                      ],
+                    Text(
+                      name,
+                      style: PixelText.title(
+                        size: 18,
+                        color: AppColors.textDark,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      // For ACTIVE races the countdown moves to the pill (the
-                      // section already says "ACTIVE"), so the subtitle drops
-                      // the time and shows just the runner count.
-                      '${status == 'ACTIVE' ? '' : '$timeLabel \u2022 '}$participantCount runner${participantCount == 1 ? '' : 's'}${isInvite && creatorName.isNotEmpty ? ' \u2022 by $creatorName' : ''}',
+                      '$participantCount runner${participantCount == 1 ? '' : 's'}${isInvite && creatorName.isNotEmpty ? ' \u2022 by $creatorName' : ''}',
                       style: PixelText.body(size: 14, color: AppColors.textMid),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
@@ -565,21 +591,52 @@ class _RacesTabState extends State<RacesTab> {
                 ),
               ),
               const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: badgeColor,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  // In the ACTIVE section the "ACTIVE" label is redundant —
-                  // show the time remaining in the pill instead.
-                  status == 'ACTIVE' ? timeLabel : statusLabel,
-                  style: PixelText.title(size: 13, color: Colors.white),
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (myPlacement != null)
+                    _buildMetaChip(
+                      '${formatOrdinal(myPlacement)} PLACE',
+                      backgroundColor: AppColors.pillGreenDark.withValues(
+                        alpha: 0.16,
+                      ),
+                      textColor: AppColors.pillGreenDark,
+                    ),
+                  if (queuedBoxCount > 0) ...[
+                    if (myPlacement != null) const SizedBox(height: 4),
+                    _buildMetaChip(
+                      '$queuedBoxCount QUEUED',
+                      backgroundColor: AppColors.pillGold.withValues(
+                        alpha: 0.34,
+                      ),
+                      textColor: AppColors.textDark,
+                    ),
+                  ],
+                  if (status == 'ACTIVE') ...[
+                    if (myPlacement != null || queuedBoxCount > 0)
+                      const SizedBox(height: 4),
+                    Text(
+                      timeLabel,
+                      style: PixelText.body(size: 12, color: AppColors.textMid),
+                      textAlign: TextAlign.right,
+                    ),
+                  ] else if (showTrailingStatus) ...[
+                    if (myPlacement != null || queuedBoxCount > 0)
+                      const SizedBox(height: 4),
+                    Text(
+                      statusLabel,
+                      style: PixelText.title(size: 12, color: badgeColor),
+                      textAlign: TextAlign.right,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      timeLabel,
+                      style: PixelText.body(size: 12, color: AppColors.textMid),
+                      textAlign: TextAlign.right,
+                    ),
+                  ],
+                ],
               ),
             ],
           ),
@@ -604,6 +661,85 @@ class _RacesTabState extends State<RacesTab> {
   }
 }
 
+class _RaceHeaderMetrics extends StatelessWidget {
+  const _RaceHeaderMetrics({
+    required this.activeCount,
+    required this.inviteCount,
+    required this.waitingCount,
+  });
+
+  final int activeCount;
+  final int inviteCount;
+  final int waitingCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(color: AppColors.parchment.withValues(alpha: 0.2)),
+          bottom: BorderSide(color: AppColors.parchment.withValues(alpha: 0.2)),
+        ),
+      ),
+      child: Row(
+        children: [
+          _RaceMetricText(label: 'ACTIVE', count: activeCount),
+          _MetricDivider(),
+          _RaceMetricText(label: 'INVITES', count: inviteCount),
+          _MetricDivider(),
+          _RaceMetricText(label: 'PENDING', count: waitingCount),
+        ],
+      ),
+    );
+  }
+}
+
+class _RaceMetricText extends StatelessWidget {
+  const _RaceMetricText({required this.label, required this.count});
+
+  final String label;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            '$count',
+            style: PixelText.title(size: 18, color: AppColors.parchment),
+          ),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: PixelText.title(
+                size: 10,
+                color: AppColors.parchment.withValues(alpha: 0.82),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetricDivider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 1,
+      height: 18,
+      color: AppColors.parchment.withValues(alpha: 0.22),
+    );
+  }
+}
+
 class _SectionToggleButton extends StatelessWidget {
   const _SectionToggleButton({
     super.key,
@@ -619,19 +755,15 @@ class _SectionToggleButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: Container(
-        width: 26,
-        height: 26,
-        decoration: BoxDecoration(
-          color: AppColors.parchmentLight,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: AppColors.parchmentBorder, width: 1.2),
-        ),
-        alignment: Alignment.center,
-        child: Icon(
-          collapsed ? Icons.add_rounded : Icons.remove_rounded,
-          size: 18,
-          color: AppColors.textMid,
+      child: SizedBox(
+        width: 30,
+        height: 30,
+        child: Center(
+          child: Icon(
+            collapsed ? Icons.add_rounded : Icons.remove_rounded,
+            size: 20,
+            color: AppColors.textMid,
+          ),
         ),
       ),
     );

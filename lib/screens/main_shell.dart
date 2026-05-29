@@ -904,21 +904,20 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   void _openProfile() {
+    _pageController.animateToPage(
+      2,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  void _openShop() {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => ProfileTab(
+        builder: (context) => ShopTab(
           authService: widget.authService,
-          displayName: _displayName,
-          email: _email,
-          onSettingsChanged: _syncSettingsState,
-          onRefresh: _refreshProfileTab,
           backendApiService: _backendApiService,
-          notificationService: widget.notificationService,
-          stepData: _stepData,
-          onAddProfilePhoto: _addOrChangeProfilePhoto,
-          onRemoveProfilePhoto: _removeProfilePhoto,
-          onOpenFriends: _openFriendsTab,
-          incomingFriendRequests: _incomingFriendRequests,
+          onShopChanged: _applyShopCatalog,
         ),
       ),
     );
@@ -1053,75 +1052,84 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
               child: PageView(
                 controller: _pageController,
                 physics: const PageScrollPhysics(),
-              onPageChanged: (index) {
-                setState(() => _currentTab = index);
-                if (index == 1) _fetchRaces();
-              },
-              children: [
-                HomeTab(
-                  streakChipKey: _streakChipKey,
-                  stepMilestonesKey: _stepMilestonesKey,
-                  incomingFriendRequests: _incomingFriendRequests,
-                  stepData: _stepData,
-                  isLoading: _isLoading,
-                  error: _error,
-                  backendApiService: _backendApiService,
-                  healthAuthorized: _healthAuthorized,
-                  notificationsState: _notificationsState,
-                  displayName: _displayName,
-                  authService: widget.authService,
-                  onRefresh: _refreshHomeTab,
-                  onEnableHealth: _enableHealthData,
-                  onEnableNotifications: _enableNotifications,
-                  onDisplayNameChanged: _syncSettingsState,
-                  friendsSteps: _friendsSteps,
-                  friendsStepsState: _friendsStepsState,
-                  equippedAccessories: _equippedAccessories,
-                  shopCatalogState: _shopCatalogState,
-                  leaderboardHighlights: _leaderboardHighlights,
-                  leaderboardHighlightsState: _leaderboardHighlightsState,
-                  leaderboardHighlightsLoading: _leaderboardHighlightsLoading,
-                  onOpenFriendsTab: _openFriendsTab,
-                  onOpenLeaderboardTab: _openLeaderboardTab,
-                  onOpenLeaderboardHighlight: _openLeaderboardHighlight,
-                  onOpenProfile: _openProfile,
-                  onAddProfilePhoto: _addOrChangeProfilePhoto,
-                  onDismissProfilePhotoPrompt: _dismissProfilePhotoPrompt,
-                  raceCard: _raceCard,
-                  onOpenRace: _openRaceFromCard,
-                  onJoinRaceFromCard: _joinRaceFromCard,
-                  onAcceptRaceInvite: _acceptRaceInviteFromCard,
-                  onDeclineRaceInvite: _declineRaceInviteFromCard,
-                  onChallengeFriendBack: _challengeFriendBack,
-                ),
-                RacesTab(
-                  authService: widget.authService,
-                  racesData: _racesData,
-                  racesState: _racesState,
-                  friendsSteps: _friendsSteps,
-                  onRacesChanged: _fetchRaces,
-                  onRefresh: _refreshRacesTab,
-                  displayName: _displayName,
-                  onOpenProfile: _openProfile,
-                ),
-                ShopTab(
-                  authService: widget.authService,
-                  backendApiService: _backendApiService,
-                  onShopChanged: _applyShopCatalog,
-                ),
-                LeaderboardTab(
-                  authService: widget.authService,
-                  backendApiService: _backendApiService,
-                  stepData: _stepData,
-                  displayName: _displayName,
-                  requestedType: _requestedLeaderboardType,
-                  requestedPeriod: _requestedLeaderboardPeriod,
-                  selectionNonce: _leaderboardSelectionNonce,
-                  onOpenProfile: _openProfile,
-                ),
-              ],
+                onPageChanged: (index) {
+                  setState(() => _currentTab = index);
+                  if (index == 1) _fetchRaces();
+                },
+                children: [
+                  HomeTab(
+                    streakChipKey: _streakChipKey,
+                    stepMilestonesKey: _stepMilestonesKey,
+                    stepData: _stepData,
+                    isLoading: _isLoading,
+                    error: _error,
+                    backendApiService: _backendApiService,
+                    healthAuthorized: _healthAuthorized,
+                    notificationsState: _notificationsState,
+                    displayName: _displayName,
+                    authService: widget.authService,
+                    onRefresh: _refreshHomeTab,
+                    onEnableHealth: _enableHealthData,
+                    onEnableNotifications: _enableNotifications,
+                    onDisplayNameChanged: _syncSettingsState,
+                    friendsSteps: _friendsSteps,
+                    friendsStepsState: _friendsStepsState,
+                    equippedAccessories: _equippedAccessories,
+                    shopCatalogState: _shopCatalogState,
+                    leaderboardHighlights: _leaderboardHighlights,
+                    leaderboardHighlightsState: _leaderboardHighlightsState,
+                    leaderboardHighlightsLoading: _leaderboardHighlightsLoading,
+                    onOpenFriendsTab: _openFriendsTab,
+                    onOpenLeaderboardTab: _openLeaderboardTab,
+                    onOpenLeaderboardHighlight: _openLeaderboardHighlight,
+                    onOpenShop: _openShop,
+                    onAddProfilePhoto: _addOrChangeProfilePhoto,
+                    onDismissProfilePhotoPrompt: _dismissProfilePhotoPrompt,
+                    raceCard: _raceCard,
+                    onOpenRace: _openRaceFromCard,
+                    onJoinRaceFromCard: _joinRaceFromCard,
+                    onAcceptRaceInvite: _acceptRaceInviteFromCard,
+                    onDeclineRaceInvite: _declineRaceInviteFromCard,
+                    onChallengeFriendBack: _challengeFriendBack,
+                  ),
+                  RacesTab(
+                    authService: widget.authService,
+                    racesData: _racesData,
+                    racesState: _racesState,
+                    friendsSteps: _friendsSteps,
+                    onRacesChanged: _fetchRaces,
+                    onRefresh: _refreshRacesTab,
+                    displayName: _displayName,
+                    onOpenProfile: _openProfile,
+                  ),
+                  ProfileTab(
+                    authService: widget.authService,
+                    displayName: _displayName,
+                    email: _email,
+                    onSettingsChanged: _syncSettingsState,
+                    onRefresh: _refreshProfileTab,
+                    backendApiService: _backendApiService,
+                    notificationService: widget.notificationService,
+                    stepData: _stepData,
+                    onAddProfilePhoto: _addOrChangeProfilePhoto,
+                    onRemoveProfilePhoto: _removeProfilePhoto,
+                    onOpenFriends: _openFriendsTab,
+                    incomingFriendRequests: _incomingFriendRequests,
+                    showBackButton: false,
+                  ),
+                  LeaderboardTab(
+                    authService: widget.authService,
+                    backendApiService: _backendApiService,
+                    stepData: _stepData,
+                    displayName: _displayName,
+                    requestedType: _requestedLeaderboardType,
+                    requestedPeriod: _requestedLeaderboardPeriod,
+                    selectionNonce: _leaderboardSelectionNonce,
+                    onOpenProfile: _openProfile,
+                  ),
+                ],
+              ),
             ),
-          ),
 
           if (!isOnboarding)
             Positioned(
@@ -1143,9 +1151,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     icon: Icons.directions_run_rounded,
                     label: 'Races',
                   ),
-                  const WoodenTabItem(
-                    icon: Icons.storefront_rounded,
-                    label: 'Shop',
+                  WoodenTabItem(
+                    icon: Icons.person_rounded,
+                    label: 'Profile',
+                    badgeCount: _incomingFriendRequests,
                   ),
                   const WoodenTabItem(
                     icon: Icons.leaderboard_rounded,

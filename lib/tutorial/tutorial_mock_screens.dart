@@ -57,11 +57,11 @@ class TutorialMockHost extends StatelessWidget {
                     icon: Icons.directions_run_rounded,
                     label: 'Races',
                   ),
-                  WoodenTabItem(icon: Icons.storefront_rounded, label: 'Shop'),
                   WoodenTabItem(
                     icon: Icons.leaderboard_rounded,
                     label: 'Leaderboard',
                   ),
+                  WoodenTabItem(icon: Icons.person_rounded, label: 'Profile'),
                 ],
               ),
             ),

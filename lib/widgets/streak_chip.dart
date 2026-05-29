@@ -19,10 +19,12 @@ class StreakChip extends StatefulWidget {
     super.key,
     required this.authService,
     required this.backendApiService,
+    this.compact = false,
   });
 
   final AuthService authService;
   final BackendApiService backendApiService;
+  final bool compact;
 
   @override
   State<StreakChip> createState() => StreakChipState();
@@ -105,11 +107,10 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
     if (!_loaded) {
       return const SizedBox(height: 48);
     }
+    final label = _unclaimed ? 'CLAIM' : 'CLAIMED';
     return PillButton(
-      label: _unclaimed ? 'CLAIM YOUR DAILY REWARD' : 'DAILY REWARD CLAIMED',
-      icon: _unclaimed
-          ? Icons.card_giftcard_rounded
-          : Icons.check_box_rounded,
+      label: label,
+      icon: _unclaimed ? Icons.card_giftcard_rounded : Icons.check_box_rounded,
       variant: PillButtonVariant.secondary,
       fullWidth: true,
       onPressed: _open,

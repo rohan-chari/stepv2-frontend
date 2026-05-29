@@ -9,11 +9,8 @@ import '../../services/backend_api_service.dart';
 import '../../services/notification_service.dart';
 import '../../styles.dart';
 import '../../tutorial/tutorial_screen.dart';
-import '../../widgets/arcade_page.dart';
 import '../../widgets/app_avatar.dart';
-import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/pill_button.dart';
-import '../../widgets/retro_card.dart';
 import '../../widgets/trail_sign.dart';
 import '../../widgets/step_calendar.dart';
 import '../../widgets/loading_skeleton.dart';
@@ -35,6 +32,7 @@ class ProfileTab extends StatefulWidget {
   final Future<void> Function()? onRemoveProfilePhoto;
   final VoidCallback? onOpenFriends;
   final int incomingFriendRequests;
+  final bool showBackButton;
 
   const ProfileTab({
     super.key,
@@ -51,6 +49,7 @@ class ProfileTab extends StatefulWidget {
     this.onRemoveProfilePhoto,
     this.onOpenFriends,
     this.incomingFriendRequests = 0,
+    this.showBackButton = true,
   });
 
   @override
@@ -58,12 +57,12 @@ class ProfileTab extends StatefulWidget {
 }
 
 class _ProfileTabState extends State<ProfileTab> {
-  late final BackendApiService _api;
-  final GlobalKey<_StatsSectionState> _statsKey = GlobalKey();
-
   static const _textShadows = [
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
+
+  late final BackendApiService _api;
+  final GlobalKey<_StatsSectionState> _statsKey = GlobalKey();
 
   void _handleAuthServiceChanged() {
     if (!mounted) return;
@@ -133,248 +132,339 @@ class _ProfileTabState extends State<ProfileTab> {
     await _refreshAfterEdit();
   }
 
-  static String _formatNumber(int n) {
-    final s = n.toString();
-    final buf = StringBuffer();
-    for (int i = 0; i < s.length; i++) {
-      if (i > 0 && (s.length - i) % 3 == 0) buf.write(',');
-      buf.write(s[i]);
+  Future<void> _handleAvatarTap() async {
+    final hasPhoto = widget.authService.profilePhotoUrl != null;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.parchment,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 18, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'PROFILE PHOTO',
+                style: PixelText.title(size: 16, color: AppColors.textDark),
+              ),
+              const SizedBox(height: 14),
+              PillButton(
+                label: hasPhoto ? 'CHANGE PHOTO' : 'ADD PHOTO',
+                variant: PillButtonVariant.primary,
+                fontSize: 13,
+                fullWidth: true,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                onPressed: () => Navigator.of(ctx).pop('change'),
+              ),
+              if (hasPhoto) ...[
+                const SizedBox(height: 10),
+                PillButton(
+                  label: 'REMOVE PHOTO',
+                  variant: PillButtonVariant.accent,
+                  fontSize: 13,
+                  fullWidth: true,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
+                  onPressed: () => Navigator.of(ctx).pop('remove'),
+                ),
+              ],
+              const SizedBox(height: 10),
+              PillButton(
+                label: 'CANCEL',
+                variant: PillButtonVariant.secondary,
+                fontSize: 13,
+                fullWidth: true,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                onPressed: () => Navigator.of(ctx).pop(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+    if (action == 'change') {
+      await _handleAddProfilePhoto();
+    } else if (action == 'remove') {
+      await _handleRemoveProfilePhoto();
     }
-    return buf.toString();
   }
 
   @override
   Widget build(BuildContext context) {
     final topInset = MediaQuery.of(context).padding.top;
     final bottomInset = MediaQuery.of(context).padding.bottom;
+    final showBackButton = widget.showBackButton && Navigator.canPop(context);
+    final bottomPadding = showBackButton ? bottomInset : 77.5 + bottomInset;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: ArcadePageBackground(
-        showHeader: false,
+      body: Stack(
+        children: [
+          const Positioned.fill(
+            child: ColoredBox(
+              color: AppColors.roofLight,
+              child: CustomPaint(
+                painter: ArcadeCheckerPainter(drawBottomStripe: false),
+              ),
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.only(top: topInset, bottom: bottomPadding),
+            child: RefreshIndicator(
+              onRefresh: _handleRefresh,
+              color: AppColors.accent,
+              backgroundColor: AppColors.parchment,
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: _buildProfileHeader(showBackButton: showBackButton),
+                  ),
+                  SliverToBoxAdapter(child: _buildBody()),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfileHeader({required bool showBackButton}) {
+    final email = widget.email;
+    final showEmail =
+        email != null && !email.endsWith('@privaterelay.appleid.com');
+    final displayName = widget.displayName;
+    final hasPhoto = widget.authService.profilePhotoUrl != null;
+
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: AppColors.roofLight,
+        border: Border(bottom: BorderSide(color: AppColors.roofDark, width: 1)),
+      ),
+      child: CustomPaint(
+        painter: const ArcadeCheckerPainter(drawBottomStripe: false),
         child: Padding(
-          padding: EdgeInsets.only(top: topInset + 12, bottom: bottomInset),
-          child: RefreshIndicator(
-            onRefresh: _handleRefresh,
-            color: AppColors.accent,
-            backgroundColor: AppColors.parchment,
-            child: CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  sliver: SliverToBoxAdapter(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _buildTopStatusBar(),
-                        const SizedBox(height: 16),
-                        RetroCard(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 12,
-                            horizontal: 14,
-                          ),
-                          child: Row(
-                            children: [
-                              AppAvatar(
-                                name: widget.displayName ?? 'You',
-                                imageUrl: widget.authService.profilePhotoUrl,
-                                size: 54,
-                                isUser: true,
-                                borderColor: AppColors.parchment,
-                                borderWidth: 2.5,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    if (widget.email != null &&
-                                        !widget.email!.endsWith(
-                                          '@privaterelay.appleid.com',
-                                        )) ...[
-                                      Text(
-                                        widget.email!,
-                                        style: PixelText.body(
-                                          size: 14,
-                                          color: AppColors.textMid,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                              PillButton(
-                                label: 'SETTINGS',
-                                variant: PillButtonVariant.secondary,
-                                fontSize: 12,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 8,
-                                ),
-                                onPressed: _openSettings,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        RetroCard(
-                          padding: const EdgeInsets.all(12),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: PillButton(
-                                  label:
-                                      widget.authService.profilePhotoUrl == null
-                                      ? 'ADD PHOTO'
-                                      : 'CHANGE PHOTO',
-                                  variant: PillButtonVariant.primary,
-                                  fontSize: 12,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 10,
-                                  ),
-                                  onPressed: _handleAddProfilePhoto,
-                                ),
-                              ),
-                              if (widget.authService.profilePhotoUrl !=
-                                  null) ...[
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: PillButton(
-                                    label: 'REMOVE PHOTO',
-                                    variant: PillButtonVariant.secondary,
-                                    fontSize: 12,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 10,
-                                    ),
-                                    onPressed: _handleRemoveProfilePhoto,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        if (widget.onOpenFriends != null) ...[
-                          const SizedBox(height: 12),
-                          RetroCard(
-                            padding: const EdgeInsets.all(12),
-                            child: PillButton(
-                              label: widget.incomingFriendRequests > 0
-                                  ? 'FRIENDS (${widget.incomingFriendRequests})'
-                                  : 'FRIENDS',
-                              variant: PillButtonVariant.primary,
-                              fontSize: 13,
-                              fullWidth: true,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 24,
-                                vertical: 12,
-                              ),
-                              onPressed: widget.onOpenFriends,
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 16),
-                        RetroCard(
-                          padding: const EdgeInsets.all(12),
-                          child: StepCalendar(
-                            authService: widget.authService,
-                            backendApiService: _api,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        RetroCard(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 12,
-                            horizontal: 8,
-                          ),
-                          child: Column(
-                            children: [
-                              Text(
-                                'STATS',
-                                style: PixelText.title(
-                                  size: 16,
-                                  color: AppColors.textMid,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 12),
-                              _StatsSection(
-                                key: _statsKey,
-                                authService: widget.authService,
-                                backendApiService: _api,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (showBackButton)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      icon: const Icon(
+                        Icons.arrow_back,
+                        color: AppColors.parchment,
+                      ),
+                      onPressed:
+                          widget.onBack ??
+                          () {
+                            Navigator.of(context).pop();
+                          },
                     ),
                   ),
                 ),
-              ],
-            ),
+              Text(
+                'PROFILE',
+                style: PixelText.title(
+                  size: 30,
+                  color: AppColors.parchment,
+                ).copyWith(shadows: _textShadows),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                'Your streak, your stats, and a quick way to manage the basics.',
+                style: PixelText.body(
+                  size: 15,
+                  color: AppColors.parchment.withValues(alpha: 0.92),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  GestureDetector(
+                    onTap: widget.onAddProfilePhoto == null
+                        ? null
+                        : _handleAvatarTap,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        AppAvatar(
+                          name: displayName ?? 'You',
+                          imageUrl: widget.authService.profilePhotoUrl,
+                          size: 72,
+                          isUser: true,
+                          borderColor: AppColors.parchment,
+                          borderWidth: 2.5,
+                        ),
+                        if (widget.onAddProfilePhoto != null)
+                          Positioned(
+                            right: -2,
+                            bottom: -2,
+                            child: Container(
+                              padding: const EdgeInsets.all(5),
+                              decoration: BoxDecoration(
+                                color: AppColors.parchment,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: AppColors.roofDark,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Icon(
+                                hasPhoto
+                                    ? Icons.edit_rounded
+                                    : Icons.add_a_photo_rounded,
+                                size: 14,
+                                color: AppColors.textDark,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (displayName != null && displayName.isNotEmpty)
+                          Text(
+                            displayName,
+                            style: PixelText.title(
+                              size: 20,
+                              color: AppColors.parchment,
+                            ).copyWith(shadows: _textShadows),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        if (showEmail) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            email,
+                            style: PixelText.body(
+                              size: 13,
+                              color: AppColors.parchment.withValues(alpha: 0.85),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: PillButton(
+                      label: 'SETTINGS',
+                      icon: Icons.settings_rounded,
+                      variant: PillButtonVariant.secondary,
+                      fontSize: 13,
+                      fullWidth: true,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      onPressed: _openSettings,
+                    ),
+                  ),
+                  if (widget.onOpenFriends != null) ...[
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: PillButton(
+                        label: widget.incomingFriendRequests > 0
+                            ? 'FRIENDS (${widget.incomingFriendRequests})'
+                            : 'FRIENDS',
+                        icon: Icons.people_alt_rounded,
+                        variant: PillButtonVariant.accent,
+                        fontSize: 13,
+                        fullWidth: true,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        onPressed: widget.onOpenFriends,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildTopStatusBar() {
-    final steps = widget.stepData?.steps ?? 0;
-    final stepsStr = _formatNumber(steps);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+  Widget _buildBody() {
+    return ColoredBox(
+      color: AppColors.parchment,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Column(
           children: [
-            GestureDetector(
-              onTap: () => Navigator.of(context).pop(),
-              child: const Padding(
-                padding: EdgeInsets.all(8),
-                child: Icon(
-                  Icons.arrow_back,
-                  color: AppColors.textDark,
-                  size: 24,
-                ),
+            _buildSectionHeader('STEP CALENDAR'),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+              child: StepCalendar(
+                authService: widget.authService,
+                backendApiService: _api,
               ),
             ),
-            const SizedBox(width: 4),
-            AppAvatar(
-              name: widget.displayName ?? 'You',
-              imageUrl: widget.authService.profilePhotoUrl,
-              size: 44,
-              isUser: true,
-              borderColor: AppColors.parchment,
-              borderWidth: 2.25,
+            _buildSectionHeader('STATS'),
+            _StatsSection(
+              key: _statsKey,
+              authService: widget.authService,
+              backendApiService: _api,
             ),
-            const SizedBox(width: 10),
-            if (widget.displayName != null)
-              Expanded(
-                child: Text(
-                  widget.displayName!,
-                  style: PixelText.title(
-                    size: 26,
-                    color: AppColors.textDark,
-                  ).copyWith(shadows: _textShadows),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            const SizedBox(width: 8),
-            CoinBalanceBadge(coins: widget.authService.coins),
           ],
         ),
-        const SizedBox(height: 2),
-        Text(
-          stepsStr,
-          style: PixelText.number(
-            size: 20,
-            color: AppColors.accent,
-          ).copyWith(shadows: _textShadows),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(10, 14, 10, 7),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(
+            color: AppColors.parchmentBorder.withValues(alpha: 0.72),
+          ),
         ),
-      ],
+      ),
+      child: Text(
+        title,
+        style: PixelText.title(
+          size: 16,
+          color: AppColors.textDark,
+        ).copyWith(shadows: _textShadows),
+      ),
     );
   }
 }
@@ -507,10 +597,10 @@ class _StatsSectionState extends State<_StatsSection> {
 
   Widget _buildStatRow(String label, String value, int index) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+      padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 14),
       decoration: BoxDecoration(
         color: index.isOdd
-            ? AppColors.parchmentDark.withValues(alpha: 0.3)
+            ? AppColors.parchmentDark.withValues(alpha: 0.45)
             : Colors.transparent,
       ),
       child: Row(

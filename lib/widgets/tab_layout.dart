@@ -23,16 +23,20 @@ class TabLayout extends StatelessWidget {
   Widget build(BuildContext context) {
     final topInset = MediaQuery.of(context).padding.top;
     final bottomInset = MediaQuery.of(context).padding.bottom;
+    final isPushedRoute = Navigator.canPop(context);
     final tabBarHeight = 77.5 + bottomInset;
+    final boardBottomPadding = isPushedRoute
+        ? bottomInset + 24
+        : tabBarHeight + 110;
 
     return Column(
       children: [
         // Sky area above the board (status bar / notch region)
-        SizedBox(height: topInset + 24),
+        SizedBox(height: topInset + (isPushedRoute ? 12 : 24)),
         // Board from here down to the nav bar
         Expanded(
           child: Padding(
-            padding: EdgeInsets.only(bottom: tabBarHeight + 110),
+            padding: EdgeInsets.only(bottom: boardBottomPadding),
             child: ContentBoard(
               expand: true,
               child: centerContent
@@ -69,7 +73,7 @@ class TabLayout extends StatelessWidget {
                         ),
                       ],
                     )
-                  : _buildScrollable(),
+                  : _buildScrollable(context),
             ),
           ),
         ),
@@ -77,17 +81,33 @@ class TabLayout extends StatelessWidget {
     );
   }
 
-  Widget _buildScrollableContent() {
+  Widget _buildScrollableContent(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (showTitle) ...[
           Padding(
             padding: const EdgeInsets.only(top: 4, bottom: 8),
-            child: Text(
-              title,
-              style: PixelText.title(size: 24, color: AppColors.textDark),
-              textAlign: TextAlign.center,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                if (Navigator.canPop(context))
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.arrow_back,
+                        color: AppColors.textDark,
+                      ),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ),
+                Text(
+                  title,
+                  style: PixelText.title(size: 24, color: AppColors.textDark),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
           ),
           Container(
@@ -101,7 +121,7 @@ class TabLayout extends StatelessWidget {
     );
   }
 
-  Widget _buildScrollable() {
+  Widget _buildScrollable(BuildContext context) {
     if (onRefresh != null) {
       return RefreshIndicator(
         onRefresh: onRefresh!,
@@ -109,14 +129,14 @@ class TabLayout extends StatelessWidget {
         backgroundColor: AppColors.parchment,
         child: AlwaysScrollableScrollView(
           padding: const EdgeInsets.only(top: 4, bottom: 16),
-          child: _buildScrollableContent(),
+          child: _buildScrollableContent(context),
         ),
       );
     }
 
     return SingleChildScrollView(
       padding: const EdgeInsets.only(top: 4, bottom: 16),
-      child: _buildScrollableContent(),
+      child: _buildScrollableContent(context),
     );
   }
 }

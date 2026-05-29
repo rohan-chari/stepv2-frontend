@@ -18,40 +18,6 @@ class _FakeBackendApiService extends BackendApiService {
     leaderboardCalls.add((type: type, period: period));
 
     switch (type) {
-      case 'challenges':
-        return {
-          'minimumCompletedChallenges': 5,
-          'top100': [
-            {
-              'rank': 1,
-              'userId': 'challenge-1',
-              'displayName': 'AceWinner',
-              'wins': 5,
-              'losses': 1,
-              'completedCount': 6,
-              'winPercentage': 0.8333333333,
-            },
-            {
-              'rank': 2,
-              'userId': 'challenge-2',
-              'displayName': 'BlazeRun',
-              'wins': 4,
-              'losses': 1,
-              'completedCount': 5,
-              'winPercentage': 0.8,
-            },
-          ],
-          'currentUser': {
-            'rank': null,
-            'displayName': 'Trail Walker',
-            'wins': 4,
-            'losses': 0,
-            'completedCount': 4,
-            'winPercentage': 1.0,
-            'inTop100': false,
-            'qualified': false,
-          },
-        };
       case 'races':
         return {
           'top100': [
@@ -134,7 +100,6 @@ Widget _buildLeaderboard({
         authService: authService,
         backendApiService: backendApiService,
         stepData: StepData(steps: 6543, date: DateTime(2026, 4, 7)),
-        stepGoal: 8000,
         displayName: 'Trail Walker',
       ),
     ),
@@ -164,38 +129,6 @@ void main() {
       expect(find.text('TODAY'), findsOneWidget);
       expect(find.text('STEPS'), findsAtLeastNWidgets(1));
       expect(find.text('12.0k'), findsOneWidget);
-    },
-  );
-
-  testWidgets(
-    'LeaderboardTab shows the challenge qualification note and W-L rows',
-    (WidgetTester tester) async {
-      final authService = await _createAuthService();
-      final backendApiService = _FakeBackendApiService();
-
-      await tester.pumpWidget(
-        _buildLeaderboard(
-          authService: authService,
-          backendApiService: backendApiService,
-        ),
-      );
-      await tester.pump();
-
-      await tester.tap(find.text('CHALLENGES'));
-      await tester.pump();
-
-      expect(backendApiService.leaderboardCalls.last, (
-        type: 'challenges',
-        period: 'allTime',
-      ));
-      expect(
-        find.text('MINIMUM 5 COMPLETED CHALLENGES TO QUALIFY'),
-        findsOneWidget,
-      );
-      expect(find.text('W-L'), findsOneWidget);
-      expect(find.text('5-1'), findsOneWidget);
-      expect(find.text('4-0'), findsOneWidget);
-      expect(find.text('TODAY'), findsNothing);
     },
   );
 

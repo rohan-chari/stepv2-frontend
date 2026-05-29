@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import '../styles.dart';
 import 'race_card_capybara_row.dart';
-import 'retro_card.dart';
 
 /// Portrait card for a single ACTIVE race the user is in. Shows the race name,
 /// a ticking "ENDS IN …" countdown, the top-3 racers as capybaras (via
@@ -117,60 +116,58 @@ class _ActiveRaceCardState extends State<ActiveRaceCard> {
       onTap: widget.onTap,
       child: SizedBox(
         width: widget.width,
-        child: RetroCard(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                widget.raceName.toUpperCase(),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: PixelText.title(size: 13, color: AppColors.textDark),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.raceName.toUpperCase(),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: PixelText.title(
+                size: 14,
+                color: AppColors.parchment,
               ),
-              const SizedBox(height: 4),
-              if (endsAt != null)
-                Row(
-                  children: [
-                    Text(
-                      'ENDS IN ',
-                      style: PixelText.body(size: 9, color: AppColors.textMid),
-                    ),
-                    Text(
-                      _formatTimeLeft(endsAt),
-                      style: PixelText.body(
-                        size: 10,
-                        color: AppColors.accent,
-                      ),
-                    ),
-                  ],
-                ),
-              const SizedBox(height: 10),
-              RaceCardCapybaraRow(top3: widget.top3),
-              // Push the placement badge to the bottom so it lines up across
-              // cards regardless of how many racers (2 vs 3) are shown.
-              const Spacer(),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: Color.lerp(placementColor, AppColors.parchment, 0.78),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: placementColor, width: 1.5),
-                ),
-                child: Text(
-                  placement != null
-                      ? '${_ordinal(placement)} PLACE'.toUpperCase()
-                      : 'NOT RANKED',
-                  textAlign: TextAlign.center,
-                  style: PixelText.button(size: 11, color: AppColors.textDark),
+            ),
+            if (endsAt != null) ...[
+              const SizedBox(height: 3),
+              Text(
+                '${_formatTimeLeft(endsAt)} LEFT',
+                style: PixelText.body(
+                  size: 11,
+                  color: AppColors.parchment.withValues(alpha: 0.75),
                 ),
               ),
             ],
-          ),
+            const SizedBox(height: 14),
+            RaceCardCapybaraRow(top3: widget.top3),
+            const Spacer(),
+            Row(
+              children: [
+                if (placement != null) ...[
+                  Icon(
+                    Icons.military_tech_rounded,
+                    size: 14,
+                    color: placementColor,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${_ordinal(placement).toUpperCase()} PLACE',
+                    style: PixelText.title(
+                      size: 12,
+                      color: AppColors.parchment,
+                    ),
+                  ),
+                ] else
+                  Text(
+                    'NOT RANKED',
+                    style: PixelText.body(
+                      size: 11,
+                      color: AppColors.parchment.withValues(alpha: 0.7),
+                    ),
+                  ),
+              ],
+            ),
+          ],
         ),
       ),
     );

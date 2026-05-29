@@ -3,7 +3,6 @@ import 'package:share_plus/share_plus.dart';
 
 import '../styles.dart';
 import 'app_avatar.dart';
-import 'home_chrome.dart';
 import 'pill_button.dart';
 
 const _inviteShareMessage =
@@ -191,7 +190,7 @@ class _PendingInviteCardState extends State<_PendingInviteCard>
       builder: (context, child) {
         final glow = 0.25 + (_pulse.value * 0.35);
         return _CardShell(
-          borderColor: HomeColors.clay.withValues(alpha: glow),
+          borderColor: AppColors.pillGoldDark.withValues(alpha: glow),
           child: child!,
         );
       },
@@ -212,12 +211,12 @@ class _PendingInviteCardState extends State<_PendingInviteCard>
                   children: [
                     Text(
                       "${inviter?.displayName ?? 'Someone'} invited you to race",
-                      style: HomeText.title(size: 16),
+                      style: PixelText.title(size: 16),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       detailLine,
-                      style: HomeText.body(size: 12, color: HomeColors.lineSoft),
+                      style: PixelText.body(size: 12, color: AppColors.parchmentBorder),
                     ),
                   ],
                 ),
@@ -230,16 +229,13 @@ class _PendingInviteCardState extends State<_PendingInviteCard>
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: HomeColors.surfaceMuted,
+                    color: AppColors.parchmentDark.withValues(alpha: 0.45),
                     borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: HomeColors.lineSoft, width: 1),
+                    border: Border.all(color: AppColors.parchmentBorder, width: 1),
                   ),
                   child: Text(
                     "+${widget.extraInviteCount} more",
-                    style: HomeText.body(
-                      size: 11,
-                      weight: FontWeight.w800,
-                    ),
+                    style: PixelText.body(size: 11),
                   ),
                 ),
               ],
@@ -288,10 +284,9 @@ class _PendingInviteCardState extends State<_PendingInviteCard>
             Center(
               child: Text(
                 expiresText,
-                style: HomeText.body(
+                style: PixelText.body(
                   size: 11,
-                  color: HomeColors.lineSoft,
-                  weight: FontWeight.w700,
+                  color: AppColors.textMid,
                 ),
               ),
             ),
@@ -343,7 +338,7 @@ class _ActiveRaceCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     name,
-                    style: HomeText.title(size: 16),
+                    style: PixelText.title(size: 16),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -351,9 +346,9 @@ class _ActiveRaceCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text(
                     'ends ${_formatRelative(endsAt)}',
-                    style: HomeText.body(
+                    style: PixelText.body(
                       size: 12,
-                      color: HomeColors.lineSoft,
+                      color: AppColors.parchmentBorder,
                     ),
                   ),
                 ],
@@ -373,7 +368,7 @@ class _ActiveRaceCard extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               gapText,
-              style: HomeText.body(size: 13, weight: FontWeight.w700),
+              style: PixelText.body(size: 13),
             ),
             const SizedBox(height: 12),
             PillButton(
@@ -420,7 +415,7 @@ class _FriendRacingCard extends StatelessWidget {
         children: [
           Text(
             "${friend?.displayName ?? 'A friend'} is racing right now",
-            style: HomeText.title(size: 16),
+            style: PixelText.title(size: 16),
           ),
           const SizedBox(height: 12),
           _MiniTrack(
@@ -442,7 +437,7 @@ class _FriendRacingCard extends StatelessWidget {
           else
             Text(
               'This is a private race — root them on.',
-              style: HomeText.body(size: 12, color: HomeColors.lineSoft),
+              style: PixelText.body(size: 12, color: AppColors.parchmentBorder),
             ),
         ],
       ),
@@ -497,7 +492,7 @@ class _FriendFinishedCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   "${friend?.displayName ?? 'A friend'} $placementText $raceName",
-                  style: HomeText.title(size: 15),
+                  style: PixelText.title(size: 15),
                 ),
               ),
               const SizedBox(width: 8),
@@ -544,12 +539,12 @@ class _PublicRaceCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(name, style: HomeText.title(size: 16)),
+          Text(name, style: PixelText.title(size: 16)),
           const SizedBox(height: 4),
           Text(
             "$participantCount racing"
             "${endsAt != null ? ' · ends ${_formatRelative(endsAt)}' : ''}",
-            style: HomeText.body(size: 12, color: HomeColors.lineSoft),
+            style: PixelText.body(size: 12, color: AppColors.parchmentBorder),
           ),
           const SizedBox(height: 14),
           PillButton(
@@ -583,12 +578,12 @@ class _InviteFriendsCard extends StatelessWidget {
         children: [
           Text(
             'Race your friends',
-            style: HomeText.title(size: 16),
+            style: PixelText.title(size: 16),
           ),
           const SizedBox(height: 4),
           Text(
             'Invite people you walk with — races are better head-to-head.',
-            style: HomeText.body(size: 12, color: HomeColors.lineSoft),
+            style: PixelText.body(size: 12, color: AppColors.parchmentBorder),
           ),
           const SizedBox(height: 14),
           PillButton(
@@ -620,13 +615,13 @@ class _CardShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: HomeColors.surface,
-        borderRadius: BorderRadius.circular(18),
+        color: AppColors.parchmentLight,
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: borderColor ?? HomeColors.lineSoft,
-          width: 2,
+          color: borderColor ?? AppColors.parchmentBorder,
+          width: 1.5,
         ),
       ),
       child: child,
@@ -648,7 +643,7 @@ class _MiniTrack extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
       decoration: BoxDecoration(
-        color: HomeColors.surfaceMuted,
+        color: AppColors.parchmentDark.withValues(alpha: 0.45),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -659,9 +654,9 @@ class _MiniTrack extends StatelessWidget {
                 children: [
                   Text(
                     '${entry.rank}',
-                    style: HomeText.title(
+                    style: PixelText.title(
                       size: 11,
-                      color: HomeColors.sageDeep,
+                      color: AppColors.accent,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -670,7 +665,7 @@ class _MiniTrack extends StatelessWidget {
                     imageUrl: entry.profilePhotoUrl,
                     size: 36,
                     borderColor: entry.userId == highlightUserId
-                        ? HomeColors.clay
+                        ? AppColors.pillGoldDark
                         : AppColors.parchment,
                     borderWidth: entry.userId == highlightUserId ? 2.5 : 1.5,
                   ),
@@ -679,7 +674,7 @@ class _MiniTrack extends StatelessWidget {
                     _formatSteps(entry.totalSteps),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: HomeText.body(size: 11, weight: FontWeight.w700),
+                    style: PixelText.body(size: 11),
                   ),
                 ],
               ),

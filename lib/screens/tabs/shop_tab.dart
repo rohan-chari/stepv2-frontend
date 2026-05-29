@@ -6,12 +6,9 @@ import '../../services/backend_api_service.dart';
 import '../../styles.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/error_toast.dart';
-import '../../widgets/game_container.dart';
-import '../../widgets/info_board_card.dart';
 import '../../widgets/info_toast.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
-import '../../widgets/tab_layout.dart';
 
 class ShopTab extends StatefulWidget {
   const ShopTab({
@@ -30,6 +27,10 @@ class ShopTab extends StatefulWidget {
 }
 
 class _ShopTabState extends State<ShopTab> {
+  static const _textShadows = [
+    Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
+  ];
+
   late final BackendApiService _backendApiService;
   Map<String, dynamic>? _catalog;
   Loadable<Map<String, dynamic>> _catalogState = const Loadable.initial();
@@ -168,29 +169,104 @@ class _ShopTabState extends State<ShopTab> {
 
   @override
   Widget build(BuildContext context) {
-    return TabLayout(
-      title: 'SHOP',
-      onRefresh: _loadCatalog,
-      child: _buildContent(),
+    final topInset = MediaQuery.of(context).padding.top;
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+    final tabBarHeight = 77.5 + bottomInset;
+
+    return Stack(
+      children: [
+        const Positioned.fill(
+          child: ColoredBox(
+            color: AppColors.roofLight,
+            child: CustomPaint(
+              painter: ArcadeCheckerPainter(drawBottomStripe: false),
+            ),
+          ),
+        ),
+        Padding(
+          padding: EdgeInsets.only(top: topInset + 14, bottom: tabBarHeight),
+          child: RefreshIndicator(
+            onRefresh: _loadCatalog,
+            color: AppColors.accent,
+            backgroundColor: AppColors.parchment,
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(child: _buildHeader()),
+                SliverToBoxAdapter(child: _buildBody()),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildContent() {
+  Widget _buildHeader() {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: AppColors.roofLight,
+        border: Border(bottom: BorderSide(color: AppColors.roofDark, width: 1)),
+      ),
+      child: CustomPaint(
+        painter: const ArcadeCheckerPainter(drawBottomStripe: false),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 15, 16, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'SHOP',
+                      style: PixelText.title(
+                        size: 30,
+                        color: AppColors.parchment,
+                      ).copyWith(shadows: _textShadows),
+                    ),
+                  ),
+                  CoinBalanceBadge(coins: widget.authService.coins),
+                ],
+              ),
+              const SizedBox(height: 5),
+              Text(
+                'Spend coins on capybara gear. Earn more by walking and racing.',
+                style: PixelText.body(
+                  size: 15,
+                  color: AppColors.parchment.withValues(alpha: 0.92),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
     final state = _catalogState;
     if (state.shouldShowInitialLoading || (_loading && _catalog == null)) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 48),
-        child: ListSkeleton(itemCount: 3),
+      return const ColoredBox(
+        color: AppColors.parchment,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(16, 16, 16, 16),
+          child: ListSkeleton(itemCount: 3),
+        ),
       );
     }
 
     if (state.isError && !state.hasData) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 24),
-        child: LoadErrorPanel(
-          title: 'Couldn’t load the shop',
-          message: state.error ?? 'Check your connection and try again.',
-          onRetry: _loadCatalog,
+      return ColoredBox(
+        color: AppColors.parchment,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+          child: LoadErrorPanel(
+            title: 'Couldn’t load the shop',
+            message: state.error ?? 'Check your connection and try again.',
+            onRetry: _loadCatalog,
+          ),
         ),
       );
     }
@@ -200,54 +276,97 @@ class _ShopTabState extends State<ShopTab> {
         (_catalog?['items'] as List?)?.cast<Map<String, dynamic>>() ??
         [];
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
+    return ColoredBox(
+      color: AppColors.parchment,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'ACCESSORIES',
-              style: PixelText.title(size: 16, color: AppColors.textMid),
-            ),
-            const Spacer(),
-            CoinBalanceBadge(coins: widget.authService.coins),
+            if (state.isRefreshing)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 4),
+                child: LinearProgressIndicator(
+                  minHeight: 2,
+                  color: AppColors.accent,
+                  backgroundColor: Colors.transparent,
+                ),
+              ),
+            _buildSectionHeader('ACCESSORIES'),
+            if (items.isEmpty)
+              _buildEmptyState()
+            else
+              for (int i = 0; i < items.length; i++)
+                _ShopItemRow(
+                  item: items[i],
+                  index: i,
+                  saving: _saving,
+                  onBuy: () => _purchase(items[i]),
+                  onEquip: () => _equip(
+                    items[i]['slot'] as String? ?? '',
+                    items[i]['id'] as String?,
+                  ),
+                  onClear: () =>
+                      _equip(items[i]['slot'] as String? ?? '', null),
+                ),
           ],
         ),
-        const SizedBox(height: 12),
-        if (state.isRefreshing)
-          const Padding(
-            padding: EdgeInsets.only(bottom: 8),
-            child: LinearProgressIndicator(
-              minHeight: 2,
-              color: AppColors.accent,
-              backgroundColor: Colors.transparent,
-            ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(10, 14, 10, 7),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(
+            color: AppColors.parchmentBorder.withValues(alpha: 0.72),
           ),
-        if (items.isEmpty)
-          const InfoBoardCard(
-            title: 'No accessories yet',
-            subtitle: 'New capybara gear will show up here soon.',
-          )
-        else
-          for (final item in items) ...[
-            _ShopItemCard(
-              item: item,
-              saving: _saving,
-              onBuy: () => _purchase(item),
-              onEquip: () =>
-                  _equip(item['slot'] as String? ?? '', item['id'] as String?),
-              onClear: () => _equip(item['slot'] as String? ?? '', null),
-            ),
-            const SizedBox(height: 10),
-          ],
-      ],
+        ),
+      ),
+      child: Text(
+        title,
+        style: PixelText.title(
+          size: 16,
+          color: AppColors.textDark,
+        ).copyWith(shadows: _textShadows),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 26),
+      decoration: BoxDecoration(
+        color: AppColors.parchmentDark.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Icons.checkroom_rounded,
+            size: 32,
+            color: AppColors.textMid.withValues(alpha: 0.7),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'No accessories yet — new capybara gear coming soon.',
+            style: PixelText.body(size: 14, color: AppColors.textMid),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _ShopItemCard extends StatelessWidget {
-  const _ShopItemCard({
+class _ShopItemRow extends StatelessWidget {
+  const _ShopItemRow({
     required this.item,
+    required this.index,
     required this.saving,
     required this.onBuy,
     required this.onEquip,
@@ -255,6 +374,7 @@ class _ShopItemCard extends StatelessWidget {
   });
 
   final Map<String, dynamic> item;
+  final int index;
   final bool saving;
   final VoidCallback onBuy;
   final VoidCallback onEquip;
@@ -268,17 +388,27 @@ class _ShopItemCard extends StatelessWidget {
     final description = item['description'] as String? ?? '';
     final price = item['priceCoins'] as int? ?? 0;
 
-    return GameContainer(
-      padding: const EdgeInsets.all(12),
+    final stripeColor = index.isOdd
+        ? AppColors.parchmentDark.withValues(alpha: 0.45)
+        : Colors.transparent;
+
+    return Container(
+      color: stripeColor,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       child: Row(
         children: [
           Container(
-            width: 46,
-            height: 46,
+            width: 48,
+            height: 48,
             decoration: BoxDecoration(
               color: AppColors.parchmentDark,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.parchmentBorder),
+              border: Border.all(
+                color: equipped
+                    ? AppColors.accent
+                    : AppColors.parchmentBorder,
+                width: equipped ? 2 : 1,
+              ),
             ),
             padding: const EdgeInsets.all(5),
             child: Image.asset(
@@ -296,15 +426,47 @@ class _ShopItemCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  name,
-                  style: PixelText.title(size: 14, color: AppColors.textDark),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        name,
+                        style: PixelText.title(
+                          size: 15,
+                          color: AppColors.textDark,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (equipped) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.accent.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          'EQUIPPED',
+                          style: PixelText.title(
+                            size: 9,
+                            color: AppColors.accent,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 if (description.isNotEmpty) ...[
                   const SizedBox(height: 3),
                   Text(
                     description,
                     style: PixelText.body(size: 12, color: AppColors.textMid),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ],
@@ -321,15 +483,16 @@ class _ShopItemCard extends StatelessWidget {
             )
           else if (equipped)
             PillButton(
-              label: 'Clear',
+              label: 'CLEAR',
               icon: Icons.close_rounded,
+              variant: PillButtonVariant.secondary,
               onPressed: saving ? null : onClear,
               fontSize: 12,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             )
           else
             PillButton(
-              label: 'Equip',
+              label: 'EQUIP',
               icon: Icons.check_rounded,
               onPressed: saving ? null : onEquip,
               fontSize: 12,

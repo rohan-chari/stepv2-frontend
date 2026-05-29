@@ -38,8 +38,8 @@ class _CoinBalanceBadgeState extends State<CoinBalanceBadge> {
         Text(
           '${widget.coins}',
           style: PixelText.number(
-            size: 16,
-            color: AppColors.coinDark,
+            size: 19,
+            color: AppColors.coinLight,
           ).copyWith(shadows: _textShadows),
         ),
         if (isTappable) ...[
@@ -47,7 +47,7 @@ class _CoinBalanceBadgeState extends State<CoinBalanceBadge> {
           Icon(
             Icons.chevron_right_rounded,
             size: widget.coinSize,
-            color: AppColors.coinDark,
+            color: AppColors.coinLight,
             shadows: _textShadows,
           ),
         ],

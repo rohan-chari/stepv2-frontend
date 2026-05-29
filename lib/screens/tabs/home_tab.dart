@@ -7,8 +7,8 @@ import '../../styles.dart';
 import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
-import '../../widgets/app_avatar.dart';
 import '../../widgets/coin_balance_badge.dart';
+import '../../widgets/pill_button.dart';
 import '../../widgets/step_milestones_section.dart';
 import '../../widgets/streak_chip.dart' show StreakChip, StreakChipState;
 import '../../widgets/active_race_card.dart';
@@ -16,7 +16,6 @@ import '../../widgets/home_chrome.dart';
 import '../../widgets/home_course_track.dart' show CapybaraCustomizationPreview;
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/race_opportunity_card.dart';
-import '../../widgets/retro_card.dart';
 import '../display_name_screen.dart';
 import '../public_races_screen.dart';
 
@@ -44,10 +43,9 @@ class HomeTab extends StatelessWidget {
   final VoidCallback? onOpenLeaderboardTab;
   final void Function(String leaderboardType, String period)?
   onOpenLeaderboardHighlight;
-  final VoidCallback? onOpenProfile;
+  final VoidCallback? onOpenShop;
   final Future<void> Function()? onAddProfilePhoto;
   final Future<bool> Function()? onDismissProfilePhotoPrompt;
-  final int incomingFriendRequests;
   final Map<String, dynamic>? raceCard;
   final GlobalKey<StreakChipState>? streakChipKey;
   final GlobalKey<StepMilestonesSectionState>? stepMilestonesKey;
@@ -81,10 +79,9 @@ class HomeTab extends StatelessWidget {
     this.onOpenFriendsTab,
     this.onOpenLeaderboardTab,
     this.onOpenLeaderboardHighlight,
-    this.onOpenProfile,
+    this.onOpenShop,
     this.onAddProfilePhoto,
     this.onDismissProfilePhotoPrompt,
-    this.incomingFriendRequests = 0,
     this.raceCard,
     this.streakChipKey,
     this.stepMilestonesKey,
@@ -112,68 +109,82 @@ class HomeTab extends StatelessWidget {
       padding: EdgeInsets.only(top: topInset, bottom: bottomPadding),
       child: RefreshIndicator(
         onRefresh: onRefresh,
-        color: HomeColors.sageDeep,
-        backgroundColor: HomeColors.surface,
+        color: AppColors.accent,
+        backgroundColor: AppColors.parchment,
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.only(bottom: 24),
-              sliver: SliverToBoxAdapter(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildHeroSection(context),
-                    if (raceCard != null) ...[
-                      const SizedBox(height: 16),
-                      // New (opt-in) ACTIVE_RACES state → horizontal row of
-                      // active-race cards. Any other state keeps rendering the
-                      // existing RaceOpportunityCard exactly as before
-                      // (invites / friend racing / public / empty).
-                      if (raceCard!['state'] == 'ACTIVE_RACES')
-                        _buildActiveRacesRow(raceCard!)
-                      else
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: RaceOpportunityCard(
-                            data: RaceCardData.fromJson(raceCard!),
-                            onAccept: onAcceptRaceInvite == null
-                                ? null
-                                : (raceId) => onAcceptRaceInvite!(raceId),
-                            onDecline: onDeclineRaceInvite == null
-                                ? null
-                                : (raceId) => onDeclineRaceInvite!(raceId),
-                            onOpenRace: onOpenRace,
-                            onJoinRace: onJoinRaceFromCard == null
-                                ? null
-                                : (raceId) => onJoinRaceFromCard!(raceId),
-                            onChallengeBack: onChallengeFriendBack,
-                          ),
-                        ),
+            SliverToBoxAdapter(child: _buildHeroSection(context)),
+            SliverToBoxAdapter(
+              child: ColoredBox(
+                color: AppColors.parchment,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (raceCard != null) _buildRaceSection(),
+                      _SetupPromptsSection(
+                        displayName: displayName,
+                        hasProfilePhoto: hasProfilePhoto,
+                        authService: authService,
+                        onDisplayNameChanged: onDisplayNameChanged,
+                        onAddProfilePhoto: onAddProfilePhoto,
+                        onDismissProfilePhotoPrompt:
+                            onDismissProfilePhotoPrompt,
+                      ),
+                      _buildLeaderboardHighlightsSection(),
+                      const _HomeSectionHeader(title: 'STEP MILESTONES'),
+                      StepMilestonesSection(
+                        key: stepMilestonesKey,
+                        authService: authService,
+                        backendApiService: backendApiService,
+                        currentSteps: stepData?.steps,
+                      ),
                     ],
-                    const SizedBox(height: 16),
-                    _SetupPromptsSection(
-                      displayName: displayName,
-                      hasProfilePhoto: hasProfilePhoto,
-                      authService: authService,
-                      onDisplayNameChanged: onDisplayNameChanged,
-                      onAddProfilePhoto: onAddProfilePhoto,
-                      onDismissProfilePhotoPrompt: onDismissProfilePhotoPrompt,
-                    ),
-                    _buildLeaderboardHighlightsSection(),
-                    if (leaderboardHighlightsLoading ||
-                        leaderboardHighlights.isNotEmpty)
-                      const SizedBox(height: 16),
-                    StepMilestonesSection(
-                      key: stepMilestonesKey,
-                      authService: authService,
-                      backendApiService: backendApiService,
-                      currentSteps: stepData?.steps,
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// RACES section on home — its own green-checkered surface (matches the
+  /// original home palette) holding the section header + active-races
+  /// carousel OR the RaceOpportunityCard for non-active states.
+  Widget _buildRaceSection() {
+    final card = raceCard!;
+    return DecoratedBox(
+      decoration: const BoxDecoration(color: HomeColors.sageDeep),
+      child: CustomPaint(
+        painter: const ArcadeCheckerPainter(drawBottomStripe: false),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const _HomeSectionHeader(title: 'RACES', onDark: true),
+            if (card['state'] == 'ACTIVE_RACES')
+              _buildActiveRacesRow(card)
+            else
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+                child: RaceOpportunityCard(
+                  data: RaceCardData.fromJson(card),
+                  onAccept: onAcceptRaceInvite == null
+                      ? null
+                      : (raceId) => onAcceptRaceInvite!(raceId),
+                  onDecline: onDeclineRaceInvite == null
+                      ? null
+                      : (raceId) => onDeclineRaceInvite!(raceId),
+                  onOpenRace: onOpenRace,
+                  onJoinRace: onJoinRaceFromCard == null
+                      ? null
+                      : (raceId) => onJoinRaceFromCard!(raceId),
+                  onChallengeBack: onChallengeFriendBack,
+                ),
+              ),
           ],
         ),
       ),
@@ -195,16 +206,29 @@ class HomeTab extends StatelessWidget {
 
     if (races.isEmpty) return const SizedBox.shrink();
 
+    final itemCount = races.length + 1;
     return SizedBox(
-      height: 248,
+      height: 220,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        // +1 for the trailing "join a public race" card.
-        itemCount: races.length + 1,
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+        itemCount: itemCount,
         itemBuilder: (context, index) {
+          final isLast = index == itemCount - 1;
+          final divider = isLast
+              ? const SizedBox.shrink()
+              : Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: Container(
+                    width: 1,
+                    color: AppColors.parchment.withValues(alpha: 0.18),
+                  ),
+                );
+
           if (index == races.length) {
-            return _buildJoinPublicRaceCard(context);
+            return Row(
+              children: [_buildJoinPublicRaceCard(context), divider],
+            );
           }
           final race = races[index];
           final raceId = race['raceId'] as String? ?? '';
@@ -220,17 +244,18 @@ class HomeTab extends StatelessWidget {
               const <Map<String, dynamic>>[];
           final placement = (race['userPlacement'] as num?)?.toInt();
 
-          return Padding(
-            // A card always follows (another race or the join card).
-            padding: const EdgeInsets.only(right: 10),
-            child: ActiveRaceCard(
-              raceId: raceId,
-              raceName: race['name'] as String? ?? 'Race',
-              endsAt: endsAt,
-              top3: top3,
-              userPlacement: placement,
-              onTap: raceId.isEmpty ? null : () => onOpenRace?.call(raceId),
-            ),
+          return Row(
+            children: [
+              ActiveRaceCard(
+                raceId: raceId,
+                raceName: race['name'] as String? ?? 'Race',
+                endsAt: endsAt,
+                top3: top3,
+                userPlacement: placement,
+                onTap: raceId.isEmpty ? null : () => onOpenRace?.call(raceId),
+              ),
+              divider,
+            ],
           );
         },
       ),
@@ -250,32 +275,32 @@ class HomeTab extends StatelessWidget {
         await onRefresh();
       },
       child: SizedBox(
-        width: 200,
-        child: RetroCard(
-          padding: const EdgeInsets.all(12),
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.add_circle_outline,
-                  size: 44,
-                  color: AppColors.accent,
+        width: 160,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.add_circle_outline,
+                size: 42,
+                color: AppColors.parchment.withValues(alpha: 0.92),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'JOIN A PUBLIC RACE',
+                textAlign: TextAlign.center,
+                style: PixelText.title(size: 13, color: AppColors.parchment),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Find an open race',
+                textAlign: TextAlign.center,
+                style: PixelText.body(
+                  size: 11,
+                  color: AppColors.parchment.withValues(alpha: 0.75),
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  'JOIN A PUBLIC RACE',
-                  textAlign: TextAlign.center,
-                  style: PixelText.title(size: 14, color: AppColors.textDark),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Find an open race to enter',
-                  textAlign: TextAlign.center,
-                  style: PixelText.body(size: 11, color: AppColors.textMid),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -293,7 +318,7 @@ class HomeTab extends StatelessWidget {
               width: 36,
               height: 36,
               child: CircularProgressIndicator(
-                color: HomeColors.sageDeep,
+                color: AppColors.parchment,
                 strokeWidth: 3,
               ),
             ),
@@ -308,17 +333,19 @@ class HomeTab extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('TODAY', style: HomeText.label()),
+            Text(
+              'TODAY',
+              style: PixelText.title(size: 14, color: AppColors.textMid),
+            ),
             const SizedBox(height: 10),
-            Text('Couldn’t load your pace', style: HomeText.title(size: 26)),
+            Text(
+              'Couldn’t load your pace',
+              style: PixelText.title(size: 22, color: AppColors.textDark),
+            ),
             const SizedBox(height: 8),
             Text(
               error!,
-              style: HomeText.body(
-                size: 14,
-                color: HomeColors.clay,
-                weight: FontWeight.w700,
-              ),
+              style: PixelText.body(size: 14, color: AppColors.textMid),
             ),
           ],
         ),
@@ -332,114 +359,110 @@ class HomeTab extends StatelessWidget {
     return HomePanel(
       padding: EdgeInsets.zero,
       radius: 0,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          DecoratedBox(
-            decoration: const BoxDecoration(color: HomeColors.sageDeep),
-            child: CustomPaint(
-              painter: const ArcadeCheckerPainter(),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(22, 22, 22, 22),
-                child: Stack(
-                  clipBehavior: Clip.none,
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: AppColors.roofLight,
+          border: Border(
+            bottom: BorderSide(color: AppColors.roofDark, width: 1),
+          ),
+        ),
+        child: CustomPaint(
+          painter: const ArcadeCheckerPainter(),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Positioned(
-                      top: 0,
-                      right: 0,
-                      child: ProfileAvatarButton(
-                        name: displayName ?? 'You',
-                        imageUrl: authService.profilePhotoUrl,
-                        onPressed: onOpenProfile,
-                        size: 42,
-                        badgeCount: incomingFriendRequests,
+                    Expanded(
+                      child: Text(
+                        displayName ?? 'You',
+                        style: PixelText.title(
+                          size: 24,
+                          color: AppColors.parchment,
+                        ).copyWith(shadows: _heroShadows),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 52),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    displayName ?? 'You',
-                                    textAlign: TextAlign.center,
-                                    style: HomeText.title(
-                                      size: 30,
-                                      color: Colors.white,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                CoinBalanceBadge(
-                                  coins: authService.coins,
-                                  coinSize: 16,
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Center(
-                            child: CapybaraCustomizationPreview(
-                              accessories: equippedAccessories,
-                              size: viewportHeight < 760 ? 104 : 122,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Steps today',
-                            textAlign: TextAlign.center,
-                            style: HomeText.body(
-                              size: 14,
-                              color: Colors.white.withValues(alpha: 0.78),
-                              weight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              stepsStr,
-                              style: HomeText.display(
-                                size: 58,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _heroSummary(steps: steps),
-                            textAlign: TextAlign.center,
-                            style: HomeText.body(
-                              size: 14,
-                              color: Colors.white.withValues(alpha: 0.82),
-                              weight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          StreakChip(
-                            key: streakChipKey,
-                            authService: authService,
-                            backendApiService: backendApiService,
-                          ),
-                        ],
+                    const SizedBox(width: 8),
+                    CoinBalanceBadge(
+                      coins: authService.coins,
+                      coinSize: 16,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Center(
+                  child: CapybaraCustomizationPreview(
+                    accessories: equippedAccessories,
+                    size: viewportHeight < 760 ? 104 : 122,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'TODAY',
+                  textAlign: TextAlign.center,
+                  style: PixelText.title(
+                    size: 12,
+                    color: AppColors.parchment.withValues(alpha: 0.82),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    stepsStr,
+                    style: PixelText.title(
+                      size: 58,
+                      color: AppColors.parchment,
+                    ).copyWith(shadows: _heroShadows),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _heroSummary(steps: steps),
+                  textAlign: TextAlign.center,
+                  style: PixelText.body(
+                    size: 14,
+                    color: AppColors.parchment.withValues(alpha: 0.88),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: StreakChip(
+                        key: streakChipKey,
+                        authService: authService,
+                        backendApiService: backendApiService,
+                        compact: true,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: PillButton(
+                        label: 'SHOP',
+                        icon: Icons.storefront_rounded,
+                        variant: PillButtonVariant.secondary,
+                        fullWidth: true,
+                        onPressed: onOpenShop,
                       ),
                     ),
                   ],
                 ),
-              ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
+
+  static const _heroShadows = [
+    Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
+  ];
 
   Widget _buildLeaderboardHighlightsSection() {
     final cards = leaderboardHighlights.take(3).toList(growable: false);
@@ -452,13 +475,10 @@ class HomeTab extends StatelessWidget {
     }
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 22),
-          child: Text('CLIMBING THE BOARDS', style: HomeText.label(size: 13)),
-        ),
-        const SizedBox(height: 10),
+        const _HomeSectionHeader(title: 'CLIMBING THE BOARDS'),
+        const SizedBox(height: 4),
         if (isLoading && cards.isEmpty)
           const _ClimbingBoardsSkeleton()
         else if (isError)
@@ -611,55 +631,59 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (showDisplayNamePrompt) ...[
-          HomePanel(
-            radius: 0,
+        const _HomeSectionHeader(title: 'SETUP'),
+        if (showDisplayNamePrompt)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('SETUP', style: HomeText.label()),
-                const SizedBox(height: 8),
-                Text('Add your display name', style: HomeText.title(size: 24)),
-                const SizedBox(height: 6),
+                Text(
+                  'Add your display name',
+                  style: PixelText.title(size: 20, color: AppColors.textDark),
+                ),
+                const SizedBox(height: 4),
                 Text(
                   'Your friends need something better than a blank avatar to look for.',
-                  style: HomeText.body(size: 14, color: HomeColors.muted),
+                  style: PixelText.body(size: 13, color: AppColors.textMid),
                 ),
-                const SizedBox(height: 14),
-                SizedBox(
-                  width: double.infinity,
-                  child: HomeButton(
-                    label: 'SET DISPLAY NAME',
-                    icon: Icons.edit_rounded,
-                    onPressed: _openDisplayNameScreen,
-                  ),
+                const SizedBox(height: 12),
+                PillButton(
+                  label: 'SET DISPLAY NAME',
+                  icon: Icons.edit_rounded,
+                  variant: PillButtonVariant.primary,
+                  fontSize: 13,
+                  fullWidth: true,
+                  onPressed: _openDisplayNameScreen,
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 12),
-        ],
-        if (showProfilePhotoPrompt) ...[
-          HomePanel(
-            radius: 0,
+        if (showProfilePhotoPrompt)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('PROFILE', style: HomeText.label()),
-                const SizedBox(height: 8),
-                Text('ADD A PROFILE PHOTO?', style: HomeText.title(size: 24)),
-                const SizedBox(height: 6),
+                Text(
+                  'Add a profile photo?',
+                  style: PixelText.title(size: 20, color: AppColors.textDark),
+                ),
+                const SizedBox(height: 4),
                 Text(
                   'Make it easier for friends to spot you in races and leaderboards.',
-                  style: HomeText.body(size: 14, color: HomeColors.muted),
+                  style: PixelText.body(size: 13, color: AppColors.textMid),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
-                      child: HomeButton(
+                      child: PillButton(
                         label: 'ADD PHOTO',
                         icon: Icons.add_a_photo_rounded,
+                        variant: PillButtonVariant.primary,
+                        fontSize: 13,
+                        fullWidth: true,
                         onPressed: _isSavingDismissal
                             ? null
                             : () => widget.onAddProfilePhoto?.call(),
@@ -667,10 +691,12 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: HomeButton(
+                      child: PillButton(
                         label: 'NO THANKS',
                         icon: Icons.close_rounded,
-                        isPrimary: false,
+                        variant: PillButtonVariant.secondary,
+                        fontSize: 13,
+                        fullWidth: true,
                         onPressed: _dismissProfilePhotoPrompt,
                       ),
                     ),
@@ -679,15 +705,13 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
               ],
             ),
           ),
-          const SizedBox(height: 12),
-        ],
         if (showDismissedConfirmation)
-          HomePanel(
+          Padding(
             key: const Key('profile-photo-dismissed-confirmation'),
-            radius: 0,
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
             child: Text(
               'You can add one anytime in Profile.',
-              style: HomeText.body(size: 14, color: HomeColors.muted),
+              style: PixelText.body(size: 13, color: AppColors.textMid),
               textAlign: TextAlign.center,
             ),
           ),
@@ -704,12 +728,12 @@ class _ClimbingBoardsSkeleton extends StatelessWidget {
     return HomePanel(
       key: const Key('climbing-boards-skeleton'),
       padding: EdgeInsets.zero,
-      backgroundColor: HomeColors.sageDeep,
-      borderColor: HomeColors.lineSoft,
+      backgroundColor: AppColors.roofLight,
+      borderColor: AppColors.roofDark,
       radius: 0,
       child: Container(
         height: 170,
-        decoration: const BoxDecoration(color: HomeColors.sageDeep),
+        decoration: const BoxDecoration(color: AppColors.roofLight),
         child: CustomPaint(
           painter: const ArcadeCheckerPainter(),
           child: Padding(
@@ -814,8 +838,8 @@ class _ClimbingBoardsCarouselState extends State<_ClimbingBoardsCarousel> {
   Widget build(BuildContext context) {
     return HomePanel(
       padding: EdgeInsets.zero,
-      backgroundColor: HomeColors.sageDeep,
-      borderColor: HomeColors.lineSoft,
+      backgroundColor: AppColors.roofLight,
+      borderColor: AppColors.roofDark,
       radius: 0,
       child: SizedBox(
         height: 170,
@@ -825,7 +849,7 @@ class _ClimbingBoardsCarouselState extends State<_ClimbingBoardsCarousel> {
             children: [
               Positioned.fill(
                 child: ColoredBox(
-                  color: HomeColors.sageDeep,
+                  color: AppColors.roofLight,
                   child: CustomPaint(painter: const ArcadeCheckerPainter()),
                 ),
               ),
@@ -877,9 +901,9 @@ class _ClimbingBoardsCarouselState extends State<_ClimbingBoardsCarousel> {
                                   title,
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
-                                  style: HomeText.title(
+                                  style: PixelText.title(
                                     size: 22,
-                                    color: Colors.white,
+                                    color: AppColors.parchment,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -887,9 +911,11 @@ class _ClimbingBoardsCarouselState extends State<_ClimbingBoardsCarousel> {
                                   subtitle,
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
-                                  style: HomeText.body(
+                                  style: PixelText.body(
                                     size: 14,
-                                    color: Colors.white.withValues(alpha: 0.78),
+                                    color: AppColors.parchment.withValues(
+                                      alpha: 0.85,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -1005,6 +1031,40 @@ class _SkeletonDot extends StatelessWidget {
             ? HomeColors.gold.withValues(alpha: 0.85)
             : Colors.white.withValues(alpha: 0.20),
         borderRadius: BorderRadius.circular(999),
+      ),
+    );
+  }
+}
+
+class _HomeSectionHeader extends StatelessWidget {
+  const _HomeSectionHeader({required this.title, this.onDark = false});
+
+  final String title;
+  final bool onDark;
+
+  static const _textShadows = [
+    Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final dividerColor = onDark
+        ? AppColors.parchment.withValues(alpha: 0.22)
+        : AppColors.parchmentBorder.withValues(alpha: 0.72);
+    final textColor =
+        onDark ? AppColors.parchment : AppColors.textDark;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 7),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: dividerColor)),
+      ),
+      child: Text(
+        title,
+        style: PixelText.title(
+          size: 16,
+          color: textColor,
+        ).copyWith(shadows: _textShadows),
       ),
     );
   }

@@ -6,10 +6,8 @@ import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
 import '../../widgets/app_avatar.dart';
-import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/filter_dropdown.dart';
 import '../../widgets/game_container.dart';
-import '../../widgets/info_board_card.dart';
 import '../../widgets/friend_request_sheet.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
@@ -42,15 +40,6 @@ extension on _LeaderboardType {
         return 'STEPS';
       case _LeaderboardType.races:
         return 'RACES';
-    }
-  }
-
-  String get trailingHeader {
-    switch (this) {
-      case _LeaderboardType.steps:
-        return 'STEPS';
-      case _LeaderboardType.races:
-        return 'PODIUMS';
     }
   }
 
@@ -117,6 +106,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   Map<String, dynamic>? _currentUser;
   Loadable<List<Map<String, dynamic>>> _leaderboardState =
       const Loadable.initial();
+  final GlobalKey _myRowKey = GlobalKey();
 
   static const _periods = [
     ('today', 'TODAY'),
@@ -285,62 +275,61 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     final bottomInset = MediaQuery.of(context).padding.bottom;
     final tabBarHeight = 77.5 + bottomInset;
 
-    return Padding(
-      padding: EdgeInsets.only(top: topInset + 12, bottom: tabBarHeight),
-      child: RefreshIndicator(
-        onRefresh: _loadLeaderboard,
-        color: AppColors.accent,
-        backgroundColor: AppColors.parchment,
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            SliverToBoxAdapter(
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: _buildTopStatusBar(),
-                  ),
-                  const SizedBox(height: 12),
-                  InfoBoardCard(
-                    badgeLabel: 'RANKING',
-                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-                    borderRadius: 0,
-                    children: [
-                      const SizedBox(height: 14),
-                      _buildTypeTabs(),
-                      if (_selectedType == _LeaderboardType.steps) ...[
-                        const SizedBox(height: 10),
-                        FilterDropdown<String>(
-                          value: _selectedPeriod,
-                          options: [
-                            for (final (val, label) in _periods) (val, label),
-                          ],
-                          onChanged: (val) {
-                            if (val != null) _selectPeriod(val);
-                          },
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: _buildLeaderboardState(),
-                  ),
-                ],
-              ),
+    return Stack(
+      children: [
+        const Positioned.fill(
+          child: ColoredBox(
+            color: AppColors.roofLight,
+            child: CustomPaint(
+              painter: ArcadeCheckerPainter(drawBottomStripe: false),
             ),
-          ],
+          ),
         ),
-      ),
+        Padding(
+          padding: EdgeInsets.only(top: topInset + 14, bottom: tabBarHeight),
+          child: RefreshIndicator(
+            onRefresh: _loadLeaderboard,
+            color: AppColors.accent,
+            backgroundColor: AppColors.parchment,
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Column(children: [_buildLeaderboardShell()]),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLeaderboardShell() {
+    return Column(
+      children: [
+        _buildRankingControls(),
+        ColoredBox(
+          color: AppColors.parchment,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+            child: _buildLeaderboardState(),
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildLeaderboardState() {
     final state = _leaderboardState;
     if (state.shouldShowInitialLoading || (_isLoading && _top100.isEmpty)) {
-      return const ListSkeleton(itemCount: 5, showAvatar: true);
+      return Column(
+        children: const [
+          _PodiumSkeleton(),
+          SizedBox(height: 14),
+          ListSkeleton(itemCount: 5, showAvatar: true),
+        ],
+      );
     }
 
     if (state.isError && !state.hasData) {
@@ -364,67 +353,9 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
               backgroundColor: Colors.transparent,
             ),
           ),
-        _buildLeaderboardTable(),
+        _buildLeaderboardBoard(),
       ],
     );
-  }
-
-  Widget _buildTopStatusBar() {
-    final steps = widget.stepData?.steps ?? 0;
-    final stepsStr = _formatNumber(steps);
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  if (widget.displayName != null)
-                    Flexible(
-                      child: Text(
-                        widget.displayName!,
-                        style: PixelText.title(
-                          size: 26,
-                          color: AppColors.textDark,
-                        ).copyWith(shadows: _textShadows),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  const SizedBox(width: 8),
-                  CoinBalanceBadge(coins: widget.authService.coins),
-                ],
-              ),
-              const SizedBox(height: 2),
-              Text(
-                stepsStr,
-                style: PixelText.number(
-                  size: 20,
-                  color: AppColors.accent,
-                ).copyWith(shadows: _textShadows),
-              ),
-            ],
-          ),
-        ),
-        ProfileAvatarButton(
-          name: widget.displayName ?? 'You',
-          imageUrl: widget.authService.profilePhotoUrl,
-          onPressed: widget.onOpenProfile,
-        ),
-      ],
-    );
-  }
-
-  static String _formatNumber(int n) {
-    final s = n.toString();
-    final buf = StringBuffer();
-    for (int i = 0; i < s.length; i++) {
-      if (i > 0 && (s.length - i) % 3 == 0) buf.write(',');
-      buf.write(s[i]);
-    }
-    return buf.toString();
   }
 
   Widget _buildTypeTabs() {
@@ -451,6 +382,44 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     );
   }
 
+  Widget _buildRankingControls() {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: AppColors.roofLight,
+        border: Border(bottom: BorderSide(color: AppColors.roofDark, width: 1)),
+      ),
+      child: CustomPaint(
+        painter: const ArcadeCheckerPainter(drawBottomStripe: false),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 15, 16, 13),
+          child: Column(
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'LEADERBOARD',
+                  style: PixelText.title(size: 30, color: AppColors.parchment),
+                ),
+              ),
+              const SizedBox(height: 14),
+              _buildTypeTabs(),
+              if (_selectedType == _LeaderboardType.steps) ...[
+                const SizedBox(height: 10),
+                FilterDropdown<String>(
+                  value: _selectedPeriod,
+                  options: [for (final (val, label) in _periods) (val, label)],
+                  onChanged: (val) {
+                    if (val != null) _selectPeriod(val);
+                  },
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   double get _valueColumnWidth {
     switch (_selectedType) {
       case _LeaderboardType.steps:
@@ -462,7 +431,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
 
   Widget _buildEmptyState() {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 28),
       child: Column(
         children: [
           Icon(
@@ -495,7 +464,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     );
   }
 
-  Widget _buildLeaderboardTable() {
+  List<_LeaderboardRow> _buildRows() {
     final rows = <_LeaderboardRow>[];
     for (final entry in _top100) {
       rows.add(
@@ -512,75 +481,205 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
         ),
       );
     }
+    return rows;
+  }
 
-    final showCurrentUser =
-        _currentUser != null && _currentUser!['inTop100'] != true;
+  _LeaderboardRow? _buildCurrentUserRow() {
+    if (_currentUser == null || _currentUser!['inTop100'] == true) return null;
+    return _LeaderboardRow(
+      rank: _currentUser!['rank'] as int?,
+      userId: widget.authService.userId,
+      displayName: _currentUser!['displayName'] as String? ?? 'Anonymous',
+      profilePhotoUrl: _currentUser!['profilePhotoUrl'] as String?,
+      valueLabel: _displayValue(_currentUser!),
+      isMe: true,
+      firsts: _currentUser!['firsts'] as int?,
+      seconds: _currentUser!['seconds'] as int?,
+      thirds: _currentUser!['thirds'] as int?,
+    );
+  }
 
-    return GameContainer(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
-      child: Column(
+  Widget _buildLeaderboardBoard() {
+    final rows = _buildRows();
+    final currentUserRow = _buildCurrentUserRow();
+    final podiumRows = rows.take(3).toList();
+    final listRows = rows.length > 3
+        ? rows.skip(3).toList()
+        : <_LeaderboardRow>[];
+    final pinnedMeRow =
+        currentUserRow != null &&
+            !rows.any((row) => row.userId == widget.authService.userId)
+        ? currentUserRow
+        : null;
+
+    return Column(
+      children: [
+        _buildPodiumSection(podiumRows),
+        if (listRows.isNotEmpty || pinnedMeRow != null) ...[
+          const SizedBox(height: 10),
+          _buildRankingsList(listRows, startIndex: 3, pinnedMeRow: pinnedMeRow),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildPodiumSection(List<_LeaderboardRow> podiumRows) {
+    if (podiumRows.isEmpty) return const SizedBox.shrink();
+
+    final first = _rowWithRank(podiumRows, 1) ?? podiumRows[0];
+    final second =
+        _rowWithRank(podiumRows, 2) ??
+        (podiumRows.length > 1 ? podiumRows[1] : null);
+    final third =
+        _rowWithRank(podiumRows, 3) ??
+        (podiumRows.length > 2 ? podiumRows[2] : null);
+
+    // Center #1, with #2 left and #3 right (smaller). If a side slot is missing,
+    // render an empty Expanded so #1 stays centered.
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 36,
-                  child: Text(
-                    '#',
-                    style: PixelText.title(size: 15, color: AppColors.textMid),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'PLAYER',
-                    style: PixelText.title(size: 15, color: AppColors.textMid),
-                  ),
-                ),
-                SizedBox(
-                  width: _valueColumnWidth,
-                  child: Text(
-                    _selectedType.trailingHeader,
-                    style: PixelText.title(size: 15, color: AppColors.textMid),
-                    textAlign: TextAlign.right,
-                  ),
-                ),
-              ],
+          Expanded(
+            child: second != null
+                ? _buildPodiumTile(second, place: 2)
+                : const SizedBox(height: 132),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            flex: 0,
+            child: SizedBox(
+              width: 132,
+              child: _buildPodiumTile(first, place: 1, featured: true),
             ),
           ),
-          Container(
-            height: 1,
-            color: AppColors.parchmentBorder.withValues(alpha: 0.5),
+          const SizedBox(width: 6),
+          Expanded(
+            child: third != null
+                ? _buildPodiumTile(third, place: 3)
+                : const SizedBox(height: 132),
           ),
-          for (int i = 0; i < rows.length; i++) _buildRow(rows[i], i),
-          if (showCurrentUser) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Text(
-                '• • •',
-                style: PixelText.title(size: 14, color: AppColors.textMid),
-                textAlign: TextAlign.center,
-              ),
-            ),
-            _buildRow(
-              _LeaderboardRow(
-                rank: _currentUser!['rank'] as int?,
-                displayName:
-                    _currentUser!['displayName'] as String? ?? 'Anonymous',
-                profilePhotoUrl: _currentUser!['profilePhotoUrl'] as String?,
-                valueLabel: _displayValue(_currentUser!),
-                isMe: true,
-                firsts: _currentUser!['firsts'] as int?,
-                seconds: _currentUser!['seconds'] as int?,
-                thirds: _currentUser!['thirds'] as int?,
-              ),
-              _top100.length,
-            ),
-          ],
         ],
       ),
+    );
+  }
+
+  _LeaderboardRow? _rowWithRank(List<_LeaderboardRow> rows, int rank) {
+    for (final row in rows) {
+      if (row.rank == rank) return row;
+    }
+    return null;
+  }
+
+  Widget _buildPodiumTile(
+    _LeaderboardRow row, {
+    required int place,
+    bool featured = false,
+  }) {
+    final medalColor = switch (place) {
+      1 => AppColors.medalGold,
+      2 => AppColors.medalSilver,
+      _ => AppColors.medalBronze,
+    };
+    final avatarSize = featured ? 70.0 : 46.0;
+    final nameSize = featured ? 15.0 : 12.5;
+    final valueSize = featured ? 17.0 : 13.0;
+
+    final content = Padding(
+      padding: EdgeInsets.symmetric(horizontal: 4, vertical: featured ? 0 : 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _RankMedal(label: '#$place', color: medalColor, featured: featured),
+          SizedBox(height: featured ? 8 : 6),
+          Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: featured
+                  ? [
+                      BoxShadow(
+                        color: AppColors.medalGold.withValues(alpha: 0.45),
+                        blurRadius: 0,
+                        spreadRadius: 1,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: AppAvatar(
+              name: row.displayName,
+              imageUrl: row.profilePhotoUrl,
+              size: avatarSize,
+              isUser: row.isMe,
+              borderColor: row.isMe
+                  ? AppColors.accent
+                  : (featured ? AppColors.medalGold : Colors.white),
+            ),
+          ),
+          SizedBox(height: featured ? 8 : 6),
+          Text(
+            row.displayName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: PixelText.body(
+              size: nameSize,
+              color: row.isMe ? AppColors.accent : AppColors.textDark,
+            ),
+          ),
+          const SizedBox(height: 3),
+          _buildPodiumValue(row, valueSize: valueSize),
+        ],
+      ),
+    );
+
+    return _withFriendTap(row, content);
+  }
+
+  Widget _buildPodiumValue(_LeaderboardRow row, {required double valueSize}) {
+    if (_selectedType == _LeaderboardType.races) {
+      return FittedBox(fit: BoxFit.scaleDown, child: _buildValueContent(row));
+    }
+
+    return Text(
+      row.valueLabel,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: PixelText.title(
+        size: valueSize,
+        color: row.isMe ? AppColors.accent : AppColors.textDark,
+      ),
+      textAlign: TextAlign.center,
+    );
+  }
+
+  Widget _buildRankingsList(
+    List<_LeaderboardRow> rows, {
+    required int startIndex,
+    _LeaderboardRow? pinnedMeRow,
+  }) {
+    final children = <Widget>[];
+    for (int i = 0; i < rows.length; i++) {
+      children.add(_buildRow(rows[i], startIndex + i));
+    }
+    if (pinnedMeRow != null) {
+      // Visual gap signalling "out of range" jump to the user's row.
+      children.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Text(
+            '· · ·',
+            textAlign: TextAlign.center,
+            style: PixelText.title(size: 14, color: AppColors.textMid),
+          ),
+        ),
+      );
+      children.add(_buildRow(pinnedMeRow, startIndex + rows.length));
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: Column(children: children),
     );
   }
 
@@ -593,43 +692,31 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
       _ => '${row.rank}',
     };
 
-    final backgroundColor = row.isMe
-        ? AppColors.accent.withValues(alpha: 0.12)
-        : index.isOdd
-        ? AppColors.parchmentDark.withValues(alpha: 0.3)
+    final stripeColor = index.isOdd
+        ? AppColors.parchmentDark.withValues(alpha: 0.45)
         : Colors.transparent;
+    final backgroundColor = row.isMe
+        ? AppColors.accent.withValues(alpha: 0.16)
+        : stripeColor;
 
-    final userId = row.userId;
-    final canAddFriend = !row.isMe && userId != null && userId.isNotEmpty;
+    final nameStyle = PixelText.body(
+      size: 16,
+      color: row.isMe ? AppColors.accent : AppColors.textDark,
+    );
 
     final content = Container(
-      color: backgroundColor,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      key: row.isMe ? _myRowKey : null,
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        border: row.isMe
+            ? Border(left: BorderSide(color: AppColors.accent, width: 3))
+            : null,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
       child: Row(
         children: [
-          SizedBox(
-            width: 36,
-            child: Text(
-              rankLabel,
-              style: PixelText.title(
-                size:
-                    rankLabel.endsWith('st') ||
-                        rankLabel.endsWith('nd') ||
-                        rankLabel.endsWith('rd')
-                    ? 13
-                    : 16,
-                color: rankLabel == '--'
-                    ? AppColors.textMid
-                    : (rankLabel.endsWith('st') ||
-                          rankLabel.endsWith('nd') ||
-                          rankLabel.endsWith('rd'))
-                    ? AppColors.coinMid
-                    : AppColors.textDark,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          const SizedBox(width: 8),
+          SizedBox(width: 42, child: _RankPill(label: rankLabel)),
+          const SizedBox(width: 9),
           AppAvatar(
             name: row.displayName,
             imageUrl: row.profilePhotoUrl,
@@ -639,13 +726,23 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              row.displayName,
-              style: PixelText.body(
-                size: 16,
-                color: row.isMe ? AppColors.accent : AppColors.textDark,
-              ),
-              overflow: TextOverflow.ellipsis,
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    row.displayName,
+                    style: nameStyle,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (row.isMe) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    '(you)',
+                    style: PixelText.pill(size: 10.5, color: AppColors.accent),
+                  ),
+                ],
+              ],
             ),
           ),
           const SizedBox(width: 12),
@@ -660,13 +757,21 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
       ),
     );
 
-    if (!canAddFriend) return content;
+    return _withFriendTap(row, content);
+  }
+
+  Widget _withFriendTap(_LeaderboardRow row, Widget child) {
+    final userId = row.userId;
+    final canAddFriend = !row.isMe && userId != null && userId.isNotEmpty;
+    if (!canAddFriend) return child;
 
     return Material(
       type: MaterialType.transparency,
       child: InkWell(
-        onTap: () => _openFriendSheet(userId, row.displayName, row.profilePhotoUrl),
-        child: content,
+        borderRadius: BorderRadius.circular(8),
+        onTap: () =>
+            _openFriendSheet(userId, row.displayName, row.profilePhotoUrl),
+        child: child,
       ),
     );
   }
@@ -709,6 +814,122 @@ class _LeaderboardRow {
     this.seconds,
     this.thirds,
   });
+}
+
+class _RankMedal extends StatelessWidget {
+  const _RankMedal({
+    required this.label,
+    required this.color,
+    this.featured = false,
+  });
+
+  final String label;
+  final Color color;
+  final bool featured;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: featured ? 12 : 9,
+        vertical: featured ? 6 : 5,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.24),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color, width: 1.5),
+      ),
+      child: Text(
+        label,
+        style: PixelText.title(
+          size: featured ? 13 : 11,
+          color: AppColors.textDark,
+        ),
+      ),
+    );
+  }
+}
+
+class _RankPill extends StatelessWidget {
+  const _RankPill({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final isPodium =
+        label.endsWith('st') || label.endsWith('nd') || label.endsWith('rd');
+    return Text(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      textAlign: TextAlign.center,
+      style: PixelText.title(
+        size: isPodium ? 13 : 14,
+        color: isPodium ? AppColors.coinDark : AppColors.textDark,
+      ),
+    );
+  }
+}
+
+class _PodiumSkeleton extends StatelessWidget {
+  const _PodiumSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return GameContainer(
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
+      frameColor: AppColors.accent,
+      surfaceColor: AppColors.parchment,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 128,
+            height: 18,
+            decoration: BoxDecoration(
+              color: AppColors.parchmentBorder.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(6),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(child: _SkeletonPodiumTile(height: 124)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Transform.translate(
+                  offset: const Offset(0, -10),
+                  child: const _SkeletonPodiumTile(height: 150),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: _SkeletonPodiumTile(height: 124)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SkeletonPodiumTile extends StatelessWidget {
+  const _SkeletonPodiumTile({required this.height});
+
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: height,
+      decoration: BoxDecoration(
+        color: AppColors.parchmentDark.withValues(alpha: 0.65),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.parchmentBorder, width: 1),
+      ),
+    );
+  }
 }
 
 class _RacePodiumBadges extends StatelessWidget {
