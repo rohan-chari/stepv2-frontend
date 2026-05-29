@@ -341,7 +341,7 @@ class _RacesTabState extends State<RacesTab> {
           ),
         ),
         SizedBox(
-          height: 210,
+          height: 226,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 10),

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../styles.dart';
 import 'pill_button.dart';
-import 'retro_card.dart';
+import 'race_ui.dart';
 
 /// Compact card for the pinned "Featured" strip on the Races tab. Leads with
 /// the top-50% coin reward, shows a countdown + live racer count, and offers a
@@ -64,44 +64,34 @@ class FeaturedRaceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: width,
-      child: RetroCard(
-        highlightColor: AppColors.accent,
+      child: Container(
+        decoration: raceCardDecoration(),
         padding: const EdgeInsets.all(14),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  children: [
-                    Text(
-                      _cadenceLabel,
-                      style: PixelText.title(size: 11, color: AppColors.accent),
-                    ),
-                    const Spacer(),
-                    if (isJoined)
-                      Text(
-                        'JOINED',
-                        style: PixelText.title(
-                          size: 11,
-                          color: AppColors.pillGreenDark,
-                        ),
-                      ),
-                  ],
+                Pill(
+                  label: _cadenceLabel,
+                  background: AppColors.pillGold,
+                  fontSize: 11,
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 8),
                 Text(
                   name,
+                  textAlign: TextAlign.center,
                   style: PixelText.title(size: 17, color: AppColors.textDark),
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 10),
                 if (finishRewardPool > 0)
                   Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       const Icon(
                         Icons.monetization_on_rounded,
@@ -112,6 +102,7 @@ class FeaturedRaceCard extends StatelessWidget {
                       Flexible(
                         child: Text(
                           'Top 50% win $finishRewardPool',
+                          textAlign: TextAlign.center,
                           style: PixelText.title(
                             size: 13,
                             color: AppColors.coinDark,
@@ -125,6 +116,7 @@ class FeaturedRaceCard extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   _countdownLabel(),
+                  textAlign: TextAlign.center,
                   style: PixelText.body(size: 12, color: AppColors.textMid),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -132,6 +124,7 @@ class FeaturedRaceCard extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   '$participantCount racing',
+                  textAlign: TextAlign.center,
                   style: PixelText.body(size: 12, color: AppColors.textMid),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

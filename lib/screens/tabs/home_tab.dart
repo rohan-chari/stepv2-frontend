@@ -14,8 +14,9 @@ import '../../widgets/step_milestones_section.dart';
 import '../../widgets/streak_chip.dart' show StreakChip, StreakChipState;
 import '../../widgets/home_chrome.dart';
 import '../../widgets/home_course_track.dart'
-    show CapybaraCustomizationPreview, CapybaraSpriteWithAccessories;
+    show CapybaraCustomizationPreview;
 import '../../widgets/race_opportunity_card.dart';
+import '../../widgets/race_ui.dart';
 import '../display_name_screen.dart';
 import '../public_races_screen.dart';
 
@@ -177,7 +178,7 @@ class HomeTab extends StatelessWidget {
         children: [
           _HomeRaceHeader(onViewAll: onOpenRacesTab),
           SizedBox(
-            height: 208,
+            height: 218,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               physics: const NeverScrollableScrollPhysics(),
@@ -209,7 +210,7 @@ class HomeTab extends StatelessWidget {
 
     final itemCount = races.length + 1;
     return SizedBox(
-      height: 208,
+      height: 218,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
@@ -238,7 +239,7 @@ class HomeTab extends StatelessWidget {
           // ranked racers we do have so older backends still render a count.
           final participantCount =
               (race['participantCount'] as num?)?.toInt() ?? top3.length;
-          const itemWidth = 252.0;
+          const itemWidth = 168.0;
 
           return Padding(
             padding: EdgeInsets.only(right: index == races.length - 1 ? 0 : 12),
@@ -405,12 +406,13 @@ class HomeTab extends StatelessWidget {
       },
       child: SizedBox(
         width: 136,
-        height: 190,
+        height: 200,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: AppColors.parchment.withValues(alpha: 0.96),
+            color: AppColors.parchment,
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: AppColors.roofDark.withValues(alpha: 0.42),
+              color: AppColors.roofDark.withValues(alpha: 0.55),
               width: 2,
             ),
           ),
@@ -957,8 +959,8 @@ class _HomeRaceSkeletonTicket extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 150,
-      height: 190,
+      width: 168,
+      height: 200,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: AppColors.parchment.withValues(alpha: 0.96),
@@ -1031,7 +1033,7 @@ class _HomeActiveRaceTicket extends StatelessWidget {
     final endsAt = this.endsAt;
     return SizedBox(
       width: width,
-      height: 190,
+      height: 200,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -1049,38 +1051,22 @@ class _HomeActiveRaceTicket extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(15, 13, 15, 13),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Row(
-                    children: [
-                      _PlacementPill(placement: placement),
-                      const Spacer(),
-                      if (endsAt != null)
-                        Flexible(
-                          child: Text(
-                            _compactTimeLeft(endsAt),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.right,
-                            style: PixelText.title(
-                              size: 11,
-                              color: AppColors.textMid,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
+                  PlacementPill(placement: placement),
                   const SizedBox(height: 12),
                   Text(
                     raceName,
                     maxLines: 2,
+                    textAlign: TextAlign.center,
                     overflow: TextOverflow.ellipsis,
                     style: PixelText.title(size: 18, color: AppColors.textDark),
                   ),
                   const Spacer(),
-                  _MiniPodium(top3: top3),
+                  RacerAvatarStack(entries: top3),
                   const SizedBox(height: 12),
                   Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         '$participantCount racer${participantCount == 1 ? '' : 's'}',
@@ -1093,133 +1079,19 @@ class _HomeActiveRaceTicket extends StatelessWidget {
                       ),
                     ],
                   ),
+                  if (endsAt != null) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      _compactTimeLeft(endsAt),
+                      maxLines: 1,
+                      textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
+                      style: PixelText.body(size: 12, color: AppColors.textMid),
+                    ),
+                  ],
                 ],
               ),
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Top-left badge: the viewer's placement (medal-tinted), or LIVE pre-ranking.
-class _PlacementPill extends StatelessWidget {
-  const _PlacementPill({required this.placement});
-
-  final int? placement;
-
-  String _ordinal(int n) {
-    if (n >= 11 && n <= 13) return '${n}th';
-    switch (n % 10) {
-      case 1:
-        return '${n}st';
-      case 2:
-        return '${n}nd';
-      case 3:
-        return '${n}rd';
-      default:
-        return '${n}th';
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final p = placement;
-    final (Color bg, Color fg, String label) = switch (p) {
-      1 => (AppColors.medalGold, AppColors.textDark, _ordinal(1)),
-      2 => (AppColors.medalSilver, AppColors.textDark, _ordinal(2)),
-      3 => (AppColors.medalBronze, AppColors.textDark, _ordinal(3)),
-      null => (AppColors.parchmentDark, AppColors.textMid, 'LIVE'),
-      _ => (AppColors.parchmentDark, AppColors.textMid, _ordinal(p)),
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 4),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(label, style: PixelText.title(size: 13, color: fg)),
-    );
-  }
-}
-
-/// Up to three racers as overlapping, medal-ringed avatars.
-class _MiniPodium extends StatelessWidget {
-  const _MiniPodium({required this.top3});
-
-  final List<Map<String, dynamic>> top3;
-
-  static const double _size = 40;
-  static const double _step = 26;
-
-  @override
-  Widget build(BuildContext context) {
-    final entries = top3.take(3).toList(growable: false);
-    if (entries.isEmpty) return const SizedBox(height: _size);
-
-    final stackWidth = _size + (entries.length - 1) * _step;
-    return SizedBox(
-      width: stackWidth,
-      height: _size,
-      child: Stack(
-        children: [
-          for (int i = 0; i < entries.length; i++)
-            Positioned(
-              left: i * _step,
-              child: _PodiumInitial(entry: entries[i], fallbackRank: i + 1),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PodiumInitial extends StatelessWidget {
-  const _PodiumInitial({required this.entry, required this.fallbackRank});
-
-  final Map<String, dynamic> entry;
-  final int fallbackRank;
-
-  @override
-  Widget build(BuildContext context) {
-    const size = 40.0;
-    final rank = (entry['rank'] as num?)?.toInt() ?? fallbackRank;
-    final isStealthed = entry['isStealthed'] == true;
-    final accessories = isStealthed
-        ? const <Map<String, dynamic>>[]
-        : ((entry['equippedAccessories'] as List?)
-                  ?.whereType<Map<String, dynamic>>()
-                  .toList() ??
-              const <Map<String, dynamic>>[]);
-    final color = switch (rank) {
-      1 => AppColors.medalGold,
-      2 => AppColors.medalSilver,
-      3 => AppColors.medalBronze,
-      _ => AppColors.parchmentBorder,
-    };
-
-    // Outer ring is the card fill so overlapping avatars read as separate.
-    return Container(
-      width: size,
-      height: size,
-      padding: const EdgeInsets.all(2),
-      decoration: const BoxDecoration(
-        color: AppColors.parchment,
-        shape: BoxShape.circle,
-      ),
-      child: Container(
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: Color.lerp(color, AppColors.parchment, 0.62),
-          shape: BoxShape.circle,
-          border: Border.all(color: color, width: 2),
-        ),
-        child: ClipOval(
-          child: CapybaraSpriteWithAccessories(
-            accessories: accessories,
-            capybaraSize: size - 12,
-            frameIndex: 0,
           ),
         ),
       ),

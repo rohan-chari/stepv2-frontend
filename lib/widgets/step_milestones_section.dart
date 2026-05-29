@@ -361,36 +361,21 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Flexible(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('🔥', style: TextStyle(fontSize: 15)),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(
-                        text: _formatWithCommas(_currentSteps),
-                        style: PixelText.title(
-                          size: 14,
-                          color: AppColors.textDark,
-                        ),
-                      ),
-                      TextSpan(
-                        text: ' steps today',
-                        style: PixelText.body(
-                          size: 13,
-                          color: AppColors.textMid,
-                        ),
-                      ),
-                    ],
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+          child: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: _formatWithCommas(_currentSteps),
+                  style: PixelText.title(size: 14, color: AppColors.textDark),
                 ),
-              ),
-            ],
+                TextSpan(
+                  text: ' steps today',
+                  style: PixelText.body(size: 13, color: AppColors.textMid),
+                ),
+              ],
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
         const SizedBox(width: 10),
