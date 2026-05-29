@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../models/loadable.dart';
 import '../../styles.dart';
@@ -11,10 +12,9 @@ import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/step_milestones_section.dart';
 import '../../widgets/streak_chip.dart' show StreakChip, StreakChipState;
-import '../../widgets/active_race_card.dart';
 import '../../widgets/home_chrome.dart';
-import '../../widgets/home_course_track.dart' show CapybaraCustomizationPreview;
-import '../../widgets/loading_skeleton.dart';
+import '../../widgets/home_course_track.dart'
+    show CapybaraCustomizationPreview, CapybaraSpriteWithAccessories;
 import '../../widgets/race_opportunity_card.dart';
 import '../display_name_screen.dart';
 import '../public_races_screen.dart';
@@ -36,17 +36,14 @@ class HomeTab extends StatelessWidget {
   final Loadable<List<Map<String, dynamic>>>? friendsStepsState;
   final List<Map<String, dynamic>> equippedAccessories;
   final Loadable<Map<String, dynamic>>? shopCatalogState;
-  final List<Map<String, dynamic>> leaderboardHighlights;
-  final Loadable<List<Map<String, dynamic>>>? leaderboardHighlightsState;
-  final bool leaderboardHighlightsLoading;
   final VoidCallback? onOpenFriendsTab;
+  final VoidCallback? onOpenRacesTab;
   final VoidCallback? onOpenLeaderboardTab;
-  final void Function(String leaderboardType, String period)?
-  onOpenLeaderboardHighlight;
   final VoidCallback? onOpenShop;
   final Future<void> Function()? onAddProfilePhoto;
   final Future<bool> Function()? onDismissProfilePhotoPrompt;
   final Map<String, dynamic>? raceCard;
+  final bool raceCardLoading;
   final GlobalKey<StreakChipState>? streakChipKey;
   final GlobalKey<StepMilestonesSectionState>? stepMilestonesKey;
   final void Function(String raceId)? onOpenRace;
@@ -73,16 +70,14 @@ class HomeTab extends StatelessWidget {
     this.friendsStepsState,
     this.equippedAccessories = const [],
     this.shopCatalogState,
-    this.leaderboardHighlights = const [],
-    this.leaderboardHighlightsState,
-    this.leaderboardHighlightsLoading = false,
     this.onOpenFriendsTab,
+    this.onOpenRacesTab,
     this.onOpenLeaderboardTab,
-    this.onOpenLeaderboardHighlight,
     this.onOpenShop,
     this.onAddProfilePhoto,
     this.onDismissProfilePhotoPrompt,
     this.raceCard,
+    this.raceCardLoading = false,
     this.streakChipKey,
     this.stepMilestonesKey,
     this.onOpenRace,
@@ -123,7 +118,10 @@ class HomeTab extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      if (raceCard != null) _buildRaceSection(),
+                      if (raceCard != null)
+                        _buildRaceSection()
+                      else if (raceCardLoading)
+                        _buildRaceSkeletonSection(),
                       _SetupPromptsSection(
                         displayName: displayName,
                         hasProfilePhoto: hasProfilePhoto,
@@ -133,8 +131,6 @@ class HomeTab extends StatelessWidget {
                         onDismissProfilePhotoPrompt:
                             onDismissProfilePhotoPrompt,
                       ),
-                      _buildLeaderboardHighlightsSection(),
-                      const _HomeSectionHeader(title: 'STEP MILESTONES'),
                       StepMilestonesSection(
                         key: stepMilestonesKey,
                         authService: authService,
@@ -152,41 +148,46 @@ class HomeTab extends StatelessWidget {
     );
   }
 
-  /// RACES section on home — its own green-checkered surface (matches the
-  /// original home palette) holding the section header + active-races
-  /// carousel OR the RaceOpportunityCard for non-active states.
+  /// RACES section on home — a compact launcher/rail, not the full races page.
   Widget _buildRaceSection() {
     final card = raceCard!;
-    return DecoratedBox(
-      decoration: const BoxDecoration(color: HomeColors.sageDeep),
-      child: CustomPaint(
-        painter: const ArcadeCheckerPainter(drawBottomStripe: false),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const _HomeSectionHeader(title: 'RACES', onDark: true),
-            if (card['state'] == 'ACTIVE_RACES')
-              _buildActiveRacesRow(card)
-            else
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-                child: RaceOpportunityCard(
-                  data: RaceCardData.fromJson(card),
-                  onAccept: onAcceptRaceInvite == null
-                      ? null
-                      : (raceId) => onAcceptRaceInvite!(raceId),
-                  onDecline: onDeclineRaceInvite == null
-                      ? null
-                      : (raceId) => onDeclineRaceInvite!(raceId),
-                  onOpenRace: onOpenRace,
-                  onJoinRace: onJoinRaceFromCard == null
-                      ? null
-                      : (raceId) => onJoinRaceFromCard!(raceId),
-                  onChallengeBack: onChallengeFriendBack,
-                ),
-              ),
-          ],
-        ),
+    return ColoredBox(
+      color: AppColors.parchment,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _HomeRaceHeader(onViewAll: onOpenRacesTab),
+          if (card['state'] == 'ACTIVE_RACES')
+            _buildActiveRacesRow(card)
+          else
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: _buildRaceOpportunityRow(RaceCardData.fromJson(card)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRaceSkeletonSection() {
+    return ColoredBox(
+      color: AppColors.parchment,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _HomeRaceHeader(onViewAll: onOpenRacesTab),
+          SizedBox(
+            height: 208,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+              itemBuilder: (context, index) => const _HomeRaceSkeletonTicket(),
+              separatorBuilder: (context, index) => const SizedBox(width: 12),
+              itemCount: 3,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -208,26 +209,16 @@ class HomeTab extends StatelessWidget {
 
     final itemCount = races.length + 1;
     return SizedBox(
-      height: 220,
+      height: 208,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
         itemCount: itemCount,
         itemBuilder: (context, index) {
-          final isLast = index == itemCount - 1;
-          final divider = isLast
-              ? const SizedBox.shrink()
-              : Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  child: Container(
-                    width: 1,
-                    color: AppColors.parchment.withValues(alpha: 0.18),
-                  ),
-                );
-
           if (index == races.length) {
-            return Row(
-              children: [_buildJoinPublicRaceCard(context), divider],
+            return Padding(
+              padding: const EdgeInsets.only(left: 10),
+              child: _buildJoinPublicRaceCard(context),
             );
           }
           final race = races[index];
@@ -243,23 +234,161 @@ class HomeTab extends StatelessWidget {
                   .toList() ??
               const <Map<String, dynamic>>[];
           final placement = (race['userPlacement'] as num?)?.toInt();
+          // participantCount is sent by newer backends; fall back to the
+          // ranked racers we do have so older backends still render a count.
+          final participantCount =
+              (race['participantCount'] as num?)?.toInt() ?? top3.length;
+          const itemWidth = 252.0;
 
-          return Row(
-            children: [
-              ActiveRaceCard(
-                raceId: raceId,
-                raceName: race['name'] as String? ?? 'Race',
-                endsAt: endsAt,
-                top3: top3,
-                userPlacement: placement,
-                onTap: raceId.isEmpty ? null : () => onOpenRace?.call(raceId),
-              ),
-              divider,
-            ],
+          return Padding(
+            padding: EdgeInsets.only(right: index == races.length - 1 ? 0 : 12),
+            child: _HomeActiveRaceTicket(
+              width: itemWidth,
+              raceName: race['name'] as String? ?? 'Race',
+              endsAt: endsAt,
+              placement: placement,
+              participantCount: participantCount,
+              top3: top3,
+              onTap: raceId.isEmpty ? null : () => onOpenRace?.call(raceId),
+            ),
           );
         },
       ),
     );
+  }
+
+  Widget _buildRaceOpportunityRow(RaceCardData data) {
+    final cardData = data.data;
+    switch (data.state) {
+      case RaceCardState.pendingInvite:
+        final inviter = RaceCardUser.fromJson(
+          cardData['inviter'] as Map<String, dynamic>?,
+        );
+        final raceId = cardData['raceId'] as String? ?? '';
+        final participantCount =
+            (cardData['participantCount'] as num?)?.toInt() ?? 0;
+        final durationHours = (cardData['durationHours'] as num?)?.toInt() ?? 0;
+        return _HomeRaceActionRow(
+          label: 'INVITE',
+          title: '${inviter?.displayName ?? 'Someone'} challenged you',
+          subtitle:
+              '${_formatDuration(durationHours)} · $participantCount racers',
+          primaryLabel: 'ACCEPT',
+          secondaryLabel: 'DECLINE',
+          onPrimary: onAcceptRaceInvite == null || raceId.isEmpty
+              ? null
+              : () => onAcceptRaceInvite!(raceId),
+          onSecondary: onDeclineRaceInvite == null || raceId.isEmpty
+              ? null
+              : () => onDeclineRaceInvite!(raceId),
+        );
+      case RaceCardState.activeRace:
+        final raceId = cardData['raceId'] as String? ?? '';
+        final name = cardData['name'] as String? ?? 'Race';
+        final endsAt = DateTime.tryParse(cardData['endsAt'] as String? ?? '');
+        return _HomeRaceActionRow(
+          label: 'ACTIVE',
+          title: name,
+          subtitle: endsAt == null
+              ? 'Race in progress'
+              : '${_formatTimeLeft(endsAt)} left',
+          primaryLabel: 'VIEW',
+          onPrimary: onOpenRace == null || raceId.isEmpty
+              ? null
+              : () => onOpenRace!(raceId),
+        );
+      case RaceCardState.friendRacing:
+        final raceId = cardData['raceId'] as String? ?? '';
+        final friend = RaceCardUser.fromJson(
+          cardData['friend'] as Map<String, dynamic>?,
+        );
+        final participants = ((cardData['participants'] as List?) ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .length;
+        final isPublicJoinable = cardData['isPublicJoinable'] as bool? ?? false;
+        return _HomeRaceActionRow(
+          label: 'LIVE',
+          title: '${friend?.displayName ?? 'A friend'} is racing',
+          subtitle: participants > 0
+              ? '$participants racers'
+              : 'A race is happening now',
+          primaryLabel: isPublicJoinable ? 'JOIN' : 'OPEN',
+          onPrimary:
+              isPublicJoinable &&
+                  onJoinRaceFromCard != null &&
+                  raceId.isNotEmpty
+              ? () => onJoinRaceFromCard!(raceId)
+              : onOpenRacesTab,
+        );
+      case RaceCardState.friendFinished:
+        final friend = RaceCardUser.fromJson(
+          cardData['friend'] as Map<String, dynamic>?,
+        );
+        final raceName = cardData['raceName'] as String? ?? 'a race';
+        return _HomeRaceActionRow(
+          label: 'FINISHED',
+          title: '${friend?.displayName ?? 'A friend'} finished $raceName',
+          subtitle: 'Start a rematch when you are ready',
+          primaryLabel: 'CHALLENGE',
+          onPrimary: onChallengeFriendBack == null || friend == null
+              ? null
+              : () => onChallengeFriendBack!(friend.userId),
+        );
+      case RaceCardState.publicRace:
+        final raceId = cardData['raceId'] as String? ?? '';
+        final name = cardData['name'] as String? ?? 'Public Race';
+        final participantCount =
+            (cardData['participantCount'] as num?)?.toInt() ?? 0;
+        final endsAt = DateTime.tryParse(cardData['endsAt'] as String? ?? '');
+        return _HomeRaceActionRow(
+          label: 'PUBLIC',
+          title: name,
+          subtitle:
+              '$participantCount racing${endsAt == null ? '' : ' · ${_formatTimeLeft(endsAt)} left'}',
+          primaryLabel: 'JOIN',
+          onPrimary: onJoinRaceFromCard == null || raceId.isEmpty
+              ? null
+              : () => onJoinRaceFromCard!(raceId),
+        );
+      case RaceCardState.empty:
+        return _HomeRaceActionRow(
+          label: 'OPEN',
+          title: 'Race your friends',
+          subtitle: 'Start with friends or find a public race.',
+          primaryLabel: 'RACES',
+          secondaryLabel: 'INVITE',
+          onPrimary: onOpenRacesTab,
+          onSecondary: () {
+            Share.share(
+              'Race me on Bara — daily step challenges with friends. https://apps.apple.com/us/app/bara-step-challenges/id6760504694',
+            );
+          },
+        );
+    }
+  }
+
+  String _formatTimeLeft(DateTime endsAt) {
+    final remaining = endsAt.difference(DateTime.now());
+    if (remaining.isNegative) return 'ending soon';
+    if (remaining.inDays > 0) {
+      return '${remaining.inDays}d ${remaining.inHours.remainder(24)}h';
+    }
+    if (remaining.inHours > 0) {
+      return '${remaining.inHours}h ${remaining.inMinutes.remainder(60)}m';
+    }
+    if (remaining.inMinutes > 0) {
+      return '${remaining.inMinutes}m';
+    }
+    return '${remaining.inSeconds}s';
+  }
+
+  String _formatDuration(int hours) {
+    if (hours <= 0) return 'Race';
+    if (hours >= 24) {
+      final days = (hours / 24).round();
+      return '$days-day race';
+    }
+    return '${hours}h race';
   }
 
   /// Trailing card in the active-races row: tap to browse/join a public race,
@@ -275,32 +404,38 @@ class HomeTab extends StatelessWidget {
         await onRefresh();
       },
       child: SizedBox(
-        width: 160,
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.add_circle_outline,
-                size: 42,
-                color: AppColors.parchment.withValues(alpha: 0.92),
+        width: 136,
+        height: 190,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: AppColors.parchment.withValues(alpha: 0.96),
+            border: Border.all(
+              color: AppColors.roofDark.withValues(alpha: 0.42),
+              width: 2,
+            ),
+          ),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 18, 12, 16),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.add_rounded, size: 38, color: AppColors.roofMid),
+                  const SizedBox(height: 12),
+                  Text(
+                    'PUBLIC',
+                    textAlign: TextAlign.center,
+                    style: PixelText.title(size: 17, color: AppColors.textDark),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Find a race',
+                    textAlign: TextAlign.center,
+                    style: PixelText.body(size: 12, color: AppColors.textMid),
+                  ),
+                ],
               ),
-              const SizedBox(height: 10),
-              Text(
-                'JOIN A PUBLIC RACE',
-                textAlign: TextAlign.center,
-                style: PixelText.title(size: 13, color: AppColors.parchment),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Find an open race',
-                textAlign: TextAlign.center,
-                style: PixelText.body(
-                  size: 11,
-                  color: AppColors.parchment.withValues(alpha: 0.75),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -387,10 +522,7 @@ class HomeTab extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    CoinBalanceBadge(
-                      coins: authService.coins,
-                      coinSize: 16,
-                    ),
+                    CoinBalanceBadge(coins: authService.coins, coinSize: 16),
                   ],
                 ),
                 const SizedBox(height: 10),
@@ -463,43 +595,6 @@ class HomeTab extends StatelessWidget {
   static const _heroShadows = [
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
-
-  Widget _buildLeaderboardHighlightsSection() {
-    final cards = leaderboardHighlights.take(3).toList(growable: false);
-    final state = leaderboardHighlightsState;
-    final isLoading =
-        leaderboardHighlightsLoading || state?.shouldShowInitialLoading == true;
-    final isError = state?.isError == true && state?.hasData != true;
-    if (!isLoading && !isError && cards.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const _HomeSectionHeader(title: 'CLIMBING THE BOARDS'),
-        const SizedBox(height: 4),
-        if (isLoading && cards.isEmpty)
-          const _ClimbingBoardsSkeleton()
-        else if (isError)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 22),
-            child: LoadErrorPanel(
-              title: 'Couldn’t load leaderboard',
-              message: 'Check your connection and try again.',
-              onRetry: () {
-                onRefresh();
-              },
-            ),
-          )
-        else
-          _ClimbingBoardsCarousel(
-            cards: cards,
-            onOpenLeaderboardHighlight: onOpenLeaderboardHighlight,
-          ),
-      ],
-    );
-  }
 
   String _heroSummary({required int steps}) {
     if (steps >= 20000) {
@@ -633,22 +728,14 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
       children: [
         const _HomeSectionHeader(title: 'SETUP'),
         if (showDisplayNamePrompt)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Add your display name',
-                  style: PixelText.title(size: 20, color: AppColors.textDark),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Your friends need something better than a blank avatar to look for.',
-                  style: PixelText.body(size: 13, color: AppColors.textMid),
-                ),
-                const SizedBox(height: 12),
-                PillButton(
+          _HomeNoticeRow(
+            icon: Icons.edit_rounded,
+            title: 'Add your display name',
+            subtitle:
+                'Your friends need something better than a blank avatar to look for.',
+            actions: [
+              Expanded(
+                child: PillButton(
                   label: 'SET DISPLAY NAME',
                   icon: Icons.edit_rounded,
                   variant: PillButtonVariant.primary,
@@ -656,54 +743,40 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
                   fullWidth: true,
                   onPressed: _openDisplayNameScreen,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         if (showProfilePhotoPrompt)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Add a profile photo?',
-                  style: PixelText.title(size: 20, color: AppColors.textDark),
+          _HomeNoticeRow(
+            icon: Icons.add_a_photo_rounded,
+            title: 'Add a profile photo?',
+            subtitle:
+                'Make it easier for friends to spot you in races and leaderboards.',
+            actions: [
+              Expanded(
+                child: PillButton(
+                  label: 'ADD PHOTO',
+                  icon: Icons.add_a_photo_rounded,
+                  variant: PillButtonVariant.primary,
+                  fontSize: 13,
+                  fullWidth: true,
+                  onPressed: _isSavingDismissal
+                      ? null
+                      : () => widget.onAddProfilePhoto?.call(),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'Make it easier for friends to spot you in races and leaderboards.',
-                  style: PixelText.body(size: 13, color: AppColors.textMid),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: PillButton(
+                  label: 'NO THANKS',
+                  icon: Icons.close_rounded,
+                  variant: PillButtonVariant.secondary,
+                  fontSize: 13,
+                  fullWidth: true,
+                  onPressed: _dismissProfilePhotoPrompt,
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: PillButton(
-                        label: 'ADD PHOTO',
-                        icon: Icons.add_a_photo_rounded,
-                        variant: PillButtonVariant.primary,
-                        fontSize: 13,
-                        fullWidth: true,
-                        onPressed: _isSavingDismissal
-                            ? null
-                            : () => widget.onAddProfilePhoto?.call(),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: PillButton(
-                        label: 'NO THANKS',
-                        icon: Icons.close_rounded,
-                        variant: PillButtonVariant.secondary,
-                        fontSize: 13,
-                        fullWidth: true,
-                        onPressed: _dismissProfilePhotoPrompt,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         if (showDismissedConfirmation)
           Padding(
@@ -720,278 +793,70 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
   }
 }
 
-class _ClimbingBoardsSkeleton extends StatelessWidget {
-  const _ClimbingBoardsSkeleton();
+class _HomeNoticeRow extends StatelessWidget {
+  const _HomeNoticeRow({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.actions,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final List<Widget> actions;
 
   @override
   Widget build(BuildContext context) {
-    return HomePanel(
-      key: const Key('climbing-boards-skeleton'),
-      padding: EdgeInsets.zero,
-      backgroundColor: AppColors.roofLight,
-      borderColor: AppColors.roofDark,
-      radius: 0,
-      child: Container(
-        height: 170,
-        decoration: const BoxDecoration(color: AppColors.roofLight),
-        child: CustomPaint(
-          painter: const ArcadeCheckerPainter(),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(22, 20, 22, 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                _SkeletonBar(width: 132, height: 28),
-                SizedBox(height: 18),
-                _SkeletonBar(width: 228, height: 24),
-                SizedBox(height: 10),
-                _SkeletonBar(width: 176, height: 16),
-                Spacer(),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _SkeletonDot(active: true),
-                    SizedBox(width: 6),
-                    _SkeletonDot(),
-                    SizedBox(width: 6),
-                    _SkeletonDot(),
-                  ],
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.parchmentDark.withValues(alpha: 0.44),
+        border: Border(
+          top: BorderSide(
+            color: AppColors.parchmentBorder.withValues(alpha: 0.72),
+          ),
+          bottom: BorderSide(
+            color: AppColors.parchmentBorder.withValues(alpha: 0.46),
+          ),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 24, color: AppColors.roofMid),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: PixelText.title(
+                          size: 20,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        subtitle,
+                        style: PixelText.body(
+                          size: 13,
+                          color: AppColors.textMid,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
-          ),
+            const SizedBox(height: 12),
+            Row(children: actions),
+          ],
         ),
-      ),
-    );
-  }
-}
-
-class _ClimbingBoardsCarousel extends StatefulWidget {
-  const _ClimbingBoardsCarousel({
-    required this.cards,
-    this.onOpenLeaderboardHighlight,
-  });
-
-  final List<Map<String, dynamic>> cards;
-  final void Function(String leaderboardType, String period)?
-  onOpenLeaderboardHighlight;
-
-  @override
-  State<_ClimbingBoardsCarousel> createState() =>
-      _ClimbingBoardsCarouselState();
-}
-
-class _ClimbingBoardsCarouselState extends State<_ClimbingBoardsCarousel> {
-  late final PageController _pageController;
-  Timer? _autoAdvanceTimer;
-  int _currentPage = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _pageController = PageController();
-    _restartAutoAdvance();
-  }
-
-  @override
-  void didUpdateWidget(covariant _ClimbingBoardsCarousel oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.cards.length != widget.cards.length) {
-      if (_currentPage >= widget.cards.length) {
-        _currentPage = 0;
-        if (_pageController.hasClients) {
-          _pageController.jumpToPage(0);
-        }
-      }
-      _restartAutoAdvance();
-    }
-  }
-
-  @override
-  void dispose() {
-    _autoAdvanceTimer?.cancel();
-    _pageController.dispose();
-    super.dispose();
-  }
-
-  void _restartAutoAdvance() {
-    _autoAdvanceTimer?.cancel();
-    if (widget.cards.length < 2) return;
-
-    _autoAdvanceTimer = Timer.periodic(const Duration(seconds: 4), (_) {
-      if (!_pageController.hasClients || widget.cards.length < 2) return;
-      final nextPage = (_currentPage + 1) % widget.cards.length;
-      _pageController.animateToPage(
-        nextPage,
-        duration: const Duration(milliseconds: 350),
-        curve: Curves.easeOutCubic,
-      );
-    });
-  }
-
-  void _stopAutoAdvance() {
-    _autoAdvanceTimer?.cancel();
-    _autoAdvanceTimer = null;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return HomePanel(
-      padding: EdgeInsets.zero,
-      backgroundColor: AppColors.roofLight,
-      borderColor: AppColors.roofDark,
-      radius: 0,
-      child: SizedBox(
-        height: 170,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(0),
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: ColoredBox(
-                  color: AppColors.roofLight,
-                  child: CustomPaint(painter: const ArcadeCheckerPainter()),
-                ),
-              ),
-              NotificationListener<ScrollStartNotification>(
-                onNotification: (_) {
-                  _stopAutoAdvance();
-                  return false;
-                },
-                child: NotificationListener<ScrollEndNotification>(
-                  onNotification: (_) {
-                    _restartAutoAdvance();
-                    return false;
-                  },
-                  child: PageView.builder(
-                    key: const Key('climbing-boards-page-view'),
-                    controller: _pageController,
-                    itemCount: widget.cards.length,
-                    onPageChanged: (page) {
-                      setState(() => _currentPage = page);
-                    },
-                    itemBuilder: (context, index) {
-                      final card = widget.cards[index];
-                      final title = card['title'] as String? ?? '';
-                      final subtitle = card['subtitle'] as String? ?? '';
-                      final leaderboardType =
-                          card['leaderboardType'] as String? ?? 'steps';
-                      final period = card['period'] as String? ?? 'today';
-
-                      return Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () {
-                            _stopAutoAdvance();
-                            widget.onOpenLeaderboardHighlight?.call(
-                              leaderboardType,
-                              period,
-                            );
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(22, 20, 22, 20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _ClimbingBoardsBadge(
-                                  label: _badgeLabel(leaderboardType, period),
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  title,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: PixelText.title(
-                                    size: 22,
-                                    color: AppColors.parchment,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  subtitle,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: PixelText.body(
-                                    size: 14,
-                                    color: AppColors.parchment.withValues(
-                                      alpha: 0.85,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 12,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    for (int i = 0; i < widget.cards.length; i++) ...[
-                      if (i > 0) const SizedBox(width: 6),
-                      _ClimbingBoardsDot(active: i == _currentPage),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _badgeLabel(String leaderboardType, String period) {
-    final typeLabel = switch (leaderboardType) {
-      'races' => 'RACES',
-      _ => 'STEPS',
-    };
-    final periodLabel = switch (period) {
-      'allTime' => 'ALL TIME',
-      'month' => 'MONTH',
-      'week' => 'WEEK',
-      _ => 'TODAY',
-    };
-    return '$typeLabel  •  $periodLabel';
-  }
-}
-
-class _ClimbingBoardsBadge extends StatelessWidget {
-  const _ClimbingBoardsBadge({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return HomePill(
-      label: label,
-      backgroundColor: HomeColors.gold,
-      foregroundColor: HomeColors.ink,
-    );
-  }
-}
-
-class _ClimbingBoardsDot extends StatelessWidget {
-  const _ClimbingBoardsDot({required this.active});
-
-  final bool active;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
-      width: active ? 18 : 8,
-      height: 8,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(999),
-        color: active ? HomeColors.gold : Colors.white.withValues(alpha: 0.28),
       ),
     );
   }
@@ -1009,38 +874,35 @@ class _SkeletonBar extends StatelessWidget {
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.16),
+        color: AppColors.parchmentBorder.withValues(alpha: 0.46),
         borderRadius: BorderRadius.circular(999),
       ),
     );
   }
 }
 
-class _SkeletonDot extends StatelessWidget {
-  const _SkeletonDot({this.active = false});
+class _SkeletonCircle extends StatelessWidget {
+  const _SkeletonCircle({required this.size});
 
-  final bool active;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: active ? 18 : 8,
-      height: 8,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
-        color: active
-            ? HomeColors.gold.withValues(alpha: 0.85)
-            : Colors.white.withValues(alpha: 0.20),
+        color: AppColors.parchmentBorder.withValues(alpha: 0.46),
         borderRadius: BorderRadius.circular(999),
       ),
     );
   }
 }
 
-class _HomeSectionHeader extends StatelessWidget {
-  const _HomeSectionHeader({required this.title, this.onDark = false});
+class _HomeRaceHeader extends StatelessWidget {
+  const _HomeRaceHeader({this.onViewAll});
 
-  final String title;
-  final bool onDark;
+  final VoidCallback? onViewAll;
 
   static const _textShadows = [
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
@@ -1048,22 +910,468 @@ class _HomeSectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dividerColor = onDark
-        ? AppColors.parchment.withValues(alpha: 0.22)
-        : AppColors.parchmentBorder.withValues(alpha: 0.72);
-    final textColor =
-        onDark ? AppColors.parchment : AppColors.textDark;
+    final dividerColor = AppColors.parchmentBorder.withValues(alpha: 0.72);
+    return Padding(
+      padding: EdgeInsets.zero,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 9),
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: dividerColor)),
+        ),
+        child: Row(
+          children: [
+            Text(
+              'RACES',
+              style: PixelText.title(
+                size: 20,
+                color: AppColors.textDark,
+              ).copyWith(shadows: _textShadows),
+            ),
+            const Spacer(),
+            if (onViewAll != null)
+              GestureDetector(
+                onTap: onViewAll,
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 6,
+                  ),
+                  child: Text(
+                    'VIEW ALL',
+                    style: PixelText.title(size: 12, color: AppColors.textMid),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeRaceSkeletonTicket extends StatelessWidget {
+  const _HomeRaceSkeletonTicket();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 150,
+      height: 190,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.parchment.withValues(alpha: 0.96),
+          border: Border.all(
+            color: AppColors.roofDark.withValues(alpha: 0.18),
+            width: 2,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const _SkeletonBar(width: 48, height: 22),
+              const SizedBox(height: 14),
+              const _SkeletonBar(width: 104, height: 14),
+              const SizedBox(height: 6),
+              const _SkeletonBar(width: 82, height: 14),
+              const SizedBox(height: 14),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: const [
+                  _SkeletonCircle(size: 34),
+                  SizedBox(width: 4),
+                  _SkeletonCircle(size: 34),
+                  SizedBox(width: 4),
+                  _SkeletonCircle(size: 34),
+                ],
+              ),
+              const Spacer(),
+              const _SkeletonBar(width: 92, height: 14),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeActiveRaceTicket extends StatelessWidget {
+  const _HomeActiveRaceTicket({
+    required this.width,
+    required this.raceName,
+    required this.endsAt,
+    required this.placement,
+    required this.participantCount,
+    required this.top3,
+    required this.onTap,
+  });
+
+  final double width;
+  final String raceName;
+  final DateTime? endsAt;
+  final int? placement;
+  final int participantCount;
+  final List<Map<String, dynamic>> top3;
+  final VoidCallback? onTap;
+
+  String _compactTimeLeft(DateTime endsAt) {
+    final remaining = endsAt.difference(DateTime.now());
+    if (remaining.isNegative) return 'ENDING SOON';
+    if (remaining.inDays > 0) return '${remaining.inDays}D LEFT';
+    if (remaining.inHours > 0) return '${remaining.inHours}H LEFT';
+    if (remaining.inMinutes > 0) return '${remaining.inMinutes}M LEFT';
+    return '${remaining.inSeconds}S LEFT';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final endsAt = this.endsAt;
+    return SizedBox(
+      width: width,
+      height: 190,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Ink(
+            decoration: BoxDecoration(
+              color: AppColors.parchment,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: AppColors.roofDark.withValues(alpha: 0.55),
+                width: 2,
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(15, 13, 15, 13),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      _PlacementPill(placement: placement),
+                      const Spacer(),
+                      if (endsAt != null)
+                        Flexible(
+                          child: Text(
+                            _compactTimeLeft(endsAt),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.right,
+                            style: PixelText.title(
+                              size: 11,
+                              color: AppColors.textMid,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    raceName,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: PixelText.title(size: 18, color: AppColors.textDark),
+                  ),
+                  const Spacer(),
+                  _MiniPodium(top3: top3),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Text(
+                        '$participantCount racer${participantCount == 1 ? '' : 's'}',
+                        style: PixelText.body(size: 13, color: AppColors.textMid),
+                      ),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        size: 18,
+                        color: AppColors.textMid,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Top-left badge: the viewer's placement (medal-tinted), or LIVE pre-ranking.
+class _PlacementPill extends StatelessWidget {
+  const _PlacementPill({required this.placement});
+
+  final int? placement;
+
+  String _ordinal(int n) {
+    if (n >= 11 && n <= 13) return '${n}th';
+    switch (n % 10) {
+      case 1:
+        return '${n}st';
+      case 2:
+        return '${n}nd';
+      case 3:
+        return '${n}rd';
+      default:
+        return '${n}th';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = placement;
+    final (Color bg, Color fg, String label) = switch (p) {
+      1 => (AppColors.medalGold, AppColors.textDark, _ordinal(1)),
+      2 => (AppColors.medalSilver, AppColors.textDark, _ordinal(2)),
+      3 => (AppColors.medalBronze, AppColors.textDark, _ordinal(3)),
+      null => (AppColors.parchmentDark, AppColors.textMid, 'LIVE'),
+      _ => (AppColors.parchmentDark, AppColors.textMid, _ordinal(p)),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(label, style: PixelText.title(size: 13, color: fg)),
+    );
+  }
+}
+
+/// Up to three racers as overlapping, medal-ringed avatars.
+class _MiniPodium extends StatelessWidget {
+  const _MiniPodium({required this.top3});
+
+  final List<Map<String, dynamic>> top3;
+
+  static const double _size = 40;
+  static const double _step = 26;
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = top3.take(3).toList(growable: false);
+    if (entries.isEmpty) return const SizedBox(height: _size);
+
+    final stackWidth = _size + (entries.length - 1) * _step;
+    return SizedBox(
+      width: stackWidth,
+      height: _size,
+      child: Stack(
+        children: [
+          for (int i = 0; i < entries.length; i++)
+            Positioned(
+              left: i * _step,
+              child: _PodiumInitial(entry: entries[i], fallbackRank: i + 1),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PodiumInitial extends StatelessWidget {
+  const _PodiumInitial({required this.entry, required this.fallbackRank});
+
+  final Map<String, dynamic> entry;
+  final int fallbackRank;
+
+  @override
+  Widget build(BuildContext context) {
+    const size = 40.0;
+    final rank = (entry['rank'] as num?)?.toInt() ?? fallbackRank;
+    final isStealthed = entry['isStealthed'] == true;
+    final accessories = isStealthed
+        ? const <Map<String, dynamic>>[]
+        : ((entry['equippedAccessories'] as List?)
+                  ?.whereType<Map<String, dynamic>>()
+                  .toList() ??
+              const <Map<String, dynamic>>[]);
+    final color = switch (rank) {
+      1 => AppColors.medalGold,
+      2 => AppColors.medalSilver,
+      3 => AppColors.medalBronze,
+      _ => AppColors.parchmentBorder,
+    };
+
+    // Outer ring is the card fill so overlapping avatars read as separate.
+    return Container(
+      width: size,
+      height: size,
+      padding: const EdgeInsets.all(2),
+      decoration: const BoxDecoration(
+        color: AppColors.parchment,
+        shape: BoxShape.circle,
+      ),
+      child: Container(
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Color.lerp(color, AppColors.parchment, 0.62),
+          shape: BoxShape.circle,
+          border: Border.all(color: color, width: 2),
+        ),
+        child: ClipOval(
+          child: CapybaraSpriteWithAccessories(
+            accessories: accessories,
+            capybaraSize: size - 12,
+            frameIndex: 0,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeRaceActionRow extends StatelessWidget {
+  const _HomeRaceActionRow({
+    required this.label,
+    required this.title,
+    required this.subtitle,
+    required this.primaryLabel,
+    this.secondaryLabel,
+    this.onPrimary,
+    this.onSecondary,
+  });
+
+  final String label;
+  final String title;
+  final String subtitle;
+  final String primaryLabel;
+  final String? secondaryLabel;
+  final VoidCallback? onPrimary;
+  final VoidCallback? onSecondary;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.parchment.withValues(alpha: 0.96),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.roofDark.withValues(alpha: 0.18)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: PixelText.title(size: 10, color: AppColors.roofMid),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: PixelText.title(size: 17, color: AppColors.textDark),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: PixelText.body(size: 12, color: AppColors.textMid),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _SmallRaceButton(label: primaryLabel, onPressed: onPrimary),
+                if (secondaryLabel != null) ...[
+                  const SizedBox(height: 6),
+                  _SmallRaceButton(
+                    label: secondaryLabel!,
+                    onPressed: onSecondary,
+                    muted: true,
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SmallRaceButton extends StatelessWidget {
+  const _SmallRaceButton({
+    required this.label,
+    required this.onPressed,
+    this.muted = false,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final bool muted;
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: onPressed == null ? 0.52 : 1,
+      child: GestureDetector(
+        onTap: onPressed,
+        child: Container(
+          width: 78,
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: muted ? AppColors.parchmentLight : AppColors.pillGold,
+            borderRadius: BorderRadius.circular(7),
+            border: Border.all(
+              color: muted ? AppColors.parchmentBorder : AppColors.pillGoldDark,
+              width: 1.5,
+            ),
+          ),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: PixelText.title(
+              size: 10,
+              color: muted ? AppColors.textMid : AppColors.textDark,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeSectionHeader extends StatelessWidget {
+  const _HomeSectionHeader({required this.title});
+
+  final String title;
+
+  static const _textShadows = [
+    Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final dividerColor = AppColors.parchmentBorder.withValues(alpha: 0.72);
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 7),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 9),
       decoration: BoxDecoration(
         border: Border(top: BorderSide(color: dividerColor)),
       ),
       child: Text(
         title,
         style: PixelText.title(
-          size: 16,
-          color: textColor,
+          size: 20,
+          color: AppColors.textDark,
         ).copyWith(shadows: _textShadows),
       ),
     );

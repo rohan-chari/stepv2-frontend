@@ -454,17 +454,6 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
-  Future<Map<String, dynamic>> fetchLeaderboardHighlights({
-    required String identityToken,
-  }) async {
-    final response = await _sendGetRequest(
-      path: '/leaderboard/highlights',
-      identityToken: identityToken,
-    );
-
-    return _decodeJsonResponse(response);
-  }
-
   Future<Map<String, dynamic>> fetchHomeRaceCard({
     required String identityToken,
   }) async {

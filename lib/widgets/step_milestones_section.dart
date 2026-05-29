@@ -4,7 +4,6 @@ import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
 import '../widgets/home_chrome.dart';
-import '../widgets/pill_button.dart';
 import '../widgets/spinning_coin.dart';
 
 String _todayLocalDate() {
@@ -88,12 +87,14 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
         _currentSteps = (res['currentSteps'] as num?)?.toInt() ?? 0;
         _totalCoinsClaimed = (res['totalCoinsClaimed'] as num?)?.toInt() ?? 0;
         _tiles = milestones
-            .map((m) => _MilestoneTile(
-                  threshold: (m['threshold'] as num?)?.toInt() ?? 0,
-                  coins: (m['coins'] as num?)?.toInt() ?? 0,
-                  claimed: m['claimed'] == true,
-                  claimable: m['claimable'] == true,
-                ))
+            .map(
+              (m) => _MilestoneTile(
+                threshold: (m['threshold'] as num?)?.toInt() ?? 0,
+                coins: (m['coins'] as num?)?.toInt() ?? 0,
+                claimed: m['claimed'] == true,
+                claimable: m['claimable'] == true,
+              ),
+            )
             .toList(growable: false);
         _lastFetchedDate = date;
       });
@@ -134,169 +135,302 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            "Today's coin checkpoints",
-            style: PixelText.title(size: 20, color: AppColors.textDark),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Hit each step threshold today, then tap to claim. Up to 110 coins/day.',
-            style: PixelText.body(size: 13, color: AppColors.textMid),
-          ),
-          if (_totalCoinsClaimed > 0) ...[
-            const SizedBox(height: 6),
-            Text(
-              'Claimed today: $_totalCoinsClaimed / 110 coins',
-              style: PixelText.body(size: 13, color: AppColors.accent),
-            ),
-          ],
-          const SizedBox(height: 14),
-          if (_loading) ...[
-            const SizedBox(
-              height: 48,
-              child: Center(
-                child: SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.accent,
-                  ),
-                ),
-              ),
-            ),
-          ] else if (_error.isNotEmpty && _tiles.isEmpty) ...[
-            Text(
-              "Couldn't load milestones.",
-              style: PixelText.body(size: 13, color: AppColors.textMid),
-            ),
-          ] else
-            ..._buildRows(),
+          _buildHeader(),
+          const SizedBox(height: 12),
+          _buildCard(),
         ],
       ),
     );
   }
 
-  List<Widget> _buildRows() {
-    final rows = <Widget>[];
-    for (var i = 0; i < _tiles.length; i++) {
-      final tile = _tiles[i];
-      if (i > 0) {
-        rows.add(const SizedBox(height: 12));
-        rows.add(Divider(
-          height: 1,
-          color: HomeColors.line.withValues(alpha: 0.10),
-        ));
-        rows.add(const SizedBox(height: 12));
-      }
-      rows.add(_buildTile(tile));
-    }
-    return rows;
+  Widget _buildHeader() {
+    final cap = _tiles.fold<int>(0, (sum, t) => sum + t.coins);
+    return Row(
+      children: [
+        const SpinningCoin(size: 22),
+        const SizedBox(width: 8),
+        Text(
+          "Today's coins",
+          style: PixelText.title(size: 22, color: AppColors.textDark),
+        ),
+        const Spacer(),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          decoration: BoxDecoration(
+            color: AppColors.parchment,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: AppColors.parchmentBorder.withValues(alpha: 0.9),
+            ),
+          ),
+          child: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: '$_totalCoinsClaimed',
+                  style: PixelText.title(size: 14, color: AppColors.coinDark),
+                ),
+                TextSpan(
+                  text: ' / ${cap == 0 ? 110 : cap}',
+                  style: PixelText.title(size: 14, color: AppColors.textMid),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
-  Widget _buildTile(_MilestoneTile tile) {
+  Widget _buildCard() {
+    Widget body;
+    if (_loading && _tiles.isEmpty) {
+      body = const SizedBox(
+        height: 96,
+        child: Center(
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: AppColors.accent,
+            ),
+          ),
+        ),
+      );
+    } else if (_error.isNotEmpty && _tiles.isEmpty) {
+      body = Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: Center(
+          child: Text(
+            "Couldn't load milestones.",
+            style: PixelText.body(size: 13, color: AppColors.textMid),
+          ),
+        ),
+      );
+    } else {
+      body = Column(
+        children: [
+          _buildTrack(),
+          const SizedBox(height: 16),
+          Container(
+            height: 1,
+            color: AppColors.parchmentBorder.withValues(alpha: 0.6),
+          ),
+          const SizedBox(height: 12),
+          _buildFooter(),
+        ],
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppColors.parchment,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppColors.roofDark.withValues(alpha: 0.55),
+          width: 2,
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 14),
+      child: body,
+    );
+  }
+
+  Widget _buildTrack() {
+    final nodes = <Widget>[];
+    for (var i = 0; i < _tiles.length; i++) {
+      if (i > 0) {
+        nodes.add(Expanded(child: _connector(filled: _tiles[i - 1].claimed)));
+      }
+      nodes.add(_node(_tiles[i]));
+    }
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: nodes);
+  }
+
+  Widget _connector({required bool filled}) {
+    return Padding(
+      // Align with the vertical center of the 56px node circle.
+      padding: const EdgeInsets.only(top: 26.5),
+      child: Container(
+        height: 3,
+        color: filled
+            ? HomeColors.success
+            : AppColors.parchmentBorder.withValues(alpha: 0.6),
+      ),
+    );
+  }
+
+  Widget _node(_MilestoneTile tile) {
     final isClaimed = tile.claimed;
     final isClaimable = tile.claimable;
     final isBusy = _claimingThreshold == '${tile.threshold}';
-    final progress = tile.threshold <= 0
-        ? 0.0
-        : (_currentSteps / tile.threshold).clamp(0.0, 1.0);
+    final color = isClaimed
+        ? HomeColors.success
+        : isClaimable
+        ? HomeColors.gold
+        : HomeColors.muted;
 
-    return Row(
-      children: [
-        Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: isClaimed
-                ? HomeColors.cream
-                : (isClaimable ? HomeColors.cream : HomeColors.surfaceMuted),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: isClaimed
-                  ? HomeColors.success.withValues(alpha: 0.65)
-                  : isClaimable
-                      ? HomeColors.gold.withValues(alpha: 0.65)
-                      : HomeColors.line.withValues(alpha: 0.10),
-              width: 2,
-            ),
-          ),
-          child: Center(
-            child: isClaimed
-                ? const Icon(
-                    Icons.check_rounded,
-                    size: 24,
-                    color: HomeColors.success,
+    final circle = Container(
+      width: 56,
+      height: 56,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: isClaimed
+            ? color.withValues(alpha: 0.16)
+            : isClaimable
+            ? color.withValues(alpha: 0.22)
+            : AppColors.parchmentDark.withValues(alpha: 0.5),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: isClaimable ? color : color.withValues(alpha: isClaimed ? 1 : 0.45),
+          width: isClaimable ? 3 : 2,
+        ),
+        boxShadow: isClaimable
+            ? [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.4),
+                  blurRadius: 12,
+                  spreadRadius: 1,
+                ),
+              ]
+            : null,
+      ),
+      child: isClaimed
+          ? Icon(Icons.check_rounded, size: 26, color: color)
+          : isClaimable
+          ? (isBusy
+                ? SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: color),
                   )
-                : isClaimable
-                    ? const SpinningCoin(size: 24)
-                    : Icon(
-                        Icons.lock_rounded,
-                        size: 22,
-                        color: HomeColors.muted.withValues(alpha: 0.65),
-                      ),
+                : const SpinningCoin(size: 34))
+          : const Icon(Icons.lock_rounded, size: 20, color: HomeColors.muted),
+    );
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GestureDetector(
+          onTap: isClaimable && !isBusy ? () => _claim(tile.threshold) : null,
+          behavior: HitTestBehavior.opaque,
+          child: circle,
+        ),
+        const SizedBox(height: 7),
+        Text(
+          _formatCompact(tile.threshold),
+          style: PixelText.title(
+            size: 15,
+            color: isClaimed || isClaimable
+                ? AppColors.textDark
+                : AppColors.textMid,
           ),
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        const SizedBox(height: 1),
+        if (isClaimable)
+          Text('TAP!', style: PixelText.title(size: 11, color: HomeColors.gold))
+        else
+          Text(
+            '+${tile.coins}',
+            style: PixelText.body(
+              size: 12,
+              color: isClaimed ? HomeColors.success : AppColors.textMid,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildFooter() {
+    _MilestoneTile? next;
+    for (final t in _tiles) {
+      if (!t.claimed) {
+        next = t;
+        break;
+      }
+    }
+    final stepsToNext = next == null ? 0 : (next.threshold - _currentSteps);
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Flexible(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                '${_formatCompact(tile.threshold)} STEPS',
-                style: HomeText.title(
-                  size: 16,
-                  color: isClaimed || isClaimable
-                      ? HomeColors.ink
-                      : HomeColors.muted,
-                ),
-              ),
-              const SizedBox(height: 4),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(999),
-                child: LinearProgressIndicator(
-                  value: progress,
-                  minHeight: 4,
-                  backgroundColor: HomeColors.surfaceMuted,
-                  color: isClaimed
-                      ? HomeColors.success
-                      : (isClaimable ? HomeColors.gold : HomeColors.muted),
+              const Text('🔥', style: TextStyle(fontSize: 15)),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: _formatWithCommas(_currentSteps),
+                        style: PixelText.title(
+                          size: 14,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      TextSpan(
+                        text: ' steps today',
+                        style: PixelText.body(
+                          size: 13,
+                          color: AppColors.textMid,
+                        ),
+                      ),
+                    ],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(width: 12),
-        if (isClaimed)
-          Text(
-            'CLAIMED',
-            style: HomeText.title(size: 13, color: HomeColors.success),
-          )
-        else if (isClaimable)
-          SizedBox(
-            width: 90,
-            child: PillButton(
-              label: isBusy ? '...' : '+${tile.coins}',
-              variant: PillButtonVariant.primary,
-              fontSize: 13,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 8,
+        const SizedBox(width: 10),
+        if (next != null && stepsToNext > 0)
+          Flexible(
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: _formatWithCommas(stepsToNext),
+                    style: PixelText.title(size: 14, color: AppColors.textDark),
+                  ),
+                  TextSpan(
+                    text: ' to ${_formatCompact(next.threshold)}',
+                    style: PixelText.body(size: 13, color: AppColors.textMid),
+                  ),
+                ],
               ),
-              onPressed: isBusy ? null : () => _claim(tile.threshold),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
             ),
           )
         else
           Text(
-            '+${tile.coins}',
-            style: HomeText.title(size: 16, color: HomeColors.muted),
+            'All milestones hit!',
+            style: PixelText.body(size: 13, color: HomeColors.success),
           ),
       ],
     );
+  }
+
+  static String _formatWithCommas(int n) {
+    final s = n.toString();
+    final buf = StringBuffer();
+    for (var i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) buf.write(',');
+      buf.write(s[i]);
+    }
+    return buf.toString();
   }
 
   static String _formatCompact(int n) {

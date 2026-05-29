@@ -76,14 +76,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   List<Map<String, dynamic>> _featuredRaces = const [];
   List<Map<String, dynamic>> _equippedAccessories = const [];
   Loadable<Map<String, dynamic>> _shopCatalogState = const Loadable.initial();
-  List<Map<String, dynamic>> _leaderboardHighlights = const [];
-  Loadable<List<Map<String, dynamic>>> _leaderboardHighlightsState =
-      const Loadable.loading();
-  bool _leaderboardHighlightsLoading = true;
   Map<String, dynamic>? _raceCard;
   bool _raceCardLoading = true;
-  String _requestedLeaderboardType = 'steps';
-  String _requestedLeaderboardPeriod = 'today';
+  final String _requestedLeaderboardType = 'steps';
+  final String _requestedLeaderboardPeriod = 'today';
   int _leaderboardSelectionNonce = 0;
   Timer? _foregroundPollTimer;
   final GlobalKey<StreakChipState> _streakChipKey =
@@ -174,7 +170,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _fetchFriendsSteps();
       _fetchRaces();
       _fetchShopCatalog();
-      _fetchLeaderboardHighlights();
       _fetchRaceCard();
       _startForegroundPolling();
     } else if (state == AppLifecycleState.paused) {
@@ -211,7 +206,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     setState(() => _healthAuthorized = true);
     await _backgroundSyncBootstrapService.enableHealthKitBackgroundDelivery();
     await _checkNotificationState();
-    _fetchLeaderboardHighlights();
     _fetchRaceCard();
     await _fetchSteps();
     _refreshMe();
@@ -271,7 +265,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       setState(() => _healthAuthorized = true);
       await _backgroundSyncBootstrapService.enableHealthKitBackgroundDelivery();
       await _checkNotificationState();
-      _fetchLeaderboardHighlights();
       _fetchRaceCard();
       await _fetchSteps();
     } catch (e) {
@@ -583,7 +576,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   Future<void> _refreshHomeTab() async {
     await Future.wait([
       _fetchSteps(),
-      _fetchLeaderboardHighlights(),
       _fetchShopCatalog(),
       _fetchRaceCard(),
       _streakChipKey.currentState?.refresh() ?? Future<void>.value(),
@@ -799,15 +791,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     );
   }
 
-  void _openLeaderboardHighlight(String leaderboardType, String period) {
-    setState(() {
-      _requestedLeaderboardType = leaderboardType;
-      _requestedLeaderboardPeriod = period;
-      _leaderboardSelectionNonce += 1;
-    });
-    _openLeaderboardTab();
-  }
-
   Future<ImageSource?> _showProfilePhotoSourceSheet() async {
     return showCupertinoModalPopup<ImageSource>(
       context: context,
@@ -983,62 +966,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _fetchLeaderboardHighlights() async {
-    final identityToken = widget.authService.authToken;
-    if (identityToken == null || identityToken.isEmpty) {
-      if (mounted) {
-        setState(() {
-          _leaderboardHighlightsLoading = false;
-          _leaderboardHighlightsState = Loadable.error(
-            'Not signed in.',
-            data: _leaderboardHighlights.isEmpty
-                ? null
-                : _leaderboardHighlights,
-          );
-        });
-      }
-      return;
-    }
-
-    if (mounted) {
-      setState(() {
-        _leaderboardHighlightsLoading = true;
-        _leaderboardHighlightsState = _leaderboardHighlights.isEmpty
-            ? const Loadable.loading()
-            : Loadable.refreshing(_leaderboardHighlights);
-      });
-    }
-
-    try {
-      final data = await _backendApiService.fetchLeaderboardHighlights(
-        identityToken: identityToken,
-      );
-      final cards = (data['cards'] as List? ?? [])
-          .cast<Map<String, dynamic>>()
-          .take(3)
-          .toList(growable: false);
-
-      if (mounted) {
-        setState(() {
-          _leaderboardHighlights = cards;
-          _leaderboardHighlightsLoading = false;
-          _leaderboardHighlightsState = Loadable.success(cards);
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _leaderboardHighlightsLoading = false;
-          _leaderboardHighlightsState = Loadable.error(
-            e.toString(),
-            data: _leaderboardHighlights.isEmpty
-                ? null
-                : _leaderboardHighlights,
-          );
-        });
-      }
-    }
-  }
 
   Future<void> _refreshMe() async {
     try {
@@ -1136,13 +1063,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     friendsStepsState: _friendsStepsState,
                     equippedAccessories: _equippedAccessories,
                     shopCatalogState: _shopCatalogState,
-                    leaderboardHighlights: _leaderboardHighlights,
-                    leaderboardHighlightsState: _leaderboardHighlightsState,
-                    leaderboardHighlightsLoading: _leaderboardHighlightsLoading,
                     onOpenFriendsTab: _openFriendsTab,
                     onOpenRacesTab: _openRacesTab,
                     onOpenLeaderboardTab: _openLeaderboardTab,
-                    onOpenLeaderboardHighlight: _openLeaderboardHighlight,
                     onOpenShop: _openShop,
                     onAddProfilePhoto: _addOrChangeProfilePhoto,
                     onDismissProfilePhotoPrompt: _dismissProfilePhotoPrompt,
