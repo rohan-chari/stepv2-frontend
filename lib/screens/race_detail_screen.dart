@@ -1682,6 +1682,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   Widget _buildActiveContent() {
     final targetSteps = _readInt(_race!['targetSteps'], fallback: 0);
     final buyInAmount = _readInt(_race!['buyInAmount'], fallback: 0);
+    final finishReward = _race!['finishReward'] as Map<String, dynamic>?;
+    final finishRewardPool = finishReward != null
+        ? _readInt(finishReward['pool'], fallback: 0)
+        : 0;
     final endsAtRaw = _race!['endsAt'] as String?;
     final endsAt = endsAtRaw != null
         ? DateTime.tryParse(endsAtRaw)?.toLocal()
@@ -1828,6 +1832,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                               style: PixelText.body(
                                 size: 13,
                                 color: AppColors.textMid,
+                              ),
+                            ),
+                          ],
+                          if (finishRewardPool > 0) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              'Top 50% split $finishRewardPool gold',
+                              style: PixelText.body(
+                                size: 13,
+                                color: AppColors.coinDark,
                               ),
                             ),
                           ],

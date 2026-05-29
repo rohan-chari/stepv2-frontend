@@ -289,6 +289,8 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
     final creator = race['creator'] as Map<String, dynamic>?;
     final creatorName = creator?['displayName'] as String? ?? 'Someone';
     final powerupsEnabled = race['powerupsEnabled'] as bool? ?? false;
+    final finishReward = race['finishReward'] as Map<String, dynamic>?;
+    final finishRewardPool = (finishReward?['pool'] as num?)?.toInt() ?? 0;
     final isJoining = _joiningRaceId == raceId;
 
     // Races are time-based: show time remaining, not a step target.
@@ -333,6 +335,10 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
                 if (buyIn > 0) ...[
                   const SizedBox(width: 16),
                   _buildStat('BUY-IN', '$buyIn'),
+                ],
+                if (finishRewardPool > 0) ...[
+                  const SizedBox(width: 16),
+                  _buildStat('TOP 50%', '$finishRewardPool'),
                 ],
                 if (powerupsEnabled) ...[
                   const SizedBox(width: 16),
