@@ -664,6 +664,21 @@ class BackendApiService {
     return races.cast<Map<String, dynamic>>();
   }
 
+  /// The live seeded daily/weekly races for the Featured section. Each entry
+  /// includes `myStatus` (null when not joined) and `finishReward`. Returns an
+  /// empty list on older backends that don't expose the endpoint.
+  Future<List<Map<String, dynamic>>> fetchFeaturedRaces({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/races/featured',
+      identityToken: identityToken,
+    );
+    final decoded = await _decodeJsonResponse(response);
+    final races = decoded['races'] as List? ?? [];
+    return races.cast<Map<String, dynamic>>();
+  }
+
   Future<Map<String, dynamic>> joinPublicRace({
     required String identityToken,
     required String raceId,

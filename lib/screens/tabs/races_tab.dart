@@ -4,6 +4,8 @@ import '../../models/loadable.dart';
 import '../../services/auth_service.dart';
 import '../../styles.dart';
 import '../../utils/race_participant_display.dart';
+import '../../widgets/featured_race_card.dart';
+import '../../widgets/info_toast.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
 import '../create_race_screen.dart';
@@ -15,8 +17,12 @@ class RacesTab extends StatefulWidget {
   final Map<String, dynamic>? racesData;
   final Loadable<Map<String, dynamic>>? racesState;
   final List<Map<String, dynamic>> friendsSteps;
+  final List<Map<String, dynamic>> featuredRaces;
   final Future<void> Function() onRacesChanged;
   final Future<void> Function()? onRefresh;
+  // Joins a featured (seeded) race; returns true on success. The card shows a
+  // confirmation toast and flips to VIEW once the refreshed data comes back.
+  final Future<bool> Function(String raceId)? onJoinFeaturedRace;
   final String? displayName;
   final VoidCallback? onOpenProfile;
 
@@ -26,8 +32,10 @@ class RacesTab extends StatefulWidget {
     this.racesData,
     this.racesState,
     required this.friendsSteps,
+    this.featuredRaces = const [],
     required this.onRacesChanged,
     this.onRefresh,
+    this.onJoinFeaturedRace,
     this.displayName,
     this.onOpenProfile,
   });
@@ -43,6 +51,21 @@ class _RacesTabState extends State<RacesTab> {
 
   // Completed races default to collapsed; users can expand to view history.
   final Set<String> _collapsedSections = {'completed'};
+
+  // raceId currently being joined from a featured card (shows JOINING… state).
+  String? _joiningFeaturedId;
+
+  Future<void> _joinFeatured(String raceId) async {
+    final onJoin = widget.onJoinFeaturedRace;
+    if (onJoin == null || raceId.isEmpty || _joiningFeaturedId != null) return;
+    setState(() => _joiningFeaturedId = raceId);
+    final joined = await onJoin(raceId);
+    if (!mounted) return;
+    setState(() => _joiningFeaturedId = null);
+    if (joined) {
+      showInfoToast(context, "You're in! 🏃");
+    }
+  }
 
   void _toggleSection(String sectionKey) {
     setState(() {
@@ -187,12 +210,17 @@ class _RacesTabState extends State<RacesTab> {
           color: AppColors.parchment,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
-            child: _buildRaceListState(
-              hasRaces: hasRaces,
-              invites: invites,
-              waiting: waiting,
-              active: active,
-              completed: completed,
+            child: Column(
+              children: [
+                _buildFeaturedSection(),
+                _buildRaceListState(
+                  hasRaces: hasRaces,
+                  invites: invites,
+                  waiting: waiting,
+                  active: active,
+                  completed: completed,
+                ),
+              ],
             ),
           ),
         ),
@@ -278,6 +306,70 @@ class _RacesTabState extends State<RacesTab> {
           ),
         ),
       ),
+    );
+  }
+
+  // Pinned "Featured" strip — the live seeded daily/weekly races. Always shown
+  // (even with no personal races) as a discovery hook. Hidden only when the
+  // backend returns nothing (e.g. older backend, or the brief gap between a
+  // race ending and the next being seeded).
+  Widget _buildFeaturedSection() {
+    final featured = widget.featuredRaces;
+    if (featured.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 14, 10, 9),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.star_rounded,
+                size: 20,
+                color: AppColors.pillGoldDark,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                'FEATURED',
+                style: PixelText.title(
+                  size: 22,
+                  color: AppColors.textDark,
+                ).copyWith(shadows: _textShadows),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 210,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            physics: const BouncingScrollPhysics(),
+            itemCount: featured.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 10),
+            itemBuilder: (context, i) => _buildFeaturedCard(featured[i]),
+          ),
+        ),
+        const SizedBox(height: 4),
+      ],
+    );
+  }
+
+  Widget _buildFeaturedCard(Map<String, dynamic> race) {
+    final raceId = race['raceId'] as String? ?? '';
+    final reward = race['finishReward'] as Map<String, dynamic>?;
+    return FeaturedRaceCard(
+      name: race['name'] as String? ?? 'Race',
+      seedKind: race['seedKind'] as String?,
+      endsAt: DateTime.tryParse(race['endsAt'] as String? ?? ''),
+      participantCount: (race['participantCount'] as num?)?.toInt() ?? 0,
+      finishRewardPool: (reward?['pool'] as num?)?.toInt() ?? 0,
+      isJoined: race['myStatus'] != null,
+      isFull: race['isFull'] as bool? ?? false,
+      isJoining: _joiningFeaturedId == raceId,
+      onJoin: () => _joinFeatured(raceId),
+      onView: () => _navigateToRaceDetail(raceId),
     );
   }
 
@@ -463,7 +555,7 @@ class _RacesTabState extends State<RacesTab> {
             Text(
               title,
               style: PixelText.title(
-                size: 16,
+                size: 22,
                 color: AppColors.textDark,
               ).copyWith(shadows: _textShadows),
             ),
@@ -480,7 +572,7 @@ class _RacesTabState extends State<RacesTab> {
                 ),
                 child: Text(
                   '$count',
-                  style: PixelText.title(size: 11, color: AppColors.textMid),
+                  style: PixelText.title(size: 13, color: AppColors.textMid),
                 ),
               ),
             ],
@@ -533,8 +625,8 @@ class _RacesTabState extends State<RacesTab> {
     }
 
     final stripeColor = index.isOdd
-        ? AppColors.parchmentDark.withValues(alpha: 0.45)
-        : Colors.transparent;
+        ? AppColors.parchmentDark
+        : AppColors.parchment;
 
     String timeLabel;
     if (status == 'ACTIVE' && endsAt != null) {
@@ -556,6 +648,8 @@ class _RacesTabState extends State<RacesTab> {
 
     final showTrailingStatus =
         status != 'ACTIVE' && status != 'COMPLETED' && statusLabel.isNotEmpty;
+    final showTrailingContent =
+        myPlacement != null || queuedBoxCount > 0 || showTrailingStatus;
 
     return Material(
       color: stripeColor,
@@ -587,57 +681,66 @@ class _RacesTabState extends State<RacesTab> {
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
                     ),
+                    if (status == 'ACTIVE') ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        timeLabel,
+                        style: PixelText.body(
+                          size: 12,
+                          color: AppColors.textMid,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ],
                   ],
                 ),
               ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (myPlacement != null)
-                    _buildMetaChip(
-                      '${formatOrdinal(myPlacement)} PLACE',
-                      backgroundColor: AppColors.pillGreenDark.withValues(
-                        alpha: 0.16,
+              if (showTrailingContent) ...[
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (myPlacement != null)
+                      _buildMetaChip(
+                        '${formatOrdinal(myPlacement)} PLACE',
+                        backgroundColor: AppColors.pillGreenDark.withValues(
+                          alpha: 0.16,
+                        ),
+                        textColor: AppColors.pillGreenDark,
                       ),
-                      textColor: AppColors.pillGreenDark,
-                    ),
-                  if (queuedBoxCount > 0) ...[
-                    if (myPlacement != null) const SizedBox(height: 4),
-                    _buildMetaChip(
-                      '$queuedBoxCount QUEUED',
-                      backgroundColor: AppColors.pillGold.withValues(
-                        alpha: 0.34,
+                    if (queuedBoxCount > 0) ...[
+                      if (myPlacement != null) const SizedBox(height: 4),
+                      _buildMetaChip(
+                        '$queuedBoxCount QUEUED',
+                        backgroundColor: AppColors.pillGold.withValues(
+                          alpha: 0.34,
+                        ),
+                        textColor: AppColors.textDark,
                       ),
-                      textColor: AppColors.textDark,
-                    ),
+                    ],
+                    if (showTrailingStatus) ...[
+                      if (myPlacement != null || queuedBoxCount > 0)
+                        const SizedBox(height: 4),
+                      Text(
+                        statusLabel,
+                        style: PixelText.title(size: 12, color: badgeColor),
+                        textAlign: TextAlign.right,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        timeLabel,
+                        style: PixelText.body(
+                          size: 12,
+                          color: AppColors.textMid,
+                        ),
+                        textAlign: TextAlign.right,
+                      ),
+                    ],
                   ],
-                  if (status == 'ACTIVE') ...[
-                    if (myPlacement != null || queuedBoxCount > 0)
-                      const SizedBox(height: 4),
-                    Text(
-                      timeLabel,
-                      style: PixelText.body(size: 12, color: AppColors.textMid),
-                      textAlign: TextAlign.right,
-                    ),
-                  ] else if (showTrailingStatus) ...[
-                    if (myPlacement != null || queuedBoxCount > 0)
-                      const SizedBox(height: 4),
-                    Text(
-                      statusLabel,
-                      style: PixelText.title(size: 12, color: badgeColor),
-                      textAlign: TextAlign.right,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      timeLabel,
-                      style: PixelText.body(size: 12, color: AppColors.textMid),
-                      textAlign: TextAlign.right,
-                    ),
-                  ],
-                ],
-              ),
+                ),
+              ],
             ],
           ),
         ),

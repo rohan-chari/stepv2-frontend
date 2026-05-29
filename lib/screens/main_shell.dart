@@ -72,6 +72,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       const Loadable.initial();
   Map<String, dynamic>? _racesData;
   Loadable<Map<String, dynamic>> _racesState = const Loadable.initial();
+  // Live seeded daily/weekly races for the Featured strip on the Races tab.
+  List<Map<String, dynamic>> _featuredRaces = const [];
   List<Map<String, dynamic>> _equippedAccessories = const [];
   Loadable<Map<String, dynamic>> _shopCatalogState = const Loadable.initial();
   List<Map<String, dynamic>> _leaderboardHighlights = const [];
@@ -79,6 +81,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       const Loadable.loading();
   bool _leaderboardHighlightsLoading = true;
   Map<String, dynamic>? _raceCard;
+  bool _raceCardLoading = true;
   String _requestedLeaderboardType = 'steps';
   String _requestedLeaderboardPeriod = 'today';
   int _leaderboardSelectionNonce = 0;
@@ -473,11 +476,48 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           _racesState = Loadable.success(data);
         });
       }
+
+      // Featured strip rides along with the races list so it stays in sync
+      // (e.g. after a join). Self-contained error handling — never disrupts the
+      // races load above.
+      await _fetchFeaturedRaces();
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _racesState = Loadable.error(e.toString(), data: previous);
       });
+    }
+  }
+
+  Future<void> _fetchFeaturedRaces() async {
+    final identityToken = widget.authService.authToken;
+    if (identityToken == null || identityToken.isEmpty) return;
+    try {
+      final featured = await _backendApiService.fetchFeaturedRaces(
+        identityToken: identityToken,
+      );
+      if (mounted) setState(() => _featuredRaces = featured);
+    } catch (_) {
+      // Featured is a non-critical discovery surface; on error keep the last
+      // known list rather than disturbing the races page.
+    }
+  }
+
+  Future<bool> _joinFeaturedRace(String raceId) async {
+    final identityToken = widget.authService.authToken;
+    if (identityToken == null || identityToken.isEmpty) return false;
+    try {
+      await _backendApiService.joinPublicRace(
+        identityToken: identityToken,
+        raceId: raceId,
+      );
+      // Refresh both surfaces: the featured card flips to VIEW and the race
+      // drops into ACTIVE below. (_fetchRaces also refreshes featured.)
+      await _fetchRaces();
+      return true;
+    } catch (e) {
+      if (mounted) showErrorToast(context, 'Could not join: $e');
+      return false;
     }
   }
 
@@ -553,16 +593,28 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   Future<void> _fetchRaceCard() async {
     final identityToken = widget.authService.authToken;
-    if (identityToken == null || identityToken.isEmpty) return;
+    if (identityToken == null || identityToken.isEmpty) {
+      if (mounted) setState(() => _raceCardLoading = false);
+      return;
+    }
+    if (mounted && _raceCard == null) {
+      setState(() => _raceCardLoading = true);
+    }
     try {
       final data = await _backendApiService.fetchHomeRaceCard(
         identityToken: identityToken,
       );
       if (mounted) {
-        setState(() => _raceCard = data);
+        setState(() {
+          _raceCard = data;
+          _raceCardLoading = false;
+        });
       }
     } catch (_) {
       // Card is non-critical; ignore fetch errors and keep last value.
+      if (mounted) {
+        setState(() => _raceCardLoading = false);
+      }
     }
   }
 
@@ -734,6 +786,14 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   void _openLeaderboardTab() {
     _pageController.animateToPage(
       3,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  void _openRacesTab() {
+    _pageController.animateToPage(
+      1,
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOutCubic,
     );
@@ -1080,12 +1140,14 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     leaderboardHighlightsState: _leaderboardHighlightsState,
                     leaderboardHighlightsLoading: _leaderboardHighlightsLoading,
                     onOpenFriendsTab: _openFriendsTab,
+                    onOpenRacesTab: _openRacesTab,
                     onOpenLeaderboardTab: _openLeaderboardTab,
                     onOpenLeaderboardHighlight: _openLeaderboardHighlight,
                     onOpenShop: _openShop,
                     onAddProfilePhoto: _addOrChangeProfilePhoto,
                     onDismissProfilePhotoPrompt: _dismissProfilePhotoPrompt,
                     raceCard: _raceCard,
+                    raceCardLoading: _raceCardLoading,
                     onOpenRace: _openRaceFromCard,
                     onJoinRaceFromCard: _joinRaceFromCard,
                     onAcceptRaceInvite: _acceptRaceInviteFromCard,
@@ -1097,8 +1159,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     racesData: _racesData,
                     racesState: _racesState,
                     friendsSteps: _friendsSteps,
+                    featuredRaces: _featuredRaces,
                     onRacesChanged: _fetchRaces,
                     onRefresh: _refreshRacesTab,
+                    onJoinFeaturedRace: _joinFeaturedRace,
                     displayName: _displayName,
                     onOpenProfile: _openProfile,
                   ),
