@@ -74,10 +74,12 @@ class _RankedTabState extends State<RankedTab> {
     final token = widget.authService.authToken;
     if (token == null || token.isEmpty) {
       if (mounted) {
-        setState(() => _state = Loadable.error(
-              'Not signed in.',
-              data: previous.isEmpty ? null : previous,
-            ));
+        setState(
+          () => _state = Loadable.error(
+            'Not signed in.',
+            data: previous.isEmpty ? null : previous,
+          ),
+        );
       }
       return;
     }
@@ -93,8 +95,9 @@ class _RankedTabState extends State<RankedTab> {
             .whereType<Map<String, dynamic>>()
             .toList();
         _rewardByTier = {
-          for (final t in (data['tiers'] as List? ?? [])
-              .whereType<Map<String, dynamic>>())
+          for (final t
+              in (data['tiers'] as List? ?? [])
+                  .whereType<Map<String, dynamic>>())
             rankedTierFromKey(t['key'] as String?):
                 (t['reward'] as num?)?.toInt() ?? 0,
         };
@@ -111,16 +114,20 @@ class _RankedTabState extends State<RankedTab> {
         });
         return;
       }
-      setState(() => _state = Loadable.error(
-            e.toString(),
-            data: previous.isEmpty ? null : previous,
-          ));
+      setState(
+        () => _state = Loadable.error(
+          e.toString(),
+          data: previous.isEmpty ? null : previous,
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _state = Loadable.error(
-            e.toString(),
-            data: previous.isEmpty ? null : previous,
-          ));
+      setState(
+        () => _state = Loadable.error(
+          e.toString(),
+          data: previous.isEmpty ? null : previous,
+        ),
+      );
     }
   }
 
@@ -148,9 +155,7 @@ class _RankedTabState extends State<RankedTab> {
             backgroundColor: AppColors.parchment,
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                SliverToBoxAdapter(child: _buildShell()),
-              ],
+              slivers: [SliverToBoxAdapter(child: _buildShell())],
             ),
           ),
         ),
@@ -165,7 +170,7 @@ class _RankedTabState extends State<RankedTab> {
         ColoredBox(
           color: AppColors.parchment,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 12, 10, 10),
+            padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
             child: _buildBody(),
           ),
         ),
@@ -175,29 +180,42 @@ class _RankedTabState extends State<RankedTab> {
 
   Widget _buildHeader() {
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: AppColors.roofLight,
-        border: Border(bottom: BorderSide(color: AppColors.roofDark, width: 1)),
-      ),
+      decoration: const BoxDecoration(color: AppColors.roofEdge),
       child: CustomPaint(
-        painter: const ArcadeCheckerPainter(drawBottomStripe: false),
+        painter: const ArcadeCheckerPainter(
+          drawBottomStripe: false,
+          tileColor: Color(0x08FFFFFF),
+        ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 15, 16, 14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          padding: const EdgeInsets.fromLTRB(18, 12, 18, 14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(
-                'RANKED',
-                style: PixelText.title(size: 30, color: AppColors.parchment)
-                    .copyWith(shadows: _headerShadows),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                _seasonSubtitle(),
-                style: PixelText.body(
-                  size: 15,
-                  color: AppColors.parchment.withValues(alpha: 0.92),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'RANKED',
+                      style: PixelText.title(
+                        size: 28,
+                        color: AppColors.parchment,
+                      ).copyWith(shadows: _headerShadows),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      _seasonLabel(),
+                      style: PixelText.body(
+                        size: 12,
+                        color: AppColors.parchment.withValues(alpha: 0.9),
+                      ),
+                    ),
+                  ],
                 ),
+              ),
+              _SeasonCountdown(
+                title: _seasonSubtitle(),
+                caption: _seasonDayCaption(),
               ),
             ],
           ),
@@ -206,24 +224,68 @@ class _RankedTabState extends State<RankedTab> {
     );
   }
 
+  String _seasonLabel() {
+    final index = (_season?['index'] as num?)?.toInt();
+    return index == null
+        ? 'Walk to earn Ranked Points'
+        : 'Season $index · climb the ladder by walking';
+  }
+
+  int? _seasonDaysLeft() {
+    final ends = DateTime.tryParse(_season?['endsAt']?.toString() ?? '');
+    if (ends == null) return null;
+    final now = DateTime.now();
+    if (ends.isBefore(now)) return 0;
+    final hours = ends.difference(now).inHours;
+    return (hours / 24).ceil();
+  }
+
   String _seasonSubtitle() {
+    final days = _seasonDaysLeft();
+    if (days == null) return 'Walk to earn Ranked Points';
+    if (days > 1) return '$days days left';
+    if (days == 1) return '1 day left';
+    return 'ends today';
+  }
+
+  String _seasonDayCaption() {
     final season = _season;
-    if (season == null) return 'Walk to earn Ranked Points';
-    final index = (season['index'] as num?)?.toInt();
+    if (season == null) return 'DAY 1/30';
     final ends = DateTime.tryParse(season['endsAt']?.toString() ?? '');
-    final parts = <String>[];
-    if (index != null) parts.add('Season $index');
-    if (ends != null) {
-      final days = ends.difference(DateTime.now()).inDays;
-      if (days > 1) {
-        parts.add('ends in $days days');
-      } else if (days == 1) {
-        parts.add('ends tomorrow');
-      } else if (!ends.isBefore(DateTime.now())) {
-        parts.add('ends today');
-      }
-    }
-    return parts.isEmpty ? 'Ranked season' : parts.join(' · ');
+    if (ends == null) return 'DAY 1/30';
+    final daysLeft = _seasonDaysLeft() ?? 0;
+    final totalDays = (season['durationDays'] as num?)?.toInt() ?? 30;
+    final elapsed = (totalDays - daysLeft).clamp(1, totalDays);
+    return 'DAY $elapsed/$totalDays';
+  }
+
+  String _rankStatus(RankedTier tier, int points) {
+    final next = switch (tier) {
+      RankedTier.bronze => 200,
+      RankedTier.silver => 550,
+      RankedTier.gold => 1400,
+      RankedTier.diamond || RankedTier.unranked => null,
+    };
+    if (next == null) return 'Top tier';
+    return '${next - points > 0 ? next - points : 0} RP to ${_nextTierName(tier)}';
+  }
+
+  String _nextTierName(RankedTier tier) => switch (tier) {
+    RankedTier.bronze => 'Silver I',
+    RankedTier.silver => 'Gold I',
+    RankedTier.gold => 'Diamond I',
+    RankedTier.diamond || RankedTier.unranked => 'next tier',
+  };
+
+  double _tierProgress(RankedTier tier, int points) {
+    final (floor, next) = switch (tier) {
+      RankedTier.bronze => (0, 200),
+      RankedTier.silver => (200, 550),
+      RankedTier.gold => (550, 1400),
+      RankedTier.diamond => (1400, 1800),
+      RankedTier.unranked => (0, 200),
+    };
+    return ((points - floor) / (next - floor)).clamp(0.08, 1).toDouble();
   }
 
   Widget _buildBody() {
@@ -261,10 +323,7 @@ class _RankedTabState extends State<RankedTab> {
             ),
           ),
         _buildHero(),
-        if (_ladder.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          _buildLadder(),
-        ],
+        if (_ladder.isNotEmpty) ...[const SizedBox(height: 14), _buildLadder()],
       ],
     );
   }
@@ -280,11 +339,16 @@ class _RankedTabState extends State<RankedTab> {
         surfaceColor: AppColors.parchment,
         child: Column(
           children: [
-            Icon(Icons.shield_outlined,
-                size: 34, color: AppColors.textMid.withValues(alpha: 0.7)),
+            Icon(
+              Icons.shield_outlined,
+              size: 34,
+              color: AppColors.textMid.withValues(alpha: 0.7),
+            ),
             const SizedBox(height: 8),
-            Text('Not ranked yet',
-                style: PixelText.title(size: 18, color: AppColors.textDark)),
+            Text(
+              'Not ranked yet',
+              style: PixelText.title(size: 18, color: AppColors.textDark),
+            ),
             const SizedBox(height: 4),
             Text(
               'Walk 5,000+ steps in a day to join this season’s ladder.',
@@ -301,28 +365,102 @@ class _RankedTabState extends State<RankedTab> {
     final points = (me['points'] as num?)?.toInt() ?? 0;
     final rank = (me['rank'] as num?)?.toInt();
     final reward = _rewardByTier[tier] ?? 0;
+    final tierText = romanDivision(division).isEmpty
+        ? tier.label.toUpperCase()
+        : '${tier.label.toUpperCase()} ${romanDivision(division)}';
 
-    return GameContainer(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
-      frameColor: tier.color,
-      surfaceColor: AppColors.parchment,
-      child: Column(
-        children: [
-          TierBadge(tier: tier, division: division, large: true),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+    return Column(
+      children: [
+        SizedBox(
+          height: 190,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.topCenter,
             children: [
-              _HeroStat(label: 'RANK', value: rank != null ? '#$rank' : '--'),
-              _HeroStat(label: 'RP', value: '$points'),
+              Positioned.fill(
+                top: 10,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: Alignment.topRight,
+                      radius: 0.95,
+                      colors: [
+                        tier.color.withValues(alpha: 0.28),
+                        AppColors.parchment.withValues(alpha: 0),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 0,
+                child: CustomPaint(
+                  size: const Size(128, 116),
+                  painter: _RankShieldPainter(color: tier.color),
+                ),
+              ),
+              const Positioned(top: 18, child: _CrownedCapybara(size: 74)),
+              Positioned(
+                top: 104,
+                child: _RankRibbon(label: rank != null ? '#$rank' : '--'),
+              ),
+              Positioned(
+                top: 144,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      tierText,
+                      style: PixelText.title(size: 28, color: tier.color),
+                    ),
+                    if (division != null) ...[
+                      const SizedBox(width: 8),
+                      _DivisionPill(division: division, color: tier.color),
+                    ],
+                  ],
+                ),
+              ),
             ],
           ),
-          if (reward > 0) ...[
-            const SizedBox(height: 12),
-            _RewardLine(label: 'Finish ${tier.label}', coins: reward),
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: _HeroMetric(
+                value: '$points',
+                label: 'RP',
+                accent: tier.color,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _HeroMetric(
+                value: rank != null ? '$rank' : '--',
+                label: 'GLOBAL RANK',
+                accent: AppColors.textDark,
+                strong: true,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _HeroMetric(
+                value: '${_ladder.length}',
+                label: 'OF RANKED',
+                accent: AppColors.textDark,
+              ),
+            ),
           ],
+        ),
+        const SizedBox(height: 10),
+        _TierProgressLine(
+          progress: _tierProgress(tier, points),
+          label: _rankStatus(tier, points),
+        ),
+        if (reward > 0) ...[
+          const SizedBox(height: 8),
+          _RewardLine(label: 'Finish ${tier.label}', coins: reward),
         ],
-      ),
+      ],
     );
   }
 
@@ -332,26 +470,35 @@ class _RankedTabState extends State<RankedTab> {
     ];
 
     final pinnedMe = _buildPinnedMeRow(rows);
+    final podiumRows = rows.take(3).toList();
+    final bodyRows = rows.skip(3).toList();
 
-    // Rows arrive sorted by points desc, so tiers are contiguous — group them
-    // into tier bands (Diamond → Bronze) so the ladder reads as a ranked climb,
-    // not a flat list. Within a band, rows show only their division.
     final counts = <RankedTier, int>{};
     for (final row in rows) {
       counts[row.tier] = (counts[row.tier] ?? 0) + 1;
     }
 
-    final children = <Widget>[];
+    final children = <Widget>[
+      _LadderTitle(onFriendsTap: () {}),
+      if (podiumRows.isNotEmpty) ...[
+        const SizedBox(height: 8),
+        _Podium(rows: podiumRows),
+        const SizedBox(height: 8),
+      ],
+    ];
+
     RankedTier? section;
     int rowIndex = 0;
-    for (final row in rows) {
+    for (final row in bodyRows) {
       if (row.tier != section) {
         section = row.tier;
-        children.add(_TierSectionHeader(
-          tier: row.tier,
-          count: counts[row.tier] ?? 0,
-          reward: _rewardByTier[row.tier] ?? 0,
-        ));
+        children.add(
+          _TierSectionHeader(
+            tier: row.tier,
+            count: counts[row.tier] ?? 0,
+            reward: _rewardByTier[row.tier] ?? 0,
+          ),
+        );
       }
       children.add(_buildRowTile(row, rowIndex, grouped: true));
       rowIndex++;
@@ -360,7 +507,7 @@ class _RankedTabState extends State<RankedTab> {
     if (pinnedMe != null) {
       children.add(
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
+          padding: const EdgeInsets.symmetric(vertical: 8),
           child: Text(
             '· · ·',
             textAlign: TextAlign.center,
@@ -368,14 +515,18 @@ class _RankedTabState extends State<RankedTab> {
           ),
         ),
       );
-      // Out-of-context row — show its full tier badge, not just a division.
+      children.add(
+        _TierSectionHeader(
+          tier: pinnedMe.tier,
+          count: pinnedMe.rank ?? 0,
+          reward: _rewardByTier[pinnedMe.tier] ?? 0,
+          rankPrefix: '#',
+        ),
+      );
       children.add(_buildRowTile(pinnedMe, rowIndex));
     }
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(6),
-      child: Column(children: children),
-    );
+    return Column(children: children);
   }
 
   // The current user's own row, only when they're ranked but absent from the
@@ -414,59 +565,68 @@ class _RankedTabState extends State<RankedTab> {
 
   Widget _buildRowTile(_RankedRow row, int index, {bool grouped = false}) {
     final rankLabel = row.rank != null ? '${row.rank}' : '--';
-    final stripeColor = index.isOdd
-        ? AppColors.parchmentDark.withValues(alpha: 0.45)
-        : Colors.transparent;
+    final progress = _tierProgress(row.tier, row.points);
     final backgroundColor = row.isMe
-        ? AppColors.accent.withValues(alpha: 0.16)
-        : stripeColor;
+        ? AppColors.accent.withValues(alpha: 0.14)
+        : AppColors.parchment;
 
     final content = Container(
+      margin: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.fromLTRB(8, 7, 8, 7),
       decoration: BoxDecoration(
         color: backgroundColor,
-        border: row.isMe
-            ? const Border(left: BorderSide(color: AppColors.accent, width: 3))
-            : null,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: row.isMe
+              ? AppColors.accent.withValues(alpha: 0.45)
+              : AppColors.parchmentBorder.withValues(alpha: 0.6),
+          width: row.isMe ? 1.5 : 1,
+        ),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
       child: Row(
         children: [
           SizedBox(
-            width: 34,
+            width: 24,
             child: Text(
               rankLabel,
               textAlign: TextAlign.center,
-              style: PixelText.title(size: 14, color: AppColors.textDark),
+              style: PixelText.body(size: 12, color: AppColors.textMid),
             ),
           ),
           const SizedBox(width: 8),
           AppAvatar(
             name: row.displayName,
             imageUrl: row.profilePhotoUrl,
-            size: 32,
+            size: 34,
             isUser: row.isMe,
-            borderColor: row.isMe ? AppColors.accent : Colors.white,
+            borderColor: row.isMe ? AppColors.accent : row.tier.color,
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Flexible(
-                  child: Text(
-                    row.displayName,
-                    overflow: TextOverflow.ellipsis,
-                    style: PixelText.body(
-                      size: 16,
-                      color: row.isMe ? AppColors.accent : AppColors.textDark,
-                    ),
+                Text(
+                  row.displayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: PixelText.body(
+                    size: 13,
+                    color: row.isMe ? AppColors.accent : AppColors.textDark,
                   ),
                 ),
-                if (row.isMe) ...[
-                  const SizedBox(width: 6),
-                  Text('(you)',
-                      style:
-                          PixelText.pill(size: 10.5, color: AppColors.accent)),
-                ],
+                const SizedBox(height: 5),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 4,
+                    backgroundColor: AppColors.parchmentBorder.withValues(
+                      alpha: 0.55,
+                    ),
+                    color: row.tier.color,
+                  ),
+                ),
               ],
             ),
           ),
@@ -476,15 +636,15 @@ class _RankedTabState extends State<RankedTab> {
           else if (row.division != null)
             _DivisionPill(division: row.division!, color: row.tier.color)
           else
-            const SizedBox.shrink(),
+            const SizedBox(width: 28),
           const SizedBox(width: 8),
           SizedBox(
-            width: 52,
+            width: 44,
             child: Text(
               '${row.points}',
               textAlign: TextAlign.right,
               style: PixelText.title(
-                size: 15,
+                size: 13,
                 color: row.isMe ? AppColors.accent : AppColors.textDark,
               ),
             ),
@@ -542,11 +702,13 @@ class _TierSectionHeader extends StatelessWidget {
     required this.tier,
     required this.count,
     this.reward = 0,
+    this.rankPrefix = '',
   });
 
   final RankedTier tier;
   final int count;
   final int reward;
+  final String rankPrefix;
 
   @override
   Widget build(BuildContext context) {
@@ -561,7 +723,10 @@ class _TierSectionHeader extends StatelessWidget {
             style: PixelText.title(size: 13, color: AppColors.textDark),
           ),
           const SizedBox(width: 6),
-          Text('$count', style: PixelText.body(size: 12, color: AppColors.textMid)),
+          Text(
+            '$rankPrefix$count',
+            style: PixelText.body(size: 12, color: AppColors.textMid),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Container(
@@ -571,9 +736,16 @@ class _TierSectionHeader extends StatelessWidget {
           ),
           if (reward > 0) ...[
             const SizedBox(width: 8),
-            const Icon(Icons.paid_rounded, size: 13, color: AppColors.medalGold),
+            const Icon(
+              Icons.paid_rounded,
+              size: 13,
+              color: AppColors.medalGold,
+            ),
             const SizedBox(width: 3),
-            Text('$reward', style: PixelText.body(size: 12, color: AppColors.textMid)),
+            Text(
+              '$reward',
+              style: PixelText.body(size: 12, color: AppColors.textMid),
+            ),
           ],
         ],
       ),
@@ -626,22 +798,473 @@ class _RewardLine extends StatelessWidget {
   }
 }
 
-class _HeroStat extends StatelessWidget {
-  const _HeroStat({required this.label, required this.value});
+class _SeasonCountdown extends StatelessWidget {
+  const _SeasonCountdown({required this.title, required this.caption});
 
-  final String label;
-  final String value;
+  final String title;
+  final String caption;
 
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        Text(value, style: PixelText.title(size: 22, color: AppColors.accent)),
-        const SizedBox(height: 2),
-        Text(label, style: PixelText.body(size: 11, color: AppColors.textMid)),
+        Text(
+          title,
+          style: PixelText.title(size: 13, color: AppColors.medalGold),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          caption,
+          style: PixelText.body(
+            size: 9,
+            color: AppColors.parchment.withValues(alpha: 0.86),
+          ),
+        ),
       ],
     );
   }
+}
+
+class _HeroMetric extends StatelessWidget {
+  const _HeroMetric({
+    required this.value,
+    required this.label,
+    required this.accent,
+    this.strong = false,
+  });
+
+  final String value;
+  final String label;
+  final Color accent;
+  final bool strong;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.parchment,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: accent, width: strong ? 1.6 : 1.1),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: PixelText.title(size: 17, color: AppColors.textDark),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: PixelText.body(size: 7.5, color: AppColors.textMid),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TierProgressLine extends StatelessWidget {
+  const _TierProgressLine({required this.progress, required this.label});
+
+  final double progress;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 7,
+              backgroundColor: AppColors.parchmentBorder.withValues(alpha: 0.8),
+              color: AppColors.medalGold,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(label, style: PixelText.body(size: 10, color: AppColors.textDark)),
+      ],
+    );
+  }
+}
+
+class _RankRibbon extends StatelessWidget {
+  const _RankRibbon({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _RibbonPainter(),
+      child: SizedBox(
+        width: 116,
+        height: 40,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              label,
+              style: PixelText.title(size: 16, color: AppColors.textDark),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CrownedCapybara extends StatelessWidget {
+  const _CrownedCapybara({this.size = 64});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size + 16,
+      child: Stack(
+        alignment: Alignment.center,
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(top: 18, child: _CapybaraFrame(size: size)),
+          Positioned(
+            top: 0,
+            child: CustomPaint(
+              size: Size(size * 0.46, size * 0.34),
+              painter: _CrownPainter(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CapybaraFrame extends StatelessWidget {
+  const _CapybaraFrame({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: ClipRect(
+        child: OverflowBox(
+          maxWidth: double.infinity,
+          alignment: Alignment.topLeft,
+          child: Image.asset(
+            'assets/images/capybara_walk_right.png',
+            width: size * 6,
+            height: size,
+            filterQuality: FilterQuality.none,
+            fit: BoxFit.contain,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LadderTitle extends StatelessWidget {
+  const _LadderTitle({required this.onFriendsTap});
+
+  final VoidCallback onFriendsTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Icon(
+          Icons.emoji_events_outlined,
+          size: 15,
+          color: AppColors.textDark,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          'Global ladder',
+          style: PixelText.body(size: 14, color: AppColors.textDark),
+        ),
+        const Spacer(),
+        TextButton(
+          onPressed: onFriendsTap,
+          style: TextButton.styleFrom(
+            minimumSize: Size.zero,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: Text(
+            'FRIENDS',
+            style: PixelText.body(size: 9, color: AppColors.textMid),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Podium extends StatelessWidget {
+  const _Podium({required this.rows});
+
+  final List<_RankedRow> rows;
+
+  _RankedRow? _rank(int rank) {
+    for (final row in rows) {
+      if (row.rank == rank) return row;
+    }
+    return rows.length >= rank ? rows[rank - 1] : null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final first = _rank(1);
+    final second = _rank(2);
+    final third = _rank(3);
+
+    return SizedBox(
+      height: 168,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(child: _PodiumPlace(row: second, place: 2, height: 54)),
+          const SizedBox(width: 8),
+          Expanded(child: _PodiumPlace(row: first, place: 1, height: 72)),
+          const SizedBox(width: 8),
+          Expanded(child: _PodiumPlace(row: third, place: 3, height: 46)),
+        ],
+      ),
+    );
+  }
+}
+
+class _PodiumPlace extends StatelessWidget {
+  const _PodiumPlace({
+    required this.row,
+    required this.place,
+    required this.height,
+  });
+
+  final _RankedRow? row;
+  final int place;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final entry = row;
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        if (entry != null) ...[
+          Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.topCenter,
+            children: [
+              AppAvatar(
+                name: entry.displayName,
+                imageUrl: entry.profilePhotoUrl,
+                size: place == 1 ? 46 : 38,
+                isUser: entry.isMe,
+                borderColor: entry.tier.color,
+              ),
+              if (place == 1)
+                Positioned(
+                  top: -18,
+                  child: CustomPaint(
+                    size: const Size(28, 22),
+                    painter: _CrownPainter(),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            entry.displayName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: PixelText.body(size: 10, color: AppColors.textDark),
+          ),
+          Text(
+            '${entry.points}',
+            style: PixelText.body(size: 9, color: AppColors.skyBand1),
+          ),
+          Text(
+            entry.tier.label.toUpperCase(),
+            style: PixelText.body(size: 7.5, color: AppColors.textMid),
+          ),
+        ] else
+          const SizedBox(height: 64),
+        const SizedBox(height: 4),
+        Container(
+          height: height,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF42B3DD), Color(0xFF247FA1)],
+            ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+            border: Border.all(color: const Color(0xFF16627E), width: 1),
+          ),
+          child: Center(
+            child: Text(
+              '$place',
+              style: PixelText.title(size: 18, color: AppColors.textDark),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RankShieldPainter extends CustomPainter {
+  const _RankShieldPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final shadow = Paint()
+      ..color = color.withValues(alpha: 0.14)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(size.width / 2, size.height * 0.62),
+        width: size.width * 1.16,
+        height: size.height * 0.95,
+      ),
+      shadow,
+    );
+
+    final path = Path()
+      ..moveTo(size.width * 0.12, size.height * 0.08)
+      ..lineTo(size.width * 0.88, size.height * 0.08)
+      ..lineTo(size.width * 0.88, size.height * 0.43)
+      ..quadraticBezierTo(
+        size.width * 0.84,
+        size.height * 0.74,
+        size.width * 0.5,
+        size.height * 0.95,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.16,
+        size.height * 0.74,
+        size.width * 0.12,
+        size.height * 0.43,
+      )
+      ..close();
+
+    canvas.drawPath(
+      path,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            color.withValues(alpha: 0.24),
+            color.withValues(alpha: 0.54),
+          ],
+        ).createShader(Offset.zero & size),
+    );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3
+        ..color = const Color(0xFF9F7620),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _RankShieldPainter oldDelegate) =>
+      oldDelegate.color != color;
+}
+
+class _RibbonPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..moveTo(size.width * 0.08, size.height * 0.24)
+      ..lineTo(size.width * 0.92, size.height * 0.24)
+      ..lineTo(size.width * 0.84, size.height * 0.95)
+      ..lineTo(size.width * 0.16, size.height * 0.95)
+      ..close();
+    final tailLeft = Path()
+      ..moveTo(size.width * 0.08, size.height * 0.24)
+      ..lineTo(0, size.height * 0.95)
+      ..lineTo(size.width * 0.16, size.height * 0.95);
+    final tailRight = Path()
+      ..moveTo(size.width * 0.92, size.height * 0.24)
+      ..lineTo(size.width, size.height * 0.95)
+      ..lineTo(size.width * 0.84, size.height * 0.95);
+
+    final fill = Paint()..color = const Color(0xFFD6A72F);
+    canvas
+      ..drawPath(tailLeft, fill)
+      ..drawPath(tailRight, fill)
+      ..drawPath(path, Paint()..color = const Color(0xFFE9BD48));
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4
+        ..color = const Color(0xFF9F7620),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _CrownPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final crown = Path()
+      ..moveTo(0, size.height)
+      ..lineTo(size.width * 0.12, size.height * 0.26)
+      ..lineTo(size.width * 0.33, size.height * 0.58)
+      ..lineTo(size.width * 0.5, 0)
+      ..lineTo(size.width * 0.67, size.height * 0.58)
+      ..lineTo(size.width * 0.88, size.height * 0.26)
+      ..lineTo(size.width, size.height)
+      ..close();
+    canvas.drawPath(crown, Paint()..color = const Color(0xFFE7BD46));
+    canvas.drawPath(
+      crown,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4
+        ..color = const Color(0xFF9B721D),
+    );
+
+    final jewelPaint = Paint()..color = const Color(0xFFFFED92);
+    for (final x in [0.12, 0.5, 0.88]) {
+      canvas.drawCircle(
+        Offset(size.width * x, x == 0.5 ? 2.5 : size.height * 0.25),
+        2.4,
+        jewelPaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _ComingSoonPanel extends StatelessWidget {
@@ -653,11 +1276,16 @@ class _ComingSoonPanel extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 32),
       child: Column(
         children: [
-          Icon(Icons.shield_outlined,
-              size: 34, color: AppColors.textMid.withValues(alpha: 0.6)),
+          Icon(
+            Icons.shield_outlined,
+            size: 34,
+            color: AppColors.textMid.withValues(alpha: 0.6),
+          ),
           const SizedBox(height: 8),
-          Text('Ranked is coming soon',
-              style: PixelText.title(size: 18, color: AppColors.textMid)),
+          Text(
+            'Ranked is coming soon',
+            style: PixelText.title(size: 18, color: AppColors.textMid),
+          ),
           const SizedBox(height: 6),
           Text(
             'Keep walking — your steps will count toward the ladder.',
