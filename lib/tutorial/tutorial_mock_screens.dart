@@ -59,7 +59,7 @@ class TutorialMockHost extends StatelessWidget {
                   ),
                   WoodenTabItem(
                     icon: Icons.leaderboard_rounded,
-                    label: 'Leaderboard',
+                    label: 'Boards',
                   ),
                   WoodenTabItem(icon: Icons.person_rounded, label: 'Profile'),
                 ],

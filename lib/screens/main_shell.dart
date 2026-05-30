@@ -26,6 +26,7 @@ import 'tabs/friends_tab.dart';
 import 'tabs/home_tab.dart';
 import 'tabs/leaderboard_tab.dart';
 import 'tabs/profile_tab.dart';
+import 'tabs/ranked_tab.dart';
 import 'create_race_screen.dart';
 import 'race_detail_screen.dart';
 import 'tabs/races_tab.dart';
@@ -81,6 +82,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   final String _requestedLeaderboardType = 'steps';
   final String _requestedLeaderboardPeriod = 'today';
   int _leaderboardSelectionNonce = 0;
+  int _rankedSelectionNonce = 0;
   Timer? _foregroundPollTimer;
   final GlobalKey<StreakChipState> _streakChipKey =
       GlobalKey<StreakChipState>();
@@ -1040,7 +1042,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                 controller: _pageController,
                 physics: const PageScrollPhysics(),
                 onPageChanged: (index) {
-                  setState(() => _currentTab = index);
+                  setState(() {
+                    _currentTab = index;
+                    // Refresh Ranked each time it's revealed (mirrors the
+                    // races refresh-on-reveal hook below).
+                    if (index == 4) _rankedSelectionNonce++;
+                  });
                   if (index == 1) _fetchRaces();
                 },
                 children: [
@@ -1114,6 +1121,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     selectionNonce: _leaderboardSelectionNonce,
                     onOpenProfile: _openProfile,
                   ),
+                  RankedTab(
+                    authService: widget.authService,
+                    backendApiService: _backendApiService,
+                    refreshNonce: _rankedSelectionNonce,
+                  ),
                 ],
               ),
             ),
@@ -1145,7 +1157,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   ),
                   const WoodenTabItem(
                     icon: Icons.leaderboard_rounded,
-                    label: 'Leaderboard',
+                    label: 'Boards',
+                  ),
+                  const WoodenTabItem(
+                    icon: Icons.shield_rounded,
+                    label: 'Ranked',
                   ),
                 ],
               ),

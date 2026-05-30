@@ -454,6 +454,17 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  Future<Map<String, dynamic>> fetchRanked({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/ranked',
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
   Future<Map<String, dynamic>> fetchHomeRaceCard({
     required String identityToken,
   }) async {
