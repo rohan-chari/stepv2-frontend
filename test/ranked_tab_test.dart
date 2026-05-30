@@ -7,6 +7,13 @@ import 'package:step_tracker/services/backend_api_service.dart';
 
 enum _Mode { ranked, unranked, notFound }
 
+const _kTiers = [
+  {'key': 'BRONZE', 'label': 'Bronze', 'floor': 0, 'reward': 100},
+  {'key': 'SILVER', 'label': 'Silver', 'floor': 200, 'reward': 250},
+  {'key': 'GOLD', 'label': 'Gold', 'floor': 550, 'reward': 600},
+  {'key': 'DIAMOND', 'label': 'Diamond', 'floor': 1400, 'reward': 1500},
+];
+
 class _FakeRankedApi extends BackendApiService {
   _FakeRankedApi(this.mode);
   final _Mode mode;
@@ -45,6 +52,7 @@ class _FakeRankedApi extends BackendApiService {
             'division': null,
           },
         ],
+        'tiers': _kTiers,
       };
     }
 
@@ -75,6 +83,7 @@ class _FakeRankedApi extends BackendApiService {
           'division': 3,
         },
       ],
+      'tiers': _kTiers,
     };
   }
 }
@@ -117,8 +126,12 @@ void main() {
     expect(find.text('RP'), findsOneWidget);
     expect(find.text('AceWalker'), findsOneWidget);
     expect(find.text('Trail Walker'), findsOneWidget);
-    // The top player's Diamond badge (no division) renders in the ladder.
-    expect(find.text('Diamond'), findsOneWidget);
+    // The ladder groups into tier section headers (uppercased; the hero badge
+    // is 'GOLD III', distinct from the 'GOLD' section header).
+    expect(find.text('DIAMOND'), findsOneWidget);
+    expect(find.text('GOLD'), findsOneWidget);
+    // Reward for the current tier is surfaced in the hero.
+    expect(find.text('Finish Gold → 600 coins'), findsOneWidget);
   });
 
   testWidgets('shows the not-ranked hero when the user has no score', (

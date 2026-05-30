@@ -8,6 +8,7 @@ import '../../widgets/app_avatar.dart';
 import '../../widgets/friend_request_sheet.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/loading_skeleton.dart';
+import '../../widgets/tier_badge.dart';
 
 /// Ranked ladder for the active season. Self-fetching like [LeaderboardTab];
 /// `refreshNonce` is bumped by the shell when the tab is revealed so it
@@ -37,9 +38,15 @@ class _RankedTabState extends State<RankedTab> {
   List<Map<String, dynamic>> _ladder = [];
   Map<String, dynamic>? _currentUser;
   Map<String, dynamic>? _season;
+  Map<RankedTier, int> _rewardByTier = {};
   // True when the backend has no Ranked endpoint yet (old prod serving a newer
   // app). Treated as "coming soon", not an error.
   bool _unavailable = false;
+
+  // Matches the title treatment on the Races/Leaderboard headers.
+  static const _headerShadows = [
+    Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
+  ];
 
   @override
   void initState() {
@@ -85,6 +92,12 @@ class _RankedTabState extends State<RankedTab> {
         _ladder = (data['ladder'] as List? ?? [])
             .whereType<Map<String, dynamic>>()
             .toList();
+        _rewardByTier = {
+          for (final t in (data['tiers'] as List? ?? [])
+              .whereType<Map<String, dynamic>>())
+            rankedTierFromKey(t['key'] as String?):
+                (t['reward'] as num?)?.toInt() ?? 0,
+        };
         _state = Loadable.success(_ladder);
       });
     } on ApiException catch (e) {
@@ -175,13 +188,14 @@ class _RankedTabState extends State<RankedTab> {
             children: [
               Text(
                 'RANKED',
-                style: PixelText.title(size: 30, color: AppColors.parchment),
+                style: PixelText.title(size: 30, color: AppColors.parchment)
+                    .copyWith(shadows: _headerShadows),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 5),
               Text(
                 _seasonSubtitle(),
                 style: PixelText.body(
-                  size: 13,
+                  size: 15,
                   color: AppColors.parchment.withValues(alpha: 0.92),
                 ),
               ),
@@ -282,10 +296,11 @@ class _RankedTabState extends State<RankedTab> {
       );
     }
 
-    final tier = _tierFromKey(me['tier'] as String?);
+    final tier = rankedTierFromKey(me['tier'] as String?);
     final division = (me['division'] as num?)?.toInt();
     final points = (me['points'] as num?)?.toInt() ?? 0;
     final rank = (me['rank'] as num?)?.toInt();
+    final reward = _rewardByTier[tier] ?? 0;
 
     return GameContainer(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
@@ -293,7 +308,7 @@ class _RankedTabState extends State<RankedTab> {
       surfaceColor: AppColors.parchment,
       child: Column(
         children: [
-          _TierBadge(tier: tier, division: division, large: true),
+          TierBadge(tier: tier, division: division, large: true),
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -302,6 +317,10 @@ class _RankedTabState extends State<RankedTab> {
               _HeroStat(label: 'RP', value: '$points'),
             ],
           ),
+          if (reward > 0) ...[
+            const SizedBox(height: 12),
+            _RewardLine(label: 'Finish ${tier.label}', coins: reward),
+          ],
         ],
       ),
     );
@@ -314,10 +333,30 @@ class _RankedTabState extends State<RankedTab> {
 
     final pinnedMe = _buildPinnedMeRow(rows);
 
-    final children = <Widget>[];
-    for (int i = 0; i < rows.length; i++) {
-      children.add(_buildRowTile(rows[i], i));
+    // Rows arrive sorted by points desc, so tiers are contiguous — group them
+    // into tier bands (Diamond → Bronze) so the ladder reads as a ranked climb,
+    // not a flat list. Within a band, rows show only their division.
+    final counts = <RankedTier, int>{};
+    for (final row in rows) {
+      counts[row.tier] = (counts[row.tier] ?? 0) + 1;
     }
+
+    final children = <Widget>[];
+    RankedTier? section;
+    int rowIndex = 0;
+    for (final row in rows) {
+      if (row.tier != section) {
+        section = row.tier;
+        children.add(_TierSectionHeader(
+          tier: row.tier,
+          count: counts[row.tier] ?? 0,
+          reward: _rewardByTier[row.tier] ?? 0,
+        ));
+      }
+      children.add(_buildRowTile(row, rowIndex, grouped: true));
+      rowIndex++;
+    }
+
     if (pinnedMe != null) {
       children.add(
         Padding(
@@ -329,7 +368,8 @@ class _RankedTabState extends State<RankedTab> {
           ),
         ),
       );
-      children.add(_buildRowTile(pinnedMe, rows.length));
+      // Out-of-context row — show its full tier badge, not just a division.
+      children.add(_buildRowTile(pinnedMe, rowIndex));
     }
 
     return ClipRRect(
@@ -350,7 +390,7 @@ class _RankedTabState extends State<RankedTab> {
       displayName: widget.authService.displayName ?? 'You',
       profilePhotoUrl: null,
       points: (me['points'] as num?)?.toInt() ?? 0,
-      tier: _tierFromKey(me['tier'] as String?),
+      tier: rankedTierFromKey(me['tier'] as String?),
       division: (me['division'] as num?)?.toInt(),
       isMe: true,
     );
@@ -366,13 +406,13 @@ class _RankedTabState extends State<RankedTab> {
       displayName: e['displayName'] as String? ?? 'Anonymous',
       profilePhotoUrl: e['profilePhotoUrl'] as String?,
       points: (e['points'] as num?)?.toInt() ?? 0,
-      tier: _tierFromKey(e['tier'] as String?),
+      tier: rankedTierFromKey(e['tier'] as String?),
       division: (e['division'] as num?)?.toInt(),
       isMe: isMe,
     );
   }
 
-  Widget _buildRowTile(_RankedRow row, int index) {
+  Widget _buildRowTile(_RankedRow row, int index, {bool grouped = false}) {
     final rankLabel = row.rank != null ? '${row.rank}' : '--';
     final stripeColor = index.isOdd
         ? AppColors.parchmentDark.withValues(alpha: 0.45)
@@ -431,7 +471,12 @@ class _RankedTabState extends State<RankedTab> {
             ),
           ),
           const SizedBox(width: 8),
-          _TierBadge(tier: row.tier, division: row.division),
+          if (!grouped)
+            TierBadge(tier: row.tier, division: row.division)
+          else if (row.division != null)
+            _DivisionPill(division: row.division!, color: row.tier.color)
+          else
+            const SizedBox.shrink(),
           const SizedBox(width: 8),
           SizedBox(
             width: 52,
@@ -468,49 +513,7 @@ class _RankedTabState extends State<RankedTab> {
   }
 }
 
-// ── Tier model ───────────────────────────────────────────────────────────────
-
-enum _Tier { bronze, silver, gold, diamond, unranked }
-
-_Tier _tierFromKey(String? key) {
-  switch (key) {
-    case 'BRONZE':
-      return _Tier.bronze;
-    case 'SILVER':
-      return _Tier.silver;
-    case 'GOLD':
-      return _Tier.gold;
-    case 'DIAMOND':
-      return _Tier.diamond;
-    default:
-      return _Tier.unranked;
-  }
-}
-
-extension on _Tier {
-  String get label => switch (this) {
-        _Tier.bronze => 'Bronze',
-        _Tier.silver => 'Silver',
-        _Tier.gold => 'Gold',
-        _Tier.diamond => 'Diamond',
-        _Tier.unranked => 'Unranked',
-      };
-
-  Color get color => switch (this) {
-        _Tier.bronze => AppColors.medalBronze,
-        _Tier.silver => AppColors.medalSilver,
-        _Tier.gold => AppColors.medalGold,
-        _Tier.diamond => const Color(0xFF49B6E0),
-        _Tier.unranked => AppColors.textMid,
-      };
-}
-
-String _roman(int? division) => switch (division) {
-      1 => 'I',
-      2 => 'II',
-      3 => 'III',
-      _ => '',
-    };
+// ── Ladder row ───────────────────────────────────────────────────────────────
 
 class _RankedRow {
   final int? rank;
@@ -518,7 +521,7 @@ class _RankedRow {
   final String displayName;
   final String? profilePhotoUrl;
   final int points;
-  final _Tier tier;
+  final RankedTier tier;
   final int? division;
   final bool isMe;
 
@@ -534,43 +537,91 @@ class _RankedRow {
   });
 }
 
-class _TierBadge extends StatelessWidget {
-  const _TierBadge({required this.tier, this.division, this.large = false});
+class _TierSectionHeader extends StatelessWidget {
+  const _TierSectionHeader({
+    required this.tier,
+    required this.count,
+    this.reward = 0,
+  });
 
-  final _Tier tier;
-  final int? division;
-  final bool large;
+  final RankedTier tier;
+  final int count;
+  final int reward;
 
   @override
   Widget build(BuildContext context) {
-    final roman = _roman(division);
-    final text = roman.isEmpty ? tier.label : '${tier.label} $roman';
-
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: large ? 14 : 8,
-        vertical: large ? 8 : 4,
-      ),
-      decoration: BoxDecoration(
-        color: tier.color.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(large ? 10 : 7),
-        border: Border.all(color: tier.color, width: large ? 2 : 1),
-      ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 12, 8, 6),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.shield_rounded,
-              size: large ? 20 : 12, color: tier.color),
-          SizedBox(width: large ? 8 : 4),
+          Icon(Icons.shield_rounded, size: 15, color: tier.color),
+          const SizedBox(width: 6),
           Text(
-            large ? text.toUpperCase() : text,
-            style: PixelText.title(
-              size: large ? 18 : 10,
-              color: AppColors.textDark,
+            tier.label.toUpperCase(),
+            style: PixelText.title(size: 13, color: AppColors.textDark),
+          ),
+          const SizedBox(width: 6),
+          Text('$count', style: PixelText.body(size: 12, color: AppColors.textMid)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Container(
+              height: 2,
+              color: tier.color.withValues(alpha: 0.35),
             ),
           ),
+          if (reward > 0) ...[
+            const SizedBox(width: 8),
+            const Icon(Icons.paid_rounded, size: 13, color: AppColors.medalGold),
+            const SizedBox(width: 3),
+            Text('$reward', style: PixelText.body(size: 12, color: AppColors.textMid)),
+          ],
         ],
       ),
+    );
+  }
+}
+
+class _DivisionPill extends StatelessWidget {
+  const _DivisionPill({required this.division, required this.color});
+
+  final int division;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color, width: 1),
+      ),
+      child: Text(
+        romanDivision(division),
+        style: PixelText.title(size: 10, color: AppColors.textDark),
+      ),
+    );
+  }
+}
+
+class _RewardLine extends StatelessWidget {
+  const _RewardLine({required this.label, required this.coins});
+
+  final String label;
+  final int coins;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(Icons.paid_rounded, size: 15, color: AppColors.medalGold),
+        const SizedBox(width: 6),
+        Text(
+          '$label → $coins coins',
+          style: PixelText.body(size: 13, color: AppColors.textMid),
+        ),
+      ],
     );
   }
 }

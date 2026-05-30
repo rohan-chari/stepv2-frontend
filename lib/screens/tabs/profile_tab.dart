@@ -14,6 +14,7 @@ import '../../widgets/pill_button.dart';
 import '../../widgets/trail_sign.dart';
 import '../../widgets/step_calendar.dart';
 import '../../widgets/loading_skeleton.dart';
+import '../../widgets/tier_badge.dart';
 import '../admin_screen.dart';
 import '../display_name_screen.dart';
 import '../start_screen.dart';
@@ -490,6 +491,8 @@ class _StatsSectionState extends State<_StatsSection> {
   int _thisYear = 0;
   int _allTime = 0;
   int _streak = 0;
+  String? _rankedTier;
+  int? _rankedDivision;
   Loadable<Map<String, dynamic>> _statsState = const Loadable.initial();
 
   @override
@@ -532,6 +535,8 @@ class _StatsSectionState extends State<_StatsSection> {
           _thisYear = (stats['thisYear'] as num?)?.toInt() ?? 0;
           _allTime = (stats['allTime'] as num?)?.toInt() ?? 0;
           _streak = (stats['streak'] as num?)?.toInt() ?? 0;
+          _rankedTier = stats['rankedTier'] as String?;
+          _rankedDivision = (stats['rankedDivision'] as num?)?.toInt();
           _statsState = Loadable.success(stats);
           _isLoading = false;
         });
@@ -582,16 +587,47 @@ class _StatsSectionState extends State<_StatsSection> {
               backgroundColor: Colors.transparent,
             ),
           ),
-        _buildStatRow('This Week', _formatSteps(_thisWeek), 0),
-        _buildStatRow('This Month', _formatSteps(_thisMonth), 1),
-        _buildStatRow('This Year', _formatSteps(_thisYear), 2),
-        _buildStatRow('All Time', _formatSteps(_allTime), 3),
+        _buildRankedRow(0),
+        _buildStatRow('This Week', _formatSteps(_thisWeek), 1),
+        _buildStatRow('This Month', _formatSteps(_thisMonth), 2),
+        _buildStatRow('This Year', _formatSteps(_thisYear), 3),
+        _buildStatRow('All Time', _formatSteps(_allTime), 4),
         _buildStatRow(
           'Goal Streak',
           '$_streak day${_streak == 1 ? '' : 's'}',
-          4,
+          5,
         ),
       ],
+    );
+  }
+
+  Widget _buildRankedRow(int index) {
+    final tier = rankedTierFromKey(_rankedTier);
+    final ranked = tier != RankedTier.unranked;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 14),
+      decoration: BoxDecoration(
+        color: index.isOdd
+            ? AppColors.parchmentDark.withValues(alpha: 0.45)
+            : Colors.transparent,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Ranked Tier',
+              style: PixelText.body(size: 16, color: AppColors.textMid),
+            ),
+          ),
+          if (ranked)
+            TierBadge(tier: tier, division: _rankedDivision)
+          else
+            Text(
+              'Unranked',
+              style: PixelText.title(size: 16, color: AppColors.textMid),
+            ),
+        ],
+      ),
     );
   }
 
