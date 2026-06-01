@@ -53,6 +53,12 @@ class MainShell extends StatefulWidget {
 }
 
 class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
+  static const _homeTabIndex = 0;
+  static const _racesTabIndex = 1;
+  static const _rankedTabIndex = 2;
+  static const _boardsTabIndex = 3;
+  static const _profileTabIndex = 4;
+
   late final HealthService _healthService;
   late final BackendApiService _backendApiService;
   late final BackgroundSyncBootstrapService _backgroundSyncBootstrapService;
@@ -153,13 +159,13 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         }
         break;
       case NotificationRoute.races:
-        _pageController.jumpToPage(1);
+        _pageController.jumpToPage(_racesTabIndex);
         break;
       case NotificationRoute.friends:
         _openFriendsTab();
         break;
       case NotificationRoute.home:
-        _pageController.jumpToPage(0);
+        _pageController.jumpToPage(_homeTabIndex);
         break;
     }
   }
@@ -779,7 +785,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   void _openLeaderboardTab() {
     _pageController.animateToPage(
-      3,
+      _boardsTabIndex,
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOutCubic,
     );
@@ -787,7 +793,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   void _openRacesTab() {
     _pageController.animateToPage(
-      1,
+      _racesTabIndex,
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOutCubic,
     );
@@ -950,7 +956,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   void _openProfile() {
     _pageController.animateToPage(
-      2,
+      _profileTabIndex,
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOutCubic,
     );
@@ -967,7 +973,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       ),
     );
   }
-
 
   Future<void> _refreshMe() async {
     try {
@@ -1046,9 +1051,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     _currentTab = index;
                     // Refresh Ranked each time it's revealed (mirrors the
                     // races refresh-on-reveal hook below).
-                    if (index == 4) _rankedSelectionNonce++;
+                    if (index == _rankedTabIndex) _rankedSelectionNonce++;
                   });
-                  if (index == 1) _fetchRaces();
+                  if (index == _racesTabIndex) _fetchRaces();
                 },
                 children: [
                   HomeTab(
@@ -1096,20 +1101,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     displayName: _displayName,
                     onOpenProfile: _openProfile,
                   ),
-                  ProfileTab(
+                  RankedTab(
                     authService: widget.authService,
-                    displayName: _displayName,
-                    email: _email,
-                    onSettingsChanged: _syncSettingsState,
-                    onRefresh: _refreshProfileTab,
                     backendApiService: _backendApiService,
-                    notificationService: widget.notificationService,
-                    stepData: _stepData,
-                    onAddProfilePhoto: _addOrChangeProfilePhoto,
-                    onRemoveProfilePhoto: _removeProfilePhoto,
-                    onOpenFriends: _openFriendsTab,
-                    incomingFriendRequests: _incomingFriendRequests,
-                    showBackButton: false,
+                    refreshNonce: _rankedSelectionNonce,
                   ),
                   LeaderboardTab(
                     authService: widget.authService,
@@ -1121,10 +1116,20 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     selectionNonce: _leaderboardSelectionNonce,
                     onOpenProfile: _openProfile,
                   ),
-                  RankedTab(
+                  ProfileTab(
                     authService: widget.authService,
                     backendApiService: _backendApiService,
-                    refreshNonce: _rankedSelectionNonce,
+                    displayName: _displayName,
+                    email: _email,
+                    onSettingsChanged: _syncSettingsState,
+                    onRefresh: _refreshProfileTab,
+                    notificationService: widget.notificationService,
+                    stepData: _stepData,
+                    onAddProfilePhoto: _addOrChangeProfilePhoto,
+                    onRemoveProfilePhoto: _removeProfilePhoto,
+                    onOpenFriends: _openFriendsTab,
+                    incomingFriendRequests: _incomingFriendRequests,
+                    showBackButton: false,
                   ),
                 ],
               ),
@@ -1150,18 +1155,18 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     icon: Icons.directions_run_rounded,
                     label: 'Races',
                   ),
-                  WoodenTabItem(
-                    icon: Icons.person_rounded,
-                    label: 'Profile',
-                    badgeCount: _incomingFriendRequests,
+                  const WoodenTabItem(
+                    icon: Icons.shield_rounded,
+                    label: 'Ranked',
                   ),
                   const WoodenTabItem(
                     icon: Icons.leaderboard_rounded,
                     label: 'Boards',
                   ),
-                  const WoodenTabItem(
-                    icon: Icons.shield_rounded,
-                    label: 'Ranked',
+                  WoodenTabItem(
+                    icon: Icons.person_rounded,
+                    label: 'Profile',
+                    badgeCount: _incomingFriendRequests,
                   ),
                 ],
               ),

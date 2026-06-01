@@ -6,10 +6,11 @@ import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
 import '../../widgets/app_avatar.dart';
-import '../../widgets/capybara.dart';
 import '../../widgets/filter_dropdown.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/friend_request_sheet.dart';
+import '../../widgets/home_course_track.dart'
+    show AnimatedCapybaraWithAccessories;
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
 
@@ -479,6 +480,11 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
           firsts: entry['firsts'] as int?,
           seconds: entry['seconds'] as int?,
           thirds: entry['thirds'] as int?,
+          equippedAccessories:
+              (entry['equippedAccessories'] as List?)
+                  ?.whereType<Map<String, dynamic>>()
+                  .toList() ??
+              const [],
         ),
       );
     }
@@ -497,6 +503,11 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
       firsts: _currentUser!['firsts'] as int?,
       seconds: _currentUser!['seconds'] as int?,
       thirds: _currentUser!['thirds'] as int?,
+      equippedAccessories:
+          (_currentUser!['equippedAccessories'] as List?)
+              ?.whereType<Map<String, dynamic>>()
+              .toList() ??
+          const [],
     );
   }
 
@@ -535,9 +546,9 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
         _rowWithRank(podiumRows, 3) ??
         (podiumRows.length > 2 ? podiumRows[2] : null);
 
-    // Gold / silver / bronze pedestals on one shared "trophy slab": #1 towers in
-    // the centre under a crown, every rank is colour-coded and numbered, so the
-    // top 3 read as one unmistakable ranking — clearly apart from the #4+ list.
+    // Gold / silver / bronze pedestals on one shared "trophy slab": #1 towers
+    // in the centre, every rank is colour-coded and numbered, so the top 3 read
+    // as one unmistakable ranking — clearly apart from the #4+ list.
     return DecoratedBox(
       decoration: BoxDecoration(
         color: AppColors.parchmentDark,
@@ -628,24 +639,10 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                     ]
                   : null,
             ),
-            child: WalkingCapybaraInPlace(size: avatarSize),
-          ),
-          if (featured)
-            Positioned(
-              top: -16,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: CustomPaint(
-                  size: const Size(30, 23),
-                  painter: _CrownPainter(),
-                ),
-              ),
+            child: AnimatedCapybaraWithAccessories(
+              accessories: row.equippedAccessories,
+              size: avatarSize,
             ),
-          Positioned(
-            right: -4,
-            bottom: -4,
-            child: _MedalDisc(place: place, isMe: row.isMe),
           ),
         ],
       ),
@@ -845,6 +842,7 @@ class _LeaderboardRow {
   final int? firsts;
   final int? seconds;
   final int? thirds;
+  final List<Map<String, dynamic>> equippedAccessories;
 
   const _LeaderboardRow({
     required this.rank,
@@ -856,6 +854,7 @@ class _LeaderboardRow {
     this.firsts,
     this.seconds,
     this.thirds,
+    this.equippedAccessories = const [],
   });
 }
 
@@ -940,76 +939,6 @@ class _PedestalBlock extends StatelessWidget {
             ),
     );
   }
-}
-
-/// Numbered medal disc stamped on the bottom-right of each podium avatar, so the
-/// rank stays legible even if a user ignores colour, height and position.
-class _MedalDisc extends StatelessWidget {
-  const _MedalDisc({required this.place, required this.isMe});
-
-  final int place;
-  final bool isMe;
-
-  @override
-  Widget build(BuildContext context) {
-    final medal = _medalStyles[place]!;
-    return Container(
-      width: 20,
-      height: 20,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: medal.base,
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: isMe ? AppColors.accent : AppColors.parchment,
-          width: isMe ? 2 : 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(color: medal.border.withValues(alpha: 0.6), blurRadius: 2),
-        ],
-      ),
-      child: Text(
-        '$place',
-        style: PixelText.title(size: 10, color: AppColors.textDark),
-      ),
-    );
-  }
-}
-
-/// Pixel crown for the #1 podium avatar. Kept private to this screen (mirrors
-/// the crown on the Ranked tab) so the Leaderboard stays self-contained.
-class _CrownPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final crown = Path()
-      ..moveTo(0, size.height)
-      ..lineTo(size.width * 0.12, size.height * 0.26)
-      ..lineTo(size.width * 0.33, size.height * 0.58)
-      ..lineTo(size.width * 0.5, 0)
-      ..lineTo(size.width * 0.67, size.height * 0.58)
-      ..lineTo(size.width * 0.88, size.height * 0.26)
-      ..lineTo(size.width, size.height)
-      ..close();
-    canvas.drawPath(crown, Paint()..color = const Color(0xFFE7BD46));
-    canvas.drawPath(
-      crown,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.4
-        ..color = const Color(0xFF9B721D),
-    );
-    final jewelPaint = Paint()..color = const Color(0xFFFFED92);
-    for (final x in [0.12, 0.5, 0.88]) {
-      canvas.drawCircle(
-        Offset(size.width * x, x == 0.5 ? 2.5 : size.height * 0.25),
-        2.4,
-        jewelPaint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _RankPill extends StatelessWidget {

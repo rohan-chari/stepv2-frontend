@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/tabs/ranked_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/widgets/home_course_track.dart'
+    show AnimatedCapybaraWithAccessories;
 
 enum _Mode { ranked, unranked, notFound }
 
@@ -50,6 +52,9 @@ class _FakeRankedApi extends BackendApiService {
             'points': 1500,
             'tier': 'DIAMOND',
             'division': null,
+            'equippedAccessories': [
+              {'slot': 'HEAD', 'assetKey': 'top-hat'},
+            ],
           },
         ],
         'tiers': _kTiers,
@@ -73,6 +78,9 @@ class _FakeRankedApi extends BackendApiService {
           'points': 1500,
           'tier': 'DIAMOND',
           'division': null,
+          'equippedAccessories': [
+            {'slot': 'HEAD', 'assetKey': 'top-hat'},
+          ],
         },
         {
           'rank': 2,
@@ -81,6 +89,9 @@ class _FakeRankedApi extends BackendApiService {
           'points': 700,
           'tier': 'GOLD',
           'division': 3,
+          'equippedAccessories': [
+            {'slot': 'BODY', 'assetKey': 'hoodie'},
+          ],
         },
       ],
       'tiers': _kTiers,
@@ -122,14 +133,11 @@ void main() {
     expect(find.text('RANKED'), findsOneWidget);
     // Hero badge is uppercased; ladder badges are not.
     expect(find.text('GOLD III'), findsOneWidget);
-    expect(find.text('#2'), findsOneWidget); // hero RANK stat
-    expect(find.text('RP'), findsOneWidget);
+    expect(find.text('2'), findsAtLeastNWidgets(1)); // hero GLOBAL RANK stat
+    expect(find.text('RANKED POINTS'), findsOneWidget);
+    expect(find.text('GLOBAL RANK'), findsOneWidget);
     expect(find.text('AceWalker'), findsOneWidget);
     expect(find.text('Trail Walker'), findsOneWidget);
-    // The ladder groups into tier section headers (uppercased; the hero badge
-    // is 'GOLD III', distinct from the 'GOLD' section header).
-    expect(find.text('DIAMOND'), findsOneWidget);
-    expect(find.text('GOLD'), findsOneWidget);
     // Reward for the current tier is surfaced in the hero.
     expect(find.text('Finish Gold → 600 coins'), findsOneWidget);
   });
@@ -146,13 +154,31 @@ void main() {
     expect(find.text('AceWalker'), findsOneWidget);
   });
 
-  testWidgets('degrades to "coming soon" when the backend has no /ranked (404)', (
-    tester,
-  ) async {
+  testWidgets('podium capybaras wear equipped accessories', (tester) async {
     final auth = await _createAuthService();
-    await tester.pumpWidget(_build(auth, _FakeRankedApi(_Mode.notFound)));
+    await tester.pumpWidget(_build(auth, _FakeRankedApi(_Mode.ranked)));
     await tester.pump();
 
-    expect(find.text('Ranked is coming soon'), findsOneWidget);
+    final capybaras = tester
+        .widgetList<AnimatedCapybaraWithAccessories>(
+          find.byType(AnimatedCapybaraWithAccessories),
+        )
+        .toList();
+    expect(capybaras, hasLength(2));
+    expect(
+      capybaras.map((capybara) => capybara.accessories.single['assetKey']),
+      containsAll(['top-hat', 'hoodie']),
+    );
   });
+
+  testWidgets(
+    'degrades to "coming soon" when the backend has no /ranked (404)',
+    (tester) async {
+      final auth = await _createAuthService();
+      await tester.pumpWidget(_build(auth, _FakeRankedApi(_Mode.notFound)));
+      await tester.pump();
+
+      expect(find.text('Ranked is coming soon'), findsOneWidget);
+    },
+  );
 }

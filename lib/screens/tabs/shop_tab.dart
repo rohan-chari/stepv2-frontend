@@ -171,38 +171,43 @@ class _ShopTabState extends State<ShopTab> {
   Widget build(BuildContext context) {
     final topInset = MediaQuery.of(context).padding.top;
     final bottomInset = MediaQuery.of(context).padding.bottom;
-    final tabBarHeight = 77.5 + bottomInset;
+    final showBackButton = Navigator.canPop(context);
+    final tabBarHeight = showBackButton ? bottomInset : 77.5 + bottomInset;
 
-    return Stack(
-      children: [
-        const Positioned.fill(
-          child: ColoredBox(
-            color: AppColors.roofLight,
-            child: CustomPaint(
-              painter: ArcadeCheckerPainter(drawBottomStripe: false),
+    return Scaffold(
+      body: Stack(
+        children: [
+          const Positioned.fill(
+            child: ColoredBox(
+              color: AppColors.roofLight,
+              child: CustomPaint(
+                painter: ArcadeCheckerPainter(drawBottomStripe: false),
+              ),
             ),
           ),
-        ),
-        Padding(
-          padding: EdgeInsets.only(top: topInset + 14, bottom: tabBarHeight),
-          child: RefreshIndicator(
-            onRefresh: _loadCatalog,
-            color: AppColors.accent,
-            backgroundColor: AppColors.parchment,
-            child: CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                SliverToBoxAdapter(child: _buildHeader()),
-                SliverToBoxAdapter(child: _buildBody()),
-              ],
+          Padding(
+            padding: EdgeInsets.only(top: topInset + 14, bottom: tabBarHeight),
+            child: RefreshIndicator(
+              onRefresh: _loadCatalog,
+              color: AppColors.accent,
+              backgroundColor: AppColors.parchment,
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: _buildHeader(showBackButton: showBackButton),
+                  ),
+                  SliverToBoxAdapter(child: _buildBody()),
+                ],
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader({required bool showBackButton}) {
     return DecoratedBox(
       decoration: const BoxDecoration(
         color: AppColors.roofLight,
@@ -218,6 +223,21 @@ class _ShopTabState extends State<ShopTab> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
+                  if (showBackButton) ...[
+                    IconButton(
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 40,
+                        height: 40,
+                      ),
+                      icon: const Icon(
+                        Icons.arrow_back,
+                        color: AppColors.parchment,
+                      ),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   Expanded(
                     child: Text(
                       'SHOP',
@@ -404,9 +424,7 @@ class _ShopItemRow extends StatelessWidget {
               color: AppColors.parchmentDark,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: equipped
-                    ? AppColors.accent
-                    : AppColors.parchmentBorder,
+                color: equipped ? AppColors.accent : AppColors.parchmentBorder,
                 width: equipped ? 2 : 1,
               ),
             ),

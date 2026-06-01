@@ -5,7 +5,8 @@ import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
 import '../../widgets/app_avatar.dart';
-import '../../widgets/capybara.dart';
+import '../../widgets/home_course_track.dart'
+    show AnimatedCapybaraWithAccessories;
 import '../../widgets/friend_request_sheet.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/loading_skeleton.dart';
@@ -617,6 +618,11 @@ class _RankedTabState extends State<RankedTab> {
       tier: rankedTierFromKey(e['tier'] as String?),
       division: (e['division'] as num?)?.toInt(),
       isMe: isMe,
+      equippedAccessories:
+          (e['equippedAccessories'] as List?)
+              ?.whereType<Map<String, dynamic>>()
+              .toList() ??
+          const [],
     );
   }
 
@@ -741,6 +747,7 @@ class _RankedRow {
   final RankedTier tier;
   final int? division;
   final bool isMe;
+  final List<Map<String, dynamic>> equippedAccessories;
 
   const _RankedRow({
     required this.rank,
@@ -751,6 +758,7 @@ class _RankedRow {
     required this.tier,
     required this.division,
     this.isMe = false,
+    this.equippedAccessories = const [],
   });
 }
 
@@ -1162,20 +1170,9 @@ class _PodiumPlace extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         if (entry != null) ...[
-          Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.topCenter,
-            children: [
-              WalkingCapybaraInPlace(size: place == 1 ? 54 : 44),
-              if (place == 1)
-                Positioned(
-                  top: -16,
-                  child: CustomPaint(
-                    size: const Size(28, 22),
-                    painter: _CrownPainter(),
-                  ),
-                ),
-            ],
+          AnimatedCapybaraWithAccessories(
+            accessories: entry.equippedAccessories,
+            size: place == 1 ? 54 : 44,
           ),
           const SizedBox(height: 4),
           Text(

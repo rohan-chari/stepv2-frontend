@@ -31,6 +31,7 @@ class _FakePublicRacesApi extends BackendApiService {
   Future<Map<String, dynamic>> joinPublicRace({
     required String identityToken,
     required String raceId,
+    bool onboarding = false,
   }) async {
     joined = true;
     return {

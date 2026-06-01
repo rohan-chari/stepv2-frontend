@@ -126,6 +126,8 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: ArcadePageBackground(
+        headerHeight: 56,
+        headerColor: AppColors.roofLight,
         child: SafeArea(
           child: Column(
             children: [
@@ -158,10 +160,6 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
                   ],
                 ),
               ),
-              // Clear the ArcadePageBackground green header band (~132px) so
-              // the first card sits on the parchment below it, not inside the
-              // header.
-              const SizedBox(height: 80),
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: _load,
@@ -300,9 +298,11 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
       if (remaining.isNegative) {
         timeLeftLabel = 'soon';
       } else if (remaining.inDays > 0) {
-        timeLeftLabel = '${remaining.inDays}d ${remaining.inHours.remainder(24)}h';
+        timeLeftLabel =
+            '${remaining.inDays}d ${remaining.inHours.remainder(24)}h';
       } else if (remaining.inHours > 0) {
-        timeLeftLabel = '${remaining.inHours}h ${remaining.inMinutes.remainder(60)}m';
+        timeLeftLabel =
+            '${remaining.inHours}h ${remaining.inMinutes.remainder(60)}m';
       } else {
         timeLeftLabel = '${remaining.inMinutes}m';
       }
@@ -374,5 +374,4 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
       ],
     );
   }
-
 }

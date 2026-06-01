@@ -313,40 +313,44 @@ class _FriendsTabState extends State<FriendsTab> {
     final tabBarHeight = canPop ? bottomInset : 77.5 + bottomInset;
     final state = _friendsState;
 
-    return Stack(
-      children: [
-        const Positioned.fill(
-          child: ColoredBox(
-            color: AppColors.roofLight,
-            child: CustomPaint(
-              painter: ArcadeCheckerPainter(drawBottomStripe: false),
-            ),
-          ),
-        ),
-        Padding(
-          padding: EdgeInsets.only(top: topInset + 14, bottom: tabBarHeight),
-          child: GestureDetector(
-            onTap: () => FocusScope.of(context).unfocus(),
-            behavior: HitTestBehavior.opaque,
-            child: RefreshIndicator(
-              onRefresh: _handleRefresh,
-              color: AppColors.accent,
-              backgroundColor: AppColors.parchment,
-              child: CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  SliverToBoxAdapter(child: _buildFriendsHeader()),
-                  SliverToBoxAdapter(child: _buildBody(state: state)),
-                ],
+    return Scaffold(
+      body: Stack(
+        children: [
+          const Positioned.fill(
+            child: ColoredBox(
+              color: AppColors.roofLight,
+              child: CustomPaint(
+                painter: ArcadeCheckerPainter(drawBottomStripe: false),
               ),
             ),
           ),
-        ),
-      ],
+          Padding(
+            padding: EdgeInsets.only(top: topInset + 14, bottom: tabBarHeight),
+            child: GestureDetector(
+              onTap: () => FocusScope.of(context).unfocus(),
+              behavior: HitTestBehavior.opaque,
+              child: RefreshIndicator(
+                onRefresh: _handleRefresh,
+                color: AppColors.accent,
+                backgroundColor: AppColors.parchment,
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: _buildFriendsHeader(showBackButton: canPop),
+                    ),
+                    SliverToBoxAdapter(child: _buildBody(state: state)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildFriendsHeader() {
+  Widget _buildFriendsHeader({required bool showBackButton}) {
     final searchBorderRadius = _showDropdown
         ? const BorderRadius.vertical(top: Radius.circular(8))
         : BorderRadius.circular(8);
@@ -363,12 +367,33 @@ class _FriendsTabState extends State<FriendsTab> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'FRIENDS',
-                style: PixelText.title(
-                  size: 30,
-                  color: AppColors.parchment,
-                ).copyWith(shadows: _textShadows),
+              Row(
+                children: [
+                  if (showBackButton) ...[
+                    IconButton(
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 40,
+                        height: 40,
+                      ),
+                      icon: const Icon(
+                        Icons.arrow_back,
+                        color: AppColors.parchment,
+                      ),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Expanded(
+                    child: Text(
+                      'FRIENDS',
+                      style: PixelText.title(
+                        size: 30,
+                        color: AppColors.parchment,
+                      ).copyWith(shadows: _textShadows),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 5),
               Text(
@@ -404,15 +429,11 @@ class _FriendsTabState extends State<FriendsTab> {
                       color: AppColors.textMid,
                     ),
                     border: OutlineInputBorder(
-                      borderSide: BorderSide(
-                        color: AppColors.parchmentBorder,
-                      ),
+                      borderSide: BorderSide(color: AppColors.parchmentBorder),
                       borderRadius: searchBorderRadius,
                     ),
                     enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(
-                        color: AppColors.parchmentBorder,
-                      ),
+                      borderSide: BorderSide(color: AppColors.parchmentBorder),
                       borderRadius: searchBorderRadius,
                     ),
                     focusedBorder: OutlineInputBorder(

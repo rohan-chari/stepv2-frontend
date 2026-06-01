@@ -629,6 +629,61 @@ class CapybaraSpriteWithAccessories extends StatelessWidget {
   }
 }
 
+/// [CapybaraSpriteWithAccessories] driven by the walk-cycle animation — a
+/// capybara that walks in place wearing its equipped accessories. Used for
+/// leaderboard / ranked podium spots.
+class AnimatedCapybaraWithAccessories extends StatefulWidget {
+  const AnimatedCapybaraWithAccessories({
+    super.key,
+    required this.accessories,
+    required this.size,
+    this.stepDuration = const Duration(milliseconds: 760),
+  });
+
+  final List<Map<String, dynamic>> accessories;
+  final double size;
+  final Duration stepDuration;
+
+  @override
+  State<AnimatedCapybaraWithAccessories> createState() =>
+      _AnimatedCapybaraWithAccessoriesState();
+}
+
+class _AnimatedCapybaraWithAccessoriesState
+    extends State<AnimatedCapybaraWithAccessories>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller =
+        AnimationController(vsync: this, duration: widget.stepDuration)..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const frames = _HomeCourseTrackState._capybaraFrameCount;
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final frameIndex = (_controller.value * frames).floor() % frames;
+        return CapybaraSpriteWithAccessories(
+          accessories: widget.accessories,
+          capybaraSize: widget.size,
+          frameIndex: frameIndex,
+        );
+      },
+    );
+  }
+}
+
 class _AccessoryOverlay extends StatelessWidget {
   const _AccessoryOverlay({
     required this.accessory,

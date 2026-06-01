@@ -57,6 +57,7 @@ class TutorialMockHost extends StatelessWidget {
                     icon: Icons.directions_run_rounded,
                     label: 'Races',
                   ),
+                  WoodenTabItem(icon: Icons.shield_rounded, label: 'Ranked'),
                   WoodenTabItem(
                     icon: Icons.leaderboard_rounded,
                     label: 'Boards',
