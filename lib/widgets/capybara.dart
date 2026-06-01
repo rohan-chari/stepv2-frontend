@@ -88,3 +88,72 @@ class _WalkingCapybaraState extends State<WalkingCapybara>
     );
   }
 }
+
+/// A capybara that walks *in place* — cycles the 6 walk frames without moving
+/// across the screen. Use as an animated avatar (e.g. leaderboard podium spots).
+class WalkingCapybaraInPlace extends StatefulWidget {
+  const WalkingCapybaraInPlace({
+    super.key,
+    this.size = 48,
+    this.stepDuration = const Duration(milliseconds: 760),
+  });
+
+  final double size;
+  final Duration stepDuration;
+
+  @override
+  State<WalkingCapybaraInPlace> createState() => _WalkingCapybaraInPlaceState();
+}
+
+class _WalkingCapybaraInPlaceState extends State<WalkingCapybaraInPlace>
+    with SingleTickerProviderStateMixin {
+  static const int _frameCount = 6;
+
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: widget.stepDuration)
+      ..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = widget.size;
+    return SizedBox(
+      width: size,
+      height: size,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          final frameIndex =
+              (_controller.value * _frameCount).floor() % _frameCount;
+          return ClipRect(
+            child: OverflowBox(
+              maxWidth: double.infinity,
+              alignment: Alignment.centerLeft,
+              child: Transform.translate(
+                offset: Offset(-frameIndex * size, 0),
+                child: Image.asset(
+                  'assets/images/capybara_walk_right.png',
+                  width: size * _frameCount,
+                  height: size,
+                  fit: BoxFit.contain,
+                  alignment: Alignment.centerLeft,
+                  filterQuality: FilterQuality.none,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}

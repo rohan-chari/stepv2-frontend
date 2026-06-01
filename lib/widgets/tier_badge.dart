@@ -79,7 +79,7 @@ class TierBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.shield_rounded, size: large ? 20 : 12, color: tier.color),
+          TierShield(tier: tier, size: large ? 22 : 14),
           SizedBox(width: large ? 8 : 4),
           Text(
             large ? text.toUpperCase() : text,
@@ -90,6 +90,46 @@ class TierBadge extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Pixel-art shield asset for a tier (bronze/silver/gold/diamond). Returns null
+/// for [RankedTier.unranked], which has no shield art.
+String? tierShieldAsset(RankedTier tier) => switch (tier) {
+      RankedTier.bronze => 'assets/images/shield_bronze.png',
+      RankedTier.silver => 'assets/images/shield_silver.png',
+      RankedTier.gold => 'assets/images/shield_gold.png',
+      RankedTier.diamond => 'assets/images/shield_diamond.png',
+      RankedTier.unranked => null,
+    };
+
+/// Renders the tier's pixel-art shield at [size]. Falls back to an outline
+/// shield icon for Unranked (no art). Nearest-neighbour so the pixels stay crisp.
+class TierShield extends StatelessWidget {
+  const TierShield({super.key, required this.tier, this.size = 24});
+
+  final RankedTier tier;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final asset = tierShieldAsset(tier);
+    if (asset == null) {
+      return Icon(Icons.shield_outlined, size: size, color: tier.color);
+    }
+    // shields.png is smooth, high-detail art (not blocky pixel art), so it must
+    // be downscaled with averaging, not nearest-neighbour. Decode it at the
+    // physical display size for a crisp result and low memory.
+    final cache = (size * MediaQuery.of(context).devicePixelRatio).round();
+    return Image.asset(
+      asset,
+      width: size,
+      height: size,
+      cacheWidth: cache,
+      cacheHeight: cache,
+      filterQuality: FilterQuality.medium,
+      fit: BoxFit.contain,
     );
   }
 }

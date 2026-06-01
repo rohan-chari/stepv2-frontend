@@ -6,6 +6,7 @@ import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
 import '../../widgets/app_avatar.dart';
+import '../../widgets/capybara.dart';
 import '../../widgets/filter_dropdown.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/friend_request_sheet.dart';
@@ -534,33 +535,37 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
         _rowWithRank(podiumRows, 3) ??
         (podiumRows.length > 2 ? podiumRows[2] : null);
 
-    // Center #1, with #2 left and #3 right (smaller). If a side slot is missing,
-    // render an empty Expanded so #1 stays centered.
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Expanded(
-            child: second != null
-                ? _buildPodiumTile(second, place: 2)
-                : const SizedBox(height: 132),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            flex: 0,
-            child: SizedBox(
-              width: 132,
-              child: _buildPodiumTile(first, place: 1, featured: true),
-            ),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: third != null
-                ? _buildPodiumTile(third, place: 3)
-                : const SizedBox(height: 132),
+    // Gold / silver / bronze pedestals on one shared "trophy slab": #1 towers in
+    // the centre under a crown, every rank is colour-coded and numbered, so the
+    // top 3 read as one unmistakable ranking — clearly apart from the #4+ list.
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.parchmentDark,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.parchmentBorder, width: 1),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 10,
+            offset: Offset(0, 4),
           ),
         ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 12, 8, 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(flex: 10, child: _buildPodiumTile(second, place: 2)),
+            const SizedBox(width: 6),
+            Expanded(
+              flex: 12,
+              child: _buildPodiumTile(first, place: 1, featured: true),
+            ),
+            const SizedBox(width: 6),
+            Expanded(flex: 10, child: _buildPodiumTile(third, place: 3)),
+          ],
+        ),
       ),
     );
   }
@@ -573,64 +578,102 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   }
 
   Widget _buildPodiumTile(
-    _LeaderboardRow row, {
+    _LeaderboardRow? row, {
     required int place,
     bool featured = false,
   }) {
-    final medalColor = switch (place) {
-      1 => AppColors.medalGold,
-      2 => AppColors.medalSilver,
-      _ => AppColors.medalBronze,
-    };
-    final avatarSize = featured ? 70.0 : 46.0;
-    final nameSize = featured ? 15.0 : 12.5;
-    final valueSize = featured ? 17.0 : 13.0;
+    final double pedestalHeight;
+    if (featured) {
+      pedestalHeight = 80;
+    } else if (place == 2) {
+      pedestalHeight = 52;
+    } else {
+      pedestalHeight = 40;
+    }
+    final clusterHeight = featured ? 80.0 : 50.0;
 
-    final content = Padding(
-      padding: EdgeInsets.symmetric(horizontal: 4, vertical: featured ? 0 : 8),
-      child: Column(
+    // Empty slot (fewer than 3 ranked): a calm, clearly-empty pedestal — never a
+    // mystery winner — keeping #1 centred.
+    if (row == null) {
+      return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _RankMedal(label: '#$place', color: medalColor, featured: featured),
-          SizedBox(height: featured ? 8 : 6),
-          Container(
+          SizedBox(height: clusterHeight),
+          const SizedBox(height: 6),
+          _PedestalBlock(place: place, height: pedestalHeight, empty: true),
+        ],
+      );
+    }
+
+    final avatarSize = featured ? 60.0 : 44.0;
+    final nameSize = featured ? 14.5 : 12.5;
+    final valueSize = featured ? 16.0 : 12.5;
+
+    final headUnit = SizedBox(
+      width: avatarSize,
+      height: avatarSize,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          DecoratedBox(
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               boxShadow: featured
                   ? [
                       BoxShadow(
-                        color: AppColors.medalGold.withValues(alpha: 0.45),
-                        blurRadius: 0,
+                        color: AppColors.medalGold.withValues(alpha: 0.55),
+                        blurRadius: 12,
                         spreadRadius: 1,
                       ),
                     ]
                   : null,
             ),
-            child: AppAvatar(
-              name: row.displayName,
-              imageUrl: row.profilePhotoUrl,
-              size: avatarSize,
-              isUser: row.isMe,
-              borderColor: row.isMe
-                  ? AppColors.accent
-                  : (featured ? AppColors.medalGold : Colors.white),
-            ),
+            child: WalkingCapybaraInPlace(size: avatarSize),
           ),
-          SizedBox(height: featured ? 8 : 6),
-          Text(
-            row.displayName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: PixelText.body(
-              size: nameSize,
-              color: row.isMe ? AppColors.accent : AppColors.textDark,
+          if (featured)
+            Positioned(
+              top: -16,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: CustomPaint(
+                  size: const Size(30, 23),
+                  painter: _CrownPainter(),
+                ),
+              ),
             ),
+          Positioned(
+            right: -4,
+            bottom: -4,
+            child: _MedalDisc(place: place, isMe: row.isMe),
           ),
-          const SizedBox(height: 3),
-          _buildPodiumValue(row, valueSize: valueSize),
         ],
       ),
+    );
+
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          height: clusterHeight,
+          child: Align(alignment: Alignment.bottomCenter, child: headUnit),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          row.displayName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: PixelText.body(
+            size: nameSize,
+            color: row.isMe ? AppColors.accent : AppColors.textDark,
+          ),
+        ),
+        const SizedBox(height: 3),
+        _buildPodiumValue(row, valueSize: valueSize),
+        const SizedBox(height: 6),
+        _PedestalBlock(place: place, height: pedestalHeight),
+      ],
     );
 
     return _withFriendTap(row, content);
@@ -816,38 +859,157 @@ class _LeaderboardRow {
   });
 }
 
-class _RankMedal extends StatelessWidget {
-  const _RankMedal({
-    required this.label,
-    required this.color,
-    this.featured = false,
+/// Per-rank medal palette for the podium: real gold/silver/bronze tokens with a
+/// lighter top tint and a darker border so the light fills still read as solid
+/// blocks, plus the worded ordinal shown on the pedestal.
+class _MedalStyle {
+  const _MedalStyle(this.base, this.top, this.border, this.label);
+
+  final Color base;
+  final Color top;
+  final Color border;
+  final String label;
+}
+
+const Map<int, _MedalStyle> _medalStyles = {
+  1: _MedalStyle(
+    AppColors.medalGold,
+    Color(0xFFFFE875),
+    Color(0xFF9F7620),
+    '1ST',
+  ),
+  2: _MedalStyle(
+    AppColors.medalSilver,
+    Color(0xFFE4E4E4),
+    Color(0xFF8A8A8A),
+    '2ND',
+  ),
+  3: _MedalStyle(
+    AppColors.medalBronze,
+    Color(0xFFE0A05A),
+    Color(0xFF8A5320),
+    '3RD',
+  ),
+};
+
+/// The medal-coloured pedestal under each podium avatar: a big dark numeral +
+/// worded ordinal so rank is explicit even ignoring colour and position.
+class _PedestalBlock extends StatelessWidget {
+  const _PedestalBlock({
+    required this.place,
+    required this.height,
+    this.empty = false,
   });
 
-  final String label;
-  final Color color;
-  final bool featured;
+  final int place;
+  final double height;
+  final bool empty;
 
   @override
   Widget build(BuildContext context) {
+    final medal = _medalStyles[place]!;
+    final isFirst = place == 1;
     return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: featured ? 12 : 9,
-        vertical: featured ? 6 : 5,
-      ),
+      height: height,
+      width: double.infinity,
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.24),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color, width: 1.5),
+        gradient: empty
+            ? null
+            : LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [medal.top, medal.base],
+              ),
+        color: empty ? AppColors.parchment : null,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(5)),
+        border: Border.all(
+          color: empty ? AppColors.parchmentBorder : medal.border,
+          width: 1.5,
+        ),
+      ),
+      child: empty
+          ? null
+          : Center(
+              child: Text(
+                medal.label,
+                style: PixelText.title(
+                  size: isFirst ? 24 : 20,
+                  color: AppColors.textDark,
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+/// Numbered medal disc stamped on the bottom-right of each podium avatar, so the
+/// rank stays legible even if a user ignores colour, height and position.
+class _MedalDisc extends StatelessWidget {
+  const _MedalDisc({required this.place, required this.isMe});
+
+  final int place;
+  final bool isMe;
+
+  @override
+  Widget build(BuildContext context) {
+    final medal = _medalStyles[place]!;
+    return Container(
+      width: 20,
+      height: 20,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: medal.base,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: isMe ? AppColors.accent : AppColors.parchment,
+          width: isMe ? 2 : 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(color: medal.border.withValues(alpha: 0.6), blurRadius: 2),
+        ],
       ),
       child: Text(
-        label,
-        style: PixelText.title(
-          size: featured ? 13 : 11,
-          color: AppColors.textDark,
-        ),
+        '$place',
+        style: PixelText.title(size: 10, color: AppColors.textDark),
       ),
     );
   }
+}
+
+/// Pixel crown for the #1 podium avatar. Kept private to this screen (mirrors
+/// the crown on the Ranked tab) so the Leaderboard stays self-contained.
+class _CrownPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final crown = Path()
+      ..moveTo(0, size.height)
+      ..lineTo(size.width * 0.12, size.height * 0.26)
+      ..lineTo(size.width * 0.33, size.height * 0.58)
+      ..lineTo(size.width * 0.5, 0)
+      ..lineTo(size.width * 0.67, size.height * 0.58)
+      ..lineTo(size.width * 0.88, size.height * 0.26)
+      ..lineTo(size.width, size.height)
+      ..close();
+    canvas.drawPath(crown, Paint()..color = const Color(0xFFE7BD46));
+    canvas.drawPath(
+      crown,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4
+        ..color = const Color(0xFF9B721D),
+    );
+    final jewelPaint = Paint()..color = const Color(0xFFFFED92);
+    for (final x in [0.12, 0.5, 0.88]) {
+      canvas.drawCircle(
+        Offset(size.width * x, x == 0.5 ? 2.5 : size.height * 0.25),
+        2.4,
+        jewelPaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _RankPill extends StatelessWidget {

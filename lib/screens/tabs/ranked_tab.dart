@@ -5,6 +5,7 @@ import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
 import '../../widgets/app_avatar.dart';
+import '../../widgets/capybara.dart';
 import '../../widgets/friend_request_sheet.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/loading_skeleton.dart';
@@ -259,33 +260,46 @@ class _RankedTabState extends State<RankedTab> {
     return 'DAY $elapsed/$totalDays';
   }
 
+  // RP checkpoints (floor → the band you enter at that floor), ascending across
+  // divisions AND tiers. Mirrors the backend ladder in steptracker-api's
+  // src/constants/rankedTiers.js — keep the two in sync. Drives the
+  // division-aware "X RP to <next>" hint and the progress bars.
+  static const List<(int, String)> _rankCheckpoints = [
+    (0, 'Bronze III'),
+    (67, 'Bronze II'),
+    (133, 'Bronze I'),
+    (200, 'Silver III'),
+    (317, 'Silver II'),
+    (433, 'Silver I'),
+    (550, 'Gold III'),
+    (833, 'Gold II'),
+    (1116, 'Gold I'),
+    (1400, 'Diamond'),
+  ];
+
+  // RP to the NEXT division/tier checkpoint — not skipping straight to the next
+  // tier — so a Bronze II player sees "… to Bronze I", not "… to Silver I".
   String _rankStatus(RankedTier tier, int points) {
-    final next = switch (tier) {
-      RankedTier.bronze => 200,
-      RankedTier.silver => 550,
-      RankedTier.gold => 1400,
-      RankedTier.diamond || RankedTier.unranked => null,
-    };
-    if (next == null) return 'Top tier';
-    return '${next - points > 0 ? next - points : 0} RP to ${_nextTierName(tier)}';
+    for (final (floor, name) in _rankCheckpoints) {
+      if (points < floor) return '${floor - points} RP to $name';
+    }
+    return 'Top tier';
   }
 
-  String _nextTierName(RankedTier tier) => switch (tier) {
-    RankedTier.bronze => 'Silver I',
-    RankedTier.silver => 'Gold I',
-    RankedTier.gold => 'Diamond I',
-    RankedTier.diamond || RankedTier.unranked => 'next tier',
-  };
-
+  // Progress within the user's current division band (floor → next checkpoint).
   double _tierProgress(RankedTier tier, int points) {
-    final (floor, next) = switch (tier) {
-      RankedTier.bronze => (0, 200),
-      RankedTier.silver => (200, 550),
-      RankedTier.gold => (550, 1400),
-      RankedTier.diamond => (1400, 1800),
-      RankedTier.unranked => (0, 200),
-    };
-    return ((points - floor) / (next - floor)).clamp(0.08, 1).toDouble();
+    var lo = 0;
+    int? hi;
+    for (final (floor, _) in _rankCheckpoints) {
+      if (points >= floor) {
+        lo = floor;
+      } else {
+        hi = floor;
+        break;
+      }
+    }
+    if (hi == null) return 1;
+    return ((points - lo) / (hi - lo)).clamp(0.05, 1).toDouble();
   }
 
   Widget _buildBody() {
@@ -333,30 +347,99 @@ class _RankedTabState extends State<RankedTab> {
     final ranked = me != null && me['ranked'] == true;
 
     if (!ranked) {
-      return GameContainer(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-        frameColor: AppColors.accent,
-        surfaceColor: AppColors.parchment,
-        child: Column(
-          children: [
-            Icon(
-              Icons.shield_outlined,
-              size: 34,
-              color: AppColors.textMid.withValues(alpha: 0.7),
+      return Column(
+        children: [
+          SizedBox(
+            height: 188,
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.topCenter,
+              children: [
+                Positioned.fill(
+                  top: 10,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: RadialGradient(
+                        center: Alignment.topRight,
+                        radius: 0.95,
+                        colors: [
+                          AppColors.accent.withValues(alpha: 0.16),
+                          AppColors.parchment.withValues(alpha: 0),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 0,
+                  child: CustomPaint(
+                    size: const Size(128, 116),
+                    painter: _RankShieldPainter(
+                      color: AppColors.parchmentBorder,
+                    ),
+                  ),
+                ),
+                const Positioned(top: 18, child: _CrownedCapybara(size: 74)),
+                const Positioned(top: 104, child: _RankRibbon(label: 'JOIN')),
+                Positioned(
+                  top: 144,
+                  child: Column(
+                    children: [
+                      Text(
+                        'UNRANKED',
+                        style: PixelText.title(
+                          size: 27,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Not ranked yet',
+                        style: PixelText.body(
+                          size: 11,
+                          color: AppColors.textMid,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Not ranked yet',
-              style: PixelText.title(size: 18, color: AppColors.textDark),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Walk 5,000+ steps in a day to join this season’s ladder.',
-              textAlign: TextAlign.center,
-              style: PixelText.body(size: 13, color: AppColors.textMid),
-            ),
-          ],
-        ),
+          ),
+          Row(
+            children: const [
+              Expanded(
+                child: _HeroMetric(
+                  value: '5K',
+                  label: 'STEP DAY',
+                  accent: AppColors.accent,
+                  strong: true,
+                ),
+              ),
+              SizedBox(width: 8),
+              Expanded(
+                child: _HeroMetric(
+                  value: '0',
+                  label: 'RP',
+                  accent: AppColors.textDark,
+                ),
+              ),
+              SizedBox(width: 8),
+              Expanded(
+                child: _HeroMetric(
+                  value: '--',
+                  label: 'RANK',
+                  accent: AppColors.textDark,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const _TierProgressLine(
+            progress: 0.08,
+            label: 'Walk 5,000+ steps to enter',
+          ),
+        ],
       );
     }
 
@@ -372,7 +455,7 @@ class _RankedTabState extends State<RankedTab> {
     return Column(
       children: [
         SizedBox(
-          height: 190,
+          height: 176,
           child: Stack(
             clipBehavior: Clip.none,
             alignment: Alignment.topCenter,
@@ -393,60 +476,34 @@ class _RankedTabState extends State<RankedTab> {
                 ),
               ),
               Positioned(
-                top: 0,
-                child: CustomPaint(
-                  size: const Size(128, 116),
-                  painter: _RankShieldPainter(color: tier.color),
-                ),
-              ),
-              const Positioned(top: 18, child: _CrownedCapybara(size: 74)),
-              Positioned(
-                top: 104,
-                child: _RankRibbon(label: rank != null ? '#$rank' : '--'),
+                top: 6,
+                child: TierShield(tier: tier, size: 132),
               ),
               Positioned(
-                top: 144,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      tierText,
-                      style: PixelText.title(size: 28, color: tier.color),
-                    ),
-                    if (division != null) ...[
-                      const SizedBox(width: 8),
-                      _DivisionPill(division: division, color: tier.color),
-                    ],
-                  ],
+                top: 148,
+                child: Text(
+                  tierText,
+                  style: PixelText.title(size: 28, color: tier.color),
                 ),
               ),
             ],
           ),
         ),
+        const SizedBox(height: 14),
         Row(
           children: [
             Expanded(
-              child: _HeroMetric(
+              child: _HeroStat(
                 value: '$points',
-                label: 'RP',
-                accent: tier.color,
+                label: 'RANKED POINTS',
+                color: tier.color,
               ),
             ),
-            const SizedBox(width: 8),
             Expanded(
-              child: _HeroMetric(
+              child: _HeroStat(
                 value: rank != null ? '$rank' : '--',
                 label: 'GLOBAL RANK',
-                accent: AppColors.textDark,
-                strong: true,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _HeroMetric(
-                value: '${_ladder.length}',
-                label: 'OF RANKED',
-                accent: AppColors.textDark,
+                color: AppColors.textDark,
               ),
             ),
           ],
@@ -716,7 +773,7 @@ class _TierSectionHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(8, 12, 8, 6),
       child: Row(
         children: [
-          Icon(Icons.shield_rounded, size: 15, color: tier.color),
+          TierShield(tier: tier, size: 18),
           const SizedBox(width: 6),
           Text(
             tier.label.toUpperCase(),
@@ -868,6 +925,41 @@ class _HeroMetric extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// A borderless hero stat: a big number sitting on the background with a small
+/// caption under it (no card/frame).
+class _HeroStat extends StatelessWidget {
+  const _HeroStat({
+    required this.value,
+    required this.label,
+    required this.color,
+  });
+
+  final String value;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: PixelText.title(size: 34, color: color),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: PixelText.body(size: 9.5, color: AppColors.textMid),
+        ),
+      ],
     );
   }
 }
@@ -1037,7 +1129,7 @@ class _Podium extends StatelessWidget {
     final third = _rank(3);
 
     return SizedBox(
-      height: 168,
+      height: 184,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
@@ -1074,16 +1166,10 @@ class _PodiumPlace extends StatelessWidget {
             clipBehavior: Clip.none,
             alignment: Alignment.topCenter,
             children: [
-              AppAvatar(
-                name: entry.displayName,
-                imageUrl: entry.profilePhotoUrl,
-                size: place == 1 ? 46 : 38,
-                isUser: entry.isMe,
-                borderColor: entry.tier.color,
-              ),
+              WalkingCapybaraInPlace(size: place == 1 ? 54 : 44),
               if (place == 1)
                 Positioned(
-                  top: -18,
+                  top: -16,
                   child: CustomPaint(
                     size: const Size(28, 22),
                     painter: _CrownPainter(),
