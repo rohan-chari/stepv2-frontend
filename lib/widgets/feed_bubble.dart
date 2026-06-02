@@ -16,6 +16,7 @@ const _powerupDisplayNames = {
   'TRAIL_MIX': 'Trail Mix',
   'DETOUR_SIGN': 'Detour Sign',
   'BANANA_PEEL': 'Banana Peel',
+  'IMPOSTER': 'Imposter',
 };
 
 const _offensiveTypes = {
@@ -24,9 +25,12 @@ const _offensiveTypes = {
   'WRONG_TURN',
   'BANANA_PEEL',
   'DETOUR_SIGN',
+  // IMPOSTER targets a rival (swaps their leaderboard display); classify it with
+  // the offensive/targeted feed accent.
+  'IMPOSTER',
 };
 
-const _shieldTypes = {'COMPRESSION_SOCKS'};
+const _shieldTypes = {'COMPRESSION_SOCKS', 'MIRROR'};
 
 const _boostTypes = {
   'PROTEIN_SHAKE',
@@ -36,6 +40,9 @@ const _boostTypes = {
   'FANNY_PACK',
   'SHORTCUT',
   'TRAIL_MIX',
+  // CLEANSE is a positive/utility self-powerup (clears opponent debuffs); treat
+  // it as a boost so the feed renders it with the positive accent color.
+  'CLEANSE',
 };
 
 /// A feed entry with avatar, color-coded accent, and rich text.
@@ -58,7 +65,9 @@ class FeedBubble extends StatelessWidget {
   });
 
   Color get _accentColor {
-    if (eventType == 'POWERUP_BLOCKED') return AppColors.feedShield;
+    if (eventType == 'POWERUP_BLOCKED' || eventType == 'POWERUP_REFLECTED') {
+      return AppColors.feedShield;
+    }
     if (eventType == 'MYSTERY_BOX_EARNED' ||
         eventType == 'MYSTERY_BOX_OPENED') {
       return AppColors.feedGold;

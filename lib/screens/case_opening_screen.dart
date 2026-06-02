@@ -28,6 +28,9 @@ const _powerupNames = {
   'TRAIL_MINE': 'Trail Mine',
   'PINECONE_TOSS': 'Pinecone Toss',
   'SNEAKY_SWAP': 'Sneaky Swap',
+  'MIRROR': 'Mirror',
+  'CLEANSE': 'Cleanse',
+  'IMPOSTER': 'Imposter',
 };
 
 const _powerupEntries = [
@@ -125,6 +128,16 @@ const _powerupEntries = [
     type: 'SNEAKY_SWAP',
     name: 'Sneaky Swap',
     description: 'View and swap a rival powerup',
+  ),
+  (
+    type: 'MIRROR',
+    name: 'Mirror',
+    description: 'Reflect the next attack back at the attacker',
+  ),
+  (
+    type: 'CLEANSE',
+    name: 'Cleanse',
+    description: 'Remove all debuffs an opponent placed on you',
   ),
 ];
 

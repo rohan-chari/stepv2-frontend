@@ -9,6 +9,9 @@ import '../../widgets/error_toast.dart';
 import '../../widgets/info_toast.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
+import '../../widgets/powerup_icon.dart';
+
+enum _ShopSection { store, inventory }
 
 class ShopTab extends StatefulWidget {
   const ShopTab({
@@ -34,8 +37,16 @@ class _ShopTabState extends State<ShopTab> {
   late final BackendApiService _backendApiService;
   Map<String, dynamic>? _catalog;
   Loadable<Map<String, dynamic>> _catalogState = const Loadable.initial();
+
+  // Powerup store + inventory. Read defensively: if the new endpoints are
+  // missing (older backend) these stay empty and the powerup sections hide.
+  List<Map<String, dynamic>> _powerupStoreItems = const [];
+  Map<String, int> _powerupInventory = const {};
+  bool _powerupsAvailable = false;
+
   bool _loading = true;
   bool _saving = false;
+  _ShopSection _section = _ShopSection.store;
 
   @override
   void initState() {
@@ -74,6 +85,10 @@ class _ShopTabState extends State<ShopTab> {
       if (coins != null) {
         await widget.authService.updateCoins(coins);
       }
+
+      // Powerups are loaded best-effort and never block the cosmetics catalog.
+      await _loadPowerups(token);
+
       if (mounted) {
         setState(() {
           _catalog = catalog;
@@ -99,6 +114,39 @@ class _ShopTabState extends State<ShopTab> {
         );
       });
       showErrorToast(context, 'Could not load the shop. Please try again.');
+    }
+  }
+
+  /// Best-effort load of the powerup store + inventory. Any failure (e.g. an
+  /// older backend without these endpoints) leaves the powerup sections empty
+  /// and hidden — it never breaks the cosmetics shop.
+  Future<void> _loadPowerups(String token) async {
+    try {
+      final results = await Future.wait([
+        _backendApiService.fetchPowerupShopCatalog(identityToken: token),
+        _backendApiService.fetchPowerupInventory(identityToken: token),
+      ]);
+      final storeItems =
+          (results[0]['items'] as List?)?.cast<Map<String, dynamic>>() ??
+          const [];
+      final inventoryItems =
+          (results[1]['items'] as List?)?.cast<Map<String, dynamic>>() ??
+          const [];
+
+      final inventory = <String, int>{};
+      for (final row in inventoryItems) {
+        final type = row['powerupType'] as String?;
+        final qty = (row['quantity'] as num?)?.toInt() ?? 0;
+        if (type != null && qty > 0) inventory[type] = qty;
+      }
+
+      _powerupStoreItems = storeItems;
+      _powerupInventory = inventory;
+      _powerupsAvailable = true;
+    } catch (_) {
+      _powerupStoreItems = const [];
+      _powerupInventory = const {};
+      _powerupsAvailable = false;
     }
   }
 
@@ -132,6 +180,43 @@ class _ShopTabState extends State<ShopTab> {
         showErrorToast(
           context,
           'Could not buy this accessory. Please try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _purchasePowerup(Map<String, dynamic> item) async {
+    if (_saving) return;
+
+    final token = widget.authService.authToken;
+    final sku = item['sku'] as String?;
+    if (token == null || token.isEmpty || sku == null) return;
+
+    setState(() => _saving = true);
+    try {
+      final result = await _backendApiService.purchasePowerupItem(
+        identityToken: token,
+        sku: sku,
+        idempotencyKey:
+            '${widget.authService.userId ?? 'user'}-pw-${DateTime.now().microsecondsSinceEpoch}',
+      );
+      final coins = result['coins'] as int?;
+      if (coins != null) {
+        await widget.authService.updateCoins(coins);
+      }
+      await _loadCatalog();
+      if (mounted) {
+        showInfoToast(context, '${item['name'] ?? 'Powerup'} purchased.');
+      }
+    } on ApiException catch (error) {
+      if (mounted) showErrorToast(context, error.message);
+    } catch (_) {
+      if (mounted) {
+        showErrorToast(
+          context,
+          'Could not buy this powerup. Please try again.',
         );
       }
     } finally {
@@ -252,15 +337,58 @@ class _ShopTabState extends State<ShopTab> {
               ),
               const SizedBox(height: 5),
               Text(
-                'Spend coins on capybara gear. Earn more by walking and racing.',
+                'Spend coins on gear and powerups. Earn more by walking and racing.',
                 style: PixelText.body(
                   size: 15,
                   color: AppColors.parchment.withValues(alpha: 0.92),
                 ),
               ),
+              const SizedBox(height: 12),
+              _buildSegmentControl(),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildSegmentControl() {
+    Widget segment(String label, _ShopSection section) {
+      final selected = _section == section;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => setState(() => _section = section),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 9),
+            decoration: BoxDecoration(
+              color: selected ? AppColors.parchment : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              label,
+              style: PixelText.title(
+                size: 13,
+                color: selected ? AppColors.textDark : AppColors.parchment,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          segment('STORE', _ShopSection.store),
+          const SizedBox(width: 3),
+          segment('INVENTORY', _ShopSection.inventory),
+        ],
       ),
     );
   }
@@ -312,27 +440,97 @@ class _ShopTabState extends State<ShopTab> {
                   backgroundColor: Colors.transparent,
                 ),
               ),
-            _buildSectionHeader('ACCESSORIES'),
-            if (items.isEmpty)
-              _buildEmptyState()
+            if (_section == _ShopSection.store)
+              ..._buildStore(items)
             else
-              for (int i = 0; i < items.length; i++)
-                _ShopItemRow(
-                  item: items[i],
-                  index: i,
-                  saving: _saving,
-                  onBuy: () => _purchase(items[i]),
-                  onEquip: () => _equip(
-                    items[i]['slot'] as String? ?? '',
-                    items[i]['id'] as String?,
-                  ),
-                  onClear: () =>
-                      _equip(items[i]['slot'] as String? ?? '', null),
-                ),
+              ..._buildInventory(items),
           ],
         ),
       ),
     );
+  }
+
+  // ── STORE: unowned cosmetics + re-buyable powerups ─────────────────────────
+  List<Widget> _buildStore(List<Map<String, dynamic>> items) {
+    final unownedCosmetics =
+        items.where((i) => i['owned'] != true).toList();
+
+    return [
+      if (_powerupsAvailable && _powerupStoreItems.isNotEmpty) ...[
+        _buildSectionHeader('POWERUPS'),
+        for (int i = 0; i < _powerupStoreItems.length; i++)
+          _PowerupStoreRow(
+            item: _powerupStoreItems[i],
+            index: i,
+            ownedQuantity: _ownedQuantityFor(_powerupStoreItems[i]),
+            saving: _saving,
+            onBuy: () => _purchasePowerup(_powerupStoreItems[i]),
+          ),
+      ],
+      _buildSectionHeader('ACCESSORIES'),
+      if (unownedCosmetics.isEmpty)
+        _buildEmptyState(
+          icon: Icons.checkroom_rounded,
+          message: 'You own all the gear! Check your Inventory.',
+        )
+      else
+        for (int i = 0; i < unownedCosmetics.length; i++)
+          _ShopItemRow(
+            item: unownedCosmetics[i],
+            index: i,
+            saving: _saving,
+            onBuy: () => _purchase(unownedCosmetics[i]),
+            onEquip: () {},
+            onClear: () {},
+          ),
+    ];
+  }
+
+  // ── INVENTORY: owned cosmetics + owned powerups ────────────────────────────
+  List<Widget> _buildInventory(List<Map<String, dynamic>> items) {
+    final ownedCosmetics = items.where((i) => i['owned'] == true).toList();
+    final ownedPowerups = _powerupInventory.entries
+        .where((e) => e.value > 0)
+        .toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+
+    return [
+      if (ownedPowerups.isNotEmpty) ...[
+        _buildSectionHeader('POWERUPS'),
+        for (int i = 0; i < ownedPowerups.length; i++)
+          _OwnedPowerupRow(
+            powerupType: ownedPowerups[i].key,
+            quantity: ownedPowerups[i].value,
+            index: i,
+          ),
+      ],
+      _buildSectionHeader('ACCESSORIES'),
+      if (ownedCosmetics.isEmpty)
+        _buildEmptyState(
+          icon: Icons.inventory_2_rounded,
+          message: 'No gear yet — buy some from the Store.',
+        )
+      else
+        for (int i = 0; i < ownedCosmetics.length; i++)
+          _ShopItemRow(
+            item: ownedCosmetics[i],
+            index: i,
+            saving: _saving,
+            onBuy: () {},
+            onEquip: () => _equip(
+              ownedCosmetics[i]['slot'] as String? ?? '',
+              ownedCosmetics[i]['id'] as String?,
+            ),
+            onClear: () =>
+                _equip(ownedCosmetics[i]['slot'] as String? ?? '', null),
+          ),
+    ];
+  }
+
+  int _ownedQuantityFor(Map<String, dynamic> item) {
+    final fromInventory = _powerupInventory[item['powerupType'] as String?];
+    if (fromInventory != null) return fromInventory;
+    return (item['ownedQuantity'] as num?)?.toInt() ?? 0;
   }
 
   Widget _buildSectionHeader(String title) {
@@ -356,7 +554,7 @@ class _ShopTabState extends State<ShopTab> {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState({required IconData icon, required String message}) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 26),
@@ -367,13 +565,13 @@ class _ShopTabState extends State<ShopTab> {
       child: Column(
         children: [
           Icon(
-            Icons.checkroom_rounded,
+            icon,
             size: 32,
             color: AppColors.textMid.withValues(alpha: 0.7),
           ),
           const SizedBox(height: 8),
           Text(
-            'No accessories yet — new capybara gear coming soon.',
+            message,
             style: PixelText.body(size: 14, color: AppColors.textMid),
             textAlign: TextAlign.center,
           ),
@@ -516,6 +714,182 @@ class _ShopItemRow extends StatelessWidget {
               fontSize: 12,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A re-buyable powerup in the store (price + buy button + owned count).
+class _PowerupStoreRow extends StatelessWidget {
+  const _PowerupStoreRow({
+    required this.item,
+    required this.index,
+    required this.ownedQuantity,
+    required this.saving,
+    required this.onBuy,
+  });
+
+  final Map<String, dynamic> item;
+  final int index;
+  final int ownedQuantity;
+  final bool saving;
+  final VoidCallback onBuy;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = item['name'] as String? ?? 'Powerup';
+    final description = item['description'] as String? ?? '';
+    final price = (item['priceCoins'] as num?)?.toInt() ?? 0;
+    final type = item['powerupType'] as String? ?? '';
+
+    final stripeColor = index.isOdd
+        ? AppColors.parchmentDark.withValues(alpha: 0.45)
+        : Colors.transparent;
+
+    return Container(
+      color: stripeColor,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: AppColors.parchmentDark,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.parchmentBorder),
+            ),
+            padding: const EdgeInsets.all(7),
+            child: PowerupIcon(type: type, size: 34),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        name,
+                        style: PixelText.title(
+                          size: 15,
+                          color: AppColors.textDark,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (ownedQuantity > 0) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.accent.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          'OWNED x$ownedQuantity',
+                          style: PixelText.title(
+                            size: 9,
+                            color: AppColors.accent,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                if (description.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    description,
+                    style: PixelText.body(size: 12, color: AppColors.textMid),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          PillButton(
+            label: '$price',
+            icon: Icons.monetization_on_rounded,
+            onPressed: saving ? null : onBuy,
+            fontSize: 12,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// An owned powerup in the inventory (icon + name + quantity badge).
+class _OwnedPowerupRow extends StatelessWidget {
+  const _OwnedPowerupRow({
+    required this.powerupType,
+    required this.quantity,
+    required this.index,
+  });
+
+  final String powerupType;
+  final int quantity;
+  final int index;
+
+  static const _names = {
+    'IMPOSTER': 'Imposter',
+    'MIRROR': 'Mirror',
+    'CLEANSE': 'Cleanse',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final name = _names[powerupType] ?? powerupType;
+    final stripeColor = index.isOdd
+        ? AppColors.parchmentDark.withValues(alpha: 0.45)
+        : Colors.transparent;
+
+    return Container(
+      color: stripeColor,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: AppColors.parchmentDark,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.parchmentBorder),
+            ),
+            padding: const EdgeInsets.all(7),
+            child: PowerupIcon(type: powerupType, size: 34),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              name,
+              style: PixelText.title(size: 15, color: AppColors.textDark),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.parchmentDark,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: AppColors.parchmentBorder),
+            ),
+            child: Text(
+              'x$quantity',
+              style: PixelText.title(size: 13, color: AppColors.textDark),
+            ),
+          ),
         ],
       ),
     );

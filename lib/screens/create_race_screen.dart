@@ -22,10 +22,10 @@ class CreateRaceScreen extends StatefulWidget {
   }) : backendApiService = backendApiService ?? BackendApiService();
 
   @override
-  State<CreateRaceScreen> createState() => _CreateRaceScreenState();
+  State<CreateRaceScreen> createState() => CreateRaceScreenState();
 }
 
-class _CreateRaceScreenState extends State<CreateRaceScreen> {
+class CreateRaceScreenState extends State<CreateRaceScreen> {
   final _nameController = TextEditingController();
   final _buyInController = TextEditingController(text: '100');
   int _selectedDuration = 7;
@@ -37,6 +37,15 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
   String _payoutPreset = 'WINNER_TAKES_ALL';
   bool _isPublic = false;
   int _maxParticipants = 10;
+  // 1.1.7: optional future auto-start. Null = instant/manual race (default).
+  DateTime? _scheduledStartAt;
+
+  /// Test-only hook so widget tests can set the scheduled start without driving
+  /// the platform date/time picker dialogs.
+  @visibleForTesting
+  void debugSetScheduledStart(DateTime? value) {
+    setState(() => _scheduledStartAt = value);
+  }
 
   static const _textShadows = [
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
@@ -56,6 +65,52 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
     _nameController.dispose();
     _buyInController.dispose();
     super.dispose();
+  }
+
+  static const _monthAbbrev = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  String _formatScheduledStart(DateTime t) {
+    final local = t.toLocal();
+    final h = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    final m = local.minute.toString().padLeft(2, '0');
+    final ampm = local.hour < 12 ? 'AM' : 'PM';
+    return '${_monthAbbrev[local.month - 1]} ${local.day} · $h:$m $ampm';
+  }
+
+  Future<void> _pickScheduledStart() async {
+    final now = DateTime.now();
+    final initial = _scheduledStartAt ?? now.add(const Duration(hours: 1));
+    final date = await showDatePicker(
+      context: context,
+      initialDate: initial.isBefore(now) ? now : initial,
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 365)),
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(initial),
+    );
+    if (time == null || !mounted) return;
+    final picked = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
+    // Guard against a picked moment that's already in the past (e.g. today +
+    // an earlier time). The backend also rejects past times defensively.
+    if (picked.isAfter(DateTime.now())) {
+      setState(() => _scheduledStartAt = picked);
+    } else {
+      if (mounted) {
+        showErrorToast(context, 'Pick a time in the future');
+      }
+    }
   }
 
   Future<void> _create() async {
@@ -96,6 +151,7 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
         payoutPreset: _buyInEnabled ? _payoutPreset : 'WINNER_TAKES_ALL',
         isPublic: _isPublic,
         maxParticipants: _maxParticipants,
+        scheduledStartAt: _scheduledStartAt,
       );
 
       final createdRace = result['race'] as Map<String, dynamic>?;
@@ -272,6 +328,108 @@ class _CreateRaceScreenState extends State<CreateRaceScreen> {
                                 );
                               }).toList(),
                             ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Scheduled start (optional auto-start)
+                      RetroCard(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment:
+                                  MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'SCHEDULED START',
+                                      style: PixelText.title(
+                                        size: 13,
+                                        color: AppColors.textMid,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      _scheduledStartAt == null
+                                          ? 'START MANUALLY'
+                                          : 'AUTO-START',
+                                      style: PixelText.body(
+                                        size: 11,
+                                        color: _scheduledStartAt == null
+                                            ? AppColors.textMid
+                                            : AppColors.pillGreenDark,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(
+                                  height: 28,
+                                  child: Switch.adaptive(
+                                    value: _scheduledStartAt != null,
+                                    activeTrackColor:
+                                        AppColors.pillGreenDark,
+                                    onChanged: (v) {
+                                      if (v) {
+                                        _pickScheduledStart();
+                                      } else {
+                                        setState(
+                                          () => _scheduledStartAt = null,
+                                        );
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (_scheduledStartAt != null) ...[
+                              const SizedBox(height: 12),
+                              GestureDetector(
+                                onTap: _pickScheduledStart,
+                                child: Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.parchmentDark,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.event_outlined,
+                                        size: 16,
+                                        color: AppColors.textMid,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'Starts at ${_formatScheduledStart(_scheduledStartAt!)}',
+                                          style: PixelText.body(
+                                            size: 13,
+                                            color: AppColors.textDark,
+                                          ),
+                                        ),
+                                      ),
+                                      Icon(
+                                        Icons.edit_outlined,
+                                        size: 14,
+                                        color: AppColors.textMid.withValues(
+                                          alpha: 0.6,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),

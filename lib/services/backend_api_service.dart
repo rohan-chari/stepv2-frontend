@@ -575,6 +575,9 @@ class BackendApiService {
     String payoutPreset = 'WINNER_TAKES_ALL',
     bool isPublic = false,
     int maxParticipants = 10,
+    // 1.1.7: optional future auto-start time. Omitted from the body when null so
+    // the backend treats it as an instant/manual race (unchanged behavior).
+    DateTime? scheduledStartAt,
   }) async {
     final body = <String, dynamic>{
       'name': name,
@@ -587,6 +590,9 @@ class BackendApiService {
     if (powerupsEnabled) {
       body['powerupsEnabled'] = true;
       body['powerupStepInterval'] = powerupStepInterval;
+    }
+    if (scheduledStartAt != null) {
+      body['scheduledStartAt'] = scheduledStartAt.toUtc().toIso8601String();
     }
 
     final response = await _sendJsonRequest(
@@ -841,6 +847,22 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  /// Returns the participants the user could Sneaky Swap with right now — only
+  /// those holding >=1 stealable powerup (not self, stealthed, or finished).
+  /// Additive endpoint; older backends 404 here, so callers should fall back to
+  /// the existing eligible-racer behavior on failure.
+  Future<Map<String, dynamic>> fetchSneakySwapTargets({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/races/$raceId/powerups/sneaky-swap-targets',
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
   Future<Map<String, dynamic>> openMysteryBox({
     required String identityToken,
     required String raceId,
@@ -1025,6 +1047,73 @@ class BackendApiService {
       body: const <String, dynamic>{},
       identityToken: identityToken,
       headers: {'Idempotency-Key': idempotencyKey},
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  /// Active coin-purchasable powerups + coin balance + per-type owned quantity.
+  /// Additive endpoint; older backends 404 here, so callers must degrade
+  /// gracefully (hide the powerup store section, no crash).
+  Future<Map<String, dynamic>> fetchPowerupShopCatalog({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/shop/powerups',
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  /// Buys a (re-buyable) powerup from the coin store. Idempotent via the
+  /// Idempotency-Key header. Returns the updated balance + inventory.
+  Future<Map<String, dynamic>> purchasePowerupItem({
+    required String identityToken,
+    String? sku,
+    String? powerupType,
+    required String idempotencyKey,
+  }) async {
+    final body = <String, dynamic>{};
+    if (sku != null) body['sku'] = sku;
+    if (powerupType != null) body['powerupType'] = powerupType;
+
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/shop/powerups/purchase',
+      body: body,
+      identityToken: identityToken,
+      headers: {'Idempotency-Key': idempotencyKey},
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  /// The user's GLOBAL powerup inventory (powerupType + quantity). Additive
+  /// endpoint; older backends 404 here, so callers must degrade gracefully.
+  Future<Map<String, dynamic>> fetchPowerupInventory({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/powerups/inventory',
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  /// Spends ONE global-inventory powerup into an active race, creating a HELD
+  /// in-race powerup that the normal use flow then applies. Additive endpoint.
+  Future<Map<String, dynamic>> redeemPowerupToRace({
+    required String identityToken,
+    required String raceId,
+    required String powerupType,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races/$raceId/powerups/redeem',
+      body: {'powerupType': powerupType},
+      identityToken: identityToken,
     );
 
     return _decodeJsonResponse(response);

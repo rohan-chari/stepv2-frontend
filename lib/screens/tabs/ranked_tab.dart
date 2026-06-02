@@ -215,10 +215,7 @@ class _RankedTabState extends State<RankedTab> {
                   ],
                 ),
               ),
-              _SeasonCountdown(
-                title: _seasonSubtitle(),
-                caption: _seasonDayCaption(),
-              ),
+              _SeasonCountdown(title: _seasonSubtitle()),
             ],
           ),
         ),
@@ -248,17 +245,6 @@ class _RankedTabState extends State<RankedTab> {
     if (days > 1) return '$days days left';
     if (days == 1) return '1 day left';
     return 'ends today';
-  }
-
-  String _seasonDayCaption() {
-    final season = _season;
-    if (season == null) return 'DAY 1/30';
-    final ends = DateTime.tryParse(season['endsAt']?.toString() ?? '');
-    if (ends == null) return 'DAY 1/30';
-    final daysLeft = _seasonDaysLeft() ?? 0;
-    final totalDays = (season['durationDays'] as num?)?.toInt() ?? 30;
-    final elapsed = (totalDays - daysLeft).clamp(1, totalDays);
-    return 'DAY $elapsed/$totalDays';
   }
 
   // RP checkpoints (floor → the band you enter at that floor), ascending across
@@ -864,10 +850,9 @@ class _RewardLine extends StatelessWidget {
 }
 
 class _SeasonCountdown extends StatelessWidget {
-  const _SeasonCountdown({required this.title, required this.caption});
+  const _SeasonCountdown({required this.title});
 
   final String title;
-  final String caption;
 
   @override
   Widget build(BuildContext context) {
@@ -877,14 +862,6 @@ class _SeasonCountdown extends StatelessWidget {
         Text(
           title,
           style: PixelText.title(size: 13, color: AppColors.medalGold),
-        ),
-        const SizedBox(height: 3),
-        Text(
-          caption,
-          style: PixelText.body(
-            size: 9,
-            color: AppColors.parchment.withValues(alpha: 0.86),
-          ),
         ),
       ],
     );

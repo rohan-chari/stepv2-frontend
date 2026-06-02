@@ -128,6 +128,11 @@ class NotificationService {
       case 'FRIEND_REQUEST_SENT':
       case 'FRIEND_REQUEST_ACCEPTED':
         return NotificationRoute.friends;
+      // Global step-multiplier event start — land on home (the event applies to
+      // all the user's active races, not one in particular). Additive type;
+      // older apps fall through to the default and ignore it.
+      case 'GLOBAL_EVENT_STARTED':
+        return NotificationRoute.home;
       // Legacy challenge notifications still in user trays land on home.
       case 'CHALLENGE_INITIATED':
       case 'CHALLENGE_DROPPED':

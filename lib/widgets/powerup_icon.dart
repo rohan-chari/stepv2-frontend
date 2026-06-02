@@ -37,6 +37,15 @@ class PowerupIcon extends StatelessWidget {
     'TRAIL_MINE': 'trail_mine',
     'PINECONE_TOSS': 'pinecone_toss',
     'SNEAKY_SWAP': 'sneaky_swap',
+    // TODO(1.1.7 art): add assets/images/powerups/mirror.png
+    // Until the art exists, Image.asset's errorBuilder renders the fallback icon.
+    'MIRROR': 'mirror',
+    // TODO(1.1.7 art): add assets/images/powerups/cleanse.png
+    // Until the art exists, Image.asset's errorBuilder renders the fallback icon.
+    'CLEANSE': 'cleanse',
+    // TODO(1.1.7 art): add assets/images/powerups/imposter.png
+    // Until the art exists, Image.asset's errorBuilder renders the fallback icon.
+    'IMPOSTER': 'imposter',
   };
 
   @override

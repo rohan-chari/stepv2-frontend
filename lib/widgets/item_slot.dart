@@ -26,6 +26,9 @@ const _powerupNames = {
   'TRAIL_MINE': 'Trail Mine',
   'PINECONE_TOSS': 'Pinecone Toss',
   'SNEAKY_SWAP': 'Sneaky Swap',
+  'MIRROR': 'Mirror',
+  'CLEANSE': 'Cleanse',
+  'IMPOSTER': 'Imposter',
 };
 
 enum ItemSlotState { empty, held, mysteryBox }

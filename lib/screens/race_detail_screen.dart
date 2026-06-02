@@ -21,6 +21,7 @@ import '../widgets/pill_button.dart';
 import '../widgets/retro_card.dart';
 import '../widgets/trail_sign.dart';
 import '../widgets/powerup_icon.dart';
+import '../widgets/attack_outcome_modal.dart';
 import '../widgets/spinning_coin.dart';
 import '../widgets/spinning_crate.dart';
 import '../widgets/game_container.dart';
@@ -74,6 +75,9 @@ const _powerupNames = {
   'TRAIL_MINE': 'Trail Mine',
   'PINECONE_TOSS': 'Pinecone Toss',
   'SNEAKY_SWAP': 'Sneaky Swap',
+  'MIRROR': 'Mirror',
+  'CLEANSE': 'Cleanse',
+  'IMPOSTER': 'Imposter',
 };
 
 const _powerupDescriptions = {
@@ -97,6 +101,9 @@ const _powerupDescriptions = {
   'TRAIL_MINE': 'Drop a hidden trap at your current step position',
   'PINECONE_TOSS': 'Hit the runner directly ahead or behind you',
   'SNEAKY_SWAP': 'View and swap a powerup with a rival',
+  'MIRROR': 'Reflect the next attack back at the attacker',
+  'CLEANSE': 'Remove all debuffs an opponent placed on you',
+  'IMPOSTER': 'Swap leaderboard positions with a rival for 1 hour (cosmetic)',
 };
 
 // Short-form descriptions used in the active-effects list, where the
@@ -113,6 +120,7 @@ const _powerupShortDescriptions = {
   'CAMPFIRE_REST': 'Frozen, then boosted',
   'POCKET_WATCH': 'Buffs extended',
   'TRAIL_MINE': 'Mine planted',
+  'MIRROR': 'Reflects next attack',
 };
 
 const _targetedPowerups = [
@@ -121,6 +129,9 @@ const _targetedPowerups = [
   'WRONG_TURN',
   'DETOUR_SIGN',
   'SNEAKY_SWAP',
+  // IMPOSTER picks a rival to swap leaderboard display with — uses the same
+  // target-picker flow as the other targeted powerups.
+  'IMPOSTER',
 ];
 
 const _rarityColors = {
@@ -210,8 +221,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   Map<String, dynamic>? _race;
   Map<String, dynamic>? _progress;
   Map<String, dynamic>? _powerupData;
+  // Active global step-multiplier event (BeReal-style 2x window), if any. Read
+  // defensively from getRaceProgress: an older backend omits this field, which
+  // simply means no banner. { active: true, multiplier, endsAt }.
+  Map<String, dynamic>? _globalEvent;
   Loadable<Map<String, dynamic>> _progressState = const Loadable.initial();
   int _queuedBoxCount = 0;
+  // Globally-owned (coin-purchased) powerups, by type -> quantity. Spendable
+  // into this race via the redeem flow. Loaded best-effort; an older backend
+  // without the endpoint leaves this empty (no extra UI, no crash).
+  Map<String, int> _globalPowerupInventory = const {};
   bool _isLoading = true;
   bool _isActing = false;
   Timer? _pollTimer;
@@ -255,6 +274,20 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
   String _formatCoinAmount(dynamic value) {
     return (_readNullableInt(value) ?? value ?? 0).toString();
+  }
+
+  static const _scheduledMonthAbbrev = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  // 1.1.7: render a scheduled auto-start time in the viewer's local timezone.
+  String _formatScheduledStart(DateTime t) {
+    final local = t.toLocal();
+    final h = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    final m = local.minute.toString().padLeft(2, '0');
+    final ampm = local.hour < 12 ? 'AM' : 'PM';
+    return '${_scheduledMonthAbbrev[local.month - 1]} ${local.day} · $h:$m $ampm';
   }
 
   @override
@@ -413,12 +446,20 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       setState(() {
         _progress = progress;
         _powerupData = progress['powerupData'] as Map<String, dynamic>?;
+        final rawEvent = progress['globalEvent'];
+        _globalEvent = rawEvent is Map
+            ? Map<String, dynamic>.from(rawEvent)
+            : null;
         _progressState = Loadable.success(progress);
       });
 
       if (_powerupData?['enabled'] == true) {
         _chat?.refreshTop();
         _feed?.refreshTop();
+
+        // Best-effort: load the user's GLOBAL powerup stash so they can spend a
+        // coin-purchased powerup (e.g. Imposter) into this race.
+        _loadGlobalPowerupInventory(token);
 
         _queuedBoxCount = _readInt(
           _powerupData?['queuedBoxCount'],
@@ -776,11 +817,19 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       targetDirection = await _showPineconeDirectionPicker();
       if (targetDirection == null) return;
     } else if (type == 'SNEAKY_SWAP') {
-      if (targets.isEmpty) {
-        if (mounted) showErrorToast(context, 'No targets available');
+      // Only offer racers who actually hold something stealable. New endpoint;
+      // on an older backend (or any failure) fall back to all eligible racers.
+      final swapTargets = await _resolveSneakySwapTargets(token, targets);
+      if (swapTargets.isEmpty) {
+        if (mounted) {
+          showInfoToast(
+            context,
+            'No one has a powerup to steal right now',
+          );
+        }
         return;
       }
-      targetUserId = await _showTargetPicker(targets, type);
+      targetUserId = await _showTargetPicker(swapTargets, type);
       if (targetUserId == null) return;
 
       final options = await _api.fetchSneakySwapOptions(
@@ -853,19 +902,100 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
       if (!mounted) return;
 
-      if (res?['blocked'] == true) {
-        showInfoToast(context, 'Blocked by Compression Socks!');
+      // Read the outcome defensively: an older backend only returns `blocked`,
+      // a newer one also returns the `outcome` discriminator + `reflected`.
+      // Blocked/Reflected get a reveal-style modal (matching the mystery-box
+      // UNBOX reveal); a normal/APPLIED outcome keeps the success toast.
+      final outcome = attackOutcomeFromResult(res);
+      if (outcome == AttackOutcome.blocked ||
+          outcome == AttackOutcome.reflected) {
+        await showAttackOutcomeModal(context, res ?? const {});
       } else {
         final tierTag = upgradeLevel > 0 ? ' (Lvl $upgradeLevel)' : '';
         showInfoToast(context, '${_powerupNames[type]}$tierTag activated!');
       }
 
+      if (!mounted) return;
       _loadProgress();
     } catch (e) {
       if (mounted) showErrorToast(context, e.toString());
     } finally {
       if (mounted) setState(() => _isActing = false);
     }
+  }
+
+  /// Best-effort fetch of the user's global powerup stash. Failures (e.g. an
+  /// older backend without the endpoint) leave the stash empty so the redeem UI
+  /// simply doesn't appear — never a crash.
+  Future<void> _loadGlobalPowerupInventory(String token) async {
+    try {
+      final result = await _api.fetchPowerupInventory(identityToken: token);
+      final items =
+          (result['items'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+      final inventory = <String, int>{};
+      for (final row in items) {
+        final type = row['powerupType'] as String?;
+        final qty = (row['quantity'] as num?)?.toInt() ?? 0;
+        if (type != null && qty > 0) inventory[type] = qty;
+      }
+      if (mounted) {
+        setState(() => _globalPowerupInventory = inventory);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _globalPowerupInventory = const {});
+      }
+    }
+  }
+
+  /// Spends a globally-owned powerup (e.g. Imposter) into this race: redeems it
+  /// to a HELD in-race powerup, then immediately runs the normal use flow
+  /// (target picker etc.) on it. Reuses [_usePowerup] so targeting/feedback are
+  /// identical to box-earned powerups.
+  Future<void> _redeemAndUsePowerup(String powerupType) async {
+    if (_isActing) return;
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) return;
+
+    setState(() => _isActing = true);
+    Map<String, dynamic>? redeemedPowerup;
+    try {
+      final result = await _api.redeemPowerupToRace(
+        identityToken: token,
+        raceId: widget.raceId,
+        powerupType: powerupType,
+      );
+      redeemedPowerup =
+          (result['result'] as Map<String, dynamic>?)?['powerup']
+              as Map<String, dynamic>?;
+      // Optimistically reflect the spent stash item.
+      final remaining = (_globalPowerupInventory[powerupType] ?? 1) - 1;
+      final updated = Map<String, int>.from(_globalPowerupInventory);
+      if (remaining > 0) {
+        updated[powerupType] = remaining;
+      } else {
+        updated.remove(powerupType);
+      }
+      if (mounted) setState(() => _globalPowerupInventory = updated);
+    } catch (e) {
+      if (mounted) showErrorToast(context, e.toString());
+      if (mounted) setState(() => _isActing = false);
+      return;
+    } finally {
+      // Release the acting lock before _usePowerup re-acquires it.
+      if (mounted) setState(() => _isActing = false);
+    }
+
+    if (redeemedPowerup == null) {
+      // Redeem succeeded but no powerup returned — refresh so it shows in the
+      // tray and the user can use it manually.
+      _loadProgress();
+      return;
+    }
+
+    // Run the normal use flow (target picker + use endpoint) on the redeemed
+    // HELD powerup.
+    await _usePowerup(redeemedPowerup);
   }
 
   Future<void> _discardPowerup(Map<String, dynamic> powerup) async {
@@ -888,6 +1018,52 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       if (mounted) showErrorToast(context, e.toString());
     } finally {
       if (mounted) setState(() => _isActing = false);
+    }
+  }
+
+  /// Resolves the Sneaky Swap target list via the new backend endpoint, which
+  /// returns only racers holding a stealable powerup. The returned userIds are
+  /// re-joined with [eligibleTargets] (the live participant rows) so the picker
+  /// keeps showing avatars/steps. Defends against an older backend that lacks
+  /// the endpoint by falling back to the full eligible-racer list.
+  Future<List<Map<String, dynamic>>> _resolveSneakySwapTargets(
+    String token,
+    List<Map<String, dynamic>> eligibleTargets,
+  ) async {
+    try {
+      final result = await _api.fetchSneakySwapTargets(
+        identityToken: token,
+        raceId: widget.raceId,
+      );
+      final rawTargets =
+          (result['targets'] as List?)?.cast<Map<String, dynamic>>() ??
+          const [];
+
+      // Index live participants so we can enrich with steps/avatar.
+      final byUserId = <String, Map<String, dynamic>>{
+        for (final p in eligibleTargets)
+          if (p['userId'] is String) p['userId'] as String: p,
+      };
+
+      final resolved = <Map<String, dynamic>>[];
+      for (final t in rawTargets) {
+        final userId = t['userId'] as String?;
+        if (userId == null) continue;
+        final live = byUserId[userId];
+        resolved.add({
+          'userId': userId,
+          'displayName':
+              live?['displayName'] ?? t['displayName'] ?? '???',
+          if (live?['profilePhotoUrl'] != null)
+            'profilePhotoUrl': live!['profilePhotoUrl'],
+          if (live?['totalSteps'] != null) 'totalSteps': live!['totalSteps'],
+        });
+      }
+      return resolved;
+    } catch (_) {
+      // Old backend without the endpoint (404) or transient failure: degrade to
+      // the prior behavior of offering every eligible racer.
+      return eligibleTargets;
     }
   }
 
@@ -1452,6 +1628,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         .where((p) => p['status'] == 'ACCEPTED')
         .length;
 
+    // 1.1.7: a scheduled race auto-starts at scheduledStartAt; manual start is
+    // blocked (and rejected server-side) until then. Read defensively — older
+    // payloads omit the field entirely.
+    final scheduledStartRaw = _race!['scheduledStartAt'] as String?;
+    final scheduledStartAt = scheduledStartRaw != null
+        ? DateTime.tryParse(scheduledStartRaw)?.toLocal()
+        : null;
+    final scheduledInFuture =
+        scheduledStartAt != null && scheduledStartAt.isAfter(DateTime.now());
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1480,6 +1666,27 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         ),
         const SizedBox(height: 16),
 
+        // 1.1.7: scheduled auto-start banner, shown to every viewer of a
+        // PENDING race that has a future scheduledStartAt.
+        if (scheduledInFuture) ...[
+          RetroCard(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            child: Row(
+              children: [
+                Icon(Icons.schedule, size: 18, color: AppColors.pillGreenDark),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Starts at ${_formatScheduledStart(scheduledStartAt)}',
+                    style: PixelText.body(size: 13, color: AppColors.textDark),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+
         // Actions
         if (isCreator) ...[
           PillButton(
@@ -1492,14 +1699,18 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
           ),
           const SizedBox(height: 10),
           PillButton(
-            label: _isActing ? 'STARTING...' : 'START RACE',
+            label: scheduledInFuture
+                ? 'AUTO-START SCHEDULED'
+                : (_isActing ? 'STARTING...' : 'START RACE'),
             variant: PillButtonVariant.primary,
             fontSize: 14,
             fullWidth: true,
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-            onPressed: (_isActing || acceptedCount < 2) ? null : _startRace,
+            onPressed: (scheduledInFuture || _isActing || acceptedCount < 2)
+                ? null
+                : _startRace,
           ),
-          if (acceptedCount < 2) ...[
+          if (!scheduledInFuture && acceptedCount < 2) ...[
             const SizedBox(height: 6),
             Text(
               'Need at least 2 participants to start',
@@ -1702,6 +1913,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             ),
           ),
 
+        // GLOBAL STEP EVENT — "2x STEPS" banner with a countdown, shown only
+        // while an event window is active. Absent for old responses.
+        if (_buildGlobalEventBanner() case final banner?)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+            child: banner,
+          ),
+
         // THE COURSE — full-bleed race visualization.
         const Padding(
           padding: EdgeInsets.fromLTRB(12, 4, 12, 8),
@@ -1839,6 +2058,139 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         _buildActivityTabsSection(),
         const SizedBox(height: 24),
       ],
+    );
+  }
+
+  // "2x STEPS — ends in mm:ss" banner for an active global step-multiplier
+  // event. Returns null when there is no active event (or the response omitted
+  // the field, e.g. an older backend), or once the countdown has elapsed.
+  Widget? _buildGlobalEventBanner() {
+    final event = _globalEvent;
+    if (event == null) return null;
+    if (event['active'] == false) return null;
+
+    final endsAtRaw = event['endsAt'];
+    final endsAt = endsAtRaw is String
+        ? DateTime.tryParse(endsAtRaw)?.toLocal()
+        : null;
+    if (endsAt == null) return null;
+
+    final remaining = endsAt.difference(_countdownNow);
+    if (remaining.isNegative || remaining == Duration.zero) return null;
+
+    final multiplier = _readNullableInt(event['multiplier']) ?? 2;
+
+    final totalSeconds = remaining.inSeconds;
+    final minutes = totalSeconds ~/ 60;
+    final seconds = totalSeconds % 60;
+    final countdown =
+        '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+
+    return Container(
+      key: const Key('race-global-event-banner'),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.woodShadow.withValues(alpha: 0.35),
+            offset: const Offset(0, 4),
+            blurRadius: 0,
+          ),
+        ],
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              AppColors.coinLight,
+              AppColors.coinMid,
+              AppColors.coinDark,
+            ],
+          ),
+          border: Border.all(color: AppColors.woodShadow, width: 1.2),
+        ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                AppColors.roofLight,
+                AppColors.roofMid,
+                AppColors.roofDark,
+              ],
+            ),
+            border: Border.all(
+              color: AppColors.pillGold.withValues(alpha: 0.9),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [AppColors.coinLight, AppColors.coinDark],
+                  ),
+                  border: Border.all(color: AppColors.woodShadow, width: 1.1),
+                ),
+                child: const Icon(
+                  Icons.bolt_rounded,
+                  size: 20,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${multiplier}x STEPS',
+                      style: PixelText.title(size: 14, color: Colors.white),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'EVERY STEP COUNTS ${multiplier}x — GO!',
+                      style: PixelText.body(
+                        size: 12.5,
+                        color: AppColors.parchmentLight,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.woodDark,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  'ends in $countdown',
+                  style: PixelText.title(size: 11, color: AppColors.parchment),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -2094,8 +2446,54 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             }
           }),
         ),
+        ..._buildGlobalPowerupStash(),
       ],
     );
+  }
+
+  /// Renders a "use from your stash" affordance for each coin-purchased powerup
+  /// the user owns globally (e.g. Imposter). Tapping redeems one into the race
+  /// and runs the normal use/target flow. Hidden entirely if the stash is empty
+  /// (which is also the case on an older backend without the inventory endpoint).
+  List<Widget> _buildGlobalPowerupStash() {
+    final entries = _globalPowerupInventory.entries
+        .where((e) => e.value > 0)
+        .toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    if (entries.isEmpty) return const [];
+
+    return [
+      const SizedBox(height: 12),
+      Text(
+        'YOUR STASH',
+        style: PixelText.title(size: 13, color: AppColors.textMid),
+      ),
+      const SizedBox(height: 6),
+      for (final e in entries)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Row(
+            children: [
+              SizedBox(width: 24, child: PowerupIcon(type: e.key, size: 22)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${_powerupNames[e.key] ?? e.key} x${e.value}',
+                  style: PixelText.body(size: 14, color: AppColors.textDark),
+                ),
+              ),
+              PillButton(
+                label: 'USE',
+                variant: PillButtonVariant.secondary,
+                fontSize: 11,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                onPressed: _isActing ? null : () => _redeemAndUsePowerup(e.key),
+              ),
+            ],
+          ),
+        ),
+    ];
   }
 
   String _relativeTime(String? isoTimestamp) {
