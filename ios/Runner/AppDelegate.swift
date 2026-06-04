@@ -614,12 +614,25 @@ final class HealthKitStepReader: StepReading {
       }
 
       let syncDay = syncDays[currentIndex]
-      let predicate = HKQuery.predicateForSamples(
+      let timePredicate = HKQuery.predicateForSamples(
         withStart: syncDay.startsAt,
         end: syncDay.endsAt,
         options: .strictStartDate
       )
+      // Exclude manually entered steps so the native path matches Dart's
+      // getTotalStepsInInterval(includeManualEntry: false).
+      let manualPredicate = HKQuery.predicateForObjects(
+        withMetadataKey: HKMetadataKeyWasUserEntered,
+        operatorType: .notEqualTo,
+        value: true
+      )
+      let predicate = NSCompoundPredicate(
+        andPredicateWithSubpredicates: [timePredicate, manualPredicate]
+      )
 
+      // cumulativeSum is Apple's own cross-source merge (the value the Health
+      // app shows), not a naive sum of every source — HealthKit reconciles
+      // iPhone + Watch + other wearables via source priority for us.
       let query = HKStatisticsQuery(
         quantityType: stepType,
         quantitySamplePredicate: predicate,
@@ -669,12 +682,25 @@ final class HealthKitStepReader: StepReading {
     let anchorDate = calendar.startOfDay(for: startDate)
     let interval = DateComponents(hour: 1)
 
-    let predicate = HKQuery.predicateForSamples(
+    let timePredicate = HKQuery.predicateForSamples(
       withStart: startDate,
       end: endDate,
       options: .strictStartDate
     )
+    // Exclude manually entered steps so the native path matches Dart's
+    // getTotalStepsInInterval(includeManualEntry: false).
+    let manualPredicate = HKQuery.predicateForObjects(
+      withMetadataKey: HKMetadataKeyWasUserEntered,
+      operatorType: .notEqualTo,
+      value: true
+    )
+    let predicate = NSCompoundPredicate(
+      andPredicateWithSubpredicates: [timePredicate, manualPredicate]
+    )
 
+    // cumulativeSum is Apple's own cross-source merge (the value the Health
+    // app shows), not a naive sum of every source — HealthKit reconciles
+    // iPhone + Watch + other wearables via source priority for us.
     let query = HKStatisticsCollectionQuery(
       quantityType: stepType,
       quantitySamplePredicate: predicate,

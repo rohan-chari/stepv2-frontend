@@ -95,8 +95,9 @@ class HealthService {
   }) async {
     // Bucket per hour and ask HealthKit for the aggregated total in each
     // bucket. getTotalStepsInInterval is backed by HKStatisticsQuery with
-    // cumulativeSum, which dedupes across sources (iPhone + Watch + Oura +
-    // Garmin all reporting the same walk count once, not N times).
+    // cumulativeSum, which is Apple's own cross-source merge — the same value
+    // the Health app shows (iPhone + Watch + other wearables reconciled via
+    // source priority, not summed). We additionally exclude manual entries.
     final samples = <StepSampleData>[];
     var bucketStart = DateTime(
       startTime.year,
