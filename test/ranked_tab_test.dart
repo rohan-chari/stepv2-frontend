@@ -136,8 +136,8 @@ void main() {
     expect(find.text('2'), findsAtLeastNWidgets(1)); // hero GLOBAL RANK stat
     expect(find.text('RANKED POINTS'), findsOneWidget);
     expect(find.text('GLOBAL RANK'), findsOneWidget);
-    expect(find.text('AceWalker'), findsOneWidget);
-    expect(find.text('Trail Walker'), findsOneWidget);
+    expect(find.text('@AceWalker'), findsOneWidget);
+    expect(find.text('@Trail Walker'), findsOneWidget);
     // Reward for the current tier is surfaced in the hero.
     expect(find.text('Finish Gold → 600 coins'), findsOneWidget);
   });
@@ -151,7 +151,7 @@ void main() {
 
     expect(find.text('Not ranked yet'), findsOneWidget);
     // The ladder still renders other players.
-    expect(find.text('AceWalker'), findsOneWidget);
+    expect(find.text('@AceWalker'), findsOneWidget);
   });
 
   testWidgets('podium capybaras wear equipped accessories', (tester) async {

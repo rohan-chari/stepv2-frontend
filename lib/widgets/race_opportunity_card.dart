@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../styles.dart';
+import '../utils/at_name.dart';
 import 'app_avatar.dart';
 import 'pill_button.dart';
 
@@ -210,7 +211,7 @@ class _PendingInviteCardState extends State<_PendingInviteCard>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      "${inviter?.displayName ?? 'Someone'} invited you to race",
+                      "${atName(inviter?.displayName ?? 'Someone')} invited you to race",
                       style: PixelText.title(size: 16),
                     ),
                     const SizedBox(height: 4),
@@ -322,7 +323,7 @@ class _ActiveRaceCard extends StatelessWidget {
     final gap = isLeading ? 0 : (leaderTotal - myTotal);
     final gapText = isLeading
         ? 'Leading the race — keep going'
-        : '${_formatSteps(gap)} steps behind ${leader?['displayName'] ?? 'the leader'}';
+        : '${_formatSteps(gap)} steps behind ${atName(leader?['displayName'] as String? ?? 'the leader')}';
 
     return GestureDetector(
       onTap: onOpenRace == null || raceId.isEmpty
@@ -414,7 +415,7 @@ class _FriendRacingCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            "${friend?.displayName ?? 'A friend'} is racing right now",
+            "${atName(friend?.displayName ?? 'A friend')} is racing right now",
             style: PixelText.title(size: 16),
           ),
           const SizedBox(height: 12),
@@ -491,7 +492,7 @@ class _FriendFinishedCard extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  "${friend?.displayName ?? 'A friend'} $placementText $raceName",
+                  "${atName(friend?.displayName ?? 'A friend')} $placementText $raceName",
                   style: PixelText.title(size: 15),
                 ),
               ),
@@ -501,7 +502,7 @@ class _FriendFinishedCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           PillButton(
-            label: 'CHALLENGE ${friend?.displayName.toUpperCase() ?? ''}'
+            label: 'CHALLENGE ${atName(friend?.displayName).toUpperCase()}'
                 .trim(),
             variant: PillButtonVariant.primary,
             fontSize: 13,

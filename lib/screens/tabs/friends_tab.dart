@@ -7,6 +7,7 @@ import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
+import '../../utils/at_name.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/loading_skeleton.dart';
@@ -171,9 +172,12 @@ class _FriendsTabState extends State<FriendsTab> {
       final identityToken = widget.authService.authToken;
       if (identityToken == null || identityToken.isEmpty) return;
 
+      // Stored names are bare; strip a leading '@' the user may have typed.
+      final bareQuery = query.startsWith('@') ? query.substring(1) : query;
+
       final results = await _backendApiService.searchUsers(
         identityToken: identityToken,
-        query: query,
+        query: bareQuery,
       );
 
       if (!mounted) return;
@@ -282,7 +286,7 @@ class _FriendsTabState extends State<FriendsTab> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              displayName,
+              atName(displayName),
               style: PixelText.title(size: 18, color: AppColors.textDark),
             ),
             const SizedBox(height: 16),
@@ -648,7 +652,7 @@ class _FriendsTabState extends State<FriendsTab> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    _searchResults[i]['displayName'] as String? ?? '',
+                    atName(_searchResults[i]['displayName'] as String? ?? ''),
                     style: PixelText.body(size: 15, color: AppColors.textDark),
                   ),
                 ),
@@ -794,7 +798,7 @@ class _FriendsTabState extends State<FriendsTab> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  displayName,
+                  atName(displayName),
                   style: PixelText.body(size: 16, color: AppColors.textDark),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -824,7 +828,7 @@ class _FriendsTabState extends State<FriendsTab> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              displayName,
+              atName(displayName),
               style: PixelText.body(size: 16, color: AppColors.textDark),
               overflow: TextOverflow.ellipsis,
             ),
@@ -866,7 +870,7 @@ class _FriendsTabState extends State<FriendsTab> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              displayName,
+              atName(displayName),
               style: PixelText.body(size: 16, color: AppColors.textDark),
               overflow: TextOverflow.ellipsis,
             ),
@@ -903,7 +907,7 @@ class _FriendsTabState extends State<FriendsTab> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Cancel request to $displayName?',
+              'Cancel request to ${atName(displayName)}?',
               textAlign: TextAlign.center,
               style: PixelText.title(size: 16, color: AppColors.textDark),
             ),

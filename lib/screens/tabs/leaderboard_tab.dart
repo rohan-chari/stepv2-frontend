@@ -5,6 +5,7 @@ import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
+import '../../utils/at_name.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/filter_dropdown.dart';
 import '../../widgets/game_container.dart';
@@ -15,6 +16,28 @@ import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
 
 enum _LeaderboardType { steps, races }
+
+enum _LeaderboardScope { global, friends }
+
+extension on _LeaderboardScope {
+  String get apiValue {
+    switch (this) {
+      case _LeaderboardScope.global:
+        return 'global';
+      case _LeaderboardScope.friends:
+        return 'friends';
+    }
+  }
+
+  String get label {
+    switch (this) {
+      case _LeaderboardScope.global:
+        return 'GLOBAL';
+      case _LeaderboardScope.friends:
+        return 'FRIENDS';
+    }
+  }
+}
 
 _LeaderboardType _leaderboardTypeFromApi(String apiValue) {
   switch (apiValue) {
@@ -103,6 +126,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   late final BackendApiService _api;
   _LeaderboardType _selectedType = _LeaderboardType.steps;
   String _selectedPeriod = 'today';
+  _LeaderboardScope _selectedScope = _LeaderboardScope.global;
   bool _isLoading = true;
   List<Map<String, dynamic>> _top100 = [];
   Map<String, dynamic>? _currentUser;
@@ -182,16 +206,19 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     final requestPeriod = requestType == _LeaderboardType.steps
         ? _selectedPeriod
         : 'allTime';
+    final requestScope = _selectedScope;
 
     try {
       final data = await _api.fetchLeaderboard(
         identityToken: token,
         type: requestType.apiValue,
         period: requestPeriod,
+        scope: requestScope.apiValue,
       );
 
       if (!mounted ||
           requestType != _selectedType ||
+          requestScope != _selectedScope ||
           requestPeriod !=
               (_selectedType == _LeaderboardType.steps
                   ? _selectedPeriod
@@ -228,6 +255,12 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   void _selectType(_LeaderboardType type) {
     if (type == _selectedType) return;
     setState(() => _selectedType = type);
+    _loadLeaderboard();
+  }
+
+  void _selectScope(_LeaderboardScope scope) {
+    if (scope == _selectedScope) return;
+    setState(() => _selectedScope = scope);
     _loadLeaderboard();
   }
 
@@ -384,6 +417,30 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     );
   }
 
+  Widget _buildScopeTabs() {
+    final scopes = _LeaderboardScope.values;
+
+    return Row(
+      children: [
+        for (int i = 0; i < scopes.length; i++) ...[
+          if (i > 0) const SizedBox(width: 8),
+          Expanded(
+            child: PillButton(
+              label: scopes[i].label,
+              onPressed: () => _selectScope(scopes[i]),
+              variant: scopes[i] == _selectedScope
+                  ? PillButtonVariant.secondary
+                  : PillButtonVariant.accent,
+              fontSize: 11,
+              fullWidth: true,
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   Widget _buildRankingControls() {
     return DecoratedBox(
       decoration: const BoxDecoration(
@@ -405,6 +462,8 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
               ),
               const SizedBox(height: 14),
               _buildTypeTabs(),
+              const SizedBox(height: 10),
+              _buildScopeTabs(),
               if (_selectedType == _LeaderboardType.steps) ...[
                 const SizedBox(height: 10),
                 FilterDropdown<String>(
@@ -432,28 +491,41 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   }
 
   Widget _buildEmptyState() {
+    // On the friends scope an empty board means "no friends to compete with"
+    // rather than "no records" — nudge the user to add some.
+    final bool friendsScope = _selectedScope == _LeaderboardScope.friends;
+    final IconData emptyIcon = friendsScope
+        ? Icons.group_add_rounded
+        : _selectedType.emptyIcon;
+    final String emptyTitle = friendsScope
+        ? 'No friends on the board yet. Add some to compete!'
+        : _selectedType.emptyTitle;
+    final String? emptySubtitle = friendsScope
+        ? null
+        : _selectedType.emptySubtitle;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 28),
       child: Column(
         children: [
           Icon(
-            _selectedType.emptyIcon,
+            emptyIcon,
             size: 32,
             color: AppColors.textMid.withValues(alpha: 0.6),
           ),
           const SizedBox(height: 8),
           Text(
-            _selectedType.emptyTitle,
+            emptyTitle,
             style: PixelText.body(
               size: 18,
               color: AppColors.textMid,
             ).copyWith(shadows: _textShadows),
             textAlign: TextAlign.center,
           ),
-          if (_selectedType.emptySubtitle != null) ...[
+          if (emptySubtitle != null) ...[
             const SizedBox(height: 6),
             Text(
-              _selectedType.emptySubtitle!,
+              emptySubtitle,
               style: PixelText.body(
                 size: 14,
                 color: AppColors.textMid,
@@ -657,7 +729,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
         ),
         const SizedBox(height: 6),
         Text(
-          row.displayName,
+          atName(row.displayName),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
@@ -770,7 +842,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
               children: [
                 Flexible(
                   child: Text(
-                    row.displayName,
+                    atName(row.displayName),
                     style: nameStyle,
                     overflow: TextOverflow.ellipsis,
                   ),

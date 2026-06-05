@@ -4,6 +4,7 @@ import '../models/loadable.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
+import '../utils/at_name.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/loading_skeleton.dart';
@@ -323,7 +324,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              'BY $creatorName'.toUpperCase(),
+              'BY ${atName(creatorName)}'.toUpperCase(),
               style: PixelText.body(size: 11, color: AppColors.textMid),
             ),
             const SizedBox(height: 12),

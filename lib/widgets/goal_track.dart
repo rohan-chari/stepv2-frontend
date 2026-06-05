@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'app_avatar.dart';
 import '../styles.dart';
+import '../utils/at_name.dart';
 
 /// Palette of distinct colors for friend avatars on the track.
 const _friendColors = [
@@ -198,7 +199,7 @@ class _GoalTrackState extends State<GoalTrack>
               Text(
                 runner.isStealthed
                     ? '???'
-                    : (runner.isUser ? 'You' : runner.name),
+                    : (runner.isUser ? 'You' : atName(runner.name)),
                 style: PixelText.body(size: 12, color: AppColors.textMid),
               ),
             ],

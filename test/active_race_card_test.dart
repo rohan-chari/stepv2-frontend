@@ -52,9 +52,9 @@ void main() {
     expect(find.text('MORNING WALK'), findsOneWidget);
     expect(find.text('ENDS IN '), findsOneWidget);
     expect(find.text('YOU: 2nd'), findsOneWidget);
-    expect(find.text('Alice'), findsOneWidget);
-    expect(find.text('Bob'), findsOneWidget);
-    expect(find.text('Cara'), findsOneWidget);
+    expect(find.text('@Alice'), findsOneWidget);
+    expect(find.text('@Bob'), findsOneWidget);
+    expect(find.text('@Cara'), findsOneWidget);
     expect(find.text('12,000 steps'), findsOneWidget);
   });
 
@@ -116,9 +116,9 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Alice'), findsOneWidget);
+    expect(find.text('@Alice'), findsOneWidget);
     expect(find.text('You'), findsOneWidget);
-    expect(find.text('Cara'), findsNothing);
+    expect(find.text('@Cara'), findsNothing);
   });
 
   testWidgets('tap invokes onTap', (tester) async {

@@ -4,6 +4,7 @@ import '../widgets/home_chrome.dart';
 import '../widgets/onboarding_permission_gate.dart';
 import '../widgets/pill_button.dart';
 import '../styles.dart';
+import '../utils/at_name.dart';
 
 /// Standalone onboarding flow shown after sign-in until the user has granted
 /// health access, answered the notification prompt, and seen the
@@ -345,7 +346,7 @@ class _OnboardingRaceCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'BY $creatorName'.toUpperCase(),
+            'BY ${atName(creatorName)}'.toUpperCase(),
             style: HomeText.label(
               size: 11,
               color: AppColors.parchmentLight.withValues(alpha: 0.80),

@@ -14,6 +14,7 @@ class _FakeBackendApiService extends BackendApiService {
     required String identityToken,
     String type = 'steps',
     String period = 'today',
+    String scope = 'global',
   }) async {
     return {
       'top100': [
@@ -96,7 +97,7 @@ void main() {
       );
       await tester.pump();
 
-      await tester.tap(find.text('AceWinner'));
+      await tester.tap(find.text('@AceWinner'));
       // Drive the modal-sheet route transition + the fetchFriends future
       // without pumpAndSettle (the leaderboard's refresh progress bar can
       // animate indefinitely and would time pumpAndSettle out).
@@ -120,7 +121,7 @@ void main() {
     );
     await tester.pump();
 
-    await tester.tap(find.text('Trail Walker').last);
+    await tester.tap(find.text('@Trail Walker').last);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 

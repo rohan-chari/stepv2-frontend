@@ -6,9 +6,11 @@ import 'package:share_plus/share_plus.dart';
 import '../../models/loadable.dart';
 import '../../styles.dart';
 import '../../models/step_data.dart';
+import '../../utils/at_name.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../widgets/coin_balance_badge.dart';
+import '../../widgets/global_event_banner.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/step_milestones_section.dart';
 import '../../widgets/streak_chip.dart' show StreakChip, StreakChipState;
@@ -119,6 +121,15 @@ class HomeTab extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      // GLOBAL STEP EVENT — on-brand "2x STEPS" banner shown to
+                      // every user while a step-multiplier window is live. The
+                      // shared widget self-ticks the countdown and collapses on
+                      // its own once the window ends.
+                      if (_buildGlobalEventBanner() case final banner?)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                          child: banner,
+                        ),
                       if (raceCard != null)
                         _buildRaceSection()
                       else if (raceCardLoading)
@@ -146,6 +157,34 @@ class HomeTab extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  /// On-brand "2x STEPS" banner for an active global step-multiplier event,
+  /// driven by the top-level `globalEvent` on the /home/race-card response.
+  /// Read defensively: an older backend omits the field (or sends it inactive /
+  /// without a parseable endsAt), in which case nothing renders. The returned
+  /// [GlobalEventBanner] self-ticks its countdown and collapses once the window
+  /// ends, so HomeTab can stay a StatelessWidget.
+  Widget? _buildGlobalEventBanner() {
+    final event = raceCard?['globalEvent'];
+    if (event is! Map) return null;
+    if (event['active'] == false) return null;
+
+    final endsAtRaw = event['endsAt'];
+    final endsAt = endsAtRaw is String
+        ? DateTime.tryParse(endsAtRaw)?.toLocal()
+        : null;
+    if (endsAt == null) return null;
+    if (!endsAt.isAfter(DateTime.now())) return null;
+
+    final multiplierRaw = event['multiplier'];
+    final multiplier = multiplierRaw is num ? multiplierRaw.toInt() : 2;
+
+    return GlobalEventBanner(
+      key: const Key('home-global-event-banner'),
+      multiplier: multiplier,
+      endsAt: endsAt,
     );
   }
 
@@ -271,7 +310,7 @@ class HomeTab extends StatelessWidget {
         final durationHours = (cardData['durationHours'] as num?)?.toInt() ?? 0;
         return _HomeRaceActionRow(
           label: 'INVITE',
-          title: '${inviter?.displayName ?? 'Someone'} challenged you',
+          title: '${atName(inviter?.displayName ?? 'Someone')} challenged you',
           subtitle:
               '${_formatDuration(durationHours)} · $participantCount racers',
           primaryLabel: 'ACCEPT',
@@ -309,7 +348,7 @@ class HomeTab extends StatelessWidget {
         final isPublicJoinable = cardData['isPublicJoinable'] as bool? ?? false;
         return _HomeRaceActionRow(
           label: 'LIVE',
-          title: '${friend?.displayName ?? 'A friend'} is racing',
+          title: '${atName(friend?.displayName ?? 'A friend')} is racing',
           subtitle: participants > 0
               ? '$participants racers'
               : 'A race is happening now',
@@ -328,7 +367,7 @@ class HomeTab extends StatelessWidget {
         final raceName = cardData['raceName'] as String? ?? 'a race';
         return _HomeRaceActionRow(
           label: 'FINISHED',
-          title: '${friend?.displayName ?? 'A friend'} finished $raceName',
+          title: '${atName(friend?.displayName ?? 'A friend')} finished $raceName',
           subtitle: 'Start a rematch when you are ready',
           primaryLabel: 'CHALLENGE',
           onPrimary: onChallengeFriendBack == null || friend == null
@@ -515,7 +554,7 @@ class HomeTab extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        displayName ?? 'You',
+                        atName(displayName ?? 'You'),
                         style: PixelText.title(
                           size: 24,
                           color: AppColors.parchment,

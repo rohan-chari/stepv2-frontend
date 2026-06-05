@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'goal_track.dart';
 import 'home_chrome.dart';
+import '../utils/at_name.dart';
 
 class HomeCourseTrack extends StatefulWidget {
   const HomeCourseTrack({
@@ -207,7 +208,7 @@ class _HomeCourseTrackState extends State<HomeCourseTrack>
     final progress = (target.runner.progress * 100).clamp(0, 100).round();
     final label = target.runner.isStealthed
         ? '??? • ?%'
-        : '${target.runner.isUser ? 'You' : target.runner.name} • $progress%';
+        : '${target.runner.isUser ? 'You' : atName(target.runner.name)} • $progress%';
 
     return Positioned(
       left: (target.center.dx - 60).clamp(8.0, layout.courseWidth - 128),
@@ -466,7 +467,7 @@ class _CapybaraRunnerMarker extends StatelessWidget {
   Widget build(BuildContext context) {
     final name = runner.isStealthed
         ? '???'
-        : (runner.isUser ? 'You' : runner.name);
+        : (runner.isUser ? 'You' : atName(runner.name));
 
     return SizedBox(
       width: 96,
@@ -1239,7 +1240,7 @@ class _LegendRow extends StatelessWidget {
                     Text(
                       runners[i].isStealthed
                           ? '???'
-                          : (runners[i].isUser ? 'You' : runners[i].name),
+                          : (runners[i].isUser ? 'You' : atName(runners[i].name)),
                       style: HomeText.body(size: 12, color: HomeColors.inkSoft),
                     ),
                   ],

@@ -190,12 +190,12 @@ void main() {
       );
       // Only the endpoint-returned racer appears in the picker.
       expect(
-        find.descendant(of: pickerColumn, matching: find.text('Hill Climber')),
+        find.descendant(of: pickerColumn, matching: find.text('@Hill Climber')),
         findsOneWidget,
       );
       // The other eligible (but not-stealable) racer is NOT offered.
       expect(
-        find.descendant(of: pickerColumn, matching: find.text('Ridge Runner')),
+        find.descendant(of: pickerColumn, matching: find.text('@Ridge Runner')),
         findsNothing,
       );
 

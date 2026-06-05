@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../styles.dart';
+import '../utils/at_name.dart';
 
 class MultiRaceTrack extends StatelessWidget {
   final List<Map<String, dynamic>> participants;
@@ -58,7 +59,7 @@ class MultiRaceTrack extends StatelessWidget {
         Row(
           children: [
             Text(
-              displayName,
+              atName(displayName),
               style: PixelText.title(
                 size: 12,
                 color: isMe ? AppColors.accent : AppColors.textDark,

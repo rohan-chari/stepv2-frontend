@@ -295,6 +295,14 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
                               decoration: InputDecoration(
                                 filled: true,
                                 fillColor: AppColors.parchmentLight,
+                                // Visual-only handle hint; the '@' never enters
+                                // the controller, so the stored/validated value
+                                // stays bare.
+                                prefixText: '@',
+                                prefixStyle: PixelText.body(
+                                  size: 18,
+                                  color: AppColors.textMid,
+                                ),
                                 hintText: 'Choose your name',
                                 hintStyle: PixelText.body(
                                   size: 18,

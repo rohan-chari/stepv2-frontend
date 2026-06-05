@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'app_avatar.dart';
 import '../styles.dart';
+import '../utils/at_name.dart';
 import '../utils/race_participant_display.dart';
 
 /// A styled wooden plank for leaderboard rows with medal and depth.
@@ -108,7 +109,7 @@ class LeaderboardPlank extends StatelessWidget {
                 children: [
                   Flexible(
                     child: Text(
-                      displayName,
+                      atName(displayName),
                       style: PixelText.body(
                         size: 15,
                         color: isStealthed

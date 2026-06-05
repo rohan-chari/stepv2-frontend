@@ -9,6 +9,7 @@ import '../../services/backend_api_service.dart';
 import '../../services/notification_service.dart';
 import '../../styles.dart';
 import '../../tutorial/tutorial_screen.dart';
+import '../../utils/at_name.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/trail_sign.dart';
@@ -351,7 +352,7 @@ class _ProfileTabState extends State<ProfileTab> {
                       children: [
                         if (displayName != null && displayName.isNotEmpty)
                           Text(
-                            displayName,
+                            atName(displayName),
                             style: PixelText.title(
                               size: 20,
                               color: AppColors.parchment,
@@ -489,6 +490,9 @@ class _StatsSectionState extends State<_StatsSection> {
   int _thisWeek = 0;
   int _thisMonth = 0;
   int _thisYear = 0;
+  int? _avgPerDayWeek;
+  int? _avgPerDayMonth;
+  int? _avgPerDayYear;
   int _allTime = 0;
   int _streak = 0;
   String? _rankedTier;
@@ -533,6 +537,9 @@ class _StatsSectionState extends State<_StatsSection> {
           _thisWeek = (stats['thisWeek'] as num?)?.toInt() ?? 0;
           _thisMonth = (stats['thisMonth'] as num?)?.toInt() ?? 0;
           _thisYear = (stats['thisYear'] as num?)?.toInt() ?? 0;
+          _avgPerDayWeek = (stats['avgPerDayWeek'] as num?)?.toInt();
+          _avgPerDayMonth = (stats['avgPerDayMonth'] as num?)?.toInt();
+          _avgPerDayYear = (stats['avgPerDayYear'] as num?)?.toInt();
           _allTime = (stats['allTime'] as num?)?.toInt() ?? 0;
           _streak = (stats['streak'] as num?)?.toInt() ?? 0;
           _rankedTier = stats['rankedTier'] as String?;
@@ -556,6 +563,18 @@ class _StatsSectionState extends State<_StatsSection> {
       return '${(steps / 1000).toStringAsFixed(1)}k';
     }
     return '$steps';
+  }
+
+  String _formatPlain(int steps) {
+    final digits = steps.abs().toString();
+    final buffer = StringBuffer();
+    for (var i = 0; i < digits.length; i++) {
+      if (i > 0 && (digits.length - i) % 3 == 0) {
+        buffer.write(',');
+      }
+      buffer.write(digits[i]);
+    }
+    return steps < 0 ? '-$buffer' : buffer.toString();
   }
 
   @override
@@ -588,9 +607,21 @@ class _StatsSectionState extends State<_StatsSection> {
             ),
           ),
         _buildRankedRow(0),
-        _buildStatRow('This Week', _formatSteps(_thisWeek), 1),
-        _buildStatRow('This Month', _formatSteps(_thisMonth), 2),
-        _buildStatRow('This Year', _formatSteps(_thisYear), 3),
+        _buildStatRow(
+          'Steps/Day This Week',
+          _formatPlain(_avgPerDayWeek ?? _thisWeek),
+          1,
+        ),
+        _buildStatRow(
+          'Steps/Day This Month',
+          _formatPlain(_avgPerDayMonth ?? _thisMonth),
+          2,
+        ),
+        _buildStatRow(
+          'Steps/Day This Year',
+          _formatPlain(_avgPerDayYear ?? _thisYear),
+          3,
+        ),
         _buildStatRow('All Time', _formatSteps(_allTime), 4),
         _buildStatRow(
           'Goal Streak',

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/loadable.dart';
 import '../../services/auth_service.dart';
 import '../../styles.dart';
+import '../../utils/at_name.dart';
 import '../../utils/race_participant_display.dart';
 import '../../widgets/featured_race_card.dart';
 import '../../widgets/info_toast.dart';
@@ -676,7 +677,7 @@ class _RacesTabState extends State<RacesTab> {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      '$participantCount runner${participantCount == 1 ? '' : 's'}${isInvite && creatorName.isNotEmpty ? ' \u2022 by $creatorName' : ''}',
+                      '$participantCount runner${participantCount == 1 ? '' : 's'}${isInvite && creatorName.isNotEmpty ? ' \u2022 by ${atName(creatorName)}' : ''}',
                       style: PixelText.body(size: 14, color: AppColors.textMid),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,

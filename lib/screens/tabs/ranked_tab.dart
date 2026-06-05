@@ -4,6 +4,7 @@ import '../../models/loadable.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
+import '../../utils/at_name.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/home_course_track.dart'
     show AnimatedCapybaraWithAccessories;
@@ -656,7 +657,7 @@ class _RankedTabState extends State<RankedTab> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  row.displayName,
+                  atName(row.displayName),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: PixelText.body(
@@ -1153,7 +1154,7 @@ class _PodiumPlace extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            entry.displayName,
+            atName(entry.displayName),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: PixelText.body(size: 10, color: AppColors.textDark),

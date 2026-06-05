@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
+import '../utils/at_name.dart';
 import 'app_avatar.dart';
 import 'error_toast.dart';
 import 'info_toast.dart';
@@ -278,7 +279,7 @@ class _FriendRequestSheetState extends State<_FriendRequestSheet> {
             ),
             const SizedBox(height: 12),
             Text(
-              widget.displayName,
+              atName(widget.displayName),
               style: PixelText.title(size: 18, color: AppColors.textDark),
               textAlign: TextAlign.center,
             ),

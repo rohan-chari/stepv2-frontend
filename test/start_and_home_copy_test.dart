@@ -141,7 +141,7 @@ void main() {
       ),
     );
 
-    expect(find.text('Trail Walker'), findsOneWidget);
+    expect(find.text('@Trail Walker'), findsOneWidget);
     expect(find.text('2,388'), findsOneWidget);
     expect(find.text('out of 5k'), findsOneWidget);
   });

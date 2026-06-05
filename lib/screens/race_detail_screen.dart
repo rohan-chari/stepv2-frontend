@@ -9,11 +9,13 @@ import '../services/backend_api_service.dart';
 import '../services/race_chat_service.dart';
 import '../services/race_feed_service.dart';
 import '../styles.dart';
+import '../utils/at_name.dart';
 import '../utils/race_participant_display.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/arcade_tab_selector.dart';
 import '../widgets/app_avatar.dart';
 import '../widgets/error_toast.dart';
+import '../widgets/global_event_banner.dart';
 import '../widgets/goal_track.dart';
 import '../widgets/home_course_track.dart';
 import '../widgets/info_toast.dart';
@@ -1117,7 +1119,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(
-                                t['displayName'] as String? ?? '???',
+                                atName(t['displayName'] as String? ?? '???'),
                                 style: PixelText.body(
                                   size: 14,
                                   color: AppColors.textDark,
@@ -2080,117 +2082,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
     final multiplier = _readNullableInt(event['multiplier']) ?? 2;
 
-    final totalSeconds = remaining.inSeconds;
-    final minutes = totalSeconds ~/ 60;
-    final seconds = totalSeconds % 60;
-    final countdown =
-        '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-
-    return Container(
+    // Shared, self-ticking banner — same look on the race page and home screen.
+    return GlobalEventBanner(
       key: const Key('race-global-event-banner'),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.woodShadow.withValues(alpha: 0.35),
-            offset: const Offset(0, 4),
-            blurRadius: 0,
-          ),
-        ],
-      ),
-      child: Container(
-        padding: const EdgeInsets.all(2),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          gradient: const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              AppColors.coinLight,
-              AppColors.coinMid,
-              AppColors.coinDark,
-            ],
-          ),
-          border: Border.all(color: AppColors.woodShadow, width: 1.2),
-        ),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            gradient: const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                AppColors.roofLight,
-                AppColors.roofMid,
-                AppColors.roofDark,
-              ],
-            ),
-            border: Border.all(
-              color: AppColors.pillGold.withValues(alpha: 0.9),
-              width: 1,
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [AppColors.coinLight, AppColors.coinDark],
-                  ),
-                  border: Border.all(color: AppColors.woodShadow, width: 1.1),
-                ),
-                child: const Icon(
-                  Icons.bolt_rounded,
-                  size: 20,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${multiplier}x STEPS',
-                      style: PixelText.title(size: 14, color: Colors.white),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'EVERY STEP COUNTS ${multiplier}x — GO!',
-                      style: PixelText.body(
-                        size: 12.5,
-                        color: AppColors.parchmentLight,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.woodDark,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  'ends in $countdown',
-                  style: PixelText.title(size: 11, color: AppColors.parchment),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+      multiplier: multiplier,
+      endsAt: endsAt,
     );
   }
 
@@ -2918,7 +2814,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                 RacerAvatar(rank: 1, accessories: winnerAccessories, size: 64),
                 const SizedBox(height: 10),
                 Text(
-                  winner['displayName'] as String? ?? 'Unknown',
+                  winner['displayName'] is String
+                      ? atName(winner['displayName'] as String)
+                      : 'Unknown',
                   style: PixelText.title(size: 22, color: AppColors.parchment),
                   textAlign: TextAlign.center,
                 ),
@@ -3214,7 +3112,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         children: [
           Expanded(
             child: Text(
-              isMe ? '$name (you)' : name,
+              isMe ? '${atName(name)} (you)' : atName(name),
               style: PixelText.body(
                 size: 18,
                 color: isMe ? AppColors.accent : AppColors.textDark,
@@ -3276,7 +3174,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                     const SizedBox(width: 6),
                     Flexible(
                       child: Text(
-                        'Remove $displayName?',
+                        'Remove ${atName(displayName)}?',
                         style: PixelText.title(
                           size: 18,
                           color: AppColors.textDark,
@@ -3717,7 +3615,7 @@ class _ChatBubble extends StatelessWidget {
                   children: [
                     if (!isMine && message.senderName != null)
                       Text(
-                        message.senderName!,
+                        atName(message.senderName!),
                         style: PixelText.title(
                           size: 12,
                           color: AppColors.textMid,

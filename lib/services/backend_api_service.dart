@@ -440,10 +440,11 @@ class BackendApiService {
     required String identityToken,
     String type = 'steps',
     String period = 'today',
+    String scope = 'global',
   }) async {
     final uri = Uri(
       path: '/leaderboard',
-      queryParameters: {'type': type, 'period': period},
+      queryParameters: {'type': type, 'period': period, 'scope': scope},
     );
 
     final response = await _sendGetRequest(

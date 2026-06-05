@@ -109,6 +109,7 @@ class _FakeBackendApiService extends BackendApiService {
     required String identityToken,
     String type = 'steps',
     String period = 'today',
+    String scope = 'global',
   }) async {
     leaderboardCalls.add((type: type, period: period));
     if (type == 'challenges') {

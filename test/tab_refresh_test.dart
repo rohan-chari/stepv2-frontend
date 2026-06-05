@@ -174,7 +174,7 @@ void main() {
     expect(find.byType(ArcadePageBackground), findsOneWidget);
     expect(find.byType(TextField), findsOneWidget);
 
-    final displayNameContext = tester.element(find.text('Trail Walker').first);
+    final displayNameContext = tester.element(find.text('@Trail Walker').first);
     expect(
       DefaultTextStyle.of(displayNameContext).style.decoration,
       isNot(TextDecoration.underline),

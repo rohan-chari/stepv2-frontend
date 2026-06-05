@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../styles.dart';
+import '../utils/at_name.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/retro_card.dart';
 
@@ -103,7 +104,7 @@ class FriendPickerScreen extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  name,
+                  atName(name),
                   style: PixelText.title(size: 18, color: AppColors.textDark),
                 ),
               ),

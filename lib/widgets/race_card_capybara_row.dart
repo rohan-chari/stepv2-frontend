@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../styles.dart';
+import '../utils/at_name.dart';
 import 'home_course_track.dart' show CapybaraSpriteWithAccessories;
 
 /// Renders the top-3 racers of an active race as capybara characters, each with
@@ -142,7 +143,7 @@ class _RaceCardCapybaraRowState extends State<RaceCardCapybaraRow>
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      displayName,
+                      atName(displayName),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: PixelText.body(
