@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
+import '../widgets/case_opening_strip.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/game_container.dart';
 import '../widgets/home_chrome.dart';
@@ -39,6 +40,11 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
   bool _isLoading = true;
   bool _isClaiming = false;
   Map<String, dynamic>? _claimedReward;
+  // Box mode (v2): claim fires when the reel screen opens; the reel waits for
+  // the result before it can spin, and the reveal shows once the spin lands.
+  bool _opening = false;
+  Map<String, dynamic>? _boxResult;
+  List<_DailyStripItem>? _stripItems;
 
   @override
   void initState() {
@@ -62,6 +68,11 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
         _status = res;
         _isLoading = false;
       });
+      // Box mode goes straight to the reel — the claim fires immediately and
+      // the reel waits for the swipe, same as opening a race mystery box.
+      if (_box != null && res['claimedToday'] != true) {
+        _openBox();
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -69,6 +80,14 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
     }
   }
 
+  /// Box mode is on only when the backend advertises it in the status
+  /// response — older backends keep the legacy ladder flow.
+  Map<String, dynamic>? get _box {
+    final box = _status?['box'];
+    return box is Map<String, dynamic> ? box : null;
+  }
+
+  // Legacy ladder claim (old backend without box support).
   Future<void> _claim() async {
     if (_isClaiming) return;
     final token = widget.authService.authToken;
@@ -94,6 +113,47 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
       setState(() => _isClaiming = false);
       showErrorToast(context, 'Claim failed. Try again.');
     }
+  }
+
+  // Box claim: switch to the reel screen immediately and roll in the
+  // background — same flow as the race mystery box (CaseOpeningScreen).
+  Future<void> _openBox() async {
+    if (_isClaiming) return;
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) return;
+    setState(() {
+      _isClaiming = true;
+      _opening = true;
+    });
+    try {
+      final res = await widget.backendApiService.claimDailyRewardBox(
+        identityToken: token,
+        localDate: _todayLocalDate(),
+      );
+      final coins = res['coins'];
+      if (coins is num) {
+        widget.authService.updateCoins(coins.toInt());
+      }
+      if (!mounted) return;
+      setState(() {
+        _boxResult = res;
+        _stripItems = _generateStrip(res);
+        _isClaiming = false;
+      });
+      widget.onClaimed?.call();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isClaiming = false;
+        _opening = false;
+      });
+      showErrorToast(context, 'Claim failed. Try again.');
+    }
+  }
+
+  void _onStripComplete() {
+    if (_claimedReward != null || _boxResult == null) return;
+    setState(() => _claimedReward = _boxResult);
   }
 
   @override
@@ -123,6 +183,10 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
                           reward: _claimedReward!,
                           onClose: () => Navigator.of(context).pop(true),
                         )
+                      : _opening
+                      ? _buildOpening()
+                      : _box != null
+                      ? _buildBox()
                       : _buildLadder(),
                 ),
               ),
@@ -232,6 +296,543 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
       ),
     );
   }
+
+  // Daily reward v2: one mystery box per day; login streak drives the odds.
+  Widget _buildBox() {
+    final status = _status!;
+    final box = _box!;
+    final claimedToday = status['claimedToday'] == true;
+    final streak = (box['streak'] as num?)?.toInt() ?? 1;
+
+    return GameContainer(
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+      frameColor: AppColors.accent,
+      surfaceColor: AppColors.parchmentLight,
+      glowColor: AppColors.coinMid,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'DAILY REWARD',
+                  style: HomeText.display(size: 26, color: HomeColors.ink),
+                ),
+              ),
+              _InfoButton(onTap: _showOddsInfo),
+              const SizedBox(width: 8),
+              _CloseButton(onTap: () => Navigator.of(context).pop(false)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            claimedToday
+                ? 'You\'ve opened today\'s box. Come back tomorrow!'
+                : 'Open today\'s mystery box to keep your streak going.',
+            style: HomeText.body(
+              size: 13,
+              color: HomeColors.muted,
+              weight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                color: AppColors.coinLight.withValues(alpha: 0.35),
+                border: Border.all(color: AppColors.coinDark, width: 2),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.local_fire_department_rounded,
+                    size: 20,
+                    color: AppColors.error,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    streak == 1 ? 'DAY 1 STREAK' : '$streak-DAY STREAK',
+                    style: PixelText.title(size: 14, color: AppColors.textDark),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Center(
+            child: Container(
+              width: 150,
+              height: 150,
+              decoration: BoxDecoration(
+                color: AppColors.parchmentDark,
+                border: Border.all(color: AppColors.coinDark, width: 3),
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.coinDark.withValues(alpha: 0.35),
+                    blurRadius: 14,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Text(
+                  '?',
+                  style: HomeText.display(size: 72, color: AppColors.coinDark),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Coins or a new accessory await...',
+            textAlign: TextAlign.center,
+            style: PixelText.body(size: 12, color: AppColors.textMid),
+          ),
+          const SizedBox(height: 18),
+          PillButton(
+            label: claimedToday
+                ? 'COME BACK TOMORROW'
+                : _isClaiming
+                ? 'OPENING...'
+                : 'OPEN BOX',
+            variant: PillButtonVariant.primary,
+            fullWidth: true,
+            onPressed: (claimedToday || _isClaiming) ? null : _openBox,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Reel screen — same chrome as the race mystery box (CaseOpeningScreen):
+  // "PREPARING..." until the claim lands, then swipe-to-spin reel.
+  Widget _buildOpening() {
+    final items = _stripItems;
+    final streak = (_box?['streak'] as num?)?.toInt() ?? 1;
+    return GameContainer(
+      key: const ValueKey('opening'),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
+      frameColor: AppColors.accent,
+      surfaceColor: AppColors.parchmentLight,
+      glowColor: AppColors.coinMid,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'DAILY REWARD',
+                  style: HomeText.display(size: 28, color: HomeColors.ink),
+                ),
+              ),
+              _InfoButton(onTap: _showOddsInfo),
+              const SizedBox(width: 8),
+              // Reward is already claimed once we're here; closing just skips
+              // the animation, so refresh the caller (pop true).
+              _CloseButton(onTap: () => Navigator.of(context).pop(true)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Swipe the reel to crack it open',
+            style: HomeText.body(
+              size: 14,
+              color: HomeColors.muted,
+              weight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.coinLight.withValues(alpha: 0.35),
+                border: Border.all(color: AppColors.coinDark, width: 2),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.local_fire_department_rounded,
+                    size: 18,
+                    color: AppColors.error,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    streak == 1 ? 'DAY 1 STREAK' : '$streak-DAY STREAK',
+                    style: PixelText.title(size: 13, color: AppColors.textDark),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (items != null)
+            CaseOpeningReel(
+              itemCount: items.length,
+              resultIndex: _DailyStripItem.resultPosition,
+              onComplete: _onStripComplete,
+              itemBuilder: (context, index, isResult) =>
+                  _DailyReelTile(item: items[index]),
+            )
+          else
+            const SizedBox(
+              height: 160,
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(color: AppColors.accent),
+                    SizedBox(height: 12),
+                    Text(
+                      'PREPARING...',
+                      style: TextStyle(
+                        color: AppColors.textMid,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // Decoy tiles show what the box can actually pay — coin stacks per tier and
+  // the player's real unowned accessories — mixed at the live streak odds, so
+  // a longer streak visibly fills the reel with rarer tiles.
+  List<_DailyStripItem> _generateStrip(Map<String, dynamic> result) {
+    final box = _box ?? const <String, dynamic>{};
+    final odds = box['odds'] is Map<String, dynamic>
+        ? box['odds'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    final commonOdds = (odds['COMMON'] as num?)?.toDouble() ?? 0.50;
+    final uncommonOdds = (odds['UNCOMMON'] as num?)?.toDouble() ?? 0.35;
+
+    final ranges = box['coinRanges'] is Map<String, dynamic>
+        ? box['coinRanges'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    (int, int) rangeFor(String tier, int defMin, int defMax) {
+      final range = ranges[tier];
+      if (range is List && range.length == 2) {
+        final min = (range[0] as num?)?.toInt();
+        final max = (range[1] as num?)?.toInt();
+        if (min != null && max != null && max >= min) return (min, max);
+      }
+      return (defMin, defMax);
+    }
+
+    final (commonMin, commonMax) = rangeFor('COMMON', 10, 30);
+    final (uncommonMin, uncommonMax) = rangeFor('UNCOMMON', 40, 80);
+    final accessoryPool = (box['accessoryPool'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
+
+    final rng = Random();
+    final items = <_DailyStripItem>[];
+    for (int i = 0; i < _DailyStripItem.stripLength; i++) {
+      if (i == _DailyStripItem.resultPosition) {
+        items.add(_DailyStripItem.fromResult(result));
+        continue;
+      }
+      final roll = rng.nextDouble();
+      if (roll < commonOdds) {
+        items.add(
+          _DailyStripItem.coins(
+            commonMin + rng.nextInt(commonMax - commonMin + 1),
+            'COMMON',
+          ),
+        );
+      } else if (roll < commonOdds + uncommonOdds) {
+        items.add(
+          _DailyStripItem.coins(
+            uncommonMin + rng.nextInt(uncommonMax - uncommonMin + 1),
+            'UNCOMMON',
+          ),
+        );
+      } else if (accessoryPool.isNotEmpty) {
+        items.add(
+          _DailyStripItem.accessory(
+            accessoryPool[rng.nextInt(accessoryPool.length)],
+          ),
+        );
+      } else {
+        items.add(const _DailyStripItem.mysteryAccessory());
+      }
+    }
+    return items;
+  }
+
+  void _showOddsInfo() {
+    final box = _box;
+    final odds = box?['odds'] is Map<String, dynamic>
+        ? box!['odds'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    String pct(String key) {
+      final v = (odds[key] as num?)?.toDouble();
+      if (v == null) return '—';
+      return '${(v * 100).round()}%';
+    }
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+        child: GameContainer(
+          padding: const EdgeInsets.all(18),
+          frameColor: AppColors.accent,
+          surfaceColor: AppColors.parchmentLight,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'HOW IT WORKS',
+                textAlign: TextAlign.center,
+                style: HomeText.display(size: 22, color: HomeColors.ink),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Open a mystery box every day to build your streak. '
+                'The longer your streak, the better your odds of rare '
+                'rewards — more coins and rarer accessories you don\'t '
+                'own yet. Miss a day and your streak resets!',
+                style: HomeText.body(
+                  size: 13,
+                  color: HomeColors.muted,
+                  weight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 14),
+              _OddsRow(
+                label: 'COMMON',
+                detail: 'a few coins',
+                pct: pct('COMMON'),
+                color: _rarityColor('COMMON'),
+              ),
+              const SizedBox(height: 6),
+              _OddsRow(
+                label: 'UNCOMMON',
+                detail: 'more coins',
+                pct: pct('UNCOMMON'),
+                color: _rarityColor('UNCOMMON'),
+              ),
+              const SizedBox(height: 6),
+              _OddsRow(
+                label: 'RARE',
+                detail: 'new accessory',
+                pct: pct('RARE'),
+                color: _rarityColor('RARE'),
+              ),
+              const SizedBox(height: 16),
+              PillButton(
+                label: 'GOT IT',
+                fullWidth: true,
+                onPressed: () => Navigator.of(dialogContext).pop(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Color _rarityColor(String rarity) => caseRarityColor(rarity);
+
+/// One tile on the daily-box reel: a coin stack or an accessory.
+class _DailyStripItem {
+  static const stripLength = 45;
+  // Same as the race reel: result near the end for a long scroll.
+  static const resultPosition = 38;
+
+  final String rarity;
+  final int? coinAmount;
+  final String? assetKey;
+  final String? name;
+
+  const _DailyStripItem._({
+    required this.rarity,
+    this.coinAmount,
+    this.assetKey,
+    this.name,
+  });
+
+  const _DailyStripItem.coins(int amount, String rarity)
+    : this._(rarity: rarity, coinAmount: amount);
+
+  const _DailyStripItem.mysteryAccessory()
+    : this._(rarity: 'RARE', name: '???');
+
+  factory _DailyStripItem.accessory(Map<String, dynamic> shopItem) {
+    return _DailyStripItem._(
+      rarity: 'RARE',
+      assetKey: shopItem['assetKey'] as String?,
+      name: shopItem['name'] as String? ?? 'Accessory',
+    );
+  }
+
+  factory _DailyStripItem.fromResult(Map<String, dynamic> result) {
+    final rarity = (result['rarity'] as String? ?? 'COMMON').toUpperCase();
+    final shopItem = result['shopItem'] as Map<String, dynamic>?;
+    if (shopItem != null) {
+      return _DailyStripItem._(
+        rarity: rarity,
+        assetKey: shopItem['assetKey'] as String?,
+        name: shopItem['name'] as String? ?? 'Accessory',
+      );
+    }
+    return _DailyStripItem._(
+      rarity: rarity,
+      coinAmount: (result['coinAmount'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  bool get isAccessory => coinAmount == null;
+}
+
+class _DailyReelTile extends StatelessWidget {
+  const _DailyReelTile({required this.item});
+  final _DailyStripItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    return CaseReelTile(
+      rarity: item.rarity,
+      width: 86,
+      height: 100,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Expanded(child: Center(child: _buildFace())),
+          const SizedBox(height: 3),
+          Text(
+            item.isAccessory ? (item.name ?? '???') : '+${item.coinAmount}',
+            style: PixelText.body(size: 10, color: AppColors.textDark),
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFace() {
+    if (!item.isAccessory) {
+      // Static coin face — dozens of tiles scroll past, so no spin animation.
+      return Image.asset(
+        'assets/images/coin.png',
+        width: 42,
+        height: 42,
+        fit: BoxFit.contain,
+        errorBuilder: (_, _, _) =>
+            const Icon(Icons.paid_rounded, size: 38, color: AppColors.coinDark),
+      );
+    }
+    if (item.assetKey != null) {
+      return Image.asset(
+        'assets/images/accessories/${item.assetKey}.png',
+        width: 46,
+        height: 46,
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.none,
+        errorBuilder: (_, _, _) => const Icon(
+          Icons.checkroom_rounded,
+          size: 38,
+          color: AppColors.accent,
+        ),
+      );
+    }
+    return const Icon(
+      Icons.checkroom_rounded,
+      size: 38,
+      color: AppColors.accent,
+    );
+  }
+}
+
+class _OddsRow extends StatelessWidget {
+  const _OddsRow({
+    required this.label,
+    required this.detail,
+    required this.pct,
+    required this.color,
+  });
+
+  final String label;
+  final String detail;
+  final String pct;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.parchmentDark,
+        border: Border.all(color: color, width: 2),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Text(label, style: PixelText.title(size: 12, color: color)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              detail,
+              style: PixelText.body(size: 11, color: AppColors.textMid),
+            ),
+          ),
+          Text(pct, style: PixelText.number(size: 13, color: color)),
+        ],
+      ),
+    );
+  }
+}
+
+class _InfoButton extends StatelessWidget {
+  const _InfoButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Ink(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: AppColors.parchmentDark,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppColors.coinDark, width: 2),
+          ),
+          child: Center(
+            child: Text(
+              '?',
+              style: PixelText.title(size: 18, color: AppColors.coinDark),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _LadderTile extends StatelessWidget {
@@ -320,7 +921,9 @@ class _RewardRevealState extends State<_RewardReveal> {
   void initState() {
     super.initState();
     final type = widget.reward['rewardType'] as String? ?? 'COINS';
-    if (type != 'ACCESSORY') {
+    // Box claims (rarity present) already spun on the reel — go straight to
+    // the reveal. The standalone accessory spinner is only for legacy day-6.
+    if (type != 'ACCESSORY' || widget.reward['rarity'] != null) {
       _spinDone = true;
     }
   }
@@ -330,6 +933,9 @@ class _RewardRevealState extends State<_RewardReveal> {
     final type = widget.reward['rewardType'] as String? ?? 'COINS';
     final coinAmount = (widget.reward['coinAmount'] as num?)?.toInt() ?? 0;
     final shopItem = widget.reward['shopItem'] as Map<String, dynamic>?;
+    // Present only on daily-box claims; legacy ladder claims have no rarity.
+    final rarity = widget.reward['rarity'] as String?;
+    final rarityColor = rarity != null ? _rarityColor(rarity) : null;
 
     if (type == 'ACCESSORY' && shopItem != null && !_spinDone) {
       return _AccessorySpinner(
@@ -350,9 +956,9 @@ class _RewardRevealState extends State<_RewardReveal> {
       },
       child: GameContainer(
         padding: const EdgeInsets.all(20),
-        frameColor: AppColors.coinDark,
+        frameColor: rarityColor ?? AppColors.coinDark,
         surfaceColor: AppColors.parchmentLight,
-        glowColor: AppColors.coinMid,
+        glowColor: rarityColor ?? AppColors.coinMid,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -362,6 +968,25 @@ class _RewardRevealState extends State<_RewardReveal> {
               textAlign: TextAlign.center,
               style: HomeText.display(size: 32, color: HomeColors.ink),
             ),
+            if (rarity != null) ...[
+              const SizedBox(height: 6),
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: rarityColor!, width: 2),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Text(
+                    rarity.toUpperCase(),
+                    style: PixelText.title(size: 13, color: rarityColor),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             if (type == 'ACCESSORY' && shopItem != null) ...[
               Center(

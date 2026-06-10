@@ -1078,6 +1078,23 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  /// Daily reward v2: rolls a mystery box whose odds scale with the login
+  /// streak. Only call when the status response includes the `box` field —
+  /// older backends don't have this endpoint.
+  Future<Map<String, dynamic>> claimDailyRewardBox({
+    required String identityToken,
+    required String localDate,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/daily-reward/claim-box',
+      body: {'localDate': localDate},
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
   Future<Map<String, dynamic>> fetchShopCatalog({
     required String identityToken,
   }) async {
