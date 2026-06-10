@@ -18,16 +18,16 @@ const _kTiersV2 = [
 
 Map<String, dynamic> _week() => {
       'index': 5,
-      'startsOn': DateTime.now()
-          .subtract(const Duration(days: 2))
-          .toIso8601String(),
+      'startsOn':
+          DateTime.now().subtract(const Duration(days: 2)).toIso8601String(),
       'endsOn': DateTime.now().add(const Duration(days: 5)).toIso8601String(),
-      'settlesAt':
-          DateTime.now().add(const Duration(days: 5, hours: 18)).toIso8601String(),
+      'settlesAt': DateTime.now()
+          .add(const Duration(days: 5, hours: 18))
+          .toIso8601String(),
       'status': 'ACTIVE',
     };
 
-Map<String, dynamic> _memberRow(
+Map<String, dynamic> _row(
   int rank,
   String userId,
   String name,
@@ -43,6 +43,19 @@ Map<String, dynamic> _memberRow(
       'weeklySteps': steps,
       'zone': zone,
     };
+
+// A coherent 8-walker Silver cohort: top 2 promote, bottom 2 drop. The user
+// (user-1) sits 4th — safely holding, chasing the move-up line.
+List<Map<String, dynamic>> _members() => [
+      _row(1, 'a', 'AceWalker', 70000, 'PROMOTION'),
+      _row(2, 'b', 'Runner-Up', 60000, 'PROMOTION'),
+      _row(3, 'c', 'OnTheBubble', 52000, 'HOLD'),
+      _row(4, 'user-1', 'Trail Walker', 41250, 'HOLD'),
+      _row(5, 'e', 'MidPack', 30000, 'HOLD'),
+      _row(6, 'f', 'Straggler', 20000, 'HOLD'),
+      _row(7, 'g', 'SlowPoke', 9000, 'DEMOTION'),
+      _row(8, 'h', 'CouchFan', 200, 'DEMOTION'),
+    ];
 
 class _FakeRankedV2Api extends BackendApiService {
   _FakeRankedV2Api(this.mode);
@@ -76,29 +89,24 @@ class _FakeRankedV2Api extends BackendApiService {
       'week': _week(),
       'currentUser': {
         'ranked': true,
-        'tier': 'GOLD',
-        'rank': 2,
+        'tier': 'SILVER',
+        'rank': 4,
         'weeklySteps': 41250,
-        'zone': 'PROMOTION',
-        'projectedCoins': 225,
+        'zone': 'HOLD',
+        'projectedCoins': 40,
       },
       'cohort': {
         'id': 'cohort-1',
-        'tier': 'GOLD',
-        'size': 4,
-        'promoteCount': 1,
-        'demoteCount': 1,
-        'members': [
-          _memberRow(1, 'other-1', 'AceWalker', 52000, 'PROMOTION'),
-          _memberRow(2, 'user-1', 'Trail Walker', 41250, 'HOLD'),
-          _memberRow(3, 'other-2', 'SlowPoke', 9000, 'HOLD'),
-          _memberRow(4, 'other-3', 'CouchFan', 200, 'DEMOTION'),
-        ],
+        'tier': 'SILVER',
+        'size': 8,
+        'promoteCount': 2,
+        'demoteCount': 2,
+        'members': _members(),
         'rewards': [
-          {'rank': 1, 'coins': 300},
-          {'rank': 2, 'coins': 225},
-          {'rank': 3, 'coins': 180},
-          {'rank': 4, 'coins': 0},
+          {'rank': 1, 'coins': 250},
+          {'rank': 2, 'coins': 190},
+          {'rank': 3, 'coins': 100},
+          {'rank': 4, 'coins': 50},
         ],
       },
       'tiers': _kTiersV2,
@@ -120,15 +128,13 @@ class _FakeRankedV2Api extends BackendApiService {
   Future<Map<String, dynamic>> fetchRanked({
     required String identityToken,
   }) async {
-    // The legacy fallback used when /ranked/v2 is missing.
     if (mode != _Mode.v2Missing) {
       throw StateError('legacy /ranked should not be called when v2 is live');
     }
     return {
       'season': {
         'index': 3,
-        'endsAt':
-            DateTime.now().add(const Duration(days: 10)).toIso8601String(),
+        'endsAt': DateTime.now().add(const Duration(days: 10)).toIso8601String(),
         'status': 'active',
       },
       'currentUser': {
@@ -170,35 +176,77 @@ Widget _build(AuthService auth, BackendApiService api) {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('shows the cohort hero, zones, and rewards when in a cohort', (
+  testWidgets('hero states a plain-language status and the path to move up', (
     tester,
   ) async {
     final auth = await _createAuthService();
     await tester.pumpWidget(_build(auth, _FakeRankedV2Api(_Mode.inCohort)));
     await tester.pump();
 
-    expect(find.text('RANKED'), findsOneWidget);
-    expect(find.text('GOLD'), findsAtLeastNWidgets(1));
-    expect(find.text('STEPS THIS WEEK'), findsOneWidget);
-    expect(find.text('41,250'), findsAtLeastNWidgets(1));
-    expect(find.text('#2 of 4'), findsOneWidget);
-    expect(find.text('COHORT RANK'), findsOneWidget);
+    // Status headline + the actionable caption (chasing the move-up line).
+    expect(find.text('HOLDING'), findsOneWidget);
+    expect(
+      find.textContaining('to pass 2nd and reach Gold'),
+      findsOneWidget,
+    );
+    // Footer line summarises position + stakes, with the on-pace coins.
+    expect(find.textContaining('4th of 8'), findsOneWidget);
+    expect(find.text('+40'), findsOneWidget);
+  });
 
-    // Zone dividers around the cohort list.
-    expect(find.text('PROMOTION ZONE · TOP 1'), findsOneWidget);
-    expect(find.text('DEMOTION ZONE · BOTTOM 1'), findsOneWidget);
+  testWidgets('group is collapsed to what matters, with the cutlines labelled', (
+    tester,
+  ) async {
+    final auth = await _createAuthService();
+    await tester.pumpWidget(_build(auth, _FakeRankedV2Api(_Mode.inCohort)));
+    await tester.pump();
 
-    // Cohort members render with their weekly steps.
+    expect(find.text('Your group'), findsOneWidget);
+    expect(find.text('8 walkers'), findsOneWidget);
+    expect(find.text('Top 2 move up · bottom 2 drop'), findsOneWidget);
+    // Plain-language cutline (the move-up boundary sits within the top six).
+    expect(find.text('Top 2 move up to Gold'), findsOneWidget);
+    // The drop boundary is near the bottom — not shown until expanded.
+    expect(find.text('Bottom 2 drop to Bronze'), findsNothing);
+    // Progressive disclosure: full list is behind a toggle.
+    expect(find.text('See full group (8)'), findsOneWidget);
+    // Top six + the user are in the focused window.
+    expect(find.text('@Trail Walker'), findsOneWidget);
     expect(find.text('@AceWalker'), findsOneWidget);
+  });
+
+  testWidgets('"See full group" expands to every walker', (tester) async {
+    final auth = await _createAuthService();
+    await tester.pumpWidget(_build(auth, _FakeRankedV2Api(_Mode.inCohort)));
+    await tester.pump();
+
+    // CouchFan (rank 8) is outside the collapsed window.
+    expect(find.text('@CouchFan'), findsNothing);
+    final toggle = find.text('See full group (8)');
+    await tester.ensureVisible(toggle);
+    await tester.pump();
+    await tester.tap(toggle);
+    await tester.pump();
     expect(find.text('@CouchFan'), findsOneWidget);
-    expect(find.text('52,000'), findsOneWidget);
+    expect(find.text('Show less'), findsOneWidget);
+    // The drop cutline becomes visible once the whole group is shown.
+    expect(find.text('Bottom 2 drop to Bronze'), findsOneWidget);
+  });
 
-    // Projected payout comes from the server reward table.
-    expect(find.text('On pace for → 225 coins'), findsOneWidget);
+  testWidgets('the in-card "How Ranked works" button opens the explainer', (
+    tester,
+  ) async {
+    final auth = await _createAuthService();
+    await tester.pumpWidget(_build(auth, _FakeRankedV2Api(_Mode.inCohort)));
+    await tester.pump();
 
-    // The six-tier ladder strip is server-driven.
-    expect(find.text('LEGEND'), findsOneWidget);
-    expect(find.text('PLATINUM'), findsOneWidget);
+    final button = find.text('How Ranked works');
+    expect(button, findsOneWidget);
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    // The bottom-sheet explainer content is shown.
+    expect(find.textContaining('matched with'), findsOneWidget);
+    expect(find.textContaining('Resets every Monday'), findsOneWidget);
   });
 
   testWidgets('shows the join hint when the user has no cohort yet', (
@@ -208,9 +256,8 @@ void main() {
     await tester.pumpWidget(_build(auth, _FakeRankedV2Api(_Mode.noCohort)));
     await tester.pump();
 
-    expect(find.text('Your cohort is waiting'), findsOneWidget);
-    // Home tier still shown (Silver), sourced from the server.
-    expect(find.text('SILVER'), findsAtLeastNWidgets(1));
+    expect(find.textContaining("You're in"), findsOneWidget);
+    expect(find.text('How Ranked works'), findsOneWidget);
   });
 
   testWidgets('surfaces last week’s promotion with the combined coin total', (
@@ -221,7 +268,7 @@ void main() {
         .pumpWidget(_build(auth, _FakeRankedV2Api(_Mode.promotedLastWeek)));
     await tester.pump();
 
-    expect(find.text('Last week: Promoted to Gold!'), findsOneWidget);
+    expect(find.text('Promoted to Gold!'), findsOneWidget);
     expect(find.text('+350'), findsOneWidget); // 150 reward + 200 bonus
   });
 
@@ -233,7 +280,6 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    // Legacy hero renders from the old endpoint's data.
     expect(find.text('GOLD III'), findsOneWidget);
     expect(find.text('RANKED POINTS'), findsOneWidget);
   });

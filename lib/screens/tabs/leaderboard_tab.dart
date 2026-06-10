@@ -7,7 +7,6 @@ import '../../services/backend_api_service.dart';
 import '../../styles.dart';
 import '../../utils/at_name.dart';
 import '../../widgets/app_avatar.dart';
-import '../../widgets/arcade_tab_selector.dart';
 import '../../widgets/filter_dropdown.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/friend_request_sheet.dart';
@@ -30,12 +29,24 @@ extension on _LeaderboardScope {
     }
   }
 
-  String get label {
+  // Section-header title shown above the podium for the active scope.
+  String get boardTitle {
     switch (this) {
       case _LeaderboardScope.global:
-        return 'GLOBAL';
+        return 'Global Leaderboard';
       case _LeaderboardScope.friends:
-        return 'FRIENDS';
+        return 'Friends Leaderboard';
+    }
+  }
+
+  // Intuitive glyph for the compact toggle: a globe for global, people for
+  // friends.
+  IconData get icon {
+    switch (this) {
+      case _LeaderboardScope.global:
+        return Icons.public_rounded;
+      case _LeaderboardScope.friends:
+        return Icons.group_rounded;
     }
   }
 }
@@ -376,7 +387,20 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
       );
     }
 
-    if (_top100.isEmpty) return _buildEmptyState();
+    if (_top100.isEmpty) {
+      // Keep the scope toggle reachable when the board is empty (e.g. on the
+      // Friends scope with no friends yet) — otherwise the user is stranded.
+      return Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(6, 2, 6, 0),
+            child: _buildScopeHeader(),
+          ),
+          const SizedBox(height: 6),
+          _buildEmptyState(),
+        ],
+      );
+    }
 
     return Column(
       children: [
@@ -418,15 +442,28 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     );
   }
 
-  Widget _buildScopeTabs() {
-    final scopes = _LeaderboardScope.values;
-
-    // A single compact segmented toggle (vs. two separate pill buttons): one
-    // parchment capsule with the active scope filled accent-green.
-    return ArcadeTabSelector(
-      labels: [for (final scope in scopes) scope.label],
-      activeIndex: scopes.indexOf(_selectedScope),
-      onChanged: (i) => _selectScope(scopes[i]),
+  // The scope section header for the podium / board: the active scope's title
+  // centred in the container, with a compact globe/friends icon toggle pinned
+  // to the right.
+  Widget _buildScopeHeader() {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Center(
+          child: Text(
+            _selectedScope.boardTitle,
+            textAlign: TextAlign.center,
+            style: PixelText.title(size: 15, color: AppColors.textDark),
+          ),
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: _ScopeIconToggle(
+            selected: _selectedScope,
+            onChanged: _selectScope,
+          ),
+        ),
+      ],
     );
   }
 
@@ -451,8 +488,6 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
               ),
               const SizedBox(height: 14),
               _buildTypeTabs(),
-              const SizedBox(height: 10),
-              _buildScopeTabs(),
               if (_selectedType == _LeaderboardType.steps) ...[
                 const SizedBox(height: 10),
                 FilterDropdown<String>(
@@ -624,18 +659,24 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 12, 8, 10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
+        padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+        child: Column(
           children: [
-            Expanded(flex: 10, child: _buildPodiumTile(second, place: 2)),
-            const SizedBox(width: 6),
-            Expanded(
-              flex: 12,
-              child: _buildPodiumTile(first, place: 1, featured: true),
+            _buildScopeHeader(),
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(flex: 10, child: _buildPodiumTile(second, place: 2)),
+                const SizedBox(width: 6),
+                Expanded(
+                  flex: 12,
+                  child: _buildPodiumTile(first, place: 1, featured: true),
+                ),
+                const SizedBox(width: 6),
+                Expanded(flex: 10, child: _buildPodiumTile(third, place: 3)),
+              ],
             ),
-            const SizedBox(width: 6),
-            Expanded(flex: 10, child: _buildPodiumTile(third, place: 3)),
           ],
         ),
       ),
@@ -889,6 +930,75 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
       userId: userId,
       displayName: displayName,
       profilePhotoUrl: profilePhotoUrl,
+    );
+  }
+}
+
+/// Compact two-icon scope toggle (globe = global, people = friends) that sits
+/// in the top-right of the podium card. Much smaller than a labelled segmented
+/// control — the active scope is named by the section header beside it.
+class _ScopeIconToggle extends StatelessWidget {
+  const _ScopeIconToggle({required this.selected, required this.onChanged});
+
+  final _LeaderboardScope selected;
+  final ValueChanged<_LeaderboardScope> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: AppColors.parchment,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.parchmentBorder, width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final scope in _LeaderboardScope.values)
+            _ScopeIconButton(
+              icon: scope.icon,
+              active: scope == selected,
+              onTap: () => onChanged(scope),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ScopeIconButton extends StatelessWidget {
+  const _ScopeIconButton({
+    required this.icon,
+    required this.active,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+          decoration: BoxDecoration(
+            color: active ? AppColors.accent : Colors.transparent,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Icon(
+            icon,
+            size: 16,
+            color: active ? AppColors.parchment : AppColors.textMid,
+          ),
+        ),
+      ),
     );
   }
 }

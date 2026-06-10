@@ -122,6 +122,11 @@ flutter pub get
 flutter run -d 00008150-000171DE2638401C --device-connection=attached --debug --dart-define=BACKEND_BASE_URL=https://staging.steptracker-api.org
 ```
 
+### Run on a physical iPhone against prod
+```bash
+# Make sure your backend listens on 0.0.0.0:3000, not just localhost:3000
+flutter run -d 00008150-000171DE2638401C --device-connection=attached --debug --dart-define=BACKEND_BASE_URL=https://steptracker-api.org
+
 ### Run on a physical iPhone against local backend
 ```bash
 flutter run -d <device-id> --dart-define=BACKEND_BASE_URL=http://<your-mac-lan-ip>:3000
