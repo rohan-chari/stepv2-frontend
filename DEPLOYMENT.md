@@ -173,6 +173,24 @@ Example sequence on `1.1.5`:
 
 ---
 
+## Shop accessory assets
+
+Accessory PNGs (`assets/images/accessories/{assetKey}.png`) are **baked into
+the binary** — there is no image upload or CDN, so a new accessory only reaches
+users via a TestFlight/App Store build. The catalog entry (price, slot,
+positioning, `testOnly` flag) lives in the backend DBs and deploys
+independently. The full add → tune-on-staging → TestFlight → flip-`testOnly`
+flow is documented in the backend repo's `DEPLOYMENT.md` under "Deploying shop
+accessories (cosmetics)". Two app-side notes:
+
+- A newly added PNG needs a full `flutter run` (or at least hot restart), not
+  hot reload, to land in the asset bundle.
+- Old binaries that lack a PNG render a placeholder icon via `errorBuilder`
+  rather than crashing — which is why new items ship `testOnly: true` until the
+  binary containing them is broadly adopted.
+
+---
+
 ## Common gotchas
 
 - **`--dart-define` is compile-time.** Hot reload doesn't pick up changes. After changing the flag, `flutter clean && flutter run …` to be sure.

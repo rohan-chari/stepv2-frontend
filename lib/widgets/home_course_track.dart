@@ -701,7 +701,7 @@ class _AccessoryOverlay extends StatelessWidget {
     final slot = accessory['slot'] as String? ?? '';
     final assetKey = accessory['assetKey'] as String? ?? '';
     final isHeadSlot = slot == 'HEAD';
-    final bobsWithHead = slot == 'HEAD' || slot == 'FACE';
+    final bobsWithHead = slot == 'HEAD' || slot == 'FACE' || slot == 'NECK';
     final renderMetadata = accessory['renderMetadata'];
     final metadata = renderMetadata is Map<String, dynamic>
         ? renderMetadata
