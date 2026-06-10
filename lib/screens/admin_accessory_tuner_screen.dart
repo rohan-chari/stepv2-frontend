@@ -37,6 +37,7 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
   double _rotation = 0;
   double _scale = 1.0;
   bool _active = true;
+  bool _testOnly = false;
   final _priceController = TextEditingController(text: '0');
 
   @override
@@ -114,6 +115,7 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
       _rotation = _toDouble(map['rotation']) ?? 0;
       _scale = _toDouble(map['scale']) ?? 1.0;
       _active = item['active'] is bool ? item['active'] as bool : true;
+      _testOnly = item['testOnly'] is bool ? item['testOnly'] as bool : false;
       final price = item['priceCoins'];
       _priceController.text = price is num ? price.toInt().toString() : '0';
     });
@@ -170,6 +172,7 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
         },
         active: _active,
         priceCoins: price,
+        testOnly: _testOnly,
       );
       final updated = res['item'] is Map
           ? Map<String, dynamic>.from(res['item'] as Map)
@@ -284,6 +287,29 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
                                 value: _active,
                                 activeThumbColor: AppColors.accent,
                                 onChanged: (v) => setState(() => _active = v),
+                              ),
+                              SwitchListTile(
+                                contentPadding: EdgeInsets.zero,
+                                dense: true,
+                                title: Text(
+                                  _testOnly ? 'TestFlight only' : 'Live in prod',
+                                  style: PixelText.body(
+                                    size: 14,
+                                    color: AppColors.textDark,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  _testOnly
+                                      ? 'Only visible in TestFlight builds'
+                                      : 'Visible to everyone on the App Store',
+                                  style: PixelText.body(
+                                    size: 11,
+                                    color: AppColors.textMid,
+                                  ),
+                                ),
+                                value: _testOnly,
+                                activeThumbColor: AppColors.accent,
+                                onChanged: (v) => setState(() => _testOnly = v),
                               ),
                               const SizedBox(height: 4),
                               TextField(

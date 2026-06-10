@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:step_tracker/widgets/powerup_icon.dart';
 
-// 1.1.7: CLEANSE is a new powerup. There is no cleanse.png art yet, so the
-// PowerupIcon must register CLEANSE in its asset map and render an Image whose
-// errorBuilder falls back gracefully — never crashing or showing a broken '?'.
+// CLEANSE is a newer powerup. PowerupIcon must register it in the asset map and
+// render an Image without crashing.
 void main() {
   testWidgets('PowerupIcon renders an Image for CLEANSE without throwing', (
     tester,

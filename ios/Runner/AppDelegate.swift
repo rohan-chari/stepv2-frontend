@@ -8,6 +8,7 @@ import UserNotifications
 @objc class AppDelegate: FlutterAppDelegate {
   private var notificationChannel: FlutterMethodChannel?
   private var backgroundSyncChannel: FlutterMethodChannel?
+  private var appInfoChannel: FlutterMethodChannel?
   private let healthStore = HKHealthStore()
   private var hasRegisteredHealthObserver = false
   private lazy var backgroundSyncCoordinator = BackgroundStepSyncCoordinator(
@@ -68,6 +69,19 @@ import UserNotifications
       }
     }
 
+    appInfoChannel = FlutterMethodChannel(
+      name: "com.steptracker/app_info",
+      binaryMessenger: controller.binaryMessenger
+    )
+
+    appInfoChannel?.setMethodCallHandler { call, result in
+      if call.method == "isTestFlight" {
+        result(AppDelegate.isTestFlightBuild())
+      } else {
+        result(FlutterMethodNotImplemented)
+      }
+    }
+
     registerBackgroundRefreshTask()
     scheduleBackgroundRefresh()
     enableHealthKitBackgroundDelivery()
@@ -75,6 +89,20 @@ import UserNotifications
     UNUserNotificationCenter.current().delegate = self
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  // Whether this binary is running as a TestFlight (or local dev) build rather
+  // than a public App Store install. TestFlight and dev builds carry a *sandbox*
+  // App Store receipt; App Store installs carry a *production* one. This is a
+  // runtime check, so the SAME binary correctly reports `true` in TestFlight and
+  // `false` once it's promoted to the App Store — no separate build needed.
+  static func isTestFlightBuild() -> Bool {
+    #if DEBUG
+    return true
+    #else
+    guard let receiptURL = Bundle.main.appStoreReceiptURL else { return false }
+    return receiptURL.lastPathComponent == "sandboxReceipt"
+    #endif
   }
 
   private func requestNotificationPermission(result: @escaping FlutterResult) {

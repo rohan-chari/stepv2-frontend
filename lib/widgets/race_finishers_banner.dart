@@ -64,6 +64,7 @@ class RaceFinishersBanner extends StatelessWidget {
             ),
           ),
           child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
                 width: 34,
@@ -84,18 +85,20 @@ class RaceFinishersBanner extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 10),
-              Expanded(
+              Flexible(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Text(
                       title,
+                      textAlign: TextAlign.center,
                       style: PixelText.title(size: 14, color: Colors.white),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
+                      textAlign: TextAlign.center,
                       style: PixelText.body(
                         size: 12.5,
                         color: AppColors.parchmentLight,

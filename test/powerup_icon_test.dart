@@ -24,6 +24,8 @@ void main() {
     'TRAIL_MINE',
     'PINECONE_TOSS',
     'SNEAKY_SWAP',
+    'CLEANSE',
+    'IMPOSTER',
   ]) {
     testWidgets('PowerupIcon renders the image asset for $type', (
       tester,

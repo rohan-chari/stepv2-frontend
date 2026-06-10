@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 
 import '../config/backend_config.dart';
@@ -50,12 +50,33 @@ class BackendApiService {
   }
 
   static const Duration _requestTimeout = Duration(seconds: 15);
+  static const MethodChannel _appInfoChannel = MethodChannel(
+    'com.steptracker/app_info',
+  );
   final HttpClient _httpClient;
   String? _cachedTimeZone;
+  String? _cachedReleaseChannel;
 
   Future<String> _getTimeZone() async {
     _cachedTimeZone ??= await FlutterTimezone.getLocalTimezone();
     return _cachedTimeZone!;
+  }
+
+  // The build's release channel, sent to the backend so it knows whether to
+  // reveal test-only catalog items. TestFlight (and dev) builds report
+  // 'testflight'; App Store builds — and any platform where detection fails or
+  // isn't implemented — report 'prod', the safe default. Resolved once, then
+  // cached for the life of the service.
+  Future<String> _getReleaseChannel() async {
+    if (_cachedReleaseChannel != null) return _cachedReleaseChannel!;
+    try {
+      final isTestFlight =
+          await _appInfoChannel.invokeMethod<bool>('isTestFlight') ?? false;
+      _cachedReleaseChannel = isTestFlight ? 'testflight' : 'prod';
+    } catch (_) {
+      _cachedReleaseChannel = 'prod';
+    }
+    return _cachedReleaseChannel!;
   }
 
   Future<Map<String, dynamic>> provisionAppleUser({
@@ -534,11 +555,13 @@ class BackendApiService {
     Map<String, double>? renderMetadata,
     bool? active,
     int? priceCoins,
+    bool? testOnly,
   }) async {
     final body = <String, dynamic>{};
     if (renderMetadata != null) body['renderMetadata'] = renderMetadata;
     if (active != null) body['active'] = active;
     if (priceCoins != null) body['priceCoins'] = priceCoins;
+    if (testOnly != null) body['testOnly'] = testOnly;
     final response = await _sendJsonRequest(
       method: 'PATCH',
       path: '/admin/shop/items/$itemId',
@@ -1164,6 +1187,7 @@ class BackendApiService {
         );
       }
       request.headers.set('X-Timezone', await _getTimeZone());
+      request.headers.set('X-Release-Channel', await _getReleaseChannel());
       return await request.close().timeout(_requestTimeout);
     } on SocketException catch (error) {
       throw ApiException(describeBackendConnectionError(error, uri: uri));
@@ -1197,6 +1221,7 @@ class BackendApiService {
         );
       }
       request.headers.set('X-Timezone', await _getTimeZone());
+      request.headers.set('X-Release-Channel', await _getReleaseChannel());
       headers?.forEach(request.headers.set);
 
       request.write(jsonEncode(body));

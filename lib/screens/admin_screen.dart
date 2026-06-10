@@ -73,6 +73,17 @@ const _powerupEntries = [
     name: 'Detour Sign',
     description: 'Hide the entire leaderboard from a rival for 3 hours',
   ),
+  (
+    type: 'CLEANSE',
+    name: 'Cleanse',
+    description: 'Remove all debuffs an opponent placed on you',
+  ),
+  (
+    type: 'IMPOSTER',
+    name: 'Imposter',
+    description:
+        'Swap leaderboard positions with a rival for 1 hour (cosmetic)',
+  ),
 ];
 
 class AdminScreen extends StatelessWidget {

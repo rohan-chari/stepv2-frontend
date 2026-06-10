@@ -4,6 +4,17 @@ import 'package:step_tracker/screens/admin_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 
 void main() {
+  testWidgets('admin powerup icon list includes newer powerups', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(home: AdminScreen(authService: AuthService())),
+    );
+
+    expect(find.text('Cleanse'), findsOneWidget);
+    expect(find.text('Imposter'), findsOneWidget);
+  });
+
   testWidgets('admin toast test buttons show shared toasts', (
     WidgetTester tester,
   ) async {

@@ -7,6 +7,7 @@ import '../../services/backend_api_service.dart';
 import '../../styles.dart';
 import '../../utils/at_name.dart';
 import '../../widgets/app_avatar.dart';
+import '../../widgets/arcade_tab_selector.dart';
 import '../../widgets/filter_dropdown.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/friend_request_sheet.dart';
@@ -420,24 +421,12 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   Widget _buildScopeTabs() {
     final scopes = _LeaderboardScope.values;
 
-    return Row(
-      children: [
-        for (int i = 0; i < scopes.length; i++) ...[
-          if (i > 0) const SizedBox(width: 8),
-          Expanded(
-            child: PillButton(
-              label: scopes[i].label,
-              onPressed: () => _selectScope(scopes[i]),
-              variant: scopes[i] == _selectedScope
-                  ? PillButtonVariant.secondary
-                  : PillButtonVariant.accent,
-              fontSize: 11,
-              fullWidth: true,
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
-            ),
-          ),
-        ],
-      ],
+    // A single compact segmented toggle (vs. two separate pill buttons): one
+    // parchment capsule with the active scope filled accent-green.
+    return ArcadeTabSelector(
+      labels: [for (final scope in scopes) scope.label],
+      activeIndex: scopes.indexOf(_selectedScope),
+      onChanged: (i) => _selectScope(scopes[i]),
     );
   }
 
