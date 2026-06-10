@@ -13,11 +13,15 @@ import '../../widgets/game_container.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/tier_badge.dart';
 
-/// Ranked ladder for the active season. Self-fetching like [LeaderboardTab];
+/// Ranked, weekly-cohort edition. Self-fetching like [LeaderboardTab];
 /// `refreshNonce` is bumped by the shell when the tab is revealed so it
-/// re-syncs. Degrades safely: an old backend (404 on `/ranked`) or no active
-/// season renders a calm "coming soon" state rather than an error, and a user
-/// with no score yet sees an explicit "not ranked" hero — never a fake number.
+/// re-syncs. Tries `/ranked/v2` (weekly cohorts) first and falls back to the
+/// legacy `/ranked` season ladder when the backend predates v2, so this build
+/// works against both backend generations. Degrades safely: a backend with
+/// neither endpoint renders a calm "coming soon" state rather than an error,
+/// and a user with no cohort yet sees an explicit join hint — never a fake
+/// number. All v2 thresholds/zones/rewards come from the server; nothing is
+/// hardcoded here (the legacy RP checkpoint table below taught us why).
 class RankedTab extends StatefulWidget {
   final AuthService authService;
   final BackendApiService? backendApiService;
@@ -38,10 +42,21 @@ class _RankedTabState extends State<RankedTab> {
   late final BackendApiService _api;
 
   Loadable<List<Map<String, dynamic>>> _state = const Loadable.initial();
+
+  // Legacy (/ranked) season-ladder state, used when the backend predates v2.
   List<Map<String, dynamic>> _ladder = [];
   Map<String, dynamic>? _currentUser;
   Map<String, dynamic>? _season;
   Map<RankedTier, int> _rewardByTier = {};
+
+  // Weekly-cohort (/ranked/v2) state.
+  bool _v2 = false;
+  Map<String, dynamic>? _week;
+  Map<String, dynamic>? _v2Me;
+  Map<String, dynamic>? _cohort;
+  Map<String, dynamic>? _lastWeek;
+  List<Map<String, dynamic>> _v2Tiers = [];
+
   // True when the backend has no Ranked endpoint yet (old prod serving a newer
   // app). Treated as "coming soon", not an error.
   bool _unavailable = false;
@@ -88,10 +103,47 @@ class _RankedTabState extends State<RankedTab> {
     }
 
     try {
+      final data = await _api.fetchRankedV2(identityToken: token);
+      if (!mounted) return;
+      setState(() {
+        _unavailable = false;
+        _v2 = true;
+        _week = data['week'] as Map<String, dynamic>?;
+        _v2Me = data['currentUser'] as Map<String, dynamic>?;
+        _cohort = data['cohort'] as Map<String, dynamic>?;
+        _lastWeek = data['lastWeek'] as Map<String, dynamic>?;
+        _v2Tiers = (data['tiers'] as List? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
+        _state = const Loadable.success([]);
+      });
+    } on ApiException {
+      if (!mounted) return;
+      // 404 → backend predates weekly cohorts. Any other API failure → the
+      // legacy ladder may still be serving; degrading to it beats an error
+      // panel. _loadLegacy owns the error state if both endpoints fail.
+      await _loadLegacy(token, previous);
+    } catch (e) {
+      if (!mounted) return;
+      setState(
+        () => _state = Loadable.error(
+          e.toString(),
+          data: previous.isEmpty ? null : previous,
+        ),
+      );
+    }
+  }
+
+  Future<void> _loadLegacy(
+    String token,
+    List<Map<String, dynamic>> previous,
+  ) async {
+    try {
       final data = await _api.fetchRanked(identityToken: token);
       if (!mounted) return;
       setState(() {
         _unavailable = false;
+        _v2 = false;
         _season = data['season'] as Map<String, dynamic>?;
         _currentUser = data['currentUser'] as Map<String, dynamic>?;
         _ladder = (data['ladder'] as List? ?? [])
@@ -108,8 +160,8 @@ class _RankedTabState extends State<RankedTab> {
       });
     } on ApiException catch (e) {
       if (!mounted) return;
-      // 404 → this build is newer than the deployed backend. Don't alarm the
-      // user; Ranked simply isn't live for them yet.
+      // 404 on both endpoints → this build is newer than the deployed backend.
+      // Don't alarm the user; Ranked simply isn't live for them yet.
       if (e.statusCode == 404) {
         setState(() {
           _unavailable = true;
@@ -225,6 +277,12 @@ class _RankedTabState extends State<RankedTab> {
   }
 
   String _seasonLabel() {
+    if (_v2) {
+      final index = (_week?['index'] as num?)?.toInt();
+      return index == null
+          ? 'Beat your cohort by walking'
+          : 'Week $index · beat your cohort by walking';
+    }
     final index = (_season?['index'] as num?)?.toInt();
     return index == null
         ? 'Walk to earn Ranked Points'
@@ -232,7 +290,8 @@ class _RankedTabState extends State<RankedTab> {
   }
 
   int? _seasonDaysLeft() {
-    final ends = DateTime.tryParse(_season?['endsAt']?.toString() ?? '');
+    final source = _v2 ? (_week?['endsOn']) : (_season?['endsAt']);
+    final ends = DateTime.tryParse(source?.toString() ?? '');
     if (ends == null) return null;
     final now = DateTime.now();
     if (ends.isBefore(now)) return 0;
@@ -242,7 +301,9 @@ class _RankedTabState extends State<RankedTab> {
 
   String _seasonSubtitle() {
     final days = _seasonDaysLeft();
-    if (days == null) return 'Walk to earn Ranked Points';
+    if (days == null) {
+      return _v2 ? 'Resets every Monday' : 'Walk to earn Ranked Points';
+    }
     if (days > 1) return '$days days left';
     if (days == 1) return '1 day left';
     return 'ends today';
@@ -324,8 +385,521 @@ class _RankedTabState extends State<RankedTab> {
               backgroundColor: Colors.transparent,
             ),
           ),
-        _buildHero(),
-        if (_ladder.isNotEmpty) ...[const SizedBox(height: 14), _buildLadder()],
+        if (_v2)
+          ..._buildV2Body()
+        else ...[
+          _buildHero(),
+          if (_ladder.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            _buildLadder(),
+          ],
+        ],
+      ],
+    );
+  }
+
+  // ── Weekly-cohort (v2) UI ──────────────────────────────────────────────────
+
+  static String _fmtSteps(int n) => n.toString().replaceAllMapped(
+        RegExp(r'(\d)(?=(\d{3})+$)'),
+        (m) => '${m[1]},',
+      );
+
+  String _tierLabelForKey(String? key) {
+    for (final t in _v2Tiers) {
+      if (t['key'] == key) return t['label'] as String? ?? key ?? '';
+    }
+    return rankedTierFromKey(key).label;
+  }
+
+  // The tier above/below the given key on the server-provided ladder.
+  String? _adjacentTierKey(String? key, int delta) {
+    final index = _v2Tiers.indexWhere((t) => t['key'] == key);
+    if (index == -1) return null;
+    final next = index + delta;
+    if (next < 0 || next >= _v2Tiers.length) return null;
+    return _v2Tiers[next]['key'] as String?;
+  }
+
+  List<Widget> _buildV2Body() {
+    final me = _v2Me;
+    final inCohort = me != null && me['ranked'] == true && _cohort != null;
+    final banner = _buildLastWeekBanner();
+
+    return [
+      if (banner != null) ...[banner, const SizedBox(height: 12)],
+      if (inCohort) ...[
+        _buildV2Hero(),
+        const SizedBox(height: 14),
+        _buildCohortList(),
+      ] else
+        _buildV2JoinHero(),
+      const SizedBox(height: 16),
+      _buildTierLadderStrip(),
+    ];
+  }
+
+  // "Promoted to Gold! +200 coins" — shown for the week right after a settled
+  // result so Monday opens with the payoff, not a blank slate.
+  Widget? _buildLastWeekBanner() {
+    final last = _lastWeek;
+    if (last == null) return null;
+    final currentIndex = (_week?['index'] as num?)?.toInt();
+    final lastIndex = (last['weekIndex'] as num?)?.toInt();
+    // Only the freshest result; older settled weeks aren't news anymore.
+    if (currentIndex != null &&
+        lastIndex != null &&
+        lastIndex < currentIndex - 1) {
+      return null;
+    }
+
+    final outcome = last['outcome'] as String?;
+    final coins = ((last['rewardCoins'] as num?)?.toInt() ?? 0) +
+        ((last['promotionCoins'] as num?)?.toInt() ?? 0);
+    final resultTier = rankedTierFromKey(last['resultTier'] as String?);
+
+    final (label, color) = switch (outcome) {
+      'PROMOTE' => ('Promoted to ${resultTier.label}!', resultTier.color),
+      'DEMOTE' => ('Demoted to ${resultTier.label}', AppColors.textMid),
+      'HOLD' when coins > 0 => ('Held ${resultTier.label}', resultTier.color),
+      _ => (null, AppColors.textMid),
+    };
+    if (label == null) return null;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.6), width: 1.2),
+      ),
+      child: Row(
+        children: [
+          TierShield(tier: resultTier, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Last week: $label',
+              style: PixelText.body(size: 12, color: AppColors.textDark),
+            ),
+          ),
+          if (coins > 0) ...[
+            const Icon(Icons.paid_rounded, size: 14, color: AppColors.medalGold),
+            const SizedBox(width: 3),
+            Text(
+              '+$coins',
+              style: PixelText.title(size: 12, color: AppColors.textDark),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildV2Hero() {
+    final me = _v2Me!;
+    final cohort = _cohort!;
+    final tier = rankedTierFromKey(me['tier'] as String?);
+    final rank = (me['rank'] as num?)?.toInt();
+    final weeklySteps = (me['weeklySteps'] as num?)?.toInt() ?? 0;
+    final projected = (me['projectedCoins'] as num?)?.toInt() ?? 0;
+    final size = (cohort['size'] as num?)?.toInt() ?? 0;
+    final zone = me['zone'] as String?;
+
+    return Column(
+      children: [
+        SizedBox(
+          height: 176,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.topCenter,
+            children: [
+              Positioned.fill(
+                top: 10,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: Alignment.topRight,
+                      radius: 0.95,
+                      colors: [
+                        tier.color.withValues(alpha: 0.28),
+                        AppColors.parchment.withValues(alpha: 0),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(top: 6, child: TierShield(tier: tier, size: 132)),
+              Positioned(
+                top: 148,
+                child: Text(
+                  tier.label.toUpperCase(),
+                  style: PixelText.title(size: 28, color: tier.color),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: _HeroStat(
+                value: _fmtSteps(weeklySteps),
+                label: 'STEPS THIS WEEK',
+                color: tier.color,
+              ),
+            ),
+            Expanded(
+              child: _HeroStat(
+                value: rank != null ? '#$rank of $size' : '--',
+                label: 'COHORT RANK',
+                color: AppColors.textDark,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        _buildZoneStatusLine(zone: zone, tier: tier, projected: projected),
+      ],
+    );
+  }
+
+  Widget _buildZoneStatusLine({
+    required String? zone,
+    required RankedTier tier,
+    required int projected,
+  }) {
+    final cohort = _cohort;
+    final promoteCount = (cohort?['promoteCount'] as num?)?.toInt() ?? 0;
+    final demoteCount = (cohort?['demoteCount'] as num?)?.toInt() ?? 0;
+    final upLabel = _tierLabelForKey(
+      _adjacentTierKey(_v2Me?['tier'] as String?, 1),
+    );
+    final downLabel = _tierLabelForKey(
+      _adjacentTierKey(_v2Me?['tier'] as String?, -1),
+    );
+
+    final (text, color, icon) = switch (zone) {
+      'PROMOTION' => (
+          'Promotion zone — top $promoteCount move up to $upLabel',
+          const Color(0xFF3E8E4B),
+          Icons.arrow_upward_rounded,
+        ),
+      'DEMOTION' => (
+          'Demotion zone — bottom $demoteCount drop to $downLabel',
+          const Color(0xFFB4503C),
+          Icons.arrow_downward_rounded,
+        ),
+      _ => (
+          'Safe zone — holding ${tier.label}',
+          AppColors.textMid,
+          Icons.remove_rounded,
+        ),
+    };
+
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                text,
+                textAlign: TextAlign.center,
+                style: PixelText.body(size: 11, color: color),
+              ),
+            ),
+          ],
+        ),
+        if (projected > 0) ...[
+          const SizedBox(height: 6),
+          _RewardLine(label: 'On pace for', coins: projected),
+        ],
+      ],
+    );
+  }
+
+  // Active week, but the user hasn't synced steps yet — they get a cohort on
+  // their next sync, not next Monday.
+  Widget _buildV2JoinHero() {
+    final tier = rankedTierFromKey(_v2Me?['tier'] as String?);
+    final shownTier = tier == RankedTier.unranked ? RankedTier.bronze : tier;
+    return Column(
+      children: [
+        SizedBox(
+          height: 176,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.topCenter,
+            children: [
+              Positioned(top: 6, child: TierShield(tier: shownTier, size: 132)),
+              Positioned(
+                top: 148,
+                child: Text(
+                  shownTier.label.toUpperCase(),
+                  style: PixelText.title(size: 28, color: shownTier.color),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Your cohort is waiting',
+          style: PixelText.title(size: 16, color: AppColors.textDark),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Sync your steps to join this week’s ${shownTier.label} cohort — '
+          'about 30 walkers at your level.',
+          textAlign: TextAlign.center,
+          style: PixelText.body(size: 12, color: AppColors.textMid),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCohortList() {
+    final cohort = _cohort!;
+    final size = (cohort['size'] as num?)?.toInt() ?? 0;
+    final promoteCount = (cohort['promoteCount'] as num?)?.toInt() ?? 0;
+    final demoteCount = (cohort['demoteCount'] as num?)?.toInt() ?? 0;
+    final demotionStart = size - demoteCount + 1;
+    final members = (cohort['members'] as List? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .toList()
+      ..sort(
+        (a, b) => ((a['rank'] as num?)?.toInt() ?? 0)
+            .compareTo((b['rank'] as num?)?.toInt() ?? 0),
+      );
+    final rewardByRank = <int, int>{
+      for (final r
+          in (cohort['rewards'] as List? ?? [])
+              .whereType<Map<String, dynamic>>())
+        (r['rank'] as num?)?.toInt() ?? 0: (r['coins'] as num?)?.toInt() ?? 0,
+    };
+    final tier = rankedTierFromKey(cohort['tier'] as String?);
+
+    final children = <Widget>[
+      Row(
+        children: [
+          const Icon(
+            Icons.groups_rounded,
+            size: 15,
+            color: AppColors.textDark,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Your cohort',
+            style: PixelText.body(size: 14, color: AppColors.textDark),
+          ),
+          const Spacer(),
+          Text(
+            '$size walkers',
+            style: PixelText.body(size: 10, color: AppColors.textMid),
+          ),
+        ],
+      ),
+    ];
+
+    for (final m in members) {
+      final rank = (m['rank'] as num?)?.toInt() ?? 0;
+      if (rank == 1 && promoteCount > 0) {
+        children.add(
+          _ZoneDivider(
+            label: 'PROMOTION ZONE · TOP $promoteCount',
+            color: const Color(0xFF3E8E4B),
+            icon: Icons.arrow_upward_rounded,
+          ),
+        );
+      }
+      if (rank == promoteCount + 1 && rank < demotionStart) {
+        children.add(
+          _ZoneDivider(
+            label: 'HOLD',
+            color: AppColors.textMid.withValues(alpha: 0.8),
+            icon: Icons.remove_rounded,
+          ),
+        );
+      }
+      if (rank == demotionStart && demoteCount > 0) {
+        children.add(
+          _ZoneDivider(
+            label: 'DEMOTION ZONE · BOTTOM $demoteCount',
+            color: const Color(0xFFB4503C),
+            icon: Icons.arrow_downward_rounded,
+          ),
+        );
+      }
+      children.add(
+        _buildCohortRow(m, tier: tier, reward: rewardByRank[rank] ?? 0),
+      );
+    }
+
+    return Column(children: children);
+  }
+
+  Widget _buildCohortRow(
+    Map<String, dynamic> m, {
+    required RankedTier tier,
+    required int reward,
+  }) {
+    final rank = (m['rank'] as num?)?.toInt();
+    final userId = m['userId'] as String?;
+    final isMe = _isMe(userId);
+    final displayName = m['displayName'] as String? ?? 'Anonymous';
+    final profilePhotoUrl = m['profilePhotoUrl'] as String?;
+    final weeklySteps = (m['weeklySteps'] as num?)?.toInt() ?? 0;
+    final zone = m['zone'] as String?;
+    final zoneColor = switch (zone) {
+      'PROMOTION' => const Color(0xFF3E8E4B),
+      'DEMOTION' => const Color(0xFFB4503C),
+      _ => Colors.transparent,
+    };
+
+    final content = Container(
+      margin: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.fromLTRB(8, 7, 8, 7),
+      decoration: BoxDecoration(
+        color: isMe
+            ? AppColors.accent.withValues(alpha: 0.14)
+            : AppColors.parchment,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: isMe
+              ? AppColors.accent.withValues(alpha: 0.45)
+              : AppColors.parchmentBorder.withValues(alpha: 0.6),
+          width: isMe ? 1.5 : 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(width: 3, height: 30, color: zoneColor),
+          const SizedBox(width: 6),
+          SizedBox(
+            width: 24,
+            child: Text(
+              rank != null ? '$rank' : '--',
+              textAlign: TextAlign.center,
+              style: PixelText.body(size: 12, color: AppColors.textMid),
+            ),
+          ),
+          const SizedBox(width: 8),
+          AppAvatar(
+            name: displayName,
+            imageUrl: profilePhotoUrl,
+            size: 34,
+            isUser: isMe,
+            borderColor: isMe ? AppColors.accent : tier.color,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              atName(displayName),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: PixelText.body(
+                size: 13,
+                color: isMe ? AppColors.accent : AppColors.textDark,
+              ),
+            ),
+          ),
+          if (reward > 0) ...[
+            const Icon(Icons.paid_rounded, size: 12, color: AppColors.medalGold),
+            const SizedBox(width: 2),
+            Text(
+              '$reward',
+              style: PixelText.body(size: 10, color: AppColors.textMid),
+            ),
+            const SizedBox(width: 8),
+          ],
+          SizedBox(
+            width: 62,
+            child: Text(
+              _fmtSteps(weeklySteps),
+              textAlign: TextAlign.right,
+              style: PixelText.title(
+                size: 12,
+                color: isMe ? AppColors.accent : AppColors.textDark,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (isMe || userId == null || userId.isEmpty) return content;
+
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: () => showFriendRequestSheet(
+          context: context,
+          authService: widget.authService,
+          backendApiService: _api,
+          userId: userId,
+          displayName: displayName,
+          profilePhotoUrl: profilePhotoUrl,
+        ),
+        child: content,
+      ),
+    );
+  }
+
+  // The six-tier ladder strip: where the user's home tier sits on the climb.
+  Widget _buildTierLadderStrip() {
+    if (_v2Tiers.isEmpty) return const SizedBox.shrink();
+    final myKey = _v2Me?['tier'] as String?;
+    return Column(
+      children: [
+        Row(
+          children: [
+            const Icon(
+              Icons.stairs_outlined,
+              size: 15,
+              color: AppColors.textDark,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'The ladder',
+              style: PixelText.body(size: 14, color: AppColors.textDark),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            for (final t in _v2Tiers)
+              Expanded(
+                child: Opacity(
+                  opacity: t['key'] == myKey ? 1 : 0.45,
+                  child: Column(
+                    children: [
+                      TierShield(
+                        tier: rankedTierFromKey(t['key'] as String?),
+                        size: t['key'] == myKey ? 40 : 30,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        (t['label'] as String? ?? '').toUpperCase(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: PixelText.body(
+                          size: 7,
+                          color: t['key'] == myKey
+                              ? AppColors.textDark
+                              : AppColors.textMid,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
       ],
     );
   }
@@ -799,6 +1373,37 @@ class _TierSectionHeader extends StatelessWidget {
               style: PixelText.body(size: 12, color: AppColors.textMid),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Thin labelled rule between cohort zones (promotion / hold / demotion).
+class _ZoneDivider extends StatelessWidget {
+  const _ZoneDivider({
+    required this.label,
+    required this.color,
+    required this.icon,
+  });
+
+  final String label;
+  final Color color;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 10, 4, 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 5),
+          Text(label, style: PixelText.body(size: 9, color: color)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Container(height: 2, color: color.withValues(alpha: 0.35)),
+          ),
         ],
       ),
     );

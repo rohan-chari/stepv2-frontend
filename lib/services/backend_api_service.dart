@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../config/backend_config.dart';
 import '../models/step_data.dart';
@@ -56,6 +57,21 @@ class BackendApiService {
   final HttpClient _httpClient;
   String? _cachedTimeZone;
   String? _cachedReleaseChannel;
+  String? _cachedAppVersion;
+
+  // The running build's version (e.g. "1.3.0"), sent on every request so the
+  // backend can gate responses by client capability instead of guessing.
+  // Resolved once; falls back to "unknown" rather than ever failing a request.
+  Future<String> _getAppVersion() async {
+    if (_cachedAppVersion != null) return _cachedAppVersion!;
+    try {
+      final info = await PackageInfo.fromPlatform();
+      _cachedAppVersion = info.version.isEmpty ? 'unknown' : info.version;
+    } catch (_) {
+      _cachedAppVersion = 'unknown';
+    }
+    return _cachedAppVersion!;
+  }
 
   Future<String> _getTimeZone() async {
     _cachedTimeZone ??= await FlutterTimezone.getLocalTimezone();
@@ -481,6 +497,19 @@ class BackendApiService {
   }) async {
     final response = await _sendGetRequest(
       path: '/ranked',
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  /// Weekly-cohort ranked ladder (backend >= June 2026). 404 means the backend
+  /// predates v2 — callers fall back to [fetchRanked] and the legacy UI.
+  Future<Map<String, dynamic>> fetchRankedV2({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/ranked/v2',
       identityToken: identityToken,
     );
 
@@ -1188,6 +1217,7 @@ class BackendApiService {
       }
       request.headers.set('X-Timezone', await _getTimeZone());
       request.headers.set('X-Release-Channel', await _getReleaseChannel());
+      request.headers.set('X-App-Version', await _getAppVersion());
       return await request.close().timeout(_requestTimeout);
     } on SocketException catch (error) {
       throw ApiException(describeBackendConnectionError(error, uri: uri));
@@ -1222,6 +1252,7 @@ class BackendApiService {
       }
       request.headers.set('X-Timezone', await _getTimeZone());
       request.headers.set('X-Release-Channel', await _getReleaseChannel());
+      request.headers.set('X-App-Version', await _getAppVersion());
       headers?.forEach(request.headers.set);
 
       request.write(jsonEncode(body));

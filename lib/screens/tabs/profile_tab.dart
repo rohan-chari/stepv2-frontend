@@ -542,8 +542,12 @@ class _StatsSectionState extends State<_StatsSection> {
           _avgPerDayYear = (stats['avgPerDayYear'] as num?)?.toInt();
           _allTime = (stats['allTime'] as num?)?.toInt() ?? 0;
           _streak = (stats['streak'] as num?)?.toInt() ?? 0;
-          _rankedTier = stats['rankedTier'] as String?;
-          _rankedDivision = (stats['rankedDivision'] as num?)?.toInt();
+          // Prefer the weekly-cohort home tier (v2); fall back to the legacy
+          // season tier for backends that predate it. v2 has no divisions.
+          final tierV2 = stats['rankedTierV2'] as String?;
+          _rankedTier = tierV2 ?? stats['rankedTier'] as String?;
+          _rankedDivision =
+              tierV2 != null ? null : (stats['rankedDivision'] as num?)?.toInt();
           _statsState = Loadable.success(stats);
           _isLoading = false;
         });
