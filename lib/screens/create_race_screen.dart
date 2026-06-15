@@ -36,7 +36,11 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
   int _buyInAmount = 100;
   String _payoutPreset = 'WINNER_TAKES_ALL';
   bool _isPublic = false;
-  int _maxParticipants = 10;
+  // Participant cap. Required selection: the user must pick a preset number or
+  // NO LIMIT before creating. `_noLimit == false && _maxParticipants == null`
+  // means "nothing chosen yet". NO LIMIT sends maxParticipants: null (unlimited).
+  int? _maxParticipants;
+  bool _noLimit = false;
   // 1.1.7: optional future auto-start. Null = instant/manual race (default).
   DateTime? _scheduledStartAt;
 
@@ -71,6 +75,30 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
   ];
+
+  Widget _maxRunnersChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.pillGreenDark : AppColors.parchmentDark,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          label,
+          style: PixelText.title(
+            size: 13,
+            color: selected ? Colors.white : AppColors.textDark,
+          ),
+        ),
+      ),
+    );
+  }
 
   String _formatScheduledStart(DateTime t) {
     final local = t.toLocal();
@@ -120,6 +148,11 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
       return;
     }
 
+    if (!_noLimit && _maxParticipants == null) {
+      showErrorToast(context, 'Pick a max runners option');
+      return;
+    }
+
     if (_buyInEnabled && _buyInAmount > 0 && _buyInAmount < 10) {
       showErrorToast(context, 'Buy-in must be at least 10 coins');
       return;
@@ -150,7 +183,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
         buyInAmount: _buyInEnabled ? _buyInAmount : 0,
         payoutPreset: _buyInEnabled ? _payoutPreset : 'WINNER_TAKES_ALL',
         isPublic: _isPublic,
-        maxParticipants: _maxParticipants,
+        maxParticipants: _noLimit ? null : _maxParticipants,
         scheduledStartAt: _scheduledStartAt,
       );
 
@@ -721,7 +754,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'PUBLIC RACE',
+                                      _isPublic ? 'PUBLIC RACE' : 'PRIVATE RACE',
                                       style: PixelText.title(
                                         size: 13,
                                         color: AppColors.textMid,
@@ -752,50 +785,41 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                 ),
                               ],
                             ),
-                            if (_isPublic) ...[
-                              const SizedBox(height: 12),
-                              Text(
-                                'MAX RUNNERS',
-                                style: PixelText.body(
-                                  size: 11,
-                                  color: AppColors.textMid,
-                                ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'MAX RUNNERS',
+                              style: PixelText.body(
+                                size: 11,
+                                color: AppColors.textMid,
                               ),
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: _maxParticipantsPresets.map((preset) {
-                                  final selected = _maxParticipants == preset;
-                                  return GestureDetector(
-                                    onTap: () => setState(
-                                      () => _maxParticipants = preset,
-                                    ),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 14,
-                                        vertical: 8,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: selected
-                                            ? AppColors.pillGreenDark
-                                            : AppColors.parchmentDark,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Text(
-                                        '$preset',
-                                        style: PixelText.title(
-                                          size: 13,
-                                          color: selected
-                                              ? Colors.white
-                                              : AppColors.textDark,
-                                        ),
-                                      ),
-                                    ),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                ..._maxParticipantsPresets.map((preset) {
+                                  final selected =
+                                      !_noLimit && _maxParticipants == preset;
+                                  return _maxRunnersChip(
+                                    label: '$preset',
+                                    selected: selected,
+                                    onTap: () => setState(() {
+                                      _noLimit = false;
+                                      _maxParticipants = preset;
+                                    }),
                                   );
-                                }).toList(),
-                              ),
-                            ],
+                                }),
+                                _maxRunnersChip(
+                                  label: 'NO LIMIT',
+                                  selected: _noLimit,
+                                  onTap: () => setState(() {
+                                    _noLimit = true;
+                                    _maxParticipants = null;
+                                  }),
+                                ),
+                              ],
+                            ),
                           ],
                         ),
                       ),

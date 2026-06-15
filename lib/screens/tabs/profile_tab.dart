@@ -32,8 +32,6 @@ class ProfileTab extends StatefulWidget {
   final VoidCallback? onBack;
   final Future<void> Function()? onAddProfilePhoto;
   final Future<void> Function()? onRemoveProfilePhoto;
-  final VoidCallback? onOpenFriends;
-  final int incomingFriendRequests;
   final bool showBackButton;
 
   const ProfileTab({
@@ -49,8 +47,6 @@ class ProfileTab extends StatefulWidget {
     this.onBack,
     this.onAddProfilePhoto,
     this.onRemoveProfilePhoto,
-    this.onOpenFriends,
-    this.incomingFriendRequests = 0,
     this.showBackButton = true,
   });
 
@@ -394,25 +390,6 @@ class _ProfileTabState extends State<ProfileTab> {
                       onPressed: _openSettings,
                     ),
                   ),
-                  if (widget.onOpenFriends != null) ...[
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: PillButton(
-                        label: widget.incomingFriendRequests > 0
-                            ? 'FRIENDS (${widget.incomingFriendRequests})'
-                            : 'FRIENDS',
-                        icon: Icons.people_alt_rounded,
-                        variant: PillButtonVariant.accent,
-                        fontSize: 13,
-                        fullWidth: true,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
-                        ),
-                        onPressed: widget.onOpenFriends,
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ],

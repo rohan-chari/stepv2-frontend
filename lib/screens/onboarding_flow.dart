@@ -325,7 +325,11 @@ class _OnboardingRaceCard extends StatelessWidget {
     final creator = race['creator'] as Map<String, dynamic>?;
     final creatorName = creator?['displayName'] as String? ?? 'Someone';
     final participantCount = race['participantCount'] as int? ?? 0;
-    final maxParticipants = race['maxParticipants'] as int? ?? 10;
+    // null => no participant limit (unlimited).
+    final maxParticipants = race['maxParticipants'] as int?;
+    final runnersLabel = maxParticipants == null
+        ? '$participantCount'
+        : '$participantCount/$maxParticipants';
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -357,7 +361,7 @@ class _OnboardingRaceCard extends StatelessWidget {
             children: [
               _stat('ENDS IN', _timeLeftLabel()),
               const SizedBox(width: 16),
-              _stat('RUNNERS', '$participantCount/$maxParticipants'),
+              _stat('RUNNERS', runnersLabel),
               const SizedBox(width: 16),
               _stat('BUY-IN', 'FREE'),
               const SizedBox(width: 16),

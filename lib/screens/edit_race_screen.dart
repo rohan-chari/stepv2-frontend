@@ -45,7 +45,8 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
   late final int _initialBuyInAmount;
   late final String _initialPayoutPreset;
   late final bool _initialIsPublic;
-  late final int _initialMaxParticipants;
+  // null => no participant limit (unlimited).
+  late final int? _initialMaxParticipants;
 
   // Live values
   late int _maxDurationDays;
@@ -55,7 +56,8 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
   late int _buyInAmount;
   late String _payoutPreset;
   late bool _isPublic;
-  late int _maxParticipants;
+  // null => no participant limit (unlimited).
+  late int? _maxParticipants;
 
   // Locked = participants have paid in; buy-in becomes non-editable
   late final bool _buyInLocked;
@@ -89,7 +91,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
     _initialPayoutPreset =
         (race['payoutPreset'] as String?) ?? 'WINNER_TAKES_ALL';
     _initialIsPublic = race['isPublic'] == true;
-    _initialMaxParticipants = _readInt(race['maxParticipants'], 10);
+    _initialMaxParticipants = _readNullableMax(race['maxParticipants']);
 
     final participants =
         (race['participants'] as List?)?.cast<Map<String, dynamic>>() ?? [];
@@ -116,11 +118,46 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
     _maxParticipants = _initialMaxParticipants;
   }
 
+  Widget _maxRunnersChip({
+    required String label,
+    required bool selected,
+    required bool disabled,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: disabled ? null : onTap,
+      child: Opacity(
+        opacity: disabled ? 0.4 : 1.0,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.pillGreenDark : AppColors.parchmentDark,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            label,
+            style: PixelText.title(
+              size: 13,
+              color: selected ? Colors.white : AppColors.textDark,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   int _readInt(dynamic value, int fallback) {
     if (value is int) return value;
     if (value is num) return value.toInt();
     if (value is String) return int.tryParse(value) ?? fallback;
     return fallback;
+  }
+
+  /// Reads maxParticipants where a null/absent value means "no limit"
+  /// (unlimited). Defensive: a newer backend serializes unlimited races as null.
+  int? _readNullableMax(dynamic value) {
+    if (value == null) return null;
+    return _readInt(value, 10);
   }
 
   @override
@@ -175,7 +212,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
       return;
     }
 
-    if (_maxParticipants < _acceptedCount) {
+    if (_maxParticipants != null && _maxParticipants! < _acceptedCount) {
       showErrorToast(
         context,
         'Cannot reduce max runners below $_acceptedCount accepted',
@@ -219,6 +256,10 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
       final token = widget.authService.authToken;
       if (token == null || token.isEmpty) return;
 
+      // maxParticipants needs a key-presence signal: a null value is a real
+      // change (set to unlimited), not "unchanged". setMaxParticipantsUnlimited
+      // tells the sparse PATCH builder to send an explicit null.
+      final maxChanged = updates.containsKey('maxParticipants');
       final result = await widget.backendApiService.updateRace(
         identityToken: token,
         raceId: widget.raceId,
@@ -230,6 +271,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
         buyInAmount: updates['buyInAmount'] as int?,
         payoutPreset: updates['payoutPreset'] as String?,
         maxParticipants: updates['maxParticipants'] as int?,
+        setMaxParticipantsUnlimited: maxChanged && _maxParticipants == null,
       );
 
       if (mounted) {
@@ -705,7 +747,9 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        'PUBLIC RACE',
+                                        _isPublic
+                                            ? 'PUBLIC RACE'
+                                            : 'PRIVATE RACE',
                                         style: PixelText.title(
                                           size: 13,
                                           color: AppColors.textMid,
@@ -749,44 +793,28 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                               Wrap(
                                 spacing: 8,
                                 runSpacing: 8,
-                                children:
-                                    _maxParticipantsPresets.map((preset) {
-                                  final selected =
-                                      _maxParticipants == preset;
-                                  final disabled = preset < _acceptedCount;
-                                  return GestureDetector(
-                                    onTap: disabled
-                                        ? null
-                                        : () => setState(
-                                              () => _maxParticipants = preset,
-                                            ),
-                                    child: Opacity(
-                                      opacity: disabled ? 0.4 : 1.0,
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 14,
-                                          vertical: 8,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: selected
-                                              ? AppColors.pillGreenDark
-                                              : AppColors.parchmentDark,
-                                          borderRadius:
-                                              BorderRadius.circular(8),
-                                        ),
-                                        child: Text(
-                                          '$preset',
-                                          style: PixelText.title(
-                                            size: 13,
-                                            color: selected
-                                                ? Colors.white
-                                                : AppColors.textDark,
-                                          ),
-                                        ),
+                                children: [
+                                  ..._maxParticipantsPresets.map((preset) {
+                                    final selected = _maxParticipants == preset;
+                                    final disabled = preset < _acceptedCount;
+                                    return _maxRunnersChip(
+                                      label: '$preset',
+                                      selected: selected,
+                                      disabled: disabled,
+                                      onTap: () => setState(
+                                        () => _maxParticipants = preset,
                                       ),
+                                    );
+                                  }),
+                                  _maxRunnersChip(
+                                    label: 'NO LIMIT',
+                                    selected: _maxParticipants == null,
+                                    disabled: false,
+                                    onTap: () => setState(
+                                      () => _maxParticipants = null,
                                     ),
-                                  );
-                                }).toList(),
+                                  ),
+                                ],
                               ),
                               if (_acceptedCount > 1) ...[
                                 const SizedBox(height: 8),

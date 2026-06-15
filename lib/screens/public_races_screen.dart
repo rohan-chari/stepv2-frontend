@@ -283,7 +283,11 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
     final endsAt = DateTime.tryParse(race['endsAt'] as String? ?? '');
     final maxDurationDays = race['maxDurationDays'] as int? ?? 7;
     final participantCount = race['participantCount'] as int? ?? 0;
-    final maxParticipants = race['maxParticipants'] as int? ?? 10;
+    // null => no participant limit (unlimited).
+    final maxParticipants = race['maxParticipants'] as int?;
+    final runnersLabel = maxParticipants == null
+        ? '$participantCount'
+        : '$participantCount/$maxParticipants';
     final buyIn = race['buyInAmount'] as int? ?? 0;
     final creator = race['creator'] as Map<String, dynamic>?;
     final creatorName = creator?['displayName'] as String? ?? 'Someone';
@@ -332,7 +336,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
               children: [
                 _buildStat('ENDS IN', timeLeftLabel),
                 const SizedBox(width: 16),
-                _buildStat('RUNNERS', '$participantCount/$maxParticipants'),
+                _buildStat('RUNNERS', runnersLabel),
                 if (buyIn > 0) ...[
                   const SizedBox(width: 16),
                   _buildStat('BUY-IN', '$buyIn'),

@@ -40,6 +40,7 @@ class HomeTab extends StatelessWidget {
   final List<Map<String, dynamic>> equippedAccessories;
   final Loadable<Map<String, dynamic>>? shopCatalogState;
   final VoidCallback? onOpenFriendsTab;
+  final int incomingFriendRequests;
   final VoidCallback? onOpenRacesTab;
   final VoidCallback? onOpenLeaderboardTab;
   final VoidCallback? onOpenShop;
@@ -74,6 +75,7 @@ class HomeTab extends StatelessWidget {
     this.equippedAccessories = const [],
     this.shopCatalogState,
     this.onOpenFriendsTab,
+    this.incomingFriendRequests = 0,
     this.onOpenRacesTab,
     this.onOpenLeaderboardTab,
     this.onOpenShop,
@@ -552,7 +554,7 @@ class HomeTab extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Expanded(
+                    Flexible(
                       child: Text(
                         atName(displayName ?? 'You'),
                         style: PixelText.title(
@@ -562,8 +564,13 @@ class HomeTab extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 10),
                     CoinBalanceBadge(coins: authService.coins, coinSize: 16),
+                    const Spacer(),
+                    _FriendsHeroButton(
+                      incomingRequests: incomingFriendRequests,
+                      onTap: onOpenFriendsTab,
+                    ),
                   ],
                 ),
                 const SizedBox(height: 10),
@@ -1284,6 +1291,93 @@ class _HomeSectionHeader extends StatelessWidget {
           size: 20,
           color: AppColors.textDark,
         ).copyWith(shadows: _textShadows),
+      ),
+    );
+  }
+}
+
+/// Tappable "find friends" entry point shown in the top-right of the home hero.
+/// Shows a small badge when there are incoming friend requests.
+class _FriendsHeroButton extends StatefulWidget {
+  final int incomingRequests;
+  final VoidCallback? onTap;
+
+  const _FriendsHeroButton({required this.incomingRequests, this.onTap});
+
+  @override
+  State<_FriendsHeroButton> createState() => _FriendsHeroButtonState();
+}
+
+class _FriendsHeroButtonState extends State<_FriendsHeroButton> {
+  static const _shadows = [
+    Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
+  ];
+
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasRequests = widget.incomingRequests > 0;
+
+    final button = Container(
+      decoration: BoxDecoration(
+        color: AppColors.parchment.withValues(alpha: 0.16),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: AppColors.parchment.withValues(alpha: 0.5),
+          width: 1.5,
+        ),
+      ),
+      padding: const EdgeInsets.all(8),
+      child: Icon(
+        Icons.person_add_alt_1_rounded,
+        size: 22,
+        color: AppColors.parchment,
+        shadows: _shadows,
+      ),
+    );
+
+    final child = hasRequests
+        ? Stack(
+            clipBehavior: Clip.none,
+            children: [
+              button,
+              Positioned(
+                top: -4,
+                right: -4,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: AppColors.error,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.parchment, width: 1.5),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Text(
+                      '${widget.incomingRequests}',
+                      style: PixelText.number(
+                        size: 9,
+                        color: AppColors.parchment,
+                      ).copyWith(height: 1),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          )
+        : button;
+
+    return GestureDetector(
+      onTap: widget.onTap,
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedScale(
+        scale: _pressed ? 0.92 : 1.0,
+        duration: const Duration(milliseconds: 90),
+        curve: Curves.easeOut,
+        child: child,
       ),
     );
   }

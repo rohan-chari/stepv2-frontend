@@ -627,7 +627,10 @@ class BackendApiService {
     int buyInAmount = 0,
     String payoutPreset = 'WINNER_TAKES_ALL',
     bool isPublic = false,
-    int maxParticipants = 10,
+    // null => no participant limit (unlimited). Sent explicitly as JSON null so
+    // the backend can distinguish "unlimited" from an omitted field (which it
+    // still defaults to 10 for older clients).
+    int? maxParticipants = 10,
     // 1.1.7: optional future auto-start time. Omitted from the body when null so
     // the backend treats it as an instant/manual race (unchanged behavior).
     DateTime? scheduledStartAt,
@@ -769,6 +772,28 @@ class BackendApiService {
     _decodeJsonResponse(response);
   }
 
+  /// Acknowledges that the user has seen the results popup for the given
+  /// finished races. Additive endpoint: older backends 404 here and the popup
+  /// simply re-shows next session, so tolerate any non-2xx (or network error)
+  /// silently rather than surfacing it to the user.
+  Future<void> markRaceResultsSeen({
+    required String identityToken,
+    required List<String> raceIds,
+  }) async {
+    if (raceIds.isEmpty) return;
+    try {
+      final response = await _sendJsonRequest(
+        method: 'POST',
+        path: '/races/results/seen',
+        body: {'raceIds': raceIds},
+        identityToken: identityToken,
+      );
+      await _decodeJsonResponse(response);
+    } catch (_) {
+      // Best-effort ack; never disrupt the UI if it fails.
+    }
+  }
+
   Future<void> kickRaceParticipant({
     required String identityToken,
     required String raceId,
@@ -833,6 +858,10 @@ class BackendApiService {
     int? buyInAmount,
     String? payoutPreset,
     int? maxParticipants,
+    // When true, send maxParticipants: null explicitly to set the race to
+    // "no limit" (unlimited). Needed because a null value can't otherwise be
+    // distinguished from "unchanged" in this sparse PATCH body.
+    bool setMaxParticipantsUnlimited = false,
   }) async {
     final body = <String, dynamic>{};
     if (name != null) body['name'] = name;
@@ -844,7 +873,11 @@ class BackendApiService {
     }
     if (buyInAmount != null) body['buyInAmount'] = buyInAmount;
     if (payoutPreset != null) body['payoutPreset'] = payoutPreset;
-    if (maxParticipants != null) body['maxParticipants'] = maxParticipants;
+    if (setMaxParticipantsUnlimited) {
+      body['maxParticipants'] = null;
+    } else if (maxParticipants != null) {
+      body['maxParticipants'] = maxParticipants;
+    }
 
     final response = await _sendJsonRequest(
       method: 'PATCH',

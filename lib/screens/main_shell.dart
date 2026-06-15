@@ -20,6 +20,7 @@ import '../widgets/info_toast.dart';
 import '../widgets/step_milestones_section.dart';
 import '../widgets/streak_chip.dart';
 import '../widgets/wooden_tab_bar.dart';
+import 'race_results_summary_screen.dart';
 import 'start_screen.dart';
 import 'onboarding_flow.dart';
 import 'tabs/friends_tab.dart';
@@ -95,6 +96,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   final GlobalKey<StepMilestonesSectionState> _stepMilestonesKey =
       GlobalKey<StepMilestonesSectionState>();
   static const Duration _foregroundPollInterval = Duration(minutes: 5);
+  // Races whose results popup we've already surfaced this session, so a race
+  // finishing mid-session (or a re-fetch) doesn't re-interrupt. The server ack
+  // (markRaceResultsSeen) is the durable source of truth across sessions.
+  final Set<String> _raceResultsShownThisSession = {};
+  bool _raceResultsPopupOpen = false;
 
   void _handleAuthServiceChanged() {
     if (!mounted) return;
@@ -176,7 +182,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _fetchSteps();
       _refreshMe();
       _fetchFriendsSteps();
-      _fetchRaces();
+      _fetchRaces(checkResults: true);
       _fetchShopCatalog();
       _fetchRaceCard();
       _startForegroundPolling();
@@ -218,7 +224,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     await _fetchSteps();
     _refreshMe();
     _fetchFriendsSteps();
-    _fetchRaces();
+    _fetchRaces(checkResults: true);
     _fetchShopCatalog();
     _startForegroundPolling();
   }
@@ -446,7 +452,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _fetchRaces() async {
+  Future<void> _fetchRaces({bool checkResults = false}) async {
     final previous = _racesData;
     if (mounted) {
       setState(() {
@@ -478,6 +484,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         });
       }
 
+      // Only the resume and initial-load paths request the results check; the
+      // 5-minute foreground poll must not interrupt the user mid-session.
+      if (checkResults) _maybeShowRaceResults();
+
       // Featured strip rides along with the races list so it stays in sync
       // (e.g. after a join). Self-contained error handling — never disrupts the
       // races load above.
@@ -501,6 +511,75 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     } catch (_) {
       // Featured is a non-critical discovery surface; on error keep the last
       // known list rather than disturbing the races page.
+    }
+  }
+
+  /// Detects races the user ran (myStatus == 'ACCEPTED') that finished and
+  /// haven't had their results acknowledged, then shows a single combined
+  /// summary popup. Called only from resume + initial load (not the poll).
+  ///
+  /// Defensive default: a missing/null `myResultsSeen` is treated as SEEN
+  /// (true), so an older backend that doesn't send the field never triggers a
+  /// spurious popup.
+  Future<void> _maybeShowRaceResults() async {
+    if (!mounted || _raceResultsPopupOpen) return;
+
+    final completed =
+        (_racesData?['completed'] as List?)?.cast<Map<String, dynamic>>() ??
+        const [];
+
+    final unseen = completed.where((race) {
+      if (race['myStatus'] != 'ACCEPTED') return false;
+      final seen = (race['myResultsSeen'] as bool?) ?? true;
+      if (seen) return false;
+      final id = race['id'] as String?;
+      if (id == null) return false;
+      return !_raceResultsShownThisSession.contains(id);
+    }).toList();
+
+    if (unseen.isEmpty) return;
+
+    // Sequence after the daily-reward popup: that modal opens on tap and lives
+    // on a route above this shell, so if anything is already on top of us, hold
+    // off — the next resume/load will re-detect and show then.
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) return;
+
+    final shownIds = unseen
+        .map((race) => race['id'] as String)
+        .toList(growable: false);
+    _raceResultsShownThisSession.addAll(shownIds);
+
+    _raceResultsPopupOpen = true;
+    await Navigator.of(context).push<void>(
+      PageRouteBuilder(
+        opaque: false,
+        pageBuilder: (_, _, _) => RaceResultsSummaryScreen(races: unseen),
+        transitionsBuilder: (_, anim, _, child) =>
+            FadeTransition(opacity: anim, child: child),
+        transitionDuration: const Duration(milliseconds: 250),
+      ),
+    );
+    _raceResultsPopupOpen = false;
+
+    // On dismiss: ack server-side and optimistically flip the local flag so a
+    // re-fetch in this session doesn't re-show them.
+    final identityToken = widget.authService.authToken;
+    if (identityToken != null && identityToken.isNotEmpty) {
+      _backendApiService.markRaceResultsSeen(
+        identityToken: identityToken,
+        raceIds: shownIds,
+      );
+    }
+    if (mounted) {
+      setState(() {
+        final shownSet = shownIds.toSet();
+        for (final race in completed) {
+          if (shownSet.contains(race['id'])) {
+            race['myResultsSeen'] = true;
+          }
+        }
+      });
     }
   }
 
@@ -1076,6 +1155,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     equippedAccessories: _equippedAccessories,
                     shopCatalogState: _shopCatalogState,
                     onOpenFriendsTab: _openFriendsTab,
+                    incomingFriendRequests: _incomingFriendRequests,
                     onOpenRacesTab: _openRacesTab,
                     onOpenLeaderboardTab: _openLeaderboardTab,
                     onOpenShop: _openShop,
@@ -1127,8 +1207,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     stepData: _stepData,
                     onAddProfilePhoto: _addOrChangeProfilePhoto,
                     onRemoveProfilePhoto: _removeProfilePhoto,
-                    onOpenFriends: _openFriendsTab,
-                    incomingFriendRequests: _incomingFriendRequests,
                     showBackButton: false,
                   ),
                 ],
