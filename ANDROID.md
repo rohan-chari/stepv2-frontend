@@ -84,6 +84,52 @@ DerivedData` 2.1 GB — all regenerable caches) and re-run the build.
 - **Deploy G1** (backend-first, defaulted): apply migration + `prisma generate` + set
   `GOOGLE_AUTH_CLIENT_ID` + restart — your explicit call; not done.
 
+### Commits (branch `android-release`, both repos)
+
+Frontend (`stepv2-frontend`):
+- `f3a9aee` — Android: project foundation + Health Connect/plugin config + step-dedup fix
+- `1af84b6` — Android: update ANDROID.md progress log
+- (+ this handoff commit, and a separate commit preserving pre-existing WIP: pubspec `1.3.3→1.3.5`,
+  `race_detail_screen.dart` padding tweak)
+
+Backend (`stepv2-backend`):
+- `98537b2` — Android G1: Google auth provider (additive, compat-safe)
+- (pre-existing WIP — `usePowerup.js`, `cleansePowerup.test.js` — committed separately to preserve it)
+
+### Resuming on a new machine
+
+The Android SDK/JDK/Gradle caches are **machine-local** and won't transfer — reinstall them. The
+code is all on the pushed `android-release` branches. Commands below are for **Apple-Silicon**
+Homebrew (`/opt/homebrew`); on Intel use `/usr/local`.
+
+```bash
+# 1. JDK 17 (keg-only) + Android command-line tools
+brew install openjdk@17
+brew install --cask android-commandlinetools
+
+# 2. SDK packages — compileSdk/targetSdk 36 for Flutter 3.38.x
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17
+export ANDROID_SDK_ROOT=/opt/homebrew/share/android-commandlinetools
+yes | sdkmanager --licenses
+sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+# 3. Point Flutter at them
+flutter config --android-sdk /opt/homebrew/share/android-commandlinetools
+flutter config --jdk-dir /opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
+# android/local.properties (gitignored) must contain:
+#   flutter.sdk=<path to your flutter checkout>
+#   sdk.dir=/opt/homebrew/share/android-commandlinetools
+
+# 4. First build (validates A/B/C). Auto-installs the NDK (~2.8 GB) — needs ~10 GB free disk.
+flutter build apk --debug --flavor staging \
+  --dart-define=BACKEND_BASE_URL=https://staging.steptracker-api.org
+```
+
+The previous build on the old machine reached manifest-merge + NDK install and then failed
+**only** on `No space left on device` (that disk was 100% full) — so this first build is expected
+to be the real config validation. Manifest-merge surprises from plugins are still possible on a
+clean first build.
+
 ---
 
 ## 1. Executive summary
