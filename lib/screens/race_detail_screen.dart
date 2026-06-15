@@ -2169,7 +2169,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.only(top: 16, bottom: 8),
           child: Text(
             'ACTIVE EFFECTS',
             style: PixelText.title(size: 14, color: AppColors.textMid),
