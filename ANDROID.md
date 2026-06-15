@@ -31,31 +31,58 @@ name is needed — only the placeholder `applicationId`/`namespace`.
 
 ## Progress log
 
-**Branch `android-release`.** Done so far (Workstream A foundation + the critical manifest fix):
+Work lives on branch **`android-release`** in **both** repos (frontend + backend), committed
+locally (not pushed). Nothing is deployed; no impact on existing iOS users.
 
-- ✅ `applicationId` + `namespace` → `com.rohanchari.steptracker` (`android/app/build.gradle.kts`);
-  `MainActivity.kt` moved to `…/kotlin/com/rohanchari/steptracker/` with matching `package`. No
-  `com.example.step_tracker` references remain anywhere in source/config.
-- ✅ `prod` / `staging` Gradle product flavors added to mirror the iOS two-listing model
-  (`staging` → `.staging` suffix). **Android builds/runs now require `--flavor prod|staging`.**
-- ✅ Release signing wired to a gitignored `android/key.properties` with a debug fallback;
-  template committed at `android/key.properties.example`.
-- ✅ `<uses-permission android:name="android.permission.INTERNET"/>` added to the **main**
-  manifest (release builds would otherwise have no network).
+**✅ Done & committed — Workstream A (foundation):**
+- `applicationId`/`namespace` → `com.rohanchari.steptracker`; `MainActivity.kt` moved to the
+  matching package. No `com.example.step_tracker` references remain.
+- `prod`/`staging` Gradle flavors mirror the iOS two-listing model (`staging` → `.staging`).
+  **Android builds/runs require `--flavor prod|staging`.**
+- Release signing wired to gitignored `android/key.properties` (debug fallback); template at
+  `android/key.properties.example`.
 
-**Not yet done / prerequisites:**
+**✅ Done & committed — Workstreams B + C (manifest/plugins + Health Connect):**
+- Main manifest: `INTERNET`, `health.READ_STEPS`, `POST_NOTIFICATIONS`, Health Connect rationale
+  `<activity-alias>` + `ACTION_SHOW_PERMISSIONS_RATIONALE` intent-filter + `<queries>` (healthdata
+  package, rationale, https), `UCropActivity` (image_cropper).
+- `Ucrop.CropTheme` style + `values-v35/styles.xml` Android-15 edge-to-edge opt-out.
+- `HealthService.setUpHealthAccess()`: Android checks Health Connect SDK status and routes to
+  install if missing; onboarding handles the needs-install case.
+- Step-dedup fix (decision #6): `_includeManualEntry => Platform.isAndroid` (de-duplicated
+  aggregate on Android, iOS unchanged; existing test stays green). Device-token label →
+  `Platform.isAndroid ? 'android' : 'ios'`.
+- `lib/` is `flutter analyze`-clean. (Pre-existing unrelated `test/` failures remain.)
 
-- ⛔ **Android SDK is not installed on the dev machine** (`flutter doctor` → no Android toolchain;
-  only Xcode). Install Android Studio + SDK and run `flutter config --android-sdk <path>` before
-  any Android build can compile. **None of the changes above have been compiled/validated** —
-  first build will also surface plugin manifest-merge issues (expected).
-- ◻️ Upload keystore not generated (create per `key.properties.example`; needed for a Play `.aab`).
-- ◻️ `versionCode`: left to the existing release flow. `pubspec.yaml` version (shared with iOS) was
-  **not** touched; Android builds need a `+N` build number or `--build-number=<N>` (see §A).
-- ◻️ Workstreams B (remaining manifest/plugin config), C, D, E and backend G1/G2 not started.
+**✅ Done & committed — Backend G1 (Google auth) [backend repo `android-release`]:**
+- `appleId` → nullable (unique kept) + new nullable-unique `googleSub`; hand-authored additive
+  migration `20260615140000_add_google_auth`.
+- `googleIdentityToken.js` (RS256 verifier), `ensureGoogleUser.js` (self-contained; Apple path
+  untouched), `user.findByGoogleSub`/`create`, `POST /auth/google`.
+- Onboarding box-grant key made provider-neutral (`hash(appleId || googleSub)`) so Google users
+  aren't skipped; ledger never backfilled. `node --check` + `prisma validate` pass.
 
-Nothing here touches the backend or affects existing iOS users. Changes are uncommitted on the
-`android-release` branch.
+**✅ Toolchain installed (this machine):** OpenJDK 17 (`/opt/homebrew/opt/openjdk@17`) + Android
+cmdline-tools/SDK 36 + build-tools 36 + NDK (`/opt/homebrew/share/android-commandlinetools`);
+`flutter config` points at both; `flutter doctor` Android toolchain ✓.
+
+**⚠️ BLOCKER — disk full.** First `flutter build apk --debug --flavor staging` got *past* flavor
+selection, manifest merge, and NDK install, then **failed only on `No space left on device`** — the
+data volume is 100% full (~3.6 GB free after I reclaimed brew cache + `build/`). **The Android
+config is validated as far as the build reached; it could not finish solely due to disk.** Free
+~10 GB+ (candidates: `~/.gradle` 2.8 GB, the auto-pulled NDK 2.8 GB, `~/Library/Developer/Xcode/
+DerivedData` 2.1 GB — all regenerable caches) and re-run the build.
+
+**◻️ Remaining (need external setup + disk):**
+- **D (Google client)** + **E (FCM client)**: code is straightforward but require a Firebase
+  project + `google-services.json`, a **Web OAuth client** (its id → `GOOGLE_AUTH_CLIENT_ID` on the
+  backend + `serverClientId` in the app) and an **Android OAuth client** with the keystore's SHA-1.
+  Adding the `google-services` Gradle plugin **before** `google-services.json` exists will break the
+  build, so these wait on the Firebase/OAuth setup (your Google account).
+- **G2 (backend FCM routing)**: `firebase-admin` sender + platform branch on the two
+  `notificationHandlers.js` fan-out paths. No DB migration needed.
+- **Deploy G1** (backend-first, defaulted): apply migration + `prisma generate` + set
+  `GOOGLE_AUTH_CLIENT_ID` + restart — your explicit call; not done.
 
 ---
 
