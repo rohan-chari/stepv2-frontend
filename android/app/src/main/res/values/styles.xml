@@ -15,4 +15,8 @@
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">?android:colorBackground</item>
     </style>
+    <!-- Theme for image_cropper's UCropActivity (requires AppCompat). The v35
+         override (values-v35/styles.xml) opts out of Android 15 edge-to-edge,
+         which uCrop does not yet support. See ANDROID.md §B. -->
+    <style name="Ucrop.CropTheme" parent="Theme.AppCompat.Light.NoActionBar" />
 </resources>

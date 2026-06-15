@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 15 (API 35) enforces edge-to-edge, which image_cropper's uCrop
+         does not yet support. Opt the crop screen out so it renders correctly.
+         See ANDROID.md §B and the image_cropper README. -->
+    <style name="Ucrop.CropTheme" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+    </style>
+</resources>

@@ -266,8 +266,17 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     setState(() => _isLoading = true);
 
     try {
-      final authorized = await _healthService.requestAuthorization();
-      if (!authorized) {
+      final result = await _healthService.setUpHealthAccess();
+      if (result == HealthSetupResult.needsHealthConnect) {
+        setState(() {
+          _isLoading = false;
+          _error =
+              'Health Connect is required to track your steps.\n'
+              'Install or update it, then tap Continue again.';
+        });
+        return;
+      }
+      if (result == HealthSetupResult.denied) {
         setState(() {
           _isLoading = false;
           _error =

@@ -1,3 +1,6 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -5,8 +8,19 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Release signing is loaded from android/key.properties (gitignored — never committed).
+// If that file is absent (e.g. a dev machine without the upload keystore), the release
+// build falls back to debug signing so `flutter run --release` still works locally.
+// See ANDROID.md §A and key.properties.example for setup.
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+val hasReleaseKeystore = keystorePropertiesFile.exists()
+if (hasReleaseKeystore) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+}
+
 android {
-    namespace = "com.example.step_tracker"
+    namespace = "com.rohanchari.steptracker"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -20,21 +34,52 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.step_tracker"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        // Matches the iOS prod bundle id (Bara). Permanent on the Play Store once published.
+        applicationId = "com.rohanchari.steptracker"
         minSdk = 28
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
+    // Mirror the iOS two-listing model (see DEPLOYMENT.md): build with
+    //   flutter build appbundle --flavor prod    --dart-define=BACKEND_BASE_URL=https://steptracker-api.org
+    //   flutter build appbundle --flavor staging --dart-define=BACKEND_BASE_URL=https://staging.steptracker-api.org
+    // NOTE: because flavors are defined, Android builds/runs MUST pass --flavor prod|staging
+    // (unlike the bare `flutter run` used for iOS in DEPLOYMENT.md).
+    flavorDimensions += "env"
+    productFlavors {
+        create("prod") {
+            dimension = "env"
+            // applicationId stays com.rohanchari.steptracker → iOS "Bara"
+        }
+        create("staging") {
+            dimension = "env"
+            applicationIdSuffix = ".staging" // → com.rohanchari.steptracker.staging → iOS "Bara Staging"
+            versionNameSuffix = "-staging"
+        }
+    }
+
+    signingConfigs {
+        create("release") {
+            if (hasReleaseKeystore) {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = (keystoreProperties["storeFile"] as String?)?.let { file(it) }
+                storePassword = keystoreProperties["storePassword"] as String
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                // Fallback so `flutter run --release` works before the upload keystore exists.
+                // A Play-uploadable .aab REQUIRES key.properties to be present.
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }

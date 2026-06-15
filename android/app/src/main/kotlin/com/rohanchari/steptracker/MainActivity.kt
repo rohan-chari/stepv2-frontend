@@ -1,4 +1,4 @@
-package com.example.step_tracker
+package com.rohanchari.steptracker
 
 import io.flutter.embedding.android.FlutterActivity
 

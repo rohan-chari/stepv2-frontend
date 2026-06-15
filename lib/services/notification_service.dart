@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -72,7 +74,8 @@ class NotificationService {
       await _backendApiService.registerDeviceToken(
         identityToken: authToken,
         deviceToken: token,
-        platform: 'ios',
+        // The backend routes APNs vs FCM by this label (see ANDROID.md §G2).
+        platform: Platform.isAndroid ? 'android' : 'ios',
       );
     } catch (e) {
       debugPrint('Failed to register device token: $e');

@@ -1,0 +1,17 @@
+# Android release signing — COPY this file to android/key.properties and fill in real values.
+# android/key.properties is gitignored (see android/.gitignore) — NEVER commit it or the keystore.
+#
+# 1. Generate an upload keystore (one-time; keep the .jks + passwords safe — losing it means you
+#    can't ship updates unless enrolled in Play App Signing, which is recommended):
+#
+#      keytool -genkey -v -keystore ~/bara-upload-key.jks \
+#        -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+#
+# 2. Copy this file:  cp android/key.properties.example android/key.properties
+# 3. Fill in the values below (storeFile is an absolute path or relative to android/app/).
+# 4. Enroll in Play App Signing when you create the Play Console app.
+
+storeFile=/absolute/path/to/bara-upload-key.jks
+storePassword=CHANGE_ME
+keyAlias=upload
+keyPassword=CHANGE_ME

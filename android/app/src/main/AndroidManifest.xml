@@ -1,4 +1,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required for all network access. Flutter only injects INTERNET into the debug/profile
+         manifests, so a RELEASE build needs it declared here or all networking fails. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Health Connect: read-only step count (the app's whole step pipeline). We deliberately
+         declare ONLY READ_STEPS — the `health` plugin example lists every data type, but Play
+         requires justifying each declared health permission. See ANDROID.md §C. -->
+    <uses-permission android:name="android.permission.health.READ_STEPS"/>
+
+    <!-- Android 13+ runtime permission for FCM/local notifications. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
     <application
         android:label="Bara"
         android:name="${applicationName}"
@@ -24,7 +36,29 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Health Connect (standalone, pre-Android 14): when the user taps the privacy
+                 policy / rationale link in the Health Connect permission sheet, it launches the
+                 app here. Required for Health Connect to surface the app and for Play review. -->
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
         </activity>
+        <!-- Health Connect (integrated, Android 14+): the equivalent rationale entry point. -->
+        <activity-alias
+            android:name="ViewPermissionUsageActivity"
+            android:exported="true"
+            android:targetActivity=".MainActivity"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
+        <!-- image_cropper (uCrop) — required or the crop screen crashes at runtime. -->
+        <activity
+            android:name="com.yalantis.ucrop.UCropActivity"
+            android:screenOrientation="portrait"
+            android:theme="@style/Ucrop.CropTheme" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
@@ -40,6 +74,16 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- Health Connect: detect/launch the Health Connect app and its rationale flow. -->
+        <package android:name="com.google.android.apps.healthdata" />
+        <intent>
+            <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+        </intent>
+        <!-- url_launcher: opening https links (privacy/support) on Android 11+. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
         </intent>
     </queries>
 </manifest>
