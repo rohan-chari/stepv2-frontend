@@ -52,7 +52,11 @@ locally (not pushed). Nothing is deployed; no impact on existing iOS users.
 - Step-dedup fix (decision #6): `_includeManualEntry => Platform.isAndroid` (de-duplicated
   aggregate on Android, iOS unchanged; existing test stays green). Device-token label →
   `Platform.isAndroid ? 'android' : 'ios'`.
-- `lib/` is `flutter analyze`-clean. (Pre-existing unrelated `test/` failures remain.)
+- **Core library desugaring enabled** (`build.gradle.kts`): `isCoreLibraryDesugaringEnabled = true`
+  + `coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")`. Required by
+  `flutter_local_notifications` (the first real plugin surprise on a clean build — it failed
+  `checkStagingDebugAarMetadata` without it).
+- `lib/` is `flutter analyze`-clean; `health_service_test.dart` + `step_sample_data_test.dart` pass.
 
 **✅ Done & committed — Backend G1 (Google auth) [backend repo `android-release`]:**
 - `appleId` → nullable (unique kept) + new nullable-unique `googleSub`; hand-authored additive
@@ -62,27 +66,61 @@ locally (not pushed). Nothing is deployed; no impact on existing iOS users.
 - Onboarding box-grant key made provider-neutral (`hash(appleId || googleSub)`) so Google users
   aren't skipped; ledger never backfilled. `node --check` + `prisma validate` pass.
 
-**✅ Toolchain installed (this machine):** OpenJDK 17 (`/opt/homebrew/opt/openjdk@17`) + Android
-cmdline-tools/SDK 36 + build-tools 36 + NDK (`/opt/homebrew/share/android-commandlinetools`);
-`flutter config` points at both; `flutter doctor` Android toolchain ✓.
+**✅ BUILD GREEN — Android app compiles & packages (2026-06-16, repos under `~/repos`).**
+Toolchain reinstalled in user-space on a fresh Apple-Silicon machine (no Homebrew/sudo needed):
+Temurin OpenJDK 17 → `~/development/jdk17`, Flutter 3.44.2 (Dart 3.12.2) → `~/development/flutter`,
+Android cmdline-tools + SDK 36 + build-tools 36.0.0 → `~/Library/Android/sdk`; first build
+auto-installed NDK 28.2.13676358 + CMake 3.22.1. The old machine's disk-full blocker is gone
+(~869 GB free here). `flutter build apk --debug --flavor staging` → **`✓ Built
+app-staging-debug.apk`** (170 MB). `aapt2` confirms the merged binary: `package
+com.rohanchari.steptracker.staging`, versionName `1.3.5-staging`, label `Bara`, and the three
+declared perms `INTERNET` / `health.READ_STEPS` / `POST_NOTIFICATIONS`. Workstreams A/B/C are now
+validated end-to-end, not just "as far as the build reached." (Env for rebuilds:
+`JAVA_HOME=~/development/jdk17/Contents/Home`, `ANDROID_SDK_ROOT=~/Library/Android/sdk`,
+flutter on PATH — caches are machine-local, see "Resuming on a new machine".)
 
-**⚠️ BLOCKER — disk full.** First `flutter build apk --debug --flavor staging` got *past* flavor
-selection, manifest merge, and NDK install, then **failed only on `No space left on device`** — the
-data volume is 100% full (~3.6 GB free after I reclaimed brew cache + `build/`). **The Android
-config is validated as far as the build reached; it could not finish solely due to disk.** Free
-~10 GB+ (candidates: `~/.gradle` 2.8 GB, the auto-pulled NDK 2.8 GB, `~/Library/Developer/Xcode/
-DerivedData` 2.1 GB — all regenerable caches) and re-run the build.
+**✅ Done — Firebase project + upload keystore (2026-06-16).**
+- Firebase project `bara-590e1` created; **two** Android apps registered (`com.rohanchari.steptracker`
+  + `.staging`), debug SHA-1 added to both. `android/app/google-services.json` (multi-app, oauth
+  clients populated) placed; **not** gitignored (no secrets — Android API keys are package+SHA
+  restricted).
+- Web OAuth client id (serverClientId / `GOOGLE_AUTH_CLIENT_ID`):
+  `784756906133-8b5umuhi93u40lg0pf11rf1grksj44cg.apps.googleusercontent.com`.
+- **Upload keystore** generated at `~/keys/bara-upload-key.jks` (outside the repo); `android/key.properties`
+  (gitignored) points at it. Upload-key SHA-1 `DA:57:0C:42:36:72:11:D2:15:6B:2E:86:3F:A0:62:31:A0:B3:08:6A`
+  — register it on the **prod** Firebase app before a release build; the Play App Signing SHA-1 is
+  added after first `.aab` upload.
 
-**◻️ Remaining (need external setup + disk):**
-- **D (Google client)** + **E (FCM client)**: code is straightforward but require a Firebase
-  project + `google-services.json`, a **Web OAuth client** (its id → `GOOGLE_AUTH_CLIENT_ID` on the
-  backend + `serverClientId` in the app) and an **Android OAuth client** with the keystore's SHA-1.
-  Adding the `google-services` Gradle plugin **before** `google-services.json` exists will break the
-  build, so these wait on the Firebase/OAuth setup (your Google account).
+**✅ Done & committed — Workstream D (Google Sign-In, frontend):**
+- `google_sign_in: ^6.2.1`. `BackendApiService.provisionGoogleUser` (`POST /auth/google`).
+  `AuthService.signInWithGoogle` (mirrors Apple; sets `_userIdentifier = account.id`; Apple path
+  untouched) + Google `signOut()` on Android. `start_screen.dart` branches sign-in + renders a Google
+  button when `Platform.isAndroid`. `kGoogleServerClientId` const = the Web client id above.
+
+**✅ Done & committed — Workstream E (FCM client, frontend):**
+- `firebase_core ^4.x` + `firebase_messaging ^16.x`; `google-services` Gradle plugin applied
+  (settings + app). `Firebase.initializeApp()` in `main.dart` **gated to Android** (iOS has no
+  Firebase config and stays on the native APNs bridge). `NotificationService`: Android branch sets up
+  an `AndroidNotificationChannel` + `flutter_local_notifications` foreground display, FCM
+  token/`onTokenRefresh` → existing `registerDeviceToken` (platform `android`), and
+  `onMessageOpenedApp`/`getInitialMessage` → existing `_routeFromType` map. iOS MethodChannel path
+  unchanged.
+- **Second build green:** `flutter build apk --debug --flavor staging` → `✓ Built` (172 MB) with
+  Firebase + Google Sign-In compiled and `google-services.json` processed. `flutter analyze lib`
+  clean; `auth_service_test` + `health_service_test` pass. (Pre-existing unrelated failure remains:
+  `start_and_home_copy_test.dart` references a removed `HomeTab.stepGoal` param — untouched here.)
+
+**◻️ Remaining (the real blockers now — all BACKEND / deploy / store):**
 - **G2 (backend FCM routing)**: `firebase-admin` sender + platform branch on the two
-  `notificationHandlers.js` fan-out paths. No DB migration needed.
+  `notificationHandlers.js` fan-out paths. No DB migration needed. **Until this deploys, an Android
+  FCM token is still sent to APNs and bounces** (only affects the Android user's own push; no iOS
+  impact). Needs the Firebase **service-account** private key on the droplet.
 - **Deploy G1** (backend-first, defaulted): apply migration + `prisma generate` + set
-  `GOOGLE_AUTH_CLIENT_ID` + restart — your explicit call; not done.
+  `GOOGLE_AUTH_CLIENT_ID=`<the Web client id above>` + restart — your explicit call; not done.
+  **Android login cannot succeed until `/auth/google` is live in prod.**
+- **Privacy policy:** add the Health Connect section to `public/privacy.html` + redeploy.
+- **Release/store:** register upload + Play App Signing SHA-1s on the prod Firebase app, build a
+  signed `.aab` (`--flavor prod`), Play data-safety/health declaration, internal track.
 
 ### Commits (branch `android-release`, both repos)
 

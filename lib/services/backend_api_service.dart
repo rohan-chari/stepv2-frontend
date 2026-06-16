@@ -122,6 +122,31 @@ class BackendApiService {
     return payload;
   }
 
+  /// Provisions/looks up a user from a Google ID token (Android). The backend
+  /// verifies the token and derives the stable Google `sub` itself — there is no
+  /// `userIdentifier` field (unlike Apple). Returns the same
+  /// `{user, sessionToken}` envelope as [provisionAppleUser].
+  Future<Map<String, dynamic>> provisionGoogleUser({
+    required String idToken,
+    String? email,
+    String? name,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/auth/google',
+      body: {'idToken': idToken, 'email': email, 'name': name},
+    );
+
+    final payload = await _decodeJsonResponse(response);
+    final user = payload['user'];
+
+    if (user is! Map<String, dynamic>) {
+      throw const ApiException('Something went wrong. Please try again.');
+    }
+
+    return payload;
+  }
+
   Future<Map<String, dynamic>> signInAsReviewer({
     required String email,
     required String password,

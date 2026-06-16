@@ -1,10 +1,18 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import 'backend_api_service.dart';
+
+/// The Firebase project's **Web** OAuth client id, passed to GoogleSignIn as
+/// `serverClientId` so the returned ID token's `aud` matches what the backend
+/// verifies (`GOOGLE_AUTH_CLIENT_ID`). Not a secret. Same value for the prod
+/// and `.staging` apps. See ANDROID.md §D.
+const String kGoogleServerClientId =
+    '784756906133-8b5umuhi93u40lg0pf11rf1grksj44cg.apps.googleusercontent.com';
 
 bool isAuthenticationFailure(Object error) {
   return error is ApiException && error.statusCode == 401;
@@ -114,6 +122,63 @@ class AuthService extends ChangeNotifier {
 
       _identityToken = identityToken;
       _userIdentifier = userIdentifier;
+      _backendUserId = backendUser['id'] as String?;
+      _sessionToken = response['sessionToken'] as String?;
+      applyBackendUser(backendUser);
+      _lastErrorMessage = null;
+
+      await _persist();
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _identityToken = null;
+      _userIdentifier = null;
+      _backendUserId = null;
+      _lastErrorMessage = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Google Sign-In (Android). Mirrors [signInWithApple]'s session-state
+  /// effects and reuses every SharedPreferences key, so `restoreSession` and
+  /// request auth work identically afterward. The Apple path is untouched.
+  Future<bool> signInWithGoogle() async {
+    try {
+      final googleSignIn = GoogleSignIn(
+        serverClientId: kGoogleServerClientId,
+        scopes: const ['email'],
+      );
+
+      final account = await googleSignIn.signIn();
+      if (account == null) {
+        // User dismissed the picker — not an error worth surfacing loudly.
+        _lastErrorMessage = 'Google sign-in was cancelled.';
+        notifyListeners();
+        return false;
+      }
+
+      final auth = await account.authentication;
+      final idToken = auth.idToken;
+
+      if (idToken == null || idToken.isEmpty) {
+        throw const HttpException(
+          'Google sign-in did not provide an ID token.',
+        );
+      }
+
+      final response = await _backendApiService.provisionGoogleUser(
+        idToken: idToken,
+        email: account.email,
+        name: account.displayName,
+      );
+
+      final backendUser = response['user'] as Map<String, dynamic>;
+
+      _identityToken = idToken;
+      // The Google stable id keeps isSignedIn (needs both tokens) true across
+      // launches, matching the Apple userIdentifier contract.
+      _userIdentifier = account.id;
       _backendUserId = backendUser['id'] as String?;
       _sessionToken = response['sessionToken'] as String?;
       applyBackendUser(backendUser);
@@ -244,6 +309,14 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    // Clear the Google session on Android so the next sign-in re-prompts the
+    // account picker. No-op / harmless on iOS (Apple has no client-side session).
+    if (Platform.isAndroid) {
+      try {
+        await GoogleSignIn().signOut();
+      } catch (_) {}
+    }
+
     _identityToken = null;
     _userIdentifier = null;
     _backendUserId = null;

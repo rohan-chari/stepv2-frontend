@@ -1,4 +1,7 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'config/backend_config.dart';
 import 'screens/display_name_screen.dart';
 import 'screens/main_shell.dart';
@@ -11,6 +14,12 @@ import 'styles.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await BackgroundSyncBootstrapService().persistBackendBaseUrl();
+
+  // FCM/Firebase is Android-only. iOS push stays on the native APNs bridge and
+  // has no Firebase config, so never initialize Firebase there.
+  if (Platform.isAndroid) {
+    await Firebase.initializeApp();
+  }
 
   final notificationService = NotificationService();
   await notificationService.initialize();

@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart' as apple;
@@ -104,7 +106,10 @@ class _StartScreenState extends State<StartScreen> {
       return;
     }
 
-    final success = await _authService.signInWithApple();
+    // Android signs in with Google; iOS keeps Sign in with Apple.
+    final success = Platform.isAndroid
+        ? await _authService.signInWithGoogle()
+        : await _authService.signInWithApple();
 
     if (!mounted) return;
     setState(() => _isSigningIn = false);
@@ -129,7 +134,10 @@ class _StartScreenState extends State<StartScreen> {
     if (!mounted) return;
     showErrorToast(
       context,
-      _authService.lastErrorMessage ?? 'Apple sign-in failed.',
+      _authService.lastErrorMessage ??
+          (Platform.isAndroid
+              ? 'Google sign-in failed.'
+              : 'Apple sign-in failed.'),
     );
   }
 
@@ -262,14 +270,37 @@ class _StartScreenState extends State<StartScreen> {
               )
             : SizedBox(
                 width: double.infinity,
-                child: apple.SignInWithAppleButton(
-                  onPressed: _onStart,
-                  height: compact ? 52 : 54,
-                  borderRadius: BorderRadius.circular(8),
-                  iconAlignment: apple.IconAlignment.left,
-                ),
+                child: Platform.isAndroid
+                    ? _buildGoogleSignInButton(compact: compact)
+                    : apple.SignInWithAppleButton(
+                        onPressed: _onStart,
+                        height: compact ? 52 : 54,
+                        borderRadius: BorderRadius.circular(8),
+                        iconAlignment: apple.IconAlignment.left,
+                      ),
               ),
       ],
+    );
+  }
+
+  Widget _buildGoogleSignInButton({required bool compact}) {
+    return SizedBox(
+      height: compact ? 52 : 54,
+      child: ElevatedButton(
+        onPressed: _onStart,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: const Color(0xFF1F1F1F),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        child: const Text(
+          'Sign in with Google',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w500),
+        ),
+      ),
     );
   }
 }

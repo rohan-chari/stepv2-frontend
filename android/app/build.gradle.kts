@@ -6,6 +6,8 @@ plugins {
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+    // Firebase Cloud Messaging — reads google-services.json (multi-app: prod + .staging).
+    id("com.google.gms.google-services")
 }
 
 // Release signing is loaded from android/key.properties (gitignored — never committed).
@@ -27,6 +29,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // Required by flutter_local_notifications (uses java.time APIs that need
+        // backporting on minSdk 28). See ANDROID.md §B and the plugin README.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -86,4 +91,9 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Backports java.time etc. for core library desugaring (flutter_local_notifications).
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
