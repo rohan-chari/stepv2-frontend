@@ -22,7 +22,7 @@ against the actual frontend (`/Users/rohan/Documents/steps-tracker`) and backend
 | 3 | Background step sync for v1 | **Foreground-only.** Defer WorkManager background sync to a fast-follow |
 | 4 | Push notifications in v1 | **Yes — FCM (workstreams E + G2 are in v1).** Only the *background step sync* is deferred; race-invite/chat push ships in v1 |
 | 5 | Privacy-policy URL | Exists: `https://steptracker-api.org/privacy` — **content needs an Android/Health Connect section added before submission** |
-| 6 | Step-count accuracy on Android | **Android uses `includeManualEntry: true`** (Health Connect's de-duplicated `aggregate()` path); iOS stays at `false`. See §C-5 — this is the most accurate option the `health` package supports |
+| 6 | Step-count accuracy on Android | **Android = de-duplicated aggregate MINUS manually-entered steps.** Take Health Connect's deduped `aggregate()` (`includeManualEntry: true`), then subtract records tagged `RecordingMethod.manual` (read separately). Closes BOTH the multi-app double-count AND the manual-entry cheat (typed 10,000,000 steps net zero). iOS stays at `false` (HealthKit dedups + excludes manual in one call). See §C-5. |
 
 The app display name is already `Bara` (`android:label`), so no rename of the user-facing
 name is needed — only the placeholder `applicationId`/`namespace`.
@@ -49,9 +49,11 @@ locally (not pushed). Nothing is deployed; no impact on existing iOS users.
 - `Ucrop.CropTheme` style + `values-v35/styles.xml` Android-15 edge-to-edge opt-out.
 - `HealthService.setUpHealthAccess()`: Android checks Health Connect SDK status and routes to
   install if missing; onboarding handles the needs-install case.
-- Step-dedup fix (decision #6): `_includeManualEntry => Platform.isAndroid` (de-duplicated
-  aggregate on Android, iOS unchanged; existing test stays green). Device-token label →
-  `Platform.isAndroid ? 'android' : 'ios'`.
+- Step accuracy (decision #6): Android reports Health Connect's de-duplicated aggregate **minus
+  manually-entered steps** (`_stepsInInterval` reads the deduped total, `_manualStepsInInterval`
+  sums `RecordingMethod.manual` records, `accurateAndroidTotal` subtracts and clamps ≥0). Closes
+  the multi-app double-count AND the manual-entry cheat. iOS unchanged (`includeManualEntry: false`,
+  HealthKit dedups + excludes manual). Device-token label → `Platform.isAndroid ? 'android' : 'ios'`.
 - **Core library desugaring enabled** (`build.gradle.kts`): `isCoreLibraryDesugaringEnabled = true`
   + `coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")`. Required by
   `flutter_local_notifications` (the first real plugin surprise on a clean build — it failed

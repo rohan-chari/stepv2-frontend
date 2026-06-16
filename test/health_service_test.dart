@@ -61,6 +61,25 @@ void main() {
     },
   );
 
+  group('accurateAndroidTotal (anti-cheat: dedup minus manual)', () {
+    test('subtracts manually-entered steps from the deduped total', () {
+      expect(HealthService.accurateAndroidTotal(9000, 1500), 7500);
+    });
+
+    test('no manual entries leaves the deduped total unchanged', () {
+      expect(HealthService.accurateAndroidTotal(8200, 0), 8200);
+    });
+
+    test('a massive manual entry cannot inflate — clamps to zero', () {
+      // The whole point: typing 10,000,000 steps nets nothing.
+      expect(HealthService.accurateAndroidTotal(5000, 10000000), 0);
+    });
+
+    test('never returns a negative total', () {
+      expect(HealthService.accurateAndroidTotal(0, 250), 0);
+    });
+  });
+
   test('getStepsToday returns the current day entry', () async {
     final fakeHealth = _FakeHealth([7321]);
     final service = HealthService(health: fakeHealth);

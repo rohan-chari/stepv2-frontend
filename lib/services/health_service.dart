@@ -1,5 +1,6 @@
 import 'dart:io' show Platform;
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:health/health.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/step_data.dart';
@@ -17,22 +18,79 @@ class HealthService {
 
   static const _keyHealthAuthorized = 'health_authorized';
 
-  /// Whether to include manually-entered steps in [getTotalStepsInInterval].
+  /// The accurate step total for the half-open interval [start, end) on the
+  /// current platform. Returns null on a read error so callers don't persist a
+  /// fabricated 0.
   ///
-  /// Platform-critical, NOT cosmetic — and intentionally keyed on `isAndroid`
-  /// (not `!isIOS`): the only platforms that are neither iOS nor Android are the
-  /// host test runner and web, where this should keep the iOS-style `false`.
+  /// iOS: HealthKit's HKStatisticsQuery/cumulativeSum de-duplicates across
+  /// sources AND excludes manual entries in a single call
+  /// (`includeManualEntry: false`) — the proven-accurate path. Kept exactly as-is.
   ///
-  /// iOS: the call is HKStatisticsQuery/cumulativeSum, which de-duplicates across
-  /// sources even with manual entries excluded — so we exclude them (`false`).
+  /// Android: Health Connect (via this plugin) exposes NO single call that both
+  /// de-duplicates and excludes manual entries:
+  ///   * `includeManualEntry: false` drops Health Connect's dedup → sums every
+  ///     step-writing app with no reconciliation (phone + watch double-count) —
+  ///     an UNBOUNDED inflation that hits even honest users.
+  ///   * `includeManualEntry: true` keeps the de-duplicated aggregate but counts
+  ///     manually-typed steps — an UNBOUNDED cheat vector (type 10,000,000 steps).
+  /// Neither is acceptable for a step-race coin economy, so we compose the only
+  /// accurate option: take the de-duplicated aggregate, then subtract the steps
+  /// Health Connect tags as manually entered. See ANDROID.md §C-5.
   ///
-  /// Android: the `health` plugin uses Health Connect's de-duplicated
-  /// `aggregate()` (StepsRecord.COUNT_TOTAL) ONLY when no recording method is
-  /// filtered. Passing `false` flips it to a raw `readRecords` + plain sum across
-  /// ALL step-writing apps with NO cross-source dedup, double-counting phone +
-  /// watch (or Google Fit + Samsung Health). So on Android we pass `true` to stay
-  /// on the aggregate path. See ANDROID.md §C-5.
-  bool get _includeManualEntry => Platform.isAndroid;
+  /// Keyed on `isAndroid` (not `!isIOS`) on purpose: the host test runner and
+  /// web are neither, and keep the iOS path so existing tests stay valid.
+  Future<int?> _stepsInInterval(DateTime start, DateTime end) async {
+    if (!Platform.isAndroid) {
+      return _health.getTotalStepsInInterval(
+        start,
+        end,
+        includeManualEntry: false,
+      );
+    }
+    final deduped = await _health.getTotalStepsInInterval(
+      start,
+      end,
+      includeManualEntry: true,
+    );
+    if (deduped == null) return null; // read error — let caller decide
+    final manual = await _manualStepsInInterval(start, end);
+    return accurateAndroidTotal(deduped, manual);
+  }
+
+  /// Anti-cheat core: the reported Android total is the de-duplicated aggregate
+  /// minus manually-entered steps, never below zero. Any amount of manual entry
+  /// (e.g. a typed 10,000,000) is fully removed and can never inflate the total.
+  @visibleForTesting
+  static int accurateAndroidTotal(int dedupedTotal, int manualSteps) {
+    final accurate = dedupedTotal - manualSteps;
+    return accurate < 0 ? 0 : accurate;
+  }
+
+  /// Android only: sum of steps Health Connect marks as manually entered, so they
+  /// can be removed from the de-duplicated aggregate. Reads manual-only records by
+  /// excluding every non-manual recording method, then sums them (defensively
+  /// re-checking the tag).
+  Future<int> _manualStepsInInterval(DateTime start, DateTime end) async {
+    final points = await _health.getHealthDataFromTypes(
+      types: const [HealthDataType.STEPS],
+      startTime: start,
+      endTime: end,
+      recordingMethodsToFilter: const [
+        RecordingMethod.automatic,
+        RecordingMethod.active,
+        RecordingMethod.unknown,
+      ],
+    );
+    var manual = 0;
+    for (final point in points) {
+      if (point.recordingMethod != RecordingMethod.manual) continue;
+      final value = point.value;
+      if (value is NumericHealthValue) {
+        manual += value.numericValue.round();
+      }
+    }
+    return manual;
+  }
 
   bool _authorized = false;
   bool get isAuthorized => _authorized;
@@ -119,11 +177,7 @@ class HealthService {
       final intervalEnd = isCurrentDay
           ? endDate
           : currentDate.add(const Duration(days: 1));
-      final steps = await _health.getTotalStepsInInterval(
-        currentDate,
-        intervalEnd,
-        includeManualEntry: _includeManualEntry,
-      );
+      final steps = await _stepsInInterval(currentDate, intervalEnd);
 
       entries.add(StepData(steps: steps ?? 0, date: currentDate));
 
@@ -137,13 +191,10 @@ class HealthService {
     required DateTime startTime,
     required DateTime endTime,
   }) async {
-    // Bucket per hour and ask the platform for the aggregated total in each
-    // bucket. On iOS getTotalStepsInInterval is backed by HKStatisticsQuery with
-    // cumulativeSum, which is Apple's own cross-source merge — the same value
-    // the Health app shows (iPhone + Watch + other wearables reconciled via
-    // source priority, not summed). On Android it maps to Health Connect's
-    // de-duplicated aggregate(). Manual-entry handling is platform-dependent —
-    // see [_includeManualEntry].
+    // Bucket per hour and ask the platform for the accurate total in each bucket
+    // via [_stepsInInterval]: iOS uses HealthKit's deduped, manual-excluded
+    // cumulativeSum; Android uses Health Connect's de-duplicated aggregate minus
+    // manually-entered steps. See [_stepsInInterval] / ANDROID.md §C-5.
     final samples = <StepSampleData>[];
     var bucketStart = DateTime(
       startTime.year,
@@ -164,11 +215,7 @@ class HealthService {
       ).add(const Duration(hours: 1));
       final bucketEnd = nextHour.isBefore(endTime) ? nextHour : endTime;
 
-      final steps = await _health.getTotalStepsInInterval(
-        bucketStart,
-        bucketEnd,
-        includeManualEntry: _includeManualEntry,
-      );
+      final steps = await _stepsInInterval(bucketStart, bucketEnd);
 
       if (steps != null && steps > 0) {
         samples.add(
