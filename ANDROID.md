@@ -110,14 +110,26 @@ flutter on PATH — caches are machine-local, see "Resuming on a new machine".)
   clean; `auth_service_test` + `health_service_test` pass. (Pre-existing unrelated failure remains:
   `start_and_home_copy_test.dart` references a removed `HomeTab.stepGoal` param — untouched here.)
 
-**◻️ Remaining (the real blockers now — all BACKEND / deploy / store):**
-- **G2 (backend FCM routing)**: `firebase-admin` sender + platform branch on the two
-  `notificationHandlers.js` fan-out paths. No DB migration needed. **Until this deploys, an Android
-  FCM token is still sent to APNs and bounces** (only affects the Android user's own push; no iOS
-  impact). Needs the Firebase **service-account** private key on the droplet.
+**✅ Done & committed — Workstream G2 (backend FCM routing) [backend repo `android-release`, `7c448d8`]:**
+- `src/services/fcm.js`: firebase-admin sender mirroring `apns.js`; **lazy require in try/catch** so a
+  missing package/cred can never break the APNs path; data values stringified for the Android client
+  (`params` → JSON string), `android.notification.channelId = bara_default`; maps
+  `registration-token-not-registered` → `unregistered`.
+- `notificationHandlers.js`: per-token platform routing (`android → fcm`, else `apns`) on both fan-out
+  paths; shared result shape keeps the `unregistered → deleteToken` cleanup working for both.
+  `stepSyncPush.js` left iOS-only (bg sync deferred). `firebase-admin ^14`.
+- New `fcm.test.js` 5/5; notificationHandlers baseline unchanged (7 pass / 9 pre-existing fail);
+  stepSyncPush + http/notifications green. No DB migration.
+
+**◻️ Remaining (the real blockers now — all DEPLOY / store, your call):**
 - **Deploy G1** (backend-first, defaulted): apply migration + `prisma generate` + set
   `GOOGLE_AUTH_CLIENT_ID=`<the Web client id above>` + restart — your explicit call; not done.
   **Android login cannot succeed until `/auth/google` is live in prod.**
+- **Deploy G2** (code done, not deployed): set the Firebase **service-account** key on the droplet
+  (`FCM_SERVICE_ACCOUNT` inline JSON, or `FCM_SERVICE_ACCOUNT_PATH`, or `GOOGLE_APPLICATION_CREDENTIALS`)
+  alongside the existing `APNS_*`, then restart. Generate it at Firebase Console → ⚙ Project settings
+  → Service accounts → Generate new private key. **Until set, Android push silently no-ops** (fail-soft;
+  no iOS impact). Deploy G2 before Android users exist so their FCM tokens don't get sent to APNs.
 - **Privacy policy:** add the Health Connect section to `public/privacy.html` + redeploy.
 - **Release/store:** register upload + Play App Signing SHA-1s on the prod Firebase app, build a
   signed `.aab` (`--flavor prod`), Play data-safety/health declaration, internal track.
