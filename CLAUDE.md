@@ -2,7 +2,7 @@
 
 ## Core principle: never break users on older app versions
 
-Local Backend is located at: `/Users/rohan/Documents/steps-tracker-backend`
+Local Backend is located at: `/Users/rohan/repos/stepv2-backend`
 
 The app talks to a shared backend (`steptracker-api.org`) that is updated
 independently of the app. Two facts follow:
