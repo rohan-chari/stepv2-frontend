@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../tutorial/tutorial_screen.dart';
+import 'main_shell.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../services/notification_service.dart';
@@ -200,9 +201,26 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
       if (Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       } else {
+        // First run: this screen is the root route (StartScreen pushReplaced
+        // into it), so there is nothing to pop back to. Show the tutorial, then
+        // route forward into the app on completion — popping here would leave
+        // an empty navigator and strand the brand-new user.
+        final authService = widget.authService;
+        final notificationService = widget.notificationService;
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (context) => const TutorialScreen(),
+            builder: (context) => TutorialScreen(
+              onComplete: (tutorialContext) {
+                Navigator.of(tutorialContext).pushReplacement(
+                  MaterialPageRoute(
+                    builder: (_) => MainShell(
+                      authService: authService,
+                      notificationService: notificationService,
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
         );
       }

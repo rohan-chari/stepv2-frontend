@@ -14,6 +14,7 @@ import '../../widgets/app_avatar.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/trail_sign.dart';
 import '../../widgets/step_calendar.dart';
+import '../../widgets/daily_reward_trigger.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/tier_badge.dart';
 import '../admin_screen.dart';
@@ -406,6 +407,14 @@ class _ProfileTabState extends State<ProfileTab> {
         padding: const EdgeInsets.only(bottom: 8),
         child: Column(
           children: [
+            _buildSectionHeader('DAILY REWARD'),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+              child: DailyRewardTrigger(
+                authService: widget.authService,
+                backendApiService: _api,
+              ),
+            ),
             _buildSectionHeader('STEP CALENDAR'),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),

@@ -280,7 +280,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         setState(() {
           _isLoading = false;
           _error =
-              'Health data access not granted.\nPlease allow access in Settings.';
+              'Steps access wasn’t granted. Tap Try Again to show the '
+              'permission prompt again, then allow Bara to read your steps. '
+              'If the prompt no longer appears, enable Steps for Bara in your '
+              'Health Connect settings.';
         });
         return;
       }

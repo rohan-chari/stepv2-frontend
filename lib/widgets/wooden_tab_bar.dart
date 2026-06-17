@@ -19,11 +19,17 @@ class WoodenTabBar extends StatelessWidget {
   final ValueChanged<int> onTap;
   final List<WoodenTabItem> items;
 
+  /// Optional per-item keys, aligned by index. Used by the tutorial to
+  /// spotlight a specific tab (e.g. Ranked). Null entries are skipped, so the
+  /// real app can omit this entirely without any wrapper overhead.
+  final List<GlobalKey?>? itemKeys;
+
   const WoodenTabBar({
     super.key,
     required this.currentIndex,
     required this.onTap,
     required this.items,
+    this.itemKeys,
   });
 
   @override
@@ -54,16 +60,26 @@ class WoodenTabBar extends StatelessWidget {
           children: [
             for (var index = 0; index < items.length; index++)
               Expanded(
-                child: _TabItemWidget(
-                  item: items[index],
-                  selected: index == currentIndex,
-                  onTap: () => onTap(index),
+                child: _withItemKey(
+                  index,
+                  _TabItemWidget(
+                    item: items[index],
+                    selected: index == currentIndex,
+                    onTap: () => onTap(index),
+                  ),
                 ),
               ),
           ],
         ),
       ),
     );
+  }
+
+  Widget _withItemKey(int index, Widget child) {
+    final key = (itemKeys != null && index < itemKeys!.length)
+        ? itemKeys![index]
+        : null;
+    return key == null ? child : KeyedSubtree(key: key, child: child);
   }
 }
 

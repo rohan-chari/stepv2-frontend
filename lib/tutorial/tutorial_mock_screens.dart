@@ -24,6 +24,7 @@ class TutorialMockHost extends StatelessWidget {
     final tabIndex = switch (page) {
       TutorialMockPage.home => 0,
       TutorialMockPage.races => 1,
+      TutorialMockPage.ranked => 2,
       TutorialMockPage.leaderboard => 3,
       TutorialMockPage.friends => null,
     };
@@ -37,6 +38,7 @@ class TutorialMockHost extends StatelessWidget {
             child: switch (page) {
               TutorialMockPage.home => _MockHome(keys: keys),
               TutorialMockPage.races => _MockRaces(keys: keys),
+              TutorialMockPage.ranked => _MockRanked(keys: keys),
               TutorialMockPage.leaderboard => _MockLeaderboard(keys: keys),
               TutorialMockPage.friends => _MockFriends(keys: keys),
             },
@@ -51,6 +53,9 @@ class TutorialMockHost extends StatelessWidget {
               child: WoodenTabBar(
                 currentIndex: tabIndex,
                 onTap: (_) {},
+                // Index 2 = Ranked; keyed so the tutorial can spotlight the
+                // real tab. Other slots stay unkeyed.
+                itemKeys: [null, null, keys['ranked.tab'], null, null],
                 items: const [
                   WoodenTabItem(icon: Icons.home_rounded, label: 'Home'),
                   WoodenTabItem(
@@ -102,10 +107,31 @@ class _MockHome extends StatelessWidget {
                       child: Stack(
                         clipBehavior: Clip.none,
                         children: [
-                          const Positioned(
+                          // Mirrors the real home hero: the friends entry
+                          // point lives top-right. Keyed so the tutorial can
+                          // spotlight it.
+                          Positioned(
                             top: 0,
                             right: 0,
-                            child: ProfileAvatarButton(name: 'Rohan', size: 42),
+                            child: KeyedSubtree(
+                              key: keys['home.friends'],
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.16),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.5),
+                                    width: 1.5,
+                                  ),
+                                ),
+                                padding: const EdgeInsets.all(9),
+                                child: const Icon(
+                                  Icons.person_add_alt_1_rounded,
+                                  size: 22,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
                           ),
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -129,8 +155,7 @@ class _MockHome extends StatelessWidget {
                                       ),
                                     ),
                                     const SizedBox(width: 8),
-                                    CoinBalanceBadge(
-                                      key: keys['home.coins'],
+                                    const CoinBalanceBadge(
                                       coins: 1840,
                                       coinSize: 16,
                                     ),
@@ -159,37 +184,18 @@ class _MockHome extends StatelessWidget {
                                 key: keys['home.steps'],
                                 child: FittedBox(
                                   fit: BoxFit.scaleDown,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.baseline,
-                                    textBaseline: TextBaseline.alphabetic,
-                                    children: [
-                                      Text(
-                                        '13,420',
-                                        style: HomeText.display(
-                                          size: compact ? 50 : 58,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Text(
-                                        'out of 15k',
-                                        style: HomeText.body(
-                                          size: 18,
-                                          color: Colors.white.withValues(
-                                            alpha: 0.82,
-                                          ),
-                                          weight: FontWeight.w800,
-                                        ),
-                                      ),
-                                    ],
+                                  child: Text(
+                                    '13,420',
+                                    style: HomeText.display(
+                                      size: compact ? 50 : 58,
+                                      color: Colors.white,
+                                    ),
                                   ),
                                 ),
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                '1,580 steps left to keep your streak moving.',
+                                'Keep walking to earn coins and climb the boards.',
                                 textAlign: TextAlign.center,
                                 style: HomeText.body(
                                   size: 14,
@@ -213,41 +219,33 @@ class _MockHome extends StatelessWidget {
                         children: [
                           const Expanded(
                             child: HomePill(
-                              label: '1,580 TO GO',
-                              icon: Icons.flag_rounded,
+                              label: '5 DAY STREAK',
+                              icon: Icons.local_fire_department_rounded,
                               fullWidth: true,
                             ),
                           ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: HomePillButton(
-                              key: keys['home.goal'],
-                              label: 'EDIT GOAL',
-                              icon: Icons.tune_rounded,
+                              key: keys['home.shop'],
+                              label: 'SHOP',
+                              icon: Icons.storefront_rounded,
                               onPressed: () {},
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 12),
-                      const _MockDailyReward(),
-                      const SizedBox(height: 10),
-                      HomePillButton(
-                        label: 'HOW TO PLAY',
-                        icon: Icons.help_outline_rounded,
-                        onPressed: () {},
-                      ),
-                      const SizedBox(height: 14),
-                      const _MockGoalProgressBar(
-                        progress: 0.89,
-                        status: 'Almost there',
+                      KeyedSubtree(
+                        key: keys['home.milestones'],
+                        child: const _MockMilestones(),
                       ),
                       if (!compact) ...[
                         const SizedBox(height: 20),
                         Row(
                           children: [
                             Text(
-                              'Step goal race',
+                              'Friends racing',
                               style: HomeText.title(size: 22),
                             ),
                             const Spacer(),
@@ -307,10 +305,11 @@ class _MockRaces extends StatelessWidget {
           const _MockStatusBar(),
           const SizedBox(height: 16),
           InfoBoardCard(
+            key: keys['races.pot'],
             badgeLabel: 'RACES',
             title: 'First to the finish line wins.',
             subtitle:
-                'Set a step target, invite friends, and race for the pot.',
+                'Set how long it runs, add a coin buy-in, and race for the pot.',
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
             borderRadius: 0,
             children: [
@@ -328,7 +327,7 @@ class _MockRaces extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               PillButton(
-                label: 'BROWSE PUBLIC RACES',
+                label: 'PUBLIC RACES',
                 variant: PillButtonVariant.secondary,
                 fontSize: 14,
                 fullWidth: true,
@@ -350,7 +349,7 @@ class _MockRaces extends StatelessWidget {
               children: [
                 _MockRaceRow(
                   name: 'Weekend 10K',
-                  meta: '30k steps - 6 runners',
+                  meta: '3-day race · 6 runners',
                   status: 'ACTIVE',
                   placement: '2ND',
                   queuedBoxKey: keys['races.box'],
@@ -360,7 +359,7 @@ class _MockRaces extends StatelessWidget {
                 _MockDivider(),
                 const _MockRaceRow(
                   name: 'Lunch Loop',
-                  meta: '18k steps - 4 runners',
+                  meta: '5-day race · 4 runners',
                   status: 'ACTIVE',
                   placement: '4TH',
                   queuedBoxes: 0,
@@ -376,7 +375,7 @@ class _MockRaces extends StatelessWidget {
             padding: EdgeInsets.symmetric(vertical: 6, horizontal: 0),
             child: _MockRaceRow(
               name: 'Morning Crew',
-              meta: '12k steps - starts when Alex joins',
+              meta: 'Starts when Alex joins',
               status: 'SETUP',
               queuedBoxes: 0,
               odd: false,
@@ -426,20 +425,6 @@ class _MockLeaderboard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: PillButton(
-                      label: 'CHALLENGES',
-                      onPressed: () {},
-                      variant: PillButtonVariant.accent,
-                      fontSize: 11,
-                      fullWidth: true,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 10,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: PillButton(
                       label: 'RACES',
                       onPressed: () {},
                       variant: PillButtonVariant.accent,
@@ -454,7 +439,7 @@ class _MockLeaderboard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 10),
-              const _MockFilter(label: 'THIS WEEK'),
+              const _MockFilter(label: 'TODAY'),
             ],
           ),
           const SizedBox(height: 16),
@@ -620,51 +605,65 @@ class _MockStatusBar extends StatelessWidget {
   }
 }
 
-class _MockDailyReward extends StatelessWidget {
-  const _MockDailyReward();
+/// Minimal Ranked backdrop. The tutorial spotlights the real Ranked tab in
+/// the bottom bar (keys['ranked.tab']); this page just needs to read as a
+/// believable weekly-cohort board behind the dimmer.
+class _MockRanked extends StatelessWidget {
+  const _MockRanked({required this.keys});
+
+  final Map<String, GlobalKey> keys;
 
   @override
   Widget build(BuildContext context) {
-    return HomeInsetPanel(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      backgroundColor: HomeColors.cream,
-      borderColor: HomeColors.gold,
-      child: Row(
-        children: [
-          const Icon(Icons.monetization_on_rounded, color: HomeColors.ink),
-          const SizedBox(width: 12),
-          Expanded(
+    return SingleChildScrollView(
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+      child: Column(
+        children: const [
+          _MockStatusBar(),
+          SizedBox(height: 12),
+          InfoBoardCard(
+            badgeLabel: 'RANKED',
+            title: 'Climb your weekly cohort.',
+            subtitle: 'Out-walk players your size to rank up. Resets weekly.',
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 14),
+            borderRadius: 0,
+          ),
+          SizedBox(height: 16),
+          _MockSectionHeader(title: 'THIS WEEK', count: 10),
+          SizedBox(height: 8),
+          GameContainer(
+            padding: EdgeInsets.symmetric(vertical: 8, horizontal: 0),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  'Daily reward',
-                  style: HomeText.body(
-                    size: 14,
-                    color: HomeColors.ink,
-                    weight: FontWeight.w800,
-                    height: 1.0,
-                  ),
+                _MockLeaderboardRow(
+                  rank: '1st',
+                  name: 'Sam Rivera',
+                  value: '88.1k',
+                  odd: false,
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'Ready to open',
-                  style: HomeText.body(
-                    size: 12,
-                    color: HomeColors.muted,
-                    weight: FontWeight.w700,
-                    height: 1.0,
-                  ),
+                _MockDivider(),
+                _MockLeaderboardRow(
+                  rank: '2nd',
+                  name: 'Maya Chen',
+                  value: '80.6k',
+                  odd: true,
+                ),
+                _MockLeaderboardRow(
+                  rank: '3rd',
+                  name: 'Rohan',
+                  value: '74.0k',
+                  isYou: true,
+                  odd: false,
+                ),
+                _MockLeaderboardRow(
+                  rank: '4',
+                  name: 'Jordan Lee',
+                  value: '69.2k',
+                  odd: true,
                 ),
               ],
             ),
-          ),
-          const HomePill(
-            label: 'CLAIM',
-            backgroundColor: HomeColors.ink,
-            foregroundColor: Colors.white,
-            padding: EdgeInsets.symmetric(horizontal: 10, vertical: 7),
           ),
         ],
       ),
@@ -672,35 +671,102 @@ class _MockDailyReward extends StatelessWidget {
   }
 }
 
-class _MockGoalProgressBar extends StatelessWidget {
-  const _MockGoalProgressBar({required this.progress, required this.status});
-
-  final double progress;
-  final String status;
+/// "Today's coins" milestone strip — mirrors the real home's
+/// StepMilestonesSection (5k/10k/15k/20k, tap each to claim). The tutorial
+/// spotlights this as the actual way coins are earned on home.
+class _MockMilestones extends StatelessWidget {
+  const _MockMilestones();
 
   @override
   Widget build(BuildContext context) {
     return HomeInsetPanel(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      backgroundColor: HomeColors.cream,
+      borderColor: HomeColors.gold,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text('Goal progress', style: HomeText.label()),
+              Text("TODAY'S COINS", style: HomeText.label(color: HomeColors.ink)),
               const Spacer(),
-              Text(status, style: HomeText.label(color: HomeColors.sageDeep)),
+              Text(
+                '+120 claimed',
+                style: HomeText.label(color: HomeColors.sageDeep),
+              ),
             ],
           ),
           const SizedBox(height: 10),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 12,
-              backgroundColor: HomeColors.surface,
-              valueColor: const AlwaysStoppedAnimation(HomeColors.sage),
-            ),
+          const Row(
+            children: [
+              Expanded(
+                child: _MockMilestoneChip(
+                  label: '5K',
+                  state: _MilestoneState.claimed,
+                ),
+              ),
+              SizedBox(width: 8),
+              Expanded(
+                child: _MockMilestoneChip(
+                  label: '10K',
+                  state: _MilestoneState.claimable,
+                ),
+              ),
+              SizedBox(width: 8),
+              Expanded(
+                child: _MockMilestoneChip(
+                  label: '15K',
+                  state: _MilestoneState.locked,
+                ),
+              ),
+              SizedBox(width: 8),
+              Expanded(
+                child: _MockMilestoneChip(
+                  label: '20K',
+                  state: _MilestoneState.locked,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+enum _MilestoneState { claimed, claimable, locked }
+
+class _MockMilestoneChip extends StatelessWidget {
+  const _MockMilestoneChip({required this.label, required this.state});
+
+  final String label;
+  final _MilestoneState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final claimable = state == _MilestoneState.claimable;
+    final claimed = state == _MilestoneState.claimed;
+    final fg = claimable ? HomeColors.ink : HomeColors.muted;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: claimable ? HomeColors.gold : HomeColors.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: HomeColors.lineSoft.withValues(alpha: 0.6)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            claimed ? Icons.check_circle_rounded : Icons.monetization_on_rounded,
+            size: 16,
+            color: claimed ? HomeColors.sageDeep : fg,
+          ),
+          const SizedBox(height: 3),
+          Text(
+            label,
+            style: HomeText.body(size: 12, color: fg, weight: FontWeight.w800),
           ),
         ],
       ),

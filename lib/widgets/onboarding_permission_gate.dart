@@ -16,6 +16,7 @@ class OnboardingPermissionGate extends StatelessWidget {
     required this.onContinue,
     this.error,
     this.isLoading = false,
+    this.retryLabel,
   });
 
   final String label;
@@ -25,6 +26,11 @@ class OnboardingPermissionGate extends StatelessWidget {
   final VoidCallback onContinue;
   final String? error;
   final bool isLoading;
+
+  /// When an [error] is showing (e.g. permission was denied), the primary
+  /// button uses this label instead of "CONTINUE" so the user understands
+  /// tapping it retries the request rather than moving on.
+  final String? retryLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -123,7 +129,9 @@ class OnboardingPermissionGate extends StatelessWidget {
                                 width: double.infinity,
                                 height: 54,
                                 child: PillButton(
-                                  label: 'CONTINUE',
+                                  label: (error != null && retryLabel != null)
+                                      ? retryLabel!
+                                      : 'CONTINUE',
                                   variant: PillButtonVariant.secondary,
                                   fullWidth: true,
                                   padding: EdgeInsets.zero,

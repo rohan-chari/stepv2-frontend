@@ -1691,6 +1691,29 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
         // Actions
         if (isCreator) ...[
+          if (!scheduledInFuture) ...[
+            RetroCard(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.groups_rounded,
+                    size: 18,
+                    color: AppColors.pillGreenDark,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'This race is waiting to start. Invite friends, and once '
+                      '2+ have joined, tap Start Race — it won’t begin on its own.',
+                      style: PixelText.body(size: 13, color: AppColors.textDark),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           PillButton(
             label: 'INVITE FRIENDS',
             variant: PillButtonVariant.secondary,

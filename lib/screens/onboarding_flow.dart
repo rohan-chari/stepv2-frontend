@@ -62,6 +62,7 @@ class OnboardingFlow extends StatelessWidget {
         onContinue: onEnableHealth,
         error: error,
         isLoading: isLoading,
+        retryLabel: 'TRY AGAIN',
       );
     }
 
