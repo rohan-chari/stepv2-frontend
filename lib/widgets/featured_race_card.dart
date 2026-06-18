@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../styles.dart';
+import '../utils/race_display.dart';
 import 'pill_button.dart';
 import 'race_ui.dart';
 
@@ -82,7 +83,7 @@ class FeaturedRaceCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  name,
+                  raceDisplayName(seedKind, name),
                   textAlign: TextAlign.center,
                   style: PixelText.title(size: 17, color: AppColors.textDark),
                   maxLines: 2,

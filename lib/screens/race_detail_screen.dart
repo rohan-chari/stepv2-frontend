@@ -10,6 +10,7 @@ import '../services/race_chat_service.dart';
 import '../services/race_feed_service.dart';
 import '../styles.dart';
 import '../utils/at_name.dart';
+import '../utils/race_display.dart';
 import '../utils/race_participant_display.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/arcade_tab_selector.dart';
@@ -1477,7 +1478,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        _race?['name'] as String? ?? 'Race',
+                        raceDisplayName(
+                          _race?['seedKind'] as String?,
+                          _race?['name'] as String? ?? 'Race',
+                        ),
                         style: PixelText.title(
                           size: 22,
                           color: AppColors.textDark,

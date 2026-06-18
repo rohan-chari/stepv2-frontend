@@ -7,6 +7,7 @@ import '../../models/loadable.dart';
 import '../../styles.dart';
 import '../../models/step_data.dart';
 import '../../utils/at_name.dart';
+import '../../utils/race_display.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../widgets/coin_balance_badge.dart';
@@ -378,7 +379,10 @@ class HomeTab extends StatelessWidget {
         );
       case RaceCardState.publicRace:
         final raceId = cardData['raceId'] as String? ?? '';
-        final name = cardData['name'] as String? ?? 'Public Race';
+        final name = raceDisplayName(
+          cardData['seedKind'] as String?,
+          cardData['name'] as String? ?? 'Public Race',
+        );
         final participantCount =
             (cardData['participantCount'] as num?)?.toInt() ?? 0;
         final endsAt = DateTime.tryParse(cardData['endsAt'] as String? ?? '');
