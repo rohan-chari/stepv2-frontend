@@ -17,30 +17,8 @@ BoxDecoration raceCardDecoration() => BoxDecoration(
   ),
 );
 
-/// A clean parchment card — the building block of every redesigned section.
-class SectionCard extends StatelessWidget {
-  const SectionCard({
-    super.key,
-    required this.child,
-    this.padding = const EdgeInsets.all(14),
-  });
-
-  final Widget child;
-  final EdgeInsets padding;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: raceCardDecoration(),
-      padding: padding,
-      child: child,
-    );
-  }
-}
-
 /// Section title row (optional icon + title + optional trailing widget). Sits
-/// above a [SectionCard].
+/// above a section card.
 class SectionHeader extends StatelessWidget {
   const SectionHeader({
     super.key,
