@@ -9,12 +9,10 @@ class TrailSign extends StatelessWidget {
     super.key,
     required this.child,
     this.width = 300,
-    this.showTopRightPin = true,
   });
 
   final Widget child;
   final double width;
-  final bool showTopRightPin;
 
   @override
   Widget build(BuildContext context) {
