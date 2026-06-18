@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER).periodicStepSync</string>
+	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
@@ -33,25 +37,21 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Bara uses the camera so you can take a profile photo.</string>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>Bara connects to your local network to reach your development backend while testing on your iPhone.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>This app needs access to your step count data to display your daily steps.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>This app needs access to update your health data.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Bara connects to your local network to reach your development backend while testing on your iPhone.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Bara uses your photo library so you can choose a profile photo.</string>
-	<key>BGTaskSchedulerPermittedIdentifiers</key>
-	<array>
-		<string>$(PRODUCT_BUNDLE_IDENTIFIER).periodicStepSync</string>
-	</array>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
 		<string>remote-notification</string>
 	</array>
-	<key>UIApplicationSupportsIndirectInputEvents</key>
-	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

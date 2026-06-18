@@ -845,7 +845,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
             const SizedBox(height: 10),
           ],
           PillButton(
-            label: 'HOW IT WORKS',
+            label: 'VIEW TUTORIAL',
             variant: PillButtonVariant.secondary,
             fontSize: 13,
             fullWidth: true,

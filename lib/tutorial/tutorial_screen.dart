@@ -1,11 +1,12 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 
 import '../styles.dart';
 import 'spotlight_overlay.dart';
-import 'tutorial_mock_screens.dart';
+import 'tutorial_preview_data.dart';
+import 'tutorial_real_screens.dart';
 
 enum TutorialMockPage { home, races, ranked, leaderboard, friends }
 
@@ -131,9 +132,14 @@ class TutorialScreen extends StatefulWidget {
 class _TutorialScreenState extends State<TutorialScreen> {
   late final List<TutorialStep> _steps = _buildSteps();
   int _index = 0;
+  int _epoch = 0;
   Rect? _targetRect;
   final Map<String, GlobalKey> _keys = {};
   final GlobalKey _stageKey = GlobalKey();
+  late final TutorialPreviewAuthService _authService =
+      TutorialPreviewAuthService();
+  late final TutorialPreviewBackendApiService _api =
+      TutorialPreviewBackendApiService();
 
   @override
   void initState() {
@@ -143,23 +149,54 @@ class _TutorialScreenState extends State<TutorialScreen> {
         _keys.putIfAbsent(step.targetKey!, () => GlobalKey());
       }
     }
-    _scheduleRectUpdate();
+    _settleTarget(_epoch);
   }
 
-  void _scheduleRectUpdate() {
-    SchedulerBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _updateTargetRect();
-    });
+  @override
+  void dispose() {
+    _authService.dispose();
+    super.dispose();
+  }
+
+  /// The real screens load their seeded data asynchronously and are taller than
+  /// the viewport, so a spotlight target may not exist (or may be off-screen)
+  /// for a few frames after a step change. Poll until the target mounts, scroll
+  /// it into view, then measure. [epoch] is bumped on every step change so a
+  /// stale settle loop from the previous step bails out.
+  Future<void> _settleTarget(int epoch) async {
+    final targetKey = _steps[_index].targetKey;
+    if (targetKey == null) {
+      if (mounted) setState(() => _targetRect = null);
+      return;
+    }
+    for (var attempt = 0; attempt < 40; attempt++) {
+      if (!mounted || epoch != _epoch) return;
+      final ctx = _keys[targetKey]?.currentContext;
+      if (ctx != null && ctx.mounted) {
+        try {
+          await Scrollable.ensureVisible(
+            ctx,
+            alignment: 0.42,
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+          );
+        } catch (_) {}
+        if (!mounted || epoch != _epoch) return;
+        await WidgetsBinding.instance.endOfFrame;
+        if (!mounted || epoch != _epoch) return;
+        _updateTargetRect();
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 32));
+    }
+    if (mounted && epoch == _epoch) _updateTargetRect();
   }
 
   void _updateTargetRect() {
     final step = _steps[_index];
-    if (step.targetKey == null) {
-      setState(() => _targetRect = null);
-      return;
-    }
-    final ctx = _keys[step.targetKey!]?.currentContext;
+    final ctx = step.targetKey == null
+        ? null
+        : _keys[step.targetKey!]?.currentContext;
     final stageCtx = _stageKey.currentContext;
     if (ctx == null || stageCtx == null) {
       setState(() => _targetRect = null);
@@ -187,7 +224,8 @@ class _TutorialScreenState extends State<TutorialScreen> {
       _index += 1;
       _targetRect = null;
     });
-    _scheduleRectUpdate();
+    _epoch++;
+    _settleTarget(_epoch);
   }
 
   void _back() {
@@ -196,7 +234,8 @@ class _TutorialScreenState extends State<TutorialScreen> {
       _index -= 1;
       _targetRect = null;
     });
-    _scheduleRectUpdate();
+    _epoch++;
+    _settleTarget(_epoch);
   }
 
   void _skip() {
@@ -222,7 +261,12 @@ class _TutorialScreenState extends State<TutorialScreen> {
           key: _stageKey,
           children: [
             Positioned.fill(
-              child: TutorialMockHost(page: step.page, keys: _keys),
+              child: TutorialRealHost(
+                page: step.page,
+                keys: _keys,
+                authService: _authService,
+                api: _api,
+              ),
             ),
             Positioned.fill(
               child: SpotlightOverlay(

@@ -117,6 +117,10 @@ class LeaderboardTab extends StatefulWidget {
   final String requestedPeriod;
   final int selectionNonce;
   final VoidCallback? onOpenProfile;
+  // Optional tutorial spotlight anchor for the current user's row. Null in the
+  // shipped app (the internal _myRowKey is used as before); the tutorial passes
+  // a key so its overlay can measure the highlighted "you" row.
+  final GlobalKey? tutorialMyRowKey;
 
   const LeaderboardTab({
     super.key,
@@ -128,6 +132,7 @@ class LeaderboardTab extends StatefulWidget {
     this.requestedPeriod = 'today',
     this.selectionNonce = 0,
     this.onOpenProfile,
+    this.tutorialMyRowKey,
   });
 
   @override
@@ -847,7 +852,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     );
 
     final content = Container(
-      key: row.isMe ? _myRowKey : null,
+      key: row.isMe ? (widget.tutorialMyRowKey ?? _myRowKey) : null,
       decoration: BoxDecoration(
         color: backgroundColor,
         border: row.isMe

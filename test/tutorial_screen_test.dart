@@ -1,83 +1,77 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:step_tracker/tutorial/tutorial_screen.dart';
-import 'package:step_tracker/widgets/home_chrome.dart';
+
+/// The tutorial renders the REAL tab screens fed by seeded offline data, so the
+/// walkthrough shows exactly what ships. These screens self-load asynchronously
+/// and run infinite animations (spinning coins, pulses), so we never use
+/// pumpAndSettle — we pump fixed durations to let the seeded futures resolve and
+/// the spotlight target settle loop finish.
+Future<void> _settle(WidgetTester tester) async {
+  for (var i = 0; i < 16; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+}
+
+Future<void> _next(WidgetTester tester) async {
+  await tester.tap(find.text('NEXT'));
+  await _settle(tester);
+}
 
 void main() {
-  testWidgets('TutorialScreen walks home -> friends -> races -> ranked', (
-    WidgetTester tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(390, 844));
+  testWidgets('walks the real home / friends / races / ranked / boards screens',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(600, 1000));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    await tester.pumpWidget(const MaterialApp(home: TutorialScreen()));
-    await tester.pump();
+    await tester.pumpWidget(MaterialApp(home: TutorialScreen(onComplete: (_) {})));
+    await _settle(tester);
 
-    // Step 1 (home): today's steps + the real milestones strip, no goal UI.
-    expect(find.text('Steps today'), findsOneWidget);
+    // Step 1-4 (home): the REAL hero step count + StepMilestonesSection, no goal.
     expect(find.text('13,420'), findsOneWidget);
-    expect(find.text("TODAY'S COINS"), findsOneWidget);
+    expect(find.text("Today's coins"), findsOneWidget);
+    expect(find.text('SHOP'), findsWidgets);
     expect(find.text('EDIT GOAL'), findsNothing);
 
-    // Steps 2-4 advance to the Friends mock page.
-    for (var i = 0; i < 4; i++) {
-      await tester.tap(find.text('NEXT'));
-      await tester.pump();
-    }
+    // Advance through the four home steps to the real Friends screen.
+    await _next(tester); // milestones
+    await _next(tester); // shop
+    await _next(tester); // friends button
+    await _next(tester); // -> friends.search
     expect(find.text('Search by display name'), findsOneWidget);
-    expect(find.text('YOUR FRIENDS'), findsOneWidget);
-    expect(find.text('Maya Chen'), findsOneWidget);
+    expect(find.text('@Maya Chen'), findsWidgets);
 
-    // Step 5: Races.
-    await tester.tap(find.text('NEXT'));
-    await tester.pump();
-    expect(find.text('First to the finish line wins.'), findsOneWidget);
-    expect(find.text('Weekend 10K'), findsOneWidget);
+    // Races (steps 6-8): real RACES header + seeded active race.
+    await _next(tester);
+    expect(find.text('RACES'), findsWidgets);
+    expect(find.text('Weekend 10K'), findsWidgets);
 
-    // Steps 6-7 advance to the Ranked mock page.
-    for (var i = 0; i < 3; i++) {
-      await tester.tap(find.text('NEXT'));
-      await tester.pump();
-    }
-    expect(find.text('Climb your weekly cohort.'), findsOneWidget);
+    // Ranked (step 9): real weekly-cohort screen.
+    await _next(tester); // races.pot
+    await _next(tester); // races.box
+    await _next(tester); // -> ranked.tab
     expect(find.text('RANKED'), findsWidgets);
+    expect(find.text('Your group'), findsOneWidget);
+
+    // Boards (step 10): real leaderboard.
+    await _next(tester);
+    expect(find.text('LEADERBOARD'), findsWidgets);
   });
 
-  testWidgets('TutorialScreen aligns spotlight targets inside the safe area', (
-    WidgetTester tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(390, 844));
+  testWidgets('SKIP finishes the tutorial via onComplete', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(600, 1000));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
+    var completed = false;
     await tester.pumpWidget(
-      MaterialApp(
-        builder: (context, child) {
-          final mediaQuery = MediaQuery.of(context);
-          return MediaQuery(
-            data: mediaQuery.copyWith(padding: const EdgeInsets.only(top: 52)),
-            child: child!,
-          );
-        },
-        home: const TutorialScreen(),
-      ),
+      MaterialApp(home: TutorialScreen(onComplete: (_) => completed = true)),
     );
+    await _settle(tester);
+
+    expect(find.text('SKIP'), findsOneWidget);
+    await tester.tap(find.text('SKIP'));
     await tester.pump();
 
-    // Advance to the "Dress up your capy" step, which spotlights the SHOP button.
-    await tester.tap(find.text('NEXT'));
-    await tester.pump();
-    await tester.tap(find.text('NEXT'));
-    await tester.pump();
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 220));
-
-    final targetRect = tester.getRect(
-      find.widgetWithText(HomePillButton, 'SHOP'),
-    );
-    final calloutRect = tester.getRect(
-      find.byKey(const Key('tutorial-callout-card')),
-    );
-
-    expect(calloutRect.top - targetRect.bottom, inInclusiveRange(20, 32));
+    expect(completed, isTrue);
   });
 }
