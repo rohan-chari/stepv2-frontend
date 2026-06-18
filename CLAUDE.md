@@ -32,4 +32,20 @@ before correctness or style.
   `--dart-define` at build (see `DEPLOYMENT.md`); a wrong value ships a broken
   binary that can't be hotfixed without a new App Store submission.
 
+## Build iOS and Android in lockstep
+
+This repo ships **both** an iOS app (Bara, App Store, native APNs) and an
+Android app (Health Connect, Google Sign-In, Firebase/FCM) from the same Dart
+code. **Whenever you build or release an Apple/iOS build, do the matching
+Android build too — never ship one platform without the other.**
+
+- iOS:     `flutter build ipa       --flavor <prod|staging> --dart-define=BACKEND_BASE_URL=…`
+- Android: `flutter build appbundle --flavor <prod|staging> --dart-define=BACKEND_BASE_URL=…`
+
+Keep the flavor, `--dart-define` backend URL, and version/build number in sync
+across both. The platforms are coupled in non-obvious ways: a dependency added
+for one (e.g. `firebase_*` for Android FCM) still links into the other's build,
+so a change "for Android" can break the iOS build (and vice-versa). Build and
+verify **both** platforms before considering a build/release change done.
+
 See `DEPLOYMENT.md` for build/release flow.

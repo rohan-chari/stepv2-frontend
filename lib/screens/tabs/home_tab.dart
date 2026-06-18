@@ -19,6 +19,7 @@ import '../../widgets/home_course_track.dart'
     show CapybaraCustomizationPreview;
 import '../../widgets/race_opportunity_card.dart';
 import '../../widgets/race_ui.dart';
+import '../../tutorial/tutorial_screen.dart';
 import '../display_name_screen.dart';
 import '../public_races_screen.dart';
 
@@ -50,6 +51,13 @@ class HomeTab extends StatelessWidget {
   final bool raceCardLoading;
   final GlobalKey<StreakChipState>? streakChipKey;
   final GlobalKey<StepMilestonesSectionState>? stepMilestonesKey;
+  // Optional tutorial spotlight anchors. Null in the shipped app (the wrapping
+  // KeyedSubtrees are then transparent); the tutorial passes keys so its
+  // overlay can measure these elements on the real home screen.
+  final GlobalKey? tutorialStepsKey;
+  final GlobalKey? tutorialMilestonesKey;
+  final GlobalKey? tutorialShopKey;
+  final GlobalKey? tutorialFriendsKey;
   final void Function(String raceId)? onOpenRace;
   final Future<void> Function(String raceId)? onJoinRaceFromCard;
   final Future<void> Function(String raceId)? onAcceptRaceInvite;
@@ -85,6 +93,10 @@ class HomeTab extends StatelessWidget {
     this.raceCardLoading = false,
     this.streakChipKey,
     this.stepMilestonesKey,
+    this.tutorialStepsKey,
+    this.tutorialMilestonesKey,
+    this.tutorialShopKey,
+    this.tutorialFriendsKey,
     this.onOpenRace,
     this.onJoinRaceFromCard,
     this.onAcceptRaceInvite,
@@ -145,11 +157,14 @@ class HomeTab extends StatelessWidget {
                         onDismissProfilePhotoPrompt:
                             onDismissProfilePhotoPrompt,
                       ),
-                      StepMilestonesSection(
-                        key: stepMilestonesKey,
-                        authService: authService,
-                        backendApiService: backendApiService,
-                        currentSteps: stepData?.steps,
+                      KeyedSubtree(
+                        key: tutorialMilestonesKey,
+                        child: StepMilestonesSection(
+                          key: stepMilestonesKey,
+                          authService: authService,
+                          backendApiService: backendApiService,
+                          currentSteps: stepData?.steps,
+                        ),
                       ),
                     ],
                   ),
@@ -567,9 +582,20 @@ class HomeTab extends StatelessWidget {
                     const SizedBox(width: 10),
                     CoinBalanceBadge(coins: authService.coins, coinSize: 16),
                     const Spacer(),
-                    _FriendsHeroButton(
-                      incomingRequests: incomingFriendRequests,
-                      onTap: onOpenFriendsTab,
+                    _HelpHeroButton(
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const TutorialScreen(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    KeyedSubtree(
+                      key: tutorialFriendsKey,
+                      child: _FriendsHeroButton(
+                        incomingRequests: incomingFriendRequests,
+                        onTap: onOpenFriendsTab,
+                      ),
                     ),
                   ],
                 ),
@@ -590,14 +616,17 @@ class HomeTab extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    stepsStr,
-                    style: PixelText.title(
-                      size: 58,
-                      color: AppColors.parchment,
-                    ).copyWith(shadows: _heroShadows),
+                KeyedSubtree(
+                  key: tutorialStepsKey,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      stepsStr,
+                      style: PixelText.title(
+                        size: 58,
+                        color: AppColors.parchment,
+                      ).copyWith(shadows: _heroShadows),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -622,12 +651,15 @@ class HomeTab extends StatelessWidget {
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: PillButton(
-                        label: 'SHOP',
-                        icon: Icons.storefront_rounded,
-                        variant: PillButtonVariant.secondary,
-                        fullWidth: true,
-                        onPressed: onOpenShop,
+                      child: KeyedSubtree(
+                        key: tutorialShopKey,
+                        child: PillButton(
+                          label: 'SHOP',
+                          icon: Icons.storefront_rounded,
+                          variant: PillButtonVariant.secondary,
+                          fullWidth: true,
+                          onPressed: onOpenShop,
+                        ),
                       ),
                     ),
                   ],
@@ -1298,6 +1330,58 @@ class _HomeSectionHeader extends StatelessWidget {
 
 /// Tappable "find friends" entry point shown in the top-right of the home hero.
 /// Shows a small badge when there are incoming friend requests.
+class _HelpHeroButton extends StatefulWidget {
+  final VoidCallback? onTap;
+
+  const _HelpHeroButton({this.onTap});
+
+  @override
+  State<_HelpHeroButton> createState() => _HelpHeroButtonState();
+}
+
+class _HelpHeroButtonState extends State<_HelpHeroButton> {
+  static const _shadows = [
+    Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
+  ];
+
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final button = Container(
+      decoration: BoxDecoration(
+        color: AppColors.parchment.withValues(alpha: 0.16),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: AppColors.parchment.withValues(alpha: 0.5),
+          width: 1.5,
+        ),
+      ),
+      padding: const EdgeInsets.all(8),
+      child: Icon(
+        Icons.help_outline_rounded,
+        size: 22,
+        color: AppColors.parchment,
+        shadows: _shadows,
+      ),
+    );
+
+    return GestureDetector(
+      onTap: widget.onTap,
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedScale(
+        scale: _pressed ? 0.92 : 1.0,
+        duration: const Duration(milliseconds: 90),
+        curve: Curves.easeOut,
+        child: button,
+      ),
+    );
+  }
+}
+
 class _FriendsHeroButton extends StatefulWidget {
   final int incomingRequests;
   final VoidCallback? onTap;

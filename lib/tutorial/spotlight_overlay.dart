@@ -199,19 +199,41 @@ class _CalloutCard extends StatelessWidget {
                       fontSize: 10.5,
                     ),
                     const Spacer(),
-                    InkWell(
-                      onTap: onSkip,
-                      borderRadius: BorderRadius.circular(8),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 7,
-                        ),
-                        child: Text(
-                          'SKIP',
-                          style: PixelText.title(
-                            size: 11,
-                            color: AppColors.parchment,
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: onSkip,
+                        borderRadius: BorderRadius.circular(999),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: AppColors.parchment.withValues(alpha: 0.55),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'SKIP',
+                                style: PixelText.title(
+                                  size: 11,
+                                  color: AppColors.parchment,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              const Icon(
+                                Icons.close_rounded,
+                                size: 13,
+                                color: AppColors.parchment,
+                              ),
+                            ],
                           ),
                         ),
                       ),

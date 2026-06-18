@@ -23,6 +23,10 @@ class FriendsTab extends StatefulWidget {
   final StepData? stepData;
   final String? displayName;
   final VoidCallback? onOpenProfile;
+  // Optional tutorial spotlight anchor for the search field. Null in the
+  // shipped app (transparent KeyedSubtree); the tutorial passes a key so its
+  // overlay can measure the real search box.
+  final GlobalKey? tutorialSearchKey;
 
   const FriendsTab({
     super.key,
@@ -33,6 +37,7 @@ class FriendsTab extends StatefulWidget {
     this.stepData,
     this.displayName,
     this.onOpenProfile,
+    this.tutorialSearchKey,
   });
 
   @override
@@ -415,6 +420,7 @@ class _FriendsTabState extends State<FriendsTab> {
               ),
               const SizedBox(height: 14),
               Material(
+                key: widget.tutorialSearchKey,
                 color: Colors.transparent,
                 child: TextField(
                   controller: _searchController,

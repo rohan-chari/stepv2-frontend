@@ -26,6 +26,12 @@ class RacesTab extends StatefulWidget {
   final Future<bool> Function(String raceId)? onJoinFeaturedRace;
   final String? displayName;
   final VoidCallback? onOpenProfile;
+  // Optional tutorial spotlight anchors (null in the shipped app). The tutorial
+  // passes keys so its overlay can measure the races header/pot explainer, the
+  // first active race row, and that row's queued-powerups chip.
+  final GlobalKey? tutorialPotKey;
+  final GlobalKey? tutorialCardKey;
+  final GlobalKey? tutorialBoxKey;
 
   const RacesTab({
     super.key,
@@ -39,6 +45,9 @@ class RacesTab extends StatefulWidget {
     this.onJoinFeaturedRace,
     this.displayName,
     this.onOpenProfile,
+    this.tutorialPotKey,
+    this.tutorialCardKey,
+    this.tutorialBoxKey,
   });
 
   @override
@@ -206,6 +215,7 @@ class _RacesTabState extends State<RacesTab> {
           activeCount: active.length,
           inviteCount: invites.length,
           waitingCount: waiting.length,
+          potKey: widget.tutorialPotKey,
         ),
         ColoredBox(
           color: AppColors.parchment,
@@ -233,6 +243,7 @@ class _RacesTabState extends State<RacesTab> {
     required int activeCount,
     required int inviteCount,
     required int waitingCount,
+    GlobalKey? potKey,
   }) {
     return DecoratedBox(
       decoration: const BoxDecoration(
@@ -241,7 +252,9 @@ class _RacesTabState extends State<RacesTab> {
       ),
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
-        child: Padding(
+        child: KeyedSubtree(
+          key: potKey,
+          child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 15, 16, 14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -305,6 +318,7 @@ class _RacesTabState extends State<RacesTab> {
               ],
             ],
           ),
+        ),
         ),
       ),
     );
@@ -440,6 +454,8 @@ class _RacesTabState extends State<RacesTab> {
             sectionKey: 'active',
             races: active,
             showCount: false,
+            firstCardKey: widget.tutorialCardKey,
+            firstBoxKey: widget.tutorialBoxKey,
           ),
         if (completed.isNotEmpty)
           _buildRaceSection(
@@ -458,6 +474,8 @@ class _RacesTabState extends State<RacesTab> {
     required List<Map<String, dynamic>> races,
     bool isInvite = false,
     bool showCount = true,
+    GlobalKey? firstCardKey,
+    GlobalKey? firstBoxKey,
   }) {
     final collapsed = _collapsedSections.contains(sectionKey);
     return Padding(
@@ -471,7 +489,13 @@ class _RacesTabState extends State<RacesTab> {
             collapsed,
             showCount: showCount,
           ),
-          if (!collapsed) _buildRaceList(races, isInvite: isInvite),
+          if (!collapsed)
+            _buildRaceList(
+              races,
+              isInvite: isInvite,
+              firstCardKey: firstCardKey,
+              firstBoxKey: firstBoxKey,
+            ),
         ],
       ),
     );
@@ -480,11 +504,19 @@ class _RacesTabState extends State<RacesTab> {
   Widget _buildRaceList(
     List<Map<String, dynamic>> races, {
     bool isInvite = false,
+    GlobalKey? firstCardKey,
+    GlobalKey? firstBoxKey,
   }) {
     return Column(
       children: [
         for (int i = 0; i < races.length; i++) ...[
-          _buildRaceRow(races[i], i, isInvite: isInvite),
+          _buildRaceRow(
+            races[i],
+            i,
+            isInvite: isInvite,
+            cardKey: i == 0 ? firstCardKey : null,
+            boxKey: i == 0 ? firstBoxKey : null,
+          ),
           if (i != races.length - 1)
             Container(
               height: 1,
@@ -593,6 +625,8 @@ class _RacesTabState extends State<RacesTab> {
     Map<String, dynamic> race,
     int index, {
     bool isInvite = false,
+    GlobalKey? cardKey,
+    GlobalKey? boxKey,
   }) {
     final raceId = race['id'] as String? ?? '';
     final name = race['name'] as String? ?? 'Race';
@@ -652,7 +686,9 @@ class _RacesTabState extends State<RacesTab> {
     final showTrailingContent =
         myPlacement != null || queuedBoxCount > 0 || showTrailingStatus;
 
-    return Material(
+    return KeyedSubtree(
+      key: cardKey,
+      child: Material(
       color: stripeColor,
       child: InkWell(
         onTap: raceId.isEmpty ? null : () => _navigateToRaceDetail(raceId),
@@ -719,6 +755,7 @@ class _RacesTabState extends State<RacesTab> {
                           alpha: 0.34,
                         ),
                         textColor: AppColors.textDark,
+                        chipKey: boxKey,
                       ),
                     ],
                     if (showTrailingStatus) ...[
@@ -746,6 +783,7 @@ class _RacesTabState extends State<RacesTab> {
           ),
         ),
       ),
+      ),
     );
   }
 
@@ -753,8 +791,10 @@ class _RacesTabState extends State<RacesTab> {
     String label, {
     required Color backgroundColor,
     required Color textColor,
+    GlobalKey? chipKey,
   }) {
     return Container(
+      key: chipKey,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: backgroundColor,
