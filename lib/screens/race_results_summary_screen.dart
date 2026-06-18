@@ -168,8 +168,8 @@ class _ResultCard extends StatelessWidget {
                   'WINNER',
                   style: PixelText.body(size: 11, color: AppColors.textMid),
                 ),
-                const Spacer(),
-                Flexible(
+                const SizedBox(width: 6),
+                Expanded(
                   child: Text(
                     atName(winnerName),
                     textAlign: TextAlign.right,

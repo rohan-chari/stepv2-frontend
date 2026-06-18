@@ -7,6 +7,7 @@ import '../screens/tabs/races_tab.dart';
 import '../screens/tabs/ranked_tab.dart';
 import '../screens/tabs/leaderboard_tab.dart';
 import '../screens/tabs/friends_tab.dart';
+import '../screens/race_detail_screen.dart';
 import 'tutorial_preview_data.dart';
 import 'tutorial_screen.dart' show TutorialMockPage;
 
@@ -37,8 +38,10 @@ class TutorialRealHost extends StatelessWidget {
     TutorialMockPage.races => 1,
     TutorialMockPage.ranked => 2,
     TutorialMockPage.leaderboard => 3,
-    // Friends is a pushed screen in the real app — no bottom bar.
+    // Friends and the race-detail view are pushed screens in the real app —
+    // no bottom bar.
     TutorialMockPage.friends => null,
+    TutorialMockPage.raceDetail => null,
   };
 
   @override
@@ -115,6 +118,15 @@ class TutorialRealHost extends StatelessWidget {
           tutorialPotKey: keys['races.pot'],
           tutorialCardKey: keys['races.card'],
           tutorialBoxKey: keys['races.box'],
+        );
+      case TutorialMockPage.raceDetail:
+        // The REAL race-detail screen, self-fed by the seeded preview API
+        // (fetchRaceDetails / fetchRaceProgress / messages are all overridden).
+        return RaceDetailScreen(
+          authService: authService,
+          raceId: tutorialPreviewRaceId,
+          backendApiService: api,
+          tutorialPowerupsKey: keys['raceDetail.powerups'],
         );
       case TutorialMockPage.ranked:
         return RankedTab(authService: authService, backendApiService: api);

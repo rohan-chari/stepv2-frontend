@@ -8,7 +8,7 @@ import 'spotlight_overlay.dart';
 import 'tutorial_preview_data.dart';
 import 'tutorial_real_screens.dart';
 
-enum TutorialMockPage { home, races, ranked, leaderboard, friends }
+enum TutorialMockPage { home, races, raceDetail, ranked, leaderboard, friends }
 
 class TutorialStep {
   const TutorialStep({
@@ -88,8 +88,8 @@ List<TutorialStep> _buildSteps() {
           'takes it all — or the top 3 split it.',
     ),
     TutorialStep(
-      page: TutorialMockPage.races,
-      targetKey: 'races.box',
+      page: TutorialMockPage.raceDetail,
+      targetKey: 'raceDetail.powerups',
       title: 'Powerups & boxes',
       body:
           'Walking earns mystery boxes of powerups — boosts and shields, plus '

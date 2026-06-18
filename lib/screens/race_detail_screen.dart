@@ -46,12 +46,18 @@ class RaceDetailScreen extends StatefulWidget {
   final List<Map<String, dynamic>> friends;
   final BackendApiService backendApiService;
 
+  /// Only set when this screen is rendered behind the onboarding tutorial's
+  /// spotlight; anchors the "Powerups & boxes" callout to the inventory block.
+  /// Null in the real app.
+  final GlobalKey? tutorialPowerupsKey;
+
   RaceDetailScreen({
     super.key,
     required this.authService,
     required this.raceId,
     this.friends = const [],
     BackendApiService? backendApiService,
+    this.tutorialPowerupsKey,
   }) : backendApiService = backendApiService ?? BackendApiService();
 
   @override
@@ -2298,6 +2304,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     final slotCount = _readInt(_powerupData?['powerupSlots'], fallback: 3);
 
     return Column(
+      key: widget.tutorialPowerupsKey,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(

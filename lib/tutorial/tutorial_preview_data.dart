@@ -14,6 +14,11 @@ import '../services/backend_api_service.dart';
 /// real screens highlight the right leaderboard/cohort row.
 const String tutorialPreviewUserId = 'preview-user';
 
+/// Stable id for the race the "Powerups & boxes" tutorial step opens into. It
+/// matches the first active race on the previewed Races tab so the flow reads
+/// as "tap that race → see its detail".
+const String tutorialPreviewRaceId = 'race-active-1';
+
 class TutorialPreviewAuthService extends AuthService {
   TutorialPreviewAuthService() {
     // Seed enough of the user for the hero (coins, name) and to suppress the
@@ -251,6 +256,52 @@ class TutorialPreviewBackendApiService extends BackendApiService {
   }) async {
     return tutorialPreviewFeaturedRaces();
   }
+
+  // -- Race detail (the "Powerups & boxes" step renders the real
+  //    RaceDetailScreen, which self-fetches these). --
+  @override
+  Future<Map<String, dynamic>> fetchRaceDetails({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    return tutorialPreviewRaceDetail();
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceProgress({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    return tutorialPreviewRaceProgress();
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceMessages({
+    required String identityToken,
+    required String raceId,
+    String? cursor,
+    int? limit,
+    String? kind,
+  }) async {
+    return tutorialPreviewRaceMessages(kind);
+  }
+
+  // No-op so the race screen's read-receipt ping never hits the network.
+  @override
+  Future<Map<String, dynamic>> markRaceChatRead({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    return const {};
+  }
+
+  // Empty global stash — keeps the inventory focused on the in-race slots.
+  @override
+  Future<Map<String, dynamic>> fetchPowerupInventory({
+    required String identityToken,
+  }) async {
+    return const {'items': []};
+  }
 }
 
 /// Sample today's step total for the home hero.
@@ -373,6 +424,185 @@ Map<String, dynamic> tutorialPreviewRacesData() {
         'queuedBoxCount': 0,
       },
     ],
+  };
+}
+
+/// The active race shown behind the "Powerups & boxes" step. An ACTIVE race the
+/// preview user has already joined, so the real RaceDetailScreen renders its
+/// full live layout (course → standings → powerup inventory).
+Map<String, dynamic> tutorialPreviewRaceDetail() {
+  final now = DateTime.now();
+  return {
+    'id': tutorialPreviewRaceId,
+    'name': 'Weekend 10K',
+    'status': 'ACTIVE',
+    'myStatus': 'ACCEPTED',
+    'isCreator': false,
+    'maxDurationDays': 3,
+    'buyInAmount': 0,
+    'targetSteps': 30000,
+    'endsAt': now.add(const Duration(days: 2, hours: 4)).toIso8601String(),
+    'participants': tutorialPreviewRaceParticipants(),
+  };
+}
+
+/// Shared roster for the race-detail course + standings. The preview user sits
+/// 2nd, matching their placement on the home/races previews.
+List<Map<String, dynamic>> tutorialPreviewRaceParticipants() {
+  return [
+    {
+      'userId': 'rk-1',
+      'displayName': 'Sam Rivera',
+      'totalSteps': 24180,
+      'profilePhotoUrl': null,
+      'accessories': const [],
+      'finishedAt': null,
+      'stealthed': false,
+    },
+    {
+      'userId': tutorialPreviewUserId,
+      'displayName': 'Rohan',
+      'totalSteps': 21640,
+      'profilePhotoUrl': null,
+      'accessories': tutorialPreviewAccessories,
+      'finishedAt': null,
+      'stealthed': false,
+    },
+    {
+      'userId': 'rk-3',
+      'displayName': 'Jordan Lee',
+      'totalSteps': 19050,
+      'profilePhotoUrl': null,
+      'accessories': const [],
+      'finishedAt': null,
+      'stealthed': false,
+    },
+    {
+      'userId': 'rk-5',
+      'displayName': 'Priya N.',
+      'totalSteps': 15220,
+      'profilePhotoUrl': null,
+      'accessories': const [],
+      'finishedAt': null,
+      'stealthed': false,
+    },
+    {
+      'userId': 'rk-6',
+      'displayName': 'Chris Park',
+      'totalSteps': 11870,
+      'profilePhotoUrl': null,
+      'accessories': const [],
+      'finishedAt': null,
+      'stealthed': false,
+    },
+  ];
+}
+
+/// Progress payload for the previewed race: the live roster plus an enabled
+/// powerup loadout — one held powerup, one openable mystery box, a queued box,
+/// and an active self-buff — so the POWERUPS block the step spotlights is full.
+Map<String, dynamic> tutorialPreviewRaceProgress() {
+  final now = DateTime.now();
+  return {
+    'status': 'ACTIVE',
+    'participants': tutorialPreviewRaceParticipants(),
+    'powerupData': {
+      'enabled': true,
+      'powerupSlots': 3,
+      'queuedBoxCount': 1,
+      'powerupStepInterval': 4000,
+      'stepsUntilNextPowerup': 1500,
+      'inventory': [
+        {
+          'id': 'pw-held-1',
+          'type': 'PROTEIN_SHAKE',
+          'rarity': 'COMMON',
+          'status': 'HELD',
+        },
+        {'id': 'pw-box-1', 'status': 'MYSTERY_BOX'},
+      ],
+      'activeEffects': [
+        {
+          'type': 'RUNNERS_HIGH',
+          'onSelf': true,
+          'targetUserId': tutorialPreviewUserId,
+          'expiresAt': now
+              .add(const Duration(hours: 2, minutes: 40))
+              .toIso8601String(),
+        },
+      ],
+    },
+  };
+}
+
+/// Seeded Activity (SYSTEM) and Chat (USER) feeds for the race-detail preview,
+/// newest-first as the live services expect. [kind] is the value the screen's
+/// chat/feed services request ('SYSTEM' for Activity, 'USER' for Chat).
+Map<String, dynamic> tutorialPreviewRaceMessages(String? kind) {
+  final now = DateTime.now();
+  if (kind == 'SYSTEM') {
+    return {
+      'messages': [
+        {
+          'id': 'sys-1',
+          'kind': 'SYSTEM',
+          'eventType': 'POWERUP_USED',
+          'powerupType': 'LEG_CRAMP',
+          'body': 'Maya Chen used Leg Cramp on you!',
+          'actorUserId': 'rk-2',
+          'targetUserId': tutorialPreviewUserId,
+          'createdAt': now
+              .subtract(const Duration(minutes: 6))
+              .toIso8601String(),
+        },
+        {
+          'id': 'sys-2',
+          'kind': 'SYSTEM',
+          'eventType': 'MYSTERY_BOX_OPENED',
+          'powerupType': 'PROTEIN_SHAKE',
+          'body': 'You opened a mystery box and found a Protein Shake!',
+          'actorUserId': tutorialPreviewUserId,
+          'createdAt': now
+              .subtract(const Duration(minutes: 18))
+              .toIso8601String(),
+        },
+        {
+          'id': 'sys-3',
+          'kind': 'SYSTEM',
+          'eventType': 'POWERUP_USED',
+          'powerupType': 'PROTEIN_SHAKE',
+          'body': 'Sam Rivera chugged a Protein Shake for +1,500 steps.',
+          'actorUserId': 'rk-1',
+          'createdAt': now
+              .subtract(const Duration(minutes: 33))
+              .toIso8601String(),
+        },
+      ],
+      'nextCursor': null,
+    };
+  }
+  return {
+    'messages': [
+      {
+        'id': 'msg-1',
+        'kind': 'USER',
+        'body': 'who hit me with the leg cramp 😤',
+        'senderId': tutorialPreviewUserId,
+        'senderName': 'Rohan',
+        'senderPhotoUrl': null,
+        'createdAt': now.subtract(const Duration(minutes: 4)).toIso8601String(),
+      },
+      {
+        'id': 'msg-2',
+        'kind': 'USER',
+        'body': 'gg everyone, catching up tonight 🏃',
+        'senderId': 'rk-1',
+        'senderName': 'Sam Rivera',
+        'senderPhotoUrl': null,
+        'createdAt': now.subtract(const Duration(minutes: 9)).toIso8601String(),
+      },
+    ],
+    'nextCursor': null,
   };
 }
 
