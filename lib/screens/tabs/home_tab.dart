@@ -16,8 +16,7 @@ import '../../widgets/pill_button.dart';
 import '../../widgets/step_milestones_section.dart';
 import '../../widgets/streak_chip.dart' show StreakChip, StreakChipState;
 import '../../widgets/home_chrome.dart';
-import '../../widgets/home_course_track.dart'
-    show CapybaraCustomizationPreview;
+import '../../widgets/home_course_track.dart' show CapybaraCustomizationPreview;
 import '../../widgets/race_opportunity_card.dart';
 import '../../widgets/race_ui.dart';
 import '../../tutorial/tutorial_screen.dart';
@@ -118,63 +117,72 @@ class HomeTab extends StatelessWidget {
         authService.profilePhotoUrl != null &&
         authService.profilePhotoUrl!.isNotEmpty;
 
-    return Padding(
-      padding: EdgeInsets.only(top: topInset, bottom: bottomPadding),
-      child: RefreshIndicator(
-        onRefresh: onRefresh,
-        color: AppColors.accent,
-        backgroundColor: AppColors.parchment,
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            SliverToBoxAdapter(child: _buildHeroSection(context)),
-            SliverToBoxAdapter(
-              child: ColoredBox(
-                color: AppColors.parchment,
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // GLOBAL STEP EVENT — on-brand "2x STEPS" banner shown to
-                      // every user while a step-multiplier window is live. The
-                      // shared widget self-ticks the countdown and collapses on
-                      // its own once the window ends.
-                      if (_buildGlobalEventBanner() case final banner?)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                          child: banner,
-                        ),
-                      if (raceCard != null)
-                        _buildRaceSection()
-                      else if (raceCardLoading)
-                        _buildRaceSkeletonSection(),
-                      _SetupPromptsSection(
-                        displayName: displayName,
-                        hasProfilePhoto: hasProfilePhoto,
-                        authService: authService,
-                        onDisplayNameChanged: onDisplayNameChanged,
-                        onAddProfilePhoto: onAddProfilePhoto,
-                        onDismissProfilePhotoPrompt:
-                            onDismissProfilePhotoPrompt,
+    return Stack(
+      children: [
+        // Full-screen background painted behind the status-bar inset too, so the
+        // transparent system status bar sits on the hero's green (roofLight)
+        // instead of the page background showing through as cream. Mirrors the
+        // other tabs (e.g. RacesTab).
+        const Positioned.fill(child: ColoredBox(color: AppColors.roofLight)),
+        Padding(
+          padding: EdgeInsets.only(top: topInset, bottom: bottomPadding),
+          child: RefreshIndicator(
+            onRefresh: onRefresh,
+            color: AppColors.accent,
+            backgroundColor: AppColors.parchment,
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(child: _buildHeroSection(context)),
+                SliverToBoxAdapter(
+                  child: ColoredBox(
+                    color: AppColors.parchment,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // GLOBAL STEP EVENT — on-brand "2x STEPS" banner shown to
+                          // every user while a step-multiplier window is live. The
+                          // shared widget self-ticks the countdown and collapses on
+                          // its own once the window ends.
+                          if (_buildGlobalEventBanner() case final banner?)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                              child: banner,
+                            ),
+                          if (raceCard != null)
+                            _buildRaceSection()
+                          else if (raceCardLoading)
+                            _buildRaceSkeletonSection(),
+                          _SetupPromptsSection(
+                            displayName: displayName,
+                            hasProfilePhoto: hasProfilePhoto,
+                            authService: authService,
+                            onDisplayNameChanged: onDisplayNameChanged,
+                            onAddProfilePhoto: onAddProfilePhoto,
+                            onDismissProfilePhotoPrompt:
+                                onDismissProfilePhotoPrompt,
+                          ),
+                          KeyedSubtree(
+                            key: tutorialMilestonesKey,
+                            child: StepMilestonesSection(
+                              key: stepMilestonesKey,
+                              authService: authService,
+                              backendApiService: backendApiService,
+                              currentSteps: stepData?.steps,
+                            ),
+                          ),
+                        ],
                       ),
-                      KeyedSubtree(
-                        key: tutorialMilestonesKey,
-                        child: StepMilestonesSection(
-                          key: stepMilestonesKey,
-                          authService: authService,
-                          backendApiService: backendApiService,
-                          currentSteps: stepData?.steps,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -385,7 +393,8 @@ class HomeTab extends StatelessWidget {
         final raceName = cardData['raceName'] as String? ?? 'a race';
         return _HomeRaceActionRow(
           label: 'FINISHED',
-          title: '${atName(friend?.displayName ?? 'A friend')} finished $raceName',
+          title:
+              '${atName(friend?.displayName ?? 'A friend')} finished $raceName',
           subtitle: 'Start a rematch when you are ready',
           primaryLabel: 'CHALLENGE',
           onPrimary: onChallengeFriendBack == null || friend == null
@@ -1154,7 +1163,10 @@ class _HomeActiveRaceTicket extends StatelessWidget {
                     children: [
                       Text(
                         '$participantCount racer${participantCount == 1 ? '' : 's'}',
-                        style: PixelText.body(size: 13, color: AppColors.textMid),
+                        style: PixelText.body(
+                          size: 13,
+                          color: AppColors.textMid,
+                        ),
                       ),
                       const Icon(
                         Icons.chevron_right_rounded,
