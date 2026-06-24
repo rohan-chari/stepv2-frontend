@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../styles.dart';
 import '../utils/race_participant_display.dart';
+import '../widgets/celebration_confetti.dart';
 import '../widgets/game_container.dart';
 import '../widgets/home_chrome.dart';
 import '../widgets/pill_button.dart';
@@ -145,6 +146,8 @@ class RankedResultsSummaryScreen extends StatelessWidget {
               ),
             ),
           ),
+          if (outcome == 'PROMOTE')
+            const Positioned.fill(child: CelebrationConfetti()),
         ],
       ),
     );

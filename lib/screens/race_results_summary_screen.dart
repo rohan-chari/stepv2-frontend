@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../styles.dart';
 import '../utils/at_name.dart';
 import '../utils/race_participant_display.dart';
+import '../widgets/celebration_confetti.dart';
 import '../widgets/game_container.dart';
 import '../widgets/home_chrome.dart';
 import '../widgets/pill_button.dart';
@@ -26,6 +27,11 @@ class RaceResultsSummaryScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final single = races.length == 1;
+    // Celebrate if any of the finished races landed a top-3 finish.
+    final placedTop3 = races.any((race) {
+      final placement = (race['myPlacement'] as num?)?.toInt();
+      return placement != null && placement >= 1 && placement <= 3;
+    });
     return Material(
       color: Colors.transparent,
       child: Stack(
@@ -89,6 +95,7 @@ class RaceResultsSummaryScreen extends StatelessWidget {
               ),
             ),
           ),
+          if (placedTop3) const Positioned.fill(child: CelebrationConfetti()),
         ],
       ),
     );
