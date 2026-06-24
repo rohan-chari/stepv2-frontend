@@ -34,6 +34,8 @@ class AuthService extends ChangeNotifier {
   static const _keyCoins = 'auth_coins';
   static const _keyHeldCoins = 'auth_held_coins';
   static const _keyFirstRaceOnboardingSeen = 'auth_first_race_onboarding_seen';
+  static const _keyTutorialOnboardingSeen = 'auth_tutorial_onboarding_seen';
+  static const _keyPendingShareToken = 'auth_pending_share_token';
 
   final BackendApiService _backendApiService;
   String? _identityToken;
@@ -48,6 +50,8 @@ class AuthService extends ChangeNotifier {
   int _coins = 0;
   int _heldCoins = 0;
   bool _firstRaceOnboardingSeen = false;
+  bool _tutorialOnboardingSeen = false;
+  String? _pendingShareToken;
 
   String? get identityToken => _identityToken;
   String? get sessionToken => _sessionToken;
@@ -61,6 +65,15 @@ class AuthService extends ChangeNotifier {
   int get coins => _coins;
   int get heldCoins => _heldCoins;
   bool get firstRaceOnboardingSeen => _firstRaceOnboardingSeen;
+  bool get tutorialOnboardingSeen => _tutorialOnboardingSeen;
+
+  /// A race share token captured from a deep link that has not yet been
+  /// consumed (joined). Persisted so it survives the sign-in/onboarding gap on
+  /// a fresh install: the link is tapped, the app installs, the user onboards,
+  /// and the token is drained once they land in the app. See DeepLinkService
+  /// and MainShell's drain logic.
+  String? get pendingShareToken => _pendingShareToken;
+
   bool get isSignedIn => _identityToken != null && _userIdentifier != null;
   bool get hasSessionToken =>
       _sessionToken != null && _sessionToken!.isNotEmpty;
@@ -82,6 +95,9 @@ class AuthService extends ChangeNotifier {
     _heldCoins = prefs.getInt(_keyHeldCoins) ?? 0;
     _firstRaceOnboardingSeen =
         prefs.getBool(_keyFirstRaceOnboardingSeen) ?? false;
+    _tutorialOnboardingSeen =
+        prefs.getBool(_keyTutorialOnboardingSeen) ?? false;
+    _pendingShareToken = prefs.getString(_keyPendingShareToken);
     notifyListeners();
     return isSignedIn && hasSessionToken;
   }
@@ -291,6 +307,11 @@ class AuthService extends ChangeNotifier {
       _firstRaceOnboardingSeen =
           backendUser['firstRaceOnboardingSeen'] as bool? ?? false;
     }
+    // Defensive: older backends omit this; only override when present.
+    if (backendUser.containsKey('tutorialOnboardingSeen')) {
+      _tutorialOnboardingSeen =
+          backendUser['tutorialOnboardingSeen'] as bool? ?? false;
+    }
   }
 
   Future<void> syncFromBackendUser(Map<String, dynamic> backendUser) async {
@@ -329,6 +350,8 @@ class AuthService extends ChangeNotifier {
     _heldCoins = 0;
     _isAdmin = false;
     _firstRaceOnboardingSeen = false;
+    _tutorialOnboardingSeen = false;
+    _pendingShareToken = null;
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyIdentityToken);
@@ -341,6 +364,25 @@ class AuthService extends ChangeNotifier {
     await prefs.remove(_keyIsAdmin);
     await prefs.remove(_keyHeldCoins);
     await prefs.remove(_keyFirstRaceOnboardingSeen);
+    await prefs.remove(_keyTutorialOnboardingSeen);
+    await prefs.remove(_keyPendingShareToken);
+    notifyListeners();
+  }
+
+  /// Records (or clears, when [token] is null) a race share token captured from
+  /// a deep link, to be joined once the user is signed in and onboarded.
+  /// Persisted immediately — like [updateSessionToken] — so it survives a fresh
+  /// install's sign-in/onboarding gap. Independent of [_persist] (which only
+  /// runs on sign-in), so a token captured on the sign-in screen isn't lost.
+  Future<void> setPendingShareToken(String? token) async {
+    _pendingShareToken = token;
+    final prefs = await SharedPreferences.getInstance();
+    if (token != null && token.isNotEmpty) {
+      await prefs.setString(_keyPendingShareToken, token);
+    } else {
+      _pendingShareToken = null;
+      await prefs.remove(_keyPendingShareToken);
+    }
     notifyListeners();
   }
 
@@ -364,6 +406,59 @@ class AuthService extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyFirstRaceOnboardingSeen, true);
     notifyListeners();
+  }
+
+  /// Marks the tutorial onboarding step as seen, both locally (so the step
+  /// won't re-show this session) and on the backend (source of truth). Used by
+  /// the skip path and after starting the tutorial. Backend write is
+  /// best-effort: the local flag still advances onboarding if the network call
+  /// fails, and the backend remains authoritative on the next sync.
+  Future<void> markTutorialOnboardingSeen() async {
+    _tutorialOnboardingSeen = true;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyTutorialOnboardingSeen, true);
+    notifyListeners();
+    final token = authToken;
+    if (token != null && token.isNotEmpty) {
+      try {
+        await _backendApiService.markTutorialOnboardingSeen(
+          identityToken: token,
+        );
+      } catch (_) {
+        // Best-effort; local flag already advanced onboarding.
+      }
+    }
+  }
+
+  /// Claims the one-time 100-coin tutorial-completion reward. The backend is
+  /// authoritative and idempotent — it only grants once per account ever, so
+  /// replays / reinstalls return granted:false. On a grant, updates the local
+  /// coin balance. Also marks the onboarding step seen locally (completing
+  /// implies seen). Returns whether coins were granted this call.
+  Future<bool> claimTutorialReward() async {
+    final token = authToken;
+    if (token == null || token.isEmpty) return false;
+    // Completing the tutorial dismisses the onboarding step regardless of
+    // whether coins were granted this time.
+    _tutorialOnboardingSeen = true;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyTutorialOnboardingSeen, true);
+    try {
+      final result = await _backendApiService.claimTutorialReward(
+        identityToken: token,
+      );
+      final granted = result['granted'] as bool? ?? false;
+      final coins = result['coins'] as int?;
+      if (coins != null) {
+        await updateCoins(coins);
+      } else {
+        notifyListeners();
+      }
+      return granted;
+    } catch (_) {
+      notifyListeners();
+      return false;
+    }
   }
 
   Future<void> updateCoins(int coins) async {
@@ -417,6 +512,7 @@ class AuthService extends ChangeNotifier {
     await prefs.setInt(_keyCoins, _coins);
     await prefs.setInt(_keyHeldCoins, _heldCoins);
     await prefs.setBool(_keyFirstRaceOnboardingSeen, _firstRaceOnboardingSeen);
+    await prefs.setBool(_keyTutorialOnboardingSeen, _tutorialOnboardingSeen);
   }
 
   String? _buildDisplayName(AuthorizationCredentialAppleID credential) {

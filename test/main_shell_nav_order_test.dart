@@ -41,7 +41,7 @@ class _FakeBackendApiService extends BackendApiService {
   }) async {
     return {
       'sessionToken': authToken,
-      'user': {'firstRaceOnboardingSeen': true},
+      'user': {'firstRaceOnboardingSeen': true, 'tutorialOnboardingSeen': true},
     };
   }
 
@@ -73,6 +73,7 @@ class _FakeBackendApiService extends BackendApiService {
       'displayName': 'Trail Walker',
       'incomingFriendRequests': 0,
       'firstRaceOnboardingSeen': true,
+      'tutorialOnboardingSeen': true,
     };
   }
 
@@ -115,6 +116,7 @@ Future<AuthService> _authService() async {
     'auth_backend_user_id': 'user-1',
     'auth_display_name': 'Trail Walker',
     'auth_first_race_onboarding_seen': true,
+    'auth_tutorial_onboarding_seen': true,
   });
   final authService = AuthService();
   await authService.restoreSession();

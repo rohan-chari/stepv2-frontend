@@ -15,12 +15,16 @@ class OnboardingFlow extends StatelessWidget {
     super.key,
     required this.healthAuthorized,
     required this.notificationsState,
+    required this.tutorialOnboardingSeen,
     required this.firstRaceOnboardingSeen,
     required this.onEnableHealth,
     required this.onEnableNotifications,
+    required this.onStartTutorial,
+    required this.onSkipTutorial,
     required this.onFetchOnboardingRaces,
     required this.onJoinOnboardingRace,
     required this.onSkipFirstRace,
+    this.firstRaceShareTokenPending = false,
     this.error,
     this.isLoading = false,
   });
@@ -30,11 +34,20 @@ class OnboardingFlow extends StatelessWidget {
   /// null = not yet prompted, true = granted, false = denied.
   final bool? notificationsState;
 
+  /// Whether this account has completed or skipped the tutorial onboarding step.
+  final bool tutorialOnboardingSeen;
+
   /// Whether the backend says this account already saw the first-race step.
   final bool firstRaceOnboardingSeen;
 
   final VoidCallback onEnableHealth;
   final VoidCallback onEnableNotifications;
+
+  /// Launches the tutorial (which grants the one-time reward on completion).
+  final VoidCallback onStartTutorial;
+
+  /// Skips the tutorial step (marks seen, no reward).
+  final VoidCallback onSkipTutorial;
 
   /// Fetches public races for the onboarding step (already restricted to the
   /// qualifying set will be applied by the step itself). Returns null on error.
@@ -45,6 +58,11 @@ class OnboardingFlow extends StatelessWidget {
 
   /// Skips the first-race step (marks seen on the backend + locally).
   final VoidCallback onSkipFirstRace;
+
+  /// True when a race share link is waiting to be joined. The first-race step
+  /// then auto-skips the generic public picker — the user already has a
+  /// specific race to join, which MainShell joins + opens once onboarding ends.
+  final bool firstRaceShareTokenPending;
 
   final String? error;
   final bool isLoading;
@@ -78,11 +96,173 @@ class OnboardingFlow extends StatelessWidget {
       );
     }
 
-    // Step 3: join your first race.
+    // Step 3: tutorial intro (after the permission gates, before first race).
+    if (!tutorialOnboardingSeen) {
+      return OnboardingTutorialStep(
+        onStart: onStartTutorial,
+        onSkip: onSkipTutorial,
+      );
+    }
+
+    // Step 4: join your first race.
     return OnboardingFirstRaceStep(
       onFetchOnboardingRaces: onFetchOnboardingRaces,
       onJoinOnboardingRace: onJoinOnboardingRace,
       onSkip: onSkipFirstRace,
+      skipForPendingShare: firstRaceShareTokenPending,
+    );
+  }
+}
+
+/// "Earn your first 100 coins" onboarding step. Mirrors the permission gates'
+/// green arcade styling and the first-race step's primary/skip layout. Starting
+/// launches the tutorial (which grants the one-time reward on completion);
+/// skipping marks the step seen without a reward (the user can still earn it
+/// later by finishing a replay).
+class OnboardingTutorialStep extends StatelessWidget {
+  const OnboardingTutorialStep({
+    super.key,
+    required this.onStart,
+    required this.onSkip,
+  });
+
+  final VoidCallback onStart;
+  final VoidCallback onSkip;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: AppColors.roofLight,
+      child: Stack(
+        children: [
+          const Positioned.fill(
+            child: CustomPaint(
+              painter: ArcadeCheckerPainter(drawBottomStripe: false),
+            ),
+          ),
+          SafeArea(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final compact = constraints.maxHeight < 680;
+                return Stack(
+                  children: [
+                    Positioned.fill(
+                      child: SingleChildScrollView(
+                        physics: const ClampingScrollPhysics(),
+                        padding: EdgeInsets.fromLTRB(
+                          24,
+                          compact ? 24 : 58,
+                          24,
+                          128,
+                        ),
+                        child: Column(
+                          children: [
+                            Container(
+                              width: compact ? 132 : 160,
+                              height: compact ? 132 : 160,
+                              decoration: BoxDecoration(
+                                color: AppColors.parchment.withValues(
+                                  alpha: 0.12,
+                                ),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: AppColors.parchmentLight.withValues(
+                                    alpha: 0.30,
+                                  ),
+                                  width: 3,
+                                ),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                '100',
+                                style: HomeText.title(
+                                  size: compact ? 44 : 54,
+                                  color: AppColors.parchment,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            Text(
+                              'FIRST 100 COINS',
+                              style: HomeText.label(
+                                size: 13,
+                                color: AppColors.parchmentLight.withValues(
+                                  alpha: 0.86,
+                                ),
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              'Earn your first 100 coins',
+                              style: HomeText.title(
+                                size: 32,
+                                color: AppColors.parchment,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Take the quick tour to learn how Bara works — '
+                              'finish it and we’ll drop 100 coins in your '
+                              'balance to get you started.',
+                              style: HomeText.body(
+                                size: 15,
+                                color: AppColors.parchmentLight.withValues(
+                                  alpha: 0.92,
+                                ),
+                                height: 1.38,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Align(
+                      alignment: Alignment.bottomCenter,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 52),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: double.infinity,
+                              height: 54,
+                              child: PillButton(
+                                label: 'START TUTORIAL',
+                                variant: PillButtonVariant.secondary,
+                                fullWidth: true,
+                                padding: EdgeInsets.zero,
+                                icon: Icons.play_arrow_rounded,
+                                onPressed: onStart,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextButton(
+                              onPressed: onSkip,
+                              child: Text(
+                                'Skip for now',
+                                style: HomeText.body(
+                                  size: 15,
+                                  color: AppColors.parchmentLight.withValues(
+                                    alpha: 0.92,
+                                  ),
+                                  weight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -96,11 +276,16 @@ class OnboardingFirstRaceStep extends StatefulWidget {
     required this.onFetchOnboardingRaces,
     required this.onJoinOnboardingRace,
     required this.onSkip,
+    this.skipForPendingShare = false,
   });
 
   final Future<List<Map<String, dynamic>>?> Function() onFetchOnboardingRaces;
   final Future<bool> Function(String raceId) onJoinOnboardingRace;
   final VoidCallback onSkip;
+
+  /// When true, skip the generic public picker entirely (a share link is
+  /// pending — MainShell will join that specific race after onboarding).
+  final bool skipForPendingShare;
 
   @override
   State<OnboardingFirstRaceStep> createState() =>
@@ -120,6 +305,14 @@ class _OnboardingFirstRaceStepState extends State<OnboardingFirstRaceStep> {
   }
 
   Future<void> _load() async {
+    // A pending share link means the user already has a specific race to join
+    // (MainShell joins + opens it once onboarding ends). Skip the generic
+    // picker straight through so onboarding doesn't dead-end on it.
+    if (widget.skipForPendingShare) {
+      widget.onSkip();
+      return;
+    }
+
     final races = await widget.onFetchOnboardingRaces();
     if (!mounted) return;
 

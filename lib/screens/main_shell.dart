@@ -21,8 +21,10 @@ import '../widgets/step_milestones_section.dart';
 import '../widgets/streak_chip.dart';
 import '../widgets/wooden_tab_bar.dart';
 import 'race_results_summary_screen.dart';
+import 'ranked_results_summary_screen.dart';
 import 'start_screen.dart';
 import 'onboarding_flow.dart';
+import '../tutorial/tutorial_screen.dart';
 import 'tabs/friends_tab.dart';
 import 'tabs/home_tab.dart';
 import 'tabs/leaderboard_tab.dart';
@@ -101,10 +103,23 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   // (markRaceResultsSeen) is the durable source of truth across sessions.
   final Set<String> _raceResultsShownThisSession = {};
   bool _raceResultsPopupOpen = false;
+  // Settled ranked weeks whose summary popup we've surfaced this session, keyed
+  // by week index. The server ack (markRankedResultsSeen) is the durable source
+  // of truth across sessions; this just prevents a re-fetch re-interrupting.
+  final Set<int> _rankedResultsShownThisSession = {};
+  bool _rankedResultsPopupOpen = false;
+
+  // Guards the shared-race drain so overlapping AuthService notifications can't
+  // fire two concurrent joins for the same pending token.
+  bool _draining = false;
 
   void _handleAuthServiceChanged() {
     if (!mounted) return;
     setState(() {});
+    // A share token may have just been captured (link tapped while running) or
+    // the final onboarding step may have just completed — either way, try to
+    // drain. Idempotent: no-ops when there's no token or onboarding isn't done.
+    _maybeDrainPendingSharedRace();
   }
 
   @override
@@ -176,6 +191,68 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
   }
 
+  /// Joins the race behind a pending share-link token (captured by
+  /// [DeepLinkService]) once the user is past onboarding and on the tabs, then
+  /// opens it. This is the SINGLE drain point for every capture path — a
+  /// cold-start link, a link tapped while the app runs, and the post-onboarding
+  /// fresh-install case — because the token flows through [AuthService], which
+  /// this shell already observes.
+  Future<void> _maybeDrainPendingSharedRace() async {
+    if (_draining) return;
+    final token = widget.authService.pendingShareToken;
+    if (token == null || token.isEmpty) return;
+
+    // Wait until onboarding is fully complete; joining + navigating over the
+    // onboarding overlay would be wrong. Mirrors build()'s isOnboarding gate.
+    final isOnboarding =
+        !_healthAuthorized ||
+        _notificationsState == null ||
+        !widget.authService.firstRaceOnboardingSeen;
+    if (isOnboarding) return;
+
+    final identityToken = widget.authService.authToken;
+    if (identityToken == null || identityToken.isEmpty) return;
+
+    _draining = true;
+    String? raceId;
+    String? errorMessage;
+    try {
+      final result = await _backendApiService.joinRaceByShareToken(
+        identityToken: identityToken,
+        token: token,
+        // Server-gated one-time welcome boxes: a fresh share-link user gets
+        // them; anyone already in the ledger is a no-op. See joinRaceCore.
+        onboarding: true,
+      );
+      raceId = result['raceId'] as String?;
+    } on ApiException catch (e) {
+      // Already a member / full / closed: still try to land them on the race by
+      // resolving its id from the public preview.
+      try {
+        final preview = await _backendApiService.fetchSharedRace(
+          token: token,
+          identityToken: identityToken,
+        );
+        raceId = preview['id'] as String?;
+      } catch (_) {}
+      if (raceId == null) errorMessage = e.message;
+    } catch (_) {
+      // Network/transient: drop the token (it's re-tappable) rather than loop.
+    } finally {
+      // Consume the token on every outcome so the drain can't loop.
+      await widget.authService.setPendingShareToken(null);
+      _draining = false;
+    }
+
+    if (!mounted) return;
+    if (raceId != null) {
+      _fetchRaces();
+      _openRaceFromCard(raceId);
+    } else if (errorMessage != null) {
+      showErrorToast(context, errorMessage);
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && _healthAuthorized) {
@@ -185,6 +262,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _fetchRaces(checkResults: true);
       _fetchShopCatalog();
       _fetchRaceCard();
+      _maybeShowRankedResults();
       _startForegroundPolling();
     } else if (state == AppLifecycleState.paused) {
       _stopForegroundPolling();
@@ -226,7 +304,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _fetchFriendsSteps();
     _fetchRaces(checkResults: true);
     _fetchShopCatalog();
+    _maybeShowRankedResults();
     _startForegroundPolling();
+    // Cold start with a share link tapped before launch: now that the session
+    // is valid and onboarding state is loaded, join + open the shared race.
+    _maybeDrainPendingSharedRace();
   }
 
   Future<bool> _refreshSessionToken() async {
@@ -595,6 +677,73 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
   }
 
+  /// Fetches `/ranked/v2` and, if the caller's most recently settled week is
+  /// unacknowledged, shows the post-settlement summary popup. Called only from
+  /// resume + initial load (not the poll), mirroring [_maybeShowRaceResults].
+  ///
+  /// Defensive throughout: a backend that predates `/ranked/v2` (404) or omits
+  /// `resultsSeen` yields no popup — `resultsSeen` defaults to SEEN (true), and
+  /// only the three real settlement outcomes qualify.
+  Future<void> _maybeShowRankedResults() async {
+    if (!mounted || _rankedResultsPopupOpen || _raceResultsPopupOpen) return;
+
+    final identityToken = widget.authService.authToken;
+    if (identityToken == null || identityToken.isEmpty) return;
+
+    Map<String, dynamic>? lastWeek;
+    try {
+      final data = await _backendApiService.fetchRankedV2(
+        identityToken: identityToken,
+      );
+      lastWeek = data['lastWeek'] as Map<String, dynamic>?;
+    } catch (_) {
+      // Legacy backend (no /ranked/v2) or a transient error — no popup.
+      return;
+    }
+    if (lastWeek == null || !mounted) return;
+
+    final seen = (lastWeek['resultsSeen'] as bool?) ?? true;
+    if (seen) return;
+    final outcome = lastWeek['outcome'] as String?;
+    if (outcome != 'PROMOTE' && outcome != 'HOLD' && outcome != 'DEMOTE') {
+      return;
+    }
+    final weekIndex = (lastWeek['weekIndex'] as num?)?.toInt();
+    if (weekIndex == null) return;
+    if (_rankedResultsShownThisSession.contains(weekIndex)) return;
+
+    // Re-check the open guards: the awaited fetch above may have let the race
+    // popup open in the meantime. Sequence behind it (and the daily-reward
+    // modal) — if anything's on top of the shell, hold off and let the next
+    // resume/load re-detect and show.
+    if (_rankedResultsPopupOpen || _raceResultsPopupOpen) return;
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) return;
+
+    _rankedResultsShownThisSession.add(weekIndex);
+    _rankedResultsPopupOpen = true;
+    await Navigator.of(context).push<void>(
+      PageRouteBuilder(
+        opaque: false,
+        pageBuilder: (_, _, _) => RankedResultsSummaryScreen(result: lastWeek!),
+        transitionsBuilder: (_, anim, _, child) =>
+            FadeTransition(opacity: anim, child: child),
+        transitionDuration: const Duration(milliseconds: 250),
+      ),
+    );
+    _rankedResultsPopupOpen = false;
+
+    // On dismiss: ack server-side so it never re-shows across sessions. The
+    // session set already guards re-show before this round-trips.
+    final token = widget.authService.authToken;
+    if (token != null && token.isNotEmpty) {
+      _backendApiService.markRankedResultsSeen(
+        identityToken: token,
+        weekIndex: weekIndex,
+      );
+    }
+  }
+
   Future<bool> _joinFeaturedRace(String raceId) async {
     final identityToken = widget.authService.authToken;
     if (identityToken == null || identityToken.isEmpty) return false;
@@ -797,6 +946,30 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       }
     }
     await widget.authService.markFirstRaceOnboardingSeenLocally();
+  }
+
+  /// Launches the tutorial from the onboarding step. TutorialScreen claims the
+  /// one-time reward itself on full completion (and marks the step seen). On
+  /// return — whether the user finished or bailed — we mark the step seen so
+  /// onboarding advances to the first-race step. Marking seen is idempotent.
+  Future<void> _startTutorialOnboarding() async {
+    final navigator = Navigator.of(context);
+    await navigator.push(
+      MaterialPageRoute(
+        builder: (_) => TutorialScreen(
+          authService: widget.authService,
+          onComplete: (ctx) => Navigator.of(ctx).pop(),
+        ),
+      ),
+    );
+    await widget.authService.markTutorialOnboardingSeen();
+  }
+
+  /// Skips the tutorial onboarding step: marks it seen (backend + locally) with
+  /// no reward. The user can still earn the 100 coins later by finishing a
+  /// replay of the tutorial.
+  Future<void> _skipTutorialOnboarding() async {
+    await widget.authService.markTutorialOnboardingSeen();
   }
 
   Future<void> _acceptRaceInviteFromCard(String raceId) async {
@@ -1108,6 +1281,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     final isOnboarding =
         !_healthAuthorized ||
         _notificationsState == null ||
+        !widget.authService.tutorialOnboardingSeen ||
         !widget.authService.firstRaceOnboardingSeen;
 
     return Scaffold(
@@ -1121,13 +1295,19 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
               child: OnboardingFlow(
                 healthAuthorized: _healthAuthorized,
                 notificationsState: _notificationsState,
+                tutorialOnboardingSeen:
+                    widget.authService.tutorialOnboardingSeen,
                 firstRaceOnboardingSeen:
                     widget.authService.firstRaceOnboardingSeen,
                 onEnableHealth: _enableHealthData,
                 onEnableNotifications: _enableNotifications,
+                onStartTutorial: _startTutorialOnboarding,
+                onSkipTutorial: _skipTutorialOnboarding,
                 onFetchOnboardingRaces: _fetchOnboardingRaces,
                 onJoinOnboardingRace: _joinOnboardingRace,
                 onSkipFirstRace: _skipFirstRaceOnboarding,
+                firstRaceShareTokenPending:
+                    widget.authService.pendingShareToken != null,
                 error: _error,
                 isLoading: _isLoading,
               ),

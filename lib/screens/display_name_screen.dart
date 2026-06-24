@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../tutorial/tutorial_screen.dart';
 import 'main_shell.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
@@ -202,24 +201,15 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
         Navigator.of(context).pop();
       } else {
         // First run: this screen is the root route (StartScreen pushReplaced
-        // into it), so there is nothing to pop back to. Show the tutorial, then
-        // route forward into the app on completion — popping here would leave
-        // an empty navigator and strand the brand-new user.
-        final authService = widget.authService;
-        final notificationService = widget.notificationService;
+        // into it), so there is nothing to pop back to — route forward into the
+        // app. The tutorial is no longer shown here; it lives as a step inside
+        // MainShell's onboarding sequence (after the permission gates), where
+        // finishing it grants the one-time 100-coin reward.
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (context) => TutorialScreen(
-              onComplete: (tutorialContext) {
-                Navigator.of(tutorialContext).pushReplacement(
-                  MaterialPageRoute(
-                    builder: (_) => MainShell(
-                      authService: authService,
-                      notificationService: notificationService,
-                    ),
-                  ),
-                );
-              },
+            builder: (_) => MainShell(
+              authService: widget.authService,
+              notificationService: widget.notificationService,
             ),
           ),
         );

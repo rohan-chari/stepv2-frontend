@@ -479,7 +479,7 @@ class _RacesTabState extends State<RacesTab> {
   }) {
     final collapsed = _collapsedSections.contains(sectionKey);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.only(left: 10, right: 10, bottom: 4),
       child: Column(
         children: [
           _buildSectionHeader(
@@ -520,8 +520,7 @@ class _RacesTabState extends State<RacesTab> {
           if (i != races.length - 1)
             Container(
               height: 1,
-              margin: const EdgeInsets.symmetric(horizontal: 4),
-              color: AppColors.parchmentBorder.withValues(alpha: 0.56),
+              color: AppColors.parchmentBorder.withValues(alpha: 0.9),
             ),
         ],
       ],
@@ -660,7 +659,7 @@ class _RacesTabState extends State<RacesTab> {
     }
 
     final stripeColor = index.isOdd
-        ? AppColors.parchmentDark
+        ? AppColors.parchmentLight
         : AppColors.parchment;
 
     String timeLabel;

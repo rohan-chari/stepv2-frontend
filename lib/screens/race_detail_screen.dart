@@ -12,6 +12,7 @@ import '../styles.dart';
 import '../utils/at_name.dart';
 import '../utils/race_display.dart';
 import '../utils/race_participant_display.dart';
+import '../utils/share_helper.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/arcade_tab_selector.dart';
 import '../widgets/app_avatar.dart';
@@ -26,6 +27,7 @@ import '../widgets/trail_sign.dart';
 import '../widgets/powerup_icon.dart';
 import '../widgets/attack_outcome_modal.dart';
 import '../widgets/spinning_coin.dart';
+import '../widgets/coin_balance_badge.dart';
 import '../widgets/spinning_crate.dart';
 import '../widgets/game_container.dart';
 import '../widgets/friend_request_sheet.dart';
@@ -256,6 +258,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   bool _chatHasUnread = false;
   final TextEditingController _messageInput = TextEditingController();
   bool _sendingMessage = false;
+  bool _sharingRace = false;
+  // Anchors the iOS/iPad share popover to the share button's rect.
+  final GlobalKey _shareButtonKey = GlobalKey();
 
   // Activity tab (system/powerup events).
   RaceFeedService? _feed;
@@ -1299,16 +1304,28 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
+                Stack(
+                  alignment: Alignment.center,
                   children: [
-                    PowerupIcon(type: type, size: 22, spinning: true),
-                    const SizedBox(width: 6),
-                    Text(
-                      _powerupNames[type] ?? type,
-                      style: PixelText.title(
-                        size: 18,
-                        color: AppColors.textDark,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        PowerupIcon(type: type, size: 22, spinning: true),
+                        const SizedBox(width: 6),
+                        Text(
+                          _powerupNames[type] ?? type,
+                          style: PixelText.title(
+                            size: 18,
+                            color: AppColors.textDark,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: CoinBalanceBadge(
+                        coins: myCoins,
+                        coinSize: 16,
                       ),
                     ),
                   ],
@@ -1334,13 +1351,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                   style: PixelText.body(size: 13, color: AppColors.textMid),
                   textAlign: TextAlign.center,
                 ),
-                if (upgradeable) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    'YOUR COINS: $myCoins',
-                    style: PixelText.title(size: 10, color: AppColors.textMid),
-                  ),
-                ],
                 const SizedBox(height: 12),
 
                 // Tier options for upgradeable powerups; single USE button otherwise.
@@ -1495,6 +1505,28 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    if (_canShareRace())
+                      GestureDetector(
+                        key: _shareButtonKey,
+                        onTap: _sharingRace ? null : _shareRace,
+                        child: Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: _sharingRace
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.textDark,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.ios_share,
+                                  color: AppColors.textDark,
+                                  size: 24,
+                                ),
+                        ),
+                      ),
                     if (_race != null &&
                         (_race!['isCreator'] as bool? ?? false) &&
                         (_race!['status'] == 'PENDING' ||
@@ -2438,6 +2470,56 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     return '${(diff.inDays / 7).floor()}w';
   }
 
+  /// Whether to show the Share action: any ACCEPTED participant can share a
+  /// race that's still open (PENDING/ACTIVE). Completed/cancelled races aren't
+  /// shareable — there's nothing to join.
+  bool _canShareRace() {
+    final race = _race;
+    if (race == null) return false;
+    final status = race['status'] as String?;
+    return race['myStatus'] == 'ACCEPTED' &&
+        status != 'COMPLETED' &&
+        status != 'CANCELLED';
+  }
+
+  /// Mints (or reuses) the race's share link via the backend and opens the
+  /// native share sheet so the user can send it over iMessage/etc. The link
+  /// opens the app straight into this race if installed, or a landing page +
+  /// store otherwise.
+  Future<void> _shareRace() async {
+    if (_sharingRace) return;
+    final identityToken = widget.authService.authToken;
+    if (identityToken == null || identityToken.isEmpty) return;
+
+    setState(() => _sharingRace = true);
+    try {
+      final result = await _api.createRaceShareLink(
+        identityToken: identityToken,
+        raceId: widget.raceId,
+      );
+      final url = result['url'] as String?;
+      if (url == null || url.isEmpty) {
+        throw const ApiException('Could not create a share link.');
+      }
+      if (!mounted) return;
+      final raceName = raceDisplayName(
+        _race?['seedKind'] as String?,
+        _race?['name'] as String? ?? 'a race',
+      );
+      await shareText(
+        _shareButtonKey.currentContext ?? context,
+        'Join me in "$raceName" on Bara! $url',
+        subject: 'Join my step race on Bara',
+      );
+    } on ApiException catch (e) {
+      if (mounted) showErrorToast(context, e.message);
+    } catch (e) {
+      if (mounted) showErrorToast(context, 'Could not share: $e');
+    } finally {
+      if (mounted) setState(() => _sharingRace = false);
+    }
+  }
+
   void _showRaceOptionsSheet() {
     final status = _race?['status'] as String? ?? '';
     showModalBottomSheet(
@@ -2672,7 +2754,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       body = _buildTabEmptyState('No messages yet. Say hi!');
     } else {
       body = ListView(
-        padding: EdgeInsets.zero,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         // IM-style: newest at the bottom, anchored there; scroll up for older.
         // messages are newest-first, so reverse lays child 0 (newest) at the
         // bottom and the "Load older" control ends up at the top.
@@ -3626,7 +3708,11 @@ class _ChatBubble extends StatelessWidget {
             : MainAxisAlignment.start,
         children: [
           if (!isMine) ...[
-            PlayerAvatar(name: message.senderName ?? '?', size: 28),
+            PlayerAvatar(
+              name: message.senderName ?? '?',
+              imageUrl: message.senderPhotoUrl,
+              size: 28,
+            ),
             const SizedBox(width: 6),
           ],
           Flexible(

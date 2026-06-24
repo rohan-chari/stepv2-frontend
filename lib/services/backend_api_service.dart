@@ -178,6 +178,17 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  /// Fetches the client version policy behind the force-update gate. Public —
+  /// no auth, so it answers before a session exists. The running build's version
+  /// rides the standard X-App-Version header, but the caller re-derives the gate
+  /// from minSupportedVersion/latestVersion rather than trusting the server's
+  /// convenience flags. Throws [ApiException] on any failure (incl. a 404 from
+  /// an older backend that predates this endpoint); callers fail open.
+  Future<Map<String, dynamic>> fetchVersionPolicy() async {
+    final response = await _sendGetRequest(path: '/app-version/policy');
+    return _decodeJsonResponse(response);
+  }
+
   Future<void> recordSteps({
     required String identityToken,
     required StepData stepData,
@@ -783,6 +794,57 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  /// Mints (or returns the existing) shareable link for [raceId]. The caller
+  /// must be an ACCEPTED participant (server-enforced). Returns the backend
+  /// payload `{shareToken, url}`; share the `url`.
+  Future<Map<String, dynamic>> createRaceShareLink({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races/$raceId/share-link',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  /// Fetches the public preview of a shared race by its share [token]. Used by
+  /// the pre-join screen. No auth required, but we forward the token when
+  /// signed in (harmless, and lets the backend personalize later). Returns the
+  /// `race` preview map, or throws [ApiException] (404 for an unknown/revoked
+  /// link).
+  Future<Map<String, dynamic>> fetchSharedRace({
+    required String token,
+    String? identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/races/share/$token',
+      identityToken: identityToken,
+    );
+    final body = await _decodeJsonResponse(response);
+    final race = body['race'];
+    return race is Map<String, dynamic> ? race : <String, dynamic>{};
+  }
+
+  /// Joins the race behind a shared [token]. Works for private races too
+  /// (possession of the token IS the invite). Mirrors [joinPublicRace]'s
+  /// onboarding flag. Returns the backend payload, which includes `raceId`.
+  Future<Map<String, dynamic>> joinRaceByShareToken({
+    required String identityToken,
+    required String token,
+    bool onboarding = false,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races/share/$token/join',
+      body: onboarding ? const {'onboarding': true} : const {},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
   /// Marks the first-race onboarding step as seen for the current user.
   /// Idempotent; used by the skip path. No request body.
   Future<void> markFirstRaceOnboardingSeen({
@@ -791,6 +853,36 @@ class BackendApiService {
     final response = await _sendJsonRequest(
       method: 'POST',
       path: '/races/onboarding/first-race-seen',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+    _decodeJsonResponse(response);
+  }
+
+  /// Grants the one-time 100-coin tutorial-completion reward and marks the
+  /// tutorial onboarding step seen. Idempotent server-side (the backend dedups
+  /// on the coin ledger), so replays / reinstalls never re-grant. Returns
+  /// `{granted: bool, coins: int}` where `coins` is the resulting balance.
+  Future<Map<String, dynamic>> claimTutorialReward({
+    required String identityToken,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/tutorial/complete-reward',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  /// Marks the tutorial onboarding step seen without granting (the skip path).
+  /// Idempotent; no request body. Mirrors [markFirstRaceOnboardingSeen].
+  Future<void> markTutorialOnboardingSeen({
+    required String identityToken,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/tutorial/onboarding-seen',
       body: const <String, dynamic>{},
       identityToken: identityToken,
     );
@@ -811,6 +903,27 @@ class BackendApiService {
         method: 'POST',
         path: '/races/results/seen',
         body: {'raceIds': raceIds},
+        identityToken: identityToken,
+      );
+      await _decodeJsonResponse(response);
+    } catch (_) {
+      // Best-effort ack; never disrupt the UI if it fails.
+    }
+  }
+
+  /// Acks the post-settlement ranked-week summary popup for one settled week.
+  /// Best-effort, display-only (sibling of [markRaceResultsSeen]). A backend
+  /// that predates the endpoint (or the weekIndex no longer existing) is a
+  /// harmless no-op — the local seen flag still suppresses re-show this session.
+  Future<void> markRankedResultsSeen({
+    required String identityToken,
+    required int weekIndex,
+  }) async {
+    try {
+      final response = await _sendJsonRequest(
+        method: 'POST',
+        path: '/ranked/results/seen',
+        body: {'weekIndex': weekIndex},
         identityToken: identityToken,
       );
       await _decodeJsonResponse(response);

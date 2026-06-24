@@ -12,5 +12,16 @@
 	</array>
 	<key>aps-environment</key>
 	<string>development</string>
+	<!-- Universal Links for shareable race links. Share links are minted on
+	     barastep.com (the user-facing domain); steptracker-api.org is kept for
+	     backward compatibility. Each host must serve a matching
+	     apple-app-site-association file (see backend src/web/deepLinkFiles.js).
+	     NOTE: the API base URL (BACKEND_BASE_URL) stays steptracker-api.org —
+	     only the deep-link/share domain moves to barastep.com. -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:barastep.com</string>
+		<string>applinks:steptracker-api.org</string>
+	</array>
 </dict>
 </plist>

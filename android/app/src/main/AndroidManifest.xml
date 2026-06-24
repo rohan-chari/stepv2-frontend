@@ -42,6 +42,33 @@
             <intent-filter>
                 <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
             </intent-filter>
+            <!-- App Links for shareable race links: https://barastep.com/r/<token>
+                 (the user-facing domain) and https://steptracker-api.org/r/<token>
+                 (kept for backward compatibility). autoVerify uses the
+                 assetlinks.json served at each host (backend src/web/deepLinkFiles.js).
+                 Opens the app directly when verified. NOTE: the API base URL stays
+                 steptracker-api.org — only the deep-link/share domain moves. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="barastep.com"
+                    android:pathPrefix="/r/" />
+                <data
+                    android:scheme="https"
+                    android:host="steptracker-api.org"
+                    android:pathPrefix="/r/" />
+            </intent-filter>
+            <!-- Custom scheme for the landing page's "Open in app" button
+                 (bara://join/<token>) — the reliable re-tap after install. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="bara" />
+            </intent-filter>
         </activity>
         <!-- Health Connect (integrated, Android 14+): the equivalent rationale entry point. -->
         <activity-alias

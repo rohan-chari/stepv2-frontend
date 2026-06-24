@@ -64,7 +64,7 @@ app.*.map.json
 .flutter-plugins
 *.g.dart
 *.freezed.dart
-tmp/imagegen/
+tmp/
 .venv-imagegen/
 
 # IDE

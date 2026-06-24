@@ -541,6 +541,15 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
         .toList();
 
     final rng = Random();
+    // Coin payouts read better as round numbers, so pick a random multiple of
+    // 5 within the tier's range instead of any integer (avoids 11, 17, …).
+    int randomCoins(int min, int max) {
+      final lo = (min + 4) ~/ 5; // smallest multiple of 5 >= min (divided by 5)
+      final hi = max ~/ 5; // largest multiple of 5 <= max (divided by 5)
+      if (hi < lo) return min + rng.nextInt(max - min + 1); // no multiple fits
+      return (lo + rng.nextInt(hi - lo + 1)) * 5;
+    }
+
     final items = <_DailyStripItem>[];
     for (int i = 0; i < _DailyStripItem.stripLength; i++) {
       if (i == _DailyStripItem.resultPosition) {
@@ -551,14 +560,14 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
       if (roll < commonOdds) {
         items.add(
           _DailyStripItem.coins(
-            commonMin + rng.nextInt(commonMax - commonMin + 1),
+            randomCoins(commonMin, commonMax),
             'COMMON',
           ),
         );
       } else if (roll < commonOdds + uncommonOdds) {
         items.add(
           _DailyStripItem.coins(
-            uncommonMin + rng.nextInt(uncommonMax - uncommonMin + 1),
+            randomCoins(uncommonMin, uncommonMax),
             'UNCOMMON',
           ),
         );

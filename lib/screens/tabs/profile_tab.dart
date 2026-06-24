@@ -854,7 +854,8 @@ class _SettingsSheetState extends State<_SettingsSheet> {
               Navigator.of(context).pop();
               await Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => const TutorialScreen(),
+                  builder: (_) =>
+                      TutorialScreen(authService: widget.authService),
                   fullscreenDialog: true,
                 ),
               );

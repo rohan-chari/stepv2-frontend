@@ -1,13 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../models/loadable.dart';
 import '../../styles.dart';
 import '../../models/step_data.dart';
 import '../../utils/at_name.dart';
 import '../../utils/race_display.dart';
+import '../../utils/share_helper.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../widgets/coin_balance_badge.dart';
@@ -338,7 +338,7 @@ class HomeTab extends StatelessWidget {
               : () => onAcceptRaceInvite!(raceId),
           onSecondary: onDeclineRaceInvite == null || raceId.isEmpty
               ? null
-              : () => onDeclineRaceInvite!(raceId),
+              : (_) => onDeclineRaceInvite!(raceId),
         );
       case RaceCardState.activeRace:
         final raceId = cardData['raceId'] as String? ?? '';
@@ -419,8 +419,9 @@ class HomeTab extends StatelessWidget {
           primaryLabel: 'RACES',
           secondaryLabel: 'INVITE',
           onPrimary: onOpenRacesTab,
-          onSecondary: () {
-            Share.share(
+          onSecondary: (ctx) {
+            shareText(
+              ctx,
               'Race me on Bara — daily step challenges with friends. https://apps.apple.com/us/app/bara-step-challenges/id6760504694',
             );
           },
@@ -589,7 +590,8 @@ class HomeTab extends StatelessWidget {
                     _HelpHeroButton(
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => const TutorialScreen(),
+                          builder: (_) =>
+                              TutorialScreen(authService: authService),
                         ),
                       ),
                     ),
@@ -1198,7 +1200,9 @@ class _HomeRaceActionRow extends StatelessWidget {
   final String primaryLabel;
   final String? secondaryLabel;
   final VoidCallback? onPrimary;
-  final VoidCallback? onSecondary;
+  // Receives the secondary button's own BuildContext so callers (e.g. share)
+  // can anchor an iPad popover to the button's rect.
+  final void Function(BuildContext)? onSecondary;
 
   @override
   Widget build(BuildContext context) {
@@ -1244,10 +1248,14 @@ class _HomeRaceActionRow extends StatelessWidget {
                 _SmallRaceButton(label: primaryLabel, onPressed: onPrimary),
                 if (secondaryLabel != null) ...[
                   const SizedBox(height: 6),
-                  _SmallRaceButton(
-                    label: secondaryLabel!,
-                    onPressed: onSecondary,
-                    muted: true,
+                  Builder(
+                    builder: (btnContext) => _SmallRaceButton(
+                      label: secondaryLabel!,
+                      onPressed: onSecondary == null
+                          ? null
+                          : () => onSecondary!(btnContext),
+                      muted: true,
+                    ),
                   ),
                 ],
               ],

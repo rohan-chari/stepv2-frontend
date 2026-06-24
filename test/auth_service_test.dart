@@ -71,4 +71,51 @@ void main() {
       isFalse,
     );
   });
+
+  test('pendingShareToken defaults to null', () async {
+    final authService = AuthService();
+    await authService.restoreSession();
+    expect(authService.pendingShareToken, isNull);
+  });
+
+  test('setPendingShareToken persists across instances (survives install gap)', () async {
+    final authService = AuthService();
+    await authService.setPendingShareToken('tok-abc');
+    expect(authService.pendingShareToken, 'tok-abc');
+
+    // A fresh instance (e.g. relaunch after onboarding) restores the token, so
+    // the share intent survives the sign-in/onboarding gap.
+    final restored = AuthService();
+    await restored.restoreSession();
+    expect(restored.pendingShareToken, 'tok-abc');
+  });
+
+  test('setPendingShareToken(null) clears the persisted token', () async {
+    final authService = AuthService();
+    await authService.setPendingShareToken('tok-abc');
+    await authService.setPendingShareToken(null);
+    expect(authService.pendingShareToken, isNull);
+
+    final restored = AuthService();
+    await restored.restoreSession();
+    expect(restored.pendingShareToken, isNull);
+  });
+
+  test('signOut clears a pending share token', () async {
+    SharedPreferences.setMockInitialValues({
+      'auth_identity_token': 'apple-token',
+      'auth_user_identifier': 'apple-user-123',
+      'auth_session_token': 'session-token',
+    });
+    final authService = AuthService();
+    await authService.restoreSession();
+    await authService.setPendingShareToken('tok-abc');
+
+    await authService.signOut();
+
+    expect(authService.pendingShareToken, isNull);
+    final restored = AuthService();
+    await restored.restoreSession();
+    expect(restored.pendingShareToken, isNull);
+  });
 }
