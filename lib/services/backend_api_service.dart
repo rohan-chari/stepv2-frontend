@@ -1208,6 +1208,22 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  /// Per-race opt-out for live placement-change pushes. Additive endpoint
+  /// (backend default false); only newer builds call it.
+  Future<Map<String, dynamic>> setRacePlacementMute({
+    required String identityToken,
+    required String raceId,
+    required bool muted,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'PUT',
+      path: '/races/$raceId/placement/mute',
+      body: {'muted': muted},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
   Future<Map<String, dynamic>> markRaceChatRead({
     required String identityToken,
     required String raceId,

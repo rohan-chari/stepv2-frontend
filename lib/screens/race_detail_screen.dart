@@ -263,6 +263,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   // Anchors the iOS/iPad share popover to the share button's rect.
   final GlobalKey _shareButtonKey = GlobalKey();
 
+  // Per-race opt-out for live placement-change notifications. Seeded from the
+  // race payload (`myPlacementAlertsMuted`) and toggled optimistically.
+  bool _placementMuted = false;
+  bool _togglingPlacementMute = false;
+
   // Activity tab (system/powerup events).
   RaceFeedService? _feed;
   bool _feedInitialized = false;
@@ -414,6 +419,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       setState(() {
         _race = details;
         _isLoading = false;
+        // Defaults false for older backends that don't return the key.
+        _placementMuted = details['myPlacementAlertsMuted'] as bool? ?? false;
       });
 
       if (details['status'] == 'ACTIVE') {
@@ -1528,6 +1535,22 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                                 ),
                         ),
                       ),
+                    if (_canMutePlacementAlerts())
+                      GestureDetector(
+                        onTap: _togglingPlacementMute
+                            ? null
+                            : _togglePlacementMute,
+                        child: Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Icon(
+                            _placementMuted
+                                ? Icons.notifications_off
+                                : Icons.notifications_active,
+                            color: AppColors.textDark,
+                            size: 24,
+                          ),
+                        ),
+                      ),
                     if (_race != null &&
                         (_race!['isCreator'] as bool? ?? false) &&
                         (_race!['status'] == 'PENDING' ||
@@ -2517,6 +2540,51 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       if (mounted) showErrorToast(context, 'Could not share: $e');
     } finally {
       if (mounted) setState(() => _sharingRace = false);
+    }
+  }
+
+  /// Whether to show the per-race notification mute toggle. Placement pushes
+  /// only fire for live races you're running in, so the control is only useful
+  /// (and only shown) for an ACTIVE race the user has accepted.
+  bool _canMutePlacementAlerts() {
+    final race = _race;
+    if (race == null) return false;
+    return race['myStatus'] == 'ACCEPTED' && race['status'] == 'ACTIVE';
+  }
+
+  /// Flips the per-race placement-notification mute. Optimistic: update the icon
+  /// immediately, persist, and revert on failure.
+  Future<void> _togglePlacementMute() async {
+    if (_togglingPlacementMute) return;
+    final identityToken = widget.authService.authToken;
+    if (identityToken == null || identityToken.isEmpty) return;
+
+    final next = !_placementMuted;
+    setState(() {
+      _placementMuted = next;
+      _togglingPlacementMute = true;
+    });
+    try {
+      await _api.setRacePlacementMute(
+        identityToken: identityToken,
+        raceId: widget.raceId,
+        muted: next,
+      );
+      if (mounted) {
+        showInfoToast(
+          context,
+          next
+              ? 'Muted placement alerts for this race'
+              : 'Placement alerts on for this race',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _placementMuted = !next); // revert
+        showErrorToast(context, 'Couldn’t update notifications: $e');
+      }
+    } finally {
+      if (mounted) setState(() => _togglingPlacementMute = false);
     }
   }
 
