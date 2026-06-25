@@ -33,6 +33,32 @@ class RunnerTests: XCTestCase {
     wait(for: [expectation], timeout: 1)
   }
 
+  func testStateStoreReadsFlutterPrefixedKeys() {
+    // Fix C1 seam test: crosses the Dart-write / Swift-read boundary. Dart's legacy
+    // shared_preferences writes "flutter."-prefixed keys; the native store must read
+    // them. Asserts the prefixed layout is read AND the old unprefixed layout is not
+    // (so the bug that killed iOS background sync can't silently return).
+    let suiteName = "lp.test.flutterPrefixed"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defaults.removePersistentDomain(forName: suiteName)
+    defaults.set("tok", forKey: "flutter.auth_session_token")
+    defaults.set("http://localhost:3000", forKey: "flutter.background_sync_backend_base_url")
+    defaults.set(true, forKey: "flutter.health_authorized")
+
+    let store = UserDefaultsBackgroundSyncStateStore(userDefaults: defaults)
+    XCTAssertEqual(store.sessionToken, "tok")
+    XCTAssertEqual(store.backendBaseURL?.absoluteString, "http://localhost:3000")
+    XCTAssertTrue(store.healthAuthorized)
+
+    // Regression guard: the pre-fix unprefixed layout must NOT be readable.
+    let suiteName2 = "lp.test.unprefixed"
+    let defaults2 = UserDefaults(suiteName: suiteName2)!
+    defaults2.removePersistentDomain(forName: suiteName2)
+    defaults2.set("tok", forKey: "auth_session_token")
+    let store2 = UserDefaultsBackgroundSyncStateStore(userDefaults: defaults2)
+    XCTAssertNil(store2.sessionToken)
+  }
+
   func testPerformSyncPostsStepsWhenStateIsAvailable() {
     let poster = MockPoster()
     let stepReader = MockStepReader(result: .success([
@@ -232,6 +258,15 @@ private final class MockPoster: StepPosting {
     capturedURL = baseURL
     capturedToken = sessionToken
     capturedPosts.append(BackgroundDailyStep(date: date, steps: steps))
+    completion(statusCode, nil)
+  }
+
+  func postStepSamples(
+    baseURL: URL,
+    sessionToken: String,
+    samples: [[String: Any]],
+    completion: @escaping (Int?, Error?) -> Void
+  ) {
     completion(statusCode, nil)
   }
 }

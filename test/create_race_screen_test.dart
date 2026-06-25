@@ -18,7 +18,8 @@ class _FakeBackendApiService extends BackendApiService {
     int buyInAmount = 0,
     String payoutPreset = 'WINNER_TAKES_ALL',
     bool isPublic = false,
-    int maxParticipants = 10,
+    int? maxParticipants = 10,
+    DateTime? scheduledStartAt,
   }) async {
     lastCreateRaceCall = {
       'identityToken': identityToken,
@@ -82,15 +83,18 @@ void main() {
     );
 
     await tester.enterText(find.byType(TextField).at(0), 'Gold Rush');
-    await tester.enterText(find.byType(TextField).at(1), '100000');
 
+    // Enable buy-in (defaults to 100 coins) so the payout mode picker shows.
     await tester.tap(find.text('BUY-IN'));
     await tester.pump();
-    await tester.ensureVisible(find.text('100'));
-    await tester.tap(find.text('100'));
+
+    await tester.ensureVisible(find.text('TOP 3'));
+    await tester.tap(find.text('TOP 3'));
     await tester.pump();
-    await tester.ensureVisible(find.text('TOP 3 70/20/10'));
-    await tester.tap(find.text('TOP 3 70/20/10'));
+
+    // Participant cap is a required selection before the race can be created.
+    await tester.ensureVisible(find.text('NO LIMIT'));
+    await tester.tap(find.text('NO LIMIT'));
     await tester.pump();
 
     await tester.ensureVisible(find.text('CREATE RACE'));

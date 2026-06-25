@@ -10,6 +10,13 @@
 	<array>
 		<string>Default</string>
 	</array>
+	<!-- Fix C5 (DEFERRED — verify before changing). This single entitlements file is
+	     shared by every build configuration. Do NOT blindly flip this to "production":
+	     it would break Debug/TestFlight (sandbox) pushes, and existing prod pushes work
+	     anyway because the backend (apns.js) retries sandbox<->prod. The correct fix is
+	     a per-configuration entitlements file (Release -> "production") wired via
+	     CODE_SIGN_ENTITLEMENTS in the Xcode project — only after confirming the archived
+	     prod IPA's embedded provisioning profile aps-environment. Left as-is until verified. -->
 	<key>aps-environment</key>
 	<string>development</string>
 	<!-- Universal Links for shareable race links. Share links are minted on

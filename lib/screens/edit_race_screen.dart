@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../models/race_payouts.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
@@ -70,11 +71,6 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
   static const _durationOptions = [3, 5, 7, 14];
   static const _intervalPresets = [2000, 3000, 4000, 5000, 10000, 25000];
   static const _maxParticipantsPresets = [5, 10, 25, 50, 100];
-  static const _payoutOptions = [
-    ('WINNER TAKE ALL', 'WINNER_TAKES_ALL'),
-    ('TOP 3 70/20/10', 'TOP3_70_20_10'),
-    ('TOP 3 80/15/5', 'TOP3_80_15_5'),
-  ];
 
   @override
   void initState() {
@@ -675,7 +671,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 Column(
-                                  children: _payoutOptions.map((option) {
+                                  children: payoutPresetOptions.map((option) {
                                     final selected =
                                         _payoutPreset == option.$2;
                                     return Padding(
@@ -716,9 +712,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                 SizedBox(
                                   width: double.infinity,
                                   child: Text(
-                                    _payoutPreset == 'WINNER_TAKES_ALL'
-                                        ? 'Winner takes the whole pot.'
-                                        : 'Top 3 payouts need at least 4 accepted runners before the race can start.',
+                                    payoutHelpText(_payoutPreset),
                                     style: PixelText.body(
                                       size: 12,
                                       color: AppColors.textMid,

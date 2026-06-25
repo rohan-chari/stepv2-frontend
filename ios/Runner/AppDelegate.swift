@@ -84,7 +84,11 @@ import UserNotifications
 
     registerBackgroundRefreshTask()
     scheduleBackgroundRefresh()
-    enableHealthKitBackgroundDelivery()
+    // Fix C4: do NOT register HealthKit background delivery here — this runs before
+    // the user has granted Health access, so the observer registration is wasted/
+    // ignored. The real registration happens via the "enableHealthKitBackgroundDelivery"
+    // method channel (above), which Dart invokes right after a confirmed Health-auth
+    // grant (main_shell.dart restoreHealthAuthState path) on every launch.
 
     UNUserNotificationCenter.current().delegate = self
 
@@ -517,8 +521,13 @@ final class UserDefaultsBackgroundSyncStateStore: BackgroundStepSyncStateStoring
     self.userDefaults = userDefaults
   }
 
+  // Fix C1: Dart persists these via the legacy shared_preferences plugin, which
+  // prepends "flutter." to every key in the standard NSUserDefaults suite. Native
+  // MUST read the prefixed keys, or every read is nil/false and the background-sync
+  // guard exits .noData — the bug that made iOS background sync dead in every
+  // shipped binary. Cheap-token: standard suite, same process, no Keychain.
   var sessionToken: String? {
-    userDefaults.string(forKey: "auth_session_token")
+    userDefaults.string(forKey: "flutter.auth_session_token")
   }
 
   var backendBaseURL: URL? {
@@ -532,12 +541,13 @@ final class UserDefaultsBackgroundSyncStateStore: BackgroundStepSyncStateStoring
   }
 
   var healthAuthorized: Bool {
-    userDefaults.bool(forKey: "health_authorized")
+    userDefaults.bool(forKey: "flutter.health_authorized")
   }
 }
 
 struct BackgroundSyncBootstrapKeys {
-  static let backendBaseURL = "background_sync_backend_base_url"
+  // Fix C1: "flutter." prefix to match what Dart's legacy shared_preferences writes.
+  static let backendBaseURL = "flutter.background_sync_backend_base_url"
 }
 
 final class URLSessionChallengeSyncDaysFetcher: ChallengeSyncDaysFetching {
@@ -792,11 +802,20 @@ final class URLSessionStepPoster: StepPosting {
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.setValue("Bearer \(sessionToken)", forHTTPHeaderField: "Authorization")
+    // Fix C2: parity with the Dart foreground path — without X-Timezone the backend
+    // defaults to America/New_York, double-counting steps across the day boundary for
+    // non-ET users (which can falsely "finish" a race).
+    request.setValue(TimeZone.current.identifier, forHTTPHeaderField: "X-Timezone")
 
     do {
+      // Fix C3: skipRaceResolution parity. The background coordinator always posts
+      // today's hourly samples right after this daily post; deferring race
+      // resolution to the (more precise) samples post — and to the Phase 0 cron —
+      // matches Dart and avoids resolving on partial daily data.
       request.httpBody = try JSONSerialization.data(withJSONObject: [
         "steps": steps,
         "date": date,
+        "skipRaceResolution": true,
       ])
     } catch {
       completion(nil, error)
@@ -824,6 +843,8 @@ final class URLSessionStepPoster: StepPosting {
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.setValue("Bearer \(sessionToken)", forHTTPHeaderField: "Authorization")
+    // Fix C2: same X-Timezone parity as the daily post above.
+    request.setValue(TimeZone.current.identifier, forHTTPHeaderField: "X-Timezone")
 
     do {
       request.httpBody = try JSONSerialization.data(withJSONObject: [

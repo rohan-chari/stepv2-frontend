@@ -8,6 +8,13 @@
          requires justifying each declared health permission. See ANDROID.md §C. -->
     <uses-permission android:name="android.permission.health.READ_STEPS"/>
 
+    <!-- Phase 2 — background step sync. Lets the WorkManager worker read Health
+         Connect steps while the app is backgrounded/closed. Android 14+ / recent
+         Health Connect only; the worker no-ops gracefully where it's unavailable or
+         the user hasn't granted it. Play requires justifying this in the Health
+         declaration (background sync of the user's own step count for live races). -->
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND"/>
+
     <!-- Android 13+ runtime permission for FCM/local notifications. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 

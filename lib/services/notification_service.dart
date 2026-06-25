@@ -9,11 +9,28 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'backend_api_service.dart';
 
-/// Android FCM background isolate handler. Notification-type messages are shown
-/// by the system tray automatically; data-only messages need no work here for
-/// v1. Must be a top-level function annotated for the AOT entry point.
+/// Channel to the native (Android) background-sync layer. On Android,
+/// `enqueueExpeditedSync` schedules a WorkManager job that reads Health Connect and
+/// posts steps. (On iOS the same channel name is used by AppDelegate for HealthKit
+/// background delivery; this Dart side is Android-only.)
+const _backgroundSyncChannel = MethodChannel('com.steptracker/background_sync');
+
+/// Android FCM background isolate handler. Notification-type messages are shown by
+/// the system tray automatically. Phase 3: a backend `STEP_SYNC_REQUEST` silent
+/// data message asks the device to push fresh steps now — we try to enqueue an
+/// expedited native WorkManager sync. In a fully-detached background isolate the
+/// channel may have no handler; that's caught and the 15-min periodic worker
+/// (Phase 2) remains the reliable baseline. Must be a top-level AOT entry point.
 @pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {}
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  if (message.data['type'] == 'STEP_SYNC_REQUEST') {
+    try {
+      await _backgroundSyncChannel.invokeMethod('enqueueExpeditedSync');
+    } catch (_) {
+      // No native channel handler in this isolate — periodic worker covers it.
+    }
+  }
+}
 
 enum NotificationRoute { home, friends, raceDetail, races }
 
@@ -81,6 +98,15 @@ class NotificationService {
     // Foreground messages: the system tray does NOT show them automatically, so
     // render a local notification carrying the data payload for tap routing.
     FirebaseMessaging.onMessage.listen((message) {
+      // Phase 3: a data-only STEP_SYNC_REQUEST (received while foregrounded) asks
+      // us to push fresh steps now. The main-engine channel handler is registered,
+      // so this enqueue path is reliable here.
+      if (message.data['type'] == 'STEP_SYNC_REQUEST') {
+        _backgroundSyncChannel.invokeMethod('enqueueExpeditedSync').catchError(
+          (_) {},
+        );
+        return;
+      }
       final notification = message.notification;
       if (notification == null) return;
       _localNotifications?.show(
@@ -272,6 +298,10 @@ class NotificationService {
       case 'RACE_COMPLETED':
       case 'POWERUP_USED':
       case 'race_message':
+      // Live placement change (Phase 0/3). Tapping the "you've been passed" alert
+      // opens the race. Additive type — older apps fall through to default/null and
+      // simply ignore it (the alert still shows; only deep-link routing is skipped).
+      case 'PLACEMENT_CHANGED':
         return NotificationRoute.raceDetail;
       case 'RACE_CANCELLED':
         return NotificationRoute.races;

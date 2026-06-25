@@ -216,6 +216,31 @@ class _FailingProgressRaceBackendApiService
   }
 }
 
+// A field-scaled preset (top half) that pays five places, so the detail card
+// shows the podium inline plus a "+2 MORE" affordance backed by payoutTiers.
+class _FieldScaledPayoutRaceBackendApiService
+    extends _ActivePaidRaceBackendApiService {
+  @override
+  Future<Map<String, dynamic>> fetchRaceDetails({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    final base = await super.fetchRaceDetails(
+      identityToken: identityToken,
+      raceId: raceId,
+    );
+    base['payoutPreset'] = 'TOP_HALF';
+    base['payoutTiers'] = const [
+      {'placement': 1, 'amount': 300},
+      {'placement': 2, 'amount': 150},
+      {'placement': 3, 'amount': 90},
+      {'placement': 4, 'amount': 40},
+      {'placement': 5, 'amount': 20},
+    ];
+    return base;
+  }
+}
+
 Future<AuthService> _createAuthService() async {
   SharedPreferences.setMockInitialValues({
     'auth_identity_token': 'apple-token',
@@ -436,6 +461,54 @@ void main() {
         findsNothing,
       );
       expect(find.byType(HomeCourseTrack), findsOneWidget);
+
+      await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'RaceDetailScreen collapses extra payout places behind a tap for field-scaled presets',
+    (WidgetTester tester) async {
+      final authService = await _createAuthService();
+      final backendApiService = _FieldScaledPayoutRaceBackendApiService();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RaceDetailScreen(
+            authService: authService,
+            raceId: 'race-2',
+            backendApiService: backendApiService,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      // Podium shown inline; the remaining two places collapse behind "+2 MORE".
+      final summary = find.byKey(const Key('race-prize-pool-summary'));
+      expect(summary, findsOneWidget);
+      expect(
+        find.descendant(of: summary, matching: find.text('1ST')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: summary, matching: find.text('+2 MORE')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: summary, matching: find.text('4TH')),
+        findsNothing,
+      );
+
+      // Tapping reveals every paid place in a bottom sheet.
+      await tester.tap(find.text('+2 MORE'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.text('PAYOUTS'), findsOneWidget);
+      expect(find.text('4TH'), findsOneWidget);
+      expect(find.text('5TH'), findsOneWidget);
 
       await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
       await tester.pumpAndSettle();

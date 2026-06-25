@@ -67,6 +67,44 @@ ranked tab shows the full 6-tier ladder strip to every user.
 
 ---
 
+## P3 — Feature backlog (not urgent, captured for later)
+
+### 6. iOS Live Activity for live race placement (lock-screen / Dynamic Island)
+- **What:** Show a user's live race placement on the Lock Screen and Dynamic
+  Island, updated entirely by the backend via APNs ActivityKit push-to-update —
+  **the only surface that stays live when the app is backgrounded or even
+  force-quit** (no app code runs; `liveactivityd` renders the pushed state).
+  Part of the larger "live placement without opening the race" effort; this is
+  the optional "wow" tier. **Decided not a must-have (2026-06-24)** — ship the
+  backend recompute + overtake-notification path first; this is a later add-on.
+- **Depends on:** the backend live-standings recompute + push job (the broadcast
+  half) existing first. That job recomputes ACTIVE-race standings server-side
+  (`resolveRaceState({ raceId })`) and is what would feed Live Activity updates.
+- **iOS-only, with real limits:** ActivityKit, iOS 16.1+ (push-to-start 17.2+);
+  an activity lives ~8h active (~12h with stale state) then auto-removes, so
+  multi-day races need restart-via-push; use `apns-priority: 5` for routine
+  updates (priority 10 draws down an hourly budget). **Android has no
+  equivalent** — its ambient surface is a notification/widget, so Android will
+  visibly lag here (accepted).
+- **Build sketch:** new Widget Extension (ActivityKit) target; `ActivityAttributes`
+  for the race + placement; per-device push token plumbing; backend sends
+  ActivityKit pushes from the same place that detects placement changes. Likely
+  also wants the iOS auth token reachable by the extension (App Group / Keychain),
+  which ties into the background-sync token-path decision in `AUDIT.md` (T2.2).
+- **Where (when built):** new `ios/` extension target; backend push handler
+  alongside the `PLACEMENT_CHANGED` fan-out in
+  `steps-tracker-backend/src/handlers/notificationHandlers.js`.
+- **Scaffold landed (2026-06-24):** `ios/RaceLiveActivity/` now contains the
+  ActivityKit source (`RaceActivityAttributes.swift`, `RaceLiveActivityWidget.swift`)
+  and `README.md` with the exact Xcode target-creation steps + the backend
+  liveactivity APNs payload. The files are **inert** (not in any target, don't affect
+  the build). Remaining is the Xcode-only work (create the Widget Extension target,
+  set target membership, `NSSupportsLiveActivities`) + the `LiveActivityManager` and
+  backend push, which are dependent on Phases 0–3 (now implemented). The backend
+  `PLACEMENT_CHANGED` event it would hook into is live (Phase 0).
+
+---
+
 ## In-flight deploy (not code TODOs, but pending right now)
 
 The 1.3.0 / Ranked v2 cutover is mid-deploy. Code is on `main` (both repos) and

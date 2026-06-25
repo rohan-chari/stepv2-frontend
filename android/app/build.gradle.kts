@@ -96,4 +96,11 @@ flutter {
 dependencies {
     // Backports java.time etc. for core library desugaring (flutter_local_notifications).
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+
+    // Phase 2 — background step sync. WorkManager runs the periodic CoroutineWorker;
+    // connect-client lets that worker read Health Connect from the background. The
+    // connect-client version is pinned to match the `health` Flutter plugin
+    // (health-13.3.1 -> 1.2.0-alpha02) so Gradle doesn't resolve two versions.
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
+    implementation("androidx.health.connect:connect-client:1.2.0-alpha02")
 }

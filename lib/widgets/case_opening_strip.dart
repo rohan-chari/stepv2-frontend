@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../styles.dart';
 import 'game_container.dart';
 import 'home_chrome.dart';
@@ -38,6 +39,12 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
   late final Animation<double> _animation;
   bool _waitingForSwipe = false;
 
+  // Layout values captured during build so the haptic listener can map the
+  // current scroll offset to a tile index without re-measuring.
+  double _totalScroll = 0;
+  double _totalItemWidth = 0;
+  int _lastTickIndex = -1;
+
   static const _itemSpacing = 8.0;
 
   @override
@@ -51,13 +58,30 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
       parent: _controller,
       curve: Curves.easeOutQuart,
     );
+    _animation.addListener(_handleReelTick);
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
+        // A firm thump as the result locks under the pointer, mirroring the
+        // heavy opening thump on the celebration confetti.
+        HapticFeedback.mediumImpact();
         // Small delay before calling onComplete for dramatic effect
         Future.delayed(const Duration(milliseconds: 600), widget.onComplete);
       }
     });
     _waitingForSwipe = true;
+  }
+
+  /// Fires a selection tick each time a new tile scrolls under the centre
+  /// marker, so the reel feels like a physical ratcheting wheel — dense ticks
+  /// while it's flying, thinning out as the easeOutQuart curve decelerates.
+  void _handleReelTick() {
+    if (_totalItemWidth <= 0) return;
+    final scrollOffset = _animation.value * _totalScroll;
+    final tileIndex = (scrollOffset / _totalItemWidth).floor();
+    if (tileIndex != _lastTickIndex) {
+      _lastTickIndex = tileIndex;
+      HapticFeedback.selectionClick();
+    }
   }
 
   @override
@@ -103,6 +127,9 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
 
           // We want to scroll so the result ends up at centerX
           final totalScroll = resultItemCenter - centerX;
+          // Hand these to the haptic tick listener (see _handleReelTick).
+          _totalScroll = totalScroll;
+          _totalItemWidth = totalItemWidth;
 
           return GameContainer(
             padding: const EdgeInsets.fromLTRB(10, 12, 10, 14),

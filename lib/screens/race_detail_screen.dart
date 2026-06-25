@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../models/loadable.dart';
+import '../models/race_payouts.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../services/race_chat_service.dart';
@@ -1617,7 +1618,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     final maxDays = _readInt(_race!['maxDurationDays'], fallback: 7);
     final buyInAmount = _readInt(_race!['buyInAmount'], fallback: 0);
     final potCoins = _readInt(_race!['projectedPotCoins'], fallback: 0);
-    final payouts = _race!['payouts'] as Map<String, dynamic>?;
+    final payoutTiers = parsePayoutTiers(_race);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1651,12 +1652,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             ],
           ],
         ),
-        if (buyInAmount > 0 && payouts != null) ...[
+        if (buyInAmount > 0 && payoutTiers.isNotEmpty) ...[
           const SizedBox(height: 10),
-          Text(
-            '1ST ${_formatCoinAmount(payouts['first'])}  •  2ND ${_formatCoinAmount(payouts['second'])}  •  3RD ${_formatCoinAmount(payouts['third'])}',
-            style: PixelText.title(size: 11, color: AppColors.textMid),
-            textAlign: TextAlign.center,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: _buildPayoutBreakdown(payoutTiers),
           ),
         ],
       ],
@@ -3105,7 +3105,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
   Widget _buildPrizePoolSummary() {
     final potCoins = _readInt(_race!['projectedPotCoins'], fallback: 0);
-    final payouts = _race!['payouts'] as Map<String, dynamic>?;
+    final payoutTiers = parsePayoutTiers(_race);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -3127,12 +3127,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
           style: PixelText.body(size: 12, color: AppColors.parchment),
           textAlign: TextAlign.center,
         ),
-        if (payouts != null) ...[
+        if (payoutTiers.isNotEmpty) ...[
           const SizedBox(height: 10),
           FittedBox(
             fit: BoxFit.scaleDown,
-            child: _buildPayoutInlineSummary(
-              payouts,
+            child: _buildPayoutBreakdown(
+              payoutTiers,
               key: const Key('race-prize-pool-summary'),
               labelColor: AppColors.parchment,
               amountColor: AppColors.pillGold,
@@ -3143,37 +3143,109 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     );
   }
 
-  Widget _buildPayoutInlineSummary(
-    Map<String, dynamic> payouts, {
+  // Inline payout breakdown: the podium (top 3) plus a tappable "+N MORE" that
+  // opens the full per-place list. For winner-takes-all / top-3 this is just the
+  // podium; for the field-scaled presets (top half, everyone but last) a big
+  // race can pay many places, so the rest live behind the tap rather than
+  // overflowing the card.
+  Widget _buildPayoutBreakdown(
+    List<PayoutTier> tiers, {
     Key? key,
     Color labelColor = AppColors.textMid,
     Color amountColor = AppColors.coinDark,
   }) {
+    final shown = tiers.take(3).toList();
+    final extra = tiers.length - shown.length;
     return Row(
       key: key,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _buildPayoutInlineValue(
-          label: '1ST',
-          amount: payouts['first'],
-          labelColor: labelColor,
-          amountColor: amountColor,
-        ),
-        const SizedBox(width: 8),
-        _buildPayoutInlineValue(
-          label: '2ND',
-          amount: payouts['second'],
-          labelColor: labelColor,
-          amountColor: amountColor,
-        ),
-        const SizedBox(width: 8),
-        _buildPayoutInlineValue(
-          label: '3RD',
-          amount: payouts['third'],
-          labelColor: labelColor,
-          amountColor: amountColor,
-        ),
+        for (var i = 0; i < shown.length; i++) ...[
+          if (i > 0) const SizedBox(width: 8),
+          _buildPayoutInlineValue(
+            label: payoutPlacementLabel(shown[i].placement),
+            amount: shown[i].amount,
+            labelColor: labelColor,
+            amountColor: amountColor,
+          ),
+        ],
+        if (extra > 0) ...[
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: () => _showPayoutBreakdownSheet(tiers),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '+$extra MORE',
+                  style: PixelText.title(size: 10, color: labelColor),
+                ),
+                Icon(Icons.chevron_right, size: 12, color: labelColor),
+              ],
+            ),
+          ),
+        ],
       ],
+    );
+  }
+
+  void _showPayoutBreakdownSheet(List<PayoutTier> tiers) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.parchmentLight,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'PAYOUTS',
+                  style: PixelText.title(size: 14, color: AppColors.textDark),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        for (final tier in tiers)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 5),
+                            child: Row(
+                              children: [
+                                Text(
+                                  payoutPlacementLabel(tier.placement),
+                                  style: PixelText.title(
+                                    size: 12,
+                                    color: AppColors.textMid,
+                                  ),
+                                ),
+                                const Spacer(),
+                                Text(
+                                  '${tier.amount}',
+                                  style: PixelText.number(
+                                    size: 14,
+                                    color: AppColors.coinDark,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

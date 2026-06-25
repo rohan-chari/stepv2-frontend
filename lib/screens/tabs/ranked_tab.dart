@@ -54,7 +54,6 @@ class _RankedTabState extends State<RankedTab> {
   Map<String, dynamic>? _week;
   Map<String, dynamic>? _v2Me;
   Map<String, dynamic>? _cohort;
-  Map<String, dynamic>? _lastWeek;
   List<Map<String, dynamic>> _v2Tiers = [];
 
   // True when the backend has no Ranked endpoint yet (old prod serving a newer
@@ -114,7 +113,6 @@ class _RankedTabState extends State<RankedTab> {
         _week = data['week'] as Map<String, dynamic>?;
         _v2Me = data['currentUser'] as Map<String, dynamic>?;
         _cohort = data['cohort'] as Map<String, dynamic>?;
-        _lastWeek = data['lastWeek'] as Map<String, dynamic>?;
         _v2Tiers = (data['tiers'] as List? ?? [])
             .whereType<Map<String, dynamic>>()
             .toList();
@@ -427,10 +425,8 @@ class _RankedTabState extends State<RankedTab> {
   List<Widget> _buildV2Body() {
     final me = _v2Me;
     final inCohort = me != null && me['ranked'] == true && _cohort != null;
-    final last = _buildLastWeekBanner();
 
     return [
-      if (last != null) ...[last, const SizedBox(height: 14)],
       if (!inCohort)
         _buildJoinCard()
       else ...[
@@ -740,77 +736,6 @@ class _RankedTabState extends State<RankedTab> {
           ),
         ],
       ],
-    );
-  }
-
-  // "Promoted to Gold! +200 coins" — shown for the week right after a settled
-  // result so Monday opens with the payoff, not a blank slate.
-  Widget? _buildLastWeekBanner() {
-    final last = _lastWeek;
-    if (last == null) return null;
-    final currentIndex = (_week?['index'] as num?)?.toInt();
-    final lastIndex = (last['weekIndex'] as num?)?.toInt();
-    // Only the freshest result; older settled weeks aren't news anymore.
-    if (currentIndex != null &&
-        lastIndex != null &&
-        lastIndex < currentIndex - 1) {
-      return null;
-    }
-
-    final outcome = last['outcome'] as String?;
-    final coins =
-        ((last['rewardCoins'] as num?)?.toInt() ?? 0) +
-        ((last['promotionCoins'] as num?)?.toInt() ?? 0);
-    final resultTier = rankedTierFromKey(last['resultTier'] as String?);
-
-    final (label, color) = switch (outcome) {
-      'PROMOTE' => ('Promoted to ${resultTier.label}!', resultTier.color),
-      'DEMOTE' => ('Moved down to ${resultTier.label}', AppColors.textMid),
-      'HOLD' when coins > 0 => ('Held ${resultTier.label}', resultTier.color),
-      _ => (null, AppColors.textMid),
-    };
-    if (label == null) return null;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.6), width: 1.2),
-      ),
-      child: Row(
-        children: [
-          TierMedal(tier: resultTier, size: 24),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'LAST WEEK',
-                  style: PixelText.body(size: 9, color: AppColors.textMid),
-                ),
-                Text(
-                  label,
-                  style: PixelText.title(size: 14, color: AppColors.textDark),
-                ),
-              ],
-            ),
-          ),
-          if (coins > 0) ...[
-            const Icon(
-              Icons.paid_rounded,
-              size: 15,
-              color: AppColors.medalGold,
-            ),
-            const SizedBox(width: 3),
-            Text(
-              '+$coins',
-              style: PixelText.title(size: 15, color: AppColors.textDark),
-            ),
-          ],
-        ],
-      ),
     );
   }
 
