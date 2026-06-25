@@ -21,6 +21,8 @@ class FeaturedRaceCard extends StatelessWidget {
     required this.isJoining,
     required this.onJoin,
     required this.onView,
+    this.isUpcoming = false,
+    this.startsAt,
     this.width = 250,
   });
 
@@ -34,9 +36,24 @@ class FeaturedRaceCard extends StatelessWidget {
   final bool isJoining;
   final VoidCallback onJoin;
   final VoidCallback onView;
+  // Pre-registration variant: the next, not-yet-started seeded race a user can
+  // opt into before it begins. Counts down to `startsAt` and the CTA is
+  // OPT IN / YOU'RE IN / FULL instead of JOIN / VIEW.
+  final bool isUpcoming;
+  final DateTime? startsAt;
   final double width;
 
   String get _cadenceLabel {
+    if (isUpcoming) {
+      switch (seedKind) {
+        case 'DAILY_10K':
+          return 'TOMORROW';
+        case 'WEEKLY_50K':
+          return 'NEXT WEEK';
+        default:
+          return 'UP NEXT';
+      }
+    }
     switch (seedKind) {
       case 'DAILY_10K':
         return 'DAILY';
@@ -48,6 +65,19 @@ class FeaturedRaceCard extends StatelessWidget {
   }
 
   String _countdownLabel() {
+    if (isUpcoming) {
+      final starts = startsAt;
+      if (starts == null) return 'STARTING SOON';
+      final remaining = starts.difference(DateTime.now());
+      if (remaining.isNegative) return 'STARTING SOON';
+      if (remaining.inDays > 0) {
+        return 'STARTS IN ${remaining.inDays}d ${remaining.inHours.remainder(24)}h';
+      }
+      if (remaining.inHours > 0) {
+        return 'STARTS IN ${remaining.inHours}h ${remaining.inMinutes.remainder(60)}m';
+      }
+      return 'STARTS IN ${remaining.inMinutes}m';
+    }
     final ends = endsAt;
     if (ends == null) return 'LIVE NOW';
     final remaining = ends.difference(DateTime.now());
@@ -124,7 +154,9 @@ class FeaturedRaceCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '$participantCount racing',
+                  isUpcoming
+                      ? '$participantCount joined'
+                      : '$participantCount racing',
                   textAlign: TextAlign.center,
                   style: PixelText.body(size: 12, color: AppColors.textMid),
                   maxLines: 1,
@@ -143,13 +175,15 @@ class FeaturedRaceCard extends StatelessWidget {
   }
 
   Widget _buildCta() {
+    const padding = EdgeInsets.symmetric(horizontal: 16, vertical: 11);
     if (isJoined) {
+      // Upcoming: "YOU'RE IN" (you opted into the next race); live: "VIEW".
       return PillButton(
-        label: 'VIEW',
+        label: isUpcoming ? "YOU'RE IN" : 'VIEW',
         variant: PillButtonVariant.secondary,
         fontSize: 13,
         fullWidth: true,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+        padding: padding,
         onPressed: onView,
       );
     }
@@ -159,16 +193,20 @@ class FeaturedRaceCard extends StatelessWidget {
         variant: PillButtonVariant.secondary,
         fontSize: 13,
         fullWidth: true,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+        padding: padding,
         onPressed: null,
       );
     }
+    // Upcoming: "OPT IN" (pre-register for the next race); live: "JOIN".
+    final joinLabel = isUpcoming
+        ? (isJoining ? 'OPTING IN…' : 'OPT IN')
+        : (isJoining ? 'JOINING…' : 'JOIN');
     return PillButton(
-      label: isJoining ? 'JOINING…' : 'JOIN',
+      label: joinLabel,
       variant: PillButtonVariant.primary,
       fontSize: 13,
       fullWidth: true,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+      padding: padding,
       onPressed: isJoining ? null : onJoin,
     );
   }

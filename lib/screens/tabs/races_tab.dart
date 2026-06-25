@@ -9,6 +9,7 @@ import '../../widgets/featured_race_card.dart';
 import '../../widgets/info_toast.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
+import '../../widgets/spinning_crate.dart';
 import '../create_race_screen.dart';
 import '../public_races_screen.dart';
 import '../race_detail_screen.dart';
@@ -198,8 +199,24 @@ class _RacesTabState extends State<RacesTab> {
     );
   }
 
+  // Soonest-ending first, so the races closest to wrapping up sit at the top of
+  // the list. Races without a parseable endsAt (shouldn't happen for ACTIVE)
+  // sink to the bottom.
+  List<Map<String, dynamic>> _sortByTimeLeft(List<Map<String, dynamic>> races) {
+    final sorted = races.toList();
+    sorted.sort((a, b) {
+      final aEnds = DateTime.tryParse(a['endsAt'] as String? ?? '');
+      final bEnds = DateTime.tryParse(b['endsAt'] as String? ?? '');
+      if (aEnds == null && bEnds == null) return 0;
+      if (aEnds == null) return 1;
+      if (bEnds == null) return -1;
+      return aEnds.compareTo(bEnds);
+    });
+    return sorted;
+  }
+
   Widget _buildContent() {
-    final active = _active;
+    final active = _sortByTimeLeft(_active);
     final invites = _invites;
     final waiting = _waiting;
     final completed = _completed;
@@ -332,6 +349,19 @@ class _RacesTabState extends State<RacesTab> {
     final featured = widget.featuredRaces;
     if (featured.isEmpty) return const SizedBox.shrink();
 
+    // Flatten to a card list: each live seeded race, immediately followed by its
+    // pre-registerable "next" race (when present) so the opt-in card sits right
+    // next to the live one.
+    final cards = <Widget>[];
+    for (final race in featured) {
+      cards.add(_buildFeaturedCard(race));
+      final upcoming = race['upcoming'] as Map<String, dynamic>?;
+      final upcomingId = upcoming?['raceId'] as String?;
+      if (upcoming != null && upcomingId != null && upcomingId.isNotEmpty) {
+        cards.add(_buildUpcomingCard(race, upcoming));
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -361,9 +391,9 @@ class _RacesTabState extends State<RacesTab> {
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 10),
             physics: const BouncingScrollPhysics(),
-            itemCount: featured.length,
+            itemCount: cards.length,
             separatorBuilder: (_, _) => const SizedBox(width: 10),
-            itemBuilder: (context, i) => _buildFeaturedCard(featured[i]),
+            itemBuilder: (context, i) => cards[i],
           ),
         ),
         const SizedBox(height: 4),
@@ -382,6 +412,32 @@ class _RacesTabState extends State<RacesTab> {
       finishRewardPool: (reward?['pool'] as num?)?.toInt() ?? 0,
       isJoined: race['myStatus'] != null,
       isFull: race['isFull'] as bool? ?? false,
+      isJoining: _joiningFeaturedId == raceId,
+      onJoin: () => _joinFeatured(raceId),
+      onView: () => _navigateToRaceDetail(raceId),
+    );
+  }
+
+  // The pre-registerable "next" race for a seed. Reuses FeaturedRaceCard in its
+  // upcoming mode: counts down to scheduledStartAt and the CTA is OPT IN /
+  // YOU'RE IN. Opting in joins the PENDING race (allowed server-side); once the
+  // race starts at midnight, every opt-in begins together at 0.
+  Widget _buildUpcomingCard(
+    Map<String, dynamic> race,
+    Map<String, dynamic> upcoming,
+  ) {
+    final raceId = upcoming['raceId'] as String? ?? '';
+    final reward = race['finishReward'] as Map<String, dynamic>?;
+    return FeaturedRaceCard(
+      name: race['name'] as String? ?? 'Race',
+      seedKind: race['seedKind'] as String?,
+      isUpcoming: true,
+      startsAt: DateTime.tryParse(upcoming['scheduledStartAt'] as String? ?? ''),
+      endsAt: DateTime.tryParse(upcoming['endsAt'] as String? ?? ''),
+      participantCount: (upcoming['participantCount'] as num?)?.toInt() ?? 0,
+      finishRewardPool: (reward?['pool'] as num?)?.toInt() ?? 0,
+      isJoined: upcoming['myStatus'] != null,
+      isFull: upcoming['isFull'] as bool? ?? false,
       isJoining: _joiningFeaturedId == raceId,
       onJoin: () => _joinFeatured(raceId),
       onView: () => _navigateToRaceDetail(raceId),
@@ -638,6 +694,9 @@ class _RacesTabState extends State<RacesTab> {
     final isCreator = race['isCreator'] as bool? ?? false;
     final myPlacement = race['myPlacement'] as int?;
     final queuedBoxCount = (race['queuedBoxCount'] as num?)?.toInt() ?? 0;
+    // Held/openable mystery boxes for the current user in this race (0..4).
+    // Absent on older backends -> defaults to 0.
+    final mysteryBoxCount = (race['mysteryBoxCount'] as num?)?.toInt() ?? 0;
 
     String statusLabel;
     Color badgeColor;
@@ -663,6 +722,9 @@ class _RacesTabState extends State<RacesTab> {
         : AppColors.parchment;
 
     String timeLabel;
+    // Default (non-active rows show "Xd race") stays muted; active rows get a
+    // green→yellow→red urgency color based on how much time is left.
+    Color timeColor = AppColors.textMid;
     if (status == 'ACTIVE' && endsAt != null) {
       final remaining = endsAt.difference(DateTime.now());
       if (remaining.isNegative) {
@@ -675,6 +737,13 @@ class _RacesTabState extends State<RacesTab> {
             '${remaining.inHours}h ${remaining.inMinutes.remainder(60)}m left';
       } else {
         timeLabel = '${remaining.inMinutes}m left';
+      }
+      if (remaining.inDays >= 2) {
+        timeColor = AppColors.pillGreenDark; // 2+ days: plenty of time
+      } else if (remaining.inDays >= 1) {
+        timeColor = AppColors.pillGoldShadow; // 1–2 days: getting close
+      } else {
+        timeColor = AppColors.error; // under a day (or ended): urgent
       }
     } else {
       timeLabel = '${maxDurationDays}d race';
@@ -711,24 +780,28 @@ class _RacesTabState extends State<RacesTab> {
                       maxLines: 1,
                     ),
                     const SizedBox(height: 3),
-                    Text(
-                      '$participantCount runner${participantCount == 1 ? '' : 's'}${isInvite && creatorName.isNotEmpty ? ' \u2022 by ${atName(creatorName)}' : ''}',
-                      style: PixelText.body(size: 14, color: AppColors.textMid),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                    ),
+                    // Active races show time-left then the user's held mystery
+                    // boxes (4 crate slots, filled ones colored). Everything
+                    // else keeps the runner count.
                     if (status == 'ACTIVE') ...[
-                      const SizedBox(height: 2),
                       Text(
                         timeLabel,
+                        style: PixelText.body(size: 13, color: timeColor),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                      const SizedBox(height: 4),
+                      _buildBoxCountRow(mysteryBoxCount),
+                    ] else
+                      Text(
+                        '$participantCount runner${participantCount == 1 ? '' : 's'}${isInvite && creatorName.isNotEmpty ? ' \u2022 by ${atName(creatorName)}' : ''}',
                         style: PixelText.body(
-                          size: 12,
+                          size: 14,
                           color: AppColors.textMid,
                         ),
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                       ),
-                    ],
                   ],
                 ),
               ),
@@ -782,6 +855,26 @@ class _RacesTabState extends State<RacesTab> {
           ),
         ),
       ),
+      ),
+    );
+  }
+
+  // Always shows four crate slots; the first [count] are colored in (boxes the
+  // user holds) and the rest stay faded silhouettes, so the row reads as
+  // "N of 4 boxes" at a glance.
+  Widget _buildBoxCountRow(int count) {
+    const total = 4;
+    final filled = count.clamp(0, total);
+    return SizedBox(
+      height: 20,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (int i = 0; i < total; i++) ...[
+            if (i > 0) const SizedBox(width: 3),
+            CrateIcon(size: 18, filled: i < filled),
+          ],
+        ],
       ),
     );
   }

@@ -57,6 +57,22 @@ class _SpinningCrateState extends State<SpinningCrate>
   }
 }
 
+/// Static (non-animated) crate, for dense lists where a per-row spin animation
+/// would be distracting and wasteful. [filled] false renders a faded/empty
+/// slot to represent "zero boxes".
+class CrateIcon extends StatelessWidget {
+  final double size;
+  final bool filled;
+  const CrateIcon({super.key, this.size = 20, this.filled = true});
+
+  @override
+  Widget build(BuildContext context) {
+    final crate = _CrateFace(size: size);
+    if (filled) return crate;
+    return Opacity(opacity: 0.3, child: crate);
+  }
+}
+
 class _CrateFace extends StatelessWidget {
   final double size;
   const _CrateFace({required this.size});

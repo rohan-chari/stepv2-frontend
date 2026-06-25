@@ -1689,6 +1689,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   Widget _buildPendingContent() {
     final isCreator = _race!['isCreator'] as bool? ?? false;
     final myStatus = _race!['myStatus'] as String? ?? '';
+    // Seeded daily/weekly races have no creator and auto-start at their scheduled
+    // ET midnight — so an opted-in user must see "you're in", not "waiting for the
+    // creator to start".
+    final isSeeded = (_race!['seedKind'] as String?) != null;
     final participants =
         (_race!['participants'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final acceptedCount = participants
@@ -1840,13 +1844,20 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                     child: Column(
                       children: [
                         Icon(
-                          Icons.hourglass_top_rounded,
+                          isSeeded
+                              ? Icons.check_circle_rounded
+                              : Icons.hourglass_top_rounded,
                           size: 32,
-                          color: AppColors.textMid.withValues(alpha: 0.6),
+                          color: isSeeded
+                              ? AppColors.pillGreenDark
+                              : AppColors.textMid.withValues(alpha: 0.6),
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Waiting for the creator to start the race',
+                          isSeeded
+                              ? "You're in! This race starts automatically — "
+                                    'no action needed.'
+                              : 'Waiting for the creator to start the race',
                           style: PixelText.body(
                             size: 14,
                             color: AppColors.textMid,

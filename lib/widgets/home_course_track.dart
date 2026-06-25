@@ -701,7 +701,14 @@ class _AccessoryOverlay extends StatelessWidget {
     final slot = accessory['slot'] as String? ?? '';
     final assetKey = accessory['assetKey'] as String? ?? '';
     final isHeadSlot = slot == 'HEAD';
-    final bobsWithHead = slot == 'HEAD' || slot == 'FACE' || slot == 'NECK';
+    // Whether this accessory rides the head-bob. The backend now sends an explicit
+    // per-item `bobble` flag; honor it when present. If it's absent (older backend,
+    // or a hardcoded preview accessory), fall back to the historical slot rule so
+    // behavior is unchanged — HEAD/FACE/NECK bobbed, BACK/FEET did not.
+    final bobbleFlag = accessory['bobble'];
+    final bobsWithHead = bobbleFlag is bool
+        ? bobbleFlag
+        : (slot == 'HEAD' || slot == 'FACE' || slot == 'NECK');
     final renderMetadata = accessory['renderMetadata'];
     final metadata = renderMetadata is Map<String, dynamic>
         ? renderMetadata

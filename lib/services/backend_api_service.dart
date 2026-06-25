@@ -621,12 +621,14 @@ class BackendApiService {
     bool? active,
     int? priceCoins,
     bool? testOnly,
+    bool? bobble,
   }) async {
     final body = <String, dynamic>{};
     if (renderMetadata != null) body['renderMetadata'] = renderMetadata;
     if (active != null) body['active'] = active;
     if (priceCoins != null) body['priceCoins'] = priceCoins;
     if (testOnly != null) body['testOnly'] = testOnly;
+    if (bobble != null) body['bobble'] = bobble;
     final response = await _sendJsonRequest(
       method: 'PATCH',
       path: '/admin/shop/items/$itemId',

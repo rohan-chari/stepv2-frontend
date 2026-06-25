@@ -38,6 +38,7 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
   double _scale = 1.0;
   bool _active = true;
   bool _testOnly = false;
+  bool _bobble = false;
   final _priceController = TextEditingController(text: '0');
 
   @override
@@ -116,6 +117,12 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
       _scale = _toDouble(map['scale']) ?? 1.0;
       _active = item['active'] is bool ? item['active'] as bool : true;
       _testOnly = item['testOnly'] is bool ? item['testOnly'] as bool : false;
+      // Fall back to the historical slot rule when the backend hasn't sent a
+      // bobble flag yet (HEAD/FACE/NECK bobbed) so the toggle shows real state.
+      final slot = item['slot'] as String?;
+      _bobble = item['bobble'] is bool
+          ? item['bobble'] as bool
+          : (slot == 'HEAD' || slot == 'FACE' || slot == 'NECK');
       final price = item['priceCoins'];
       _priceController.text = price is num ? price.toInt().toString() : '0';
     });
@@ -141,6 +148,7 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
     return {
       'slot': item['slot'],
       'assetKey': item['assetKey'],
+      'bobble': _bobble,
       'renderMetadata': {
         'offsetX': _offsetX,
         'offsetY': _offsetY,
@@ -173,6 +181,7 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
         active: _active,
         priceCoins: price,
         testOnly: _testOnly,
+        bobble: _bobble,
       );
       final updated = res['item'] is Map
           ? Map<String, dynamic>.from(res['item'] as Map)
@@ -311,6 +320,29 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
                                 activeThumbColor: AppColors.accent,
                                 onChanged: (v) => setState(() => _testOnly = v),
                               ),
+                              SwitchListTile(
+                                contentPadding: EdgeInsets.zero,
+                                dense: true,
+                                title: Text(
+                                  _bobble ? 'Bobbles' : 'Static',
+                                  style: PixelText.body(
+                                    size: 14,
+                                    color: AppColors.textDark,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  _bobble
+                                      ? 'Rides the capybara head-bob'
+                                      : 'Stays still as the capybara moves',
+                                  style: PixelText.body(
+                                    size: 11,
+                                    color: AppColors.textMid,
+                                  ),
+                                ),
+                                value: _bobble,
+                                activeThumbColor: AppColors.accent,
+                                onChanged: (v) => setState(() => _bobble = v),
+                              ),
                               const SizedBox(height: 4),
                               TextField(
                                 controller: _priceController,
@@ -358,9 +390,9 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
                               _slider(
                                 'rotation (rad)',
                                 _rotation,
-                                -0.8,
-                                0.8,
-                                0.01,
+                                -3.15,
+                                3.15,
+                                0.02,
                                 (v) => setState(() => _rotation = v),
                               ),
                               _slider(
