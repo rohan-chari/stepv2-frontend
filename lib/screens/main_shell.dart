@@ -1308,6 +1308,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                 onSkipFirstRace: _skipFirstRaceOnboarding,
                 firstRaceShareTokenPending:
                     widget.authService.pendingShareToken != null,
+                welcomeReferralCode: widget.authService.welcomeReferralCode,
+                onWelcomeDismissed: () {
+                  widget.authService.clearWelcomeReferralCode();
+                },
+                onFetchReferralPreview: (code) =>
+                    _backendApiService.fetchReferralPreview(code: code),
                 error: _error,
                 isLoading: _isLoading,
               ),

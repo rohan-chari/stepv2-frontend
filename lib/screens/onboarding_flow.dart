@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/app_avatar.dart';
 import '../widgets/home_chrome.dart';
 import '../widgets/onboarding_permission_gate.dart';
 import '../widgets/pill_button.dart';
@@ -25,6 +26,9 @@ class OnboardingFlow extends StatelessWidget {
     required this.onJoinOnboardingRace,
     required this.onSkipFirstRace,
     this.firstRaceShareTokenPending = false,
+    this.welcomeReferralCode,
+    this.onWelcomeDismissed,
+    this.onFetchReferralPreview,
     this.error,
     this.isLoading = false,
   });
@@ -64,11 +68,35 @@ class OnboardingFlow extends StatelessWidget {
   /// specific race to join, which MainShell joins + opens once onboarding ends.
   final bool firstRaceShareTokenPending;
 
+  /// One-shot code a just-referred user signed up with. When present (and the
+  /// callbacks below are wired), a welcome step greets them by inviter before
+  /// the permission gates. Null for organic installs — they see no extra step.
+  final String? welcomeReferralCode;
+
+  /// Marks the welcome shown (clears [welcomeReferralCode]) so the flow advances.
+  final VoidCallback? onWelcomeDismissed;
+
+  /// Fetches the public inviter preview ({inviterName, inviterAvatar,
+  /// rewardCoins}) for [welcomeReferralCode]. Errors → a generic welcome.
+  final Future<Map<String, dynamic>> Function(String code)?
+  onFetchReferralPreview;
+
   final String? error;
   final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
+    // Step 0: tailored welcome for a referred user (only when a code resolved
+    // and the host wired the callbacks). Organic installs skip straight to the
+    // permission gates — no added friction.
+    if (welcomeReferralCode != null && onWelcomeDismissed != null) {
+      return OnboardingReferralWelcomeStep(
+        code: welcomeReferralCode!,
+        onFetchPreview: onFetchReferralPreview,
+        onContinue: onWelcomeDismissed!,
+      );
+    }
+
     // Step 1: health permission (required to proceed).
     if (!healthAuthorized) {
       return OnboardingPermissionGate(
@@ -110,6 +138,170 @@ class OnboardingFlow extends StatelessWidget {
       onJoinOnboardingRace: onJoinOnboardingRace,
       onSkip: onSkipFirstRace,
       skipForPendingShare: firstRaceShareTokenPending,
+    );
+  }
+}
+
+/// Tailored welcome for a referred user (onboarding step 0). Greets them by
+/// inviter and states the shared reward, then a single "Let's go" advances into
+/// the normal gates. Best-effort: if the inviter preview can't be fetched it
+/// falls back to a generic "A friend invited you" so onboarding never stalls.
+class OnboardingReferralWelcomeStep extends StatefulWidget {
+  const OnboardingReferralWelcomeStep({
+    super.key,
+    required this.code,
+    required this.onContinue,
+    this.onFetchPreview,
+  });
+
+  final String code;
+  final VoidCallback onContinue;
+  final Future<Map<String, dynamic>> Function(String code)? onFetchPreview;
+
+  @override
+  State<OnboardingReferralWelcomeStep> createState() =>
+      _OnboardingReferralWelcomeStepState();
+}
+
+class _OnboardingReferralWelcomeStepState
+    extends State<OnboardingReferralWelcomeStep> {
+  bool _loading = true;
+  String? _inviterName;
+  String? _inviterAvatar;
+  int? _rewardCoins;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreview();
+  }
+
+  Future<void> _loadPreview() async {
+    final fetch = widget.onFetchPreview;
+    if (fetch == null) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
+    try {
+      final preview = await fetch(widget.code);
+      if (!mounted) return;
+      setState(() {
+        _inviterName = preview['inviterName'] as String?;
+        _inviterAvatar = preview['inviterAvatar'] as String?;
+        _rewardCoins = (preview['rewardCoins'] as num?)?.toInt();
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final inviter = _inviterName;
+    final headline = inviter != null && inviter.isNotEmpty
+        ? '${atName(inviter)} invited you to Bara'
+        : 'A friend invited you to Bara';
+    final reward = _rewardCoins;
+    final body = reward != null && reward > 0
+        ? 'Finish your first race and you’ll both earn coins — '
+              '$reward to get you started.'
+        : 'Finish your first race and you’ll both earn coins.';
+
+    return ColoredBox(
+      color: AppColors.roofLight,
+      child: Stack(
+        children: [
+          const Positioned.fill(
+            child: CustomPaint(
+              painter: ArcadeCheckerPainter(drawBottomStripe: false),
+            ),
+          ),
+          SafeArea(
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: SingleChildScrollView(
+                    physics: const ClampingScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(24, 48, 24, 128),
+                    child: Column(
+                      children: [
+                        if (_loading)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 48),
+                            child: CircularProgressIndicator(
+                              color: AppColors.parchment,
+                              strokeWidth: 3,
+                            ),
+                          )
+                        else ...[
+                          AppAvatar(
+                            name: inviter ?? 'Friend',
+                            imageUrl: _inviterAvatar,
+                            size: 96,
+                            borderColor: AppColors.parchment,
+                            borderWidth: 3,
+                          ),
+                          const SizedBox(height: 18),
+                          Text(
+                            'YOU’RE INVITED',
+                            style: HomeText.label(
+                              size: 13,
+                              color: AppColors.parchmentLight.withValues(
+                                alpha: 0.86,
+                              ),
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            headline,
+                            style: HomeText.title(
+                              size: 30,
+                              color: AppColors.parchment,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            body,
+                            style: HomeText.body(
+                              size: 15,
+                              color: AppColors.parchmentLight.withValues(
+                                alpha: 0.92,
+                              ),
+                              height: 1.38,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 52),
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 54,
+                      child: PillButton(
+                        label: "LET'S GO",
+                        variant: PillButtonVariant.secondary,
+                        fullWidth: true,
+                        padding: EdgeInsets.zero,
+                        icon: Icons.arrow_forward_rounded,
+                        onPressed: _loading ? null : widget.onContinue,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

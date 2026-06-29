@@ -167,4 +167,21 @@ void main() {
     await authService.restoreSession();
     expect(authService.pendingReferralCode, isNull);
   });
+
+  test('welcomeReferralCode restores and clears (one-shot)', () async {
+    SharedPreferences.setMockInitialValues({
+      'auth_welcome_referral_code': 'BARA-7F3K',
+    });
+    final authService = AuthService();
+    await authService.restoreSession();
+    expect(authService.welcomeReferralCode, 'BARA-7F3K');
+
+    await authService.clearWelcomeReferralCode();
+    expect(authService.welcomeReferralCode, isNull);
+
+    // Cleared from storage too — the welcome never shows twice.
+    final restored = AuthService();
+    await restored.restoreSession();
+    expect(restored.welcomeReferralCode, isNull);
+  });
 }

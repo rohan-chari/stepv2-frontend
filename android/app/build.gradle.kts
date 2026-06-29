@@ -103,4 +103,8 @@ dependencies {
     // (health-13.3.1 -> 1.2.0-alpha02) so Gradle doesn't resolve two versions.
     implementation("androidx.work:work-runtime-ktx:2.9.1")
     implementation("androidx.health.connect:connect-client:1.2.0-alpha02")
+    // Play Install Referrer — deterministic, silent referral attribution for
+    // installs from the Play Store (reads the &referrer= we bake into the store
+    // URL on the /r/ landing page). Referral feature; see InstallAttributionService.
+    implementation("com.android.installreferrer:installreferrer:2.2")
 }

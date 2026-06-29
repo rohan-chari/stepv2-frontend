@@ -9,6 +9,7 @@ import UserNotifications
   private var notificationChannel: FlutterMethodChannel?
   private var backgroundSyncChannel: FlutterMethodChannel?
   private var appInfoChannel: FlutterMethodChannel?
+  private var referralChannel: FlutterMethodChannel?
   private let healthStore = HKHealthStore()
   private var hasRegisteredHealthObserver = false
   private lazy var backgroundSyncCoordinator = BackgroundStepSyncCoordinator(
@@ -78,6 +79,49 @@ import UserNotifications
       if call.method == "isTestFlight" {
         result(AppDelegate.isTestFlightBuild())
       } else {
+        result(FlutterMethodNotImplemented)
+      }
+    }
+
+    // Referral clipboard handoff (iOS deferred-attribution convenience).
+    //  * clipboardHasProbableUrl — UIPasteboard.detectPatterns runs SILENTLY
+    //    (no "Allow Paste?" prompt) and only reports whether a URL is present.
+    //  * readClipboardUrl — actually reads the URL string; invoked ONLY behind a
+    //    user tap (so the read is consented), after detect says one exists.
+    // The prompt-free one-tap upgrade is a UIPasteControl button (iOS 16+); this
+    // detect-then-tap split is the equivalent without a custom platform view.
+    referralChannel = FlutterMethodChannel(
+      name: "com.steptracker/referral",
+      binaryMessenger: controller.binaryMessenger
+    )
+
+    referralChannel?.setMethodCallHandler { call, result in
+      switch call.method {
+      case "clipboardHasProbableUrl":
+        if #available(iOS 14.0, *) {
+          UIPasteboard.general.detectPatterns(for: [.probableWebURL]) { outcome in
+            DispatchQueue.main.async {
+              switch outcome {
+              case .success(let patterns):
+                result(patterns.contains(.probableWebURL))
+              case .failure:
+                result(false)
+              }
+            }
+          }
+        } else {
+          result(false)
+        }
+      case "readClipboardUrl":
+        let pasteboard = UIPasteboard.general
+        if let url = pasteboard.url {
+          result(url.absoluteString)
+        } else if let string = pasteboard.string {
+          result(string)
+        } else {
+          result(nil)
+        }
+      default:
         result(FlutterMethodNotImplemented)
       }
     }

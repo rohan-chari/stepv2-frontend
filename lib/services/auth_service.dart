@@ -39,6 +39,11 @@ class AuthService extends ChangeNotifier {
   static const _keyPendingReferralCode = 'auth_pending_referral_code';
   static const _keyPendingReferralCapturedAt =
       'auth_pending_referral_captured_at';
+  // One-shot: the code a just-signed-in user was referred with, stashed so the
+  // onboarding welcome can greet them by inviter. Set at sign-in (the pending
+  // code is cleared there to prevent re-apply), read once by the welcome step,
+  // then cleared. Distinct from _keyPendingReferralCode for exactly that reason.
+  static const _keyWelcomeReferralCode = 'auth_welcome_referral_code';
 
   /// How long a captured referral code stays usable client-side. After this it
   /// is ignored (the server also enforces a signup→first-race window).
@@ -61,6 +66,7 @@ class AuthService extends ChangeNotifier {
   String? _pendingShareToken;
   String? _pendingReferralCode;
   int? _pendingReferralCapturedAtMs;
+  String? _welcomeReferralCode;
 
   String? get identityToken => _identityToken;
   String? get sessionToken => _sessionToken;
@@ -98,6 +104,10 @@ class AuthService extends ChangeNotifier {
     return code;
   }
 
+  /// One-shot referral code for the post-sign-in welcome (inviter greeting).
+  /// Null once the welcome has been dismissed. See [_keyWelcomeReferralCode].
+  String? get welcomeReferralCode => _welcomeReferralCode;
+
   bool get isSignedIn => _identityToken != null && _userIdentifier != null;
   bool get hasSessionToken =>
       _sessionToken != null && _sessionToken!.isNotEmpty;
@@ -124,6 +134,7 @@ class AuthService extends ChangeNotifier {
     _pendingShareToken = prefs.getString(_keyPendingShareToken);
     _pendingReferralCode = prefs.getString(_keyPendingReferralCode);
     _pendingReferralCapturedAtMs = prefs.getInt(_keyPendingReferralCapturedAt);
+    _welcomeReferralCode = prefs.getString(_keyWelcomeReferralCode);
     notifyListeners();
     return isSignedIn && hasSessionToken;
   }
@@ -164,9 +175,11 @@ class AuthService extends ChangeNotifier {
 
       final backendUser = response['user'] as Map<String, dynamic>;
       // Attribution is recorded server-side in the new-user create branch (when
-      // a code was present); clear it so a later re-login can't re-apply it.
+      // a code was present); clear the pending code so a later re-login can't
+      // re-apply it, but stash a one-shot copy for the onboarding welcome.
       if (referralCode != null) {
         await setPendingReferralCode(null);
+        await _setWelcomeReferralCode(referralCode);
       }
 
       _identityToken = identityToken;
@@ -452,6 +465,24 @@ class AuthService extends ChangeNotifier {
     await prefs.setInt(_keyPendingReferralCapturedAt, nowMs);
     notifyListeners();
   }
+
+  /// Stash (or clear) the one-shot welcome code. Set at sign-in when the user
+  /// was referred; cleared by the welcome step once shown.
+  Future<void> _setWelcomeReferralCode(String? code) async {
+    // Update the field + notify SYNCHRONOUSLY so a listener (MainShell) rebuilds
+    // and advances the onboarding flow immediately; persistence follows.
+    _welcomeReferralCode = (code != null && code.isNotEmpty) ? code : null;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    if (_welcomeReferralCode != null) {
+      await prefs.setString(_keyWelcomeReferralCode, _welcomeReferralCode!);
+    } else {
+      await prefs.remove(_keyWelcomeReferralCode);
+    }
+  }
+
+  /// Clears the one-shot welcome code after the welcome has been shown.
+  Future<void> clearWelcomeReferralCode() => _setWelcomeReferralCode(null);
 
   Future<void> updateSessionToken(String? token) async {
     _sessionToken = token;

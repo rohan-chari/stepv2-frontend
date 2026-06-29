@@ -13,6 +13,7 @@ import 'services/auth_service.dart';
 import 'services/backend_api_service.dart';
 import 'services/background_sync_bootstrap_service.dart';
 import 'services/deep_link_service.dart';
+import 'services/install_attribution_service.dart';
 import 'services/notification_service.dart';
 import 'styles.dart';
 import 'utils/app_version_gate.dart';
@@ -38,6 +39,14 @@ Future<void> main() async {
   final authService = AuthService();
   final deepLinkService = DeepLinkService(authService: authService);
   await deepLinkService.initialize();
+
+  // First-launch referral auto-capture for the not-yet-installed case (Android
+  // Play Install Referrer / iOS clipboard handoff). Self-gates to run once and
+  // defers to a deep-link-captured code if one already exists. Never blocks
+  // launch on failure.
+  await InstallAttributionService(
+    authService: authService,
+  ).resolveOnFirstLaunch();
 
   runApp(
     StepTrackerApp(
