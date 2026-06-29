@@ -21,7 +21,7 @@ class _FakeBackendApiService extends BackendApiService {
     int buyInAmount = 0,
     String payoutPreset = 'WINNER_TAKES_ALL',
     bool isPublic = false,
-    int maxParticipants = 10,
+    int? maxParticipants = 10,
     DateTime? scheduledStartAt,
   }) async {
     lastCreateRaceCall = {

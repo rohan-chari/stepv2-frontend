@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:step_tracker/screens/tabs/challenges_tab.dart';
 import 'package:step_tracker/screens/tabs/friends_tab.dart';
 import 'package:step_tracker/screens/tabs/profile_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
@@ -85,41 +84,6 @@ Future<void> _pullToRefresh(WidgetTester tester) async {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
-  testWidgets('ChallengesTab pull-to-refresh calls the page refresh callback', (
-    WidgetTester tester,
-  ) async {
-    final authService = await _createAuthService();
-    var refreshCalls = 0;
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ChallengesTab(
-            authService: authService,
-            currentChallenge: {
-              'challenge': {
-                'title': 'Summit Sprint',
-                'description': 'Outwalk your friend this week.',
-              },
-              'instances': const [],
-            },
-            friendsSteps: const [],
-            onChallengeChanged: () {},
-            onRefresh: () async {
-              refreshCalls += 1;
-            },
-          ),
-        ),
-      ),
-    );
-
-    expect(find.byType(RefreshIndicator), findsOneWidget);
-
-    await _pullToRefresh(tester);
-
-    expect(refreshCalls, 1);
-  });
 
   testWidgets('FriendsTab pull-to-refresh reloads friends and shell state', (
     WidgetTester tester,
@@ -264,7 +228,6 @@ void main() {
             body: ProfileTab(
               authService: authService,
               displayName: 'Trail Walker',
-              stepGoal: 8000,
               email: 'walker@example.com',
               onSettingsChanged: () {},
               onRefresh: () async {

@@ -5,7 +5,7 @@ import 'package:step_tracker/screens/tabs/ranked_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 
-enum _Mode { inCohort, noCohort, promotedLastWeek, v2Missing }
+enum _Mode { inCohort, noCohort, v2Missing }
 
 const _kTiersV2 = [
   {'key': 'BRONZE', 'label': 'Bronze', 'promotionBonus': 0},
@@ -110,17 +110,7 @@ class _FakeRankedV2Api extends BackendApiService {
         ],
       },
       'tiers': _kTiersV2,
-      'lastWeek': mode == _Mode.promotedLastWeek
-          ? {
-              'weekIndex': 4,
-              'finalRank': 3,
-              'tier': 'SILVER',
-              'resultTier': 'GOLD',
-              'outcome': 'PROMOTE',
-              'rewardCoins': 150,
-              'promotionCoins': 200,
-            }
-          : null,
+      'lastWeek': null,
     };
   }
 
@@ -258,18 +248,6 @@ void main() {
 
     expect(find.textContaining("You're in"), findsOneWidget);
     expect(find.text('How Ranked works'), findsOneWidget);
-  });
-
-  testWidgets('surfaces last week’s promotion with the combined coin total', (
-    tester,
-  ) async {
-    final auth = await _createAuthService();
-    await tester
-        .pumpWidget(_build(auth, _FakeRankedV2Api(_Mode.promotedLastWeek)));
-    await tester.pump();
-
-    expect(find.text('Promoted to Gold!'), findsOneWidget);
-    expect(find.text('+350'), findsOneWidget); // 150 reward + 200 bonus
   });
 
   testWidgets('falls back to the legacy season ladder when /ranked/v2 404s', (

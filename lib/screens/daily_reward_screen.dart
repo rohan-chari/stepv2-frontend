@@ -98,16 +98,15 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
         identityToken: token,
         localDate: _todayLocalDate(),
       );
-      final coins = res['coins'];
-      if (coins is num) {
-        widget.authService.updateCoins(coins.toInt());
-      }
       if (!mounted) return;
+      // Don't apply coins / refresh yet — the accessory reveal still spins (and
+      // the coin reveal hasn't shown). Stash the result and apply it only when
+      // the reveal settles (_applyReward, via _RewardReveal.onSettled), so the
+      // wallet/inventory doesn't jump before the roll lands.
       setState(() {
         _claimedReward = res;
         _isClaiming = false;
       });
-      widget.onClaimed?.call();
     } catch (e) {
       if (!mounted) return;
       setState(() => _isClaiming = false);
@@ -130,17 +129,15 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
         identityToken: token,
         localDate: _todayLocalDate(),
       );
-      final coins = res['coins'];
-      if (coins is num) {
-        widget.authService.updateCoins(coins.toInt());
-      }
       if (!mounted) return;
+      // Don't apply the coin balance yet — the reel hasn't spun. Stash the
+      // result and credit coins only when the spin lands (_onStripComplete),
+      // so the wallet doesn't jump before the roll is revealed.
       setState(() {
         _boxResult = res;
         _stripItems = _generateStrip(res);
         _isClaiming = false;
       });
-      widget.onClaimed?.call();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -153,7 +150,24 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
 
   void _onStripComplete() {
     if (_claimedReward != null || _boxResult == null) return;
+    // Spin landed: credit the coins and reveal the reward.
+    _applyReward(_boxResult!);
     setState(() => _claimedReward = _boxResult);
+  }
+
+  // Applies a claimed reward's side effects — credit coins + trigger the parent
+  // refresh. Guarded so it runs exactly once: box mode calls it from
+  // _onStripComplete (when the reel lands), legacy mode from the reveal's
+  // onSettled (when the coin card shows / the accessory spinner lands).
+  bool _rewardApplied = false;
+  void _applyReward(Map<String, dynamic> reward) {
+    if (_rewardApplied) return;
+    _rewardApplied = true;
+    final coins = reward['coins'];
+    if (coins is num) {
+      widget.authService.updateCoins(coins.toInt());
+    }
+    widget.onClaimed?.call();
   }
 
   @override
@@ -181,6 +195,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
                       : _claimedReward != null
                       ? _RewardReveal(
                           reward: _claimedReward!,
+                          onSettled: () => _applyReward(_claimedReward!),
                           onClose: () => Navigator.of(context).pop(true),
                         )
                       : _opening
@@ -915,9 +930,18 @@ class _LadderTile extends StatelessWidget {
 }
 
 class _RewardReveal extends StatefulWidget {
-  const _RewardReveal({required this.reward, required this.onClose});
+  const _RewardReveal({
+    required this.reward,
+    required this.onClose,
+    this.onSettled,
+  });
   final Map<String, dynamic> reward;
   final VoidCallback onClose;
+
+  /// Fired once when the reveal settles — the coin card is shown, or the
+  /// accessory spinner has landed. The parent uses this to apply the reward
+  /// (credit coins + refresh) so nothing is granted before the roll lands.
+  final VoidCallback? onSettled;
 
   @override
   State<_RewardReveal> createState() => _RewardRevealState();
@@ -934,6 +958,10 @@ class _RewardRevealState extends State<_RewardReveal> {
     // the reveal. The standalone accessory spinner is only for legacy day-6.
     if (type != 'ACCESSORY' || widget.reward['rarity'] != null) {
       _spinDone = true;
+      // No spinner to wait on — the card shows now, so settle on the next frame.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onSettled?.call();
+      });
     }
   }
 
@@ -949,7 +977,11 @@ class _RewardRevealState extends State<_RewardReveal> {
     if (type == 'ACCESSORY' && shopItem != null && !_spinDone) {
       return _AccessorySpinner(
         targetItem: shopItem,
-        onComplete: () => setState(() => _spinDone = true),
+        onComplete: () {
+          // Spinner landed: apply the reward, then show the claimed card.
+          widget.onSettled?.call();
+          setState(() => _spinDone = true);
+        },
       );
     }
 

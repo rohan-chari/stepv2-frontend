@@ -12,6 +12,8 @@ FeaturedRaceCard _card({
   bool isUpcoming = false,
   bool isJoined = false,
   bool isFull = false,
+  int finishRewardPool = 100,
+  int finishRewardPlaces = 0,
   VoidCallback? onJoin,
   VoidCallback? onView,
 }) {
@@ -21,7 +23,8 @@ FeaturedRaceCard _card({
     endsAt: DateTime.now().add(const Duration(hours: 8)),
     startsAt: DateTime.now().add(const Duration(hours: 5)),
     participantCount: 12,
-    finishRewardPool: 100,
+    finishRewardPool: finishRewardPool,
+    finishRewardPlaces: finishRewardPlaces,
     isJoined: isJoined,
     isFull: isFull,
     isJoining: false,
@@ -61,6 +64,34 @@ void main() {
     await tester.pumpWidget(_host(_card(isUpcoming: true, isFull: true)));
     expect(find.text('FULL'), findsOneWidget);
     expect(find.text('OPT IN'), findsNothing);
+  });
+
+  testWidgets('reward line names the paid place count, not a fixed fraction', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(_card(finishRewardPool: 1200, finishRewardPlaces: 10)),
+    );
+    expect(find.text('Top 10 win 1200'), findsOneWidget);
+    expect(find.textContaining('50%'), findsNothing);
+  });
+
+  testWidgets('reward line reads "Winner wins" for a single paid place', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(_card(finishRewardPool: 100, finishRewardPlaces: 1)),
+    );
+    expect(find.text('Winner wins 100'), findsOneWidget);
+  });
+
+  testWidgets('reward line falls back to fraction-free copy when places absent', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(_card(finishRewardPool: 100, finishRewardPlaces: 0)),
+    );
+    expect(find.text('Top finishers win 100'), findsOneWidget);
   });
 
   testWidgets('tapping OPT IN calls onJoin', (tester) async {

@@ -6,8 +6,9 @@ import 'pill_button.dart';
 import 'race_ui.dart';
 
 /// Compact card for the pinned "Featured" strip on the Races tab. Leads with
-/// the top-50% coin reward, shows a countdown + live racer count, and offers a
-/// one-tap JOIN (which flips to VIEW once joined, or FULL at capacity).
+/// the minted coin reward (split across the top `finishRewardPlaces` finishers),
+/// shows a countdown + live racer count, and offers a one-tap JOIN (which flips
+/// to VIEW once joined, or FULL at capacity).
 class FeaturedRaceCard extends StatelessWidget {
   const FeaturedRaceCard({
     super.key,
@@ -16,6 +17,7 @@ class FeaturedRaceCard extends StatelessWidget {
     required this.endsAt,
     required this.participantCount,
     required this.finishRewardPool,
+    this.finishRewardPlaces = 0,
     required this.isJoined,
     required this.isFull,
     required this.isJoining,
@@ -31,6 +33,10 @@ class FeaturedRaceCard extends StatelessWidget {
   final DateTime? endsAt;
   final int participantCount;
   final int finishRewardPool;
+  // How many top places split the pool (server-computed, scales with field).
+  // 0 when the backend didn't send it (older backend) — we then fall back to a
+  // fraction-free label rather than the stale "Top 50%".
+  final int finishRewardPlaces;
   final bool isJoined;
   final bool isFull;
   final bool isJoining;
@@ -42,6 +48,19 @@ class FeaturedRaceCard extends StatelessWidget {
   final bool isUpcoming;
   final DateTime? startsAt;
   final double width;
+
+  // Coin-reward line. The pool is split across the top `finishRewardPlaces`
+  // finishers, so name the actual place count rather than a fixed fraction. We
+  // fall back to a fraction-free label when an older backend omits the count.
+  String get _rewardLabel {
+    if (finishRewardPlaces == 1) {
+      return 'Winner wins $finishRewardPool';
+    }
+    if (finishRewardPlaces > 1) {
+      return 'Top $finishRewardPlaces win $finishRewardPool';
+    }
+    return 'Top finishers win $finishRewardPool';
+  }
 
   String get _cadenceLabel {
     if (isUpcoming) {
@@ -132,7 +151,7 @@ class FeaturedRaceCard extends StatelessWidget {
                       const SizedBox(width: 5),
                       Flexible(
                         child: Text(
-                          'Top 50% win $finishRewardPool',
+                          _rewardLabel,
                           textAlign: TextAlign.center,
                           style: PixelText.title(
                             size: 13,

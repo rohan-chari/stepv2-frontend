@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../styles.dart';
 import '../utils/at_name.dart';
+import '../widgets/app_avatar.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/retro_card.dart';
@@ -152,6 +153,7 @@ class _RaceInviteScreenState extends State<RaceInviteScreen> {
   Widget _buildFriendCard(Map<String, dynamic> friend) {
     final id = friend['id'] as String? ?? '';
     final name = friend['displayName'] as String? ?? '???';
+    final profilePhotoUrl = friend['profilePhotoUrl'] as String?;
     final selected = _selectedIds.contains(id);
 
     return Padding(
@@ -189,6 +191,8 @@ class _RaceInviteScreenState extends State<RaceInviteScreen> {
                     ? const Icon(Icons.check, size: 16, color: Colors.white)
                     : null,
               ),
+              const SizedBox(width: 12),
+              AppAvatar(name: name, imageUrl: profilePhotoUrl, size: 34),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(

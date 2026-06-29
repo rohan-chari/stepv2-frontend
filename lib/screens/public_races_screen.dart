@@ -294,6 +294,14 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
     final powerupsEnabled = race['powerupsEnabled'] as bool? ?? false;
     final finishReward = race['finishReward'] as Map<String, dynamic>?;
     final finishRewardPool = (finishReward?['pool'] as num?)?.toInt() ?? 0;
+    final finishRewardPlaces =
+        (finishReward?['paidPlaces'] as num?)?.toInt() ?? 0;
+    // "TOP 3" / "WINNER" / fraction-free fallback for older backends.
+    final finishRewardLabel = finishRewardPlaces == 1
+        ? 'WINNER'
+        : finishRewardPlaces > 1
+        ? 'TOP $finishRewardPlaces'
+        : 'REWARD';
     final isJoining = _joiningRaceId == raceId;
 
     // Races are time-based: show time remaining, not a step target.
@@ -343,7 +351,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
                 ],
                 if (finishRewardPool > 0) ...[
                   const SizedBox(width: 16),
-                  _buildStat('TOP 50%', '$finishRewardPool'),
+                  _buildStat(finishRewardLabel, '$finishRewardPool'),
                 ],
                 if (powerupsEnabled) ...[
                   const SizedBox(width: 16),

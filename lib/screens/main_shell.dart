@@ -256,13 +256,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && _healthAuthorized) {
-      _fetchSteps();
-      _refreshMe();
-      _fetchFriendsSteps();
-      _fetchRaces(checkResults: true);
-      _fetchShopCatalog();
-      _fetchRaceCard();
-      _maybeShowRankedResults();
+      // Mirror initial load: refresh every home surface, then surface the
+      // results modals only once all calls have settled.
+      unawaited(_loadHomeAndShowResults());
       _startForegroundPolling();
     } else if (state == AppLifecycleState.paused) {
       _stopForegroundPolling();
@@ -298,14 +294,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     setState(() => _healthAuthorized = true);
     await _backgroundSyncBootstrapService.enableHealthKitBackgroundDelivery();
     await _checkNotificationState();
-    _fetchRaceCard();
-    await _fetchSteps();
-    _refreshMe();
-    _fetchFriendsSteps();
-    _fetchRaces(checkResults: true);
-    _fetchShopCatalog();
-    _maybeShowRankedResults();
     _startForegroundPolling();
+    // Load all home-page surfaces, then show the race/ranked results modals
+    // only after every call has settled — never over still-loading sections.
+    unawaited(_loadHomeAndShowResults());
     // Cold start with a share link tapped before launch: now that the session
     // is valid and onboarding state is loaded, join + open the shared race.
     _maybeDrainPendingSharedRace();
@@ -546,7 +538,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _fetchRaces({bool checkResults = false}) async {
+  Future<void> _fetchRaces() async {
     final previous = _racesData;
     if (mounted) {
       setState(() {
@@ -578,10 +570,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         });
       }
 
-      // Only the resume and initial-load paths request the results check; the
-      // 5-minute foreground poll must not interrupt the user mid-session.
-      if (checkResults) _maybeShowRaceResults();
-
       // Featured strip rides along with the races list so it stays in sync
       // (e.g. after a join). Self-contained error handling — never disrupts the
       // races load above.
@@ -592,6 +580,27 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         _racesState = Loadable.error(e.toString(), data: previous);
       });
     }
+  }
+
+  /// Loads every home-page surface in parallel and, once they have ALL
+  /// settled, surfaces the race/ranked results modals. Gating the popups on
+  /// completion keeps a results modal from appearing over sections that are
+  /// still showing loading skeletons. Race results go first: it sets its open
+  /// guard before its first await, so the ranked check then defers behind it,
+  /// preserving the prior sequencing. Every fetch swallows its own errors, so
+  /// the wait never throws and the modals always get their chance.
+  Future<void> _loadHomeAndShowResults() async {
+    await Future.wait([
+      _fetchSteps(),
+      _fetchRaceCard(),
+      _refreshMe(),
+      _fetchFriendsSteps(),
+      _fetchRaces(),
+      _fetchShopCatalog(),
+    ]);
+    if (!mounted) return;
+    _maybeShowRaceResults();
+    _maybeShowRankedResults();
   }
 
   Future<void> _fetchFeaturedRaces() async {

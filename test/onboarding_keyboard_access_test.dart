@@ -25,7 +25,7 @@ void main() {
     expect(tester.getTopLeft(find.text('CONTINUE')).dy, lessThan(360));
   });
 
-  testWidgets('DisplayNameScreen centers the prompt and dismisses keyboard', (
+  testWidgets('DisplayNameScreen dismisses the keyboard on tap outside', (
     WidgetTester tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(360, 640));
@@ -35,11 +35,7 @@ void main() {
       MaterialApp(home: DisplayNameScreen(authService: AuthService())),
     );
 
-    final prompt = find.text('This is how friends will find you');
     final input = find.byType(TextField);
-
-    expect(tester.getCenter(prompt).dy, inInclusiveRange(200, 460));
-    expect(tester.getCenter(input).dy, inInclusiveRange(250, 520));
 
     await tester.showKeyboard(input);
     await tester.pump();

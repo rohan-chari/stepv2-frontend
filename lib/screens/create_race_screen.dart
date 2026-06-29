@@ -32,7 +32,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
   int _selectedDuration = 7;
   bool _isCreating = false;
   bool _powerupsEnabled = false;
-  int _powerupInterval = 5000;
+  int _powerupInterval = 2000;
   bool _buyInEnabled = false;
   int _buyInAmount = 100;
   String _payoutPreset = 'WINNER_TAKES_ALL';

@@ -8,8 +8,8 @@ import 'package:step_tracker/screens/tabs/profile_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/services/background_sync_bootstrap_service.dart';
-import 'package:step_tracker/services/challenge_week_step_sync_service.dart';
 import 'package:step_tracker/services/health_service.dart';
+import 'package:step_tracker/widgets/app_avatar.dart';
 
 class _FakeHealthService extends HealthService {
   @override
@@ -26,19 +26,6 @@ class _FakeBackgroundSyncBootstrapService
     extends BackgroundSyncBootstrapService {
   @override
   Future<void> enableHealthKitBackgroundDelivery() async {}
-}
-
-class _FakeChallengeWeekStepSyncService extends ChallengeWeekStepSyncService {
-  _FakeChallengeWeekStepSyncService(this.result);
-
-  final List<StepData> result;
-
-  @override
-  Future<List<StepData>> loadCurrentChallengeWeekSteps({
-    required String identityToken,
-  }) async {
-    return result;
-  }
 }
 
 class _FakeBackendApiService extends BackendApiService {
@@ -62,6 +49,7 @@ class _FakeBackendApiService extends BackendApiService {
   Future<void> recordSteps({
     required String identityToken,
     required StepData stepData,
+    bool skipRaceResolution = false,
   }) async {}
 
   @override
@@ -159,9 +147,6 @@ void main() {
             backendApiService: backendApiService,
             backgroundSyncBootstrapService:
                 _FakeBackgroundSyncBootstrapService(),
-            challengeWeekStepSyncService: _FakeChallengeWeekStepSyncService([
-              StepData(steps: 2400, date: DateTime.utc(2026, 4, 9)),
-            ]),
           ),
         ),
       );
@@ -169,24 +154,24 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      expect(find.text('ADD A PROFILE PHOTO?'), findsOneWidget);
+      expect(find.text('Add a profile photo?'), findsOneWidget);
 
       await authService.syncFromBackendUser({
         'profilePhotoUrl': 'https://example.com/profile.jpg',
       });
       await tester.pump();
 
-      expect(find.text('ADD A PROFILE PHOTO?'), findsNothing);
+      expect(find.text('Add a profile photo?'), findsNothing);
 
       await authService.syncFromBackendUser({'profilePhotoUrl': null});
       await tester.pump();
 
-      expect(find.text('ADD A PROFILE PHOTO?'), findsOneWidget);
+      expect(find.text('Add a profile photo?'), findsOneWidget);
     },
   );
 
   testWidgets(
-    'ProfileTab photo controls react immediately to profile photo auth changes',
+    'ProfileTab photo sheet reflects the current profile photo state',
     (WidgetTester tester) async {
       final authService = await _createAuthService();
 
@@ -196,9 +181,12 @@ void main() {
             body: ProfileTab(
               authService: authService,
               displayName: 'Trail Walker',
-              stepGoal: 8000,
               email: 'walker@example.com',
               onSettingsChanged: () {},
+              // Photo controls now live in a bottom sheet behind the avatar tap;
+              // the tap is only wired when onAddProfilePhoto is supplied.
+              onAddProfilePhoto: () async {},
+              onRemoveProfilePhoto: () async {},
               backendApiService: _FakeBackendApiService(),
             ),
           ),
@@ -207,22 +195,30 @@ void main() {
 
       await tester.pump();
 
+      // No photo yet: the sheet offers "ADD PHOTO" and no "REMOVE PHOTO".
+      await tester.tap(find.byType(AppAvatar).first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
       expect(find.text('ADD PHOTO'), findsOneWidget);
       expect(find.text('REMOVE PHOTO'), findsNothing);
+      await tester.tap(find.text('CANCEL'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
 
+      // Once a photo syncs in, the sheet switches to "CHANGE PHOTO" + "REMOVE PHOTO".
       await authService.syncFromBackendUser({
         'profilePhotoUrl': 'https://example.com/profile.jpg',
       });
       await tester.pump();
 
+      await tester.tap(find.byType(AppAvatar).first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
       expect(find.text('CHANGE PHOTO'), findsOneWidget);
       expect(find.text('REMOVE PHOTO'), findsOneWidget);
-
-      await authService.syncFromBackendUser({'profilePhotoUrl': null});
+      await tester.tap(find.text('CANCEL'));
       await tester.pump();
-
-      expect(find.text('ADD PHOTO'), findsOneWidget);
-      expect(find.text('REMOVE PHOTO'), findsNothing);
+      await tester.pump(const Duration(milliseconds: 400));
     },
   );
 }

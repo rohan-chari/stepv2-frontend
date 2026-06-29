@@ -263,8 +263,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   // Anchors the iOS/iPad share popover to the share button's rect.
   final GlobalKey _shareButtonKey = GlobalKey();
 
-  // Per-race opt-out for live placement-change notifications. Seeded from the
-  // race payload (`myPlacementAlertsMuted`) and toggled optimistically.
+  // Per-race notification opt-out. One toggle that silences BOTH live
+  // placement-change pushes and chat-message pushes for this race. Seeded from
+  // the race payload (`myPlacementAlertsMuted`/`myChatMuted`) and toggled
+  // optimistically, flipping both backend flags together.
   bool _placementMuted = false;
   bool _togglingPlacementMute = false;
 
@@ -419,8 +421,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       setState(() {
         _race = details;
         _isLoading = false;
-        // Defaults false for older backends that don't return the key.
-        _placementMuted = details['myPlacementAlertsMuted'] as bool? ?? false;
+        // One mute covers both placement and chat; treat the race as muted if
+        // either flag is set. Defaults false for older backends missing the keys.
+        _placementMuted = (details['myPlacementAlertsMuted'] as bool? ?? false) ||
+            (details['myChatMuted'] as bool? ?? false);
       });
 
       if (details['status'] == 'ACTIVE') {
@@ -1939,6 +1943,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     final finishRewardPool = finishReward != null
         ? _readInt(finishReward['pool'], fallback: 0)
         : 0;
+    final finishRewardPlaces = finishReward != null
+        ? _readInt(finishReward['paidPlaces'], fallback: 0)
+        : 0;
     final endsAtRaw = _race!['endsAt'] as String?;
     final endsAt = endsAtRaw != null
         ? DateTime.tryParse(endsAtRaw)?.toLocal()
@@ -2071,7 +2078,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                 if (finishRewardPool > 0) ...[
                   const SizedBox(height: 2),
                   Text(
-                    'Top 50% split $finishRewardPool gold',
+                    finishRewardPlaces == 1
+                        ? 'Winner takes $finishRewardPool gold'
+                        : finishRewardPlaces > 1
+                        ? 'Top $finishRewardPlaces split $finishRewardPool gold'
+                        : 'Top finishers split $finishRewardPool gold',
                     style: PixelText.body(size: 13, color: AppColors.coinDark),
                   ),
                 ],
@@ -2554,17 +2565,18 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     }
   }
 
-  /// Whether to show the per-race notification mute toggle. Placement pushes
-  /// only fire for live races you're running in, so the control is only useful
-  /// (and only shown) for an ACTIVE race the user has accepted.
+  /// Whether to show the per-race notification mute toggle. It silences both
+  /// placement and chat pushes, which only fire for live races you're running
+  /// in, so the control is only shown for an ACTIVE race the user has accepted.
   bool _canMutePlacementAlerts() {
     final race = _race;
     if (race == null) return false;
     return race['myStatus'] == 'ACCEPTED' && race['status'] == 'ACTIVE';
   }
 
-  /// Flips the per-race placement-notification mute. Optimistic: update the icon
-  /// immediately, persist, and revert on failure.
+  /// Flips the per-race notification mute, covering BOTH placement-change and
+  /// chat pushes. Optimistic: update the icon immediately, persist both backend
+  /// flags together, and revert on failure.
   Future<void> _togglePlacementMute() async {
     if (_togglingPlacementMute) return;
     final identityToken = widget.authService.authToken;
@@ -2575,23 +2587,34 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       _placementMuted = next;
       _togglingPlacementMute = true;
     });
+    // Keep the chat service's local mute state in sync without a second
+    // round-trip (the API call below is the source of truth).
+    _chat?.setMutedFromServer(next);
     try {
-      await _api.setRacePlacementMute(
-        identityToken: identityToken,
-        raceId: widget.raceId,
-        muted: next,
-      );
+      await Future.wait([
+        _api.setRacePlacementMute(
+          identityToken: identityToken,
+          raceId: widget.raceId,
+          muted: next,
+        ),
+        _api.setRaceChatMute(
+          identityToken: identityToken,
+          raceId: widget.raceId,
+          muted: next,
+        ),
+      ]);
       if (mounted) {
         showInfoToast(
           context,
           next
-              ? 'Muted placement alerts for this race'
-              : 'Placement alerts on for this race',
+              ? 'Muted notifications for this race'
+              : 'Notifications on for this race',
         );
       }
     } catch (e) {
       if (mounted) {
         setState(() => _placementMuted = !next); // revert
+        _chat?.setMutedFromServer(!next);
         showErrorToast(context, 'Couldn’t update notifications: $e');
       }
     } finally {
@@ -3351,6 +3374,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     final name = p['displayName'] as String? ?? '???';
     final status = p['status'] as String? ?? '';
     final userId = p['userId'] as String? ?? '';
+    final profilePhotoUrl = p['profilePhotoUrl'] as String?;
     final isMe = userId == _myUserId;
     final isCreator = _race?['isCreator'] as bool? ?? false;
     final raceStatus = _race?['status'] as String? ?? '';
@@ -3377,6 +3401,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
+          AppAvatar(
+            name: name,
+            imageUrl: profilePhotoUrl,
+            size: 34,
+            isUser: isMe,
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
               isMe ? '${atName(name)} (you)' : atName(name),

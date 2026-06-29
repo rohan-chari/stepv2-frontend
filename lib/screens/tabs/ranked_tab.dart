@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../models/loadable.dart';
@@ -269,7 +271,7 @@ class _RankedTabState extends State<RankedTab> {
                   ],
                 ),
               ),
-              _SeasonCountdown(title: _seasonSubtitle()),
+              _howItWorksButton(AppColors.parchment),
             ],
           ),
         ),
@@ -290,24 +292,12 @@ class _RankedTabState extends State<RankedTab> {
         : 'Season $index · climb the ladder by walking';
   }
 
-  int? _seasonDaysLeft() {
+  // When the current week/season closes — drives the live countdown in the
+  // status hero. Null when the backend doesn't send an end date (older or
+  // between-season), in which case the countdown is simply hidden.
+  DateTime? _seasonEndsAt() {
     final source = _v2 ? (_week?['endsOn']) : (_season?['endsAt']);
-    final ends = DateTime.tryParse(source?.toString() ?? '');
-    if (ends == null) return null;
-    final now = DateTime.now();
-    if (ends.isBefore(now)) return 0;
-    final hours = ends.difference(now).inHours;
-    return (hours / 24).ceil();
-  }
-
-  String _seasonSubtitle() {
-    final days = _seasonDaysLeft();
-    if (days == null) {
-      return _v2 ? 'Resets every Monday' : 'Walk to earn Ranked Points';
-    }
-    if (days > 1) return '$days days left';
-    if (days == 1) return '1 day left';
-    return 'ends today';
+    return DateTime.tryParse(source?.toString() ?? '');
   }
 
   // RP checkpoints (floor → the band you enter at that floor), ascending across
@@ -605,16 +595,9 @@ class _RankedTabState extends State<RankedTab> {
         }
     }
 
-    final daysLeft = _seasonDaysLeft();
     final weekIndex = (_week?['index'] as num?)?.toInt();
     final metaParts = <String>[
       if (weekIndex != null) 'Week $weekIndex',
-      if (daysLeft != null)
-        daysLeft > 1
-            ? '$daysLeft days left'
-            : daysLeft == 1
-            ? '1 day left'
-            : 'ends today',
     ];
 
     return Container(
@@ -677,8 +660,8 @@ class _RankedTabState extends State<RankedTab> {
           ),
           const SizedBox(height: 10),
           _heroFooter(s, fg),
-          const SizedBox(height: 12),
-          _howItWorksButton(fg),
+          const SizedBox(height: 14),
+          _LiveCountdown(endsAt: _seasonEndsAt(), fg: fg, numColor: numColor),
         ],
       ),
     );
@@ -1892,21 +1875,112 @@ class _RewardLine extends StatelessWidget {
   }
 }
 
-class _SeasonCountdown extends StatelessWidget {
-  const _SeasonCountdown({required this.title});
+// Big, live-ticking "time left" for the status hero. Owns its own 1-second
+// timer so only this subtree rebuilds each tick (not the whole tab). Hides
+// itself when there's no end date or the week has already closed.
+class _LiveCountdown extends StatefulWidget {
+  const _LiveCountdown({
+    required this.endsAt,
+    required this.fg,
+    required this.numColor,
+  });
 
-  final String title;
+  final DateTime? endsAt;
+  final Color fg;
+  final Color numColor;
+
+  @override
+  State<_LiveCountdown> createState() => _LiveCountdownState();
+}
+
+class _LiveCountdownState extends State<_LiveCountdown> {
+  Timer? _ticker;
+  DateTime _now = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final ends = widget.endsAt;
+    if (ends == null) return const SizedBox.shrink();
+
+    final remaining = ends.difference(_now);
+    final safe = remaining.isNegative ? Duration.zero : remaining;
+    final days = safe.inDays;
+    final hours = safe.inHours.remainder(24);
+    final minutes = safe.inMinutes.remainder(60);
+    final seconds = safe.inSeconds.remainder(60);
+
+    final fg = widget.fg;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          title,
-          style: PixelText.title(size: 13, color: AppColors.medalGold),
+          'TIME LEFT',
+          style: PixelText.body(size: 10, color: fg.withValues(alpha: 0.7)),
+        ),
+        const SizedBox(height: 6),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _unit(days, 'DAYS'),
+              _sep(),
+              _unit(hours, 'HRS'),
+              _sep(),
+              _unit(minutes, 'MIN'),
+              _sep(),
+              _unit(seconds, 'SEC'),
+            ],
+          ),
         ),
       ],
+    );
+  }
+
+  Widget _unit(int value, String label) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value.toString().padLeft(2, '0'),
+          style: PixelText.number(size: 30, color: widget.numColor),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: PixelText.body(
+            size: 8,
+            color: widget.fg.withValues(alpha: 0.7),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _sep() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(6, 0, 6, 14),
+      child: Text(
+        ':',
+        style: PixelText.number(
+          size: 24,
+          color: widget.numColor.withValues(alpha: 0.5),
+        ),
+      ),
     );
   }
 }
