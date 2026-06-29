@@ -100,6 +100,7 @@ class BackendApiService {
     required String userIdentifier,
     String? email,
     String? name,
+    String? referralCode,
   }) async {
     final response = await _sendJsonRequest(
       method: 'POST',
@@ -109,6 +110,10 @@ class BackendApiService {
         'userIdentifier': userIdentifier,
         'email': email,
         'name': name,
+        // Additive/optional — included only when a referral code was captured,
+        // so older backends (which ignore it) and this build both stay happy.
+        if (referralCode != null && referralCode.isNotEmpty)
+          'referralCode': referralCode,
       },
     );
 
@@ -130,11 +135,18 @@ class BackendApiService {
     required String idToken,
     String? email,
     String? name,
+    String? referralCode,
   }) async {
     final response = await _sendJsonRequest(
       method: 'POST',
       path: '/auth/google',
-      body: {'idToken': idToken, 'email': email, 'name': name},
+      body: {
+        'idToken': idToken,
+        'email': email,
+        'name': name,
+        if (referralCode != null && referralCode.isNotEmpty)
+          'referralCode': referralCode,
+      },
     );
 
     final payload = await _decodeJsonResponse(response);
@@ -810,6 +822,72 @@ class BackendApiService {
       identityToken: identityToken,
     );
     return _decodeJsonResponse(response);
+  }
+
+  // ---- Referrals ----------------------------------------------------------
+  // All additive: older backends 404 these and callers degrade gracefully (like
+  // fetchFeaturedRaces / markRaceResultsSeen). See REFERRAL_FEATURE_RESEARCH.md.
+
+  /// Lazily mints (or returns) the signed-in user's stable referral code and the
+  /// canonical share URL. POST /referrals/link -> `{code, url}`.
+  Future<Map<String, dynamic>> createReferralLink({
+    required String identityToken,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/referrals/link',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  /// The signed-in user's referral dashboard. GET /referrals/me ->
+  /// `{code, url, referredCount, completedCount, coinsEarned, friends:[...]}`.
+  /// Callers read defensively — fields may be absent on an older backend.
+  Future<Map<String, dynamic>> fetchReferralStatus({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/referrals/me',
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  /// Attaches a referrer AFTER sign-in (the manual-entry / iOS-paste path, where
+  /// the code wasn't in the provision body). POST /referrals/redeem ->
+  /// `{attributed: bool, reason?: String}`.
+  Future<Map<String, dynamic>> redeemReferralCode({
+    required String identityToken,
+    required String code,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/referrals/redeem',
+      body: {'referralCode': code},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  /// Public, unauthenticated preview of an invite code for the tailored welcome.
+  /// GET /referrals/:code -> `{referral: {inviterName, inviterAvatar, rewardCoins}}`.
+  /// Returns an empty map for an unknown/invalid code or an older backend, so
+  /// callers can default safely.
+  Future<Map<String, dynamic>> fetchReferralPreview({
+    required String code,
+  }) async {
+    try {
+      final response = await _sendGetRequest(
+        path: '/referrals/${Uri.encodeComponent(code)}',
+      );
+      final body = await _decodeJsonResponse(response);
+      final referral = body['referral'];
+      return referral is Map<String, dynamic> ? referral : <String, dynamic>{};
+    } on ApiException {
+      return <String, dynamic>{};
+    }
   }
 
   /// Fetches the public preview of a shared race by its share [token]. Used by

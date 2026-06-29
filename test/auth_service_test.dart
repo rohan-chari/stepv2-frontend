@@ -118,4 +118,53 @@ void main() {
     await restored.restoreSession();
     expect(restored.pendingShareToken, isNull);
   });
+
+  test('pendingReferralCode defaults to null', () async {
+    final authService = AuthService();
+    await authService.restoreSession();
+    expect(authService.pendingReferralCode, isNull);
+  });
+
+  test('setPendingReferralCode persists across instances (survives install gap)', () async {
+    final authService = AuthService();
+    await authService.setPendingReferralCode('BARA-7F3K');
+    expect(authService.pendingReferralCode, 'BARA-7F3K');
+
+    final restored = AuthService();
+    await restored.restoreSession();
+    expect(restored.pendingReferralCode, 'BARA-7F3K');
+  });
+
+  test('setPendingReferralCode is first-capture-wins (no overwrite)', () async {
+    final authService = AuthService();
+    await authService.setPendingReferralCode('BARA-AAAA');
+    // A later capture must NOT overwrite the first invite tapped.
+    await authService.setPendingReferralCode('BARA-BBBB');
+    expect(authService.pendingReferralCode, 'BARA-AAAA');
+  });
+
+  test('setPendingReferralCode(null) clears the persisted code', () async {
+    final authService = AuthService();
+    await authService.setPendingReferralCode('BARA-7F3K');
+    await authService.setPendingReferralCode(null);
+    expect(authService.pendingReferralCode, isNull);
+
+    final restored = AuthService();
+    await restored.restoreSession();
+    expect(restored.pendingReferralCode, isNull);
+  });
+
+  test('pendingReferralCode expires after the max age', () async {
+    // A code captured 40 days ago is past the 30-day window, so it's ignored.
+    final fortyDaysAgoMs = DateTime.now()
+        .subtract(const Duration(days: 40))
+        .millisecondsSinceEpoch;
+    SharedPreferences.setMockInitialValues({
+      'auth_pending_referral_code': 'BARA-7F3K',
+      'auth_pending_referral_captured_at': fortyDaysAgoMs,
+    });
+    final authService = AuthService();
+    await authService.restoreSession();
+    expect(authService.pendingReferralCode, isNull);
+  });
 }

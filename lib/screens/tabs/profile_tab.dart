@@ -19,6 +19,7 @@ import '../../widgets/loading_skeleton.dart';
 import '../../widgets/tier_badge.dart';
 import '../admin_screen.dart';
 import '../display_name_screen.dart';
+import '../referral_screen.dart';
 import '../start_screen.dart';
 
 class ProfileTab extends StatefulWidget {
@@ -407,6 +408,31 @@ class _ProfileTabState extends State<ProfileTab> {
         padding: const EdgeInsets.only(bottom: 8),
         child: Column(
           children: [
+            _buildSectionHeader('INVITE FRIENDS'),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+              child: PillButton(
+                label: 'INVITE FRIENDS & EARN COINS',
+                icon: Icons.group_add_rounded,
+                variant: PillButtonVariant.primary,
+                fontSize: 13,
+                fullWidth: true,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ReferralScreen(
+                        authService: widget.authService,
+                        backendApiService: _api,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
             _buildSectionHeader('DAILY REWARD'),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),

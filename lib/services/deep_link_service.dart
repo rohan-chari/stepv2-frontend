@@ -10,6 +10,12 @@ import 'auth_service.dart';
 /// (`bara://join/<token>`) as the reliable re-tap after install.
 const String kAppUrlScheme = 'bara';
 
+/// Reserved prefix marking a referral code (vs a race share token). Both ride
+/// the same `/r/<...>` path; this prefix is the disambiguator. Race share tokens
+/// are hyphen-free, so they never collide with it. Mirrors the backend
+/// `REFERRAL_CODE_PREFIX` in src/lib/referralCode.js.
+const String kReferralCodePrefix = 'BARA-';
+
 /// Captures race share links — both Universal/App Links
 /// (`https://<host>/r/<token>`) and the custom-scheme deep link
 /// (`bara://join/<token>`) — and turns them into a pending share token.
@@ -31,13 +37,12 @@ class DeepLinkService {
   /// to join immediately when a link is tapped while the app is already open.
   final ValueNotifier<String?> pendingToken = ValueNotifier<String?>(null);
 
-  /// Pure URI -> share-token extraction. Static + side-effect-free so it's
-  /// trivially unit-testable. Returns null for any link that isn't a race
-  /// share link, or whose token fails a basic sanity check.
-  static String? parseShareToken(Uri uri) {
-    // Token sanity guard: url-safe characters only, bounded length. The backend
-    // is the source of truth (it 404s unknown tokens); this just stops us
-    // persisting obvious garbage from a malformed link.
+  /// Shared extraction of the `<token>` from a `/r/<token>` (https) or
+  /// `bara://join|race/<token>` / `bara:///r/<token>` (custom scheme) link.
+  /// Returns the raw (un-normalized) token, or null. The charset guard bounds
+  /// characters + length; the backend is the source of truth (it 404s unknown
+  /// tokens) — this just stops us persisting obvious garbage.
+  static String? _extractRToken(Uri uri) {
     bool isValid(String t) =>
         t.isNotEmpty && RegExp(r'^[A-Za-z0-9_-]{1,128}$').hasMatch(t);
 
@@ -68,6 +73,30 @@ class DeepLinkService {
     return null;
   }
 
+  /// Pure URI -> race share-token extraction. Static + side-effect-free so it's
+  /// trivially unit-testable. Returns null for any link that isn't a race share
+  /// link — including a referral invite (`/r/BARA-…`), which [parseReferralCode]
+  /// owns instead, so we never try to "join a race" with a referral code.
+  static String? parseShareToken(Uri uri) {
+    final token = _extractRToken(uri);
+    if (token == null) return null;
+    if (token.toUpperCase().startsWith(kReferralCodePrefix)) return null;
+    return token;
+  }
+
+  /// Pure URI -> referral-code extraction. Returns the normalized (uppercased)
+  /// referral code if [uri] is a referral invite (`/r/BARA-xxxx` or
+  /// `bara://join/BARA-xxxx`), else null. Side-effect-free + unit-testable.
+  static String? parseReferralCode(Uri uri) {
+    final token = _extractRToken(uri);
+    if (token == null) return null;
+    final upper = token.toUpperCase();
+    if (!upper.startsWith(kReferralCodePrefix)) return null;
+    // Prefix + alphanumeric body, within the share-token charset.
+    if (!RegExp(r'^BARA-[A-Z0-9]{2,32}$').hasMatch(upper)) return null;
+    return upper;
+  }
+
   /// Begins listening for links: the cold-start link (if the app was launched
   /// by a link) plus the warm stream (links tapped while running). Safe to call
   /// once at startup. Never throws — a deep-link failure must not block launch.
@@ -96,6 +125,15 @@ class DeepLinkService {
   /// onto [pendingToken]. Public so it can be unit-tested directly without the
   /// platform plugin.
   Future<void> handleLink(Uri uri) async {
+    // A referral invite and a race share link ride the same /r/ path; the
+    // BARA- prefix routes them apart. Referral attribution is captured but does
+    // NOT push pendingToken (there's no race to auto-join).
+    final referralCode = parseReferralCode(uri);
+    if (referralCode != null) {
+      await _authService.setPendingReferralCode(referralCode);
+      return;
+    }
+
     final token = parseShareToken(uri);
     if (token == null) return;
     await _authService.setPendingShareToken(token);

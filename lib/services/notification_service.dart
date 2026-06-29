@@ -313,6 +313,12 @@ class NotificationService {
       // older apps fall through to the default and ignore it.
       case 'GLOBAL_EVENT_STARTED':
         return NotificationRoute.home;
+      // Referral payout — a referred friend finished their first race and the
+      // referrer earned coins. Land on home (where the referral dashboard /
+      // balance live). Additive type: older apps fall through to default/null,
+      // so the alert still shows but tapping it doesn't navigate.
+      case 'REFERRAL_REWARDED':
+        return NotificationRoute.home;
       // Legacy challenge notifications still in user trays land on home.
       case 'CHALLENGE_INITIATED':
       case 'CHALLENGE_DROPPED':

@@ -7,7 +7,6 @@ import '../../styles.dart';
 import '../../models/step_data.dart';
 import '../../utils/at_name.dart';
 import '../../utils/race_display.dart';
-import '../../utils/share_helper.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../widgets/coin_balance_badge.dart';
@@ -22,6 +21,7 @@ import '../../widgets/race_ui.dart';
 import '../../tutorial/tutorial_screen.dart';
 import '../display_name_screen.dart';
 import '../public_races_screen.dart';
+import '../referral_screen.dart';
 
 class HomeTab extends StatelessWidget {
   final StepData? stepData;
@@ -429,9 +429,15 @@ class HomeTab extends StatelessWidget {
           secondaryLabel: 'INVITE',
           onPrimary: onOpenRacesTab,
           onSecondary: (ctx) {
-            shareText(
-              ctx,
-              'Race me on Bara — daily step challenges with friends. https://apps.apple.com/us/app/bara-step-challenges/id6760504694',
+            // Open the referral screen so the invite carries the user's real
+            // /r/BARA-<code> link (earns both sides coins), not a bare store URL.
+            Navigator.of(ctx).push(
+              MaterialPageRoute(
+                builder: (_) => ReferralScreen(
+                  authService: authService,
+                  backendApiService: backendApiService,
+                ),
+              ),
             );
           },
         );

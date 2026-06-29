@@ -36,6 +36,13 @@ class AuthService extends ChangeNotifier {
   static const _keyFirstRaceOnboardingSeen = 'auth_first_race_onboarding_seen';
   static const _keyTutorialOnboardingSeen = 'auth_tutorial_onboarding_seen';
   static const _keyPendingShareToken = 'auth_pending_share_token';
+  static const _keyPendingReferralCode = 'auth_pending_referral_code';
+  static const _keyPendingReferralCapturedAt =
+      'auth_pending_referral_captured_at';
+
+  /// How long a captured referral code stays usable client-side. After this it
+  /// is ignored (the server also enforces a signup→first-race window).
+  static const Duration _pendingReferralMaxAge = Duration(days: 30);
 
   final BackendApiService _backendApiService;
   String? _identityToken;
@@ -52,6 +59,8 @@ class AuthService extends ChangeNotifier {
   bool _firstRaceOnboardingSeen = false;
   bool _tutorialOnboardingSeen = false;
   String? _pendingShareToken;
+  String? _pendingReferralCode;
+  int? _pendingReferralCapturedAtMs;
 
   String? get identityToken => _identityToken;
   String? get sessionToken => _sessionToken;
@@ -73,6 +82,21 @@ class AuthService extends ChangeNotifier {
   /// and the token is drained once they land in the app. See DeepLinkService
   /// and MainShell's drain logic.
   String? get pendingShareToken => _pendingShareToken;
+
+  /// A referral code captured from a deep link / install referrer / clipboard
+  /// that hasn't been attributed yet. Returns null once older than
+  /// [_pendingReferralMaxAge]. Persisted immediately so it survives the fresh-
+  /// install sign-in/onboarding gap, mirroring [pendingShareToken].
+  String? get pendingReferralCode {
+    final code = _pendingReferralCode;
+    if (code == null || code.isEmpty) return null;
+    final at = _pendingReferralCapturedAtMs;
+    if (at != null) {
+      final ageMs = DateTime.now().millisecondsSinceEpoch - at;
+      if (ageMs > _pendingReferralMaxAge.inMilliseconds) return null;
+    }
+    return code;
+  }
 
   bool get isSignedIn => _identityToken != null && _userIdentifier != null;
   bool get hasSessionToken =>
@@ -98,6 +122,8 @@ class AuthService extends ChangeNotifier {
     _tutorialOnboardingSeen =
         prefs.getBool(_keyTutorialOnboardingSeen) ?? false;
     _pendingShareToken = prefs.getString(_keyPendingShareToken);
+    _pendingReferralCode = prefs.getString(_keyPendingReferralCode);
+    _pendingReferralCapturedAtMs = prefs.getInt(_keyPendingReferralCapturedAt);
     notifyListeners();
     return isSignedIn && hasSessionToken;
   }
@@ -127,14 +153,21 @@ class AuthService extends ChangeNotifier {
         );
       }
 
+      final referralCode = pendingReferralCode;
       final response = await _backendApiService.provisionAppleUser(
         identityToken: identityToken,
         userIdentifier: userIdentifier,
         email: credential.email,
         name: _buildDisplayName(credential),
+        referralCode: referralCode,
       );
 
       final backendUser = response['user'] as Map<String, dynamic>;
+      // Attribution is recorded server-side in the new-user create branch (when
+      // a code was present); clear it so a later re-login can't re-apply it.
+      if (referralCode != null) {
+        await setPendingReferralCode(null);
+      }
 
       _identityToken = identityToken;
       _userIdentifier = userIdentifier;
@@ -183,13 +216,18 @@ class AuthService extends ChangeNotifier {
         );
       }
 
+      final referralCode = pendingReferralCode;
       final response = await _backendApiService.provisionGoogleUser(
         idToken: idToken,
         email: account.email,
         name: account.displayName,
+        referralCode: referralCode,
       );
 
       final backendUser = response['user'] as Map<String, dynamic>;
+      if (referralCode != null) {
+        await setPendingReferralCode(null);
+      }
 
       _identityToken = idToken;
       // The Google stable id keeps isSignedIn (needs both tokens) true across
@@ -383,6 +421,35 @@ class AuthService extends ChangeNotifier {
       _pendingShareToken = null;
       await prefs.remove(_keyPendingShareToken);
     }
+    notifyListeners();
+  }
+
+  /// Records (or clears, when [code] is null) a referral code captured before
+  /// sign-in, to be attributed once the user signs in. Persisted immediately
+  /// (independent of [_persist], which only runs on sign-in) so it survives a
+  /// fresh install's sign-in/onboarding gap, mirroring [setPendingShareToken].
+  ///
+  /// First-capture-wins: an already-persisted, non-expired code is NOT
+  /// overwritten by a later capture (the first invite tapped wins), matching the
+  /// backend's first-capture-wins attribution. Deliberately NOT cleared by
+  /// [signOut] — a code may be captured before the referred account signs in.
+  Future<void> setPendingReferralCode(String? code) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (code == null || code.isEmpty) {
+      _pendingReferralCode = null;
+      _pendingReferralCapturedAtMs = null;
+      await prefs.remove(_keyPendingReferralCode);
+      await prefs.remove(_keyPendingReferralCapturedAt);
+      notifyListeners();
+      return;
+    }
+    // First-capture-wins: keep an existing, non-expired code.
+    if (pendingReferralCode != null) return;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    _pendingReferralCode = code;
+    _pendingReferralCapturedAtMs = nowMs;
+    await prefs.setString(_keyPendingReferralCode, code);
+    await prefs.setInt(_keyPendingReferralCapturedAt, nowMs);
     notifyListeners();
   }
 
