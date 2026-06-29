@@ -47,6 +47,28 @@ ranked tab shows the full 6-tier ladder strip to every user.
 
 ---
 
+## P1 — Referral rollout (deferred: no Android users yet)
+
+### Add the Play app-signing key SHA-256 to assetlinks (Android App Links)
+- **What:** Android App Link verification for the referral `/r/BARA-…` links
+  needs the Play **app-signing** key fingerprint in `assetlinks.json`. Only the
+  **upload** key is in so far (extracted from the release keystore); Google
+  re-signs Play Store installs with *its* key, so **Play Store installs won't
+  verify App Links until the app-signing key SHA-256 is added** (the link falls
+  back to the browser). iOS is fully done; internal-test/sideload Android builds
+  already verify with the upload key.
+- **Why deferred:** no Android users yet (2026-06-28) — safe to ship without it.
+  Must be added before any real Android Play Store launch.
+- **Where to get it:** Play Console → app → **Test and release → Setup → App
+  integrity → App signing** → "App signing key certificate" → copy the SHA-256.
+- **Where it goes:** backend `src/config/sharing.js`, the
+  `// TODO: append the Play app-signing key SHA-256` line in
+  `DEFAULT_ANDROID_FINGERPRINTS` (or set the `ANDROID_SHA256_FINGERPRINTS` env,
+  comma-separated). Then redeploy and confirm
+  `curl …/.well-known/assetlinks.json` lists both fingerprints.
+
+---
+
 ## P2 — Minor / cleanup
 
 ### 4. Dead "FRIENDS" button on the legacy ranked ladder
