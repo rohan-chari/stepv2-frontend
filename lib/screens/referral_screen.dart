@@ -5,6 +5,7 @@ import '../services/backend_api_service.dart';
 import '../styles.dart';
 import '../utils/at_name.dart';
 import '../utils/share_helper.dart';
+import 'referral_rules_screen.dart';
 import '../widgets/app_avatar.dart';
 import '../widgets/loading_skeleton.dart';
 import '../widgets/pill_button.dart';
@@ -322,6 +323,24 @@ class _ReferralScreenState extends State<ReferralScreen> {
             style: PixelText.body(
               size: 14,
               color: AppColors.textMid,
+            ).copyWith(decoration: TextDecoration.underline),
+          ),
+        ),
+      ),
+      Center(
+        child: TextButton(
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const ReferralRulesScreen(),
+              ),
+            );
+          },
+          child: Text(
+            'Program rules',
+            style: PixelText.body(
+              size: 13,
+              color: AppColors.textMid.withValues(alpha: 0.8),
             ).copyWith(decoration: TextDecoration.underline),
           ),
         ),
