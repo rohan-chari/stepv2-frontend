@@ -59,15 +59,53 @@ class _SpinningCrateState extends State<SpinningCrate>
 
 /// Static (non-animated) crate, for dense lists where a per-row spin animation
 /// would be distracting and wasteful. [filled] false renders a faded/empty
-/// slot to represent "zero boxes".
+/// slot to represent "zero boxes". [queued] renders a dimmed crate with a small
+/// clock badge to represent a box waiting for inventory space (inventory full).
 class CrateIcon extends StatelessWidget {
   final double size;
   final bool filled;
-  const CrateIcon({super.key, this.size = 20, this.filled = true});
+  final bool queued;
+  const CrateIcon({
+    super.key,
+    this.size = 20,
+    this.filled = true,
+    this.queued = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     final crate = _CrateFace(size: size);
+    if (queued) {
+      // Half-bright crate with a clock corner badge: a box you've earned but
+      // can't hold yet because your slots are full.
+      return SizedBox.square(
+        dimension: size,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Opacity(opacity: 0.55, child: crate),
+            Positioned(
+              right: -size * 0.12,
+              bottom: -size * 0.12,
+              child: Container(
+                width: size * 0.5,
+                height: size * 0.5,
+                decoration: BoxDecoration(
+                  color: AppColors.pillGold,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.dirtDark, width: 1),
+                ),
+                child: Icon(
+                  Icons.schedule,
+                  size: size * 0.34,
+                  color: AppColors.textDark,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     if (filled) return crate;
     return Opacity(opacity: 0.3, child: crate);
   }

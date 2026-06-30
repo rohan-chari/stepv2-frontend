@@ -380,6 +380,13 @@ Map<String, dynamic> tutorialPreviewRacesData() {
         'creator': {'displayName': 'Maya Chen'},
         'isCreator': false,
         'myPlacement': 2,
+        // One held powerup (sprite) + one unopened mystery box (crate), plus a
+        // queued box — showcases all three inventory-slot states in the row.
+        'slotItems': const [
+          {'id': 'pwr-1', 'type': 'SECOND_WIND', 'status': 'HELD'},
+          {'id': 'box-1', 'type': null, 'status': 'MYSTERY_BOX'},
+        ],
+        'mysteryBoxCount': 1,
         'queuedBoxCount': 1,
       },
       {

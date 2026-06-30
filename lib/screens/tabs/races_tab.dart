@@ -9,6 +9,7 @@ import '../../widgets/featured_race_card.dart';
 import '../../widgets/info_toast.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
+import '../../widgets/powerup_icon.dart';
 import '../../widgets/spinning_crate.dart';
 import '../create_race_screen.dart';
 import '../public_races_screen.dart';
@@ -699,6 +700,11 @@ class _RacesTabState extends State<RacesTab> {
     // Held/openable mystery boxes for the current user in this race (0..4).
     // Absent on older backends -> defaults to 0.
     final mysteryBoxCount = (race['mysteryBoxCount'] as num?)?.toInt() ?? 0;
+    // Per-slot inventory ({type, status, ...}): HELD powerups render as their
+    // sprite, MYSTERY_BOX as a crate. Absent on older backends -> falls back to
+    // mysteryBoxCount crates.
+    final slotItems =
+        (race['slotItems'] as List?)?.whereType<Map>().toList() ?? const [];
 
     String statusLabel;
     Color badgeColor;
@@ -753,8 +759,7 @@ class _RacesTabState extends State<RacesTab> {
 
     final showTrailingStatus =
         status != 'ACTIVE' && status != 'COMPLETED' && statusLabel.isNotEmpty;
-    final showTrailingContent =
-        myPlacement != null || queuedBoxCount > 0 || showTrailingStatus;
+    final showTrailingContent = myPlacement != null || showTrailingStatus;
 
     return KeyedSubtree(
       key: cardKey,
@@ -782,9 +787,10 @@ class _RacesTabState extends State<RacesTab> {
                       maxLines: 1,
                     ),
                     const SizedBox(height: 3),
-                    // Active races show time-left then the user's held mystery
-                    // boxes (4 crate slots, filled ones colored). Everything
-                    // else keeps the runner count.
+                    // Active races show time-left then the user's race inventory
+                    // (4 slots: held powerup sprites, mystery-box crates, then
+                    // queued crates, then empty). Everything else keeps the
+                    // runner count.
                     if (status == 'ACTIVE') ...[
                       Text(
                         timeLabel,
@@ -793,7 +799,12 @@ class _RacesTabState extends State<RacesTab> {
                         maxLines: 1,
                       ),
                       const SizedBox(height: 4),
-                      _buildBoxCountRow(mysteryBoxCount),
+                      _buildInventoryRow(
+                        slotItems,
+                        mysteryBoxCount,
+                        queuedBoxCount,
+                        rowKey: boxKey,
+                      ),
                     ] else
                       Text(
                         '$participantCount runner${participantCount == 1 ? '' : 's'}${isInvite && creatorName.isNotEmpty ? ' \u2022 by ${atName(creatorName)}' : ''}',
@@ -821,20 +832,8 @@ class _RacesTabState extends State<RacesTab> {
                         ),
                         textColor: AppColors.pillGreenDark,
                       ),
-                    if (queuedBoxCount > 0) ...[
-                      if (myPlacement != null) const SizedBox(height: 4),
-                      _buildMetaChip(
-                        '$queuedBoxCount QUEUED',
-                        backgroundColor: AppColors.pillGold.withValues(
-                          alpha: 0.34,
-                        ),
-                        textColor: AppColors.textDark,
-                        chipKey: boxKey,
-                      ),
-                    ],
                     if (showTrailingStatus) ...[
-                      if (myPlacement != null || queuedBoxCount > 0)
-                        const SizedBox(height: 4),
+                      if (myPlacement != null) const SizedBox(height: 4),
                       Text(
                         statusLabel,
                         style: PixelText.title(size: 12, color: badgeColor),
@@ -861,21 +860,63 @@ class _RacesTabState extends State<RacesTab> {
     );
   }
 
-  // Always shows four crate slots; the first [count] are colored in (boxes the
-  // user holds) and the rest stay faded silhouettes, so the row reads as
-  // "N of 4 boxes" at a glance.
-  Widget _buildBoxCountRow(int count) {
-    const total = 4;
-    final filled = count.clamp(0, total);
+  // Shows four slots: three active-inventory spots followed by one dedicated
+  // queue spot (set off by a wider gap).
+  //   • Active spots fill from [slotItems] — a powerup sprite for HELD items, a
+  //     crate for unopened MYSTERY_BOX items — then pad with faded silhouettes.
+  //   • The 4th spot is a queued crate when [queuedBoxCount] > 0 (a box earned
+  //     but waiting because the active inventory is full), else a faded slot.
+  // [slotItems] is absent on older backends; we then fall back to filling the
+  // active spots from [mysteryBoxCount] so the row still reads correctly.
+  Widget _buildInventoryRow(
+    List slotItems,
+    int mysteryBoxCount,
+    int queuedBoxCount, {
+    GlobalKey? rowKey,
+  }) {
+    const activeSlots = 3;
+    const slotSize = 18.0;
+    final active = <Widget>[];
+
+    if (slotItems.isNotEmpty) {
+      for (final raw in slotItems) {
+        if (active.length >= activeSlots) break;
+        final item = raw as Map;
+        final status = item['status'] as String?;
+        final type = item['type'] as String?;
+        if (status == 'HELD' && type != null && type.isNotEmpty) {
+          active.add(PowerupIcon(type: type, size: slotSize));
+        } else {
+          active.add(const CrateIcon(size: slotSize, filled: true));
+        }
+      }
+    } else {
+      // Old backend: no per-slot data, just the held mystery-box count.
+      for (var i = 0; i < mysteryBoxCount && active.length < activeSlots; i++) {
+        active.add(const CrateIcon(size: slotSize, filled: true));
+      }
+    }
+    while (active.length < activeSlots) {
+      active.add(const CrateIcon(size: slotSize, filled: false));
+    }
+
+    final queueSlot = queuedBoxCount > 0
+        ? const CrateIcon(size: slotSize, queued: true)
+        : const CrateIcon(size: slotSize, filled: false);
+
     return SizedBox(
+      key: rowKey,
       height: 20,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          for (int i = 0; i < total; i++) ...[
+          for (var i = 0; i < active.length; i++) ...[
             if (i > 0) const SizedBox(width: 3),
-            CrateIcon(size: 18, filled: i < filled),
+            active[i],
           ],
+          // Wider gap sets the queue spot apart from the active inventory.
+          const SizedBox(width: 8),
+          queueSlot,
         ],
       ),
     );
