@@ -18,6 +18,16 @@ So **every change — frontend or backend — must keep working for users on
 previous app versions.** This is the first thing to check for any change,
 before correctness or style.
 
+## Never run integration tests against the prod database
+
+Integration/e2e tests create, mutate, and delete rows (users, races, coin
+transactions, referrals). **Never point them at the prod DB.** They must run
+only against a dedicated local/test Postgres (a `*_test` database or a
+disposable container) — confirm `DATABASE_URL` is the test DB before running,
+and never set it to the prod connection string for a test run. The prod DB is
+the live source of truth for real users' coins and races; a stray test write or
+teardown there is unrecoverable.
+
 ### Rules that follow from this
 - **Read API responses defensively.** A field may be missing or null because
   the backend is a different version than this build expects. Default safely;
