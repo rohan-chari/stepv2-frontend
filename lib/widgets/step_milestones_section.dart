@@ -14,14 +14,18 @@ String _todayLocalDate() {
 
 /// Step-milestone daily rewards. Renders four tiers (5k/10k/15k/20k) with
 /// locked/claimable/claimed state and a tap-to-claim button on each row.
-/// Self-fetches from `/users/me/step-milestones/today`; refreshes via
-/// [refresh] (called by parent pull-to-refresh).
+/// Fed by the home race-card batch via [initialData] (so it appears with the
+/// rest of the page); self-fetches `/users/me/step-milestones/today` only as
+/// a fallback for old backends. Refreshes via [refresh] (parent
+/// pull-to-refresh).
 class StepMilestonesSection extends StatefulWidget {
   const StepMilestonesSection({
     super.key,
     required this.authService,
     required this.backendApiService,
     this.currentSteps,
+    this.initialData,
+    this.awaitingBatch = false,
   });
 
   final AuthService authService;
@@ -30,6 +34,17 @@ class StepMilestonesSection extends StatefulWidget {
   /// Optional hint from the parent's already-fetched step total; used as a
   /// best-guess until the server response arrives.
   final int? currentSteps;
+
+  /// Milestones payload from the home race-card batch (`stepMilestones`, same
+  /// shape as the standalone endpoint). When present, no extra request is
+  /// made — the card renders in the same frame as the rest of the home page.
+  final Map<String, dynamic>? initialData;
+
+  /// True while the home batch is still in flight. Holds off the fallback
+  /// self-fetch so we don't fire the extra request the batch was meant to
+  /// replace; the fallback runs only if the batch lands without the field
+  /// (old backend) or fails.
+  final bool awaitingBatch;
 
   @override
   State<StepMilestonesSection> createState() => StepMilestonesSectionState();
@@ -49,16 +64,57 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
   @override
   void initState() {
     super.initState();
-    _refresh();
+    _consumeBatchOrFetch();
   }
 
   @override
   void didUpdateWidget(covariant StepMilestonesSection oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // Batch landed (or its payload changed): consume it, or fall back to the
+    // standalone fetch when the batch came back without the field.
+    if (!identical(oldWidget.initialData, widget.initialData) ||
+        (oldWidget.awaitingBatch && !widget.awaitingBatch)) {
+      _consumeBatchOrFetch();
+      return;
+    }
     // If today changed underneath us, re-fetch so the UI resets at midnight.
     if (_lastFetchedDate.isNotEmpty && _lastFetchedDate != _todayLocalDate()) {
       _refresh();
     }
+  }
+
+  void _consumeBatchOrFetch() {
+    final data = widget.initialData;
+    if (data != null) {
+      _applyData(data);
+    } else if (!widget.awaitingBatch) {
+      // Old backend (no embedded stepMilestones) or batch failure: standalone
+      // fetch, same as before the batching change.
+      _refresh();
+    }
+    // else: batch still in flight — didUpdateWidget consumes it when it lands.
+  }
+
+  void _applyData(Map<String, dynamic> res) {
+    final milestones = (res['milestones'] as List? ?? [])
+        .cast<Map<String, dynamic>>();
+    setState(() {
+      _loading = false;
+      _error = '';
+      _currentSteps = (res['currentSteps'] as num?)?.toInt() ?? 0;
+      _totalCoinsClaimed = (res['totalCoinsClaimed'] as num?)?.toInt() ?? 0;
+      _tiles = milestones
+          .map(
+            (m) => _MilestoneTile(
+              threshold: (m['threshold'] as num?)?.toInt() ?? 0,
+              coins: (m['coins'] as num?)?.toInt() ?? 0,
+              claimed: m['claimed'] == true,
+              claimable: m['claimable'] == true,
+            ),
+          )
+          .toList(growable: false);
+      _lastFetchedDate = res['localDate'] as String? ?? _todayLocalDate();
+    });
   }
 
   Future<void> _refresh() async {
@@ -79,25 +135,7 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
         localDate: date,
       );
       if (!mounted) return;
-      final milestones = (res['milestones'] as List? ?? [])
-          .cast<Map<String, dynamic>>();
-      setState(() {
-        _loading = false;
-        _error = '';
-        _currentSteps = (res['currentSteps'] as num?)?.toInt() ?? 0;
-        _totalCoinsClaimed = (res['totalCoinsClaimed'] as num?)?.toInt() ?? 0;
-        _tiles = milestones
-            .map(
-              (m) => _MilestoneTile(
-                threshold: (m['threshold'] as num?)?.toInt() ?? 0,
-                coins: (m['coins'] as num?)?.toInt() ?? 0,
-                claimed: m['claimed'] == true,
-                claimable: m['claimable'] == true,
-              ),
-            )
-            .toList(growable: false);
-        _lastFetchedDate = date;
-      });
+      _applyData(res);
     } catch (e) {
       if (!mounted) return;
       setState(() {

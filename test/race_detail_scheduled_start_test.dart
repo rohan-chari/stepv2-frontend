@@ -86,8 +86,9 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      // "Starts at ..." copy is shown.
-      expect(find.textContaining('Starts at'), findsOneWidget);
+      // Live countdown + absolute time are shown.
+      expect(find.textContaining('STARTS IN'), findsOneWidget);
+      expect(find.textContaining('at '), findsWidgets);
 
       // The manual Start button is either absent or disabled (onPressed == null).
       final startFinder = find.widgetWithText(PillButton, 'START RACE');

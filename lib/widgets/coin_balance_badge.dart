@@ -8,11 +8,17 @@ class CoinBalanceBadge extends StatefulWidget {
   final double coinSize;
   final VoidCallback? onTap;
 
+  /// When set, renders a small gold "+" button after the balance — the
+  /// earn-more affordance (opens the invite-friends screen). Independent of
+  /// [onTap], which makes the balance itself tappable.
+  final VoidCallback? onAddTap;
+
   const CoinBalanceBadge({
     super.key,
     required this.coins,
     this.coinSize = 18,
     this.onTap,
+    this.onAddTap,
   });
 
   @override
@@ -51,6 +57,10 @@ class _CoinBalanceBadgeState extends State<CoinBalanceBadge> {
             shadows: _textShadows,
           ),
         ],
+        if (widget.onAddTap != null) ...[
+          const SizedBox(width: 6),
+          _AddCoinsButton(size: widget.coinSize + 4, onTap: widget.onAddTap),
+        ],
       ],
     );
 
@@ -67,6 +77,62 @@ class _CoinBalanceBadgeState extends State<CoinBalanceBadge> {
         duration: const Duration(milliseconds: 90),
         curve: Curves.easeOut,
         child: content,
+      ),
+    );
+  }
+}
+
+/// Small circular gold "+" next to the coin balance — the "earn more coins"
+/// entry point. Styled like the hero header's circular help button, in the
+/// badge's coin-gold palette, with the standard press-scale effect.
+class _AddCoinsButton extends StatefulWidget {
+  final double size;
+  final VoidCallback? onTap;
+
+  const _AddCoinsButton({required this.size, this.onTap});
+
+  @override
+  State<_AddCoinsButton> createState() => _AddCoinsButtonState();
+}
+
+class _AddCoinsButtonState extends State<_AddCoinsButton> {
+  static const _shadows = [
+    Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
+  ];
+
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final button = Container(
+      decoration: BoxDecoration(
+        color: AppColors.coinMid.withValues(alpha: 0.28),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: AppColors.coinLight.withValues(alpha: 0.7),
+          width: 1.5,
+        ),
+      ),
+      padding: const EdgeInsets.all(2),
+      child: Icon(
+        Icons.add_rounded,
+        size: widget.size - 4,
+        color: AppColors.coinLight,
+        shadows: _shadows,
+      ),
+    );
+
+    return GestureDetector(
+      onTap: widget.onTap,
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedScale(
+        scale: _pressed ? 0.92 : 1.0,
+        duration: const Duration(milliseconds: 90),
+        curve: Curves.easeOut,
+        child: button,
       ),
     );
   }

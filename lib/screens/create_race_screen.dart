@@ -104,6 +104,54 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
     return '${_monthAbbrev[local.month - 1]} ${local.day} · $h:$m $ampm';
   }
 
+  // Bara-themed wrapper for the stock Material date/time pickers: parchment
+  // surfaces, accent-green selection, wood-frame border — so they read like
+  // the app's RetroCard/GameContainer dialogs instead of raw Material 3.
+  Widget _themedPicker(BuildContext context, Widget? child) {
+    final base = Theme.of(context);
+    return Theme(
+      data: base.copyWith(
+        colorScheme: base.colorScheme.copyWith(
+          primary: AppColors.accent,
+          onPrimary: AppColors.parchment,
+          secondary: AppColors.accentLight,
+          surface: AppColors.parchment,
+          onSurface: AppColors.textDark,
+          onSurfaceVariant: AppColors.textMid,
+        ),
+        datePickerTheme: DatePickerThemeData(
+          backgroundColor: AppColors.parchment,
+          headerBackgroundColor: AppColors.accent,
+          headerForegroundColor: AppColors.parchment,
+          weekdayStyle: PixelText.body(size: 13, color: AppColors.textMid),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: AppColors.accent, width: 2),
+          ),
+        ),
+        timePickerTheme: TimePickerThemeData(
+          backgroundColor: AppColors.parchment,
+          dialBackgroundColor: AppColors.parchmentDark,
+          dialHandColor: AppColors.accent,
+          hourMinuteColor: AppColors.parchmentDark,
+          hourMinuteTextColor: AppColors.textDark,
+          dayPeriodTextColor: AppColors.textDark,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: AppColors.accent, width: 2),
+          ),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(
+            foregroundColor: AppColors.accent,
+            textStyle: PixelText.button(size: 14),
+          ),
+        ),
+      ),
+      child: child!,
+    );
+  }
+
   Future<void> _pickScheduledStart() async {
     final now = DateTime.now();
     final initial = _scheduledStartAt ?? now.add(const Duration(hours: 1));
@@ -112,11 +160,13 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
       initialDate: initial.isBefore(now) ? now : initial,
       firstDate: now,
       lastDate: now.add(const Duration(days: 365)),
+      builder: _themedPicker,
     );
     if (date == null || !mounted) return;
     final time = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(initial),
+      builder: _themedPicker,
     );
     if (time == null || !mounted) return;
     final picked = DateTime(

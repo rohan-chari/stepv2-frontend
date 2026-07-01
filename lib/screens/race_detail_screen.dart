@@ -112,7 +112,7 @@ const _powerupDescriptions = {
   'POCKET_WATCH': 'Extend all active timed buffs',
   'TRAIL_MINE': 'Drop a hidden trap at your current step position',
   'PINECONE_TOSS': 'Hit the runner directly ahead or behind you',
-  'SNEAKY_SWAP': 'View and swap a powerup with a rival',
+  'SNEAKY_SWAP': 'Steal a random powerup from a rival',
   'MIRROR': 'Reflect the next attack back at the attacker',
   'CLEANSE': 'Remove all debuffs an opponent placed on you',
   'IMPOSTER': 'Swap leaderboard positions with a rival for 1 hour (cosmetic)',
@@ -336,7 +336,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     super.dispose();
   }
 
-  void _ensureChatInitialized() {
+  void _ensureChatInitialized({bool poll = true}) {
     if (_chatInitialized) return;
     final race = _race;
     if (race == null) return;
@@ -359,10 +359,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         chat.markRead();
       }
     });
-    chat.startPolling();
+    if (poll) chat.startPolling();
   }
 
-  void _ensureFeedInitialized() {
+  void _ensureFeedInitialized({bool poll = true}) {
     if (_feedInitialized) return;
     if (_race == null) return;
     _feedInitialized = true;
@@ -374,7 +374,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     _feed = feed;
     feed.addListener(_onFeedChanged);
     feed.loadInitial();
-    feed.startPolling();
+    if (poll) feed.startPolling();
   }
 
   void _onChatChanged() {
@@ -433,6 +433,21 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         _startCountdown();
         _ensureChatInitialized();
         _ensureFeedInitialized();
+      } else if (details['status'] == 'COMPLETED') {
+        // Finished races keep their chat + activity viewable (read-only —
+        // _canPostMessage is false and the backend rejects posts). Load once,
+        // no polling: the conversation can't change anymore.
+        _ensureChatInitialized(poll: false);
+        _ensureFeedInitialized(poll: false);
+      } else if (details['status'] == 'PENDING') {
+        // Scheduled races show a live countdown to their auto-start; the
+        // ticker otherwise only runs for ACTIVE races.
+        final scheduled = DateTime.tryParse(
+          details['scheduledStartAt'] as String? ?? '',
+        );
+        if (scheduled != null && scheduled.isAfter(DateTime.now())) {
+          _startCountdown();
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -826,8 +841,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
     String? targetUserId;
     String? targetDirection;
-    String? swapOfferedPowerupId;
-    String? swapRequestedPowerupId;
 
     final participants =
         (_progress?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
@@ -855,35 +868,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         }
         return;
       }
+      // Steal redesign: pick a target and the server takes one RANDOM
+      // stealable powerup from them — nothing of yours is given up, so the
+      // old two-step SWAP AWAY / TAKE FROM TARGET pickers are gone.
       targetUserId = await _showTargetPicker(swapTargets, type);
       if (targetUserId == null) return;
-
-      final options = await _api.fetchSneakySwapOptions(
-        identityToken: token,
-        raceId: widget.raceId,
-        targetUserId: targetUserId,
-      );
-      final ownPowerups =
-          (options['ownPowerups'] as List?)?.cast<Map<String, dynamic>>() ??
-          const [];
-      final targetPowerups =
-          (options['targetPowerups'] as List?)?.cast<Map<String, dynamic>>() ??
-          const [];
-      if (ownPowerups.isEmpty || targetPowerups.isEmpty) {
-        if (mounted) showErrorToast(context, 'No swappable powerups available');
-        return;
-      }
-
-      swapOfferedPowerupId = await _showPowerupPicker(
-        title: 'SWAP AWAY',
-        powerups: ownPowerups,
-      );
-      if (swapOfferedPowerupId == null) return;
-      swapRequestedPowerupId = await _showPowerupPicker(
-        title: 'TAKE FROM TARGET',
-        powerups: targetPowerups,
-      );
-      if (swapRequestedPowerupId == null) return;
     } else if (_targetedPowerups.contains(type)) {
       final participants =
           (_progress?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
@@ -906,6 +895,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     }
 
     setState(() => _isActing = true);
+    // Optimistically empty the slot the moment the user commits (mirrors the
+    // optimistic coin deduction below) — on a slow connection the item used
+    // to sit in the inventory until _loadProgress() returned, which read as
+    // "it went back". Restored on failure.
+    final restoreInventory = _optimisticallyRemoveFromInventory(
+      powerup['id'] as String,
+    );
     try {
       final result = await _api.usePowerup(
         identityToken: token,
@@ -913,8 +909,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         powerupId: powerup['id'] as String,
         targetUserId: targetUserId,
         targetDirection: targetDirection,
-        swapOfferedPowerupId: swapOfferedPowerupId,
-        swapRequestedPowerupId: swapRequestedPowerupId,
         upgradeLevel: upgradeLevel,
       );
 
@@ -936,6 +930,17 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       if (outcome == AttackOutcome.blocked ||
           outcome == AttackOutcome.reflected) {
         await showAttackOutcomeModal(context, res ?? const {});
+      } else if (type == 'SNEAKY_SWAP') {
+        // Reveal what was stolen. Additive field — older backends (mutual
+        // swap) return no stolenPowerup, so fall back to the generic toast.
+        final stolen = res?['stolenPowerup'] as Map<String, dynamic>?;
+        final stolenType = stolen?['type'] as String?;
+        showInfoToast(
+          context,
+          stolenType != null
+              ? 'You stole a ${_powerupNames[stolenType] ?? stolenType}!'
+              : '${_powerupNames[type]} activated!',
+        );
       } else {
         final tierTag = upgradeLevel > 0 ? ' (Lvl $upgradeLevel)' : '';
         showInfoToast(context, '${_powerupNames[type]}$tierTag activated!');
@@ -944,10 +949,32 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       if (!mounted) return;
       _loadProgress();
     } catch (e) {
+      restoreInventory();
       if (mounted) showErrorToast(context, e.toString());
     } finally {
       if (mounted) setState(() => _isActing = false);
     }
+  }
+
+  /// Optimistic-inventory helper: drops [powerupId] from the local
+  /// `_powerupData['inventory']` projection so its slot empties immediately
+  /// instead of lingering until the follow-up _loadProgress() round-trip.
+  /// Returns a rollback closure for the failure path (a later successful
+  /// _loadProgress() replaces the whole projection anyway).
+  VoidCallback _optimisticallyRemoveFromInventory(String powerupId) {
+    final data = _powerupData;
+    final inventory = data?['inventory'] as List?;
+    if (data == null || inventory == null) return () {};
+    final saved = List<dynamic>.from(inventory);
+    setState(() {
+      data['inventory'] = inventory
+          .where((p) => p is Map && p['id'] != powerupId)
+          .toList();
+    });
+    return () {
+      if (!mounted) return;
+      setState(() => data['inventory'] = saved);
+    };
   }
 
   /// Best-effort fetch of the user's global powerup stash. Failures (e.g. an
@@ -1211,84 +1238,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                   ],
                 ),
               ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<String?> _showPowerupPicker({
-    required String title,
-    required List<Map<String, dynamic>> powerups,
-  }) async {
-    return showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: AppColors.parchment,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      isScrollControlled: true,
-      builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: PixelText.title(size: 16, color: AppColors.textMid),
-                  ),
-                  const SizedBox(height: 12),
-                  for (final powerup in powerups)
-                    GestureDetector(
-                      onTap: () =>
-                          Navigator.of(ctx).pop(powerup['id'] as String?),
-                      child: Container(
-                        width: double.infinity,
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.parchmentDark,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            PowerupIcon(
-                              type: powerup['type'] as String? ?? '',
-                              size: 28,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                _powerupNames[powerup['type']] ??
-                                    powerup['type'] as String? ??
-                                    'Powerup',
-                                style: PixelText.body(
-                                  size: 14,
-                                  color: AppColors.textDark,
-                                ),
-                              ),
-                            ),
-                            Text(
-                              powerup['rarity'] as String? ?? '',
-                              style: PixelText.title(
-                                size: 10,
-                                color: AppColors.textMid,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                ],
-              ),
             ),
           ),
         );
@@ -1742,7 +1691,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         const SizedBox(height: 16),
 
         // 1.1.7: scheduled auto-start banner, shown to every viewer of a
-        // PENDING race that has a future scheduledStartAt.
+        // PENDING race that has a future scheduledStartAt. Live countdown,
+        // driven by the same 1s ticker the active-race countdown uses.
         if (scheduledInFuture) ...[
           RetroCard(
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
@@ -1751,9 +1701,25 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                 Icon(Icons.schedule, size: 18, color: AppColors.pillGreenDark),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    'Starts at ${_formatScheduledStart(scheduledStartAt)}',
-                    style: PixelText.body(size: 13, color: AppColors.textDark),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'STARTS IN ${_formatCountdownShort(scheduledStartAt.difference(_countdownNow))}',
+                        style: PixelText.title(
+                          size: 14,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'at ${_formatScheduledStart(scheduledStartAt)}',
+                        style: PixelText.body(
+                          size: 12,
+                          color: AppColors.textMid,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -2000,11 +1966,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         .where((p) => p['finishedAt'] != null)
         .length;
 
-    // Position runners relative to the current leader so time-based races
-    // (no step target, or runners blowing past it) still show who's ahead.
+    // Position runners against the expected-pace denominator (leader-capped)
+    // so time-based races show sane positions from minute one — see
+    // _courseDenominator.
     final leaderSteps = _leaderSteps(participants);
-    final milestoneProgress = targetSteps > 0 && leaderSteps > 0
-        ? (targetSteps / leaderSteps).clamp(0.0, 1.0).toDouble()
+    final courseDenominator = _courseDenominator(leaderSteps);
+    final milestoneProgress = targetSteps > 0 && courseDenominator > 0
+        ? (targetSteps / courseDenominator).clamp(0.0, 1.0).toDouble()
         : null;
 
     return Column(
@@ -2047,7 +2015,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                     : (p['displayName'] as String? ?? '???'),
                 progress: p['stealthed'] == true
                     ? _jitterProgress(p['userId'] as String? ?? '', targetSteps)
-                    : _leaderRelativeProgress(p['totalSteps'], leaderSteps),
+                    : _courseProgress(p['totalSteps'], courseDenominator),
                 isUser: (p['userId'] as String?) == _myUserId,
                 isStealthed: p['stealthed'] == true,
                 profilePhotoUrl: p['profilePhotoUrl'] as String?,
@@ -2236,11 +2204,20 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         PageRouteBuilder(
           opaque: false,
           pageBuilder: (_, _, _) => CaseOpeningScreen(
-            openMysteryBox: () => _api.openMysteryBox(
-              identityToken: token,
-              raceId: widget.raceId,
-              powerupId: boxId,
-            ),
+            openMysteryBox: () async {
+              final result = await _api.openMysteryBox(
+                identityToken: token,
+                raceId: widget.raceId,
+                powerupId: boxId,
+              );
+              // The overlay is non-opaque, so the inventory row stays visible
+              // behind the reveal. Empty the box's slot as soon as the server
+              // confirms — on slow connections it used to sit there until the
+              // post-close _loadProgress() returned, looking like the box had
+              // bounced back into the inventory.
+              _optimisticallyRemoveFromInventory(boxId);
+              return result;
+            },
           ),
           transitionsBuilder: (_, anim, _, child) =>
               FadeTransition(opacity: anim, child: child),
@@ -3088,6 +3065,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: _buildLeaderboardRows(participants),
         ),
+        const SizedBox(height: 18),
+
+        // ACTIVITY / CHAT — still viewable after the race ends. The composer
+        // auto-disables (read-only) via _canPostMessage.
+        _buildActivityTabsSection(),
         const SizedBox(height: 24),
       ],
     );
@@ -3642,10 +3624,62 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   /// A runner's progress relative to the leader (0..1). If nobody has any
   /// steps yet (leaderSteps == 0) everyone sits at the start. Guards against
   /// division by zero and null/absent step fields from older backends.
+  ///
+  /// Used only for COMPLETED races, where "the winner sits on the finish
+  /// line" is the correct final image. Live races use [_courseDenominator] —
+  /// pure leader-relative pins whoever is ahead to the flag even at 100 steps.
   static double _leaderRelativeProgress(dynamic totalSteps, int leaderSteps) {
     if (leaderSteps <= 0) return 0.0;
     final steps = (totalSteps as num?)?.toInt() ?? 0;
     return (steps / leaderSteps).clamp(0.0, 1.0).toDouble();
+  }
+
+  /// Baseline daily pace the live track scales against — the app's canonical
+  /// default step goal (see the backend's COMPAT_STEP_GOAL).
+  static const int _baselineStepsPerDay = 5000;
+
+  /// Denominator for live course positions:
+  ///   max(leaderSteps, 5000/day × durationDays × max(elapsedFrac, 0.15))
+  /// The time-scaled expectation keeps early-race positions sane (100 steps at
+  /// minute one lands near the start, not the finish line); taking the max
+  /// with leaderSteps guarantees a leader who outruns the expectation still
+  /// caps at 1.0 instead of overflowing. The 0.15 floor avoids a near-zero
+  /// denominator in the opening hours.
+  double _courseDenominator(int leaderSteps) {
+    final days = _readInt(_race?['maxDurationDays'], fallback: 7);
+    final startedAt = DateTime.tryParse(_race?['startedAt'] as String? ?? '');
+    final endsAt = DateTime.tryParse(_race?['endsAt'] as String? ?? '');
+    var elapsedFrac = 1.0;
+    if (startedAt != null && endsAt != null && endsAt.isAfter(startedAt)) {
+      final total = endsAt.difference(startedAt).inSeconds;
+      final elapsed = DateTime.now().difference(startedAt).inSeconds;
+      elapsedFrac = (elapsed / total).clamp(0.0, 1.0).toDouble();
+    }
+    final expected =
+        _baselineStepsPerDay * days * math.max(elapsedFrac, 0.15);
+    final denom = math.max(leaderSteps.toDouble(), expected.toDouble());
+    return denom > 0 ? denom : 1.0;
+  }
+
+  /// A runner's live course position (0..1) against [_courseDenominator].
+  static double _courseProgress(dynamic totalSteps, double denominator) {
+    if (denominator <= 0) return 0.0;
+    final steps = (totalSteps as num?)?.toInt() ?? 0;
+    return (steps / denominator).clamp(0.0, 1.0).toDouble();
+  }
+
+  /// Compact live countdown label ("2d 3h 14m", "3h 14m 05s", "14m 05s").
+  static String _formatCountdownShort(Duration remaining) {
+    final safe = remaining.isNegative ? Duration.zero : remaining;
+    final days = safe.inDays;
+    final hours = safe.inHours.remainder(24);
+    final minutes = safe.inMinutes.remainder(60);
+    final seconds = safe.inSeconds.remainder(60);
+    if (days > 0) return '${days}d ${hours}h ${minutes}m';
+    if (hours > 0) {
+      return '${hours}h ${minutes}m ${seconds.toString().padLeft(2, '0')}s';
+    }
+    return '${minutes}m ${seconds.toString().padLeft(2, '0')}s';
   }
 
   /// Compact step label for milestone markers / subtitles (e.g. 50000 -> 50K).

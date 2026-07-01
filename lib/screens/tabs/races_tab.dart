@@ -80,7 +80,7 @@ class _RacesTabState extends State<RacesTab> {
     if (!mounted) return;
     setState(() => _joiningFeaturedId = null);
     if (joined) {
-      showInfoToast(context, "You're in! 🏃");
+      showInfoToast(context, "You're in!");
     }
   }
 
@@ -701,6 +701,10 @@ class _RacesTabState extends State<RacesTab> {
     final creatorName = creator?['displayName'] as String? ?? '';
     final isCreator = race['isCreator'] as bool? ?? false;
     final myPlacement = race['myPlacement'] as int?;
+    // Detour Sign: the backend nulls myPlacement and sets this additive flag
+    // so the list shows "???" instead of a placement (matches the race-detail
+    // masking). Absent on older backends -> false.
+    final myPlacementHidden = race['myPlacementHidden'] as bool? ?? false;
     final queuedBoxCount = (race['queuedBoxCount'] as num?)?.toInt() ?? 0;
     // Held/openable mystery boxes for the current user in this race (0..4).
     // Absent on older backends -> defaults to 0.
@@ -764,7 +768,8 @@ class _RacesTabState extends State<RacesTab> {
 
     final showTrailingStatus =
         status != 'ACTIVE' && status != 'COMPLETED' && statusLabel.isNotEmpty;
-    final showTrailingContent = myPlacement != null || showTrailingStatus;
+    final showTrailingContent =
+        myPlacement != null || myPlacementHidden || showTrailingStatus;
 
     return KeyedSubtree(
       key: cardKey,
@@ -836,9 +841,18 @@ class _RacesTabState extends State<RacesTab> {
                           alpha: 0.16,
                         ),
                         textColor: AppColors.pillGreenDark,
+                      )
+                    else if (myPlacementHidden)
+                      _buildMetaChip(
+                        '??? PLACE',
+                        backgroundColor: AppColors.textMid.withValues(
+                          alpha: 0.16,
+                        ),
+                        textColor: AppColors.textMid,
                       ),
                     if (showTrailingStatus) ...[
-                      if (myPlacement != null) const SizedBox(height: 4),
+                      if (myPlacement != null || myPlacementHidden)
+                        const SizedBox(height: 4),
                       Text(
                         statusLabel,
                         style: PixelText.title(size: 12, color: badgeColor),

@@ -594,8 +594,17 @@ class BackendApiService {
     // Opt-in flag: tells the backend this build understands the new
     // ACTIVE_RACES list state (horizontal row of active-race cards). Older app
     // builds never send it and keep receiving the legacy single-state response.
+    //
+    // localDate: asks the backend to embed `stepMilestones` (same shape as
+    // /users/me/step-milestones/today) so the claim-rewards card loads with
+    // the rest of the home page instead of racing its own request. Old
+    // backends ignore the param; the field is then absent and the milestones
+    // widget falls back to its standalone fetch.
+    final now = DateTime.now();
+    String two(int n) => n.toString().padLeft(2, '0');
+    final localDate = '${now.year}-${two(now.month)}-${two(now.day)}';
     final response = await _sendGetRequest(
-      path: '/home/race-card?homeActiveRaces=1',
+      path: '/home/race-card?homeActiveRaces=1&localDate=$localDate',
       identityToken: identityToken,
     );
 
@@ -1137,38 +1146,20 @@ class BackendApiService {
     required String powerupId,
     String? targetUserId,
     String? targetDirection,
-    String? swapOfferedPowerupId,
-    String? swapRequestedPowerupId,
     int upgradeLevel = 0,
   }) async {
+    // Sneaky Swap's retired swapOfferedPowerupId/swapRequestedPowerupId are
+    // gone: the steal redesign is target-only, and the server ignores the
+    // legacy ids anyway.
     final body = <String, dynamic>{};
     if (targetUserId != null) body['targetUserId'] = targetUserId;
     if (targetDirection != null) body['targetDirection'] = targetDirection;
-    if (swapOfferedPowerupId != null) {
-      body['swapOfferedPowerupId'] = swapOfferedPowerupId;
-    }
-    if (swapRequestedPowerupId != null) {
-      body['swapRequestedPowerupId'] = swapRequestedPowerupId;
-    }
     if (upgradeLevel > 0) body['upgradeLevel'] = upgradeLevel;
 
     final response = await _sendJsonRequest(
       method: 'POST',
       path: '/races/$raceId/powerups/$powerupId/use',
       body: body,
-      identityToken: identityToken,
-    );
-
-    return _decodeJsonResponse(response);
-  }
-
-  Future<Map<String, dynamic>> fetchSneakySwapOptions({
-    required String identityToken,
-    required String raceId,
-    required String targetUserId,
-  }) async {
-    final response = await _sendGetRequest(
-      path: '/races/$raceId/powerups/sneaky-swap-options/$targetUserId',
       identityToken: identityToken,
     );
 

@@ -593,7 +593,7 @@ Map<String, dynamic> tutorialPreviewRaceMessages(String? kind) {
       {
         'id': 'msg-1',
         'kind': 'USER',
-        'body': 'who hit me with the leg cramp 😤',
+        'body': 'who hit me with the leg cramp',
         'senderId': tutorialPreviewUserId,
         'senderName': 'Rohan',
         'senderPhotoUrl': null,
@@ -602,7 +602,7 @@ Map<String, dynamic> tutorialPreviewRaceMessages(String? kind) {
       {
         'id': 'msg-2',
         'kind': 'USER',
-        'body': 'gg everyone, catching up tonight 🏃',
+        'body': 'gg everyone, catching up tonight',
         'senderId': 'rk-1',
         'senderName': 'Sam Rivera',
         'senderPhotoUrl': null,

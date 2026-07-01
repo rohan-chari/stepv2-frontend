@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
 import '../styles.dart';
+import '../widgets/game_container.dart';
 import '../widgets/home_chrome.dart';
 import '../widgets/pill_button.dart';
+import '../widgets/spinning_coin.dart';
 import 'spotlight_overlay.dart';
 import 'tutorial_preview_data.dart';
 import 'tutorial_real_screens.dart';
@@ -285,40 +287,42 @@ class _TutorialScreenState extends State<TutorialScreen> {
   }
 
   Future<void> _showRewardReveal() {
+    // Framed GameContainer reveal, matching the daily-reward / attack-outcome
+    // modal family (accent frame, parchment surface, coin-gold glow). No
+    // emoji — the SpinningCoin is the hero, like every other coin reveal.
     return showDialog<void>(
       context: context,
       barrierDismissible: false,
       barrierColor: Colors.black.withValues(alpha: 0.62),
       builder: (dialogContext) {
         return Dialog(
-          backgroundColor: AppColors.parchment,
+          backgroundColor: Colors.transparent,
           insetPadding: const EdgeInsets.symmetric(horizontal: 40),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-            side: const BorderSide(color: AppColors.parchmentBorder, width: 2),
-          ),
-          child: Padding(
+          child: GameContainer(
             padding: const EdgeInsets.fromLTRB(28, 32, 28, 24),
+            frameColor: AppColors.accent,
+            surfaceColor: AppColors.parchmentLight,
+            glowColor: AppColors.coinMid,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('🎉', style: TextStyle(fontSize: 44)),
+                const SpinningCoin(size: 44),
                 const SizedBox(height: 12),
                 Text(
                   'TUTORIAL COMPLETE',
-                  style: HomeText.label(size: 13, color: AppColors.textMid),
+                  style: PixelText.title(size: 13, color: AppColors.textMid),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
                 Text(
                   '+$kTutorialRewardCoins coins',
-                  style: HomeText.title(size: 30, color: AppColors.textDark),
+                  style: PixelText.title(size: 30, color: AppColors.textDark),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
                 Text(
                   'Nice work — your reward is in the bag. Now go earn some more!',
-                  style: HomeText.body(size: 15, color: AppColors.textMid),
+                  style: PixelText.body(size: 15, color: AppColors.textMid),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 22),

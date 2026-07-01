@@ -173,6 +173,13 @@ class HomeTab extends StatelessWidget {
                               authService: authService,
                               backendApiService: backendApiService,
                               currentSteps: stepData?.steps,
+                              // Fed by the home batch so the claim card lands
+                              // with everything else; falls back to its own
+                              // fetch on old backends.
+                              initialData:
+                                  raceCard?['stepMilestones']
+                                      as Map<String, dynamic>?,
+                              awaitingBatch: raceCardLoading,
                             ),
                           ),
                         ],
@@ -602,7 +609,19 @@ class HomeTab extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 10),
-                    CoinBalanceBadge(coins: authService.coins, coinSize: 16),
+                    CoinBalanceBadge(
+                      coins: authService.coins,
+                      coinSize: 16,
+                      // "+" = earn more coins -> invite friends (referral).
+                      onAddTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ReferralScreen(
+                            authService: authService,
+                            backendApiService: backendApiService,
+                          ),
+                        ),
+                      ),
+                    ),
                     const Spacer(),
                     _HelpHeroButton(
                       onTap: () => Navigator.of(context).push(
