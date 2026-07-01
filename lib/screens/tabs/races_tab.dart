@@ -26,6 +26,10 @@ class RacesTab extends StatefulWidget {
   // Joins a featured (seeded) race; returns true on success. The card shows a
   // confirmation toast and flips to VIEW once the refreshed data comes back.
   final Future<bool> Function(String raceId)? onJoinFeaturedRace;
+  // Number of joinable public races (matches PublicRacesScreen's list). Shown
+  // inline in the PUBLIC RACES button label. Defaults to 0 until loaded; the
+  // parent keeps the last known value on a fetch error.
+  final int publicRacesCount;
   final String? displayName;
   final VoidCallback? onOpenProfile;
   // Optional tutorial spotlight anchors (null in the shipped app). The tutorial
@@ -45,6 +49,7 @@ class RacesTab extends StatefulWidget {
     required this.onRacesChanged,
     this.onRefresh,
     this.onJoinFeaturedRace,
+    this.publicRacesCount = 0,
     this.displayName,
     this.onOpenProfile,
     this.tutorialPotKey,
@@ -319,7 +324,7 @@ class _RacesTabState extends State<RacesTab> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: PillButton(
-                        label: 'PUBLIC RACES',
+                        label: 'PUBLIC RACES (${widget.publicRacesCount})',
                         icon: Icons.travel_explore_rounded,
                         variant: PillButtonVariant.accent,
                         fontSize: 13,
@@ -860,12 +865,13 @@ class _RacesTabState extends State<RacesTab> {
     );
   }
 
-  // Shows four slots: three active-inventory spots followed by one dedicated
-  // queue spot (set off by a wider gap).
+  // Shows four slots: three active-inventory spots followed by one queue spot,
+  // all evenly spaced.
   //   • Active spots fill from [slotItems] — a powerup sprite for HELD items, a
   //     crate for unopened MYSTERY_BOX items — then pad with faded silhouettes.
-  //   • The 4th spot is a queued crate when [queuedBoxCount] > 0 (a box earned
-  //     but waiting because the active inventory is full), else a faded slot.
+  //   • The 4th spot is a plain filled crate when [queuedBoxCount] > 0 (a box
+  //     earned but waiting because the active inventory is full), else a faded
+  //     slot. It renders like a regular box (no dimmed clock-badge variant).
   // [slotItems] is absent on older backends; we then fall back to filling the
   // active spots from [mysteryBoxCount] so the row still reads correctly.
   Widget _buildInventoryRow(
@@ -900,9 +906,10 @@ class _RacesTabState extends State<RacesTab> {
       active.add(const CrateIcon(size: slotSize, filled: false));
     }
 
-    final queueSlot = queuedBoxCount > 0
-        ? const CrateIcon(size: slotSize, queued: true)
-        : const CrateIcon(size: slotSize, filled: false);
+    // The queue spot renders as a plain crate — filled when a box is queued,
+    // faded when empty — so it reads like any other inventory box (no dimmed
+    // clock-badge variant).
+    final queueSlot = CrateIcon(size: slotSize, filled: queuedBoxCount > 0);
 
     return SizedBox(
       key: rowKey,
@@ -914,8 +921,9 @@ class _RacesTabState extends State<RacesTab> {
             if (i > 0) const SizedBox(width: 3),
             active[i],
           ],
-          // Wider gap sets the queue spot apart from the active inventory.
-          const SizedBox(width: 8),
+          // Same 3px gap as the inter-slot gaps so the queue spot sits flush
+          // with the active inventory.
+          const SizedBox(width: 3),
           queueSlot,
         ],
       ),

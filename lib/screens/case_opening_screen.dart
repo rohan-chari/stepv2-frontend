@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../styles.dart';
 import '../widgets/case_opening_strip.dart';
+import '../widgets/error_toast.dart';
 import '../widgets/game_container.dart';
 import '../widgets/home_chrome.dart';
 import '../widgets/pill_button.dart';
@@ -180,9 +181,7 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
         })
         .catchError((_) {
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Failed to open mystery box')),
-          );
+          showErrorToast(context, 'Failed to open mystery box');
           Navigator.of(context).pop();
         });
   }

@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -11,10 +12,10 @@ import '../../styles.dart';
 import '../../tutorial/tutorial_screen.dart';
 import '../../utils/at_name.dart';
 import '../../widgets/app_avatar.dart';
+import '../../widgets/error_toast.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/trail_sign.dart';
 import '../../widgets/step_calendar.dart';
-import '../../widgets/daily_reward_trigger.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/tier_badge.dart';
 import '../admin_screen.dart';
@@ -433,14 +434,6 @@ class _ProfileTabState extends State<ProfileTab> {
                 },
               ),
             ),
-            _buildSectionHeader('DAILY REWARD'),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-              child: DailyRewardTrigger(
-                authService: widget.authService,
-                backendApiService: _api,
-              ),
-            ),
             _buildSectionHeader('STEP CALENDAR'),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
@@ -796,9 +789,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete account: $error')),
-      );
+      showErrorToast(context, 'Failed to delete account: $error');
     }
   }
 
@@ -851,6 +842,8 @@ class _SettingsSheetState extends State<_SettingsSheet> {
             ),
             const SizedBox(height: 10),
           ],
+          _LeaderboardVisibilityToggle(authService: widget.authService),
+          const SizedBox(height: 10),
           if (widget.authService.isAdmin) ...[
             PillButton(
               label: 'ADMIN TOOLS',
@@ -976,6 +969,70 @@ class _NotificationToggleState extends State<_NotificationToggle> {
       fullWidth: true,
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       onPressed: _granted! ? null : _enable,
+    );
+  }
+}
+
+/// Apple-settings-style row toggling whether the user appears on the global
+/// leaderboard. Listens to [authService] so it reflects the latest value
+/// (including a revert if the backend write fails).
+class _LeaderboardVisibilityToggle extends StatefulWidget {
+  final AuthService authService;
+
+  const _LeaderboardVisibilityToggle({required this.authService});
+
+  @override
+  State<_LeaderboardVisibilityToggle> createState() =>
+      _LeaderboardVisibilityToggleState();
+}
+
+class _LeaderboardVisibilityToggleState
+    extends State<_LeaderboardVisibilityToggle> {
+  void _handleChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.authService.addListener(_handleChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.authService.removeListener(_handleChanged);
+    super.dispose();
+  }
+
+  Future<void> _toggle(bool value) async {
+    await widget.authService.updateLeaderboardVisibility(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+      decoration: BoxDecoration(
+        color: AppColors.parchmentLight,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.parchmentBorder, width: 1.5),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Hide me from the global leaderboard',
+              style: PixelText.body(size: 13, color: AppColors.textDark),
+            ),
+          ),
+          const SizedBox(width: 12),
+          CupertinoSwitch(
+            value: widget.authService.hiddenFromLeaderboard,
+            activeTrackColor: AppColors.accent,
+            onChanged: _toggle,
+          ),
+        ],
+      ),
     );
   }
 }

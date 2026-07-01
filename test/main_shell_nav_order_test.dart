@@ -148,7 +148,7 @@ void main() {
     expect(tabBar.items.map((item) => item.label), [
       'Home',
       'Races',
-      'Ranked',
+      'Friends',
       'Boards',
       'Profile',
     ]);

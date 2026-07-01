@@ -7,6 +7,8 @@ import '../utils/at_name.dart';
 import '../utils/share_helper.dart';
 import 'referral_rules_screen.dart';
 import '../widgets/app_avatar.dart';
+import '../widgets/error_toast.dart';
+import '../widgets/info_toast.dart';
 import '../widgets/loading_skeleton.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/spinning_coin.dart';
@@ -125,22 +127,25 @@ class _ReferralScreenState extends State<ReferralScreen> {
     if (token == null || token.isEmpty) return;
 
     String message;
+    var success = false;
     try {
       final result = await _api.redeemReferralCode(
         identityToken: token,
         code: code,
       );
-      final attributed = result['attributed'] == true;
-      message = attributed
+      success = result['attributed'] == true;
+      message = success
           ? "You're in! Finish your first race to earn coins."
           : _reasonMessage(result['reason'] as String?);
     } catch (_) {
       message = "Couldn't apply that code. Please try again.";
     }
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    if (success) {
+      showInfoToast(context, message);
+    } else {
+      showErrorToast(context, message);
+    }
   }
 
   String _reasonMessage(String? reason) {

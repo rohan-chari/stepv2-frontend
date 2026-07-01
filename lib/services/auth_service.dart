@@ -35,6 +35,7 @@ class AuthService extends ChangeNotifier {
   static const _keyHeldCoins = 'auth_held_coins';
   static const _keyFirstRaceOnboardingSeen = 'auth_first_race_onboarding_seen';
   static const _keyTutorialOnboardingSeen = 'auth_tutorial_onboarding_seen';
+  static const _keyHiddenFromLeaderboard = 'auth_hidden_from_leaderboard';
   static const _keyPendingShareToken = 'auth_pending_share_token';
   static const _keyPendingReferralCode = 'auth_pending_referral_code';
   static const _keyPendingReferralCapturedAt =
@@ -63,6 +64,7 @@ class AuthService extends ChangeNotifier {
   int _heldCoins = 0;
   bool _firstRaceOnboardingSeen = false;
   bool _tutorialOnboardingSeen = false;
+  bool _hiddenFromLeaderboard = false;
   String? _pendingShareToken;
   String? _pendingReferralCode;
   int? _pendingReferralCapturedAtMs;
@@ -81,6 +83,7 @@ class AuthService extends ChangeNotifier {
   int get heldCoins => _heldCoins;
   bool get firstRaceOnboardingSeen => _firstRaceOnboardingSeen;
   bool get tutorialOnboardingSeen => _tutorialOnboardingSeen;
+  bool get hiddenFromLeaderboard => _hiddenFromLeaderboard;
 
   /// A race share token captured from a deep link that has not yet been
   /// consumed (joined). Persisted so it survives the sign-in/onboarding gap on
@@ -131,6 +134,8 @@ class AuthService extends ChangeNotifier {
         prefs.getBool(_keyFirstRaceOnboardingSeen) ?? false;
     _tutorialOnboardingSeen =
         prefs.getBool(_keyTutorialOnboardingSeen) ?? false;
+    _hiddenFromLeaderboard =
+        prefs.getBool(_keyHiddenFromLeaderboard) ?? false;
     _pendingShareToken = prefs.getString(_keyPendingShareToken);
     _pendingReferralCode = prefs.getString(_keyPendingReferralCode);
     _pendingReferralCapturedAtMs = prefs.getInt(_keyPendingReferralCapturedAt);
@@ -329,6 +334,36 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Sets whether the user is hidden from the global leaderboard. Updates local
+  /// state + persists + notifies optimistically so the toggle reflects the
+  /// change immediately, then pushes to the backend. On failure (e.g. an older
+  /// backend that 404s the endpoint) the local value is reverted so the UI
+  /// doesn't drift from the server.
+  Future<void> updateLeaderboardVisibility(bool hidden) async {
+    final token = authToken;
+    if (token == null || token.isEmpty) return;
+
+    final previous = _hiddenFromLeaderboard;
+    _hiddenFromLeaderboard = hidden;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyHiddenFromLeaderboard, hidden);
+    notifyListeners();
+
+    try {
+      final user = await _backendApiService.updateLeaderboardVisibility(
+        identityToken: token,
+        hidden: hidden,
+      );
+      applyBackendUser(user);
+      await prefs.setBool(_keyHiddenFromLeaderboard, _hiddenFromLeaderboard);
+      notifyListeners();
+    } catch (_) {
+      _hiddenFromLeaderboard = previous;
+      await prefs.setBool(_keyHiddenFromLeaderboard, previous);
+      notifyListeners();
+    }
+  }
+
   void applyBackendUser(Map<String, dynamic> backendUser) {
     if (backendUser.containsKey('id')) {
       _backendUserId = backendUser['id'] as String?;
@@ -362,6 +397,12 @@ class AuthService extends ChangeNotifier {
     if (backendUser.containsKey('tutorialOnboardingSeen')) {
       _tutorialOnboardingSeen =
           backendUser['tutorialOnboardingSeen'] as bool? ?? false;
+    }
+    // Defensive: older backends predate the leaderboard-visibility field. Only
+    // override when the key is present; default false (visible) otherwise.
+    if (backendUser.containsKey('hiddenFromLeaderboard')) {
+      _hiddenFromLeaderboard =
+          backendUser['hiddenFromLeaderboard'] as bool? ?? false;
     }
   }
 
@@ -402,6 +443,7 @@ class AuthService extends ChangeNotifier {
     _isAdmin = false;
     _firstRaceOnboardingSeen = false;
     _tutorialOnboardingSeen = false;
+    _hiddenFromLeaderboard = false;
     _pendingShareToken = null;
 
     final prefs = await SharedPreferences.getInstance();
@@ -416,6 +458,7 @@ class AuthService extends ChangeNotifier {
     await prefs.remove(_keyHeldCoins);
     await prefs.remove(_keyFirstRaceOnboardingSeen);
     await prefs.remove(_keyTutorialOnboardingSeen);
+    await prefs.remove(_keyHiddenFromLeaderboard);
     await prefs.remove(_keyPendingShareToken);
     notifyListeners();
   }
@@ -611,6 +654,7 @@ class AuthService extends ChangeNotifier {
     await prefs.setInt(_keyHeldCoins, _heldCoins);
     await prefs.setBool(_keyFirstRaceOnboardingSeen, _firstRaceOnboardingSeen);
     await prefs.setBool(_keyTutorialOnboardingSeen, _tutorialOnboardingSeen);
+    await prefs.setBool(_keyHiddenFromLeaderboard, _hiddenFromLeaderboard);
   }
 
   String? _buildDisplayName(AuthorizationCredentialAppleID credential) {

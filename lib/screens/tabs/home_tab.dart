@@ -40,7 +40,10 @@ class HomeTab extends StatelessWidget {
   final Loadable<List<Map<String, dynamic>>>? friendsStepsState;
   final List<Map<String, dynamic>> equippedAccessories;
   final Loadable<Map<String, dynamic>>? shopCatalogState;
-  final VoidCallback? onOpenFriendsTab;
+  // Retained for backward compatibility with callers (e.g. the tutorial
+  // preview) that still pass it. The add-friends hero button that consumed it
+  // was removed (Friends is now a primary tab), so HomeTab no longer renders a
+  // badge from this count.
   final int incomingFriendRequests;
   final VoidCallback? onOpenRacesTab;
   final VoidCallback? onOpenLeaderboardTab;
@@ -82,7 +85,6 @@ class HomeTab extends StatelessWidget {
     this.friendsStepsState,
     this.equippedAccessories = const [],
     this.shopCatalogState,
-    this.onOpenFriendsTab,
     this.incomingFriendRequests = 0,
     this.onOpenRacesTab,
     this.onOpenLeaderboardTab,
@@ -608,14 +610,6 @@ class HomeTab extends StatelessWidget {
                           builder: (_) =>
                               TutorialScreen(authService: authService),
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    KeyedSubtree(
-                      key: tutorialFriendsKey,
-                      child: _FriendsHeroButton(
-                        incomingRequests: incomingFriendRequests,
-                        onTap: onOpenFriendsTab,
                       ),
                     ),
                   ],
@@ -1407,91 +1401,6 @@ class _HelpHeroButtonState extends State<_HelpHeroButton> {
         duration: const Duration(milliseconds: 90),
         curve: Curves.easeOut,
         child: button,
-      ),
-    );
-  }
-}
-
-class _FriendsHeroButton extends StatefulWidget {
-  final int incomingRequests;
-  final VoidCallback? onTap;
-
-  const _FriendsHeroButton({required this.incomingRequests, this.onTap});
-
-  @override
-  State<_FriendsHeroButton> createState() => _FriendsHeroButtonState();
-}
-
-class _FriendsHeroButtonState extends State<_FriendsHeroButton> {
-  static const _shadows = [
-    Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
-  ];
-
-  bool _pressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final hasRequests = widget.incomingRequests > 0;
-
-    final button = Container(
-      decoration: BoxDecoration(
-        color: AppColors.parchment.withValues(alpha: 0.16),
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: AppColors.parchment.withValues(alpha: 0.5),
-          width: 1.5,
-        ),
-      ),
-      padding: const EdgeInsets.all(8),
-      child: Icon(
-        Icons.person_add_alt_1_rounded,
-        size: 22,
-        color: AppColors.parchment,
-        shadows: _shadows,
-      ),
-    );
-
-    final child = hasRequests
-        ? Stack(
-            clipBehavior: Clip.none,
-            children: [
-              button,
-              Positioned(
-                top: -4,
-                right: -4,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: AppColors.error,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.parchment, width: 1.5),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Text(
-                      '${widget.incomingRequests}',
-                      style: PixelText.number(
-                        size: 9,
-                        color: AppColors.parchment,
-                      ).copyWith(height: 1),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          )
-        : button;
-
-    return GestureDetector(
-      onTap: widget.onTap,
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) => setState(() => _pressed = false),
-      onTapCancel: () => setState(() => _pressed = false),
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedScale(
-        scale: _pressed ? 0.92 : 1.0,
-        duration: const Duration(milliseconds: 90),
-        curve: Curves.easeOut,
-        child: child,
       ),
     );
   }

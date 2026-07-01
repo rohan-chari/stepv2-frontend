@@ -29,7 +29,6 @@ import 'tabs/friends_tab.dart';
 import 'tabs/home_tab.dart';
 import 'tabs/leaderboard_tab.dart';
 import 'tabs/profile_tab.dart';
-import 'tabs/ranked_tab.dart';
 import 'create_race_screen.dart';
 import 'race_detail_screen.dart';
 import 'tabs/races_tab.dart';
@@ -58,7 +57,7 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   static const _homeTabIndex = 0;
   static const _racesTabIndex = 1;
-  static const _rankedTabIndex = 2;
+  static const _friendsTabIndex = 2;
   static const _boardsTabIndex = 3;
   static const _profileTabIndex = 4;
 
@@ -84,6 +83,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   Loadable<Map<String, dynamic>> _racesState = const Loadable.initial();
   // Live seeded daily/weekly races for the Featured strip on the Races tab.
   List<Map<String, dynamic>> _featuredRaces = const [];
+  // Count of joinable public races, surfaced inline on the Races tab's PUBLIC
+  // RACES button. Defaults to 0; on a fetch error we keep the last known value.
+  int _publicRacesCount = 0;
   List<Map<String, dynamic>> _equippedAccessories = const [];
   Loadable<Map<String, dynamic>> _shopCatalogState = const Loadable.initial();
   Map<String, dynamic>? _raceCard;
@@ -91,7 +93,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   final String _requestedLeaderboardType = 'steps';
   final String _requestedLeaderboardPeriod = 'today';
   int _leaderboardSelectionNonce = 0;
-  int _rankedSelectionNonce = 0;
   Timer? _foregroundPollTimer;
   final GlobalKey<StreakChipState> _streakChipKey =
       GlobalKey<StreakChipState>();
@@ -108,6 +109,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   // of truth across sessions; this just prevents a re-fetch re-interrupting.
   final Set<int> _rankedResultsShownThisSession = {};
   bool _rankedResultsPopupOpen = false;
+  // The in-app ranked-results popup is intentionally suppressed: settled weeks
+  // should never interrupt users (settlement still runs server-side). The
+  // detection/popup code below is kept wired (not deleted) behind this flag so
+  // it can be re-enabled by flipping it. A non-const field keeps the body live
+  // (no dead-code) while making it a no-op.
+  final bool _showRankedResultsPopup = false;
 
   // Guards the shared-race drain so overlapping AuthService notifications can't
   // fire two concurrent joins for the same pending token.
@@ -183,7 +190,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         _pageController.jumpToPage(_racesTabIndex);
         break;
       case NotificationRoute.friends:
-        _openFriendsTab();
+        // Friends is now a primary tab (index 2); jumping there also clears the
+        // incoming-request badge via onPageChanged.
+        _pageController.jumpToPage(_friendsTabIndex);
         break;
       case NotificationRoute.home:
         _pageController.jumpToPage(_homeTabIndex);
@@ -570,10 +579,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         });
       }
 
-      // Featured strip rides along with the races list so it stays in sync
-      // (e.g. after a join). Self-contained error handling — never disrupts the
-      // races load above.
+      // Featured strip + public-races count ride along with the races list so
+      // they stay in sync (e.g. after a join). Self-contained error handling —
+      // never disrupts the races load above.
       await _fetchFeaturedRaces();
+      await _fetchPublicRaces();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -614,6 +624,23 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     } catch (_) {
       // Featured is a non-critical discovery surface; on error keep the last
       // known list rather than disturbing the races page.
+    }
+  }
+
+  /// Fetches the joinable public races just to surface their count on the Races
+  /// tab's PUBLIC RACES button. Mirrors [_fetchFeaturedRaces]: non-critical, so
+  /// on any error (older backend, transient failure) we keep the last known
+  /// count rather than disturbing the races page.
+  Future<void> _fetchPublicRaces() async {
+    final identityToken = widget.authService.authToken;
+    if (identityToken == null || identityToken.isEmpty) return;
+    try {
+      final races = await _backendApiService.fetchPublicRaces(
+        identityToken: identityToken,
+      );
+      if (mounted) setState(() => _publicRacesCount = races.length);
+    } catch (_) {
+      // Keep the last known count on error.
     }
   }
 
@@ -694,6 +721,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   /// `resultsSeen` yields no popup — `resultsSeen` defaults to SEEN (true), and
   /// only the three real settlement outcomes qualify.
   Future<void> _maybeShowRankedResults() async {
+    // Suppressed in-app (see [_showRankedResultsPopup]): no fetch, no popup, so
+    // a settled week never interrupts the user. Settlement still runs server-
+    // side; the user sees their new tier the next time they open Ranked.
+    if (!_showRankedResultsPopup) return;
     if (!mounted || _rankedResultsPopupOpen || _raceResultsPopupOpen) return;
 
     final identityToken = widget.authService.authToken;
@@ -1034,28 +1065,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     await _refreshMe();
   }
 
-  void _openFriendsTab() {
-    if (_incomingFriendRequests != 0) {
-      setState(() => _incomingFriendRequests = 0);
-    }
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => FriendsTab(
-          authService: widget.authService,
-          onFriendsChanged: () {
-            _refreshMe();
-            _fetchFriendsSteps();
-          },
-          onRefresh: _refreshFriendsTab,
-          backendApiService: _backendApiService,
-          stepData: _stepData,
-          displayName: _displayName,
-          onOpenProfile: _openProfile,
-        ),
-      ),
-    );
-  }
-
   void _openLeaderboardTab() {
     _pageController.animateToPage(
       _boardsTabIndex,
@@ -1335,11 +1344,19 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                 onPageChanged: (index) {
                   setState(() {
                     _currentTab = index;
-                    // Refresh Ranked each time it's revealed (mirrors the
-                    // races refresh-on-reveal hook below).
-                    if (index == _rankedTabIndex) _rankedSelectionNonce++;
+                    // Clear the incoming-friend-request badge when the Friends
+                    // tab is revealed (mirrors _openFriendsTab's old behavior).
+                    if (index == _friendsTabIndex &&
+                        _incomingFriendRequests != 0) {
+                      _incomingFriendRequests = 0;
+                    }
                   });
                   if (index == _racesTabIndex) _fetchRaces();
+                  // Refresh the friends surface each time it's revealed (mirrors
+                  // the races refresh-on-reveal hook). We intentionally refresh
+                  // only the friends-steps data here, not _refreshMe, so the
+                  // badge we just cleared isn't immediately re-read from /me.
+                  if (index == _friendsTabIndex) _fetchFriendsSteps();
                 },
                 children: [
                   HomeTab(
@@ -1361,8 +1378,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     friendsStepsState: _friendsStepsState,
                     equippedAccessories: _equippedAccessories,
                     shopCatalogState: _shopCatalogState,
-                    onOpenFriendsTab: _openFriendsTab,
-                    incomingFriendRequests: _incomingFriendRequests,
                     onOpenRacesTab: _openRacesTab,
                     onOpenLeaderboardTab: _openLeaderboardTab,
                     onOpenShop: _openShop,
@@ -1385,13 +1400,21 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     onRacesChanged: _fetchRaces,
                     onRefresh: _refreshRacesTab,
                     onJoinFeaturedRace: _joinFeaturedRace,
+                    publicRacesCount: _publicRacesCount,
                     displayName: _displayName,
                     onOpenProfile: _openProfile,
                   ),
-                  RankedTab(
+                  FriendsTab(
                     authService: widget.authService,
+                    onFriendsChanged: () {
+                      _refreshMe();
+                      _fetchFriendsSteps();
+                    },
+                    onRefresh: _refreshFriendsTab,
                     backendApiService: _backendApiService,
-                    refreshNonce: _rankedSelectionNonce,
+                    stepData: _stepData,
+                    displayName: _displayName,
+                    onOpenProfile: _openProfile,
                   ),
                   LeaderboardTab(
                     authService: widget.authService,
@@ -1440,18 +1463,18 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     icon: Icons.directions_run_rounded,
                     label: 'Races',
                   ),
-                  const WoodenTabItem(
-                    icon: Icons.shield_rounded,
-                    label: 'Ranked',
+                  WoodenTabItem(
+                    icon: Icons.people_rounded,
+                    label: 'Friends',
+                    badgeCount: _incomingFriendRequests,
                   ),
                   const WoodenTabItem(
                     icon: Icons.leaderboard_rounded,
                     label: 'Boards',
                   ),
-                  WoodenTabItem(
+                  const WoodenTabItem(
                     icon: Icons.person_rounded,
                     label: 'Profile',
-                    badgeCount: _incomingFriendRequests,
                   ),
                 ],
               ),

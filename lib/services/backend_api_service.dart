@@ -300,6 +300,30 @@ class BackendApiService {
     return user;
   }
 
+  /// Toggles whether the signed-in user is hidden from the global leaderboard.
+  /// Additive endpoint (backend >= June 2026); older backends 404 here, so
+  /// callers degrade gracefully. Returns the updated `user` map.
+  Future<Map<String, dynamic>> updateLeaderboardVisibility({
+    required String identityToken,
+    required bool hidden,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'PUT',
+      path: '/auth/me/leaderboard-visibility',
+      body: {'hidden': hidden},
+      identityToken: identityToken,
+    );
+
+    final payload = await _decodeJsonResponse(response);
+    final user = payload['user'];
+
+    if (user is! Map<String, dynamic>) {
+      throw const ApiException('Something went wrong. Please try again.');
+    }
+
+    return user;
+  }
+
   Future<Map<String, dynamic>> checkDisplayName({
     required String identityToken,
     required String name,

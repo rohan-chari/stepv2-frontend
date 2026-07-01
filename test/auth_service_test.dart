@@ -3,6 +3,21 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 
+class _RecordingLeaderboardApi extends BackendApiService {
+  bool? lastHidden;
+  int calls = 0;
+
+  @override
+  Future<Map<String, dynamic>> updateLeaderboardVisibility({
+    required String identityToken,
+    required bool hidden,
+  }) async {
+    calls += 1;
+    lastHidden = hidden;
+    return {'hiddenFromLeaderboard': hidden};
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -166,6 +181,59 @@ void main() {
     final authService = AuthService();
     await authService.restoreSession();
     expect(authService.pendingReferralCode, isNull);
+  });
+
+  test('hiddenFromLeaderboard defaults to false', () async {
+    final authService = AuthService();
+    await authService.restoreSession();
+    expect(authService.hiddenFromLeaderboard, isFalse);
+  });
+
+  test(
+    'applyBackendUser ignores hiddenFromLeaderboard when the key is absent',
+    () async {
+      final authService = AuthService();
+      // Older backend payload without the field must not crash or flip state.
+      authService.applyBackendUser({'displayName': 'Trail Walker'});
+      expect(authService.hiddenFromLeaderboard, isFalse);
+    },
+  );
+
+  test(
+    'applyBackendUser merges hiddenFromLeaderboard only when the key is present',
+    () async {
+      final authService = AuthService();
+      authService.applyBackendUser({'hiddenFromLeaderboard': true});
+      expect(authService.hiddenFromLeaderboard, isTrue);
+      authService.applyBackendUser({'hiddenFromLeaderboard': false});
+      expect(authService.hiddenFromLeaderboard, isFalse);
+    },
+  );
+
+  test('updateLeaderboardVisibility calls the API, updates state, notifies', () async {
+    SharedPreferences.setMockInitialValues({
+      'auth_identity_token': 'apple-token',
+      'auth_user_identifier': 'apple-user-123',
+      'auth_session_token': 'session-token',
+    });
+    final api = _RecordingLeaderboardApi();
+    final authService = AuthService(backendApiService: api);
+    await authService.restoreSession();
+
+    var notified = 0;
+    authService.addListener(() => notified++);
+
+    await authService.updateLeaderboardVisibility(true);
+
+    expect(api.calls, 1);
+    expect(api.lastHidden, isTrue);
+    expect(authService.hiddenFromLeaderboard, isTrue);
+    expect(notified, greaterThan(0));
+
+    // Persisted: a fresh instance restores the toggle.
+    final restored = AuthService();
+    await restored.restoreSession();
+    expect(restored.hiddenFromLeaderboard, isTrue);
   });
 
   test('welcomeReferralCode restores and clears (one-shot)', () async {

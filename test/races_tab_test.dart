@@ -4,6 +4,7 @@ import 'package:step_tracker/models/loadable.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/tabs/races_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
+import 'package:step_tracker/widgets/spinning_crate.dart';
 
 Future<AuthService> _createAuthService() async {
   SharedPreferences.setMockInitialValues({
@@ -74,9 +75,11 @@ void main() {
   });
 
   testWidgets(
-    'RacesTab keeps placement and queued boxes aligned with the race title',
+    'RacesTab renders the queue slot as a plain filled crate (not the dimmed '
+    'clock-badge variant) with a 3px gap matching the other slots',
     (WidgetTester tester) async {
       final authService = await _createAuthService();
+      final boxKey = GlobalKey();
 
       await tester.pumpWidget(
         MaterialApp(
@@ -103,6 +106,7 @@ void main() {
               friendsSteps: const [],
               onRacesChanged: _noop,
               displayName: 'Trail Walker',
+              tutorialBoxKey: boxKey,
             ),
           ),
         ),
@@ -110,7 +114,6 @@ void main() {
       await tester.pump();
 
       final headerRow = find.byKey(const Key('race-card-header-race-1'));
-
       expect(headerRow, findsOneWidget);
       expect(
         find.descendant(of: headerRow, matching: find.text('Morning Dash')),
@@ -120,10 +123,32 @@ void main() {
         find.descendant(of: headerRow, matching: find.text('1ST PLACE')),
         findsOneWidget,
       );
-      expect(
-        find.descendant(of: headerRow, matching: find.text('2 QUEUED')),
-        findsOneWidget,
+
+      // The inventory row lives inside the tutorial-anchored SizedBox.
+      final inventoryRow = tester.widget<Row>(
+        find.descendant(of: find.byKey(boxKey), matching: find.byType(Row)),
       );
+      final children = inventoryRow.children;
+
+      // The queue slot is the last child: a plain filled crate, NOT the
+      // dimmed/clock-badge queued variant.
+      final queueSlot = children.last;
+      expect(queueSlot, isA<CrateIcon>());
+      expect((queueSlot as CrateIcon).filled, isTrue);
+      expect(queueSlot.queued, isFalse);
+
+      // No crate anywhere in the row uses the queued (dimmed + clock) variant.
+      for (final child in children) {
+        if (child is CrateIcon) {
+          expect(child.queued, isFalse);
+        }
+      }
+
+      // The gap immediately before the queue slot is 3px, matching the
+      // inter-slot gaps (no wider 8px separator anymore).
+      final gap = children[children.length - 2];
+      expect(gap, isA<SizedBox>());
+      expect((gap as SizedBox).width, 3);
     },
   );
 }
