@@ -898,6 +898,17 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
   }
 
+  // Keep the cached race-card batch truthful after a claim, so a remounted
+  // StreakChip (home page disposed by the PageView) doesn't briefly show a
+  // stale CLAIM state. No setState: nothing on screen reads this until the
+  // next HomeTab build.
+  void _markDailyRewardClaimed() {
+    final dailyReward = _raceCard?['dailyReward'];
+    if (dailyReward is Map) {
+      dailyReward['claimedToday'] = true;
+    }
+  }
+
   void _openRaceFromCard(String raceId) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -1390,6 +1401,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     onAcceptRaceInvite: _acceptRaceInviteFromCard,
                     onDeclineRaceInvite: _declineRaceInviteFromCard,
                     onChallengeFriendBack: _challengeFriendBack,
+                    onDailyRewardClaimed: _markDailyRewardClaimed,
                   ),
                   RacesTab(
                     authService: widget.authService,

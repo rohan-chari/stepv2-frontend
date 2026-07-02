@@ -66,6 +66,9 @@ class HomeTab extends StatelessWidget {
   final Future<void> Function(String raceId)? onAcceptRaceInvite;
   final Future<void> Function(String raceId)? onDeclineRaceInvite;
   final void Function(String friendUserId)? onChallengeFriendBack;
+  // Lets the shell patch its cached race-card batch when today's daily reward
+  // is claimed, so remounting home doesn't show a stale CLAIM button.
+  final VoidCallback? onDailyRewardClaimed;
 
   const HomeTab({
     super.key,
@@ -104,6 +107,7 @@ class HomeTab extends StatelessWidget {
     this.onAcceptRaceInvite,
     this.onDeclineRaceInvite,
     this.onChallengeFriendBack,
+    this.onDailyRewardClaimed,
   });
 
   @override
@@ -681,6 +685,13 @@ class HomeTab extends StatelessWidget {
                         authService: authService,
                         backendApiService: backendApiService,
                         compact: true,
+                        // Fed by the home batch so the CLAIM button lands
+                        // with everything else; falls back to its own fetch
+                        // on old backends.
+                        initialData:
+                            raceCard?['dailyReward'] as Map<String, dynamic>?,
+                        awaitingBatch: raceCardLoading,
+                        onClaimedToday: onDailyRewardClaimed,
                       ),
                     ),
                     const SizedBox(width: 10),

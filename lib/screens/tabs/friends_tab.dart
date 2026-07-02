@@ -118,8 +118,16 @@ class _FriendsTabState extends State<FriendsTab> {
 
       if (!mounted) return;
 
-      final friends =
-          (data['friends'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      // Copied (not sorted in place — the response list may be unmodifiable)
+      // and ordered alphabetically regardless of backend version (older
+      // backends return insertion order).
+      final friends = List<Map<String, dynamic>>.of(
+        (data['friends'] as List?)?.cast<Map<String, dynamic>>() ?? [],
+      )..sort(
+        (a, b) => (a['displayName'] as String? ?? '').toLowerCase().compareTo(
+          (b['displayName'] as String? ?? '').toLowerCase(),
+        ),
+      );
       final pending = data['pending'] as Map<String, dynamic>? ?? {};
       final incoming =
           (pending['incoming'] as List?)?.cast<Map<String, dynamic>>() ?? [];

@@ -36,6 +36,7 @@ class AuthService extends ChangeNotifier {
   static const _keyFirstRaceOnboardingSeen = 'auth_first_race_onboarding_seen';
   static const _keyTutorialOnboardingSeen = 'auth_tutorial_onboarding_seen';
   static const _keyHiddenFromLeaderboard = 'auth_hidden_from_leaderboard';
+  static const _keyAutoJoinFeaturedRaces = 'auth_auto_join_featured_races';
   static const _keyPendingShareToken = 'auth_pending_share_token';
   static const _keyPendingReferralCode = 'auth_pending_referral_code';
   static const _keyPendingReferralCapturedAt =
@@ -65,6 +66,7 @@ class AuthService extends ChangeNotifier {
   bool _firstRaceOnboardingSeen = false;
   bool _tutorialOnboardingSeen = false;
   bool _hiddenFromLeaderboard = false;
+  bool _autoJoinFeaturedRaces = false;
   String? _pendingShareToken;
   String? _pendingReferralCode;
   int? _pendingReferralCapturedAtMs;
@@ -84,6 +86,7 @@ class AuthService extends ChangeNotifier {
   bool get firstRaceOnboardingSeen => _firstRaceOnboardingSeen;
   bool get tutorialOnboardingSeen => _tutorialOnboardingSeen;
   bool get hiddenFromLeaderboard => _hiddenFromLeaderboard;
+  bool get autoJoinFeaturedRaces => _autoJoinFeaturedRaces;
 
   /// A race share token captured from a deep link that has not yet been
   /// consumed (joined). Persisted so it survives the sign-in/onboarding gap on
@@ -136,6 +139,8 @@ class AuthService extends ChangeNotifier {
         prefs.getBool(_keyTutorialOnboardingSeen) ?? false;
     _hiddenFromLeaderboard =
         prefs.getBool(_keyHiddenFromLeaderboard) ?? false;
+    _autoJoinFeaturedRaces =
+        prefs.getBool(_keyAutoJoinFeaturedRaces) ?? false;
     _pendingShareToken = prefs.getString(_keyPendingShareToken);
     _pendingReferralCode = prefs.getString(_keyPendingReferralCode);
     _pendingReferralCapturedAtMs = prefs.getInt(_keyPendingReferralCapturedAt);
@@ -364,6 +369,36 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  /// Sets whether the user auto-joins the daily/weekly featured challenges.
+  /// Same optimistic-update-then-revert pattern as
+  /// [updateLeaderboardVisibility]: local state flips immediately, the backend
+  /// write follows, and a failure (e.g. an older backend that 404s the
+  /// endpoint) reverts the local value.
+  Future<void> updateFeaturedAutoJoin(bool enabled) async {
+    final token = authToken;
+    if (token == null || token.isEmpty) return;
+
+    final previous = _autoJoinFeaturedRaces;
+    _autoJoinFeaturedRaces = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyAutoJoinFeaturedRaces, enabled);
+    notifyListeners();
+
+    try {
+      final user = await _backendApiService.updateFeaturedAutoJoin(
+        identityToken: token,
+        enabled: enabled,
+      );
+      applyBackendUser(user);
+      await prefs.setBool(_keyAutoJoinFeaturedRaces, _autoJoinFeaturedRaces);
+      notifyListeners();
+    } catch (_) {
+      _autoJoinFeaturedRaces = previous;
+      await prefs.setBool(_keyAutoJoinFeaturedRaces, previous);
+      notifyListeners();
+    }
+  }
+
   void applyBackendUser(Map<String, dynamic> backendUser) {
     if (backendUser.containsKey('id')) {
       _backendUserId = backendUser['id'] as String?;
@@ -403,6 +438,12 @@ class AuthService extends ChangeNotifier {
     if (backendUser.containsKey('hiddenFromLeaderboard')) {
       _hiddenFromLeaderboard =
           backendUser['hiddenFromLeaderboard'] as bool? ?? false;
+    }
+    // Defensive: older backends predate the featured auto-join field. Only
+    // override when the key is present; default false (off) otherwise.
+    if (backendUser.containsKey('autoJoinFeaturedRaces')) {
+      _autoJoinFeaturedRaces =
+          backendUser['autoJoinFeaturedRaces'] as bool? ?? false;
     }
   }
 
@@ -444,6 +485,7 @@ class AuthService extends ChangeNotifier {
     _firstRaceOnboardingSeen = false;
     _tutorialOnboardingSeen = false;
     _hiddenFromLeaderboard = false;
+    _autoJoinFeaturedRaces = false;
     _pendingShareToken = null;
 
     final prefs = await SharedPreferences.getInstance();
@@ -459,6 +501,7 @@ class AuthService extends ChangeNotifier {
     await prefs.remove(_keyFirstRaceOnboardingSeen);
     await prefs.remove(_keyTutorialOnboardingSeen);
     await prefs.remove(_keyHiddenFromLeaderboard);
+    await prefs.remove(_keyAutoJoinFeaturedRaces);
     await prefs.remove(_keyPendingShareToken);
     notifyListeners();
   }

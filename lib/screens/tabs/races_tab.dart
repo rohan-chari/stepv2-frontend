@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoSwitch;
 import 'package:flutter/material.dart';
 
 import '../../models/loadable.dart';
@@ -388,6 +389,21 @@ class _RacesTabState extends State<RacesTab> {
                   color: AppColors.textDark,
                 ).copyWith(shadows: _textShadows),
               ),
+              const Spacer(),
+              // Featured-races settings (auto-join toggle).
+              IconButton(
+                icon: const Icon(
+                  Icons.settings_rounded,
+                  size: 22,
+                  color: AppColors.textDark,
+                ),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(
+                  minWidth: 36,
+                  minHeight: 36,
+                ),
+                onPressed: _openFeaturedSettings,
+              ),
             ],
           ),
         ),
@@ -404,6 +420,20 @@ class _RacesTabState extends State<RacesTab> {
         ),
         const SizedBox(height: 4),
       ],
+    );
+  }
+
+  // Slide-up settings sheet for the featured strip (same pattern as the
+  // profile settings sheet). Currently holds only the auto-join toggle.
+  Future<void> _openFeaturedSettings() async {
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.parchment,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) =>
+          _FeaturedSettingsSheet(authService: widget.authService),
     );
   }
 
@@ -1066,6 +1096,109 @@ class _SectionToggleButton extends StatelessWidget {
             color: AppColors.textMid,
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Bottom sheet with settings for the featured daily/weekly challenges.
+/// Mirrors the profile settings sheet's layout.
+class _FeaturedSettingsSheet extends StatelessWidget {
+  final AuthService authService;
+
+  const _FeaturedSettingsSheet({required this.authService});
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'FEATURED RACES',
+            style: PixelText.title(size: 18, color: AppColors.textDark),
+          ),
+          const SizedBox(height: 16),
+          _FeaturedAutoJoinToggle(authService: authService),
+        ],
+      ),
+    );
+  }
+}
+
+/// Apple-settings-style row toggling auto-join for the daily/weekly featured
+/// challenges. Listens to [authService] so it reflects the latest value
+/// (including a revert if the backend write fails). Same pattern as the
+/// profile tab's leaderboard-visibility toggle.
+class _FeaturedAutoJoinToggle extends StatefulWidget {
+  final AuthService authService;
+
+  const _FeaturedAutoJoinToggle({required this.authService});
+
+  @override
+  State<_FeaturedAutoJoinToggle> createState() =>
+      _FeaturedAutoJoinToggleState();
+}
+
+class _FeaturedAutoJoinToggleState extends State<_FeaturedAutoJoinToggle> {
+  void _handleChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.authService.addListener(_handleChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.authService.removeListener(_handleChanged);
+    super.dispose();
+  }
+
+  Future<void> _toggle(bool value) async {
+    await widget.authService.updateFeaturedAutoJoin(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+      decoration: BoxDecoration(
+        color: AppColors.parchmentLight,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.parchmentBorder, width: 1.5),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Auto-join daily & weekly races',
+                  style: PixelText.body(size: 13, color: AppColors.textDark),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Automatically enters you into each new daily and weekly '
+                  'challenge, starting with the next one. Turning this off '
+                  'stops future auto-joins but keeps races you already '
+                  'entered.',
+                  style: PixelText.body(size: 11, color: AppColors.textMid),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          CupertinoSwitch(
+            value: widget.authService.autoJoinFeaturedRaces,
+            activeTrackColor: AppColors.accent,
+            onChanged: _toggle,
+          ),
+        ],
       ),
     );
   }

@@ -324,6 +324,31 @@ class BackendApiService {
     return user;
   }
 
+  /// Toggles auto-joining the daily/weekly featured challenges. Additive
+  /// endpoint (backend >= July 2026); older backends 404 here, so callers
+  /// degrade gracefully. Enabling also opts the user into the already-pending
+  /// next race server-side. Returns the updated `user` map.
+  Future<Map<String, dynamic>> updateFeaturedAutoJoin({
+    required String identityToken,
+    required bool enabled,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'PUT',
+      path: '/auth/me/featured-auto-join',
+      body: {'enabled': enabled},
+      identityToken: identityToken,
+    );
+
+    final payload = await _decodeJsonResponse(response);
+    final user = payload['user'];
+
+    if (user is! Map<String, dynamic>) {
+      throw const ApiException('Something went wrong. Please try again.');
+    }
+
+    return user;
+  }
+
   Future<Map<String, dynamic>> checkDisplayName({
     required String identityToken,
     required String name,
