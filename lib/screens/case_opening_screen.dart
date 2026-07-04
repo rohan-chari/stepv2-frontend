@@ -32,6 +32,7 @@ const _powerupNames = {
   'MIRROR': 'Mirror',
   'CLEANSE': 'Cleanse',
   'IMPOSTER': 'Imposter',
+  'RAINSTORM': 'Rainstorm',
 };
 
 const _powerupEntries = [

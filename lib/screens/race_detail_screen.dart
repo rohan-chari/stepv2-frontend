@@ -90,6 +90,7 @@ const _powerupNames = {
   'MIRROR': 'Mirror',
   'CLEANSE': 'Cleanse',
   'IMPOSTER': 'Imposter',
+  'RAINSTORM': 'Rainstorm',
 };
 
 const _powerupDescriptions = {
@@ -116,6 +117,8 @@ const _powerupDescriptions = {
   'MIRROR': 'Reflect the next attack back at the attacker',
   'CLEANSE': 'Remove all debuffs an opponent placed on you',
   'IMPOSTER': 'Swap leaderboard positions with a rival for 1 hour (cosmetic)',
+  'RAINSTORM':
+      'Everyone else\'s steps count for half for 1 hour (shields protect)',
 };
 
 // Short-form descriptions used in the active-effects list, where the
@@ -133,6 +136,7 @@ const _powerupShortDescriptions = {
   'POCKET_WATCH': 'Buffs extended',
   'TRAIL_MINE': 'Mine planted',
   'MIRROR': 'Reflects next attack',
+  'RAINSTORM': 'Steps halved by rain',
 };
 
 const _targetedPowerups = [

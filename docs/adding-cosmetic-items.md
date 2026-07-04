@@ -51,8 +51,14 @@ that bundles the PNG is live and rolled out, flip it to `testOnly: false`. See
 - `offsetX` / `offsetY`: if `|value| <= 1` it's a **fraction of capybara size**
   (scales with render size); if `> 1` it's raw pixels.
 - `rotation`: radians. `scale`: multiplier on the slot rect (default `1`).
-- Only these four keys are honored (the apply script sanitizes to them).
+- Optional animation keys:
+  - `animationFrames`: positive integer for a horizontal frame sheet.
+  - `renderLayer`: `"front"` or `"behind"`; use `"behind"` for tails/capes that should sit under the capybara body.
 - Start neutral (`0/0/0/1`) and dial it in with the admin tuner (Step 3).
+
+Animated accessories should be exported like `capybara_walk_right.png`: one
+horizontal PNG sheet with equal-width frames. The frontend crops the accessory
+sheet to the same `frameIndex` as the capybara walk cycle.
 
 ## Slots
 

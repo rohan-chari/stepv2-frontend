@@ -4,6 +4,7 @@ import '../../models/loadable.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
+import '../../widgets/accessory_thumbnail.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/info_toast.dart';
@@ -639,10 +640,9 @@ class _ShopItemRow extends StatelessWidget {
               ),
             ),
             padding: const EdgeInsets.all(5),
-            child: Image.asset(
-              'assets/images/accessories/${item['assetKey']}.png',
-              fit: BoxFit.contain,
-              filterQuality: FilterQuality.none,
+            child: AccessoryThumbnail(
+              assetKey: item['assetKey'] as String? ?? '',
+              animationFrames: AccessoryThumbnail.framesOf(item),
               errorBuilder: (context, error, stackTrace) => Icon(
                 Icons.checkroom_rounded,
                 color: equipped ? AppColors.accent : AppColors.textMid,
@@ -854,6 +854,7 @@ class _OwnedPowerupRow extends StatelessWidget {
 
   static const _names = {
     'IMPOSTER': 'Imposter',
+    'RAINSTORM': 'Rainstorm',
     'MIRROR': 'Mirror',
     'CLEANSE': 'Cleanse',
   };

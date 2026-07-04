@@ -29,6 +29,7 @@ const _powerupNames = {
   'MIRROR': 'Mirror',
   'CLEANSE': 'Cleanse',
   'IMPOSTER': 'Imposter',
+  'RAINSTORM': 'Rainstorm',
 };
 
 enum ItemSlotState { empty, held, mysteryBox }

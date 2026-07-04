@@ -687,7 +687,9 @@ class BackendApiService {
   Future<Map<String, dynamic>> updateAdminShopItem({
     required String identityToken,
     required String itemId,
-    Map<String, double>? renderMetadata,
+    // Not Map<String, double>: carries non-numeric keys too (renderLayer,
+    // animationFrames). The backend sanitizes per-key.
+    Map<String, dynamic>? renderMetadata,
     bool? active,
     int? priceCoins,
     bool? testOnly,

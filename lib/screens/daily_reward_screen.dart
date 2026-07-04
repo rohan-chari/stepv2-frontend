@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
+import '../widgets/accessory_thumbnail.dart';
 import '../widgets/case_opening_strip.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/game_container.dart';
@@ -687,12 +688,14 @@ class _DailyStripItem {
   final int? coinAmount;
   final String? assetKey;
   final String? name;
+  final int animationFrames;
 
   const _DailyStripItem._({
     required this.rarity,
     this.coinAmount,
     this.assetKey,
     this.name,
+    this.animationFrames = 1,
   });
 
   const _DailyStripItem.coins(int amount, String rarity)
@@ -706,6 +709,7 @@ class _DailyStripItem {
       rarity: 'RARE',
       assetKey: shopItem['assetKey'] as String?,
       name: shopItem['name'] as String? ?? 'Accessory',
+      animationFrames: AccessoryThumbnail.framesOf(shopItem),
     );
   }
 
@@ -717,6 +721,7 @@ class _DailyStripItem {
         rarity: rarity,
         assetKey: shopItem['assetKey'] as String?,
         name: shopItem['name'] as String? ?? 'Accessory',
+        animationFrames: AccessoryThumbnail.framesOf(shopItem),
       );
     }
     return _DailyStripItem._(
@@ -768,16 +773,17 @@ class _DailyReelTile extends StatelessWidget {
       );
     }
     if (item.assetKey != null) {
-      return Image.asset(
-        'assets/images/accessories/${item.assetKey}.png',
+      return SizedBox(
         width: 46,
         height: 46,
-        fit: BoxFit.contain,
-        filterQuality: FilterQuality.none,
-        errorBuilder: (_, _, _) => const Icon(
-          Icons.checkroom_rounded,
-          size: 38,
-          color: AppColors.accent,
+        child: AccessoryThumbnail(
+          assetKey: item.assetKey!,
+          animationFrames: item.animationFrames,
+          errorBuilder: (_, _, _) => const Icon(
+            Icons.checkroom_rounded,
+            size: 38,
+            color: AppColors.accent,
+          ),
         ),
       );
     }
@@ -1040,10 +1046,9 @@ class _RewardRevealState extends State<_RewardReveal> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   padding: const EdgeInsets.all(10),
-                  child: Image.asset(
-                    'assets/images/accessories/${shopItem['assetKey']}.png',
-                    fit: BoxFit.contain,
-                    filterQuality: FilterQuality.none,
+                  child: AccessoryThumbnail(
+                    assetKey: shopItem['assetKey'] as String? ?? '',
+                    animationFrames: AccessoryThumbnail.framesOf(shopItem),
                     errorBuilder: (_, _, _) => const Icon(
                       Icons.checkroom_rounded,
                       size: 80,
@@ -1262,10 +1267,9 @@ class _SpinTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       padding: const EdgeInsets.all(6),
-      child: Image.asset(
-        'assets/images/accessories/$assetKey.png',
-        fit: BoxFit.contain,
-        filterQuality: FilterQuality.none,
+      child: AccessoryThumbnail(
+        assetKey: assetKey,
+        animationFrames: AccessoryThumbnail.framesOf(item),
         errorBuilder: (_, _, _) =>
             const Icon(Icons.checkroom_rounded, color: AppColors.accent),
       ),

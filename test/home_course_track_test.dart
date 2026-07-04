@@ -112,6 +112,45 @@ void main() {
     expect(angles.any((angle) => angle < -0.12), isTrue);
     expect(lowestShoe - highestShoe, greaterThan(5));
   });
+
+  testWidgets('renders beaver tail as a frame-synced behind-body sheet', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Center(
+          child: CapybaraSpriteWithAccessories(
+            capybaraSize: 96,
+            frameIndex: 4,
+            accessories: [
+              {
+                'slot': 'BACK',
+                'assetKey': 'beaver_tail',
+                'renderMetadata': {
+                  'offsetX': 0,
+                  'offsetY': 0,
+                  'rotation': 0,
+                  'scale': 1,
+                  'animationFrames': 6,
+                  'renderLayer': 'behind',
+                },
+              },
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final images = tester.widgetList<Image>(find.byType(Image)).toList();
+    final assetNames = images
+        .map((image) => (image.image as AssetImage).assetName)
+        .toList();
+
+    expect(assetNames[0], contains('accessories/beaver_tail.png'));
+    expect(assetNames[1], contains('capybara_walk_right.png'));
+    expect(images[0].width, 96 * 6);
+    expect(images[0].height, 96);
+  });
 }
 
 Widget _feetSpriteForFrame(int frameIndex) {

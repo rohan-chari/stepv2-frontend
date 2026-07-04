@@ -601,6 +601,12 @@ class CapybaraSpriteWithAccessories extends StatelessWidget {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
+          for (final accessory in accessories.where(_isBehindCapybaraAccessory))
+            _BehindCapybaraAccessoryOverlay(
+              accessory: accessory,
+              capybaraSize: capybaraSize,
+              frameIndex: frameIndex,
+            ),
           ClipRect(
             child: OverflowBox(
               maxWidth: double.infinity,
@@ -618,7 +624,9 @@ class CapybaraSpriteWithAccessories extends StatelessWidget {
               ),
             ),
           ),
-          for (final accessory in accessories)
+          for (final accessory in accessories.where(
+            (accessory) => !_isBehindCapybaraAccessory(accessory),
+          ))
             _AccessoryOverlay(
               accessory: accessory,
               capybaraSize: capybaraSize,
@@ -627,6 +635,12 @@ class CapybaraSpriteWithAccessories extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  static bool _isBehindCapybaraAccessory(Map<String, dynamic> accessory) {
+    final renderMetadata = accessory['renderMetadata'];
+    if (renderMetadata is! Map<String, dynamic>) return false;
+    return renderMetadata['renderLayer'] == 'behind';
   }
 }
 
@@ -658,8 +672,10 @@ class _AnimatedCapybaraWithAccessoriesState
   @override
   void initState() {
     super.initState();
-    _controller =
-        AnimationController(vsync: this, duration: widget.stepDuration)..repeat();
+    _controller = AnimationController(
+      vsync: this,
+      duration: widget.stepDuration,
+    )..repeat();
   }
 
   @override
@@ -726,6 +742,7 @@ class _AccessoryOverlay extends StatelessWidget {
     final rotation =
         _metadataDouble(metadata, 'rotation') ?? (isHeadSlot ? -0.14 : 0.0);
     final scale = _metadataDouble(metadata, 'scale') ?? 1.0;
+    final animationFrames = _metadataInt(metadata, 'animationFrames') ?? 1;
 
     if (slot == 'FEET') {
       return _FeetAccessoryOverlay(
@@ -755,13 +772,11 @@ class _AccessoryOverlay extends StatelessWidget {
       child: Transform.rotate(
         angle: rotation,
         alignment: Alignment.center,
-        child: Image.asset(
-          'assets/images/accessories/$assetKey.png',
-          fit: BoxFit.contain,
-          filterQuality: FilterQuality.none,
-          errorBuilder: (context, error, stackTrace) => CustomPaint(
-            painter: _AccessoryPainter(slot: slot, assetKey: assetKey),
-          ),
+        child: _AccessoryImage(
+          assetKey: assetKey,
+          slot: slot,
+          frameIndex: frameIndex,
+          frameCount: animationFrames,
         ),
       ),
     );
@@ -777,6 +792,13 @@ class _AccessoryOverlay extends StatelessWidget {
     final value = metadata[key];
     if (value is num) return value.toDouble();
     if (value is String) return double.tryParse(value);
+    return null;
+  }
+
+  int? _metadataInt(Map<String, dynamic> metadata, String key) {
+    final value = metadata[key];
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value);
     return null;
   }
 
@@ -835,6 +857,153 @@ class _AccessoryOverlay extends StatelessWidget {
           size * 0.26,
         );
     }
+  }
+}
+
+class _BehindCapybaraAccessoryOverlay extends StatelessWidget {
+  const _BehindCapybaraAccessoryOverlay({
+    required this.accessory,
+    required this.capybaraSize,
+    required this.frameIndex,
+  });
+
+  final Map<String, dynamic> accessory;
+  final double capybaraSize;
+  final int frameIndex;
+
+  @override
+  Widget build(BuildContext context) {
+    final assetKey = accessory['assetKey'] as String? ?? '';
+    final renderMetadata = accessory['renderMetadata'];
+    final metadata = renderMetadata is Map<String, dynamic>
+        ? renderMetadata
+        : const <String, dynamic>{};
+    final offsetX = _metadataOffset(
+      _metadataDouble(metadata, 'offsetX'),
+      capybaraSize,
+      fallback: 0,
+    );
+    final offsetY = _metadataOffset(
+      _metadataDouble(metadata, 'offsetY'),
+      capybaraSize,
+      fallback: 0,
+    );
+    final rotation = _metadataDouble(metadata, 'rotation') ?? 0.0;
+    final scale = _metadataDouble(metadata, 'scale') ?? 1.0;
+    final animationFrames = _metadataInt(metadata, 'animationFrames') ?? 1;
+
+    return Positioned.fill(
+      child: Transform.translate(
+        offset: Offset(offsetX, offsetY),
+        child: Transform.rotate(
+          angle: rotation,
+          alignment: Alignment.center,
+          child: Transform.scale(
+            scale: scale,
+            alignment: Alignment.center,
+            child: ClipRect(
+              child: OverflowBox(
+                maxWidth: double.infinity,
+                alignment: Alignment.topLeft,
+                child: SizedBox(
+                  width: capybaraSize,
+                  height: capybaraSize,
+                  child: _AccessoryImage(
+                    assetKey: assetKey,
+                    slot: accessory['slot'] as String? ?? 'BACK',
+                    frameIndex: frameIndex,
+                    frameCount: animationFrames,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  double? _metadataDouble(Map<String, dynamic> metadata, String key) {
+    final value = metadata[key];
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+
+  int? _metadataInt(Map<String, dynamic> metadata, String key) {
+    final value = metadata[key];
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
+  double _metadataOffset(
+    double? value,
+    double size, {
+    required double fallback,
+  }) {
+    if (value == null) return fallback;
+    if (value.abs() <= 1) return value * size;
+    return value;
+  }
+}
+
+class _AccessoryImage extends StatelessWidget {
+  const _AccessoryImage({
+    required this.assetKey,
+    required this.slot,
+    required this.frameIndex,
+    required this.frameCount,
+  });
+
+  final String assetKey;
+  final String slot;
+  final int frameIndex;
+  final int frameCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final assetPath = 'assets/images/accessories/$assetKey.png';
+    final safeFrameCount = frameCount < 1 ? 1 : frameCount;
+
+    if (safeFrameCount == 1) {
+      return Image.asset(
+        assetPath,
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.none,
+        errorBuilder: (context, error, stackTrace) => CustomPaint(
+          painter: _AccessoryPainter(slot: slot, assetKey: assetKey),
+        ),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final frameWidth = constraints.maxWidth;
+        final frameHeight = constraints.maxHeight;
+        final frame = frameIndex % safeFrameCount;
+
+        return ClipRect(
+          child: OverflowBox(
+            maxWidth: double.infinity,
+            alignment: Alignment.topLeft,
+            child: Transform.translate(
+              offset: Offset(-frame * frameWidth, 0),
+              child: Image.asset(
+                assetPath,
+                width: frameWidth * safeFrameCount,
+                height: frameHeight,
+                fit: BoxFit.contain,
+                filterQuality: FilterQuality.none,
+                errorBuilder: (context, error, stackTrace) => CustomPaint(
+                  painter: _AccessoryPainter(slot: slot, assetKey: assetKey),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 
@@ -1176,11 +1345,7 @@ class _MilestoneMarker extends StatelessWidget {
               ),
             ),
           ),
-          Container(
-            width: 3,
-            height: _poleHeight,
-            color: HomeColors.ink,
-          ),
+          Container(width: 3, height: _poleHeight, color: HomeColors.ink),
         ],
       ),
     );
@@ -1247,7 +1412,9 @@ class _LegendRow extends StatelessWidget {
                     Text(
                       runners[i].isStealthed
                           ? '???'
-                          : (runners[i].isUser ? 'You' : atName(runners[i].name)),
+                          : (runners[i].isUser
+                                ? 'You'
+                                : atName(runners[i].name)),
                       style: HomeText.body(size: 12, color: HomeColors.inkSoft),
                     ),
                   ],

@@ -40,6 +40,8 @@ class PowerupIcon extends StatelessWidget {
     'MIRROR': 'mirror',
     'CLEANSE': 'cleanse',
     'IMPOSTER': 'imposter',
+    // Placeholder art until final rainstorm asset lands.
+    'RAINSTORM': 'rainstorm',
   };
 
   @override

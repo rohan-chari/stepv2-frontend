@@ -84,6 +84,12 @@ const _powerupEntries = [
     description:
         'Swap leaderboard positions with a rival for 1 hour (cosmetic)',
   ),
+  (
+    type: 'RAINSTORM',
+    name: 'Rainstorm',
+    description:
+        'Everyone else\'s steps count for half for 1 hour (shields protect)',
+  ),
 ];
 
 class AdminScreen extends StatelessWidget {

@@ -17,6 +17,7 @@ const _powerupDisplayNames = {
   'DETOUR_SIGN': 'Detour Sign',
   'BANANA_PEEL': 'Banana Peel',
   'IMPOSTER': 'Imposter',
+  'RAINSTORM': 'Rainstorm',
 };
 
 const _offensiveTypes = {
@@ -28,6 +29,8 @@ const _offensiveTypes = {
   // IMPOSTER targets a rival (swaps their leaderboard display); classify it with
   // the offensive/targeted feed accent.
   'IMPOSTER',
+  // RAINSTORM debuffs every other racer at once — offensive accent.
+  'RAINSTORM',
 };
 
 const _shieldTypes = {'COMPRESSION_SOCKS', 'MIRROR'};

@@ -36,6 +36,9 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
   double _offsetY = 0;
   double _rotation = 0;
   double _scale = 1.0;
+  // Non-slider renderMetadata keys (animationFrames, renderLayer, …) carried
+  // through preview and save so tuning doesn't strip them from the DB.
+  Map<String, dynamic> _extraMetadata = const {};
   bool _active = true;
   bool _testOnly = false;
   bool _bobble = false;
@@ -111,6 +114,15 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
     final map = meta is Map ? Map<String, dynamic>.from(meta) : const {};
     setState(() {
       _selectedItemId = id;
+      _extraMetadata = Map<String, dynamic>.from(map)
+        ..removeWhere(
+          (key, _) => const {
+            'offsetX',
+            'offsetY',
+            'rotation',
+            'scale',
+          }.contains(key),
+        );
       _offsetX = _toDouble(map['offsetX']) ?? 0;
       _offsetY = _toDouble(map['offsetY']) ?? 0;
       _rotation = _toDouble(map['rotation']) ?? 0;
@@ -150,6 +162,7 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
       'assetKey': item['assetKey'],
       'bobble': _bobble,
       'renderMetadata': {
+        ..._extraMetadata,
         'offsetX': _offsetX,
         'offsetY': _offsetY,
         'rotation': _rotation,
@@ -173,6 +186,7 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
         identityToken: token,
         itemId: id,
         renderMetadata: {
+          ..._extraMetadata,
           'offsetX': _offsetX,
           'offsetY': _offsetY,
           'rotation': _rotation,
