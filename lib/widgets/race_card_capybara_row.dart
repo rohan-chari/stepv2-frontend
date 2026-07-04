@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../config/animals.dart';
 import '../styles.dart';
 import '../utils/at_name.dart';
 import 'home_course_track.dart' show CapybaraSpriteWithAccessories;
@@ -105,6 +106,7 @@ class _RaceCardCapybaraRowState extends State<RaceCardCapybaraRow>
                   ?.whereType<Map<String, dynamic>>()
                   .toList() ??
               const <Map<String, dynamic>>[]);
+    final animal = isStealthed ? null : animalFromJson(entry['animal']);
     final totalSteps = entry['totalSteps'];
     final medal = _medalColor(rank);
 
@@ -125,6 +127,7 @@ class _RaceCardCapybaraRowState extends State<RaceCardCapybaraRow>
               accessories: accessories,
               capybaraSize: widget.capybaraSize,
               frameIndex: frameIndex,
+              animal: animal,
             ),
           ),
         ),

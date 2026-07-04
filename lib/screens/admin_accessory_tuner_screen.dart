@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../config/animals.dart';
 import '../models/loadable.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
@@ -36,9 +37,15 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
   double _offsetY = 0;
   double _rotation = 0;
   double _scale = 1.0;
-  // Non-slider renderMetadata keys (animationFrames, renderLayer, …) carried
-  // through preview and save so tuning doesn't strip them from the DB.
+  // Non-slider renderMetadata keys (animationFrames, renderLayer, perAnimal, …)
+  // carried through preview and save so tuning doesn't strip them from the DB.
   Map<String, dynamic> _extraMetadata = const {};
+  // The item's saved base (capybara) slider values, preserved verbatim while
+  // tuning a different animal's override block.
+  Map<String, dynamic> _baseSliders = const {};
+  // Which animal the sliders currently edit: the default animal edits the base
+  // renderMetadata keys, any other edits renderMetadata.perAnimal.<animal>.
+  String _tunerAnimal = kDefaultAnimal;
   bool _active = true;
   bool _testOnly = false;
   bool _bobble = false;
@@ -111,7 +118,9 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
       orElse: () => const <String, dynamic>{},
     );
     final meta = item['renderMetadata'];
-    final map = meta is Map ? Map<String, dynamic>.from(meta) : const {};
+    final map = meta is Map
+        ? Map<String, dynamic>.from(meta)
+        : const <String, dynamic>{};
     setState(() {
       _selectedItemId = id;
       _extraMetadata = Map<String, dynamic>.from(map)
@@ -123,10 +132,11 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
             'scale',
           }.contains(key),
         );
-      _offsetX = _toDouble(map['offsetX']) ?? 0;
-      _offsetY = _toDouble(map['offsetY']) ?? 0;
-      _rotation = _toDouble(map['rotation']) ?? 0;
-      _scale = _toDouble(map['scale']) ?? 1.0;
+      _baseSliders = {
+        for (final key in const ['offsetX', 'offsetY', 'rotation', 'scale'])
+          if (map[key] != null) key: map[key],
+      };
+      _loadSlidersFor(_tunerAnimal, map);
       _active = item['active'] is bool ? item['active'] as bool : true;
       _testOnly = item['testOnly'] is bool ? item['testOnly'] as bool : false;
       // Fall back to the historical slot rule when the backend hasn't sent a
@@ -146,6 +156,68 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
     return null;
   }
 
+  /// Loads the four sliders for [animal] from a raw renderMetadata [map]:
+  /// the default animal reads the base keys; other animals read their
+  /// perAnimal block, falling back to the base placement.
+  void _loadSlidersFor(String animal, Map<String, dynamic> map) {
+    Map<String, dynamic> source = map;
+    if (animal != kDefaultAnimal) {
+      final perAnimal = map['perAnimal'];
+      final block = perAnimal is Map ? perAnimal[animal] : null;
+      if (block is Map) {
+        source = {...map, ...block.map((k, v) => MapEntry(k.toString(), v))};
+      }
+    }
+    _offsetX = _toDouble(source['offsetX']) ?? 0;
+    _offsetY = _toDouble(source['offsetY']) ?? 0;
+    _rotation = _toDouble(source['rotation']) ?? 0;
+    _scale = _toDouble(source['scale']) ?? 1.0;
+  }
+
+  /// The renderMetadata to preview/save: sliders write to the base keys when
+  /// tuning the default animal, or to `perAnimal.<animal>` otherwise (base keys
+  /// and other animals' blocks pass through untouched).
+  Map<String, dynamic> _composeMetadata() {
+    final sliders = <String, dynamic>{
+      'offsetX': _offsetX,
+      'offsetY': _offsetY,
+      'rotation': _rotation,
+      'scale': _scale,
+    };
+    if (_tunerAnimal == kDefaultAnimal) {
+      return {..._extraMetadata, ...sliders};
+    }
+    final existing = _extraMetadata['perAnimal'];
+    final perAnimal = existing is Map
+        ? existing.map((k, v) => MapEntry(k.toString(), v))
+        : <String, dynamic>{};
+    perAnimal[_tunerAnimal] = sliders;
+    return {..._extraMetadata, ..._baseSliders, 'perAnimal': perAnimal};
+  }
+
+  void _switchTunerAnimal(String animal) {
+    // Bank the current sliders into the composed metadata first so flipping
+    // between animals doesn't discard unsaved tweaks.
+    final banked = _composeMetadata();
+    setState(() {
+      _extraMetadata = Map<String, dynamic>.from(banked)
+        ..removeWhere(
+          (key, _) => const {
+            'offsetX',
+            'offsetY',
+            'rotation',
+            'scale',
+          }.contains(key),
+        );
+      _baseSliders = {
+        for (final key in const ['offsetX', 'offsetY', 'rotation', 'scale'])
+          if (banked[key] != null) key: banked[key],
+      };
+      _tunerAnimal = animal;
+      _loadSlidersFor(animal, banked);
+    });
+  }
+
   Map<String, dynamic>? get _selectedItem {
     if (_selectedItemId == null) return null;
     return _items.firstWhere(
@@ -161,13 +233,7 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
       'slot': item['slot'],
       'assetKey': item['assetKey'],
       'bobble': _bobble,
-      'renderMetadata': {
-        ..._extraMetadata,
-        'offsetX': _offsetX,
-        'offsetY': _offsetY,
-        'rotation': _rotation,
-        'scale': _scale,
-      },
+      'renderMetadata': _composeMetadata(),
     };
   }
 
@@ -185,13 +251,7 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
       final res = await _api.updateAdminShopItem(
         identityToken: token,
         itemId: id,
-        renderMetadata: {
-          ..._extraMetadata,
-          'offsetX': _offsetX,
-          'offsetY': _offsetY,
-          'rotation': _rotation,
-          'scale': _scale,
-        },
+        renderMetadata: _composeMetadata(),
         active: _active,
         priceCoins: price,
         testOnly: _testOnly,
@@ -288,6 +348,11 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
                             children: [
                               _buildPicker(),
                               const SizedBox(height: 8),
+                              if (item != null && item['slot'] != 'CHARACTER')
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: _buildAnimalPicker(),
+                                ),
                               SwitchListTile(
                                 contentPadding: EdgeInsets.zero,
                                 dense: true,
@@ -378,10 +443,23 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   alignment: Alignment.bottomCenter,
-                                  child: CapybaraCustomizationPreview(
-                                    accessories: [_previewAccessory()],
-                                    size: 140,
-                                  ),
+                                  child: item != null &&
+                                          item['slot'] == 'CHARACTER'
+                                      // A character item IS the body — preview
+                                      // it directly instead of overlaying it.
+                                      ? CapybaraCustomizationPreview(
+                                          accessories: const [],
+                                          size: 140,
+                                          animal: item['assetKey'] as String?,
+                                        )
+                                      : CapybaraCustomizationPreview(
+                                          accessories: [_previewAccessory()],
+                                          size: 140,
+                                          animal:
+                                              _tunerAnimal == kDefaultAnimal
+                                              ? null
+                                              : _tunerAnimal,
+                                        ),
                                 ),
                               ),
                               const SizedBox(height: 16),
@@ -480,6 +558,35 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
           .toList(),
       onChanged: (id) {
         if (id != null) _selectItem(id);
+      },
+    );
+  }
+
+  Widget _buildAnimalPicker() {
+    return DropdownButtonFormField<String>(
+      initialValue: _tunerAnimal,
+      isExpanded: true,
+      decoration: const InputDecoration(
+        labelText: 'Tune placement on',
+        border: OutlineInputBorder(),
+      ),
+      items: kAnimalSprites.keys
+          .map(
+            (animal) => DropdownMenuItem<String>(
+              value: animal,
+              child: Text(
+                animal == kDefaultAnimal
+                    ? 'Capybara (base)'
+                    : animal,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          )
+          .toList(),
+      onChanged: (animal) {
+        if (animal != null && animal != _tunerAnimal) {
+          _switchTunerAnimal(animal);
+        }
       },
     );
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../config/animals.dart';
 import '../../models/loadable.dart';
 import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
@@ -586,6 +587,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                   ?.whereType<Map<String, dynamic>>()
                   .toList() ??
               const [],
+          animal: animalFromJson(entry['animal']),
         ),
       );
     }
@@ -609,6 +611,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
               ?.whereType<Map<String, dynamic>>()
               .toList() ??
           const [],
+      animal: animalFromJson(_currentUser!['animal']),
     );
   }
 
@@ -749,6 +752,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
             child: AnimatedCapybaraWithAccessories(
               accessories: row.equippedAccessories,
               size: avatarSize,
+              animal: row.animal,
             ),
           ),
         ],
@@ -1019,6 +1023,7 @@ class _LeaderboardRow {
   final int? seconds;
   final int? thirds;
   final List<Map<String, dynamic>> equippedAccessories;
+  final String? animal;
 
   const _LeaderboardRow({
     required this.rank,
@@ -1031,6 +1036,7 @@ class _LeaderboardRow {
     this.seconds,
     this.thirds,
     this.equippedAccessories = const [],
+    this.animal,
   });
 }
 

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../config/animals.dart';
 import '../models/loadable.dart';
 import '../models/step_data.dart';
 import '../models/step_sample_data.dart';
@@ -87,6 +88,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   // RACES button. Defaults to 0; on a fetch error we keep the last known value.
   int _publicRacesCount = 0;
   List<Map<String, dynamic>> _equippedAccessories = const [];
+  // Equipped base character assetKey (e.g. 'corgi_puppy'); null = capybara.
+  String? _equippedAnimal;
   Loadable<Map<String, dynamic>> _shopCatalogState = const Loadable.initial();
   Map<String, dynamic>? _raceCard;
   bool _raceCardLoading = true;
@@ -843,9 +846,17 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   void _applyShopCatalog(Map<String, dynamic> catalog) {
     final equipped = catalog['equipped'] as Map<String, dynamic>? ?? {};
-    final accessories = equipped.values
+    // The CHARACTER entry is the base animal, not a wearable — keep it out of
+    // the accessory overlay list.
+    final accessories = equipped.entries
+        .where((entry) => entry.key != 'CHARACTER')
+        .map((entry) => entry.value)
         .whereType<Map<String, dynamic>>()
         .toList(growable: false);
+    final character = equipped['CHARACTER'];
+    final animal = character is Map<String, dynamic>
+        ? animalFromJson(character['assetKey'])
+        : null;
     final coins = catalog['coins'] as int?;
 
     if (coins != null) {
@@ -853,7 +864,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
 
     if (mounted) {
-      setState(() => _equippedAccessories = accessories);
+      setState(() {
+        _equippedAccessories = accessories;
+        _equippedAnimal = animal;
+      });
     }
   }
 
@@ -1388,6 +1402,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     friendsSteps: _friendsSteps,
                     friendsStepsState: _friendsStepsState,
                     equippedAccessories: _equippedAccessories,
+                    equippedAnimal: _equippedAnimal,
                     shopCatalogState: _shopCatalogState,
                     onOpenRacesTab: _openRacesTab,
                     onOpenLeaderboardTab: _openLeaderboardTab,

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'goal_track.dart';
 import 'home_chrome.dart';
+import '../config/animals.dart';
 import '../utils/at_name.dart';
 
 class HomeCourseTrack extends StatefulWidget {
@@ -36,9 +37,10 @@ class HomeCourseTrack extends StatefulWidget {
 class _HomeCourseTrackState extends State<HomeCourseTrack>
     with SingleTickerProviderStateMixin {
   static const _courseAsset = 'assets/images/home_race_course_platformer.png';
-  static const _capybaraAsset = 'assets/images/capybara_walk_right.png';
   static const _sourceWidth = 1942.0;
   static const _sourceHeight = 809.0;
+  // Drives the shared track walk cadence; per-runner sprites mod by their own
+  // sheet's frame count inside CapybaraSpriteWithAccessories.
   static const _capybaraFrameCount = 6;
   static const _courseAnchors = <Offset>[
     Offset(0.060, 0.803),
@@ -429,6 +431,7 @@ class _HomeCourseTrackState extends State<HomeCourseTrack>
           previous[i].progress != next[i].progress ||
           previous[i].isUser != next[i].isUser ||
           previous[i].profilePhotoUrl != next[i].profilePhotoUrl ||
+          previous[i].animal != next[i].animal ||
           !_sameAccessories(previous[i].accessories, next[i].accessories)) {
         return false;
       }
@@ -488,6 +491,7 @@ class _CapybaraRunnerMarker extends StatelessWidget {
               accessories: runner.accessories,
               capybaraSize: capybaraSize,
               frameIndex: frameIndex,
+              animal: runner.animal,
             ),
           ),
         ],
@@ -501,10 +505,12 @@ class CapybaraCustomizationPreview extends StatefulWidget {
     super.key,
     required this.accessories,
     this.size = 118,
+    this.animal,
   });
 
   final List<Map<String, dynamic>> accessories;
   final double size;
+  final String? animal;
 
   @override
   State<CapybaraCustomizationPreview> createState() =>
@@ -542,10 +548,8 @@ class _CapybaraCustomizationPreviewState
         child: AnimatedBuilder(
           animation: _controller,
           builder: (context, child) {
-            final frameIndex =
-                (_controller.value * _HomeCourseTrackState._capybaraFrameCount)
-                    .floor() %
-                _HomeCourseTrackState._capybaraFrameCount;
+            final frames = animalSpriteFor(widget.animal).frameCount;
+            final frameIndex = (_controller.value * frames).floor() % frames;
 
             return Stack(
               clipBehavior: Clip.none,
@@ -570,6 +574,7 @@ class _CapybaraCustomizationPreviewState
                     accessories: widget.accessories,
                     capybaraSize: widget.size,
                     frameIndex: frameIndex,
+                    animal: widget.animal,
                   ),
                 ),
               ],
@@ -587,14 +592,20 @@ class CapybaraSpriteWithAccessories extends StatelessWidget {
     required this.accessories,
     required this.capybaraSize,
     required this.frameIndex,
+    this.animal,
   });
 
   final List<Map<String, dynamic>> accessories;
   final double capybaraSize;
   final int frameIndex;
 
+  /// Base character assetKey (e.g. 'corgi_puppy'); null/unknown = capybara.
+  final String? animal;
+
   @override
   Widget build(BuildContext context) {
+    final sprite = animalSpriteFor(animal);
+    final bodyFrame = frameIndex % sprite.frameCount;
     return SizedBox(
       width: capybaraSize,
       height: capybaraSize,
@@ -606,17 +617,17 @@ class CapybaraSpriteWithAccessories extends StatelessWidget {
               accessory: accessory,
               capybaraSize: capybaraSize,
               frameIndex: frameIndex,
+              animal: animal,
             ),
           ClipRect(
             child: OverflowBox(
               maxWidth: double.infinity,
               alignment: Alignment.topLeft,
               child: Transform.translate(
-                offset: Offset(-frameIndex * capybaraSize, 0),
+                offset: Offset(-bodyFrame * capybaraSize, 0),
                 child: Image.asset(
-                  _HomeCourseTrackState._capybaraAsset,
-                  width:
-                      capybaraSize * _HomeCourseTrackState._capybaraFrameCount,
+                  sprite.asset,
+                  width: capybaraSize * sprite.frameCount,
                   height: capybaraSize,
                   filterQuality: FilterQuality.none,
                   fit: BoxFit.contain,
@@ -631,6 +642,7 @@ class CapybaraSpriteWithAccessories extends StatelessWidget {
               accessory: accessory,
               capybaraSize: capybaraSize,
               frameIndex: frameIndex,
+              animal: animal,
             ),
         ],
       ),
@@ -653,11 +665,13 @@ class AnimatedCapybaraWithAccessories extends StatefulWidget {
     required this.accessories,
     required this.size,
     this.stepDuration = const Duration(milliseconds: 760),
+    this.animal,
   });
 
   final List<Map<String, dynamic>> accessories;
   final double size;
   final Duration stepDuration;
+  final String? animal;
 
   @override
   State<AnimatedCapybaraWithAccessories> createState() =>
@@ -686,7 +700,7 @@ class _AnimatedCapybaraWithAccessoriesState
 
   @override
   Widget build(BuildContext context) {
-    const frames = _HomeCourseTrackState._capybaraFrameCount;
+    final frames = animalSpriteFor(widget.animal).frameCount;
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
@@ -695,6 +709,7 @@ class _AnimatedCapybaraWithAccessoriesState
           accessories: widget.accessories,
           capybaraSize: widget.size,
           frameIndex: frameIndex,
+          animal: widget.animal,
         );
       },
     );
@@ -706,11 +721,13 @@ class _AccessoryOverlay extends StatelessWidget {
     required this.accessory,
     required this.capybaraSize,
     required this.frameIndex,
+    this.animal,
   });
 
   final Map<String, dynamic> accessory;
   final double capybaraSize;
   final int frameIndex;
+  final String? animal;
 
   @override
   Widget build(BuildContext context) {
@@ -726,9 +743,12 @@ class _AccessoryOverlay extends StatelessWidget {
         ? bobbleFlag
         : (slot == 'HEAD' || slot == 'FACE' || slot == 'NECK');
     final renderMetadata = accessory['renderMetadata'];
-    final metadata = renderMetadata is Map<String, dynamic>
-        ? renderMetadata
-        : const <String, dynamic>{};
+    final metadata = renderMetadataForAnimal(
+      renderMetadata is Map<String, dynamic>
+          ? renderMetadata
+          : const <String, dynamic>{},
+      animal,
+    );
     final offsetX = _metadataOffset(
       _metadataDouble(metadata, 'offsetX'),
       capybaraSize,
@@ -865,19 +885,24 @@ class _BehindCapybaraAccessoryOverlay extends StatelessWidget {
     required this.accessory,
     required this.capybaraSize,
     required this.frameIndex,
+    this.animal,
   });
 
   final Map<String, dynamic> accessory;
   final double capybaraSize;
   final int frameIndex;
+  final String? animal;
 
   @override
   Widget build(BuildContext context) {
     final assetKey = accessory['assetKey'] as String? ?? '';
     final renderMetadata = accessory['renderMetadata'];
-    final metadata = renderMetadata is Map<String, dynamic>
-        ? renderMetadata
-        : const <String, dynamic>{};
+    final metadata = renderMetadataForAnimal(
+      renderMetadata is Map<String, dynamic>
+          ? renderMetadata
+          : const <String, dynamic>{},
+      animal,
+    );
     final offsetX = _metadataOffset(
       _metadataDouble(metadata, 'offsetX'),
       capybaraSize,

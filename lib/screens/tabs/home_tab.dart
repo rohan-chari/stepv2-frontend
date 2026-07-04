@@ -39,6 +39,8 @@ class HomeTab extends StatelessWidget {
   final List<Map<String, dynamic>> friendsSteps;
   final Loadable<List<Map<String, dynamic>>>? friendsStepsState;
   final List<Map<String, dynamic>> equippedAccessories;
+  // Equipped base character assetKey; null = capybara.
+  final String? equippedAnimal;
   final Loadable<Map<String, dynamic>>? shopCatalogState;
   // Retained for backward compatibility with callers (e.g. the tutorial
   // preview) that still pass it. The add-friends hero button that consumed it
@@ -87,6 +89,7 @@ class HomeTab extends StatelessWidget {
     required this.friendsSteps,
     this.friendsStepsState,
     this.equippedAccessories = const [],
+    this.equippedAnimal,
     this.shopCatalogState,
     this.incomingFriendRequests = 0,
     this.onOpenRacesTab,
@@ -641,6 +644,7 @@ class HomeTab extends StatelessWidget {
                 Center(
                   child: CapybaraCustomizationPreview(
                     accessories: equippedAccessories,
+                    animal: equippedAnimal,
                     size: viewportHeight < 760 ? 104 : 122,
                   ),
                 ),

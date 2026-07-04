@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../config/animals.dart';
 import '../../models/loadable.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
@@ -1408,6 +1409,7 @@ class _RankedTabState extends State<RankedTab> {
               ?.whereType<Map<String, dynamic>>()
               .toList() ??
           const [],
+      animal: animalFromJson(e['animal']),
     );
   }
 
@@ -1533,6 +1535,7 @@ class _RankedRow {
   final int? division;
   final bool isMe;
   final List<Map<String, dynamic>> equippedAccessories;
+  final String? animal;
 
   const _RankedRow({
     required this.rank,
@@ -1544,6 +1547,7 @@ class _RankedRow {
     required this.division,
     this.isMe = false,
     this.equippedAccessories = const [],
+    this.animal,
   });
 }
 
@@ -2267,6 +2271,7 @@ class _PodiumPlace extends StatelessWidget {
           AnimatedCapybaraWithAccessories(
             accessories: entry.equippedAccessories,
             size: place == 1 ? 54 : 44,
+            animal: entry.animal,
           ),
           const SizedBox(height: 4),
           Text(

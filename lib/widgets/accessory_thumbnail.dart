@@ -12,11 +12,16 @@ class AccessoryThumbnail extends StatelessWidget {
     required this.assetKey,
     this.animationFrames = 1,
     this.errorBuilder,
+    this.assetPath,
   });
 
   final String assetKey;
   final int animationFrames;
   final ImageErrorWidgetBuilder? errorBuilder;
+
+  /// Full asset path override for sheets that don't live under
+  /// assets/images/accessories/ (e.g. base-character walk cycles).
+  final String? assetPath;
 
   /// Reads `renderMetadata.animationFrames` off a shop-item map, defaulting
   /// to 1 (older backends may not send it).
@@ -31,7 +36,8 @@ class AccessoryThumbnail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final assetPath = 'assets/images/accessories/$assetKey.png';
+    final assetPath =
+        this.assetPath ?? 'assets/images/accessories/$assetKey.png';
     final frames = animationFrames < 1 ? 1 : animationFrames;
 
     if (frames == 1) {

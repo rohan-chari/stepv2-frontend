@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../config/animals.dart';
 import '../styles.dart';
 import 'home_course_track.dart' show CapybaraSpriteWithAccessories;
 
@@ -158,10 +159,12 @@ class RacerAvatar extends StatelessWidget {
     required this.accessories,
     this.size = 40,
     this.ringColor,
+    this.animal,
   });
 
   final int rank;
   final List<Map<String, dynamic>> accessories;
+  final String? animal;
   final double size;
   final Color? ringColor;
 
@@ -195,6 +198,7 @@ class RacerAvatar extends StatelessWidget {
             accessories: accessories,
             capybaraSize: size - 12,
             frameIndex: 0,
+            animal: animal,
           ),
         ),
       ),
@@ -245,6 +249,12 @@ class RacerAvatarStack extends StatelessWidget {
                   ?.whereType<Map<String, dynamic>>()
                   .toList() ??
               const <Map<String, dynamic>>[]);
-    return RacerAvatar(rank: rank, accessories: accessories, size: size);
+    final animal = isStealthed ? null : animalFromJson(entry['animal']);
+    return RacerAvatar(
+      rank: rank,
+      accessories: accessories,
+      size: size,
+      animal: animal,
+    );
   }
 }

@@ -1544,6 +1544,9 @@ class BackendApiService {
       request.headers.set('X-Timezone', await _getTimeZone());
       request.headers.set('X-Release-Channel', await _getReleaseChannel());
       request.headers.set('X-App-Version', await _getAppVersion());
+      // Declares renderable feature set; the backend hides CHARACTER-slot shop
+      // items (base animals) from clients that don't send this.
+      request.headers.set('X-Client-Features', 'characters');
       return await request.close().timeout(_requestTimeout);
     } on SocketException catch (error) {
       throw ApiException(describeBackendConnectionError(error, uri: uri));
@@ -1579,6 +1582,9 @@ class BackendApiService {
       request.headers.set('X-Timezone', await _getTimeZone());
       request.headers.set('X-Release-Channel', await _getReleaseChannel());
       request.headers.set('X-App-Version', await _getAppVersion());
+      // Declares renderable feature set; the backend hides CHARACTER-slot shop
+      // items (base animals) from clients that don't send this.
+      request.headers.set('X-Client-Features', 'characters');
       headers?.forEach(request.headers.set);
 
       request.write(jsonEncode(body));

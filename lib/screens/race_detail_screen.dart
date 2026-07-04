@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../config/animals.dart';
 import '../models/loadable.dart';
 import '../models/race_payouts.dart';
 import '../services/auth_service.dart';
@@ -2026,6 +2027,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                 accessories:
                     (p['accessories'] as List?)?.cast<Map<String, dynamic>>() ??
                     const [],
+                animal: p['stealthed'] == true
+                    ? null
+                    : animalFromJson(p['animal']),
               ),
           ],
         ),
@@ -2990,6 +2994,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     final winnerAccessories =
         (winnerEntry['accessories'] as List?)?.cast<Map<String, dynamic>>() ??
         const <Map<String, dynamic>>[];
+    final winnerAnimal = animalFromJson(winnerEntry['animal']);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3010,7 +3015,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               ),
               const SizedBox(height: 12),
               if (winner != null) ...[
-                RacerAvatar(rank: 1, accessories: winnerAccessories, size: 64),
+                RacerAvatar(
+                  rank: 1,
+                  accessories: winnerAccessories,
+                  size: 64,
+                  animal: winnerAnimal,
+                ),
                 const SizedBox(height: 10),
                 Text(
                   winner['displayName'] is String
@@ -3054,6 +3064,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                 accessories:
                     (p['accessories'] as List?)?.cast<Map<String, dynamic>>() ??
                     const [],
+                animal: animalFromJson(p['animal']),
               ),
           ],
         ),

@@ -28,6 +28,9 @@ class GoalTrackRunner {
   final bool isStealthed;
   final List<Map<String, dynamic>> accessories;
 
+  /// Base character assetKey (e.g. 'corgi_puppy'); null = default capybara.
+  final String? animal;
+
   const GoalTrackRunner({
     required this.name,
     this.profilePhotoUrl,
@@ -35,6 +38,7 @@ class GoalTrackRunner {
     this.isUser = false,
     this.isStealthed = false,
     this.accessories = const [],
+    this.animal,
   });
 
   /// Deterministic color based on name hash.

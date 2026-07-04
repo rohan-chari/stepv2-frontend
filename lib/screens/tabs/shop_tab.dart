@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../config/animals.dart';
 import '../../models/loadable.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
@@ -463,10 +464,15 @@ class _ShopTabState extends State<ShopTab> {
     );
   }
 
+  static bool _isCharacter(Map<String, dynamic> item) =>
+      item['slot'] == 'CHARACTER';
+
   // ── STORE: unowned cosmetics + re-buyable powerups ─────────────────────────
   List<Widget> _buildStore(List<Map<String, dynamic>> items) {
+    final unowned = items.where((i) => i['owned'] != true).toList();
+    final unownedCharacters = unowned.where(_isCharacter).toList();
     final unownedCosmetics =
-        items.where((i) => i['owned'] != true).toList();
+        unowned.where((i) => !_isCharacter(i)).toList();
 
     return [
       if (_powerupsAvailable && _powerupStoreItems.isNotEmpty) ...[
@@ -478,6 +484,18 @@ class _ShopTabState extends State<ShopTab> {
             ownedQuantity: _ownedQuantityFor(_powerupStoreItems[i]),
             saving: _saving,
             onBuy: () => _purchasePowerup(_powerupStoreItems[i]),
+          ),
+      ],
+      if (unownedCharacters.isNotEmpty) ...[
+        _buildSectionHeader('CHARACTERS'),
+        for (int i = 0; i < unownedCharacters.length; i++)
+          _ShopItemRow(
+            item: unownedCharacters[i],
+            index: i,
+            saving: _saving,
+            onBuy: () => _purchase(unownedCharacters[i]),
+            onEquip: () {},
+            onClear: () {},
           ),
       ],
       _buildSectionHeader('ACCESSORIES'),
@@ -501,7 +519,9 @@ class _ShopTabState extends State<ShopTab> {
 
   // ── INVENTORY: owned cosmetics + owned powerups ────────────────────────────
   List<Widget> _buildInventory(List<Map<String, dynamic>> items) {
-    final ownedCosmetics = items.where((i) => i['owned'] == true).toList();
+    final owned = items.where((i) => i['owned'] == true).toList();
+    final ownedCharacters = owned.where(_isCharacter).toList();
+    final ownedCosmetics = owned.where((i) => !_isCharacter(i)).toList();
     final ownedPowerups = _powerupInventory.entries
         .where((e) => e.value > 0)
         .toList()
@@ -515,6 +535,23 @@ class _ShopTabState extends State<ShopTab> {
             powerupType: ownedPowerups[i].key,
             quantity: ownedPowerups[i].value,
             index: i,
+          ),
+      ],
+      if (ownedCharacters.isNotEmpty) ...[
+        _buildSectionHeader('CHARACTERS'),
+        for (int i = 0; i < ownedCharacters.length; i++)
+          _ShopItemRow(
+            item: ownedCharacters[i],
+            index: i,
+            saving: _saving,
+            onBuy: () {},
+            onEquip: () => _equip(
+              ownedCharacters[i]['slot'] as String? ?? '',
+              ownedCharacters[i]['id'] as String?,
+            ),
+            // Clearing the CHARACTER slot goes back to the capybara.
+            onClear: () =>
+                _equip(ownedCharacters[i]['slot'] as String? ?? '', null),
           ),
       ],
       _buildSectionHeader('ACCESSORIES'),
@@ -615,6 +652,8 @@ class _ShopItemRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final owned = item['owned'] == true;
     final equipped = item['equipped'] == true;
+    final isCharacter = item['slot'] == 'CHARACTER';
+    final assetKey = item['assetKey'] as String? ?? '';
     final name = item['name'] as String? ?? 'Accessory';
     final description = item['description'] as String? ?? '';
     final price = item['priceCoins'] as int? ?? 0;
@@ -640,14 +679,24 @@ class _ShopItemRow extends StatelessWidget {
               ),
             ),
             padding: const EdgeInsets.all(5),
-            child: AccessoryThumbnail(
-              assetKey: item['assetKey'] as String? ?? '',
-              animationFrames: AccessoryThumbnail.framesOf(item),
-              errorBuilder: (context, error, stackTrace) => Icon(
-                Icons.checkroom_rounded,
-                color: equipped ? AppColors.accent : AppColors.textMid,
-              ),
-            ),
+            child: isCharacter
+                ? AccessoryThumbnail(
+                    assetKey: assetKey,
+                    assetPath: animalSpriteFor(assetKey).asset,
+                    animationFrames: animalSpriteFor(assetKey).frameCount,
+                    errorBuilder: (context, error, stackTrace) => Icon(
+                      Icons.pets_rounded,
+                      color: equipped ? AppColors.accent : AppColors.textMid,
+                    ),
+                  )
+                : AccessoryThumbnail(
+                    assetKey: assetKey,
+                    animationFrames: AccessoryThumbnail.framesOf(item),
+                    errorBuilder: (context, error, stackTrace) => Icon(
+                      Icons.checkroom_rounded,
+                      color: equipped ? AppColors.accent : AppColors.textMid,
+                    ),
+                  ),
           ),
           const SizedBox(width: 12),
           Expanded(
