@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../services/ad_service.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
@@ -24,12 +25,16 @@ class DailyRewardScreen extends StatefulWidget {
   final AuthService authService;
   final BackendApiService backendApiService;
   final VoidCallback? onClaimed;
+  // Rewarded-ad extra spin. Null (or an unsupported platform) hides the offer
+  // entirely — the screen works exactly as before ads existed.
+  final ExtraSpinAdController? adController;
 
   const DailyRewardScreen({
     super.key,
     required this.authService,
     required this.backendApiService,
     this.onClaimed,
+    this.adController,
   });
 
   @override
@@ -46,6 +51,10 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
   bool _opening = false;
   Map<String, dynamic>? _boxResult;
   List<_DailyStripItem>? _stripItems;
+  // Rewarded-ad extra spin state.
+  bool _adReady = false;
+  bool _adFlowBusy = false;
+  bool _extraSpinDone = false;
 
   @override
   void initState() {
@@ -74,6 +83,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
       if (_box != null && res['claimedToday'] != true) {
         _openBox();
       }
+      _maybePrepareExtraSpin();
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -86,6 +96,30 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
   Map<String, dynamic>? get _box {
     final box = _status?['box'];
     return box is Map<String, dynamic> ? box : null;
+  }
+
+  /// Rewarded-ad extra spin offer — present only when the backend has the
+  /// feature enabled AND this build declared the `ads` capability. Older
+  /// backends simply omit it. Read defensively.
+  Map<String, dynamic>? get _adExtraSpin {
+    final extra = _status?['adExtraSpin'];
+    return extra is Map<String, dynamic> ? extra : null;
+  }
+
+  // Preload the rewarded ad as soon as the offer is live, so the button is
+  // tappable by the time the free box's reveal settles. Skipped when a
+  // verified-but-unredeemed watch already exists (claim needs no new ad).
+  Future<void> _maybePrepareExtraSpin() async {
+    final extra = _adExtraSpin;
+    final ctrl = widget.adController;
+    if (extra == null || ctrl == null || !ctrl.isSupported) return;
+    if (extra['used'] == true || extra['pendingGrant'] == true) return;
+    final userId = widget.authService.userId;
+    if (userId == null || userId.isEmpty) return;
+    if (!ctrl.isReady) {
+      await ctrl.load(userId: userId, localDate: _todayLocalDate());
+    }
+    if (mounted) setState(() => _adReady = ctrl.isReady);
   }
 
   // Legacy ladder claim (old backend without box support).
@@ -146,6 +180,84 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
         _opening = false;
       });
       showErrorToast(context, 'Claim failed. Try again.');
+    }
+  }
+
+  // Extra spin: (optionally) run the rewarded ad, then claim and re-run the
+  // reel with the extra roll. The server only honors the claim if AdMob's SSV
+  // callback minted a grant — the client never asserts "I watched an ad".
+  Future<void> _startExtraSpin() async {
+    if (_adFlowBusy || _isClaiming) return;
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) return;
+    final ctrl = widget.adController;
+    final pending = _adExtraSpin?['pendingGrant'] == true;
+
+    setState(() => _adFlowBusy = true);
+    // Snapshot for restore if the flow dies before the new roll lands.
+    final priorClaimed = _claimedReward;
+    final priorBoxResult = _boxResult;
+    final priorStrip = _stripItems;
+    final priorOpening = _opening;
+    try {
+      if (!pending) {
+        if (ctrl == null || !ctrl.isReady) return;
+        setState(() => _adReady = false);
+        final earned = await ctrl.showAndAwaitReward();
+        if (!earned || !mounted) return;
+      }
+      setState(() {
+        // Back to the reel screen; the reveal-once guard resets so the extra
+        // roll credits coins when ITS spin lands.
+        _opening = true;
+        _claimedReward = null;
+        _boxResult = null;
+        _stripItems = null;
+        _rewardApplied = false;
+        _extraSpinDone = true;
+      });
+      final res = await _claimExtraWithRetry(token);
+      if (!mounted) return;
+      setState(() {
+        _boxResult = res;
+        _stripItems = _generateStrip(res);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      // The grant (if any) is still unconsumed server-side — next visit shows
+      // pendingGrant and redeems it without another ad.
+      setState(() {
+        _claimedReward = priorClaimed;
+        _boxResult = priorBoxResult;
+        _stripItems = priorStrip;
+        _opening = priorOpening;
+        _rewardApplied = true;
+        _extraSpinDone = false;
+      });
+      showErrorToast(context, 'Extra spin failed. Try again later.');
+    } finally {
+      if (mounted) setState(() => _adFlowBusy = false);
+    }
+  }
+
+  // AdMob's server-side verification can land a few seconds after the ad
+  // closes on-device; the backend answers 409 ("no verified ad reward") until
+  // it does. Retry briefly before giving up.
+  Future<Map<String, dynamic>> _claimExtraWithRetry(String token) async {
+    const maxAttempts = 5;
+    for (var attempt = 0; ; attempt++) {
+      try {
+        return await widget.backendApiService.claimExtraDailyRewardBox(
+          identityToken: token,
+          localDate: _todayLocalDate(),
+        );
+      } on ApiException catch (e) {
+        final ssvLag =
+            e.statusCode == 409 &&
+            e.message.toLowerCase().contains('no verified ad reward');
+        if (!ssvLag || attempt >= maxAttempts - 1) rethrow;
+        await Future<void>.delayed(const Duration(seconds: 2));
+      }
     }
   }
 
@@ -344,9 +456,11 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            claimedToday
-                ? 'You\'ve opened today\'s box. Come back tomorrow!'
-                : 'Open today\'s mystery box to keep your streak going.',
+            !claimedToday
+                ? 'Open today\'s mystery box to keep your streak going.'
+                : _extraSpinOffered
+                ? 'You\'ve opened today\'s box — grab your bonus spin!'
+                : 'You\'ve opened today\'s box. Come back tomorrow!',
             style: HomeText.body(
               size: 13,
               color: HomeColors.muted,
@@ -372,58 +486,63 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    streak == 1 ? 'DAY 1 STREAK' : '$streak-DAY STREAK',
+                    '$streak-DAY STREAK',
                     style: PixelText.title(size: 14, color: AppColors.textDark),
                   ),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 16),
-          Center(
-            child: Container(
-              width: 150,
-              height: 150,
-              decoration: BoxDecoration(
-                color: AppColors.parchmentDark,
-                border: Border.all(color: AppColors.coinDark, width: 3),
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.coinDark.withValues(alpha: 0.35),
-                    blurRadius: 14,
-                    spreadRadius: 1,
-                  ),
-                ],
-              ),
-              child: Center(
-                child: Text(
-                  '?',
-                  style: HomeText.display(size: 72, color: AppColors.coinDark),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Coins or a new accessory await...',
-            textAlign: TextAlign.center,
-            style: PixelText.body(size: 12, color: AppColors.textMid),
-          ),
           const SizedBox(height: 18),
-          PillButton(
-            label: claimedToday
-                ? 'COME BACK TOMORROW'
-                : _isClaiming
-                ? 'OPENING...'
-                : 'OPEN BOX',
-            variant: PillButtonVariant.primary,
-            fullWidth: true,
-            onPressed: (claimedToday || _isClaiming) ? null : _openBox,
-          ),
+          if (!claimedToday)
+            PillButton(
+              label: _isClaiming ? 'OPENING...' : 'OPEN BOX',
+              variant: PillButtonVariant.primary,
+              fullWidth: true,
+              onPressed: _isClaiming ? null : _openBox,
+            )
+          else if (_extraSpinOffered)
+            // The extra spin IS the primary action once today's box is open —
+            // this view is reached from the home button's EXTRA SPIN state.
+            PillButton(
+              label: _adFlowBusy
+                  ? 'PLEASE WAIT...'
+                  : _adExtraSpin?['pendingGrant'] == true
+                  ? 'CLAIM EXTRA SPIN'
+                  : _adReady
+                  ? 'WATCH AD · +1 SPIN'
+                  : 'LOADING AD...',
+              variant: PillButtonVariant.primary,
+              fullWidth: true,
+              onPressed:
+                  (_adFlowBusy ||
+                      !(_adExtraSpin?['pendingGrant'] == true || _adReady))
+                  ? null
+                  : _startExtraSpin,
+            )
+          else
+            const PillButton(
+              label: 'COME BACK TOMORROW',
+              variant: PillButtonVariant.primary,
+              fullWidth: true,
+              onPressed: null,
+            ),
         ],
       ),
     );
+  }
+
+  /// The rewarded-ad extra spin is on offer: the backend advertised it, it
+  /// hasn't been used or already run this session, and this platform can show
+  /// ads.
+  bool get _extraSpinOffered {
+    final extra = _adExtraSpin;
+    final ctrl = widget.adController;
+    return extra != null &&
+        extra['used'] != true &&
+        !_extraSpinDone &&
+        ctrl != null &&
+        ctrl.isSupported;
   }
 
   // Reel screen — same chrome as the race mystery box (CaseOpeningScreen):
@@ -484,7 +603,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    streak == 1 ? 'DAY 1 STREAK' : '$streak-DAY STREAK',
+                    '$streak-DAY STREAK',
                     style: PixelText.title(size: 13, color: AppColors.textDark),
                   ),
                 ],

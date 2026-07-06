@@ -59,7 +59,12 @@ When you have something worth testing on a real phone:
 # Increment build number in pubspec.yaml (e.g., 1.1.4+5 → 1.1.4+6)
 # DO NOT bump the version name (1.1.4) until cutting a prod release.
 
-flutter build ipa --flavor staging --release \
+# NOTE: no --flavor on iOS — the Xcode project defines no flavor schemes
+# (passing one fails with "You must specify a --flavor option").
+# No ADMOB_EXTRA_SPIN_AD_UNIT_ID here: the ad unit's SSV callback points at
+# PROD, so a staging-backend build can't verify rewards — omitting the define
+# keeps the extra-spin offer out of staging builds entirely.
+flutter build ipa --release \
   --dart-define=BACKEND_BASE_URL=https://staging.steptracker-api.org
 ```
 
@@ -112,8 +117,13 @@ For most releases, you can deploy backend first because the old App Store binary
 ### 4. Build the Bara (prod) release
 
 ```bash
-flutter build ipa --flavor prod --release \
-  --dart-define=BACKEND_BASE_URL=https://steptracker-api.org
+# NOTE: no --flavor on iOS (no flavor schemes in the Xcode project).
+# ADMOB_EXTRA_SPIN_AD_UNIT_ID is REQUIRED: it bakes in the rewarded ad unit
+# for the extra daily spin (iOS-only feature; see AD_REWARD_DESIGN.md).
+# Forgetting it is safe but silently ships the release without ads.
+flutter build ipa --release \
+  --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
+  --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717
 ```
 
 Upload via Transporter to "Bara" in App Store Connect.

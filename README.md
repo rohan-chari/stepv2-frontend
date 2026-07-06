@@ -125,7 +125,12 @@ flutter run --debug --dart-define=BACKEND_BASE_URL=https://staging.steptracker-a
 ### Run on a physical iPhone against prod
 ```bash
 # Make sure your backend listens on 0.0.0.0:3000, not just localhost:3000
-flutter run -d 00008150-000171DE2638401C --device-connection=attached --debug --dart-define=BACKEND_BASE_URL=https://steptracker-api.org
+# ADMOB_EXTRA_SPIN_AD_UNIT_ID enables the rewarded-ad extra daily spin (iOS
+# only; its SSV callback verifies against prod). Omit it and the ads feature
+# simply doesn't exist in the build.
+flutter run -d 00008150-000171DE2638401C --device-connection=attached --debug \
+  --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
+  --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717
 
 ### Run on a physical iPhone against local backend
 ```bash
@@ -139,7 +144,12 @@ flutter run -d ios
 
 ### Build production iOS
 ```bash
-flutter build ios --dart-define=BACKEND_BASE_URL=https://steptracker-api.org
+# No --flavor on iOS (the Xcode project has no flavor schemes).
+# The ADMOB define is REQUIRED for release builds — without it the
+# rewarded-ad extra spin is compiled out (safe, but missing).
+flutter build ipa --release \
+  --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
+  --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717
 ```
 
 ### Tests

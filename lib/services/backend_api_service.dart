@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -54,6 +55,19 @@ class BackendApiService {
   static const MethodChannel _appInfoChannel = MethodChannel(
     'com.steptracker/app_info',
   );
+
+  // The `ads` capability is advertised ONLY when this build can actually
+  // complete a rewarded-ad flow: iOS with a real ad unit injected at build
+  // time. This keeps the extra-spin offer off Android builds (no AdMob app
+  // registered yet) and off any build where the dart-define was forgotten —
+  // otherwise users would see an offer whose reward can never verify.
+  static const String _adUnitId = String.fromEnvironment(
+    'ADMOB_EXTRA_SPIN_AD_UNIT_ID',
+  );
+  static final String clientFeaturesHeader =
+      (!kIsWeb && Platform.isIOS && _adUnitId.isNotEmpty)
+      ? 'characters,ads'
+      : 'characters';
   final HttpClient _httpClient;
   String? _cachedTimeZone;
   String? _cachedReleaseChannel;
@@ -1404,6 +1418,24 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  /// Extra daily box spin, unlocked by a verified rewarded-ad watch. Only call
+  /// when the status response carries `adExtraSpin` — older backends 404 this.
+  /// A 409 shortly after the ad means the server-side verification hasn't
+  /// landed yet; callers retry briefly.
+  Future<Map<String, dynamic>> claimExtraDailyRewardBox({
+    required String identityToken,
+    required String localDate,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/daily-reward/claim-extra-box',
+      body: {'localDate': localDate},
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
   Future<Map<String, dynamic>> fetchShopCatalog({
     required String identityToken,
   }) async {
@@ -1545,8 +1577,9 @@ class BackendApiService {
       request.headers.set('X-Release-Channel', await _getReleaseChannel());
       request.headers.set('X-App-Version', await _getAppVersion());
       // Declares renderable feature set; the backend hides CHARACTER-slot shop
-      // items (base animals) from clients that don't send this.
-      request.headers.set('X-Client-Features', 'characters');
+      // items (base animals) and the rewarded-ad extra-spin offer from clients
+      // that don't send the matching capability.
+      request.headers.set('X-Client-Features', clientFeaturesHeader);
       return await request.close().timeout(_requestTimeout);
     } on SocketException catch (error) {
       throw ApiException(describeBackendConnectionError(error, uri: uri));
@@ -1583,8 +1616,9 @@ class BackendApiService {
       request.headers.set('X-Release-Channel', await _getReleaseChannel());
       request.headers.set('X-App-Version', await _getAppVersion());
       // Declares renderable feature set; the backend hides CHARACTER-slot shop
-      // items (base animals) from clients that don't send this.
-      request.headers.set('X-Client-Features', 'characters');
+      // items (base animals) and the rewarded-ad extra-spin offer from clients
+      // that don't send the matching capability.
+      request.headers.set('X-Client-Features', clientFeaturesHeader);
       headers?.forEach(request.headers.set);
 
       request.write(jsonEncode(body));

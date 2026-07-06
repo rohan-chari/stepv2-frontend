@@ -56,6 +56,48 @@
 	<string>This app needs access to your step count data to display your daily steps.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>This app needs access to update your health data.</string>
+	<!-- AdMob app ID (rewarded extra daily spin). Real "Bara - Step Challenges
+	     (iOS)" AdMob app; one AdMob iOS app covers prod + staging since both
+	     share this bundle id. The SDK crashes on launch if this key is missing.
+	     Ad UNIT ids are injected per-build via
+	     --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID (see AD_REWARD_DESIGN.md). -->
+	<key>GADApplicationIdentifier</key>
+	<string>ca-app-pub-4538901002392200~5288861983</string>
+	<!-- ATT prompt string. Shown once before the first rewarded-ad load; if the
+	     user declines, AdMob serves non-personalized ads and the extra-spin
+	     reward flow is unchanged. -->
+	<key>NSUserTrackingUsageDescription</key>
+	<string>Bara shows an optional ad in exchange for a bonus daily reward. Allowing tracking helps show ads that are more relevant to you.</string>
+	<!-- SKAdNetwork attribution IDs. Google's own network ID plus its published
+	     partner list; the full current list ships with the AdMob docs — refresh
+	     it when bumping google_mobile_ads (release checklist). -->
+	<key>SKAdNetworkItems</key>
+	<array>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>cstr6suwn9.skadnetwork</string>
+		</dict>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>4fzdc2evr5.skadnetwork</string>
+		</dict>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>2fnua5tdw4.skadnetwork</string>
+		</dict>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>ydx93a7ass.skadnetwork</string>
+		</dict>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>v9wttpbfk9.skadnetwork</string>
+		</dict>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>n38lu8286q.skadnetwork</string>
+		</dict>
+	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Bara connects to your local network to reach your development backend while testing on your iPhone.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../screens/daily_reward_screen.dart';
+import '../services/ad_service.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import 'pill_button.dart';
@@ -25,7 +26,12 @@ class StreakChip extends StatefulWidget {
     this.initialData,
     this.awaitingBatch = false,
     this.onClaimedToday,
+    this.adController,
   });
+
+  /// Test seam for the rewarded-ad extra spin; defaults to a real [AdService]
+  /// owned by the chip.
+  final ExtraSpinAdController? adController;
 
   final AuthService authService;
   final BackendApiService backendApiService;
@@ -55,6 +61,15 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
   bool _unclaimed = false;
   bool _loaded = false;
   String _lastFetchedDate = '';
+  // Rewarded-ad extra spin is live for today (claimed the free box, extra not
+  // yet used). Drives the EXTRA SPIN button state. Fed by the batch payload's
+  // dailyReward.adExtraSpin (new backends) or the standalone status fetch.
+  bool _extraSpinAvailable = false;
+  // One ad controller per chip lifetime so a preloaded rewarded ad survives
+  // reopening the daily-reward screen. Constructing it touches no platform
+  // channels; ads only load once the screen sees a live offer.
+  late final ExtraSpinAdController _adController =
+      widget.adController ?? AdService();
 
   @override
   void initState() {
@@ -82,6 +97,7 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
     if (data != null && data['localDate'] == today) {
       setState(() {
         _unclaimed = data['claimedToday'] != true;
+        _extraSpinAvailable = _extraSpinFrom(data);
         _loaded = true;
         _lastFetchedDate = today;
       });
@@ -96,6 +112,9 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    // Only dispose a controller the chip created; an injected one is owned by
+    // the caller.
+    if (widget.adController == null) _adController.dispose();
     super.dispose();
   }
 
@@ -123,12 +142,26 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
       if (!mounted) return;
       setState(() {
         _unclaimed = res['claimedToday'] != true;
+        _extraSpinAvailable = _extraSpinFrom(res);
         _loaded = true;
         _lastFetchedDate = localDate;
       });
     } catch (_) {
       if (mounted) setState(() => _loaded = true);
     }
+  }
+
+  /// True when today's box is claimed and a rewarded-ad extra spin is still
+  /// on the table (either watch-an-ad or a verified-but-unredeemed grant).
+  /// Reads the additive `adExtraSpin` block defensively — absent on old
+  /// backends and before the free claim.
+  bool _extraSpinFrom(Map<String, dynamic> payload) {
+    if (payload['claimedToday'] != true) return false;
+    if (!_adController.isSupported) return false;
+    final extra = payload['adExtraSpin'];
+    if (extra is! Map<String, dynamic>) return false;
+    if (extra['used'] == true) return false;
+    return extra['available'] == true || extra['pendingGrant'] == true;
   }
 
   Future<void> _open() async {
@@ -138,6 +171,7 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
         pageBuilder: (_, _, _) => DailyRewardScreen(
           authService: widget.authService,
           backendApiService: widget.backendApiService,
+          adController: _adController,
         ),
         transitionsBuilder: (_, anim, _, child) =>
             FadeTransition(opacity: anim, child: child),
@@ -147,9 +181,11 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
     if (claimed == true && mounted) {
       setState(() => _unclaimed = false);
       widget.onClaimedToday?.call();
-    } else {
-      _refresh();
     }
+    // Always re-fetch: a claim just changed today's state (the extra-spin
+    // offer appears right after the free claim and disappears once used),
+    // and a dismissed sheet may still have consumed the extra spin.
+    _refresh();
   }
 
   @override
@@ -157,10 +193,18 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
     if (!_loaded) {
       return const SizedBox(height: 48);
     }
-    final label = _unclaimed ? 'CLAIM' : 'CLAIMED';
+    final label = _unclaimed
+        ? 'CLAIM'
+        : _extraSpinAvailable
+        ? 'EXTRA SPIN'
+        : 'CLAIMED';
     return PillButton(
       label: label,
-      icon: _unclaimed ? Icons.card_giftcard_rounded : Icons.check_box_rounded,
+      icon: _unclaimed
+          ? Icons.card_giftcard_rounded
+          : _extraSpinAvailable
+          ? Icons.replay_rounded
+          : Icons.check_box_rounded,
       variant: PillButtonVariant.secondary,
       fullWidth: true,
       onPressed: _open,

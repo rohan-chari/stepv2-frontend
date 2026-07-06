@@ -49,10 +49,13 @@ Android app (Health Connect, Google Sign-In, Firebase/FCM) from the same Dart
 code. **Whenever you build or release an Apple/iOS build, do the matching
 Android build too — never ship one platform without the other.**
 
-- iOS:     `flutter build ipa       --flavor <prod|staging> --dart-define=BACKEND_BASE_URL=…`
+- iOS:     `flutter build ipa       --dart-define=BACKEND_BASE_URL=… [--dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=…]`
+  (NO `--flavor` on iOS — the Xcode project has no flavor schemes. The ADMOB
+  define is required for PROD releases only: it enables the iOS-only
+  rewarded-ad extra spin; staging builds omit it. See `DEPLOYMENT.md`.)
 - Android: `flutter build appbundle --flavor <prod|staging> --dart-define=BACKEND_BASE_URL=…`
 
-Keep the flavor, `--dart-define` backend URL, and version/build number in sync
+Keep the flavor (Android), `--dart-define` backend URL, and version/build number in sync
 across both. The platforms are coupled in non-obvious ways: a dependency added
 for one (e.g. `firebase_*` for Android FCM) still links into the other's build,
 so a change "for Android" can break the iOS build (and vice-versa). Build and

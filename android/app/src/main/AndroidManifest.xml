@@ -18,6 +18,11 @@
     <!-- Android 13+ runtime permission for FCM/local notifications. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
+    <!-- Android 13+ advertising-ID permission for AdMob (rewarded extra daily
+         spin — see AD_REWARD_DESIGN.md). Must also be declared in the Play
+         Console Data Safety form. -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID"/>
+
     <application
         android:label="Bara"
         android:name="${applicationName}"
@@ -93,6 +98,14 @@
             android:name="com.yalantis.ucrop.UCropActivity"
             android:screenOrientation="portrait"
             android:theme="@style/Ucrop.CropTheme" />
+        <!-- AdMob app ID (rewarded extra daily spin). This is Google's PUBLIC
+             TEST app ID — replace with the real per-flavor AdMob app ID before
+             a prod release (AD_REWARD_DESIGN.md release checklist). The SDK
+             crashes on launch if this meta-data is missing. -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-3940256099942544~3347511713" />
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
