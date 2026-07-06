@@ -597,124 +597,138 @@ class HomeTab extends StatelessWidget {
         ),
         child: CustomPaint(
           painter: const ArcadeCheckerPainter(),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
+          child: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Flexible(
-                      child: Text(
-                        atName(displayName ?? 'You'),
-                        style: PixelText.title(
-                          size: 24,
-                          color: AppColors.parchment,
-                        ).copyWith(shadows: _heroShadows),
-                        overflow: TextOverflow.ellipsis,
+                    Padding(
+                      // Keep the name/coins clear of the overlaid help button.
+                      padding: const EdgeInsets.only(right: 36),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              atName(displayName ?? 'You'),
+                              style: PixelText.title(
+                                size: 24,
+                                color: AppColors.parchment,
+                              ).copyWith(shadows: _heroShadows),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          CoinBalanceBadge(
+                            coins: authService.coins,
+                            coinSize: 16,
+                            // "+" = earn more coins -> invite friends
+                            // (referral).
+                            onAddTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => ReferralScreen(
+                                  authService: authService,
+                                  backendApiService: backendApiService,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    CoinBalanceBadge(
-                      coins: authService.coins,
-                      coinSize: 16,
-                      // "+" = earn more coins -> invite friends (referral).
-                      onAddTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => ReferralScreen(
+                    const SizedBox(height: 10),
+                    Center(
+                      child: CapybaraCustomizationPreview(
+                        accessories: equippedAccessories,
+                        animal: equippedAnimal,
+                        size: viewportHeight < 760 ? 104 : 122,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'TODAY',
+                      textAlign: TextAlign.center,
+                      style: PixelText.title(
+                        size: 12,
+                        color: AppColors.parchment.withValues(alpha: 0.82),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    KeyedSubtree(
+                      key: tutorialStepsKey,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          stepsStr,
+                          style: PixelText.title(
+                            size: 58,
+                            color: AppColors.parchment,
+                          ).copyWith(shadows: _heroShadows),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _heroSummary(steps: steps),
+                      textAlign: TextAlign.center,
+                      style: PixelText.body(
+                        size: 14,
+                        color: AppColors.parchment.withValues(alpha: 0.88),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: StreakChip(
+                            key: streakChipKey,
                             authService: authService,
                             backendApiService: backendApiService,
+                            compact: true,
+                            // Fed by the home batch so the CLAIM button lands
+                            // with everything else; falls back to its own fetch
+                            // on old backends.
+                            initialData:
+                                raceCard?['dailyReward']
+                                    as Map<String, dynamic>?,
+                            awaitingBatch: raceCardLoading,
+                            onClaimedToday: onDailyRewardClaimed,
                           ),
                         ),
-                      ),
-                    ),
-                    const Spacer(),
-                    _HelpHeroButton(
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              TutorialScreen(authService: authService),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: KeyedSubtree(
+                            key: tutorialShopKey,
+                            child: PillButton(
+                              label: 'SHOP',
+                              icon: Icons.storefront_rounded,
+                              variant: PillButtonVariant.secondary,
+                              fullWidth: true,
+                              onPressed: onOpenShop,
+                            ),
+                          ),
                         ),
-                      ),
+                      ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                Center(
-                  child: CapybaraCustomizationPreview(
-                    accessories: equippedAccessories,
-                    animal: equippedAnimal,
-                    size: viewportHeight < 760 ? 104 : 122,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'TODAY',
-                  textAlign: TextAlign.center,
-                  style: PixelText.title(
-                    size: 12,
-                    color: AppColors.parchment.withValues(alpha: 0.82),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                KeyedSubtree(
-                  key: tutorialStepsKey,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      stepsStr,
-                      style: PixelText.title(
-                        size: 58,
-                        color: AppColors.parchment,
-                      ).copyWith(shadows: _heroShadows),
+              ),
+              // Last child so it paints and hit-tests above the hero content,
+              // pinned to the panel's true top-right corner.
+              Positioned(
+                top: 10,
+                right: 10,
+                child: _HelpHeroButton(
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => TutorialScreen(authService: authService),
                     ),
                   ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  _heroSummary(steps: steps),
-                  textAlign: TextAlign.center,
-                  style: PixelText.body(
-                    size: 14,
-                    color: AppColors.parchment.withValues(alpha: 0.88),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: StreakChip(
-                        key: streakChipKey,
-                        authService: authService,
-                        backendApiService: backendApiService,
-                        compact: true,
-                        // Fed by the home batch so the CLAIM button lands
-                        // with everything else; falls back to its own fetch
-                        // on old backends.
-                        initialData:
-                            raceCard?['dailyReward'] as Map<String, dynamic>?,
-                        awaitingBatch: raceCardLoading,
-                        onClaimedToday: onDailyRewardClaimed,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: KeyedSubtree(
-                        key: tutorialShopKey,
-                        child: PillButton(
-                          label: 'SHOP',
-                          icon: Icons.storefront_rounded,
-                          variant: PillButtonVariant.secondary,
-                          fullWidth: true,
-                          onPressed: onOpenShop,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

@@ -13,7 +13,7 @@ import 'package:step_tracker/widgets/global_event_banner.dart';
 //
 // The /home/race-card response carries a top-level `globalEvent`
 // ({ active: true, multiplier, endsAt }). When it is active the home column
-// shows the on-brand "2x STEPS" banner with a countdown to endsAt. When the
+// shows the on-brand "2x RACE STEPS" banner with a countdown to endsAt. When the
 // field is absent (older backend) or expired, no banner. Read defensively.
 // ---------------------------------------------------------------------------
 
@@ -100,7 +100,7 @@ void main() {
         find.byKey(const Key('home-global-event-banner')),
         findsOneWidget,
       );
-      expect(find.textContaining('2x STEPS'), findsOneWidget);
+      expect(find.textContaining('2x RACE STEPS'), findsOneWidget);
 
       // Tear down the periodic countdown timer.
       await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
@@ -121,7 +121,7 @@ void main() {
       await tester.pump();
 
       expect(find.byKey(const Key('home-global-event-banner')), findsNothing);
-      expect(find.textContaining('2x STEPS'), findsNothing);
+      expect(find.textContaining('2x RACE STEPS'), findsNothing);
     },
   );
 
@@ -149,7 +149,7 @@ void main() {
       await tester.pump();
 
       expect(find.byKey(const Key('home-global-event-banner')), findsNothing);
-      expect(find.textContaining('2x STEPS'), findsNothing);
+      expect(find.textContaining('2x RACE STEPS'), findsNothing);
     },
   );
 
@@ -175,7 +175,7 @@ void main() {
         find.byKey(const Key('standalone-event-banner')),
         findsOneWidget,
       );
-      expect(find.textContaining('3x STEPS'), findsOneWidget);
+      expect(find.textContaining('3x RACE STEPS'), findsOneWidget);
       expect(find.textContaining('ends in'), findsOneWidget);
 
       // Tear down the periodic countdown timer.
@@ -202,7 +202,7 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.textContaining('2x STEPS'), findsNothing);
+      expect(find.textContaining('2x RACE STEPS'), findsNothing);
       expect(find.textContaining('ends in'), findsNothing);
 
       await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));

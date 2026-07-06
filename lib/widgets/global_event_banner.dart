@@ -4,9 +4,10 @@ import 'package:flutter/material.dart';
 
 import '../styles.dart';
 
-/// On-brand "2x STEPS — ends in mm:ss" banner for an active global
-/// step-multiplier event (BeReal-style window). Shared between the race detail
-/// page and the home screen so both render the SAME look.
+/// On-brand "2x RACE STEPS — ends in mm:ss" banner for an active global
+/// step-multiplier event (BeReal-style window; the boost applies to steps
+/// counted toward races). Shared between the race detail page and the home
+/// screen so both render the SAME look.
 ///
 /// Self-ticking: owns a 1-second [Timer.periodic] to update the countdown and
 /// collapses to [SizedBox.shrink] once [endsAt] passes. Callers just supply the
@@ -68,109 +69,69 @@ class _GlobalEventBannerState extends State<GlobalEventBanner> {
     final countdown =
         '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
 
+    // Flat panel matching the home cards (parchment surface, 2px ink border,
+    // hard offset shadow) — no gold bevel / gradients.
     return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
+        color: AppColors.parchmentLight,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.woodDark, width: 2),
         boxShadow: [
           BoxShadow(
-            color: AppColors.woodShadow.withValues(alpha: 0.35),
-            offset: const Offset(0, 4),
+            color: AppColors.woodShadow.withValues(alpha: 0.22),
+            offset: const Offset(4, 4),
             blurRadius: 0,
           ),
         ],
       ),
-      child: Container(
-        padding: const EdgeInsets.all(2),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          gradient: const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              AppColors.coinLight,
-              AppColors.coinMid,
-              AppColors.coinDark,
-            ],
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: AppColors.roofMid,
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.woodDark, width: 1.5),
+            ),
+            child: const Icon(
+              Icons.bolt_rounded,
+              size: 20,
+              color: AppColors.parchment,
+            ),
           ),
-          border: Border.all(color: AppColors.woodShadow, width: 1.2),
-        ),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            gradient: const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                AppColors.roofLight,
-                AppColors.roofMid,
-                AppColors.roofDark,
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${multiplier}x RACE STEPS',
+                  style: PixelText.title(size: 14, color: AppColors.woodDark),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'STEPS COUNT ${multiplier}x IN ALL RACES — GO!',
+                  style: PixelText.body(size: 12.5, color: AppColors.roofDark),
+                ),
               ],
             ),
-            border: Border.all(
-              color: AppColors.pillGold.withValues(alpha: 0.9),
-              width: 1,
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.woodDark,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              'ends in $countdown',
+              style: PixelText.title(size: 11, color: AppColors.parchment),
             ),
           ),
-          child: Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [AppColors.coinLight, AppColors.coinDark],
-                  ),
-                  border: Border.all(color: AppColors.woodShadow, width: 1.1),
-                ),
-                child: const Icon(
-                  Icons.bolt_rounded,
-                  size: 20,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${multiplier}x STEPS',
-                      style: PixelText.title(size: 14, color: Colors.white),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'EVERY STEP COUNTS ${multiplier}x — GO!',
-                      style: PixelText.body(
-                        size: 12.5,
-                        color: AppColors.parchmentLight,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.woodDark,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  'ends in $countdown',
-                  style: PixelText.title(size: 11, color: AppColors.parchment),
-                ),
-              ),
-            ],
-          ),
-        ),
+        ],
       ),
     );
   }

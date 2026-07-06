@@ -49,6 +49,21 @@ class AccessoryThumbnail extends StatelessWidget {
       );
     }
 
+    // Frame-sheet art is drawn in-world (positioned/scaled by renderMetadata),
+    // so a frame can be mostly transparent and make a tiny icon. A bundled
+    // `<name>_thumb.png` — the frame-0 art cropped to its content — wins when
+    // present; otherwise fall back to cropping frame 0 out of the sheet.
+    final thumbPath = assetPath.replaceFirst(RegExp(r'\.png$'), '_thumb.png');
+    return Image.asset(
+      thumbPath,
+      fit: BoxFit.contain,
+      filterQuality: FilterQuality.none,
+      errorBuilder: (context, error, stackTrace) =>
+          _frameZeroCrop(assetPath, frames),
+    );
+  }
+
+  Widget _frameZeroCrop(String assetPath, int frames) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final frameWidth = constraints.maxWidth;

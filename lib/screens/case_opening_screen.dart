@@ -299,9 +299,17 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
     );
   }
 
+  String? _descriptionFor(String type) {
+    for (final entry in _powerupEntries) {
+      if (entry.type == type) return entry.description;
+    }
+    return null;
+  }
+
   Widget _buildRevealCard() {
     final rarityColor = _rarityColor(_resultRarity);
     final name = _powerupNames[_resultType] ?? _resultType;
+    final description = _descriptionFor(_resultType);
 
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
@@ -365,6 +373,14 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
               style: PixelText.title(size: 24, color: AppColors.textDark),
               textAlign: TextAlign.center,
             ),
+            if (description != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                description,
+                style: PixelText.body(size: 13, color: AppColors.textMid),
+                textAlign: TextAlign.center,
+              ),
+            ],
             if (_autoActivated) ...[
               const SizedBox(height: 8),
               Text(

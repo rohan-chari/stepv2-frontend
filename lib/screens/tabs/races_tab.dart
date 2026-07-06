@@ -95,8 +95,15 @@ class _RacesTabState extends State<RacesTab> {
     });
   }
 
+  // Declined races are excluded server-side on current backends, but an older
+  // backend may still return them — filter defensively so a declined race
+  // never shows up (the user opted out; it's dead weight they can't act on).
   List<Map<String, dynamic>> get _active =>
-      (_raceData?['active'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      (_raceData?['active'] as List?)
+          ?.cast<Map<String, dynamic>>()
+          .where((r) => r['myStatus'] != 'DECLINED')
+          .toList() ??
+      [];
 
   List<Map<String, dynamic>> get _invites =>
       (_raceData?['pending'] as List?)
@@ -108,7 +115,9 @@ class _RacesTabState extends State<RacesTab> {
   List<Map<String, dynamic>> get _waiting =>
       (_raceData?['pending'] as List?)
           ?.cast<Map<String, dynamic>>()
-          .where((r) => r['myStatus'] != 'INVITED')
+          .where(
+            (r) => r['myStatus'] != 'INVITED' && r['myStatus'] != 'DECLINED',
+          )
           .toList() ??
       [];
 
@@ -279,70 +288,70 @@ class _RacesTabState extends State<RacesTab> {
         child: KeyedSubtree(
           key: potKey,
           child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 15, 16, 14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'RACES',
-                style: PixelText.title(
-                  size: 30,
-                  color: AppColors.parchment,
-                ).copyWith(shadows: _textShadows),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                'Race friends, climb the board, and turn daily steps into wins.',
-                style: PixelText.body(
-                  size: 15,
-                  color: AppColors.parchment.withValues(alpha: 0.92),
+            padding: const EdgeInsets.fromLTRB(16, 15, 16, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'RACES',
+                  style: PixelText.title(
+                    size: 30,
+                    color: AppColors.parchment,
+                  ).copyWith(shadows: _textShadows),
                 ),
-              ),
-              const SizedBox(height: 14),
-              _RaceHeaderMetrics(
-                activeCount: activeCount,
-                inviteCount: inviteCount,
-                waitingCount: waitingCount,
-              ),
-              if (widget.displayName != null) ...[
+                const SizedBox(height: 5),
+                Text(
+                  'Race friends, climb the board, and turn daily steps into wins.',
+                  style: PixelText.body(
+                    size: 15,
+                    color: AppColors.parchment.withValues(alpha: 0.92),
+                  ),
+                ),
                 const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: PillButton(
-                        label: 'NEW RACE',
-                        icon: Icons.add_rounded,
-                        variant: PillButtonVariant.secondary,
-                        fontSize: 13,
-                        fullWidth: true,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
-                        ),
-                        onPressed: _navigateToCreateRace,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: PillButton(
-                        label: 'PUBLIC RACES (${widget.publicRacesCount})',
-                        icon: Icons.travel_explore_rounded,
-                        variant: PillButtonVariant.accent,
-                        fontSize: 13,
-                        fullWidth: true,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
-                        ),
-                        onPressed: _navigateToPublicRaces,
-                      ),
-                    ),
-                  ],
+                _RaceHeaderMetrics(
+                  activeCount: activeCount,
+                  inviteCount: inviteCount,
+                  waitingCount: waitingCount,
                 ),
+                if (widget.displayName != null) ...[
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: PillButton(
+                          label: 'NEW RACE',
+                          icon: Icons.add_rounded,
+                          variant: PillButtonVariant.secondary,
+                          fontSize: 13,
+                          fullWidth: true,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          onPressed: _navigateToCreateRace,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: PillButton(
+                          label: 'PUBLIC RACES (${widget.publicRacesCount})',
+                          icon: Icons.travel_explore_rounded,
+                          variant: PillButtonVariant.accent,
+                          fontSize: 13,
+                          fullWidth: true,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          onPressed: _navigateToPublicRaces,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
-        ),
         ),
       ),
     );
@@ -398,10 +407,7 @@ class _RacesTabState extends State<RacesTab> {
                   color: AppColors.textDark,
                 ),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(
-                  minWidth: 36,
-                  minHeight: 36,
-                ),
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                 onPressed: _openFeaturedSettings,
               ),
             ],
@@ -469,7 +475,9 @@ class _RacesTabState extends State<RacesTab> {
       name: race['name'] as String? ?? 'Race',
       seedKind: race['seedKind'] as String?,
       isUpcoming: true,
-      startsAt: DateTime.tryParse(upcoming['scheduledStartAt'] as String? ?? ''),
+      startsAt: DateTime.tryParse(
+        upcoming['scheduledStartAt'] as String? ?? '',
+      ),
       endsAt: DateTime.tryParse(upcoming['endsAt'] as String? ?? ''),
       participantCount: (upcoming['participantCount'] as num?)?.toInt() ?? 0,
       finishRewardPool: (reward?['pool'] as num?)?.toInt() ?? 0,
@@ -804,107 +812,107 @@ class _RacesTabState extends State<RacesTab> {
     return KeyedSubtree(
       key: cardKey,
       child: Material(
-      color: stripeColor,
-      child: InkWell(
-        onTap: raceId.isEmpty ? null : () => _navigateToRaceDetail(raceId),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-          child: Row(
-            key: Key('race-card-header-$raceId'),
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      style: PixelText.title(
-                        size: 18,
-                        color: AppColors.textDark,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                    ),
-                    const SizedBox(height: 3),
-                    // Active races show time-left then the user's race inventory
-                    // (4 slots: held powerup sprites, mystery-box crates, then
-                    // queued crates, then empty). Everything else keeps the
-                    // runner count.
-                    if (status == 'ACTIVE') ...[
+        color: stripeColor,
+        child: InkWell(
+          onTap: raceId.isEmpty ? null : () => _navigateToRaceDetail(raceId),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+            child: Row(
+              key: Key('race-card-header-$raceId'),
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        timeLabel,
-                        style: PixelText.body(size: 13, color: timeColor),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                      ),
-                      const SizedBox(height: 4),
-                      _buildInventoryRow(
-                        slotItems,
-                        mysteryBoxCount,
-                        queuedBoxCount,
-                        rowKey: boxKey,
-                      ),
-                    ] else
-                      Text(
-                        '$participantCount runner${participantCount == 1 ? '' : 's'}${isInvite && creatorName.isNotEmpty ? ' \u2022 by ${atName(creatorName)}' : ''}',
-                        style: PixelText.body(
-                          size: 14,
-                          color: AppColors.textMid,
+                        name,
+                        style: PixelText.title(
+                          size: 18,
+                          color: AppColors.textDark,
                         ),
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                       ),
-                  ],
-                ),
-              ),
-              if (showTrailingContent) ...[
-                const SizedBox(width: 10),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (myPlacement != null)
-                      _buildMetaChip(
-                        '${formatOrdinal(myPlacement)} PLACE',
-                        backgroundColor: AppColors.pillGreenDark.withValues(
-                          alpha: 0.16,
+                      const SizedBox(height: 3),
+                      // Active races show time-left then the user's race inventory
+                      // (4 slots: held powerup sprites, mystery-box crates, then
+                      // queued crates, then empty). Everything else keeps the
+                      // runner count.
+                      if (status == 'ACTIVE') ...[
+                        Text(
+                          timeLabel,
+                          style: PixelText.body(size: 13, color: timeColor),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
-                        textColor: AppColors.pillGreenDark,
-                      )
-                    else if (myPlacementHidden)
-                      _buildMetaChip(
-                        '??? PLACE',
-                        backgroundColor: AppColors.textMid.withValues(
-                          alpha: 0.16,
-                        ),
-                        textColor: AppColors.textMid,
-                      ),
-                    if (showTrailingStatus) ...[
-                      if (myPlacement != null || myPlacementHidden)
                         const SizedBox(height: 4),
-                      Text(
-                        statusLabel,
-                        style: PixelText.title(size: 12, color: badgeColor),
-                        textAlign: TextAlign.right,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        timeLabel,
-                        style: PixelText.body(
-                          size: 12,
-                          color: AppColors.textMid,
+                        _buildInventoryRow(
+                          slotItems,
+                          mysteryBoxCount,
+                          queuedBoxCount,
+                          rowKey: boxKey,
                         ),
-                        textAlign: TextAlign.right,
-                      ),
+                      ] else
+                        Text(
+                          '$participantCount runner${participantCount == 1 ? '' : 's'}${isInvite && creatorName.isNotEmpty ? ' \u2022 by ${atName(creatorName)}' : ''}',
+                          style: PixelText.body(
+                            size: 14,
+                            color: AppColors.textMid,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
                     ],
-                  ],
+                  ),
                 ),
+                if (showTrailingContent) ...[
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (myPlacement != null)
+                        _buildMetaChip(
+                          '${formatOrdinal(myPlacement)} PLACE',
+                          backgroundColor: AppColors.pillGreenDark.withValues(
+                            alpha: 0.16,
+                          ),
+                          textColor: AppColors.pillGreenDark,
+                        )
+                      else if (myPlacementHidden)
+                        _buildMetaChip(
+                          '??? PLACE',
+                          backgroundColor: AppColors.textMid.withValues(
+                            alpha: 0.16,
+                          ),
+                          textColor: AppColors.textMid,
+                        ),
+                      if (showTrailingStatus) ...[
+                        if (myPlacement != null || myPlacementHidden)
+                          const SizedBox(height: 4),
+                        Text(
+                          statusLabel,
+                          style: PixelText.title(size: 12, color: badgeColor),
+                          textAlign: TextAlign.right,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          timeLabel,
+                          style: PixelText.body(
+                            size: 12,
+                            color: AppColors.textMid,
+                          ),
+                          textAlign: TextAlign.right,
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }

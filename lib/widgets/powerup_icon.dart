@@ -40,9 +40,10 @@ class PowerupIcon extends StatelessWidget {
     'MIRROR': 'mirror',
     'CLEANSE': 'cleanse',
     'IMPOSTER': 'imposter',
-    // Placeholder art until final rainstorm asset lands.
     'RAINSTORM': 'rainstorm',
   };
+
+  static int get knownTypeCount => _assetNames.length;
 
   @override
   Widget build(BuildContext context) {

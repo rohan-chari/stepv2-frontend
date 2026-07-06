@@ -9,7 +9,7 @@ import 'package:step_tracker/services/backend_api_service.dart';
 // Global step-multiplier event banner on the race detail page.
 //
 // When getRaceProgress returns an active `globalEvent`
-// ({ active: true, multiplier, endsAt }), the race page shows a "2x STEPS"
+// ({ active: true, multiplier, endsAt }), the race page shows a "2x RACE STEPS"
 // banner with a countdown to endsAt. When the field is absent, no banner.
 // Read defensively — old responses simply omit the field.
 // ---------------------------------------------------------------------------
@@ -141,7 +141,7 @@ void main() {
         find.byKey(const Key('race-global-event-banner')),
         findsOneWidget,
       );
-      expect(find.textContaining('2x STEPS'), findsOneWidget);
+      expect(find.textContaining('2x RACE STEPS'), findsOneWidget);
 
       // Tear down the periodic countdown timer.
       await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
@@ -168,7 +168,7 @@ void main() {
       await tester.pump();
 
       expect(find.byKey(const Key('race-global-event-banner')), findsNothing);
-      expect(find.textContaining('2x STEPS'), findsNothing);
+      expect(find.textContaining('2x RACE STEPS'), findsNothing);
 
       await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
       await tester.pumpAndSettle();

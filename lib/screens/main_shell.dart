@@ -15,6 +15,7 @@ import '../services/backend_api_service.dart';
 import '../services/background_sync_bootstrap_service.dart';
 import '../services/health_service.dart';
 import '../services/notification_service.dart';
+import '../services/review_prompt_service.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/info_toast.dart';
@@ -43,6 +44,7 @@ class MainShell extends StatefulWidget {
     this.backendApiService,
     this.backgroundSyncBootstrapService,
     this.notificationService,
+    this.reviewPromptService,
   });
 
   final AuthService authService;
@@ -50,6 +52,7 @@ class MainShell extends StatefulWidget {
   final BackendApiService? backendApiService;
   final BackgroundSyncBootstrapService? backgroundSyncBootstrapService;
   final NotificationService? notificationService;
+  final ReviewPromptService? reviewPromptService;
 
   @override
   State<MainShell> createState() => _MainShellState();
@@ -65,6 +68,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   late final HealthService _healthService;
   late final BackendApiService _backendApiService;
   late final BackgroundSyncBootstrapService _backgroundSyncBootstrapService;
+  late final ReviewPromptService _reviewPromptService;
 
   int _currentTab = 0;
   late final PageController _pageController;
@@ -140,6 +144,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _backgroundSyncBootstrapService =
         widget.backgroundSyncBootstrapService ??
         BackgroundSyncBootstrapService();
+    _reviewPromptService = widget.reviewPromptService ?? ReviewPromptService();
     _pageController = PageController();
     WidgetsBinding.instance.addObserver(this);
     widget.authService.addListener(_handleAuthServiceChanged);
@@ -713,6 +718,17 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           }
         }
       });
+    }
+
+    // Happy-moment hook: the user just dismissed a results modal that included
+    // a top-3 finish. The service applies its own warm-up/cooldown/never-again
+    // guards, so most calls are no-ops.
+    final placedTop3 = unseen.any((race) {
+      final placement = (race['myPlacement'] as num?)?.toInt();
+      return placement != null && placement >= 1 && placement <= 3;
+    });
+    if (placedTop3 && mounted) {
+      await _reviewPromptService.recordHappyMomentAndMaybePrompt(context);
     }
   }
 

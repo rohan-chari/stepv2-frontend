@@ -43,4 +43,29 @@ void main() {
     await tester.pump(const Duration(seconds: 4));
     await tester.pump(const Duration(milliseconds: 300));
   });
+
+  testWidgets('unbox reveal shows the powerup description', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CaseOpeningScreen(
+          openMysteryBox: () async => {
+            'result': {'type': 'WRONG_TURN', 'rarity': 'UNCOMMON'},
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('SWIPE OR TAP'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 4100));
+    await tester.pump(const Duration(milliseconds: 700));
+    // Reveal-card scale-in animation; the spinning icon never settles, so
+    // pump fixed durations rather than pumpAndSettle.
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(find.text('UNBOXED'), findsOneWidget);
+    expect(find.text('Wrong Turn'), findsOneWidget);
+    expect(find.text('Reverse a rival\'s steps for 1 hour'), findsOneWidget);
+  });
 }

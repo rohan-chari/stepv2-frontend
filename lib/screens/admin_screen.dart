@@ -74,6 +74,46 @@ const _powerupEntries = [
     description: 'Hide the entire leaderboard from a rival for 3 hours',
   ),
   (
+    type: 'LUCKY_HORSESHOE',
+    name: 'Lucky Horseshoe',
+    description: 'Guarantee a better next mystery box',
+  ),
+  (
+    type: 'CAMPFIRE_REST',
+    name: 'Campfire Rest',
+    description: 'Freeze for 30 min, then multiply steps for up to 90 min',
+  ),
+  (
+    type: 'TRAIL_MAGNET',
+    name: 'Trail Magnet',
+    description: 'Pull your next mystery box 1,000 steps closer',
+  ),
+  (
+    type: 'POCKET_WATCH',
+    name: 'Pocket Watch',
+    description: 'Extend all active timed buffs',
+  ),
+  (
+    type: 'TRAIL_MINE',
+    name: 'Trail Mine',
+    description: 'Drop a hidden trap at your current step position',
+  ),
+  (
+    type: 'PINECONE_TOSS',
+    name: 'Pinecone Toss',
+    description: 'Hit the runner directly ahead or behind you',
+  ),
+  (
+    type: 'SNEAKY_SWAP',
+    name: 'Sneaky Swap',
+    description: 'Steal a random powerup from a rival',
+  ),
+  (
+    type: 'MIRROR',
+    name: 'Mirror',
+    description: 'Reflect the next attack back at the attacker',
+  ),
+  (
     type: 'CLEANSE',
     name: 'Cleanse',
     description: 'Remove all debuffs an opponent placed on you',
