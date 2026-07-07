@@ -43,6 +43,63 @@ class AdService implements ExtraSpinAdController {
   static const _testAdUnitAndroid = 'ca-app-pub-3940256099942544/5224354917';
   static const _testAdUnitIos = 'ca-app-pub-3940256099942544/1712485313';
 
+  // Banner placements (shop, race mystery-box overlay) are display-only: no
+  // SSV, no reward, no backend. Like the rewarded unit, the real banner unit is
+  // baked in per-build via --dart-define; absent, we fall back to Google's
+  // public test banner so dev/staging shows a placeholder ad, never a real one.
+  static const _envBannerAdUnitId =
+      String.fromEnvironment('ADMOB_BANNER_AD_UNIT_ID');
+  static const _testBannerIos = 'ca-app-pub-3940256099942544/2934735716';
+
+  /// Banners render ONLY on iOS builds that baked in a real
+  /// ADMOB_BANNER_AD_UNIT_ID — mirrors the rewarded-ad gating so Android (no
+  /// AdMob app registered) and misconfigured builds show nothing at all. When
+  /// off, [AdBannerSlot] collapses to zero size.
+  static bool get bannersEnabled =>
+      !kIsWeb && Platform.isIOS && _envBannerAdUnitId.isNotEmpty;
+
+  /// Ad unit for [AdBannerSlot]. The real unit when injected at build time,
+  /// otherwise Google's public test banner (only reached in dev, since
+  /// [bannersEnabled] is false without the define).
+  static String get bannerAdUnitId =>
+      _envBannerAdUnitId.isNotEmpty ? _envBannerAdUnitId : _testBannerIos;
+
+  /// Initialize the ads SDK once (with an iOS ATT prompt on first run). Shared
+  /// by the rewarded-ad path and [AdBannerSlot] so neither owns SDK setup.
+  /// Safe to call repeatedly.
+  static Future<void> ensureInitialized() async {
+    if (_sdkInitialized) return;
+    // ATT first (iOS): with tracking denied the SDK serves non-personalized
+    // ads, which is fine — the reward/banner flows are identical.
+    if (!kIsWeb && Platform.isIOS) {
+      try {
+        final status =
+            await AppTrackingTransparency.trackingAuthorizationStatus;
+        if (status == TrackingStatus.notDetermined) {
+          await AppTrackingTransparency.requestTrackingAuthorization();
+        }
+      } catch (_) {
+        // ATT unavailable (simulator/old iOS) — proceed without it.
+      }
+    }
+    // Debug builds only: mark our own devices as AdMob test devices so we can
+    // watch the REAL ad units without generating invalid traffic (impressions/
+    // clicks Google would otherwise penalize). The value is the hashed
+    // identifier the SDK prints to the console ("testDeviceIdentifiers = …"),
+    // NOT the raw IDFA. Stripped from release builds by kDebugMode, so real
+    // users are never flagged as test — for release/TestFlight testing,
+    // register the device's IDFA in the AdMob console instead.
+    if (kDebugMode) {
+      await MobileAds.instance.updateRequestConfiguration(
+        RequestConfiguration(
+          testDeviceIds: ['9e7526f59bde4aeb8cdc4910cf702487'], // Rohan iPhone
+        ),
+      );
+    }
+    await MobileAds.instance.initialize();
+    _sdkInitialized = true;
+  }
+
   final String? _adUnitIdOverride;
   RewardedAd? _ad;
   bool _loading = false;
@@ -68,22 +125,7 @@ class AdService implements ExtraSpinAdController {
     if (!isSupported || _loading || _ad != null) return;
     _loading = true;
     try {
-      if (!_sdkInitialized) {
-        // ATT first (iOS): with tracking denied the SDK serves
-        // non-personalized ads, which is fine — the reward flow is identical.
-        if (Platform.isIOS) {
-          try {
-            final status = await AppTrackingTransparency.trackingAuthorizationStatus;
-            if (status == TrackingStatus.notDetermined) {
-              await AppTrackingTransparency.requestTrackingAuthorization();
-            }
-          } catch (_) {
-            // ATT unavailable (simulator/old iOS) — proceed without it.
-          }
-        }
-        await MobileAds.instance.initialize();
-        _sdkInitialized = true;
-      }
+      await ensureInitialized();
 
       final completer = Completer<void>();
       await RewardedAd.load(

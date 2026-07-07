@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import '../styles.dart';
+import '../widgets/ad_banner_slot.dart';
 import '../widgets/case_opening_strip.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/game_container.dart';
@@ -211,21 +212,31 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
             ),
           ),
           SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(14, 18, 14, 24),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 460),
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 280),
-                    switchInCurve: Curves.easeOutCubic,
-                    switchOutCurve: Curves.easeInCubic,
-                    child: _revealed
-                        ? _buildRevealCard()
-                        : _buildOpeningContent(),
+            child: Column(
+              children: [
+                Expanded(
+                  child: Center(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(14, 18, 14, 24),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 460),
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 280),
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeInCubic,
+                          child: _revealed
+                              ? _buildRevealCard()
+                              : _buildOpeningContent(),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-              ),
+                // Bottom banner, in-flow below the centered card so it reserves
+                // its own space and never covers the Continue button. Collapses
+                // to zero size unless banners are enabled AND an ad loads.
+                const AdBannerSlot(),
+              ],
             ),
           ),
         ],

@@ -60,7 +60,9 @@
 	     (iOS)" AdMob app; one AdMob iOS app covers prod + staging since both
 	     share this bundle id. The SDK crashes on launch if this key is missing.
 	     Ad UNIT ids are injected per-build via
-	     --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID (see AD_REWARD_DESIGN.md). -->
+	     --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID (rewarded) and
+	     --dart-define=ADMOB_BANNER_AD_UNIT_ID (display banner); see
+	     AD_REWARD_DESIGN.md. -->
 	<key>GADApplicationIdentifier</key>
 	<string>ca-app-pub-4538901002392200~5288861983</string>
 	<!-- ATT prompt string. Shown once before the first rewarded-ad load; if the

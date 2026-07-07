@@ -110,6 +110,32 @@ Replay/abuse coverage:
 - New client against old backend: `adExtraSpin` absent → button never shows.
 - Kill switch handles emergencies without an App Store cycle.
 
+## Phase 2: display banners (shop + race mystery-box)
+
+Status: implemented 2026-07-07 (frontend only; needs a real AdMob banner unit +
+prod `--dart-define=ADMOB_BANNER_AD_UNIT_ID` before release).
+
+Two **display-only** anchored-adaptive banners — **no SSV, no reward, no
+backend, no economy tie-in** — so this is a pure client change with no
+old-client compatibility surface:
+
+- **Shop/inventory** (`shop_tab.dart`): banner pinned just above the shell tab
+  bar (a `Positioned` layer in the existing `Stack`).
+- **Race mystery-box overlay** (`case_opening_screen.dart`): banner pinned to
+  the screen bottom, below the vertically-centered opening/reveal card. The
+  reveal waits for a "Continue" tap, so the banner has time to fill.
+
+Both use `lib/widgets/ad_banner_slot.dart` (`AdBannerSlot`), which collapses to
+zero size unless `AdService.bannersEnabled` AND an ad actually loads — screens
+never reserve dead space for a missing/unfilled banner. SDK init + ATT is shared
+with the rewarded path via `AdService.ensureInitialized()`.
+
+Gating mirrors the rewarded unit: banners render **only on iOS builds carrying a
+real `ADMOB_BANNER_AD_UNIT_ID`**. Android (no AdMob app) and define-less builds
+show nothing; dev/staging fall back to Google's public test banner. No backend
+kill switch — to stop a live banner without an App Store cycle, pause the ad
+unit in the AdMob console.
+
 ## Not in Phase 1 (deliberately)
 
 - ATT pre-prompt UX polish (we request non-personalized ads if ATT is

@@ -120,11 +120,19 @@ For most releases, you can deploy backend first because the old App Store binary
 # NOTE: no --flavor on iOS (no flavor schemes in the Xcode project).
 # ADMOB_EXTRA_SPIN_AD_UNIT_ID is REQUIRED: it bakes in the rewarded ad unit
 # for the extra daily spin (iOS-only feature; see AD_REWARD_DESIGN.md).
-# Forgetting it is safe but silently ships the release without ads.
+# ADMOB_BANNER_AD_UNIT_ID bakes in the display banner shown at the bottom of
+# the shop/inventory and the race mystery-box overlay (iOS-only, display-only:
+# no reward, no backend). Both define are safe to forget — the app just ships
+# without that ad — but a prod release should carry both.
 flutter build ipa --release \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
-  --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717
+  --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
+  --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309
 ```
+
+> The banner unit (`/5308967309`) lives under the iOS AdMob app (`~5288861983`).
+> Omit the define on dev/staging to fall back to Google's public test banner;
+> new units can take up to an hour to start filling live ads.
 
 Upload via Transporter to "Bara" in App Store Connect.
 

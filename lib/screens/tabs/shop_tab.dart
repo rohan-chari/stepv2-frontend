@@ -6,6 +6,7 @@ import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
 import '../../widgets/accessory_thumbnail.dart';
+import '../../widgets/ad_banner_slot.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/info_toast.dart';
@@ -275,19 +276,30 @@ class _ShopTabState extends State<ShopTab> {
           ),
           Padding(
             padding: EdgeInsets.only(top: topInset + 14, bottom: tabBarHeight),
-            child: RefreshIndicator(
-              onRefresh: _loadCatalog,
-              color: AppColors.accent,
-              backgroundColor: AppColors.parchment,
-              child: CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: _buildHeader(showBackButton: showBackButton),
+            child: Column(
+              children: [
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: _loadCatalog,
+                    color: AppColors.accent,
+                    backgroundColor: AppColors.parchment,
+                    child: CustomScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      slivers: [
+                        SliverToBoxAdapter(
+                          child: _buildHeader(showBackButton: showBackButton),
+                        ),
+                        SliverToBoxAdapter(child: _buildBody()),
+                      ],
+                    ),
                   ),
-                  SliverToBoxAdapter(child: _buildBody()),
-                ],
-              ),
+                ),
+                // Bottom banner, in-flow below the list so it reserves its own
+                // space (never overlaps the last row). AdBannerSlot collapses to
+                // zero size unless banners are enabled AND an ad loads, so no
+                // gap appears otherwise.
+                const AdBannerSlot(),
+              ],
             ),
           ),
         ],
