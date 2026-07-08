@@ -10,7 +10,12 @@ import '../styles.dart';
 /// ad actually loads, so screens never reserve dead space for a missing ad.
 /// Part of the ad layer alongside AdService: no screen touches the ads SDK.
 class AdBannerSlot extends StatefulWidget {
-  const AdBannerSlot({super.key});
+  const AdBannerSlot({super.key, this.withBottomSafeArea = false});
+
+  /// For hosts whose SafeArea excludes the bottom (race detail): pad the
+  /// loaded banner clear of the home indicator. Applied only when an ad is
+  /// actually showing, so the collapsed state stays zero-size.
+  final bool withBottomSafeArea;
 
   @override
   State<AdBannerSlot> createState() => _AdBannerSlotState();
@@ -36,11 +41,11 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
     await AdService.ensureInitialized();
     if (!mounted) return;
     // Full-width anchored adaptive banner: spans the screen at a compact
-    // (~50pt) height. Width is inset by the parchment card's margin (8*2) +
-    // padding (6*2) so the ad fits inside the panel. The non-deprecated
+    // (~50pt) height. Width is inset by a small horizontal buffer (16px each
+    // side) so the tappable ad never runs edge-to-edge. The non-deprecated
     // variants only offer the taller "large" size, so we keep the standard
     // anchored size here.
-    final width = (MediaQuery.of(context).size.width - 28).truncate();
+    final width = (MediaQuery.of(context).size.width - 32).truncate();
     // ignore: deprecated_member_use
     final size = await AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(
       width,
@@ -84,27 +89,30 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
   Widget build(BuildContext context) {
     final ad = _ad;
     if (!_loaded || ad == null) return const SizedBox.shrink();
-    // Wrap the ad in a parchment card so it reads as a deliberate panel rather
-    // than a transparent ad floating over the screen's background.
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8),
-      padding: const EdgeInsets.all(6),
-      decoration: BoxDecoration(
+    final bottomPad = widget.withBottomSafeArea
+        ? MediaQuery.of(context).padding.bottom
+        : 0.0;
+    // Anchored footer bar: full-bleed and opaque with a single top divider, so
+    // it reads as a fixed footer rather than a card floating over the screen's
+    // background. The vertical padding forms a buffer that keeps the tappable
+    // ad away from the content above, reducing accidental clicks.
+    return DecoratedBox(
+      decoration: const BoxDecoration(
         color: AppColors.parchmentLight,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.parchmentBorder),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x1A000000),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
+        border: Border(top: BorderSide(color: AppColors.parchmentBorder)),
       ),
       child: SizedBox(
-        width: ad.size.width.toDouble(),
-        height: ad.size.height.toDouble(),
-        child: Center(child: AdWidget(ad: ad)),
+        width: double.infinity,
+        child: Padding(
+          padding: EdgeInsets.only(top: 10, bottom: 10 + bottomPad),
+          child: Center(
+            child: SizedBox(
+              width: ad.size.width.toDouble(),
+              height: ad.size.height.toDouble(),
+              child: AdWidget(ad: ad),
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -7,6 +7,7 @@ import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
 import '../../utils/at_name.dart';
+import '../../widgets/ad_banner_slot.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/filter_dropdown.dart';
 import '../../widgets/game_container.dart';
@@ -340,18 +341,28 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
         ),
         Padding(
           padding: EdgeInsets.only(top: topInset + 14, bottom: tabBarHeight),
-          child: RefreshIndicator(
-            onRefresh: _loadLeaderboard,
-            color: AppColors.accent,
-            backgroundColor: AppColors.parchment,
-            child: CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                SliverToBoxAdapter(
-                  child: Column(children: [_buildLeaderboardShell()]),
+          child: Column(
+            children: [
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: _loadLeaderboard,
+                  color: AppColors.accent,
+                  backgroundColor: AppColors.parchment,
+                  child: CustomScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: Column(children: [_buildLeaderboardShell()]),
+                      ),
+                    ],
+                  ),
                 ),
-              ],
-            ),
+              ),
+              // Bottom banner, in-flow below the list so it reserves its own
+              // space (mirrors the shop tab). Collapses to zero size unless
+              // banners are enabled AND an ad loads.
+              const AdBannerSlot(),
+            ],
           ),
         ),
       ],

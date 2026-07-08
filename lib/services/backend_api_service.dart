@@ -1436,6 +1436,24 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  /// Watch-ad-for-coins (Get Coins hub), paid by a verified rewarded-ad
+  /// watch. Only call when the status response carries `adCoinReward` — older
+  /// backends 404 this. A 409 shortly after the ad means the server-side
+  /// verification hasn't landed yet; callers retry briefly.
+  Future<Map<String, dynamic>> claimAdCoinReward({
+    required String identityToken,
+    required String localDate,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/coins/claim-ad-reward',
+      body: {'localDate': localDate},
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
   Future<Map<String, dynamic>> fetchShopCatalog({
     required String identityToken,
   }) async {

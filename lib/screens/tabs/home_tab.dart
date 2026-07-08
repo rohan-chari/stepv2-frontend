@@ -21,6 +21,7 @@ import '../../widgets/race_ui.dart';
 import '../../tutorial/tutorial_screen.dart';
 import '../display_name_screen.dart';
 import '../public_races_screen.dart';
+import '../get_coins_screen.dart';
 import '../referral_screen.dart';
 
 class HomeTab extends StatelessWidget {
@@ -624,11 +625,11 @@ class HomeTab extends StatelessWidget {
                           CoinBalanceBadge(
                             coins: authService.coins,
                             coinSize: 16,
-                            // "+" = earn more coins -> invite friends
-                            // (referral).
+                            // "+" = earn more coins -> the Get Coins hub
+                            // (watch an ad, invite friends, daily box).
                             onAddTap: () => Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) => ReferralScreen(
+                                builder: (_) => GetCoinsScreen(
                                   authService: authService,
                                   backendApiService: backendApiService,
                                 ),

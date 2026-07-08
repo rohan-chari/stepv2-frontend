@@ -13,7 +13,7 @@ import '../../widgets/info_toast.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/powerup_icon.dart';
-import '../referral_screen.dart';
+import '../get_coins_screen.dart';
 
 enum _ShopSection { store, inventory }
 
@@ -349,10 +349,11 @@ class _ShopTabState extends State<ShopTab> {
                   ),
                   CoinBalanceBadge(
                     coins: widget.authService.coins,
-                    // "+" = earn more coins -> invite friends (referral).
+                    // "+" = earn more coins -> the Get Coins hub (watch an
+                    // ad, invite friends, daily box).
                     onAddTap: () => Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => ReferralScreen(
+                        builder: (_) => GetCoinsScreen(
                           authService: widget.authService,
                           backendApiService: _backendApiService,
                         ),

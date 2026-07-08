@@ -7,6 +7,7 @@ import '../../styles.dart';
 import '../../utils/at_name.dart';
 import '../../utils/race_participant_display.dart';
 import '../../widgets/featured_race_card.dart';
+import '../../widgets/ad_inline_card.dart';
 import '../../widgets/info_toast.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
@@ -558,6 +559,7 @@ class _RacesTabState extends State<RacesTab> {
             showCount: false,
             firstCardKey: widget.tutorialCardKey,
             firstBoxKey: widget.tutorialBoxKey,
+            showInFeedAd: true,
           ),
         if (completed.isNotEmpty)
           _buildRaceSection(
@@ -578,6 +580,7 @@ class _RacesTabState extends State<RacesTab> {
     bool showCount = true,
     GlobalKey? firstCardKey,
     GlobalKey? firstBoxKey,
+    bool showInFeedAd = false,
   }) {
     final collapsed = _collapsedSections.contains(sectionKey);
     return Padding(
@@ -597,6 +600,7 @@ class _RacesTabState extends State<RacesTab> {
               isInvite: isInvite,
               firstCardKey: firstCardKey,
               firstBoxKey: firstBoxKey,
+              showInFeedAd: showInFeedAd,
             ),
         ],
       ),
@@ -608,7 +612,15 @@ class _RacesTabState extends State<RacesTab> {
     bool isInvite = false,
     GlobalKey? firstCardKey,
     GlobalKey? firstBoxKey,
+    bool showInFeedAd = false,
   }) {
+    // Single in-feed ad for the section: after the 4th row on longer lists so
+    // it reads as part of the feed, else after the last row. The card
+    // collapses to zero size unless banners are enabled AND an ad loads, so
+    // rows and dividers are untouched in the adless case.
+    final adAfterIndex = showInFeedAd
+        ? (races.length > 4 ? 3 : races.length - 1)
+        : -1;
     return Column(
       children: [
         for (int i = 0; i < races.length; i++) ...[
@@ -619,6 +631,8 @@ class _RacesTabState extends State<RacesTab> {
             cardKey: i == 0 ? firstCardKey : null,
             boxKey: i == 0 ? firstBoxKey : null,
           ),
+          if (i == adAfterIndex)
+            const AdInlineCard(key: Key('active-section-ad')),
           if (i != races.length - 1)
             Container(
               height: 1,

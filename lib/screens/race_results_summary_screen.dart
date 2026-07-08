@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../styles.dart';
 import '../utils/at_name.dart';
 import '../utils/race_participant_display.dart';
+import '../widgets/ad_banner_slot.dart';
 import '../widgets/celebration_confetti.dart';
 import '../widgets/game_container.dart';
 import '../widgets/home_chrome.dart';
@@ -86,8 +87,14 @@ class RaceResultsSummaryScreen extends StatelessWidget {
                           label: 'NICE',
                           variant: PillButtonVariant.primary,
                           fullWidth: true,
+                          // TODO(ads-interstitial): frequency-capped
+                          // interstitial fires after this pop (see ADS_TODO.md)
                           onPressed: () => Navigator.of(context).pop(),
                         ),
+                        // Banner below the action so it never delays the
+                        // dismiss; collapses to zero size when adless (its own
+                        // top padding provides the gap when an ad shows).
+                        const AdBannerSlot(),
                       ],
                     ),
                   ),

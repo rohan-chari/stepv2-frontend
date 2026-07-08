@@ -15,6 +15,7 @@ import '../utils/at_name.dart';
 import '../utils/race_display.dart';
 import '../utils/race_participant_display.dart';
 import '../utils/share_helper.dart';
+import '../widgets/ad_banner_slot.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/arcade_tab_selector.dart';
 import '../widgets/app_avatar.dart';
@@ -1548,6 +1549,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                         ),
                       ),
               ),
+              // Anchored bottom banner, in-flow below the scrollable so it
+              // reserves its own space. SafeArea above excludes the bottom, so
+              // the slot pads itself clear of the home indicator when an ad is
+              // showing; it collapses to zero size otherwise.
+              const AdBannerSlot(withBottomSafeArea: true),
             ],
           ),
         ),
