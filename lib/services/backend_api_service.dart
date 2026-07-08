@@ -113,7 +113,6 @@ class BackendApiService {
     required String identityToken,
     required String userIdentifier,
     String? email,
-    String? name,
     String? referralCode,
   }) async {
     final response = await _sendJsonRequest(
@@ -123,7 +122,8 @@ class BackendApiService {
         'identityToken': identityToken,
         'userIdentifier': userIdentifier,
         'email': email,
-        'name': name,
+        // No 'name': the Apple real name is never requested nor sent; the
+        // backend generates the display name (see ensureAppleUser.js).
         // Additive/optional — included only when a referral code was captured,
         // so older backends (which ignore it) and this build both stay happy.
         if (referralCode != null && referralCode.isNotEmpty)

@@ -151,10 +151,11 @@ class AuthService extends ChangeNotifier {
 
   Future<bool> signInWithApple() async {
     try {
+      // Only the email scope: the backend assigns a generated display name and
+      // never uses the Apple real name, so we don't request (or send) it.
       final credential = await SignInWithApple.getAppleIDCredential(
         scopes: [
           AppleIDAuthorizationScopes.email,
-          AppleIDAuthorizationScopes.fullName,
         ],
       );
 
@@ -179,7 +180,6 @@ class AuthService extends ChangeNotifier {
         identityToken: identityToken,
         userIdentifier: userIdentifier,
         email: credential.email,
-        name: _buildDisplayName(credential),
         referralCode: referralCode,
       );
 
@@ -698,13 +698,5 @@ class AuthService extends ChangeNotifier {
     await prefs.setBool(_keyFirstRaceOnboardingSeen, _firstRaceOnboardingSeen);
     await prefs.setBool(_keyTutorialOnboardingSeen, _tutorialOnboardingSeen);
     await prefs.setBool(_keyHiddenFromLeaderboard, _hiddenFromLeaderboard);
-  }
-
-  String? _buildDisplayName(AuthorizationCredentialAppleID credential) {
-    final given = credential.givenName ?? '';
-    final family = credential.familyName ?? '';
-    final full = '$given $family'.trim();
-
-    return full.isEmpty ? null : full;
   }
 }
