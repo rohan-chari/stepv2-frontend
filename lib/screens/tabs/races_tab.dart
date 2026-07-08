@@ -70,6 +70,8 @@ class _RacesTabState extends State<RacesTab> {
 
   // Completed races default to collapsed; users can expand to view history.
   final Set<String> _collapsedSections = {'completed'};
+  // Guards against double-pushing RaceDetailScreen from rapid taps.
+  bool _navigatingToRace = false;
 
   // raceId currently being joined from a featured card (shows JOINING… state).
   String? _joiningFeaturedId;
@@ -169,6 +171,10 @@ class _RacesTabState extends State<RacesTab> {
   }
 
   void _navigateToRaceDetail(String raceId) {
+    // Rapid taps during the push transition used to stack duplicate detail
+    // screens, each running the full details/progress/chat load.
+    if (_navigatingToRace) return;
+    _navigatingToRace = true;
     Navigator.of(context)
         .push<bool>(
           MaterialPageRoute(
@@ -180,6 +186,7 @@ class _RacesTabState extends State<RacesTab> {
           ),
         )
         .then((_) {
+          _navigatingToRace = false;
           if (mounted) widget.onRacesChanged();
         });
   }

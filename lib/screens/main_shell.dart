@@ -106,6 +106,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   final GlobalKey<StepMilestonesSectionState> _stepMilestonesKey =
       GlobalKey<StepMilestonesSectionState>();
   static const Duration _foregroundPollInterval = Duration(minutes: 5);
+  // In-flight coalescing for the two full home loads (see the methods): a
+  // second trigger while one runs shares its future instead of re-fanning out.
+  Future<void>? _homeLoadInFlight;
+  Future<void>? _homeRefreshInFlight;
+  // Guards against double-pushing RaceDetailScreen from rapid taps.
+  bool _openingRaceDetail = false;
   // Races whose results popup we've already surfaced this session, so a race
   // finishing mid-session (or a re-fetch) doesn't re-interrupt. The server ack
   // (markRaceResultsSeen) is the durable source of truth across sessions.
@@ -183,15 +189,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       case NotificationRoute.raceDetail:
         final raceId = action.params['raceId'];
         if (raceId != null) {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => RaceDetailScreen(
-                authService: widget.authService,
-                raceId: raceId,
-                friends: _friendsSteps,
-              ),
-            ),
-          );
+          // Shares the tap guard so a notification tap can't stack a second
+          // detail screen over one already opening.
+          _openRaceFromCard(raceId);
         }
         break;
       case NotificationRoute.races:
@@ -286,8 +286,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _foregroundPollTimer?.cancel();
     _foregroundPollTimer = Timer.periodic(_foregroundPollInterval, (_) {
       if (_healthAuthorized) {
+        // _fetchSteps refreshes friends + me at its tail; no separate call.
         _fetchSteps();
-        _refreshMe();
       }
     });
   }
@@ -498,8 +498,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         _error = null;
       });
 
-      _fetchFriendsSteps();
-      _refreshMe();
+      // Awaited so every caller of _fetchSteps gets the post-settlement
+      // refresh of friends + me (coins/boxes minted by /steps/samples) without
+      // having to fetch them again itself — this is the ONLY place a steps
+      // sync refreshes those two surfaces.
+      await Future.wait([_fetchFriendsSteps(), _refreshMe()]);
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -607,12 +610,22 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   /// guard before its first await, so the ranked check then defers behind it,
   /// preserving the prior sequencing. Every fetch swallows its own errors, so
   /// the wait never throws and the modals always get their chance.
-  Future<void> _loadHomeAndShowResults() async {
+  Future<void> _loadHomeAndShowResults() {
+    // Coalesce: iOS fires a `resumed` lifecycle event right after cold start,
+    // which used to double the entire home load (every endpoint hit twice).
+    // While a load is in flight, all triggers share the same future.
+    return _homeLoadInFlight ??= _loadHomeAndShowResultsInner().whenComplete(() {
+      _homeLoadInFlight = null;
+    });
+  }
+
+  Future<void> _loadHomeAndShowResultsInner() async {
     await Future.wait([
+      // _fetchSteps also refreshes friends + me after the steps/samples sync
+      // settles server-side — fresher than fetching them in parallel here, and
+      // it halves the calls per load.
       _fetchSteps(),
       _fetchRaceCard(),
-      _refreshMe(),
-      _fetchFriendsSteps(),
       _fetchRaces(),
       _fetchShopCatalog(),
     ]);
@@ -891,7 +904,17 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     await Future.wait([_fetchRaces(), _fetchFriendsSteps()]);
   }
 
-  Future<void> _refreshHomeTab() async {
+  Future<void> _refreshHomeTab() {
+    // Coalesce rapid pull-to-refreshes: each swipe triggers a steps/samples
+    // POST whose server-side settlement recompute is expensive; stacking them
+    // concurrently just makes every request slower. A swipe while a refresh is
+    // in flight rides that refresh instead of starting another.
+    return _homeRefreshInFlight ??= _refreshHomeTabInner().whenComplete(() {
+      _homeRefreshInFlight = null;
+    });
+  }
+
+  Future<void> _refreshHomeTabInner() async {
     await Future.wait([
       _fetchSteps(),
       _fetchShopCatalog(),
@@ -940,15 +963,21 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   void _openRaceFromCard(String raceId) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => RaceDetailScreen(
-          authService: widget.authService,
-          raceId: raceId,
-          friends: _friendsSteps,
-        ),
-      ),
-    );
+    // Rapid taps during the push transition used to stack duplicate detail
+    // screens, each running the full details/progress/chat load.
+    if (_openingRaceDetail) return;
+    _openingRaceDetail = true;
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => RaceDetailScreen(
+              authService: widget.authService,
+              raceId: raceId,
+              friends: _friendsSteps,
+            ),
+          ),
+        )
+        .whenComplete(() => _openingRaceDetail = false);
   }
 
   Future<void> _joinRaceFromCard(String raceId) async {

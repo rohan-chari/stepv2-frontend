@@ -418,6 +418,17 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         return;
       }
 
+      // Fire progress alongside details instead of after it — the two are
+      // independent and progress is the slower call, so this removes a full
+      // serial round-trip from screen open. If the race turns out not to be
+      // ACTIVE the prefetched result is simply discarded (errors included:
+      // the catchError below keeps a non-ACTIVE race's progress fetch from
+      // surfacing as an unhandled async error).
+      final progressPrefetch = _api
+          .fetchRaceProgress(identityToken: token, raceId: widget.raceId)
+          .then((p) => p as Map<String, dynamic>?)
+          .catchError((_) => null);
+
       final details = await _api.fetchRaceDetails(
         identityToken: token,
         raceId: widget.raceId,
@@ -434,7 +445,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       });
 
       if (details['status'] == 'ACTIVE') {
-        _loadProgress();
+        _loadProgress(prefetched: progressPrefetch);
         _startPolling();
         _startCountdown();
         _ensureChatInitialized();
@@ -463,7 +474,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     }
   }
 
-  Future<void> _loadProgress() async {
+  Future<void> _loadProgress({Future<Map<String, dynamic>?>? prefetched}) async {
     final previous = _progress;
     if (mounted) {
       setState(() {
@@ -484,10 +495,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         return;
       }
 
-      final progress = await _api.fetchRaceProgress(
-        identityToken: token,
-        raceId: widget.raceId,
-      );
+      // A prefetched result (fired in parallel with details) is used when it
+      // succeeded; a failed prefetch falls back to a fresh request so errors
+      // still surface through the normal path below.
+      final progress =
+          (prefetched != null ? await prefetched : null) ??
+          await _api.fetchRaceProgress(
+            identityToken: token,
+            raceId: widget.raceId,
+          );
 
       if (!mounted) return;
       setState(() {
@@ -501,8 +517,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       });
 
       if (_powerupData?['enabled'] == true) {
-        _chat?.refreshTop();
-        _feed?.refreshTop();
+        // Skip the chat/feed refresh on the FIRST progress load: it lands
+        // right after loadInitial() fetched the same pages, so refreshing
+        // again just duplicated both message requests. Later loads (30s poll,
+        // powerup actions) refresh as before to pick up new events.
+        if (previous != null) {
+          _chat?.refreshTop();
+          _feed?.refreshTop();
+        }
 
         // Best-effort: load the user's GLOBAL powerup stash so they can spend a
         // coin-purchased powerup (e.g. Imposter) into this race.
