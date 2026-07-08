@@ -21,11 +21,29 @@ The same `--dart-define=BACKEND_BASE_URL=…` value is baked at build time; a bu
 
 ## Local dev (Xcode debug build, fastest iteration)
 
+Full staging run command (iPhone over cable; ad units fall back to Google's
+test ads in debug, and GOOGLE_IOS_CLIENT_ID enables the Google sign-in button
+— use the STAGING client since this hits the staging backend):
+
 ```bash
-flutter run --dart-define=BACKEND_BASE_URL=https://staging.steptracker-api.org
+flutter run -d 00008150-000171DE2638401C --device-connection=attached --debug \
+  --dart-define=BACKEND_BASE_URL=https://staging.steptracker-api.org \
+  --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
+  --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
+  --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-m1bdl17qk10afve110og6m7adte1q9n0.apps.googleusercontent.com
 ```
 
-Or, if you want to test against a backend running on your laptop:
+To run against PROD instead, swap the backend URL and the Google client id
+(prod backend only accepts the prod iOS client):
+
+```bash
+  --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
+  --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com
+```
+
+Or, if you want to test against a backend running on your laptop (omit the
+Google define — the local backend's allowlist doesn't include the iOS
+clients unless you add them to your local `.env`):
 
 ```bash
 flutter run --dart-define=BACKEND_BASE_URL=http://127.0.0.1:3000
@@ -64,8 +82,12 @@ When you have something worth testing on a real phone:
 # No ADMOB_EXTRA_SPIN_AD_UNIT_ID here: the ad unit's SSV callback points at
 # PROD, so a staging-backend build can't verify rewards — omitting the define
 # keeps the extra-spin offer out of staging builds entirely.
+# GOOGLE_IOS_CLIENT_ID enables the "Sign in with Google" button on iOS
+# (STAGING iOS OAuth client — the one registered for the .staging bundle id).
+# Omitting it is safe: the button is hidden and sign-in stays Apple-only.
 flutter build ipa --release \
-  --dart-define=BACKEND_BASE_URL=https://staging.steptracker-api.org
+  --dart-define=BACKEND_BASE_URL=https://staging.steptracker-api.org \
+  --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-m1bdl17qk10afve110og6m7adte1q9n0.apps.googleusercontent.com
 ```
 
 Then upload `build/ios/ipa/*.ipa` via Transporter or `xcrun altool`. Apple processes it (~10 min) and pushes to your "Bara Staging" TestFlight internal testers — no Beta App Review needed since they're internal.
@@ -124,10 +146,15 @@ For most releases, you can deploy backend first because the old App Store binary
 # the shop/inventory and the race mystery-box overlay (iOS-only, display-only:
 # no reward, no backend). Both define are safe to forget — the app just ships
 # without that ad — but a prod release should carry both.
+# GOOGLE_IOS_CLIENT_ID enables the "Sign in with Google" button on iOS
+# (PROD iOS OAuth client, registered for com.rohanchari.steptracker). The
+# backend's GOOGLE_AUTH_CLIENT_ID allowlist must already include this client
+# id in prod BEFORE this build ships (iOS Google ID tokens carry it as `aud`).
 flutter build ipa --release \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
-  --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309
+  --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
+  --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com
 ```
 
 > The banner unit (`/5308967309`) lives under the iOS AdMob app (`~5288861983`).
@@ -160,6 +187,71 @@ Release to the App Store. Phased rollout starts.
 git tag -a v1.1.5-released -m "Released to App Store"
 git push origin v1.1.5-released
 ```
+
+---
+
+## Android (Google Play)
+
+Same Dart code, two Gradle flavors instead of two bundle ids. Ship Android in
+lockstep with iOS (CLAUDE.md): whenever you cut an iOS release, build and
+upload the matching Android release.
+
+| App           | Application ID                         | Flavor    | Backend  |
+| ------------- | -------------------------------------- | --------- | -------- |
+| Bara          | `com.rohanchari.steptracker`           | `prod`    | prod     |
+| Bara Staging  | `com.rohanchari.steptracker.staging`   | `staging` | staging  |
+
+### versionCode scheme
+
+Play requires a globally increasing integer `versionCode` — unlike iOS build
+numbers, it must NOT reset when the version name bumps. Derive it from the
+version so it stays monotonic, and pass it explicitly:
+
+```
+versionCode = major*100000 + minor*1000 + patch*10 + upload#   (upload# = 0–9)
+1.5.2 first upload  → 105020
+1.5.2 second upload → 105021
+1.5.3 first upload  → 105030
+```
+
+`--build-number` also sets iOS's CFBundleVersion, so pass it only on the
+Android build command; the iOS build keeps the pubspec `+N`.
+
+### Build
+
+```bash
+# Staging (internal testing against staging backend)
+flutter build appbundle --release --flavor staging \
+  --dart-define=BACKEND_BASE_URL=https://staging.steptracker-api.org \
+  --build-number=<versionCode>
+
+# Prod
+flutter build appbundle --release --flavor prod \
+  --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
+  --build-number=<versionCode>
+```
+
+Output: `build/app/outputs/bundle/<flavor>Release/app-<flavor>-release.aab`.
+Release signing needs `android/key.properties` (gitignored; template in
+`android/key.properties.example`) pointing at the upload keystore
+(`~/keys/bara-upload-key.jks`). Without it Gradle silently falls back to
+debug signing and Play rejects the bundle — check the signature if unsure:
+`keytool -printcert -jarfile <aab>`.
+
+No ad defines on Android: ads are iOS-only (AdService gates on Platform.isIOS),
+and the manifest carries Google's public test AdMob app id only so the SDK's
+startup provider doesn't crash. Replace it with a real Android AdMob app id
+before ever enabling ads on Android.
+
+### First-upload checklist (Play Console, one-time)
+
+- [ ] Create the Play app (com.rohanchari.steptracker) and enroll in Play App Signing with the upload key.
+- [ ] Register BOTH SHA-1s (upload key + Play App Signing key, from Play Console → App integrity) on the prod Android app in Firebase (`bara-590e1`) and re-download `google-services.json` — Google Sign-In fails with DEVELOPER_ERROR otherwise.
+- [ ] Data safety form: steps/health data (app functionality, not shared), account identifiers, device IDs (AD_ID is declared in the merged manifest via google_mobile_ads even though Android shows no ads).
+- [ ] Health apps declaration + Health Connect access request (Play Console policy section) — cite the privacy policy's Health Data section (barastep.com / steptracker-api.org `/privacy.html`, includes background reads).
+- [ ] Background health-data access justification (READ_HEALTH_DATA_IN_BACKGROUND).
+- [ ] Store listing (screenshots, icon, descriptions) + content rating questionnaire.
+- [ ] Internal testing track first; promote to production only after Google Sign-In, Health Connect sync, FCM push, and deep links are verified on a real device install from Play.
 
 ---
 

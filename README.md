@@ -124,10 +124,15 @@ flutter pub get
 # NOTE: the rewarded extra-spin flow can't complete against staging — the ad
 # unit's SSV callback points at prod, so the grant lands in prod's DB while the
 # claim hits staging. Banners work fine on staging; test extra spin against prod.
+# GOOGLE_IOS_CLIENT_ID enables the "Sign in with Google" button (iOS). This is
+# the STAGING iOS OAuth client — it must match the backend the build talks to,
+# since each env's GOOGLE_AUTH_CLIENT_ID allowlist only accepts its own client.
+# Omit the define and the button is hidden (sign-in stays Apple-only).
 flutter run -d 00008150-000171DE2638401C --device-connection=attached --debug \
   --dart-define=BACKEND_BASE_URL=https://staging.steptracker-api.org \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
-  --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309
+  --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
+  --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-m1bdl17qk10afve110og6m7adte1q9n0.apps.googleusercontent.com
 ```
 
 ### Run on a physical iPhone against prod
@@ -138,10 +143,13 @@ flutter run -d 00008150-000171DE2638401C --device-connection=attached --debug \
 # the display banners at the bottom of the shop and the race mystery-box overlay
 # (iOS only, display-only). Omit either and that ad simply doesn't exist in the
 # build (dev/staging fall back to Google's test banner for the banner slot).
+# GOOGLE_IOS_CLIENT_ID here is the PROD iOS OAuth client (prod backend only
+# accepts this one — the staging client would fail with "audience is invalid").
 flutter run -d 00008150-000171DE2638401C --device-connection=attached --debug \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
-  --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309
+  --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
+  --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com
 ```
 
 ### Run on a physical iPhone against local backend
@@ -159,11 +167,13 @@ flutter run -d ios
 # No --flavor on iOS (the Xcode project has no flavor schemes).
 # The ADMOB defines are REQUIRED for release builds — without them the
 # rewarded-ad extra spin and the display banners are compiled out (safe, but
-# missing). See DEPLOYMENT.md.
+# missing). GOOGLE_IOS_CLIENT_ID (prod iOS OAuth client) is likewise REQUIRED
+# or the release ships without the Google sign-in button. See DEPLOYMENT.md.
 flutter build ipa --release \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
-  --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309
+  --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
+  --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com
 ```
 
 ### Tests

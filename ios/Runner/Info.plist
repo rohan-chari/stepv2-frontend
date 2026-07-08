@@ -40,6 +40,22 @@
 				<string>bara</string>
 			</array>
 		</dict>
+		<!-- Google Sign-In callback schemes: the REVERSED iOS OAuth client ids
+		     (com.googleusercontent.apps.<number>-<hash>) for the prod and
+		     staging bundle ids. Both live here because prod and staging share
+		     this Info.plist; only the one matching the build's
+		     GOOGLE_IOS_CLIENT_ID dart-define is ever used. -->
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>GoogleSignInCallback</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl</string>
+				<string>com.googleusercontent.apps.784756906133-m1bdl17qk10afve110og6m7adte1q9n0</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>

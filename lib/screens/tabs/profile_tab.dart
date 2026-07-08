@@ -1,4 +1,3 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -14,6 +13,7 @@ import '../../utils/at_name.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/pill_button.dart';
+import '../../widgets/pixel_switch.dart';
 import '../../widgets/trail_sign.dart';
 import '../../widgets/step_calendar.dart';
 import '../../widgets/loading_skeleton.dart';
@@ -1026,9 +1026,8 @@ class _LeaderboardVisibilityToggleState
             ),
           ),
           const SizedBox(width: 12),
-          CupertinoSwitch(
+          PixelSwitch(
             value: widget.authService.hiddenFromLeaderboard,
-            activeTrackColor: AppColors.accent,
             onChanged: _toggle,
           ),
         ],

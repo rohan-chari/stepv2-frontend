@@ -84,7 +84,7 @@ class _StartScreenState extends State<StartScreen> {
     );
   }
 
-  Future<void> _onStart() async {
+  Future<void> _onStart({required bool withGoogle}) async {
     setState(() => _isSigningIn = true);
 
     final hasSession = await _authService.restoreSession();
@@ -106,8 +106,7 @@ class _StartScreenState extends State<StartScreen> {
       return;
     }
 
-    // Android signs in with Google; iOS keeps Sign in with Apple.
-    final success = Platform.isAndroid
+    final success = withGoogle
         ? await _authService.signInWithGoogle()
         : await _authService.signInWithApple();
 
@@ -135,9 +134,7 @@ class _StartScreenState extends State<StartScreen> {
     showErrorToast(
       context,
       _authService.lastErrorMessage ??
-          (Platform.isAndroid
-              ? 'Google sign-in failed.'
-              : 'Apple sign-in failed.'),
+          (withGoogle ? 'Google sign-in failed.' : 'Apple sign-in failed.'),
     );
   }
 
@@ -268,37 +265,89 @@ class _StartScreenState extends State<StartScreen> {
                   child: CircularProgressIndicator(color: AppColors.parchment),
                 ),
               )
-            : SizedBox(
-                width: double.infinity,
-                child: Platform.isAndroid
-                    ? _buildGoogleSignInButton(compact: compact)
-                    : apple.SignInWithAppleButton(
-                        onPressed: _onStart,
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Android is Google-only. iOS leads with Apple (App Store
+                  // requirement + where existing accounts live) and offers
+                  // Google underneath when this build carries an iOS Google
+                  // client id (see kGoogleIosClientId).
+                  if (!Platform.isAndroid)
+                    SizedBox(
+                      width: double.infinity,
+                      child: apple.SignInWithAppleButton(
+                        onPressed: () => _onStart(withGoogle: false),
                         height: compact ? 52 : 54,
                         borderRadius: BorderRadius.circular(8),
                         iconAlignment: apple.IconAlignment.left,
                       ),
+                    ),
+                  if (Platform.isAndroid || isGoogleSignInAvailable) ...[
+                    if (!Platform.isAndroid) SizedBox(height: compact ? 10 : 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: _buildGoogleSignInButton(compact: compact),
+                    ),
+                  ],
+                ],
               ),
       ],
     );
   }
 
+  // White Google-branded twin of SignInWithAppleButton(iconAlignment: left):
+  // replicates that widget's exact geometry — 16px horizontal padding, a
+  // left-edge icon slot of 28/44 × height, centered text at 0.43 × height in
+  // .SF Pro Text, and a trailing spacer mirroring the icon slot — so the two
+  // stacked buttons align logo-for-logo and glyph-for-glyph. The "G" is
+  // Google's official logo asset (assets/images/google_g_logo.png).
   Widget _buildGoogleSignInButton({required bool compact}) {
+    final height = compact ? 52.0 : 54.0;
+    final fontSize = height * 0.43;
+    final iconSlotWidth = height * (28 / 44);
+
     return SizedBox(
-      height: compact ? 52 : 54,
+      height: height,
       child: ElevatedButton(
-        onPressed: _onStart,
+        onPressed: () => _onStart(withGoogle: true),
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.white,
           foregroundColor: const Color(0xFF1F1F1F),
           elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
+            side: const BorderSide(color: Color(0xFFDADCE0)),
           ),
         ),
-        child: const Text(
-          'Sign in with Google',
-          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w500),
+        child: Row(
+          children: [
+            SizedBox(
+              width: iconSlotWidth,
+              child: Center(
+                child: Image.asset(
+                  'assets/images/google_g_logo.png',
+                  width: fontSize,
+                  height: fontSize,
+                ),
+              ),
+            ),
+            Expanded(
+              child: Text(
+                'Sign in with Google',
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                style: TextStyle(
+                  inherit: false,
+                  fontSize: fontSize,
+                  color: const Color(0xFF1F1F1F),
+                  fontFamily: '.SF Pro Text',
+                  letterSpacing: -0.41,
+                ),
+              ),
+            ),
+            SizedBox(width: iconSlotWidth),
+          ],
         ),
       ),
     );

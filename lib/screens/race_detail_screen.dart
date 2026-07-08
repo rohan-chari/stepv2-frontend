@@ -1159,22 +1159,52 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       isScrollControlled: true,
+      // Cap the sheet so a big race never fills the screen edge-to-edge with
+      // names — the list scrolls between a pinned header and footer instead.
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.65,
+      ),
       builder: (ctx) {
         return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'TARGET FOR ${_powerupNames[powerupType]?.toUpperCase()}',
-                    style: PixelText.title(size: 16, color: AppColors.textMid),
-                  ),
-                  const SizedBox(height: 12),
-                  for (final t in targets)
-                    GestureDetector(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        PowerupIcon(type: powerupType, size: 22, spinning: true),
+                        const SizedBox(width: 8),
+                        Text(
+                          _powerupNames[powerupType] ?? powerupType,
+                          style: PixelText.title(
+                            size: 18,
+                            color: AppColors.textDark,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'CHOOSE A TARGET',
+                      style: PixelText.title(size: 12, color: AppColors.textMid),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(height: 2, color: AppColors.parchmentDark),
+                  ],
+                ),
+              ),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  itemCount: targets.length,
+                  itemBuilder: (_, i) {
+                    final t = targets[i];
+                    return GestureDetector(
                       onTap: () =>
                           Navigator.of(ctx).pop(t['userId'] as String?),
                       child: Container(
@@ -1216,10 +1246,28 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                           ],
                         ),
                       ),
-                    ),
-                ],
+                    );
+                  },
+                ),
               ),
-            ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                child: Column(
+                  children: [
+                    Container(height: 2, color: AppColors.parchmentDark),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: PillButton(
+                        label: 'CANCEL',
+                        variant: PillButtonVariant.secondary,
+                        onPressed: () => Navigator.of(ctx).pop(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         );
       },

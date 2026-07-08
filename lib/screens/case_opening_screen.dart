@@ -161,31 +161,25 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
   String _resultRarity = 'COMMON';
   bool _autoActivated = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _rollResult();
-  }
-
-  void _rollResult() {
-    widget
-        .openMysteryBox()
-        .then((result) {
-          if (!mounted) return;
-          final openResult =
-              result['result'] as Map<String, dynamic>? ?? result;
-          setState(() {
-            _resultType = openResult['type'] as String? ?? '';
-            _resultRarity = openResult['rarity'] as String? ?? 'COMMON';
-            _autoActivated = openResult['autoActivated'] == true;
-            _resultReady = true;
-          });
-        })
-        .catchError((_) {
-          if (!mounted) return;
-          showErrorToast(context, 'Failed to open mystery box');
-          Navigator.of(context).pop();
-        });
+  // The server roll fires HERE, from the reel's swipe gate — never on screen
+  // open. Backing out with the X before swiping leaves the box unopened in
+  // the inventory. Returns false (re-arming the reel) if the roll fails.
+  Future<bool> _rollResult() async {
+    try {
+      final result = await widget.openMysteryBox();
+      if (!mounted) return false;
+      final openResult = result['result'] as Map<String, dynamic>? ?? result;
+      setState(() {
+        _resultType = openResult['type'] as String? ?? '';
+        _resultRarity = openResult['rarity'] as String? ?? 'COMMON';
+        _autoActivated = openResult['autoActivated'] == true;
+        _resultReady = true;
+      });
+      return true;
+    } catch (_) {
+      if (mounted) showErrorToast(context, 'Failed to open mystery box');
+      return false;
+    }
   }
 
   void _onStripComplete() {
@@ -207,7 +201,7 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 2.5),
               child: ColoredBox(
-                color: AppColors.roofDark.withValues(alpha: 0.54),
+                color: AppColors.roofDark.withValues(alpha: 0.78),
               ),
             ),
           ),
@@ -278,33 +272,12 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
             ),
           ),
           const SizedBox(height: 14),
-          if (_resultReady)
-            CaseOpeningStrip(
-              resultType: _resultType,
-              resultRarity: _resultRarity,
-              onComplete: _onStripComplete,
-            )
-          else
-            const SizedBox(
-              height: 160,
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(color: AppColors.accent),
-                    SizedBox(height: 12),
-                    Text(
-                      'PREPARING...',
-                      style: TextStyle(
-                        color: AppColors.textMid,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          CaseOpeningStrip(
+            resultType: _resultType,
+            resultRarity: _resultRarity,
+            onSpinRequested: _rollResult,
+            onComplete: _onStripComplete,
+          ),
         ],
       ),
     );

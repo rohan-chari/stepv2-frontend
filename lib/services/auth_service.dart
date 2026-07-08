@@ -14,6 +14,33 @@ import 'backend_api_service.dart';
 const String kGoogleServerClientId =
     '784756906133-8b5umuhi93u40lg0pf11rf1grksj44cg.apps.googleusercontent.com';
 
+/// The **iOS** OAuth client id for Google Sign-In, injected per build via
+/// `--dart-define=GOOGLE_IOS_CLIENT_ID=…` (prod and staging bundle ids have
+/// separate iOS clients — see DEPLOYMENT.md). Unlike Android, the iOS Google
+/// SDK issues ID tokens with `aud` = this iOS client id, so the backend's
+/// GOOGLE_AUTH_CLIENT_ID allowlist must include it. When the define is absent
+/// (older build recipes, local dev) the Google button is hidden on iOS and
+/// sign-in stays Apple-only, so forgetting the define can't ship a broken
+/// button. Not a secret.
+const String kGoogleIosClientId = String.fromEnvironment(
+  'GOOGLE_IOS_CLIENT_ID',
+);
+
+/// Whether Google Sign-In can work in this build: always on Android; on iOS
+/// only when the iOS OAuth client id was baked in at build time.
+bool get isGoogleSignInAvailable =>
+    Platform.isAndroid || (Platform.isIOS && kGoogleIosClientId.isNotEmpty);
+
+GoogleSignIn _buildGoogleSignIn() {
+  return GoogleSignIn(
+    // iOS requires its own client id; Android resolves it from
+    // google-services.json and must not receive one here.
+    clientId: Platform.isIOS ? kGoogleIosClientId : null,
+    serverClientId: kGoogleServerClientId,
+    scopes: const ['email'],
+  );
+}
+
 bool isAuthenticationFailure(Object error) {
   return error is ApiException && error.statusCode == 401;
 }
@@ -212,15 +239,13 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  /// Google Sign-In (Android). Mirrors [signInWithApple]'s session-state
-  /// effects and reuses every SharedPreferences key, so `restoreSession` and
-  /// request auth work identically afterward. The Apple path is untouched.
+  /// Google Sign-In (Android, and iOS builds carrying GOOGLE_IOS_CLIENT_ID).
+  /// Mirrors [signInWithApple]'s session-state effects and reuses every
+  /// SharedPreferences key, so `restoreSession` and request auth work
+  /// identically afterward. The Apple path is untouched.
   Future<bool> signInWithGoogle() async {
     try {
-      final googleSignIn = GoogleSignIn(
-        serverClientId: kGoogleServerClientId,
-        scopes: const ['email'],
-      );
+      final googleSignIn = _buildGoogleSignIn();
 
       final account = await googleSignIn.signIn();
       if (account == null) {
@@ -463,11 +488,13 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
-    // Clear the Google session on Android so the next sign-in re-prompts the
-    // account picker. No-op / harmless on iOS (Apple has no client-side session).
-    if (Platform.isAndroid) {
+    // Clear the Google session so the next sign-in re-prompts the account
+    // picker. Runs wherever Google Sign-In is available (Android always; iOS
+    // when the client id was baked in) — harmless if the user signed in with
+    // Apple, which keeps no client-side session.
+    if (isGoogleSignInAvailable) {
       try {
-        await GoogleSignIn().signOut();
+        await _buildGoogleSignIn().signOut();
       } catch (_) {}
     }
 

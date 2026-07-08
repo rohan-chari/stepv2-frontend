@@ -30,7 +30,16 @@ void main() {
     );
 
     await tester.tap(find.text('open'));
-    // Push the route, run initState's roll, reject the future, slide the toast.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    // Deferred roll: nothing fires on screen open — the reel sits armed.
+    expect(find.text('SWIPE OR TAP'), findsOneWidget);
+    expect(find.byKey(const Key('error-toast-shell')), findsNothing);
+
+    // Swiping triggers the roll, which rejects → toast, and the reel re-arms
+    // (the screen stays up so the user can retry or close).
+    await tester.tap(find.text('SWIPE OR TAP'));
     for (var i = 0; i < 6; i++) {
       await tester.pump(const Duration(milliseconds: 200));
     }
@@ -38,6 +47,7 @@ void main() {
     expect(find.byType(SnackBar), findsNothing);
     expect(find.byKey(const Key('error-toast-shell')), findsOneWidget);
     expect(find.text('Failed to open mystery box'), findsOneWidget);
+    expect(find.text('SWIPE OR TAP'), findsOneWidget);
 
     // Flush the auto-dismiss timer so no Timer is left pending at teardown.
     await tester.pump(const Duration(seconds: 4));

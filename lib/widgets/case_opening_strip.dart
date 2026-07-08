@@ -19,6 +19,13 @@ class CaseOpeningReel extends StatefulWidget {
   final double height;
   final double itemWidth;
 
+  /// Async gate between the swipe and the spin. The server roll happens HERE —
+  /// not before — so backing out of the screen without swiping never consumes
+  /// the box. Return true once the result tile is in place to run the spin;
+  /// return false to re-arm the reel (e.g. the roll request failed). While the
+  /// future is pending the reel shows PREPARING. Null spins immediately.
+  final Future<bool> Function()? onSpinRequested;
+
   const CaseOpeningReel({
     super.key,
     required this.itemCount,
@@ -27,6 +34,7 @@ class CaseOpeningReel extends StatefulWidget {
     required this.onComplete,
     this.height = 116,
     this.itemWidth = 86.0,
+    this.onSpinRequested,
   });
 
   @override
@@ -38,6 +46,7 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
   late final AnimationController _controller;
   late final Animation<double> _animation;
   bool _waitingForSwipe = false;
+  bool _requestingSpin = false;
 
   // Layout values captured during build so the haptic listener can map the
   // current scroll offset to a tile index without re-measuring.
@@ -90,8 +99,21 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
     super.dispose();
   }
 
-  void _startSpin() {
-    if (!_waitingForSwipe) return;
+  Future<void> _startSpin() async {
+    if (!_waitingForSwipe || _requestingSpin) return;
+    if (widget.onSpinRequested != null) {
+      setState(() => _requestingSpin = true);
+      bool ok = false;
+      try {
+        ok = await widget.onSpinRequested!();
+      } catch (_) {
+        ok = false;
+      }
+      if (!mounted) return;
+      setState(() => _requestingSpin = false);
+      if (!ok) return; // roll failed — stay armed so the user can retry
+    }
+    if (!mounted || !_waitingForSwipe) return;
     setState(() => _waitingForSwipe = false);
     _controller.forward();
   }
@@ -113,9 +135,10 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
   @override
   Widget build(BuildContext context) {
     final totalItemWidth = widget.itemWidth + _itemSpacing;
+    final armed = _waitingForSwipe && !_requestingSpin;
     return GestureDetector(
-      onTap: _waitingForSwipe ? _startSpin : null,
-      onHorizontalDragEnd: _waitingForSwipe ? (_) => _startSpin() : null,
+      onTap: armed ? _startSpin : null,
+      onHorizontalDragEnd: armed ? (_) => _startSpin() : null,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final viewportWidth = constraints.maxWidth;
@@ -139,7 +162,11 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  _waitingForSwipe ? 'SWIPE OR TAP' : 'OPENING...',
+                  _requestingSpin
+                      ? 'PREPARING...'
+                      : _waitingForSwipe
+                      ? 'SWIPE OR TAP'
+                      : 'OPENING...',
                   style: PixelText.title(size: 14, color: AppColors.textMid),
                 ),
                 const SizedBox(height: 8),
@@ -317,10 +344,14 @@ class CaseReelTile extends StatelessWidget {
 /// CSGO-style horizontal scrolling strip of powerup icons.
 /// Rapidly scrolls left, decelerates, and stops with the result under the pointer.
 class CaseOpeningStrip extends StatefulWidget {
+  /// May be empty while the server roll hasn't happened yet (deferred-roll
+  /// flow): the result slot holds a decoy until [didUpdateWidget] swaps the
+  /// real result in. It lands before the spin starts, far off-screen.
   final String resultType;
   final String resultRarity;
   final VoidCallback onComplete;
   final double height;
+  final Future<bool> Function()? onSpinRequested;
 
   const CaseOpeningStrip({
     super.key,
@@ -328,6 +359,7 @@ class CaseOpeningStrip extends StatefulWidget {
     required this.resultRarity,
     required this.onComplete,
     this.height = 116,
+    this.onSpinRequested,
   });
 
   @override
@@ -335,7 +367,7 @@ class CaseOpeningStrip extends StatefulWidget {
 }
 
 class _CaseOpeningStripState extends State<CaseOpeningStrip> {
-  late final List<_StripItem> _items;
+  late List<_StripItem> _items;
 
   static const _itemWidth = 86.0;
   static const _itemCount = 45;
@@ -403,13 +435,33 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip> {
     _items = _generateStrip();
   }
 
+  @override
+  void didUpdateWidget(CaseOpeningStrip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Deferred-roll flow: the result arrives after the swipe. Replant only the
+    // result tile so the decoys the user is already looking at don't reshuffle.
+    if (widget.resultType != oldWidget.resultType ||
+        widget.resultRarity != oldWidget.resultRarity) {
+      _items = List.of(_items)
+        ..[_resultPosition] = _resultOrDecoy(Random());
+    }
+  }
+
+  _StripItem _resultOrDecoy(Random rng) {
+    if (widget.resultType.isNotEmpty) {
+      return _StripItem(widget.resultType, widget.resultRarity);
+    }
+    final type = _randomType(rng);
+    return _StripItem(type, _rarityByType[type] ?? 'COMMON');
+  }
+
   List<_StripItem> _generateStrip() {
     final rng = Random();
     final items = <_StripItem>[];
 
     for (int i = 0; i < _itemCount; i++) {
       if (i == _resultPosition) {
-        items.add(_StripItem(widget.resultType, widget.resultRarity));
+        items.add(_resultOrDecoy(rng));
       } else {
         final type = _randomType(rng);
         items.add(_StripItem(type, _rarityByType[type] ?? 'COMMON'));
@@ -437,6 +489,7 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip> {
       onComplete: widget.onComplete,
       height: widget.height,
       itemWidth: _itemWidth,
+      onSpinRequested: widget.onSpinRequested,
       itemBuilder: (context, index, isResult) {
         final item = _items[index];
         return CaseReelTile(

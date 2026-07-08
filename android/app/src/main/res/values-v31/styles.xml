@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ replaces windowBackground splashes with the system splash
+         screen (centered launcher icon on a plain window). Match its
+         background to the icon art's sky so the icon appears to float in its
+         own scene instead of a white void. Pre-31 devices keep the plain
+         launch_background drawable from values/styles.xml. -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@drawable/launch_background</item>
+        <item name="android:windowSplashScreenBackground">@color/ic_launcher_background</item>
+    </style>
+</resources>

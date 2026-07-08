@@ -1,6 +1,7 @@
 # ANDROID.md — Android release plan for steps-tracker (Bara)
 
-Status: **planning / not started.** The app ships iOS-only today. This document is the
+Status: **code-complete, backend live (G1+G2 verified in prod 2026-07-08); Play Console
+store setup is the only remaining work.** The app still ships iOS-only today. This document is the
 plan of record for bringing it to the Google Play Store. Every claim below was verified
 against the actual frontend (`/Users/rohan/Documents/steps-tracker`) and backend
 (`/Users/rohan/Documents/steps-tracker-backend`) source; file:line citations are in the
@@ -123,18 +124,27 @@ flutter on PATH — caches are machine-local, see "Resuming on a new machine".)
 - New `fcm.test.js` 5/5; notificationHandlers baseline unchanged (7 pass / 9 pre-existing fail);
   stepSyncPush + http/notifications green. No DB migration.
 
-**◻️ Remaining (the real blockers now — all DEPLOY / store, your call):**
-- **Deploy G1** (backend-first, defaulted): apply migration + `prisma generate` + set
-  `GOOGLE_AUTH_CLIENT_ID=`<the Web client id above>` + restart — your explicit call; not done.
-  **Android login cannot succeed until `/auth/google` is live in prod.**
-- **Deploy G2** (code done, not deployed): set the Firebase **service-account** key on the droplet
-  (`FCM_SERVICE_ACCOUNT` inline JSON, or `FCM_SERVICE_ACCOUNT_PATH`, or `GOOGLE_APPLICATION_CREDENTIALS`)
-  alongside the existing `APNS_*`, then restart. Generate it at Firebase Console → ⚙ Project settings
-  → Service accounts → Generate new private key. **Until set, Android push silently no-ops** (fail-soft;
-  no iOS impact). Deploy G2 before Android users exist so their FCM tokens don't get sent to APNs.
-- **Privacy policy:** add the Health Connect section to `public/privacy.html` + redeploy.
-- **Release/store:** register upload + Play App Signing SHA-1s on the prod Firebase app, build a
-  signed `.aab` (`--flavor prod`), Play data-safety/health declaration, internal track.
+**✅ Deploy G1 — DONE (verified 2026-07-08):** `/auth/google` answers 400-on-empty-body on both
+prod and staging, and `GOOGLE_AUTH_CLIENT_ID` is set in both droplet `.env`s. Android login works
+against prod. (Heads-up: `GOOGLE_AUTH_CLIENT_ID` now accepts a comma-separated allowlist — the iOS
+Google Sign-In client ids get appended to it; see DEPLOYMENT.md.)
+
+**✅ Deploy G2 — DONE (verified 2026-07-08):** `FCM_SERVICE_ACCOUNT_PATH` is set on prod and
+staging and points at an existing key file (`/var/www/bara-fcm-service-account.json`).
+
+**✅ Privacy policy — DONE (2026-07-08):** Health Connect + background-read disclosure and an
+Advertising section are in `public/privacy.html` (backend repo); redeploy prod backend to publish.
+
+**✅ Launcher icon — DONE (2026-07-08):** legacy `ic_launcher` mipmaps generated from the iOS
+1024px Bara icon at all five densities. (Adaptive icon + a white FCM notification small icon
+remain nice-to-haves.)
+
+**◻️ Remaining (store-side — see DEPLOYMENT.md "Android (Google Play)" for the full checklist):**
+- Register upload + Play App Signing SHA-1s on the prod Firebase app, re-download
+  `google-services.json`.
+- Build a signed `.aab` (`--flavor prod`, `--build-number` per the versionCode scheme in
+  DEPLOYMENT.md — pubspec has no `+N`, so an explicit build number is REQUIRED or versionCode=1).
+- Play data-safety + health declaration, store listing, internal testing track.
 
 ### Commits (branch `android-release`, both repos)
 

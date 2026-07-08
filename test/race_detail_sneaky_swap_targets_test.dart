@@ -179,15 +179,18 @@ void main() {
       await _openSneakySwapUse(tester);
 
       expect(api.sneakySwapTargetsCalls, 1);
-      // Picker header is shown.
-      expect(find.text('TARGET FOR SNEAKY SWAP'), findsOneWidget);
+      // Picker header is shown (powerup title row + subtitle).
+      expect(find.text('CHOOSE A TARGET'), findsOneWidget);
 
       // Scope name assertions to the picker sheet subtree (these names also
-      // appear in the race board behind the sheet).
-      final pickerColumn = find.ancestor(
-        of: find.text('TARGET FOR SNEAKY SWAP'),
-        matching: find.byType(Column),
-      );
+      // appear in the race board behind the sheet). The header and list live
+      // in the sheet's root Column, so anchor on the subtitle's outer Column.
+      final pickerColumn = find
+          .ancestor(
+            of: find.text('CHOOSE A TARGET'),
+            matching: find.byType(Column),
+          )
+          .last;
       // Only the endpoint-returned racer appears in the picker.
       expect(
         find.descendant(of: pickerColumn, matching: find.text('@Hill Climber')),
@@ -201,7 +204,7 @@ void main() {
 
       // Dismiss the picker sheet so no route animation is left pending.
       Navigator.of(
-        tester.element(find.text('TARGET FOR SNEAKY SWAP')),
+        tester.element(find.text('CHOOSE A TARGET')),
       ).pop();
       await _pumpFrames(tester);
     },

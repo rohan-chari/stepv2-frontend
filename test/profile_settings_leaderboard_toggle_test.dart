@@ -1,10 +1,10 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/tabs/profile_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/widgets/pixel_switch.dart';
 
 class _LeaderboardApi extends BackendApiService {
   bool? lastHidden;
@@ -99,7 +99,7 @@ Future<void> _openSettings(WidgetTester tester, AuthService auth, BackendApiServ
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('settings sheet renders a CupertinoSwitch reflecting auth state', (
+  testWidgets('settings sheet renders a PixelSwitch reflecting auth state', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1200, 2400);
@@ -112,9 +112,9 @@ void main() {
     await _openSettings(tester, auth, api);
 
     expect(find.text('Hide me from the global leaderboard'), findsOneWidget);
-    final switchFinder = find.byType(CupertinoSwitch);
+    final switchFinder = find.byType(PixelSwitch);
     expect(switchFinder, findsOneWidget);
-    expect(tester.widget<CupertinoSwitch>(switchFinder).value, isTrue);
+    expect(tester.widget<PixelSwitch>(switchFinder).value, isTrue);
   });
 
   testWidgets('toggling the switch calls updateLeaderboardVisibility', (
@@ -129,8 +129,8 @@ void main() {
     final auth = await _createAuthService(api, hidden: false);
     await _openSettings(tester, auth, api);
 
-    final switchFinder = find.byType(CupertinoSwitch);
-    expect(tester.widget<CupertinoSwitch>(switchFinder).value, isFalse);
+    final switchFinder = find.byType(PixelSwitch);
+    expect(tester.widget<PixelSwitch>(switchFinder).value, isFalse);
 
     await tester.tap(switchFinder);
     for (var i = 0; i < 4; i++) {
@@ -140,6 +140,6 @@ void main() {
     expect(api.calls, 1);
     expect(api.lastHidden, isTrue);
     expect(auth.hiddenFromLeaderboard, isTrue);
-    expect(tester.widget<CupertinoSwitch>(switchFinder).value, isTrue);
+    expect(tester.widget<PixelSwitch>(switchFinder).value, isTrue);
   });
 }

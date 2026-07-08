@@ -46,8 +46,9 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
   bool _isLoading = true;
   bool _isClaiming = false;
   Map<String, dynamic>? _claimedReward;
-  // Box mode (v2): claim fires when the reel screen opens; the reel waits for
-  // the result before it can spin, and the reveal shows once the spin lands.
+  // Box mode (v2): the reel screen opens UNclaimed — the claim fires from the
+  // reel's swipe gate, so closing with the X before swiping consumes nothing.
+  // The reveal shows once the spin lands.
   bool _opening = false;
   Map<String, dynamic>? _boxResult;
   List<_DailyStripItem>? _stripItems;
@@ -78,8 +79,8 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
         _status = res;
         _isLoading = false;
       });
-      // Box mode goes straight to the reel — the claim fires immediately and
-      // the reel waits for the swipe, same as opening a race mystery box.
+      // Box mode goes straight to the reel, still unclaimed — the claim only
+      // fires when the user swipes, same as opening a race mystery box.
       if (_box != null && res['claimedToday'] != true) {
         _openBox();
       }
@@ -149,37 +150,51 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
     }
   }
 
-  // Box claim: switch to the reel screen immediately and roll in the
-  // background — same flow as the race mystery box (CaseOpeningScreen).
-  Future<void> _openBox() async {
-    if (_isClaiming) return;
-    final token = widget.authService.authToken;
-    if (token == null || token.isEmpty) return;
+  // Box mode: show the reel WITHOUT claiming. The strip is decoys-only (null
+  // result) until the swipe-gated claim lands and replants the result tile.
+  void _openBox() {
     setState(() {
-      _isClaiming = true;
       _opening = true;
+      _stripItems = _generateStrip(null);
     });
+  }
+
+  // Swipe gate for the free daily box (CaseOpeningReel.onSpinRequested): claim
+  // now, plant the result, then let the reel spin. Returning false on failure
+  // re-arms the reel so the user can retry — nothing was consumed server-side.
+  Future<bool> _claimBoxOnSpin() async {
+    // Extra-spin path arrives here with the roll already claimed (the ad grant
+    // forced an eager claim) — nothing to do but spin.
+    if (_boxResult != null) return true;
+    if (_isClaiming) return false;
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) return false;
+    setState(() => _isClaiming = true);
     try {
       final res = await widget.backendApiService.claimDailyRewardBox(
         identityToken: token,
         localDate: _todayLocalDate(),
       );
-      if (!mounted) return;
+      if (!mounted) return false;
       // Don't apply the coin balance yet — the reel hasn't spun. Stash the
       // result and credit coins only when the spin lands (_onStripComplete),
-      // so the wallet doesn't jump before the roll is revealed.
+      // so the wallet doesn't jump before the roll is revealed. Replant just
+      // the result tile so the visible decoys don't reshuffle mid-swipe.
       setState(() {
         _boxResult = res;
-        _stripItems = _generateStrip(res);
+        final items = List<_DailyStripItem>.of(
+          _stripItems ?? _generateStrip(null),
+        );
+        items[_DailyStripItem.resultPosition] = _DailyStripItem.fromResult(res);
+        _stripItems = items;
         _isClaiming = false;
       });
+      return true;
     } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isClaiming = false;
-        _opening = false;
-      });
+      if (!mounted) return false;
+      setState(() => _isClaiming = false);
       showErrorToast(context, 'Claim failed. Try again.');
+      return false;
     }
   }
 
@@ -293,7 +308,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 2.5),
               child: ColoredBox(
-                color: AppColors.roofDark.withValues(alpha: 0.54),
+                color: AppColors.roofDark.withValues(alpha: 0.78),
               ),
             ),
           ),
@@ -570,8 +585,9 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
               ),
               _InfoButton(onTap: _showOddsInfo),
               const SizedBox(width: 8),
-              // Reward is already claimed once we're here; closing just skips
-              // the animation, so refresh the caller (pop true).
+              // Before the swipe nothing is claimed — closing keeps today's
+              // box available. After the swipe-gated claim it just skips the
+              // reveal. Either way refresh the caller (pop true).
               _CloseButton(onTap: () => Navigator.of(context).pop(true)),
             ],
           ),
@@ -615,6 +631,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
             CaseOpeningReel(
               itemCount: items.length,
               resultIndex: _DailyStripItem.resultPosition,
+              onSpinRequested: _claimBoxOnSpin,
               onComplete: _onStripComplete,
               itemBuilder: (context, index, isResult) =>
                   _DailyReelTile(item: items[index]),
@@ -647,8 +664,10 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
 
   // Decoy tiles show what the box can actually pay — coin stacks per tier and
   // the player's real unowned accessories — mixed at the live streak odds, so
-  // a longer streak visibly fills the reel with rarer tiles.
-  List<_DailyStripItem> _generateStrip(Map<String, dynamic> result) {
+  // a longer streak visibly fills the reel with rarer tiles. A null [result]
+  // (deferred-roll: claim hasn't fired yet) fills the result slot with a decoy
+  // too; _claimBoxOnSpin replants it once the claim lands.
+  List<_DailyStripItem> _generateStrip(Map<String, dynamic>? result) {
     final box = _box ?? const <String, dynamic>{};
     final odds = box['odds'] is Map<String, dynamic>
         ? box['odds'] as Map<String, dynamic>
@@ -687,7 +706,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
 
     final items = <_DailyStripItem>[];
     for (int i = 0; i < _DailyStripItem.stripLength; i++) {
-      if (i == _DailyStripItem.resultPosition) {
+      if (i == _DailyStripItem.resultPosition && result != null) {
         items.add(_DailyStripItem.fromResult(result));
         continue;
       }

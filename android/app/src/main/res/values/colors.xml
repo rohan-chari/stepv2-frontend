@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Sky color sampled from the Bara icon art; used behind the adaptive
+         launcher icon and as the Android 12+ system splash background. -->
+    <color name="ic_launcher_background">#C5E9F7</color>
+</resources>

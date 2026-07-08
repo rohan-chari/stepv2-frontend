@@ -122,15 +122,16 @@ Future<void> _pumpScreen(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('box mode goes straight to the reel and claims immediately', (
+  testWidgets('box mode goes straight to the reel WITHOUT claiming', (
     WidgetTester tester,
   ) async {
     final auth = await _authService();
     final api = _BoxModeApi();
     await _pumpScreen(tester, api, auth);
 
-    // No intermediate screen: claim fired on open, reel is waiting.
-    expect(api.boxClaimCalls, 1);
+    // No intermediate screen, and — deferred roll — no claim yet: closing
+    // now must leave today's box unclaimed.
+    expect(api.boxClaimCalls, 0);
     expect(find.text('OPEN BOX'), findsNothing);
     expect(find.text('SWIPE OR TAP'), findsOneWidget);
     expect(find.text('7-DAY STREAK'), findsOneWidget);
@@ -164,15 +165,17 @@ void main() {
     final api = _BoxModeApi();
     await _pumpScreen(tester, api, auth);
 
-    // Claim fired on open, reel is waiting for the swipe — same as race boxes.
-    expect(api.boxClaimCalls, 1);
+    // Reel armed, nothing claimed yet — the swipe is what claims.
+    expect(api.boxClaimCalls, 0);
     expect(api.legacyClaimCalls, 0);
     expect(find.text('SWIPE OR TAP'), findsOneWidget);
     expect(find.text('CLAIMED!'), findsNothing);
 
-    // Spin: 4s scroll + 600ms dramatic pause, then the reveal scales in.
+    // Swipe: claim fires, then 4s scroll + 600ms pause, then the reveal.
     await tester.tap(find.text('SWIPE OR TAP'));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(api.boxClaimCalls, 1);
     expect(find.text('OPENING...'), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 4100));
     await tester.pump(const Duration(milliseconds: 700));
