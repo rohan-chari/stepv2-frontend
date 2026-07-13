@@ -717,6 +717,19 @@ class _ShopTabState extends State<ShopTab> {
     );
   }
 
+  /// Powerup art that fills the tile like the cosmetics do: thumb-first
+  /// via AccessoryThumbnail, PowerupIcon as the unknown-type fallback.
+  Widget _powerupArt(String type, {double fallbackSize = 44}) {
+    final path = PowerupIcon.assetPathFor(type);
+    if (path == null) return PowerupIcon(type: type, size: fallbackSize);
+    return AccessoryThumbnail(
+      assetKey: type,
+      assetPath: path,
+      errorBuilder: (context, error, stackTrace) =>
+          PowerupIcon(type: type, size: fallbackSize),
+    );
+  }
+
   /// STORE tile for a re-buyable powerup.
   Widget _storePowerupTile(Map<String, dynamic> item) {
     final name = item['name'] as String? ?? 'Powerup';
@@ -724,7 +737,7 @@ class _ShopTabState extends State<ShopTab> {
     final type = item['powerupType'] as String? ?? '';
     final owned = _ownedQuantityFor(item);
     return _ShopTile(
-      art: PowerupIcon(type: type, size: 44),
+      art: _powerupArt(type),
       name: name,
       badge: owned > 0 ? 'x$owned' : null,
       stripLabel: '$price',
@@ -732,7 +745,7 @@ class _ShopTabState extends State<ShopTab> {
       stripEnabled: !_saving,
       onStrip: () => _purchasePowerup(item),
       onTap: () => _showItemSheet(
-        art: PowerupIcon(type: type, size: 64),
+        art: _powerupArt(type, fallbackSize: 64),
         name: name,
         badge: owned > 0 ? 'OWNED x$owned' : null,
         description: item['description'] as String? ?? '',
@@ -765,7 +778,7 @@ class _ShopTabState extends State<ShopTab> {
     };
     final name = names[type] ?? type;
     return _ShopTile(
-      art: PowerupIcon(type: type, size: 44),
+      art: _powerupArt(type),
       name: name,
       badge: 'x$quantity',
       stripLabel: 'x$quantity',
@@ -773,7 +786,7 @@ class _ShopTabState extends State<ShopTab> {
       stripEnabled: false,
       onStrip: null,
       onTap: () => _showItemSheet(
-        art: PowerupIcon(type: type, size: 64),
+        art: _powerupArt(type, fallbackSize: 64),
         name: name,
         badge: 'OWNED x$quantity',
         description: 'Use it from a race to unleash it on your rivals.',

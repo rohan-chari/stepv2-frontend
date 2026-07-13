@@ -45,6 +45,14 @@ class PowerupIcon extends StatelessWidget {
 
   static int get knownTypeCount => _assetNames.length;
 
+  /// Full asset path for a powerup type, or null when unknown. Lets shop
+  /// tiles render the art through AccessoryThumbnail (thumb-first, fills
+  /// the tile) instead of at this widget's fixed icon size.
+  static String? assetPathFor(String type) {
+    final name = _assetNames[type.toUpperCase()];
+    return name == null ? null : 'assets/images/powerups/$name.png';
+  }
+
   @override
   Widget build(BuildContext context) {
     final assetName = _assetNames[type.toUpperCase()];
