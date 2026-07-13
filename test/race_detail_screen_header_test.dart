@@ -79,11 +79,14 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      // Find the main page SingleChildScrollView (the one inside the
-      // RefreshIndicator that wraps the main content area).
+      // Find the main page SingleChildScrollView (the vertical one inside the
+      // RefreshIndicator — the race-day hero contributes its own horizontal
+      // course scroller).
       final scrollFinder = find.descendant(
         of: find.byType(RefreshIndicator),
-        matching: find.byType(SingleChildScrollView),
+        matching: find.byWidgetPredicate(
+          (w) => w is SingleChildScrollView && w.scrollDirection == Axis.vertical,
+        ),
       );
       expect(scrollFinder, findsOneWidget);
 

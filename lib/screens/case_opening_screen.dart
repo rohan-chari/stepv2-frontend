@@ -202,6 +202,13 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
               filter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 2.5),
               child: ColoredBox(
                 color: AppColors.roofDark.withValues(alpha: 0.78),
+                child: const CustomPaint(
+                  painter: ArcadeCheckerPainter(
+                    tileColor: Color(0x0AFFFFFF),
+                    stripeColor: Color(0x14000000),
+                    drawBottomStripe: false,
+                  ),
+                ),
               ),
             ),
           ),

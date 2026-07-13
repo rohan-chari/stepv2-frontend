@@ -24,6 +24,28 @@ Update this file after every major/minor change. Add new work under
 
 ## [Unreleased]
 
+### Changed
+- Race detail redesigned around a race-day hero: the course scene runs
+  edge-to-edge under the header on new Codex-imagegen artwork
+  (`race_day_course.png` — grandstand crowd, bunting, balloons composited
+  above the original course ground so runner anchors are unchanged), with the
+  countdown and prize pool as dark HUD chips floating on the sky (prize chip
+  opens a payout-breakdown sheet). Pending races line the joined racers up at
+  the start line with a STARTS IN chip; completed races show final positions
+  with a RACE COMPLETE chip and a winner card. Below the hero: home-style
+  checkered green with gold-tick headers and parchment game-piece section
+  cards (standings, powerups, activity & chat). The old TIME LEFT/PRIZE POOL
+  status board is gone.
+- Toasts (error/info/game) reskinned to the game-piece card spec with a
+  springy overshoot drop-in and a badge wobble on landing; static under
+  reduced-motion.
+- Mystery-box / daily-reward reel rebuilt as a slot-machine window: dark felt
+  stage with a gold cabinet frame, edge fades so tiles surface out of the
+  dark, a glowing gold win-line with chunky chevron pointers, a gold glow that
+  builds as the reel decelerates, and a lock-in scale-pop + glow on the
+  winning tile. Overlay backdrops picked up the subtle arcade checker. (No
+  confetti here — confetti stays exclusive to race finishes.)
+
 ---
 
 ## [1.5.3] — 2026-07-12

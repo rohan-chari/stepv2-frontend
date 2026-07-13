@@ -122,11 +122,31 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
     final isResult = index == widget.resultIndex;
     final tile = widget.itemBuilder(context, index, isResult);
     if (!isResult) return tile;
+    // Lock-in pop: as the reel settles, the winning tile lifts, scales up and
+    // catches a gold glow — the "it's THIS one" beat.
     return AnimatedBuilder(
       animation: _animation,
       builder: (context, child) {
-        final lift = _animation.value > 0.985 ? -4.0 : 0.0;
-        return Transform.translate(offset: Offset(0, lift), child: child);
+        final locked = _animation.value > 0.985;
+        final content = locked
+            ? DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.pillGold.withValues(alpha: 0.85),
+                      blurRadius: 18,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: child,
+              )
+            : child!;
+        return Transform.translate(
+          offset: Offset(0, locked ? -5.0 : 0.0),
+          child: Transform.scale(scale: locked ? 1.07 : 1.0, child: content),
+        );
       },
       child: tile,
     );
@@ -172,49 +192,128 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
                 const SizedBox(height: 8),
                 Stack(
                   alignment: Alignment.center,
+                  clipBehavior: Clip.none,
                   children: [
-                    SizedBox(
-                      height: widget.height,
-                      width: viewportWidth,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: ColoredBox(
-                          color: AppColors.parchmentDark,
-                          child: ClipRect(
-                            child: OverflowBox(
-                              maxWidth: double.infinity,
-                              alignment: Alignment.centerLeft,
-                              child: AnimatedBuilder(
-                                animation: _animation,
-                                builder: (context, child) {
-                                  final scrollOffset =
-                                      _animation.value * totalScroll;
-                                  return Transform.translate(
-                                    offset: Offset(-scrollOffset, 0),
-                                    child: child,
-                                  );
-                                },
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 8,
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      for (
-                                        int i = 0;
-                                        i < widget.itemCount;
-                                        i++
-                                      ) ...[
-                                        if (i > 0)
-                                          const SizedBox(width: _itemSpacing),
-                                        _buildItem(i),
+                    // Gold glow that builds around the viewport as the reel
+                    // decelerates toward the result, then holds once it locks.
+                    AnimatedBuilder(
+                      animation: _animation,
+                      builder: (context, child) {
+                        final t = ((_animation.value - 0.55) / 0.45).clamp(
+                          0.0,
+                          1.0,
+                        );
+                        return DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            boxShadow: t == 0
+                                ? const []
+                                : [
+                                    BoxShadow(
+                                      color: AppColors.pillGold.withValues(
+                                        alpha: 0.65 * t,
+                                      ),
+                                      blurRadius: 6 + 14 * t,
+                                      spreadRadius: 2 * t,
+                                    ),
+                                  ],
+                          ),
+                          child: child,
+                        );
+                      },
+                      child: Container(
+                        height: widget.height,
+                        width: viewportWidth,
+                        // Dark machine window: tiles glow against the deep
+                        // felt, framed like a cabinet slot.
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: AppColors.pillGoldShadow,
+                            width: 2,
+                          ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: ColoredBox(
+                            color: AppColors.felt,
+                            child: ClipRect(
+                              child: OverflowBox(
+                                maxWidth: double.infinity,
+                                alignment: Alignment.centerLeft,
+                                child: AnimatedBuilder(
+                                  animation: _animation,
+                                  builder: (context, child) {
+                                    final scrollOffset =
+                                        _animation.value * totalScroll;
+                                    return Transform.translate(
+                                      offset: Offset(-scrollOffset, 0),
+                                      child: child,
+                                    );
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 8,
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        for (
+                                          int i = 0;
+                                          i < widget.itemCount;
+                                          i++
+                                        ) ...[
+                                          if (i > 0)
+                                            const SizedBox(width: _itemSpacing),
+                                          _buildItem(i),
+                                        ],
                                       ],
-                                    ],
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Edge fades: tiles surface out of the dark on one side
+                    // and sink back into it on the other, so the strip reads
+                    // as a spinning wheel instead of a sliding row.
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: Padding(
+                          padding: const EdgeInsets.all(2),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 46,
+                                decoration: const BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.centerLeft,
+                                    end: Alignment.centerRight,
+                                    colors: [
+                                      Color(0xE61A2B20),
+                                      Color(0x001A2B20),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const Spacer(),
+                              Container(
+                                width: 46,
+                                decoration: const BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.centerRight,
+                                    end: Alignment.centerLeft,
+                                    colors: [
+                                      Color(0xE61A2B20),
+                                      Color(0x001A2B20),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -225,18 +324,18 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
                       ),
                     ),
                     Positioned(
-                      top: 0,
+                      top: -3,
                       child: CustomPaint(
-                        size: const Size(24, 14),
+                        size: const Size(28, 16),
                         painter: _PointerPainter(),
                       ),
                     ),
                     Positioned(
-                      bottom: 0,
+                      bottom: -3,
                       child: Transform.rotate(
                         angle: pi,
                         child: CustomPaint(
-                          size: const Size(24, 14),
+                          size: const Size(28, 16),
                           painter: _PointerPainter(),
                         ),
                       ),
@@ -331,10 +430,7 @@ class CaseReelTile extends StatelessWidget {
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(6, 7, 6, 6),
-            child: child,
-          ),
+          Padding(padding: const EdgeInsets.fromLTRB(6, 7, 6, 6), child: child),
         ],
       ),
     );
@@ -442,8 +538,7 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip> {
     // result tile so the decoys the user is already looking at don't reshuffle.
     if (widget.resultType != oldWidget.resultType ||
         widget.resultRarity != oldWidget.resultRarity) {
-      _items = List.of(_items)
-        ..[_resultPosition] = _resultOrDecoy(Random());
+      _items = List.of(_items)..[_resultPosition] = _resultOrDecoy(Random());
     }
   }
 
@@ -552,41 +647,48 @@ class _StripItem {
   const _StripItem(this.type, this.rarity);
 }
 
+/// Chunky gold chevron with a dark keyline — the cabinet's win pointer.
 class _PointerPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = AppColors.coinDark
-      ..style = PaintingStyle.fill;
-
     final path = Path()
       ..moveTo(0, 0)
       ..lineTo(size.width, 0)
       ..lineTo(size.width / 2, size.height)
       ..close();
 
-    canvas.drawPath(path, paint);
+    canvas.drawPath(path, Paint()..color = AppColors.pillGold);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = AppColors.pillGoldShadow
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
   }
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
+/// The gold "win line" through the reel window: a soft glow column under a
+/// crisp gold hairline, so the landing spot is unmistakable against the felt.
 class _CenterMarkerPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final x = size.width / 2;
-    final paint = Paint()
-      ..color = AppColors.coinDark.withValues(alpha: 0.7)
-      ..strokeWidth = 3
-      ..strokeCap = StrokeCap.square;
 
-    canvas.drawLine(Offset(x, 8), Offset(x, size.height - 8), paint);
-    canvas.drawLine(
-      Offset(x - 5, size.height / 2),
-      Offset(x + 5, size.height / 2),
-      paint,
-    );
+    // Soft glow column behind the line.
+    final glow = Paint()
+      ..color = AppColors.pillGold.withValues(alpha: 0.22)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+    canvas.drawRect(Rect.fromLTRB(x - 7, 4, x + 7, size.height - 4), glow);
+
+    final line = Paint()
+      ..color = AppColors.pillGold
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(Offset(x, 6), Offset(x, size.height - 6), line);
   }
 
   @override

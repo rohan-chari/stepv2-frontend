@@ -128,7 +128,8 @@ flutter pub get
 # the STAGING iOS OAuth client — it must match the backend the build talks to,
 # since each env's GOOGLE_AUTH_CLIENT_ID allowlist only accepts its own client.
 # Omit the define and the button is hidden (sign-in stays Apple-only).
-flutter run -d 00008150-000171DE2638401C --device-connection=attached --debug \
+flutter run -d 00008150-000171DE2638401C --device-connection=attached \
+  --profile \
   --dart-define=BACKEND_BASE_URL=https://staging.steptracker-api.org \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
   --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \

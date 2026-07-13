@@ -16,12 +16,13 @@ import '../utils/race_display.dart';
 import '../utils/race_participant_display.dart';
 import '../utils/share_helper.dart';
 import '../widgets/ad_banner_slot.dart';
-import '../widgets/arcade_page.dart';
+import '../widgets/arcade_fx.dart';
 import '../widgets/arcade_tab_selector.dart';
 import '../widgets/app_avatar.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/global_event_banner.dart';
 import '../widgets/goal_track.dart';
+import '../widgets/home_chrome.dart';
 import '../widgets/home_course_track.dart';
 import '../widgets/info_toast.dart';
 import '../widgets/pill_button.dart';
@@ -253,6 +254,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   bool _isActing = false;
   Timer? _pollTimer;
   Timer? _countdownTimer;
+  // Monotonic id of the newest fetchRaceProgress request — see _loadProgress.
+  int _progressFetchSeq = 0;
   late DateTime _countdownNow;
 
   // Activity/Chat tabs state.
@@ -305,8 +308,18 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   }
 
   static const _scheduledMonthAbbrev = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
 
   // 1.1.7: render a scheduled auto-start time in the viewer's local timezone.
@@ -440,7 +453,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         _isLoading = false;
         // One mute covers both placement and chat; treat the race as muted if
         // either flag is set. Defaults false for older backends missing the keys.
-        _placementMuted = (details['myPlacementAlertsMuted'] as bool? ?? false) ||
+        _placementMuted =
+            (details['myPlacementAlertsMuted'] as bool? ?? false) ||
             (details['myChatMuted'] as bool? ?? false);
       });
 
@@ -474,7 +488,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     }
   }
 
-  Future<void> _loadProgress({Future<Map<String, dynamic>?>? prefetched}) async {
+  Future<void> _loadProgress({
+    Future<Map<String, dynamic>?>? prefetched,
+  }) async {
+    // Ordering guard: concurrent fetches (30s poll vs the refresh fired right
+    // after opening a box) can resolve out of order, and a stale snapshot
+    // landing last used to overwrite the fresh one — an opened mystery box
+    // would visibly "un-open" until the next poll. Only the newest-issued
+    // request may commit its response.
+    final fetchSeq = ++_progressFetchSeq;
     final previous = _progress;
     if (mounted) {
       setState(() {
@@ -505,7 +527,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             raceId: widget.raceId,
           );
 
-      if (!mounted) return;
+      if (!mounted || fetchSeq != _progressFetchSeq) return;
       setState(() {
         _progress = progress;
         _powerupData = progress['powerupData'] as Map<String, dynamic>?;
@@ -561,7 +583,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         _loadDetails();
       }
     } catch (e) {
-      if (!mounted) return;
+      // A stale request's failure must not clobber a newer request's result.
+      if (!mounted || fetchSeq != _progressFetchSeq) return;
       setState(() {
         _progressState = Loadable.error(e.toString(), data: previous);
       });
@@ -889,10 +912,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       final swapTargets = await _resolveSneakySwapTargets(token, targets);
       if (swapTargets.isEmpty) {
         if (mounted) {
-          showInfoToast(
-            context,
-            'No one has a powerup to steal right now',
-          );
+          showInfoToast(context, 'No one has a powerup to steal right now');
         }
         return;
       }
@@ -982,6 +1002,39 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     } finally {
       if (mounted) setState(() => _isActing = false);
     }
+  }
+
+  /// Optimistic-inventory helper for a confirmed mystery-box open: mirrors
+  /// the server's transition on the local projection. The box row keeps its
+  /// slot but becomes the rolled HELD powerup; a Fanny Pack that
+  /// auto-activated is dropped (server marks it USED).
+  void _optimisticallyApplyBoxOpen(
+    String powerupId,
+    Map<String, dynamic> openResult,
+  ) {
+    final data = _powerupData;
+    final inventory = data?['inventory'] as List?;
+    if (data == null || inventory == null || !mounted) return;
+    setState(() {
+      if (openResult['autoActivated'] == true) {
+        data['inventory'] = inventory
+            .where((p) => p is Map && p['id'] != powerupId)
+            .toList();
+      } else {
+        data['inventory'] = [
+          for (final p in inventory)
+            if (p is Map && p['id'] == powerupId)
+              <String, dynamic>{
+                ...p.cast<String, dynamic>(),
+                'type': openResult['type'],
+                'rarity': openResult['rarity'],
+                'status': 'HELD',
+              }
+            else
+              p,
+        ];
+      }
+    });
   }
 
   /// Optimistic-inventory helper: drops [powerupId] from the local
@@ -1133,8 +1186,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         final live = byUserId[userId];
         resolved.add({
           'userId': userId,
-          'displayName':
-              live?['displayName'] ?? t['displayName'] ?? '???',
+          'displayName': live?['displayName'] ?? t['displayName'] ?? '???',
           if (live?['profilePhotoUrl'] != null)
             'profilePhotoUrl': live!['profilePhotoUrl'],
           if (live?['totalSteps'] != null) 'totalSteps': live!['totalSteps'],
@@ -1176,7 +1228,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        PowerupIcon(type: powerupType, size: 22, spinning: true),
+                        PowerupIcon(
+                          type: powerupType,
+                          size: 22,
+                          spinning: true,
+                        ),
                         const SizedBox(width: 8),
                         Text(
                           _powerupNames[powerupType] ?? powerupType,
@@ -1190,7 +1246,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                     const SizedBox(height: 4),
                     Text(
                       'CHOOSE A TARGET',
-                      style: PixelText.title(size: 12, color: AppColors.textMid),
+                      style: PixelText.title(
+                        size: 12,
+                        color: AppColors.textMid,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     Container(height: 2, color: AppColors.parchmentDark),
@@ -1360,10 +1419,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                     ),
                     Align(
                       alignment: Alignment.centerRight,
-                      child: CoinBalanceBadge(
-                        coins: myCoins,
-                        coinSize: 16,
-                      ),
+                      child: CoinBalanceBadge(coins: myCoins, coinSize: 16),
                     ),
                   ],
                 ),
@@ -1497,136 +1553,165 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     return buttons;
   }
 
+  // Soft drop shadow for light text sitting directly on the checker.
+  static const _headerTextShadows = [
+    Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
+  ];
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: ArcadePageBackground(
-        showHeader: false,
-        child: SafeArea(
-          bottom: false,
-          child: Column(
-            children: [
-              // Header (fixed, does not scroll)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                decoration: const BoxDecoration(
-                  color: AppColors.parchmentLight,
-                ),
-                child: Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () => Navigator.of(context).pop(true),
-                      child: const Padding(
-                        padding: EdgeInsets.all(8),
-                        child: Icon(
-                          Icons.arrow_back,
-                          color: AppColors.textDark,
-                          size: 24,
-                        ),
-                      ),
+      // Checkered arcade green — the same below-the-fold surface as the tabs,
+      // so pushing into a race no longer flips back to the old parchment look.
+      body: Stack(
+        children: [
+          const Positioned.fill(
+            child: ColoredBox(
+              color: AppColors.roofLight,
+              child: CustomPaint(
+                painter: ArcadeCheckerPainter(drawBottomStripe: false),
+              ),
+            ),
+          ),
+          SafeArea(
+            bottom: false,
+            child: Column(
+              children: [
+                // Header (fixed, does not scroll) — light chrome on the checker.
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  decoration: const BoxDecoration(
+                    // Opaque, so scrolled content can't show through the fixed
+                    // header (guarded by race_detail_screen_header_test).
+                    color: AppColors.roofLight,
+                    border: Border(
+                      bottom: BorderSide(color: AppColors.roofDark, width: 1),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        raceDisplayName(
-                          _race?['seedKind'] as String?,
-                          _race?['name'] as String? ?? 'Race',
-                        ),
-                        style: PixelText.title(
-                          size: 22,
-                          color: AppColors.textDark,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (_canShareRace())
+                  ),
+                  child: Row(
+                    children: [
                       GestureDetector(
-                        key: _shareButtonKey,
-                        onTap: _sharingRace ? null : _shareRace,
-                        child: Padding(
-                          padding: const EdgeInsets.all(8),
-                          child: _sharingRace
-                              ? const SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: AppColors.textDark,
-                                  ),
-                                )
-                              : const Icon(
-                                  Icons.ios_share,
-                                  color: AppColors.textDark,
-                                  size: 24,
-                                ),
-                        ),
-                      ),
-                    if (_canMutePlacementAlerts())
-                      GestureDetector(
-                        onTap: _togglingPlacementMute
-                            ? null
-                            : _togglePlacementMute,
-                        child: Padding(
-                          padding: const EdgeInsets.all(8),
-                          child: Icon(
-                            _placementMuted
-                                ? Icons.notifications_off
-                                : Icons.notifications_active,
-                            color: AppColors.textDark,
-                            size: 24,
-                          ),
-                        ),
-                      ),
-                    if (_race != null &&
-                        (_race!['isCreator'] as bool? ?? false) &&
-                        (_race!['status'] == 'PENDING' ||
-                            _race!['status'] == 'ACTIVE'))
-                      GestureDetector(
-                        onTap: _showRaceOptionsSheet,
+                        onTap: () => Navigator.of(context).pop(true),
                         child: const Padding(
                           padding: EdgeInsets.all(8),
                           child: Icon(
-                            Icons.more_horiz,
-                            color: AppColors.textDark,
+                            Icons.arrow_back,
+                            color: AppColors.parchment,
                             size: 24,
                           ),
                         ),
                       ),
-                  ],
-                ),
-              ),
-
-              Expanded(
-                child: _isLoading
-                    ? const Center(
-                        child: CircularProgressIndicator(
-                          color: AppColors.accent,
-                        ),
-                      )
-                    : _race == null
-                    ? const Center(child: Text('Failed to load race'))
-                    : RefreshIndicator(
-                        onRefresh: _loadDetails,
-                        color: AppColors.accent,
-                        backgroundColor: AppColors.parchment,
-                        child: SingleChildScrollView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding: EdgeInsets.zero,
-                          child: _buildContent(),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          raceDisplayName(
+                            _race?['seedKind'] as String?,
+                            _race?['name'] as String? ?? 'Race',
+                          ),
+                          style: PixelText.title(
+                            size: 22,
+                            color: AppColors.parchment,
+                          ).copyWith(shadows: _headerTextShadows),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-              ),
-              // Anchored bottom banner, in-flow below the scrollable so it
-              // reserves its own space. SafeArea above excludes the bottom, so
-              // the slot pads itself clear of the home indicator when an ad is
-              // showing; it collapses to zero size otherwise.
-              const AdBannerSlot(withBottomSafeArea: true),
-            ],
+                      if (_canShareRace())
+                        GestureDetector(
+                          key: _shareButtonKey,
+                          onTap: _sharingRace ? null : _shareRace,
+                          child: Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: _sharingRace
+                                ? const SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: AppColors.parchment,
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.ios_share,
+                                    color: AppColors.parchment,
+                                    size: 24,
+                                  ),
+                          ),
+                        ),
+                      if (_canMutePlacementAlerts())
+                        GestureDetector(
+                          onTap: _togglingPlacementMute
+                              ? null
+                              : _togglePlacementMute,
+                          child: Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: Icon(
+                              _placementMuted
+                                  ? Icons.notifications_off
+                                  : Icons.notifications_active,
+                              color: AppColors.parchment,
+                              size: 24,
+                            ),
+                          ),
+                        ),
+                      if (_race != null &&
+                          (_race!['isCreator'] as bool? ?? false) &&
+                          (_race!['status'] == 'PENDING' ||
+                              _race!['status'] == 'ACTIVE'))
+                        GestureDetector(
+                          onTap: _showRaceOptionsSheet,
+                          child: const Padding(
+                            padding: EdgeInsets.all(8),
+                            child: Icon(
+                              Icons.more_horiz,
+                              color: AppColors.parchment,
+                              size: 24,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+
+                Expanded(
+                  child: _isLoading
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                            color: AppColors.accent,
+                          ),
+                        )
+                      : _race == null
+                      ? Center(
+                          child: Text(
+                            'Failed to load race',
+                            style: PixelText.body(
+                              size: 14,
+                              color: AppColors.parchment,
+                            ),
+                          ),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: _loadDetails,
+                          color: AppColors.accent,
+                          backgroundColor: AppColors.parchment,
+                          child: SingleChildScrollView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: EdgeInsets.zero,
+                            child: _buildContent(),
+                          ),
+                        ),
+                ),
+                // Anchored bottom banner, in-flow below the scrollable so it
+                // reserves its own space. SafeArea above excludes the bottom, so
+                // the slot pads itself clear of the home indicator when an ad is
+                // showing; it collapses to zero size otherwise.
+                const AdBannerSlot(withBottomSafeArea: true),
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -1639,21 +1724,24 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
     switch (status) {
       case 'PENDING':
+        // Full-bleed race-day hero at the top — padding applied per-section.
         content = _buildPendingContent();
+        wrapWithHorizontalPadding = false;
         break;
       case 'ACTIVE':
         final myStatus = _race!['myStatus'] as String? ?? '';
         if (myStatus == 'INVITED') {
           content = _buildInvitedToActiveContent();
+          wrapWithHorizontalPadding = false;
         } else {
-          // _buildActiveContent applies its own per-child horizontal padding so
-          // the status board (countdown + prize pool) can render full-width.
+          // Full-bleed hero; per-child horizontal padding inside.
           content = _buildActiveContent();
           wrapWithHorizontalPadding = false;
         }
         break;
       case 'COMPLETED':
         content = _buildCompletedContent();
+        wrapWithHorizontalPadding = false;
         break;
       case 'CANCELLED':
         content = _buildCancelledContent();
@@ -1669,6 +1757,258 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       );
     }
     return content;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Race-day hero: the course scene edge-to-edge with HUD chips floating on
+  // the sky — the race itself is the first thing on screen, home-hero style.
+  // ---------------------------------------------------------------------------
+
+  static const _raceDayAsset = 'assets/images/race_day_course.png';
+
+  Widget _buildRaceHero({
+    required List<GoalTrackRunner> runners,
+    int? goalSteps,
+    double? milestoneProgress,
+    String? milestoneLabel,
+    List<Widget> chips = const [],
+  }) {
+    return Stack(
+      children: [
+        HomeCourseTrack(
+          height: 286,
+          backdropAsset: _raceDayAsset,
+          frameless: true,
+          goalSteps: goalSteps,
+          milestoneProgress: milestoneProgress,
+          milestoneLabel: milestoneLabel,
+          runners: runners,
+        ),
+        // HUD chips float over the empty sky band, clear of the bunting and
+        // the grandstand. They never intercept the track's own gestures
+        // outside their own bounds.
+        if (chips.isNotEmpty)
+          Positioned(
+            left: 12,
+            right: 12,
+            top: 12,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var i = 0; i < chips.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 8),
+                  chips[i],
+                ],
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Dark HUD chip floating on the hero sky (same ink language as the
+  /// course-track name tags). [onTap] makes it a button.
+  Widget _heroChip({Key? key, required Widget child, VoidCallback? onTap}) {
+    final chip = Container(
+      key: key,
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+      decoration: BoxDecoration(
+        color: HomeColors.ink.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.18),
+          width: 2,
+        ),
+      ),
+      child: child,
+    );
+    if (onTap == null) return chip;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: chip,
+    );
+  }
+
+  /// Ticking countdown chip (⏱ 2d 4h 12m). Uses the same 1s ticker as the
+  /// rest of the screen via [_countdownNow].
+  Widget _countdownChip(DateTime endsAt, {String label = 'ENDS IN'}) {
+    final remaining = endsAt.difference(_countdownNow);
+    return _heroChip(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.timer_rounded, size: 16, color: AppColors.pillGold),
+          const SizedBox(width: 6),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: HomeText.label(
+                  size: 8,
+                  color: Colors.white.withValues(alpha: 0.7),
+                ),
+              ),
+              Text(
+                _formatCountdownShort(
+                  remaining.isNegative ? Duration.zero : remaining,
+                ),
+                style: PixelText.title(size: 15, color: Colors.white),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Prize-pool chip — tapping opens the payout breakdown sheet.
+  Widget _prizeChip() {
+    final potCoins = _readInt(_race!['projectedPotCoins'], fallback: 0);
+    return _heroChip(
+      key: const Key('race-prize-pool-board'),
+      onTap: _showPrizePoolSheet,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SpinningCoin(size: 18),
+          const SizedBox(width: 6),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'PRIZE POOL',
+                style: HomeText.label(
+                  size: 8,
+                  color: Colors.white.withValues(alpha: 0.7),
+                ),
+              ),
+              Text(
+                '$potCoins',
+                style: PixelText.title(size: 15, color: AppColors.pillGold),
+              ),
+            ],
+          ),
+          const SizedBox(width: 5),
+          Icon(
+            Icons.expand_more_rounded,
+            size: 16,
+            color: Colors.white.withValues(alpha: 0.7),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Bottom sheet with the pot and the full payout breakdown (podium +
+  /// "+N MORE" expansion, same as before — just summoned from the hero chip).
+  void _showPrizePoolSheet() {
+    final potCoins = _readInt(_race!['projectedPotCoins'], fallback: 0);
+    final payoutTiers = parsePayoutTiers(_race);
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.parchmentLight,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.woodMid,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'PRIZE POOL',
+                  style: PixelText.title(size: 16, color: AppColors.textMid),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '$potCoins',
+                  style: PixelText.number(size: 40, color: AppColors.coinDark),
+                ),
+                Text(
+                  'gold',
+                  style: PixelText.body(size: 13, color: AppColors.textMid),
+                ),
+                if (payoutTiers.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: _buildPayoutBreakdown(
+                      payoutTiers,
+                      key: const Key('race-prize-pool-summary'),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Gold-tick light section header on the checker (races/home tab language).
+  Widget _checkerSectionHeader(String title, {Widget? trailing}) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: Row(
+        children: [
+          Container(
+            width: 6,
+            height: 16,
+            decoration: BoxDecoration(
+              color: AppColors.pillGold,
+              borderRadius: BorderRadius.circular(3),
+              border: Border.all(color: AppColors.pillGoldDark),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              title,
+              style: PixelText.title(
+                size: 16,
+                color: AppColors.parchment,
+              ).copyWith(shadows: _headerTextShadows),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (trailing != null) ...[const SizedBox(width: 8), trailing],
+        ],
+      ),
+    );
+  }
+
+  /// Parchment game-piece card for a section body on the checker (home tab
+  /// below-the-fold language).
+  Widget _sectionCard({
+    required Widget child,
+    EdgeInsetsGeometry padding = const EdgeInsets.all(14),
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Container(
+        width: double.infinity,
+        padding: padding,
+        decoration: raceCardDecoration(),
+        child: child,
+      ),
+    );
   }
 
   Widget _buildRaceInfoCard() {
@@ -1743,20 +2083,60 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     final scheduledInFuture =
         scheduledStartAt != null && scheduledStartAt.isAfter(DateTime.now());
 
+    // Everyone who's in lines up at the start line of the race-day scene.
+    final startLineRunners = <GoalTrackRunner>[
+      for (final p in participants)
+        if (p['status'] == 'ACCEPTED')
+          GoalTrackRunner(
+            name: p['displayName'] as String? ?? '???',
+            progress: 0,
+            isUser: (p['userId'] as String?) == _myUserId,
+            profilePhotoUrl: p['profilePhotoUrl'] as String?,
+            accessories:
+                (p['accessories'] as List?)?.cast<Map<String, dynamic>>() ??
+                const [],
+            animal: animalFromJson(p['animal']),
+          ),
+    ];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SectionHeader(
-          title: 'RACE DETAILS',
-          icon: Icons.info_outline_rounded,
+        _buildRaceHero(
+          runners: startLineRunners,
+          chips: [
+            if (scheduledInFuture)
+              _countdownChip(scheduledStartAt, label: 'STARTS IN')
+            else
+              _heroChip(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.flag_rounded,
+                      size: 16,
+                      color: AppColors.pillGold,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'AT THE START LINE',
+                      style: PixelText.title(size: 13, color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+            const Spacer(),
+            if (_readInt(_race!['buyInAmount'], fallback: 0) > 0) _prizeChip(),
+          ],
         ),
-        const SizedBox(height: 8),
-        _buildRaceInfoCard(),
         const SizedBox(height: 16),
 
-        SectionHeader(
-          title: 'PARTICIPANTS',
-          icon: Icons.groups_rounded,
+        _checkerSectionHeader('RACE DETAILS'),
+        _sectionCard(child: _buildRaceInfoCard()),
+        const SizedBox(height: 16),
+
+        _checkerSectionHeader(
+          'PARTICIPANTS',
           trailing: Pill(
             label: '$acceptedCount',
             background: AppColors.parchmentDark,
@@ -1764,17 +2144,46 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             fontSize: 12,
           ),
         ),
-        const SizedBox(height: 8),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [for (final p in participants) _buildParticipantRow(p)],
+        _sectionCard(
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [for (final p in participants) _buildParticipantRow(p)],
+          ),
         ),
         const SizedBox(height: 16),
 
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: _buildPendingActions(
+            isCreator: isCreator,
+            myStatus: myStatus,
+            isSeeded: isSeeded,
+            acceptedCount: acceptedCount,
+            scheduledInFuture: scheduledInFuture,
+            scheduledStartAt: scheduledStartAt,
+          ),
+        ),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  Widget _buildPendingActions({
+    required bool isCreator,
+    required String myStatus,
+    required bool isSeeded,
+    required int acceptedCount,
+    required bool scheduledInFuture,
+    required DateTime? scheduledStartAt,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
         // 1.1.7: scheduled auto-start banner, shown to every viewer of a
         // PENDING race that has a future scheduledStartAt. Live countdown,
         // driven by the same 1s ticker the active-race countdown uses.
-        if (scheduledInFuture) ...[
+        if (scheduledInFuture && scheduledStartAt != null) ...[
           RetroCard(
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
             child: Row(
@@ -1785,8 +2194,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Countdown lives in the hero's STARTS IN chip — the
+                      // banner carries the absolute local time.
                       Text(
-                        'STARTS IN ${_formatCountdownShort(scheduledStartAt.difference(_countdownNow))}',
+                        'AUTO-START SCHEDULED',
                         style: PixelText.title(
                           size: 14,
                           color: AppColors.textDark,
@@ -1826,7 +2237,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                     child: Text(
                       'This race is waiting to start. Invite friends, and once '
                       '2+ have joined, tap Start Race — it won’t begin on its own.',
-                      style: PixelText.body(size: 13, color: AppColors.textDark),
+                      style: PixelText.body(
+                        size: 13,
+                        color: AppColors.textDark,
+                      ),
                     ),
                   ),
                 ],
@@ -1859,7 +2273,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             const SizedBox(height: 6),
             Text(
               'Need at least 2 participants to start',
-              style: PixelText.body(size: 12, color: AppColors.textMid),
+              style: PixelText.body(
+                size: 12,
+                color: AppColors.parchment.withValues(alpha: 0.9),
+              ),
               textAlign: TextAlign.center,
             ),
           ],
@@ -1923,7 +2340,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             ],
           ),
         ],
-        const SizedBox(height: 24),
       ],
     );
   }
@@ -1932,51 +2348,64 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SectionHeader(
-          title: 'RACE DETAILS',
-          icon: Icons.info_outline_rounded,
-        ),
-        const SizedBox(height: 8),
-        _buildRaceInfoCard(),
+        const SizedBox(height: 12),
+        _checkerSectionHeader('RACE DETAILS'),
+        _sectionCard(child: _buildRaceInfoCard()),
         const SizedBox(height: 16),
-        Column(
-          children: [
-            Icon(
-              Icons.directions_run_rounded,
-              size: 32,
-              color: AppColors.accent,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'This race is already underway!',
-              style: PixelText.title(size: 16, color: AppColors.textDark),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Join now and your steps will count from when you accept.',
-              style: PixelText.body(size: 14, color: AppColors.textMid),
-              textAlign: TextAlign.center,
-            ),
-          ],
+        _sectionCard(
+          child: Column(
+            children: [
+              Icon(
+                Icons.directions_run_rounded,
+                size: 32,
+                color: AppColors.accent,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'This race is already underway!',
+                style: PixelText.title(size: 16, color: AppColors.textDark),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Join now and your steps will count from when you accept.',
+                style: PixelText.body(size: 14, color: AppColors.textMid),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 16),
-        PillButton(
-          label: _isActing ? 'JOINING...' : 'JOIN RACE',
-          variant: PillButtonVariant.primary,
-          fontSize: 14,
-          fullWidth: true,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-          onPressed: _isActing ? null : () => _respondToInvite(true),
-        ),
-        const SizedBox(height: 10),
-        PillButton(
-          label: 'DECLINE',
-          variant: PillButtonVariant.accent,
-          fontSize: 13,
-          fullWidth: true,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          onPressed: _isActing ? null : () => _respondToInvite(false),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              PillButton(
+                label: _isActing ? 'JOINING...' : 'JOIN RACE',
+                variant: PillButtonVariant.primary,
+                fontSize: 14,
+                fullWidth: true,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 14,
+                ),
+                onPressed: _isActing ? null : () => _respondToInvite(true),
+              ),
+              const SizedBox(height: 10),
+              PillButton(
+                label: 'DECLINE',
+                variant: PillButtonVariant.accent,
+                fontSize: 13,
+                fullWidth: true,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                onPressed: _isActing ? null : () => _respondToInvite(false),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 24),
       ],
@@ -1998,17 +2427,17 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         ? DateTime.tryParse(endsAtRaw)?.toLocal()
         : null;
 
-    final header = <Widget>[
-      if (endsAt != null || buyInAmount > 0) ...[
-        _buildRaceStatusBoard(endsAt: endsAt, showPrizePool: buyInAmount > 0),
-        const SizedBox(height: 12),
-      ],
+    final chips = <Widget>[
+      if (endsAt != null) _countdownChip(endsAt),
+      const Spacer(),
+      if (buyInAmount > 0) _prizeChip(),
     ];
 
     if (_progressState.shouldShowInitialLoading) {
       return Column(
         children: [
-          ...header,
+          _buildRaceHero(runners: const [], chips: chips),
+          const SizedBox(height: 16),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16),
             child: KeyedSubtree(
@@ -2023,7 +2452,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     if (_progressState.isError && !_progressState.hasData) {
       return Column(
         children: [
-          ...header,
+          _buildRaceHero(runners: const [], chips: chips),
+          const SizedBox(height: 16),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: KeyedSubtree(
@@ -2058,36 +2488,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
     return Column(
       children: [
-        ...header,
-
-        if (_progressState.isRefreshing)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12),
-            child: LinearProgressIndicator(
-              minHeight: 2,
-              color: AppColors.accent,
-              backgroundColor: Colors.transparent,
-            ),
-          ),
-
-        // GLOBAL STEP EVENT — "2x STEPS" banner with a countdown, shown only
-        // while an event window is active. Absent for old responses.
-        if (_buildGlobalEventBanner() case final banner?)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-            child: banner,
-          ),
-
-        // THE COURSE — full-bleed race visualization.
-        const Padding(
-          padding: EdgeInsets.fromLTRB(12, 4, 12, 8),
-          child: SectionHeader(title: 'THE COURSE', icon: Icons.flag_rounded),
-        ),
-        HomeCourseTrack(
-          height: 268,
+        // THE RACE — full-bleed race-day hero with HUD chips on the sky.
+        _buildRaceHero(
           goalSteps: targetSteps,
           milestoneProgress: milestoneProgress,
           milestoneLabel: _formatStepsCompact(targetSteps),
+          chips: chips,
           runners: [
             for (final p in participants)
               GoalTrackRunner(
@@ -2109,117 +2515,162 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               ),
           ],
         ),
+
+        if (_progressState.isRefreshing)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12),
+            child: LinearProgressIndicator(
+              minHeight: 2,
+              color: AppColors.accent,
+              backgroundColor: Colors.transparent,
+            ),
+          ),
+
+        // GLOBAL STEP EVENT — "2x STEPS" banner with a countdown, shown only
+        // while an event window is active. Absent for old responses.
+        if (_buildGlobalEventBanner() case final banner?)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: banner,
+          ),
+
         if (targetSteps > 0 || finishRewardPool > 0 || endsAt == null)
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-            child: Column(
-              key: const Key('race-target-header'),
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (endsAt == null)
-                  Text(
-                    'RACE IN PROGRESS',
-                    style: PixelText.title(size: 16, color: AppColors.accent),
-                  ),
-                if (targetSteps > 0)
-                  Text(
-                    'Goal: ${_formatStepsCompact(targetSteps)}',
-                    style: PixelText.body(size: 13, color: AppColors.textMid),
-                  ),
-                if (finishRewardPool > 0) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    finishRewardPlaces == 1
-                        ? 'Winner takes $finishRewardPool gold'
-                        : finishRewardPlaces > 1
-                        ? 'Top $finishRewardPlaces split $finishRewardPool gold'
-                        : 'Top finishers split $finishRewardPool gold',
-                    style: PixelText.body(size: 13, color: AppColors.coinDark),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        if (_buildNextPowerupHelper() case final helper?)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-            child: helper,
-          ),
-        const SizedBox(height: 18),
-
-        // STANDINGS — full-width rows.
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: SectionHeader(
-            title: 'STANDINGS',
-            icon: Icons.leaderboard_rounded,
-            trailing: finishedCount > 0
-                ? Pill(
-                    label: '$finishedCount FINISHED',
-                    background: AppColors.pillGreen,
-                    foreground: AppColors.pillGreenDark,
-                    fontSize: 11,
-                  )
-                : null,
-          ),
-        ),
-        const SizedBox(height: 8),
-        if (finishedCount > 0) ...[
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: RaceFinishersBanner(
-              finishedCount: finishedCount,
-              targetSteps: targetSteps,
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: _buildLeaderboardRows(participants),
-          ),
-        ),
-        const SizedBox(height: 18),
-
-        // POWERUPS — inventory + active effects keep their own headings.
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (_powerupData != null && _powerupData!['enabled'] == true)
-                _buildInventoryContent()
-              else
-                Row(
-                  children: [
-                    Icon(
-                      Icons.block_rounded,
-                      size: 18,
-                      color: AppColors.textMid.withValues(alpha: 0.5),
+            child: SizedBox(
+              width: double.infinity,
+              child: Column(
+                key: const Key('race-target-header'),
+                crossAxisAlignment: CrossAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (endsAt == null)
+                    Text(
+                      'RACE IN PROGRESS',
+                      textAlign: TextAlign.center,
+                      style: PixelText.title(
+                        size: 16,
+                        color: AppColors.pillGold,
+                      ).copyWith(shadows: _headerTextShadows),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Powerups are disabled for this race',
-                        style: PixelText.body(
-                          size: 14,
-                          color: AppColors.textMid,
-                        ),
+                  if (targetSteps > 0)
+                    Text(
+                      'Goal: ${_formatStepsCompact(targetSteps)}',
+                      textAlign: TextAlign.center,
+                      style: PixelText.body(
+                        size: 13,
+                        color: AppColors.parchment.withValues(alpha: 0.9),
+                      ),
+                    ),
+                  if (finishRewardPool > 0) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      finishRewardPlaces == 1
+                          ? 'Winner takes $finishRewardPool gold'
+                          : finishRewardPlaces > 1
+                          ? 'Top $finishRewardPlaces split $finishRewardPool gold'
+                          : 'Top finishers split $finishRewardPool gold',
+                      textAlign: TextAlign.center,
+                      style: PixelText.body(
+                        size: 13,
+                        color: AppColors.pillGold,
                       ),
                     ),
                   ],
+                ],
+              ),
+            ),
+          ),
+        const SizedBox(height: 18),
+
+        // STANDINGS
+        StaggerIn(
+          index: 0,
+          child: Column(
+            children: [
+              _checkerSectionHeader(
+                'STANDINGS',
+                trailing: finishedCount > 0
+                    ? Pill(
+                        label: '$finishedCount FINISHED',
+                        background: AppColors.pillGreen,
+                        foreground: AppColors.pillGreenDark,
+                        fontSize: 11,
+                      )
+                    : null,
+              ),
+              _sectionCard(
+                padding: const EdgeInsets.all(8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (finishedCount > 0) ...[
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+                        child: RaceFinishersBanner(
+                          finishedCount: finishedCount,
+                          targetSteps: targetSteps,
+                        ),
+                      ),
+                    ],
+                    ..._buildLeaderboardRows(participants),
+                  ],
                 ),
-              _buildActiveEffectsSection(),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+
+        // POWERUPS — slots, stash, and active effects on one card.
+        StaggerIn(
+          index: 1,
+          child: Column(
+            children: [
+              _checkerSectionHeader('POWERUPS', trailing: _queuedBoxesChip()),
+              _sectionCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_powerupData != null &&
+                        _powerupData!['enabled'] == true) ...[
+                      _buildInventoryContent(),
+                      if (_buildNextPowerupHelper() case final helper?)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: helper,
+                        ),
+                    ] else
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.block_rounded,
+                            size: 18,
+                            color: AppColors.textMid.withValues(alpha: 0.5),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Powerups are disabled for this race',
+                              style: PixelText.body(
+                                size: 14,
+                                color: AppColors.textMid,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    _buildActiveEffectsSection(),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
         const SizedBox(height: 18),
 
         // ACTIVITY & CHAT
-        _buildActivityTabsSection(),
+        StaggerIn(index: 2, child: _buildActivityTabsSection()),
         const SizedBox(height: 24),
       ],
     );
@@ -2295,11 +2746,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                 powerupId: boxId,
               );
               // The overlay is non-opaque, so the inventory row stays visible
-              // behind the reveal. Empty the box's slot as soon as the server
-              // confirms — on slow connections it used to sit there until the
-              // post-close _loadProgress() returned, looking like the box had
-              // bounced back into the inventory.
-              _optimisticallyRemoveFromInventory(boxId);
+              // behind the reveal. Mirror the server's state transition
+              // locally as soon as it confirms: the box row becomes the
+              // rolled HELD powerup (or empties if it auto-activated), so
+              // the slot never shows a stale unopened box while waiting for
+              // the follow-up _loadProgress() round-trip.
+              _optimisticallyApplyBoxOpen(
+                boxId,
+                result['result'] as Map<String, dynamic>? ?? result,
+              );
               return result;
             },
           ),
@@ -2435,6 +2890,30 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     );
   }
 
+  /// "N queued" mystery-box chip for the POWERUPS section header. Null when
+  /// nothing is queued so the header renders without a trailing widget.
+  Widget? _queuedBoxesChip() {
+    if (_queuedBoxCount <= 0) return null;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.parchment.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(width: 18, height: 20, child: SpinningCrate(size: 16)),
+          const SizedBox(width: 4),
+          Text(
+            '$_queuedBoxCount queued',
+            style: PixelText.body(size: 11, color: AppColors.coinDark),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildInventoryContent() {
     final inventory =
         (_powerupData?['inventory'] as List?)?.cast<Map<String, dynamic>>() ??
@@ -2445,42 +2924,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       key: widget.tutorialPowerupsKey,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'POWERUPS',
-              style: PixelText.title(size: 18, color: AppColors.textMid),
-            ),
-            if (_queuedBoxCount > 0)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.coinLight.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(
-                      width: 18,
-                      height: 20,
-                      child: SpinningCrate(size: 16),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '$_queuedBoxCount queued',
-                      style: PixelText.body(
-                        size: 11,
-                        color: AppColors.coinDark,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 8),
         Row(
           children: List.generate(slotCount, (i) {
             final isExtraSlot = i >= 3;
@@ -2524,10 +2967,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   /// and runs the normal use/target flow. Hidden entirely if the stash is empty
   /// (which is also the case on an older backend without the inventory endpoint).
   List<Widget> _buildGlobalPowerupStash() {
-    final entries = _globalPowerupInventory.entries
-        .where((e) => e.value > 0)
-        .toList()
-      ..sort((a, b) => a.key.compareTo(b.key));
+    final entries =
+        _globalPowerupInventory.entries.where((e) => e.value > 0).toList()
+          ..sort((a, b) => a.key.compareTo(b.key));
     if (entries.isEmpty) return const [];
 
     return [
@@ -2554,8 +2996,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                 label: 'USE',
                 variant: PillButtonVariant.secondary,
                 fontSize: 11,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
                 onPressed: _isActing ? null : () => _redeemAndUsePowerup(e.key),
               ),
             ],
@@ -2827,16 +3271,24 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ArcadeTabSelector(
-          labels: const ['ACTIVITY', 'CHAT'],
-          activeIndex: _activityTabIndex,
-          onChanged: _onTabChanged,
-          unread: [false, _chatHasUnread],
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: ArcadeTabSelector(
+            labels: const ['ACTIVITY', 'CHAT'],
+            activeIndex: _activityTabIndex,
+            onChanged: _onTabChanged,
+            unread: [false, _chatHasUnread],
+          ),
         ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 400,
-          child: _activityTabIndex == 0 ? _buildActivityTab() : _buildChatTab(),
+        const SizedBox(height: 10),
+        _sectionCard(
+          padding: const EdgeInsets.all(10),
+          child: SizedBox(
+            height: 400,
+            child: _activityTabIndex == 0
+                ? _buildActivityTab()
+                : _buildChatTab(),
+          ),
         ),
       ],
     );
@@ -3088,58 +3540,32 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Winner — the arcade celebratory hero.
-        GameContainer(
-          padding: const EdgeInsets.all(20),
-          frameColor: AppColors.accent,
-          surfaceColor: AppColors.accent,
-          child: Column(
-            children: [
-              Text(
-                'RACE COMPLETE',
-                style: PixelText.title(
-                  size: 13,
-                  color: AppColors.parchment.withValues(alpha: 0.8),
-                ),
-              ),
-              const SizedBox(height: 12),
-              if (winner != null) ...[
-                RacerAvatar(
-                  rank: 1,
-                  accessories: winnerAccessories,
-                  size: 64,
-                  animal: winnerAnimal,
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  winner['displayName'] is String
-                      ? atName(winner['displayName'] as String)
-                      : 'Unknown',
-                  style: PixelText.title(size: 22, color: AppColors.parchment),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 6),
-                const PlacementPill(placement: 1),
-              ] else
-                Text(
-                  'No winner',
-                  style: PixelText.title(size: 18, color: AppColors.parchment),
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-
-        // THE COURSE — final positions.
-        const SectionHeader(title: 'THE COURSE', icon: Icons.flag_rounded),
-        const SizedBox(height: 8),
-        HomeCourseTrack(
-          height: 268,
+        // The finished race on the race-day course, final positions held.
+        _buildRaceHero(
           goalSteps: targetSteps,
           milestoneProgress: targetSteps > 0 && completedLeaderSteps > 0
               ? (targetSteps / completedLeaderSteps).clamp(0.0, 1.0).toDouble()
               : null,
           milestoneLabel: _formatStepsCompact(targetSteps),
+          chips: [
+            _heroChip(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.emoji_events_rounded,
+                    size: 16,
+                    color: AppColors.pillGold,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'RACE COMPLETE',
+                    style: PixelText.title(size: 13, color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+          ],
           runners: [
             for (final p in participants)
               GoalTrackRunner(
@@ -3157,23 +3583,76 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               ),
           ],
         ),
+        const SizedBox(height: 16),
+
+        // WINNER — celebratory podium card.
+        StaggerIn(
+          index: 0,
+          child: Column(
+            children: [
+              _checkerSectionHeader('WINNER'),
+              _sectionCard(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  children: [
+                    if (winner != null) ...[
+                      RacerAvatar(
+                        rank: 1,
+                        accessories: winnerAccessories,
+                        size: 64,
+                        animal: winnerAnimal,
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        winner['displayName'] is String
+                            ? atName(winner['displayName'] as String)
+                            : 'Unknown',
+                        style: PixelText.title(
+                          size: 22,
+                          color: AppColors.textDark,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 6),
+                      const PlacementPill(placement: 1),
+                    ] else
+                      Text(
+                        'No winner',
+                        style: PixelText.title(
+                          size: 18,
+                          color: AppColors.textMid,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: 18),
 
         // FINAL STANDINGS
-        const SectionHeader(
-          title: 'FINAL STANDINGS',
-          icon: Icons.leaderboard_rounded,
-        ),
-        const SizedBox(height: 8),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: _buildLeaderboardRows(participants),
+        StaggerIn(
+          index: 1,
+          child: Column(
+            children: [
+              _checkerSectionHeader('FINAL STANDINGS'),
+              _sectionCard(
+                padding: const EdgeInsets.all(8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: _buildLeaderboardRows(participants),
+                ),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 18),
 
         // ACTIVITY / CHAT — still viewable after the race ends. The composer
         // auto-disables (read-only) via _canPostMessage.
-        _buildActivityTabsSection(),
+        StaggerIn(index: 2, child: _buildActivityTabsSection()),
         const SizedBox(height: 24),
       ],
     );
@@ -3187,12 +3666,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         Icon(
           Icons.cancel_outlined,
           size: 48,
-          color: AppColors.textMid.withValues(alpha: 0.6),
+          color: AppColors.parchment.withValues(alpha: 0.75),
         ),
         const SizedBox(height: 12),
         Text(
           'This race was cancelled',
-          style: PixelText.title(size: 18, color: AppColors.textMid),
+          style: PixelText.title(
+            size: 18,
+            color: AppColors.parchment,
+          ).copyWith(shadows: _headerTextShadows),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 24),
@@ -3200,142 +3682,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     );
   }
 
-  Widget _buildRaceStatusBoard({
-    required DateTime? endsAt,
-    required bool showPrizePool,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 4, bottom: 8),
-      child: GameContainer(
-        key: showPrizePool
-            ? const Key('race-prize-pool-board')
-            : const Key('race-status-board'),
-        padding: EdgeInsets.zero,
-        frameColor: AppColors.accent,
-        surfaceColor: AppColors.accent,
-        child: CustomPaint(
-          painter: const ArcadeCheckerPainter(tile: 20),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  if (endsAt != null) _buildCountdownSummary(endsAt),
-                  if (endsAt != null && showPrizePool)
-                    Container(
-                      height: 2,
-                      margin: const EdgeInsets.symmetric(vertical: 14),
-                      color: AppColors.parchmentLight.withValues(alpha: 0.18),
-                    ),
-                  if (showPrizePool) _buildPrizePoolSummary(),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCountdownSummary(DateTime endsAt) {
-    final remaining = endsAt.difference(_countdownNow);
-    final safe = remaining.isNegative ? Duration.zero : remaining;
-    final days = safe.inDays;
-    final hours = safe.inHours.remainder(24);
-    final minutes = safe.inMinutes.remainder(60);
-    final seconds = safe.inSeconds.remainder(60);
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          'TIME LEFT',
-          style: PixelText.title(size: 13, color: AppColors.parchmentLight),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 10),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _CountdownUnit(
-                value: days,
-                label: 'DAYS',
-                labelColor: AppColors.parchment,
-              ),
-              const SizedBox(width: 10),
-              _CountdownUnit(
-                value: hours,
-                label: 'HRS',
-                labelColor: AppColors.parchment,
-              ),
-              const SizedBox(width: 10),
-              _CountdownUnit(
-                value: minutes,
-                label: 'MIN',
-                labelColor: AppColors.parchment,
-              ),
-              const SizedBox(width: 10),
-              _CountdownUnit(
-                value: seconds,
-                label: 'SEC',
-                labelColor: AppColors.parchment,
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPrizePoolSummary() {
-    final potCoins = _readInt(_race!['projectedPotCoins'], fallback: 0);
-    final payoutTiers = parsePayoutTiers(_race);
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Text(
-          'PRIZE POOL',
-          style: PixelText.title(size: 14, color: AppColors.parchmentLight),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 6),
-        Text(
-          '$potCoins',
-          style: PixelText.number(size: 30, color: AppColors.pillGold),
-          textAlign: TextAlign.center,
-        ),
-        Text(
-          'gold',
-          style: PixelText.body(size: 12, color: AppColors.parchment),
-          textAlign: TextAlign.center,
-        ),
-        if (payoutTiers.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: _buildPayoutBreakdown(
-              payoutTiers,
-              key: const Key('race-prize-pool-summary'),
-              labelColor: AppColors.parchment,
-              amountColor: AppColors.pillGold,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  // Inline payout breakdown: the podium (top 3) plus a tappable "+N MORE" that
-  // opens the full per-place list. For winner-takes-all / top-3 this is just the
-  // podium; for the field-scaled presets (top half, everyone but last) a big
-  // race can pay many places, so the rest live behind the tap rather than
-  // overflowing the card.
   Widget _buildPayoutBreakdown(
     List<PayoutTier> tiers, {
     Key? key,
@@ -3759,8 +4105,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       final elapsed = DateTime.now().difference(startedAt).inSeconds;
       elapsedFrac = (elapsed / total).clamp(0.0, 1.0).toDouble();
     }
-    final expected =
-        _baselineStepsPerDay * days * math.max(elapsedFrac, 0.15);
+    final expected = _baselineStepsPerDay * days * math.max(elapsedFrac, 0.15);
     final denom = math.max(leaderSteps.toDouble(), expected.toDouble());
     return denom > 0 ? denom : 1.0;
   }
@@ -3791,46 +4136,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     if (n >= 1000 && n % 1000 == 0) return '${n ~/ 1000}K';
     if (n >= 10000) return '${(n / 1000).round()}K';
     return _formatSteps(n);
-  }
-}
-
-class _CountdownUnit extends StatelessWidget {
-  final int value;
-  final String label;
-  final Color labelColor;
-
-  const _CountdownUnit({
-    required this.value,
-    required this.label,
-    this.labelColor = AppColors.textMid,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: AppColors.woodDark,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.woodShadow.withValues(alpha: 0.5),
-                offset: const Offset(0, 3),
-                blurRadius: 6,
-              ),
-            ],
-          ),
-          child: Text(
-            value.toString().padLeft(2, '0'),
-            style: PixelText.number(size: 26, color: AppColors.parchment),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(label, style: PixelText.title(size: 11, color: labelColor)),
-      ],
-    );
   }
 }
 

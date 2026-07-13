@@ -22,42 +22,6 @@ BoxDecoration raceCardDecoration() => BoxDecoration(
   ],
 );
 
-/// Section title row (optional icon + title + optional trailing widget). Sits
-/// above a section card.
-class SectionHeader extends StatelessWidget {
-  const SectionHeader({
-    super.key,
-    required this.title,
-    this.icon,
-    this.trailing,
-  });
-
-  final String title;
-  final IconData? icon;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        if (icon != null) ...[
-          Icon(icon, size: 20, color: AppColors.pillGoldDark),
-          const SizedBox(width: 6),
-        ],
-        Expanded(
-          child: Text(
-            title,
-            style: PixelText.title(size: 22, color: AppColors.textDark),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        if (trailing != null) ...[const SizedBox(width: 8), trailing!],
-      ],
-    );
-  }
-}
-
 /// A rounded badge pill.
 class Pill extends StatelessWidget {
   const Pill({
@@ -81,7 +45,10 @@ class Pill extends StatelessWidget {
         color: background,
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(label, style: PixelText.title(size: fontSize, color: foreground)),
+      child: Text(
+        label,
+        style: PixelText.title(size: fontSize, color: foreground),
+      ),
     );
   }
 }
@@ -89,7 +56,11 @@ class Pill extends StatelessWidget {
 /// Placement badge: medal-tinted for the podium, neutral otherwise, or a
 /// fallback label (e.g. LIVE) when there's no placement yet.
 class PlacementPill extends StatelessWidget {
-  const PlacementPill({super.key, required this.placement, this.fallbackLabel = 'LIVE'});
+  const PlacementPill({
+    super.key,
+    required this.placement,
+    this.fallbackLabel = 'LIVE',
+  });
 
   final int? placement;
   final String fallbackLabel;
@@ -147,7 +118,10 @@ class StatColumn extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           value,
-          style: PixelText.title(size: 14, color: valueColor ?? AppColors.textDark),
+          style: PixelText.title(
+            size: 14,
+            color: valueColor ?? AppColors.textDark,
+          ),
         ),
       ],
     );

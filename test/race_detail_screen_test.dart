@@ -382,6 +382,10 @@ void main() {
 
       expect(find.text('ACCEPT'), findsOneWidget);
 
+      // The race-day hero sits above the actions — scroll the button into
+      // view before tapping.
+      await tester.ensureVisible(find.text('ACCEPT'));
+      await tester.pump();
       await tester.tap(find.text('ACCEPT'));
       await tester.pump();
 
@@ -393,7 +397,10 @@ void main() {
       expect(backendApiService.respondCalls, 0);
 
       await tester.tap(find.text('LOCK IT IN'));
-      await tester.pumpAndSettle();
+      // Bounded pumps instead of pumpAndSettle: the hero's spinning-coin
+      // prize chip animates forever, so the tree never fully settles.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(backendApiService.respondCalls, 1);
     },
@@ -417,18 +424,19 @@ void main() {
       await tester.pump();
       await tester.pump();
 
+      // The prize pool lives in a HUD chip on the hero; tapping it opens the
+      // payout breakdown sheet.
       expect(find.text('PRIZE POOL'), findsOneWidget);
       expect(find.text('600'), findsOneWidget);
       final prizePoolBoard = find.byKey(const Key('race-prize-pool-board'));
-      final prizePoolSummary = find.byKey(const Key('race-prize-pool-summary'));
       expect(prizePoolBoard, findsOneWidget);
+
+      await tester.tap(prizePoolBoard);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      final prizePoolSummary = find.byKey(const Key('race-prize-pool-summary'));
       expect(prizePoolSummary, findsOneWidget);
-      expect(
-        (tester.getRect(prizePoolSummary).center.dx -
-                tester.getRect(prizePoolBoard).center.dx)
-            .abs(),
-        lessThanOrEqualTo(1),
-      );
       expect(
         find.descendant(of: prizePoolSummary, matching: find.text('1ST')),
         findsOneWidget,
@@ -485,7 +493,12 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      // Podium shown inline; the remaining two places collapse behind "+2 MORE".
+      // Open the prize-pool sheet from the hero chip: the podium shows
+      // inline; the remaining two places collapse behind "+2 MORE".
+      await tester.tap(find.byKey(const Key('race-prize-pool-board')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
       final summary = find.byKey(const Key('race-prize-pool-summary'));
       expect(summary, findsOneWidget);
       expect(
@@ -649,11 +662,18 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      final retroCards = find.byType(RetroCard);
-      final participantCardSize = tester.getSize(retroCards.at(1));
-      final waitingCardSize = tester.getSize(retroCards.at(2));
-
-      expect(waitingCardSize.width, equals(participantCardSize.width));
+      // The waiting-for-creator card is the only RetroCard on the accepted
+      // pending view; it must stretch to the full padded content width
+      // instead of shrink-wrapping its text.
+      final waitingCard = find.byType(RetroCard);
+      expect(waitingCard, findsOneWidget);
+      final screenWidth = tester
+          .getSize(find.byType(RaceDetailScreen))
+          .width;
+      expect(
+        tester.getSize(waitingCard).width,
+        equals(screenWidth - 24), // 12px gutter each side
+      );
     },
   );
 }

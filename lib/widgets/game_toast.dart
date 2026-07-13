@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -87,6 +88,7 @@ class _GameToastOverlayState extends State<_GameToastOverlay>
   late final Animation<Offset> _slideAnimation;
   Timer? _dismissTimer;
   bool _dismissed = false;
+  bool _entranceStarted = false;
   double _dragOffset = 0;
 
   @override
@@ -94,15 +96,31 @@ class _GameToastOverlayState extends State<_GameToastOverlay>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 260),
-      reverseDuration: const Duration(milliseconds: 220),
+      duration: const Duration(milliseconds: 420),
+      reverseDuration: const Duration(milliseconds: 200),
     );
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, -1),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
-    _controller.forward();
+    // Springy drop-in: overshoots the resting spot slightly, then settles.
+    _slideAnimation = Tween<Offset>(begin: const Offset(0, -1.2), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: _controller,
+            curve: Curves.easeOutBack,
+            reverseCurve: Curves.easeInCubic,
+          ),
+        );
     _startDismissTimer();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_entranceStarted) return;
+    _entranceStarted = true;
+    if (MediaQuery.of(context).disableAnimations) {
+      _controller.value = 1;
+    } else {
+      _controller.forward();
+    }
   }
 
   @override
@@ -181,40 +199,53 @@ class _GameToastOverlayState extends State<_GameToastOverlay>
               key: widget.shellKey,
               decoration: BoxDecoration(
                 color: widget.palette.shadow,
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: [
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: AppColors.roofDark.withValues(alpha: 0.55),
+                  width: 2,
+                ),
+                boxShadow: const [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.20),
-                    blurRadius: 14,
-                    offset: const Offset(0, 7),
-                  ),
-                  BoxShadow(
-                    color: widget.palette.face.withValues(alpha: 0.16),
-                    blurRadius: 18,
+                    color: Color(0x66000000),
+                    offset: Offset(0, 4),
+                    blurRadius: 0,
                   ),
                 ],
               ),
               child: Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(11),
                   child: DecoratedBox(
                     decoration: BoxDecoration(
                       color: AppColors.parchment,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: AppColors.parchmentBorder,
-                        width: 1.5,
-                      ),
+                      borderRadius: BorderRadius.circular(11),
                     ),
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(12, 10, 12, 11),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          _ToastBadge(
-                            key: widget.badgeKey,
-                            palette: widget.palette,
+                          // A couple of decaying wiggles as the toast lands —
+                          // driven by the entrance controller, so no extra
+                          // timers and it renders static under
+                          // disableAnimations (controller pinned at 1).
+                          AnimatedBuilder(
+                            animation: _controller,
+                            builder: (context, child) {
+                              final t = _controller.value;
+                              final angle = t >= 1
+                                  ? 0.0
+                                  : math.sin(t * math.pi * 4) * 0.16 * (1 - t);
+                              return Transform.rotate(
+                                angle: angle,
+                                child: child,
+                              );
+                            },
+                            child: _ToastBadge(
+                              key: widget.badgeKey,
+                              palette: widget.palette,
+                            ),
                           ),
                           const SizedBox(width: 11),
                           Expanded(

@@ -15,11 +15,22 @@ class HomeCourseTrack extends StatefulWidget {
     this.goalSteps,
     this.milestoneProgress,
     this.milestoneLabel,
+    this.backdropAsset,
+    this.frameless = false,
   });
 
   final List<GoalTrackRunner> runners;
   final double height;
   final int? goalSteps;
+
+  /// Alternate course artwork (e.g. the race-day grandstand variant on the
+  /// race detail hero). Must share the home course's dimensions and ground
+  /// line so runner anchors stay valid. Null → the home course.
+  final String? backdropAsset;
+
+  /// When true the backdrop renders edge-to-edge: no rounded corners, no
+  /// hairline border (for full-bleed hero placements).
+  final bool frameless;
 
   /// Position of a "goal" milestone marker along the track, in the same
   /// leader-relative 0..1 space as runner progress. When null, no marker.
@@ -132,6 +143,10 @@ class _HomeCourseTrackState extends State<HomeCourseTrack>
                                   courseWidth: layout.courseWidth,
                                   worldHeight: layout.worldHeight,
                                   cropTop: layout.cropTop,
+                                  asset:
+                                      widget.backdropAsset ??
+                                      _HomeCourseTrackState._courseAsset,
+                                  frameless: widget.frameless,
                                 ),
                               ),
                               if (_milestonePoint(layout) case final point?)
@@ -1303,29 +1318,35 @@ class _CourseBackdrop extends StatelessWidget {
     required this.courseWidth,
     required this.worldHeight,
     required this.cropTop,
+    required this.asset,
+    this.frameless = false,
   });
 
   final double courseWidth;
   final double worldHeight;
   final double cropTop;
+  final String asset;
+  final bool frameless;
 
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.circular(frameless ? 0 : 6),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: const Color(0xFFD6EEF8),
-          border: Border.all(
-            color: HomeColors.line.withValues(alpha: 0.14),
-            width: 2,
-          ),
+          border: frameless
+              ? null
+              : Border.all(
+                  color: HomeColors.line.withValues(alpha: 0.14),
+                  width: 2,
+                ),
         ),
         child: ClipRect(
           child: Transform.translate(
             offset: Offset(0, -cropTop),
             child: Image.asset(
-              _HomeCourseTrackState._courseAsset,
+              asset,
               width: courseWidth,
               height: worldHeight,
               fit: BoxFit.fill,

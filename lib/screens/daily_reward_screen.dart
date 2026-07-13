@@ -309,6 +309,13 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
               filter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 2.5),
               child: ColoredBox(
                 color: AppColors.roofDark.withValues(alpha: 0.78),
+                child: const CustomPaint(
+                  painter: ArcadeCheckerPainter(
+                    tileColor: Color(0x0AFFFFFF),
+                    stripeColor: Color(0x14000000),
+                    drawBottomStripe: false,
+                  ),
+                ),
               ),
             ),
           ),
@@ -343,9 +350,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
   Widget _buildLoading() {
     return const Padding(
       padding: EdgeInsets.all(48),
-      child: Center(
-        child: CircularProgressIndicator(color: AppColors.accent),
-      ),
+      child: Center(child: CircularProgressIndicator(color: AppColors.accent)),
     );
   }
 
@@ -418,9 +423,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
             childAspectRatio: 0.82,
             mainAxisSpacing: 10,
             crossAxisSpacing: 10,
-            children: [
-              for (final tile in ladder) _LadderTile(tile: tile),
-            ],
+            children: [for (final tile in ladder) _LadderTile(tile: tile)],
           ),
           const SizedBox(height: 18),
           PillButton(
@@ -713,10 +716,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
       final roll = rng.nextDouble();
       if (roll < commonOdds) {
         items.add(
-          _DailyStripItem.coins(
-            randomCoins(commonMin, commonMax),
-            'COMMON',
-          ),
+          _DailyStripItem.coins(randomCoins(commonMin, commonMax), 'COMMON'),
         );
       } else if (roll < commonOdds + uncommonOdds) {
         items.add(
@@ -1266,7 +1266,10 @@ class _AccessorySpinnerState extends State<_AccessorySpinner>
       vsync: this,
       duration: const Duration(milliseconds: 4000),
     );
-    _animation = CurvedAnimation(parent: _controller, curve: Curves.easeOutQuart);
+    _animation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutQuart,
+    );
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
         Future.delayed(const Duration(milliseconds: 600), widget.onComplete);
@@ -1309,7 +1312,8 @@ class _AccessorySpinnerState extends State<_AccessorySpinner>
         builder: (context, constraints) {
           final viewportWidth = constraints.maxWidth;
           final centerX = viewportWidth / 2;
-          final resultCenter = _resultPosition * _totalItemWidth + _itemWidth / 2;
+          final resultCenter =
+              _resultPosition * _totalItemWidth + _itemWidth / 2;
           final totalScroll = resultCenter - centerX;
 
           return GameContainer(
@@ -1357,7 +1361,11 @@ class _AccessorySpinnerState extends State<_AccessorySpinner>
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      for (int i = 0; i < _strip.length; i++) ...[
+                                      for (
+                                        int i = 0;
+                                        i < _strip.length;
+                                        i++
+                                      ) ...[
                                         if (i > 0)
                                           const SizedBox(width: _itemSpacing),
                                         _SpinTile(item: _strip[i]),
@@ -1435,7 +1443,11 @@ class _CloseButton extends StatelessWidget {
             border: Border.all(color: AppColors.error, width: 2),
           ),
           child: const Center(
-            child: Icon(Icons.close_rounded, size: 18, color: AppColors.textDark),
+            child: Icon(
+              Icons.close_rounded,
+              size: 18,
+              color: AppColors.textDark,
+            ),
           ),
         ),
       ),
