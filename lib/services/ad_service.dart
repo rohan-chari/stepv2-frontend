@@ -51,6 +51,14 @@ class AdService implements ExtraSpinAdController {
       String.fromEnvironment('ADMOB_BANNER_AD_UNIT_ID');
   static const _testBannerIos = 'ca-app-pub-3940256099942544/2934735716';
 
+  // Native in-feed placement (races tab list row). Same deal as the banner
+  // unit: real id baked in per-build via --dart-define, Google's public iOS
+  // "native advanced" test unit otherwise. Gated by the SAME bannersEnabled
+  // switch — natives are just a better-dressed banner, not a new ad surface.
+  static const _envNativeAdUnitId =
+      String.fromEnvironment('ADMOB_NATIVE_AD_UNIT_ID');
+  static const _testNativeIos = 'ca-app-pub-3940256099942544/3986624511';
+
   /// Remote kill switch, set from the backend's `featureFlags.bannerAdsEnabled`
   /// (AuthService mirrors it here on restore and on every /auth/me sync, and it
   /// is toggleable from Admin → Settings without an app release). Defaults OFF:
@@ -74,6 +82,13 @@ class AdService implements ExtraSpinAdController {
   /// [bannersEnabled] is false without the define).
   static String get bannerAdUnitId =>
       _envBannerAdUnitId.isNotEmpty ? _envBannerAdUnitId : _testBannerIos;
+
+  /// Ad unit for [AdInlineCard]'s native in-feed ad. The real unit when
+  /// injected at build time, otherwise Google's public test native unit (only
+  /// reached in dev, since [bannersEnabled] is false without the banner
+  /// define).
+  static String get nativeAdUnitId =>
+      _envNativeAdUnitId.isNotEmpty ? _envNativeAdUnitId : _testNativeIos;
 
   /// Initialize the ads SDK once (with an iOS ATT prompt on first run). Shared
   /// by the rewarded-ad path and [AdBannerSlot] so neither owns SDK setup.

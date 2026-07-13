@@ -144,12 +144,16 @@ flutter run -d 00008150-000171DE2638401C --device-connection=attached \
 # the display banners at the bottom of the shop and the race mystery-box overlay
 # (iOS only, display-only). Omit either and that ad simply doesn't exist in the
 # build (dev/staging fall back to Google's test banner for the banner slot).
+# ADMOB_NATIVE_AD_UNIT_ID bakes in the races-tab in-feed NATIVE ad unit; omit
+# it and the slot uses Google's test native ad (gated by the same banner
+# switch, so it still requires ADMOB_BANNER_AD_UNIT_ID to render at all).
 # GOOGLE_IOS_CLIENT_ID here is the PROD iOS OAuth client (prod backend only
 # accepts this one — the staging client would fail with "audience is invalid").
 flutter run -d 00008150-000171DE2638401C --device-connection=attached --debug \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
   --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
+  --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \
   --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com
 ```
 
@@ -160,7 +164,12 @@ flutter run -d <device-id> --dart-define=BACKEND_BASE_URL=http://<your-mac-lan-i
 
 ### Run on simulator
 ```bash
-flutter run -d ios
+flutter run -d 19CCB48E-62CA-4AA1-8E55-B3F287E9BB0D \
+    --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
+    --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
+    --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
+    --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \
+    --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com
 ```
 
 ### Build production iOS
@@ -170,10 +179,13 @@ flutter run -d ios
 # rewarded-ad extra spin and the display banners are compiled out (safe, but
 # missing). GOOGLE_IOS_CLIENT_ID (prod iOS OAuth client) is likewise REQUIRED
 # or the release ships without the Google sign-in button. See DEPLOYMENT.md.
+# ADMOB_NATIVE_AD_UNIT_ID is the races-tab in-feed NATIVE ad unit — omitting
+# it serves Google's TEST native ad in that slot (do not ship that).
 flutter build ipa --release \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
   --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
+  --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \
   --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com
 ```
 

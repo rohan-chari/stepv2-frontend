@@ -80,6 +80,9 @@ flutter:
     - assets/images/
     - assets/images/accessories/
     - assets/images/powerups/
+    # Variable TTFs registered at runtime by the iOS native ad factory
+    # (RaceFeedNativeAdFactory) — assets only, NOT a flutter fonts: entry.
+    - assets/fonts/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

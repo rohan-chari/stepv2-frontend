@@ -2,13 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import '../services/ad_service.dart';
-import '../styles.dart';
 
-/// In-feed ad row for list surfaces (races tab): a card-framed inline
-/// adaptive banner with an "AD" tag, sized to sit between race rows. Renders
+/// In-feed ad row for the races tab: a NATIVE ad rendered by the custom iOS
+/// NativeAdFactory registered as 'raceFeedAd' (ios/Runner/
+/// RaceFeedNativeAdFactory.swift), styled to read as another row in the race
+/// list — parchment background, hairline top divider, race-row typography,
+/// "AD" attribution pill in the native layout. The factory's 120x120pt media
+/// view meets AdMob's minimum for VIDEO creatives (the stock small template
+/// capped media at ~25% width, below the bar), so video stays ON for this ad
+/// unit in the AdMob console. Space Grotesk / DM Sans ship as flutter assets
+/// (assets/fonts/) and are registered natively at ad-build time. Renders
 /// NOTHING — zero size — unless this build has banners enabled AND the ad
-/// loads, so lists never show a gap or stray divider for a missing ad.
-/// Part of the ad layer alongside AdService: no screen touches the ads SDK.
+/// loads, so lists never show a gap or stray divider for a missing ad. Part
+/// of the ad layer alongside AdService: no screen touches the ads SDK.
 class AdInlineCard extends StatefulWidget {
   const AdInlineCard({super.key});
 
@@ -17,64 +23,60 @@ class AdInlineCard extends StatefulWidget {
 }
 
 class _AdInlineCardState extends State<AdInlineCard> {
-  // Horizontal chrome of the card frame around the creative: 6px padding and
-  // 2px border on each side. Subtracted from the measured slot width so the
-  // ad is requested at exactly the width it will render in.
-  static const double _frameInset = 16;
-  // Cap the creative height so the ad sits between race rows instead of
-  // dominating the list.
-  static const int _maxCreativeHeight = 120;
+  // Total row height built by the native factory: 120pt media + 12pt
+  // vertical insets on each side. Must match RaceFeedNativeAdFactory.swift.
+  static const double _rowHeight = 144;
 
-  BannerAd? _ad;
-  AdSize? _resolvedSize;
-  bool _loadStarted = false;
+  NativeAd? _ad;
+  bool _adLoaded = false;
 
-  /// Requests an inline adaptive banner at the MEASURED slot width (from
-  /// LayoutBuilder, so it's the true list-item width rather than a screen-size
-  /// guess — a wrong/zero width here is what the SDK rejects with "Invalid ad
-  /// width or height").
-  Future<void> _loadForWidth(int width) async {
-    if (_loadStarted || width <= 0) return;
-    _loadStarted = true;
+  Future<void> _load() async {
     if (!AdService.bannersEnabled) return;
     await AdService.ensureInitialized();
     if (!mounted) return;
 
-    final size = AdSize.getInlineAdaptiveBannerAdSize(width, _maxCreativeHeight);
-    final ad = BannerAd(
-      adUnitId: AdService.bannerAdUnitId,
-      size: size,
+    final ad = NativeAd(
+      adUnitId: AdService.nativeAdUnitId,
       request: const AdRequest(),
-      listener: BannerAdListener(
-        onAdLoaded: (ad) async {
-          // Inline adaptive: the size passed to BannerAd is a placeholder —
-          // the platform resolves the real creative height at load time, so
-          // the frame must be sized from getPlatformAdSize(), not `ad.size`.
-          final banner = ad as BannerAd;
-          final resolved = await banner.getPlatformAdSize();
+      // Custom layout registered in AppDelegate — replaces the stock
+      // NativeTemplateStyle so the media view can be 120x120 (video-eligible)
+      // and the row blends with the race list.
+      factoryId: 'raceFeedAd',
+      nativeAdOptions: NativeAdOptions(
+        adChoicesPlacement: AdChoicesPlacement.topRightCorner,
+        videoOptions: VideoOptions(startMuted: true),
+      ),
+      listener: NativeAdListener(
+        onAdLoaded: (ad) {
           if (!mounted) {
             ad.dispose();
             return;
           }
-          setState(() {
-            _ad = banner;
-            _resolvedSize = resolved ?? banner.size;
-          });
+          setState(() => _adLoaded = true);
         },
         onAdFailedToLoad: (ad, error) {
           // No fill / error: stay collapsed and the list closes up normally.
-          debugPrint('Inline ad failed to load (width=$width): $error');
+          debugPrint('Inline native ad failed to load: $error');
           ad.dispose();
           if (mounted) {
             setState(() {
               _ad = null;
-              _resolvedSize = null;
+              _adLoaded = false;
             });
           }
         },
       ),
     );
+    _ad = ad;
     await ad.load();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // A factory-built native ad doesn't need a measured slot width to
+    // request — kick off the load immediately.
+    _load();
   }
 
   @override
@@ -87,53 +89,15 @@ class _AdInlineCardState extends State<AdInlineCard> {
   Widget build(BuildContext context) {
     if (!AdService.bannersEnabled) return const SizedBox.shrink();
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final slotWidth = constraints.maxWidth.isFinite
-            ? (constraints.maxWidth - _frameInset).truncate()
-            : 0;
-        if (!_loadStarted && slotWidth > 0) {
-          // Kick off the load once real layout constraints exist; loading from
-          // the build phase itself isn't allowed to call setState.
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _loadForWidth(slotWidth);
-          });
-        }
+    final ad = _ad;
+    if (ad == null || !_adLoaded) return const SizedBox.shrink();
 
-        final ad = _ad;
-        final size = _resolvedSize;
-        if (ad == null || size == null) return const SizedBox.shrink();
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Container(
-            decoration: BoxDecoration(
-              color: AppColors.parchmentDark,
-              border: Border.all(color: AppColors.parchmentBorder, width: 2),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            padding: const EdgeInsets.all(6),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'AD',
-                  style: PixelText.body(size: 9, color: AppColors.textMid),
-                ),
-                const SizedBox(height: 4),
-                Center(
-                  child: SizedBox(
-                    width: size.width.toDouble(),
-                    height: size.height.toDouble(),
-                    child: AdWidget(ad: ad),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+    // Edge-to-edge: all chrome (background, divider, insets, AD pill) lives
+    // in the native layout so the row sits flush in the section card.
+    return SizedBox(
+      width: double.infinity,
+      height: _rowHeight,
+      child: AdWidget(ad: ad),
     );
   }
 }

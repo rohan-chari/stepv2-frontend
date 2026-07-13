@@ -267,6 +267,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   bool _chatInitialized = false;
   bool _chatHasUnread = false;
   final TextEditingController _messageInput = TextEditingController();
+  final FocusNode _messageFocus = FocusNode();
   bool _sendingMessage = false;
   bool _sharingRace = false;
   // Anchors the iOS/iPad share popover to the share button's rect.
@@ -335,7 +336,25 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   void initState() {
     super.initState();
     _countdownNow = DateTime.now();
+    _messageFocus.addListener(_onComposerFocusChanged);
     _loadDetails();
+  }
+
+  // The composer lives inside the page's SingleChildScrollView, so the
+  // keyboard can open with the field scrolled out of view; once the keyboard
+  // animation has settled, scroll it back to just above the keyboard.
+  void _onComposerFocusChanged() {
+    if (!_messageFocus.hasFocus) return;
+    Future.delayed(const Duration(milliseconds: 350), () {
+      if (!mounted || !_messageFocus.hasFocus) return;
+      final ctx = _messageFocus.context;
+      if (ctx == null || !ctx.mounted) return;
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 1.0,
+        duration: const Duration(milliseconds: 150),
+      );
+    });
   }
 
   @override
@@ -343,6 +362,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     _pollTimer?.cancel();
     _countdownTimer?.cancel();
     _messageInput.dispose();
+    _messageFocus.dispose();
     final chat = _chat;
     if (chat != null) {
       chat.markRead();
@@ -1706,8 +1726,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                 // Anchored bottom banner, in-flow below the scrollable so it
                 // reserves its own space. SafeArea above excludes the bottom, so
                 // the slot pads itself clear of the home indicator when an ad is
-                // showing; it collapses to zero size otherwise.
-                const AdBannerSlot(withBottomSafeArea: true),
+                // showing; it collapses to zero size otherwise, and also while
+                // the keyboard is open so it can't cover the chat composer.
+                const AdBannerSlot(
+                  withBottomSafeArea: true,
+                  hideWhenKeyboardOpen: true,
+                ),
               ],
             ),
           ),
@@ -1916,7 +1940,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       ),
       builder: (ctx) {
         return SafeArea(
-          child: Padding(
+          child: Container(
+            width: double.infinity,
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -3482,6 +3507,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
           Expanded(
             child: TextField(
               controller: _messageInput,
+              focusNode: _messageFocus,
               minLines: 1,
               maxLines: 4,
               maxLength: 500,

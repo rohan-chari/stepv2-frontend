@@ -146,6 +146,9 @@ For most releases, you can deploy backend first because the old App Store binary
 # the shop/inventory and the race mystery-box overlay (iOS-only, display-only:
 # no reward, no backend). Both define are safe to forget — the app just ships
 # without that ad — but a prod release should carry both.
+# ADMOB_NATIVE_AD_UNIT_ID bakes in the races-tab in-feed NATIVE ad (styled
+# template, same kill switch as banners). A prod build WITHOUT it falls back
+# to Google's TEST native ad in that slot — always carry the define.
 # GOOGLE_IOS_CLIENT_ID enables the "Sign in with Google" button on iOS
 # (PROD iOS OAuth client, registered for com.rohanchari.steptracker). The
 # backend's GOOGLE_AUTH_CLIENT_ID allowlist must already include this client
@@ -154,12 +157,15 @@ flutter build ipa --release \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
   --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
+  --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \
   --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com
 ```
 
 > The banner unit (`/5308967309`) lives under the iOS AdMob app (`~5288861983`).
 > Omit the define on dev/staging to fall back to Google's public test banner;
-> new units can take up to an hour to start filling live ads.
+> new units can take up to an hour to start filling live ads. The native unit
+> for the races-tab in-feed slot (`/9892856363`, created 2026-07-13) lives
+> under the same iOS AdMob app.
 
 Upload via Transporter to "Bara" in App Store Connect.
 

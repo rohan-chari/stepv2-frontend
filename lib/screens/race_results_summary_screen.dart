@@ -94,7 +94,7 @@ class RaceResultsSummaryScreen extends StatelessWidget {
                         // Banner below the action so it never delays the
                         // dismiss; collapses to zero size when adless (its own
                         // top padding provides the gap when an ad shows).
-                        const AdBannerSlot(),
+                        const AdBannerSlot(style: AdBannerStyle.inCard),
                       ],
                     ),
                   ),

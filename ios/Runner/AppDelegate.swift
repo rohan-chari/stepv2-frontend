@@ -3,6 +3,7 @@ import Flutter
 import HealthKit
 import UIKit
 import UserNotifications
+import google_mobile_ads
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -29,6 +30,15 @@ import UserNotifications
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     GeneratedPluginRegistrant.register(with: self)
+
+    // Custom native-ad layout for the races-tab in-feed ad (AdInlineCard
+    // requests factoryId "raceFeedAd"). Registered for the app's lifetime —
+    // no unregister needed.
+    FLTGoogleMobileAdsPlugin.registerNativeAdFactory(
+      self,
+      factoryId: "raceFeedAd",
+      nativeAdFactory: RaceFeedNativeAdFactory()
+    )
 
     let controller = window!.rootViewController as! FlutterViewController
 
