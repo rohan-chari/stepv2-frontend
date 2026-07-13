@@ -47,6 +47,10 @@ Update this file after every major/minor change. Add new work under
 ### Changed
 - `PillButton` shadow is now a straight-down hard drop matching the press
   animation (was a diagonal smear on textured backgrounds).
+- Accessory art downscaled to a 512px cap (rendered at <=150px everywhere;
+  visually identical, verified at render size). Cuts bundled accessory
+  assets from 22.5MB to 7.4MB (~15MB smaller installs). Animation sheets
+  left untouched to preserve frame alignment.
 - CLAUDE.md: new hard rule — never hand-draw shippable artwork; always use
   the Codex imagegen pipeline (or crop existing generated assets).
 
