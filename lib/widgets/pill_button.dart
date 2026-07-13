@@ -59,7 +59,7 @@ class _PillButtonState extends State<PillButton> {
 
   @override
   Widget build(BuildContext context) {
-    final (face, dark, _) = _colors();
+    final (face, dark, shadow) = _colors();
     final disabledFace = face.withValues(alpha: 0.45);
     final disabledDark = dark.withValues(alpha: 0.45);
 
@@ -89,12 +89,15 @@ class _PillButtonState extends State<PillButton> {
           borderRadius: BorderRadius.circular(8),
           color: activeFace,
           border: Border.all(color: activeDark, width: 2),
+          // Straight-down hard shadow: the press animation drops the button
+          // 4px onto it, so it reads as a physical underside — no diagonal
+          // smear on textured backgrounds.
           boxShadow: _pressed
               ? []
               : [
                   BoxShadow(
-                    color: activeDark.withValues(alpha: 0.24),
-                    offset: const Offset(4, 4),
+                    color: shadow.withValues(alpha: _enabled ? 0.55 : 0.25),
+                    offset: const Offset(0, 4),
                     blurRadius: 0,
                   ),
                 ],

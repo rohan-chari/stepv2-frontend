@@ -9,13 +9,14 @@ import '../../utils/at_name.dart';
 import '../../utils/race_display.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
+import '../../widgets/arcade_fx.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/global_event_banner.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/step_milestones_section.dart';
 import '../../widgets/streak_chip.dart' show StreakChip, StreakChipState;
-import '../../widgets/home_chrome.dart';
 import '../../widgets/home_course_track.dart' show CapybaraCustomizationPreview;
+import '../../widgets/home_hero_scene.dart';
 import '../../widgets/race_opportunity_card.dart';
 import '../../widgets/race_ui.dart';
 import '../../tutorial/tutorial_screen.dart';
@@ -23,6 +24,12 @@ import '../display_name_screen.dart';
 import '../public_races_screen.dart';
 import '../get_coins_screen.dart';
 import '../referral_screen.dart';
+
+// Shared hard-offset "game piece" shadow for home cards — flat, no blur, so
+// cards read as chunky physical tiles sitting on the dark felt.
+const _homeCardShadow = [
+  BoxShadow(color: Color(0x66000000), offset: Offset(0, 4), blurRadius: 0),
+];
 
 class HomeTab extends StatelessWidget {
   final StepData? stepData;
@@ -129,15 +136,33 @@ class HomeTab extends StatelessWidget {
 
     return Stack(
       children: [
-        // Full-screen background painted behind the status-bar inset too, so the
-        // transparent system status bar sits on the hero's green (roofLight)
-        // instead of the page background showing through as cream. Mirrors the
-        // other tabs (e.g. RacesTab).
-        const Positioned.fill(child: ColoredBox(color: AppColors.roofLight)),
+        // Full-screen backdrop painted behind the status-bar inset and both
+        // overscroll zones: sky blue up top (behind the hero / status bar),
+        // the arcade green below (behind the content / bottom overscroll).
+        // A hard-stop gradient (not a Column of Expandeds — that variant
+        // reproducibly fails to paint here, see golden A/B test 2026-07-12)
+        // splits the fill at mid-screen in a single paint op.
+        const Positioned.fill(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                stops: [0.5, 0.5],
+                colors: [HomeHeroScene.skyTopColor, AppColors.roofLight],
+              ),
+            ),
+          ),
+        ),
         Padding(
-          padding: EdgeInsets.only(top: topInset, bottom: bottomPadding),
+          // No top inset: the hero scene extends up behind the status bar so
+          // the sky scrolls away with the content (a fixed sky band up top
+          // reads as a weird blue header once you scroll). The hero adds the
+          // inset internally to keep its HUD clear of the status bar.
+          padding: EdgeInsets.only(bottom: bottomPadding),
           child: RefreshIndicator(
             onRefresh: onRefresh,
+            edgeOffset: topInset,
             color: AppColors.accent,
             backgroundColor: AppColors.parchment,
             child: CustomScrollView(
@@ -146,51 +171,102 @@ class HomeTab extends StatelessWidget {
                 SliverToBoxAdapter(child: _buildHeroSection(context)),
                 SliverToBoxAdapter(
                   child: ColoredBox(
-                    color: AppColors.parchment,
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // GLOBAL STEP EVENT — on-brand "2x STEPS" banner shown to
-                          // every user while a step-multiplier window is live. The
-                          // shared widget self-ticks the countdown and collapses on
-                          // its own once the window ends.
-                          if (_buildGlobalEventBanner() case final banner?)
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                              child: banner,
+                    color: AppColors.roofLight,
+                    child: CustomPaint(
+                      painter: const ArcadeCheckerPainter(
+                        drawBottomStripe: false,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // Soft soil shadow under the hero's dirt edge so the
+                            // ground blends into the green instead of hard-cutting.
+                            Container(
+                              height: 16,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    AppColors.dirtDark.withValues(alpha: 0.38),
+                                    AppColors.dirtDark.withValues(alpha: 0.0),
+                                  ],
+                                ),
+                              ),
                             ),
-                          if (raceCard != null)
-                            _buildRaceSection()
-                          else if (raceCardLoading)
-                            _buildRaceSkeletonSection(),
-                          _SetupPromptsSection(
-                            displayName: displayName,
-                            hasProfilePhoto: hasProfilePhoto,
-                            authService: authService,
-                            onDisplayNameChanged: onDisplayNameChanged,
-                            onAddProfilePhoto: onAddProfilePhoto,
-                            onDismissProfilePhotoPrompt:
-                                onDismissProfilePhotoPrompt,
-                          ),
-                          KeyedSubtree(
-                            key: tutorialMilestonesKey,
-                            child: StepMilestonesSection(
-                              key: stepMilestonesKey,
-                              authService: authService,
-                              backendApiService: backendApiService,
-                              currentSteps: stepData?.steps,
-                              // Fed by the home batch so the claim card lands
-                              // with everything else; falls back to its own
-                              // fetch on old backends.
-                              initialData:
-                                  raceCard?['stepMilestones']
-                                      as Map<String, dynamic>?,
-                              awaitingBatch: raceCardLoading,
+                            // Streak + shop live just under the hero scene so the
+                            // world stays clean; they're the first card to bounce in.
+                            StaggerIn(
+                              index: 0,
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  14,
+                                  16,
+                                  0,
+                                ),
+                                child: _buildQuickActionsRow(context),
+                              ),
                             ),
-                          ),
-                        ],
+                            // GLOBAL STEP EVENT — on-brand "2x STEPS" banner shown to
+                            // every user while a step-multiplier window is live. The
+                            // shared widget self-ticks the countdown and collapses on
+                            // its own once the window ends.
+                            if (_buildGlobalEventBanner() case final banner?)
+                              StaggerIn(
+                                index: 1,
+                                child: Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    16,
+                                    16,
+                                    16,
+                                    0,
+                                  ),
+                                  child: banner,
+                                ),
+                              ),
+                            if (raceCard != null)
+                              StaggerIn(index: 2, child: _buildRaceSection())
+                            else if (raceCardLoading)
+                              StaggerIn(
+                                index: 2,
+                                child: _buildRaceSkeletonSection(),
+                              ),
+                            StaggerIn(
+                              index: 3,
+                              child: _SetupPromptsSection(
+                                displayName: displayName,
+                                hasProfilePhoto: hasProfilePhoto,
+                                authService: authService,
+                                onDisplayNameChanged: onDisplayNameChanged,
+                                onAddProfilePhoto: onAddProfilePhoto,
+                                onDismissProfilePhotoPrompt:
+                                    onDismissProfilePhotoPrompt,
+                              ),
+                            ),
+                            StaggerIn(
+                              index: 4,
+                              child: KeyedSubtree(
+                                key: tutorialMilestonesKey,
+                                child: StepMilestonesSection(
+                                  key: stepMilestonesKey,
+                                  authService: authService,
+                                  backendApiService: backendApiService,
+                                  currentSteps: stepData?.steps,
+                                  // Fed by the home batch so the claim card lands
+                                  // with everything else; falls back to its own
+                                  // fetch on old backends.
+                                  initialData:
+                                      raceCard?['stepMilestones']
+                                          as Map<String, dynamic>?,
+                                  awaitingBatch: raceCardLoading,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -235,7 +311,7 @@ class HomeTab extends StatelessWidget {
   Widget _buildRaceSection() {
     final card = raceCard!;
     return ColoredBox(
-      color: AppColors.parchment,
+      color: Colors.transparent,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -254,13 +330,13 @@ class HomeTab extends StatelessWidget {
 
   Widget _buildRaceSkeletonSection() {
     return ColoredBox(
-      color: AppColors.parchment,
+      color: Colors.transparent,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _HomeRaceHeader(onViewAll: onOpenRacesTab),
           SizedBox(
-            height: 218,
+            height: 240,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               physics: const NeverScrollableScrollPhysics(),
@@ -292,7 +368,7 @@ class HomeTab extends StatelessWidget {
 
     final itemCount = races.length + 1;
     return SizedBox(
-      height: 218,
+      height: 240,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
@@ -327,6 +403,7 @@ class HomeTab extends StatelessWidget {
             padding: EdgeInsets.only(right: index == races.length - 1 ? 0 : 12),
             child: _HomeActiveRaceTicket(
               width: itemWidth,
+              sweepDelay: Duration(milliseconds: 420 * index),
               raceName: race['name'] as String? ?? 'Race',
               endsAt: endsAt,
               placement: placement,
@@ -499,36 +576,47 @@ class HomeTab extends StatelessWidget {
       },
       child: SizedBox(
         width: 136,
-        height: 200,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: AppColors.parchment,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: AppColors.roofDark.withValues(alpha: 0.55),
-              width: 2,
+        height: 222,
+        child: PulseGlow(
+          borderRadius: 14,
+          minAlpha: 0.14,
+          maxAlpha: 0.38,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: AppColors.parchment,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.pillGoldDark, width: 2),
             ),
-          ),
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 18, 12, 16),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.add_rounded, size: 38, color: AppColors.roofMid),
-                  const SizedBox(height: 12),
-                  Text(
-                    'PUBLIC',
-                    textAlign: TextAlign.center,
-                    style: PixelText.title(size: 17, color: AppColors.textDark),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Find a race',
-                    textAlign: TextAlign.center,
-                    style: PixelText.body(size: 12, color: AppColors.textMid),
-                  ),
-                ],
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 18, 12, 16),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    WobbleBadge(
+                      child: Icon(
+                        Icons.add_circle_rounded,
+                        size: 42,
+                        color: AppColors.pillGoldShadow,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'PUBLIC',
+                      textAlign: TextAlign.center,
+                      style: PixelText.title(
+                        size: 17,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Find a race',
+                      textAlign: TextAlign.center,
+                      style: PixelText.body(size: 12, color: AppColors.textMid),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -537,207 +625,240 @@ class HomeTab extends StatelessWidget {
     );
   }
 
+  /// The hero is the capybara's world: generated pixel sky + sun, drifting
+  /// clouds, and the course scene's grass-and-dirt ground, with the
+  /// dressed-up capybara walking on the grass and today's steps floating as
+  /// a game HUD.
   Widget _buildHeroSection(BuildContext context) {
+    final viewportHeight = MediaQuery.of(context).size.height;
+    final compact = viewportHeight < 760;
+    // The scene runs edge-to-edge behind the status bar; the inset is added
+    // to the scene height and to every top-anchored element so the HUD stays
+    // clear of the system chrome.
+    final topInset = MediaQuery.of(context).padding.top;
+    final heroHeight = (compact ? 352.0 : 404.0) + topInset;
+    const groundHeight = 84.0;
+    final capySize = compact ? 126.0 : 148.0;
+
+    final Widget hud;
     if (isLoading && stepData == null) {
-      return const HomePanel(
-        radius: 0,
-        child: SizedBox(
-          height: 320,
-          child: Center(
-            child: SizedBox(
-              width: 36,
-              height: 36,
-              child: CircularProgressIndicator(
-                color: AppColors.parchment,
-                strokeWidth: 3,
+      hud = const Padding(
+        padding: EdgeInsets.only(top: 48),
+        // (sits below topInset via the HUD's Positioned offset)
+        child: Center(
+          child: SizedBox(
+            width: 36,
+            height: 36,
+            child: CircularProgressIndicator(
+              color: AppColors.parchment,
+              strokeWidth: 3,
+            ),
+          ),
+        ),
+      );
+    } else if (error != null) {
+      hud = Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Couldn’t load your pace',
+            textAlign: TextAlign.center,
+            style: PixelText.title(
+              size: 22,
+              color: AppColors.parchment,
+            ).copyWith(shadows: _heroShadows),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            error!,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: PixelText.body(
+              size: 14,
+              color: AppColors.parchment.withValues(alpha: 0.88),
+            ).copyWith(shadows: _heroShadows),
+          ),
+        ],
+      );
+    } else {
+      final steps = stepData?.steps ?? 0;
+      hud = Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          KeyedSubtree(
+            key: tutorialStepsKey,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: CountUpText(
+                value: steps,
+                format: _formatNumber,
+                style: PixelText.title(
+                  size: compact ? 56 : 64,
+                  color: AppColors.parchment,
+                ).copyWith(shadows: _heroHudShadows),
               ),
             ),
           ),
-        ),
-      );
-    }
-
-    if (error != null) {
-      return HomePanel(
-        radius: 0,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'TODAY',
-              style: PixelText.title(size: 14, color: AppColors.textMid),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'Couldn’t load your pace',
-              style: PixelText.title(size: 22, color: AppColors.textDark),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              error!,
-              style: PixelText.body(size: 14, color: AppColors.textMid),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final steps = stepData?.steps ?? 0;
-    final stepsStr = _formatNumber(steps);
-    final viewportHeight = MediaQuery.of(context).size.height;
-
-    return HomePanel(
-      padding: EdgeInsets.zero,
-      radius: 0,
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          color: AppColors.roofLight,
-          border: Border(
-            bottom: BorderSide(color: AppColors.roofDark, width: 1),
+          const SizedBox(height: 2),
+          // Label under the number so it can never collide with the
+          // name/coins row above.
+          Text(
+            'STEPS TODAY',
+            textAlign: TextAlign.center,
+            style: PixelText.title(
+              size: 13,
+              color: AppColors.parchment.withValues(alpha: 0.85),
+            ).copyWith(shadows: _heroShadows, letterSpacing: 3),
           ),
-        ),
-        child: CustomPaint(
-          painter: const ArcadeCheckerPainter(),
-          child: Stack(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Padding(
-                      // Keep the name/coins clear of the overlaid help button.
-                      padding: const EdgeInsets.only(right: 36),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              atName(displayName ?? 'You'),
-                              style: PixelText.title(
-                                size: 24,
-                                color: AppColors.parchment,
-                              ).copyWith(shadows: _heroShadows),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          CoinBalanceBadge(
-                            coins: authService.coins,
-                            coinSize: 16,
-                            // "+" = earn more coins -> the Get Coins hub
-                            // (watch an ad, invite friends, daily box).
-                            onAddTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => GetCoinsScreen(
-                                  authService: authService,
-                                  backendApiService: backendApiService,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Center(
-                      child: CapybaraCustomizationPreview(
-                        accessories: equippedAccessories,
-                        animal: equippedAnimal,
-                        size: viewportHeight < 760 ? 104 : 122,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'TODAY',
-                      textAlign: TextAlign.center,
+        ],
+      );
+    }
+
+    return SizedBox(
+      height: heroHeight,
+      child: HomeHeroScene(
+        groundHeight: groundHeight,
+        child: Stack(
+          children: [
+            Positioned(
+              left: 20,
+              // Keep the name/coins clear of the overlaid help button.
+              right: 58,
+              top: topInset + 12,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: Text(
+                      atName(displayName ?? 'You'),
                       style: PixelText.title(
-                        size: 12,
-                        color: AppColors.parchment.withValues(alpha: 0.82),
-                      ),
+                        size: 24,
+                        color: AppColors.parchment,
+                      ).copyWith(shadows: _heroShadows),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 4),
-                    KeyedSubtree(
-                      key: tutorialStepsKey,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          stepsStr,
-                          style: PixelText.title(
-                            size: 58,
-                            color: AppColors.parchment,
-                          ).copyWith(shadows: _heroShadows),
+                  ),
+                  const SizedBox(width: 10),
+                  CoinBalanceBadge(
+                    coins: authService.coins,
+                    coinSize: 16,
+                    // "+" = earn more coins -> the Get Coins hub
+                    // (watch an ad, invite friends, daily box).
+                    onAddTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => GetCoinsScreen(
+                          authService: authService,
+                          backendApiService: backendApiService,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _heroSummary(steps: steps),
-                      textAlign: TextAlign.center,
-                      style: PixelText.body(
-                        size: 14,
-                        color: AppColors.parchment.withValues(alpha: 0.88),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: StreakChip(
-                            key: streakChipKey,
-                            authService: authService,
-                            backendApiService: backendApiService,
-                            compact: true,
-                            // Fed by the home batch so the CLAIM button lands
-                            // with everything else; falls back to its own fetch
-                            // on old backends.
-                            initialData:
-                                raceCard?['dailyReward']
-                                    as Map<String, dynamic>?,
-                            awaitingBatch: raceCardLoading,
-                            onClaimedToday: onDailyRewardClaimed,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: KeyedSubtree(
-                            key: tutorialShopKey,
-                            child: PillButton(
-                              label: 'SHOP',
-                              icon: Icons.storefront_rounded,
-                              variant: PillButtonVariant.secondary,
-                              fullWidth: true,
-                              onPressed: onOpenShop,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                  ),
+                ],
+              ),
+            ),
+            Positioned(
+              left: 16,
+              right: 16,
+              top: topInset + (compact ? 52 : 72),
+              child: hud,
+            ),
+            // Pace summary sits on the dirt strip below the capybara's feet,
+            // like signage in the game world.
+            if (!(isLoading && stepData == null) && error == null)
+              Positioned(
+                left: 24,
+                right: 24,
+                bottom: 16,
+                child: Text(
+                  _heroSummary(steps: stepData?.steps ?? 0),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: PixelText.body(
+                    size: 13,
+                    color: AppColors.parchment,
+                  ).copyWith(shadows: _heroShadows),
                 ),
               ),
-              // Last child so it paints and hit-tests above the hero content,
-              // pinned to the panel's true top-right corner.
-              Positioned(
-                top: 10,
-                right: 10,
-                child: _HelpHeroButton(
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => TutorialScreen(authService: authService),
-                    ),
+            // The capybara stands on the grass line. The walk sprite has
+            // ~22% transparent padding below the feet, so pull the widget
+            // down by that much to land the feet a few px into the grass.
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: groundHeight - 4 - capySize * 0.22,
+              child: Center(
+                child: CapybaraCustomizationPreview(
+                  accessories: equippedAccessories,
+                  animal: equippedAnimal,
+                  size: capySize,
+                  showShadow: false,
+                ),
+              ),
+            ),
+            // Last child so it paints and hit-tests above the hero content,
+            // pinned to the scene's true top-right corner.
+            Positioned(
+              top: topInset + 10,
+              right: 10,
+              child: _HelpHeroButton(
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => TutorialScreen(authService: authService),
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  /// Streak + shop, first row under the hero. Same widgets and wiring as the
+  /// old in-hero row — only their home moved.
+  Widget _buildQuickActionsRow(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: StreakChip(
+            key: streakChipKey,
+            authService: authService,
+            backendApiService: backendApiService,
+            compact: true,
+            // Fed by the home batch so the CLAIM button lands with everything
+            // else; falls back to its own fetch on old backends.
+            initialData: raceCard?['dailyReward'] as Map<String, dynamic>?,
+            awaitingBatch: raceCardLoading,
+            onClaimedToday: onDailyRewardClaimed,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: KeyedSubtree(
+            key: tutorialShopKey,
+            child: PillButton(
+              label: 'SHOP',
+              icon: Icons.storefront_rounded,
+              variant: PillButtonVariant.secondary,
+              fullWidth: true,
+              onPressed: onOpenShop,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
   static const _heroShadows = [
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
+  ];
+
+  // Chunkier drop for the big HUD number so it reads like game UI over sky.
+  static const _heroHudShadows = [
+    Shadow(color: Color(0x59102A3C), blurRadius: 0, offset: Offset(0, 4)),
+    Shadow(color: Color(0x33000000), blurRadius: 10, offset: Offset(0, 2)),
   ];
 
   String _heroSummary({required int steps}) {
@@ -928,7 +1049,10 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
             padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
             child: Text(
               'You can add one anytime in Profile.',
-              style: PixelText.body(size: 13, color: AppColors.textMid),
+              style: PixelText.body(
+                size: 13,
+                color: AppColors.parchment.withValues(alpha: 0.8),
+              ),
               textAlign: TextAlign.center,
             ),
           ),
@@ -952,54 +1076,55 @@ class _HomeNoticeRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.parchmentDark.withValues(alpha: 0.44),
-        border: Border(
-          top: BorderSide(
-            color: AppColors.parchmentBorder.withValues(alpha: 0.72),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.parchment,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: AppColors.roofDark.withValues(alpha: 0.4),
+            width: 2,
           ),
-          bottom: BorderSide(
-            color: AppColors.parchmentBorder.withValues(alpha: 0.46),
-          ),
+          boxShadow: _homeCardShadow,
         ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 24, color: AppColors.roofMid),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: PixelText.title(
-                          size: 20,
-                          color: AppColors.textDark,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, size: 24, color: AppColors.roofMid),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: PixelText.title(
+                            size: 20,
+                            color: AppColors.textDark,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        subtitle,
-                        style: PixelText.body(
-                          size: 13,
-                          color: AppColors.textMid,
+                        const SizedBox(height: 3),
+                        Text(
+                          subtitle,
+                          style: PixelText.body(
+                            size: 13,
+                            color: AppColors.textMid,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(children: actions),
-          ],
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(children: actions),
+            ],
+          ),
         ),
       ),
     );
@@ -1054,7 +1179,7 @@ class _HomeRaceHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dividerColor = AppColors.parchmentBorder.withValues(alpha: 0.72);
+    const dividerColor = AppColors.feltLine;
     return Padding(
       padding: EdgeInsets.zero,
       child: Container(
@@ -1065,11 +1190,13 @@ class _HomeRaceHeader extends StatelessWidget {
         ),
         child: Row(
           children: [
+            const _SectionTick(),
+            const SizedBox(width: 8),
             Text(
               'RACES',
               style: PixelText.title(
                 size: 20,
-                color: AppColors.textDark,
+                color: AppColors.parchment,
               ).copyWith(shadows: _textShadows),
             ),
             const Spacer(),
@@ -1077,14 +1204,24 @@ class _HomeRaceHeader extends StatelessWidget {
               GestureDetector(
                 onTap: onViewAll,
                 behavior: HitTestBehavior.opaque,
-                child: Padding(
+                child: Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
+                    horizontal: 10,
                     vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.07),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.24),
+                    ),
                   ),
                   child: Text(
                     'VIEW ALL',
-                    style: PixelText.title(size: 12, color: AppColors.textMid),
+                    style: PixelText.title(
+                      size: 11,
+                      color: AppColors.parchment.withValues(alpha: 0.9),
+                    ),
                   ),
                 ),
               ),
@@ -1102,10 +1239,11 @@ class _HomeRaceSkeletonTicket extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: 168,
-      height: 200,
+      height: 222,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: AppColors.parchment.withValues(alpha: 0.96),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: AppColors.roofDark.withValues(alpha: 0.18),
             width: 2,
@@ -1151,6 +1289,7 @@ class _HomeActiveRaceTicket extends StatelessWidget {
     required this.participantCount,
     required this.top3,
     required this.onTap,
+    this.sweepDelay = Duration.zero,
   });
 
   final double width;
@@ -1161,6 +1300,9 @@ class _HomeActiveRaceTicket extends StatelessWidget {
   final List<Map<String, dynamic>> top3;
   final VoidCallback? onTap;
 
+  /// Staggers the shine sweep so a rail of tickets doesn't flash in unison.
+  final Duration sweepDelay;
+
   String _compactTimeLeft(DateTime endsAt) {
     final remaining = endsAt.difference(DateTime.now());
     if (remaining.isNegative) return 'ENDING SOON';
@@ -1170,12 +1312,32 @@ class _HomeActiveRaceTicket extends StatelessWidget {
     return '${remaining.inSeconds}S LEFT';
   }
 
+  /// Header band tint keyed to the user's placement — gold/silver/bronze for
+  /// podium spots, course green otherwise.
+  Color _bandColor() {
+    switch (placement) {
+      case 1:
+        return AppColors.medalGold.withValues(alpha: 0.34);
+      case 2:
+        return AppColors.medalSilver.withValues(alpha: 0.40);
+      case 3:
+        return AppColors.medalBronze.withValues(alpha: 0.34);
+      default:
+        return AppColors.roofLight.withValues(alpha: 0.22);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final endsAt = this.endsAt;
+    final info = [
+      '$participantCount racer${participantCount == 1 ? '' : 's'}',
+      if (endsAt != null) _compactTimeLeft(endsAt),
+    ].join(' · ');
+
     return SizedBox(
       width: width,
-      height: 200,
+      height: 222,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -1189,52 +1351,90 @@ class _HomeActiveRaceTicket extends StatelessWidget {
                 color: AppColors.roofDark.withValues(alpha: 0.55),
                 width: 2,
               ),
+              boxShadow: _homeCardShadow,
             ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(15, 13, 15, 13),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  PlacementPill(placement: placement),
-                  const SizedBox(height: 12),
-                  Text(
-                    raceName,
-                    maxLines: 2,
-                    textAlign: TextAlign.center,
-                    overflow: TextOverflow.ellipsis,
-                    style: PixelText.title(size: 18, color: AppColors.textDark),
-                  ),
-                  const Spacer(),
-                  RacerAvatarStack(entries: top3),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '$participantCount racer${participantCount == 1 ? '' : 's'}',
-                        style: PixelText.body(
-                          size: 13,
-                          color: AppColors.textMid,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: ShineSweep(
+                delay: sweepDelay,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: _bandColor(),
+                        border: Border(
+                          bottom: BorderSide(
+                            color: AppColors.roofDark.withValues(alpha: 0.16),
+                            width: 2,
+                          ),
                         ),
                       ),
-                      const Icon(
-                        Icons.chevron_right_rounded,
-                        size: 18,
-                        color: AppColors.textMid,
+                      child: Center(
+                        child: WobbleBadge(
+                          child: PlacementPill(placement: placement),
+                        ),
                       ),
-                    ],
-                  ),
-                  if (endsAt != null) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      _compactTimeLeft(endsAt),
-                      maxLines: 1,
-                      textAlign: TextAlign.center,
-                      overflow: TextOverflow.ellipsis,
-                      style: PixelText.body(size: 12, color: AppColors.textMid),
+                    ),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text(
+                              raceName,
+                              maxLines: 2,
+                              textAlign: TextAlign.center,
+                              overflow: TextOverflow.ellipsis,
+                              style: PixelText.title(
+                                size: 17,
+                                color: AppColors.textDark,
+                              ),
+                            ),
+                            const Spacer(),
+                            RacerAvatarStack(entries: top3),
+                            const SizedBox(height: 8),
+                            Text(
+                              info,
+                              maxLines: 1,
+                              textAlign: TextAlign.center,
+                              overflow: TextOverflow.ellipsis,
+                              style: PixelText.body(
+                                size: 12,
+                                color: AppColors.textMid,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            PulseGlow(
+                              borderRadius: 8,
+                              child: Container(
+                                height: 32,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: AppColors.pillGold,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: AppColors.pillGoldDark,
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: Text(
+                                  'VIEW RACE',
+                                  style: PixelText.title(
+                                    size: 12,
+                                    color: AppColors.textDark,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ],
-                ],
+                ),
               ),
             ),
           ),
@@ -1269,9 +1469,13 @@ class _HomeRaceActionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: AppColors.parchment.withValues(alpha: 0.96),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.roofDark.withValues(alpha: 0.18)),
+        color: AppColors.parchment,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: AppColors.roofDark.withValues(alpha: 0.4),
+          width: 2,
+        ),
+        boxShadow: _homeCardShadow,
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
@@ -1306,7 +1510,13 @@ class _HomeRaceActionRow extends StatelessWidget {
             Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _SmallRaceButton(label: primaryLabel, onPressed: onPrimary),
+                PulseGlow(
+                  borderRadius: 7,
+                  child: _SmallRaceButton(
+                    label: primaryLabel,
+                    onPressed: onPrimary,
+                  ),
+                ),
                 if (secondaryLabel != null) ...[
                   const SizedBox(height: 6),
                   Builder(
@@ -1383,19 +1593,43 @@ class _HomeSectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dividerColor = AppColors.parchmentBorder.withValues(alpha: 0.72);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 9),
-      decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: dividerColor)),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AppColors.feltLine)),
       ),
-      child: Text(
-        title,
-        style: PixelText.title(
-          size: 20,
-          color: AppColors.textDark,
-        ).copyWith(shadows: _textShadows),
+      child: Row(
+        children: [
+          const _SectionTick(),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: PixelText.title(
+              size: 20,
+              color: AppColors.parchment,
+            ).copyWith(shadows: _textShadows),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Small gold tab in front of section titles — the one recurring flourish in
+/// the below-the-fold card language.
+class _SectionTick extends StatelessWidget {
+  const _SectionTick();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 6,
+      height: 18,
+      decoration: BoxDecoration(
+        color: AppColors.pillGold,
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(color: AppColors.pillGoldDark),
       ),
     );
   }

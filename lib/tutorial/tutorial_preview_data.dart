@@ -67,6 +67,44 @@ class TutorialPreviewBackendApiService extends BackendApiService {
     return {'claimedToday': false};
   }
 
+  // -- Profile: lifetime stats (_StatsSection) --
+  @override
+  Future<Map<String, dynamic>> fetchStats({
+    required String identityToken,
+  }) async {
+    return {
+      'thisWeek': 61240,
+      'thisMonth': 244890,
+      'thisYear': 1893400,
+      'avgPerDayWeek': 8748,
+      'avgPerDayMonth': 8163,
+      'avgPerDayYear': 7920,
+      'allTime': 2417800,
+      'streak': 6,
+    };
+  }
+
+  // -- Profile: step calendar --
+  @override
+  Future<Map<String, dynamic>> fetchStepCalendar({
+    required String identityToken,
+    required String month,
+  }) async {
+    final now = DateTime.now();
+    final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
+    return {
+      'days': [
+        for (var d = 1; d <= daysInMonth; d++)
+          {
+            'steps': d < now.day ? 4200 + (d * 731) % 9200 : 0,
+            'goalMet': d < now.day && (d * 731) % 9200 > 3400,
+            'isToday': d == now.day,
+            'future': d > now.day,
+          },
+      ],
+    };
+  }
+
   // -- Leaderboard: steps / global / today --
   @override
   Future<Map<String, dynamic>> fetchLeaderboard({
@@ -75,22 +113,18 @@ class TutorialPreviewBackendApiService extends BackendApiService {
     String period = 'today',
     String scope = 'global',
   }) async {
-    Map<String, dynamic> row(
-      int rank,
-      String userId,
-      String name,
-      int steps,
-    ) => {
-      'rank': rank,
-      'userId': userId,
-      'displayName': name,
-      'profilePhotoUrl': null,
-      'totalSteps': steps,
-      'firsts': null,
-      'seconds': null,
-      'thirds': null,
-      'equippedAccessories': const [],
-    };
+    Map<String, dynamic> row(int rank, String userId, String name, int steps) =>
+        {
+          'rank': rank,
+          'userId': userId,
+          'displayName': name,
+          'profilePhotoUrl': null,
+          'totalSteps': steps,
+          'firsts': null,
+          'seconds': null,
+          'thirds': null,
+          'equippedAccessories': const [],
+        };
 
     return {
       'top100': [
@@ -139,7 +173,8 @@ class TutorialPreviewBackendApiService extends BackendApiService {
         'index': 24,
         'startsOn': now.subtract(const Duration(days: 3)).toIso8601String(),
         'endsOn': now.add(const Duration(days: 4)).toIso8601String(),
-        'settlesAt': now.add(const Duration(days: 4, hours: 12))
+        'settlesAt': now
+            .add(const Duration(days: 4, hours: 12))
             .toIso8601String(),
         'status': 'ACTIVE',
       },
@@ -350,12 +385,18 @@ Map<String, dynamic> tutorialPreviewHomeRaceCard() {
         {
           'raceId': 'home-race-1',
           'name': 'Weekend 10K',
-          'endsAt': now.add(const Duration(days: 2, hours: 4)).toIso8601String(),
+          'endsAt': now
+              .add(const Duration(days: 2, hours: 4))
+              .toIso8601String(),
           'userPlacement': 2,
           'participantCount': 6,
           'top3': const [
             {'userId': 'rk-1', 'displayName': 'Sam Rivera', 'rank': 1},
-            {'userId': tutorialPreviewUserId, 'displayName': 'Rohan', 'rank': 2},
+            {
+              'userId': tutorialPreviewUserId,
+              'displayName': 'Rohan',
+              'rank': 2,
+            },
             {'userId': 'rk-3', 'displayName': 'Jordan Lee', 'rank': 3},
           ],
         },

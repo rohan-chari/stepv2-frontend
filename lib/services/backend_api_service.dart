@@ -698,6 +698,49 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  /// GET /admin/settings -> `{settings: {bannerAdsEnabled, ...}}`.
+  Future<Map<String, dynamic>> fetchAdminSettings({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/admin/settings',
+      identityToken: identityToken,
+    );
+    final body = await _decodeJsonResponse(response);
+    final settings = body['settings'];
+    return settings is Map<String, dynamic> ? settings : <String, dynamic>{};
+  }
+
+  /// PATCH /admin/settings with a subset of boolean flags; echoes the full
+  /// updated settings map.
+  Future<Map<String, dynamic>> updateAdminSettings({
+    required String identityToken,
+    required Map<String, bool> settings,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'PATCH',
+      path: '/admin/settings',
+      body: settings,
+      identityToken: identityToken,
+    );
+    final body = await _decodeJsonResponse(response);
+    final updated = body['settings'];
+    return updated is Map<String, dynamic> ? updated : <String, dynamic>{};
+  }
+
+  /// GET /admin/stats -> `{stats: {...}}` product-health snapshot.
+  Future<Map<String, dynamic>> fetchAdminStats({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/admin/stats',
+      identityToken: identityToken,
+    );
+    final body = await _decodeJsonResponse(response);
+    final stats = body['stats'];
+    return stats is Map<String, dynamic> ? stats : <String, dynamic>{};
+  }
+
   Future<Map<String, dynamic>> updateAdminShopItem({
     required String identityToken,
     required String itemId,

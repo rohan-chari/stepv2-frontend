@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../models/loadable.dart';
+import '../../widgets/arcade_fx.dart';
 import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
@@ -121,13 +122,14 @@ class _FriendsTabState extends State<FriendsTab> {
       // Copied (not sorted in place — the response list may be unmodifiable)
       // and ordered alphabetically regardless of backend version (older
       // backends return insertion order).
-      final friends = List<Map<String, dynamic>>.of(
-        (data['friends'] as List?)?.cast<Map<String, dynamic>>() ?? [],
-      )..sort(
-        (a, b) => (a['displayName'] as String? ?? '').toLowerCase().compareTo(
-          (b['displayName'] as String? ?? '').toLowerCase(),
-        ),
-      );
+      final friends =
+          List<Map<String, dynamic>>.of(
+            (data['friends'] as List?)?.cast<Map<String, dynamic>>() ?? [],
+          )..sort(
+            (a, b) => (a['displayName'] as String? ?? '')
+                .toLowerCase()
+                .compareTo((b['displayName'] as String? ?? '').toLowerCase()),
+          );
       final pending = data['pending'] as Map<String, dynamic>? ?? {};
       final incoming =
           (pending['incoming'] as List?)?.cast<Map<String, dynamic>>() ?? [];
@@ -480,61 +482,103 @@ class _FriendsTabState extends State<FriendsTab> {
     required Loadable<Map<String, List<Map<String, dynamic>>>> state,
   }) {
     if (state.shouldShowInitialLoading || (_isLoading && !state.hasData)) {
-      return const ColoredBox(
-        color: AppColors.parchment,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(16, 16, 16, 16),
-          child: ListSkeleton(itemCount: 4, showAvatar: true),
-        ),
+      return Container(
+        margin: const EdgeInsets.fromLTRB(10, 12, 10, 8),
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: _friendsCardDecoration(),
+        child: const ListSkeleton(itemCount: 4, showAvatar: true),
       );
     }
 
     if (state.isError && !state.hasData) {
-      return ColoredBox(
-        color: AppColors.parchment,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-          child: LoadErrorPanel(
-            title: 'Couldn’t load friends',
-            message: state.error ?? 'Check your connection and try again.',
-            onRetry: _loadFriends,
-          ),
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(10, 12, 10, 8),
+        child: LoadErrorPanel(
+          title: 'Couldn’t load friends',
+          message: state.error ?? 'Check your connection and try again.',
+          onRetry: _loadFriends,
         ),
       );
     }
 
-    return ColoredBox(
-      color: AppColors.parchment,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (state.isRefreshing)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 4),
-                child: LinearProgressIndicator(
-                  minHeight: 2,
-                  color: AppColors.accent,
-                  backgroundColor: Colors.transparent,
-                ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (state.isRefreshing)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 4),
+              child: LinearProgressIndicator(
+                minHeight: 2,
+                color: AppColors.accent,
+                backgroundColor: Colors.transparent,
               ),
-            if (_incomingRequests.isNotEmpty) ...[
-              _buildSectionHeader('INCOMING REQUESTS'),
-              _buildIncomingList(),
-            ],
-            if (_outgoingRequests.isNotEmpty) ...[
-              _buildSectionHeader('SENT REQUESTS'),
-              _buildOutgoingList(),
-            ],
-            _buildSectionHeader('FRIENDS'),
-            if (_friends.isEmpty)
-              _buildFriendsEmptyState()
-            else
-              _buildFriendsList(),
-          ],
-        ),
+            ),
+          if (_incomingRequests.isNotEmpty)
+            StaggerIn(
+              index: 0,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildSectionHeader('INCOMING REQUESTS'),
+                  _buildSectionCard(_buildIncomingList()),
+                ],
+              ),
+            ),
+          if (_outgoingRequests.isNotEmpty)
+            StaggerIn(
+              index: 1,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildSectionHeader('SENT REQUESTS'),
+                  _buildSectionCard(_buildOutgoingList()),
+                ],
+              ),
+            ),
+          StaggerIn(
+            index: 2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildSectionHeader('FRIENDS'),
+                if (_friends.isEmpty)
+                  _buildFriendsEmptyState()
+                else
+                  _buildSectionCard(_buildFriendsList()),
+              ],
+            ),
+          ),
+        ],
       ),
+    );
+  }
+
+  /// Parchment game-piece card — same language as the home/races tabs.
+  BoxDecoration _friendsCardDecoration() {
+    return BoxDecoration(
+      color: AppColors.parchment,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(
+        color: AppColors.roofDark.withValues(alpha: 0.55),
+        width: 2,
+      ),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x66000000),
+          offset: Offset(0, 4),
+          blurRadius: 0,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSectionCard(Widget child) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: _friendsCardDecoration(),
+      child: ClipRRect(borderRadius: BorderRadius.circular(12), child: child),
     );
   }
 
@@ -542,10 +586,7 @@ class _FriendsTabState extends State<FriendsTab> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 26),
-      decoration: BoxDecoration(
-        color: AppColors.parchmentDark.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(8),
-      ),
+      decoration: _friendsCardDecoration(),
       child: Column(
         children: [
           Icon(
@@ -594,20 +635,27 @@ class _FriendsTabState extends State<FriendsTab> {
   Widget _buildSectionHeader(String title) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(10, 14, 10, 7),
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(
-            color: AppColors.parchmentBorder.withValues(alpha: 0.72),
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 8),
+      child: Row(
+        children: [
+          Container(
+            width: 6,
+            height: 16,
+            decoration: BoxDecoration(
+              color: AppColors.pillGold,
+              borderRadius: BorderRadius.circular(3),
+              border: Border.all(color: AppColors.pillGoldDark),
+            ),
           ),
-        ),
-      ),
-      child: Text(
-        title,
-        style: PixelText.title(
-          size: 16,
-          color: AppColors.textDark,
-        ).copyWith(shadows: _textShadows),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: PixelText.title(
+              size: 16,
+              color: AppColors.parchment,
+            ).copyWith(shadows: _textShadows),
+          ),
+        ],
       ),
     );
   }
@@ -847,12 +895,14 @@ class _FriendsTabState extends State<FriendsTab> {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          PillButton(
-            label: 'ACCEPT',
-            variant: PillButtonVariant.primary,
-            fontSize: 11,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            onPressed: () => _respond(friendshipId, true),
+          PulseGlow(
+            child: PillButton(
+              label: 'ACCEPT',
+              variant: PillButtonVariant.primary,
+              fontSize: 11,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              onPressed: () => _respond(friendshipId, true),
+            ),
           ),
           const SizedBox(width: 6),
           PillButton(

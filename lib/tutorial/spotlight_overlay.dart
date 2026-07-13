@@ -213,7 +213,9 @@ class _CalloutCard extends StatelessWidget {
                             color: Colors.white.withValues(alpha: 0.14),
                             borderRadius: BorderRadius.circular(999),
                             border: Border.all(
-                              color: AppColors.parchment.withValues(alpha: 0.55),
+                              color: AppColors.parchment.withValues(
+                                alpha: 0.55,
+                              ),
                               width: 1.5,
                             ),
                           ),

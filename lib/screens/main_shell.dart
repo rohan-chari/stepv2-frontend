@@ -132,6 +132,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   // Guards the shared-race drain so overlapping AuthService notifications can't
   // fire two concurrent joins for the same pending token.
   bool _draining = false;
+  // Guards for the referred-install "race your friend" capture + one-tap offer.
+  bool _capturingInviterRace = false;
+  bool _inviterOfferShowing = false;
 
   void _handleAuthServiceChanged() {
     if (!mounted) return;
@@ -140,6 +143,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     // the final onboarding step may have just completed — either way, try to
     // drain. Idempotent: no-ops when there's no token or onboarding isn't done.
     _maybeDrainPendingSharedRace();
+    _maybeCaptureInviterRace();
+    _maybeOfferInviterRace();
   }
 
   @override
@@ -270,6 +275,107 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
   }
 
+  /// While the referred-install welcome code is live (onboarding), resolve the
+  /// inviter's joinable race from the public referral preview and stash it on
+  /// [AuthService] (persisted), so the one-tap offer survives an app restart
+  /// mid-onboarding. Best-effort: no race in the preview means no offer.
+  Future<void> _maybeCaptureInviterRace() async {
+    if (_capturingInviterRace) return;
+    final code = widget.authService.welcomeReferralCode;
+    if (code == null || code.isEmpty) return;
+    if (widget.authService.pendingInviterRace != null) return;
+
+    _capturingInviterRace = true;
+    try {
+      final preview = await _backendApiService.fetchReferralPreview(code: code);
+      final race = preview['inviterRace'];
+      final raceId = race is Map ? race['id'] as String? : null;
+      if (raceId == null || raceId.isEmpty) return;
+      await widget.authService.setPendingInviterRace({
+        'raceId': raceId,
+        'raceName': (race as Map)['name'] as String? ?? 'their race',
+        'inviterName': preview['inviterName'] as String? ?? 'Your friend',
+      });
+    } catch (_) {
+      // Preview is best-effort; the invitee still gets the normal flow.
+    } finally {
+      _capturingInviterRace = false;
+    }
+  }
+
+  /// One-tap "race your friend now" for a referred install, shown once,
+  /// immediately after onboarding completes (same gate as the share-token
+  /// drain). Joining is server-tolerant: if they're somehow already in the
+  /// race (e.g. it's the seeded race signup auto-enrolled them into), we just
+  /// open it.
+  Future<void> _maybeOfferInviterRace() async {
+    if (_inviterOfferShowing || _draining) return;
+    final pending = widget.authService.pendingInviterRace;
+    if (pending == null) return;
+    // Share-token flow wins when both are somehow pending.
+    if (widget.authService.pendingShareToken != null) return;
+
+    final isOnboarding =
+        !_healthAuthorized ||
+        _notificationsState == null ||
+        !widget.authService.firstRaceOnboardingSeen;
+    if (isOnboarding) return;
+
+    final identityToken = widget.authService.authToken;
+    if (identityToken == null || identityToken.isEmpty) return;
+
+    final raceId = pending['raceId'];
+    if (raceId == null || raceId.isEmpty) {
+      await widget.authService.setPendingInviterRace(null);
+      return;
+    }
+
+    _inviterOfferShowing = true;
+    final inviterName = pending['inviterName'] ?? 'Your friend';
+    final raceName = pending['raceName'] ?? 'their race';
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('$inviterName challenged you!'),
+        content: Text('Jump into "$raceName" and race them right now.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Later'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Race now'),
+          ),
+        ],
+      ),
+    );
+    // One-shot on every outcome — the offer never nags twice.
+    await widget.authService.setPendingInviterRace(null);
+    _inviterOfferShowing = false;
+    if (!mounted || accepted != true) return;
+
+    try {
+      await _backendApiService.joinPublicRace(
+        identityToken: identityToken,
+        raceId: raceId,
+        // Server-gated one-time welcome boxes; a no-op if already granted.
+        onboarding: true,
+      );
+    } on ApiException {
+      // "Already in this race" (signup auto-enroll) or full/closed — either
+      // way the race screen is the right destination; it renders any state.
+    } catch (_) {
+      if (mounted) {
+        showErrorToast(context, 'Couldn\'t join right now — try again later.');
+      }
+      return;
+    }
+    if (!mounted) return;
+    _fetchRaces();
+    _openRaceFromCard(raceId);
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && _healthAuthorized) {
@@ -318,6 +424,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     // Cold start with a share link tapped before launch: now that the session
     // is valid and onboarding state is loaded, join + open the shared race.
     _maybeDrainPendingSharedRace();
+    // Referred install: resolve/offer the inviter's race (each no-ops unless
+    // its precondition holds — see the methods).
+    _maybeCaptureInviterRace();
+    _maybeOfferInviterRace();
   }
 
   Future<bool> _refreshSessionToken() async {

@@ -6,6 +6,7 @@ import '../../services/auth_service.dart';
 import '../../styles.dart';
 import '../../utils/at_name.dart';
 import '../../utils/race_participant_display.dart';
+import '../../widgets/arcade_fx.dart';
 import '../../widgets/featured_race_card.dart';
 import '../../widgets/ad_inline_card.dart';
 import '../../widgets/info_toast.dart';
@@ -16,6 +17,11 @@ import '../../widgets/spinning_crate.dart';
 import '../create_race_screen.dart';
 import '../public_races_screen.dart';
 import '../race_detail_screen.dart';
+
+// Hard-offset "game piece" shadow shared with the home tab's card language.
+const _raceCardShadow = [
+  BoxShadow(color: Color(0x66000000), offset: Offset(0, 4), blurRadius: 0),
+];
 
 class RacesTab extends StatefulWidget {
   final AuthService authService;
@@ -258,22 +264,19 @@ class _RacesTabState extends State<RacesTab> {
           waitingCount: waiting.length,
           potKey: widget.tutorialPotKey,
         ),
-        ColoredBox(
-          color: AppColors.parchment,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
-            child: Column(
-              children: [
-                _buildFeaturedSection(),
-                _buildRaceListState(
-                  hasRaces: hasRaces,
-                  invites: invites,
-                  waiting: waiting,
-                  active: active,
-                  completed: completed,
-                ),
-              ],
-            ),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Column(
+            children: [
+              StaggerIn(index: 0, child: _buildFeaturedSection()),
+              _buildRaceListState(
+                hasRaces: hasRaces,
+                invites: invites,
+                waiting: waiting,
+                active: active,
+                completed: completed,
+              ),
+            ],
           ),
         ),
       ],
@@ -393,26 +396,28 @@ class _RacesTabState extends State<RacesTab> {
           padding: const EdgeInsets.fromLTRB(10, 14, 10, 9),
           child: Row(
             children: [
-              const Icon(
-                Icons.star_rounded,
-                size: 20,
-                color: AppColors.pillGoldDark,
+              const WobbleBadge(
+                child: Icon(
+                  Icons.star_rounded,
+                  size: 22,
+                  color: AppColors.pillGold,
+                ),
               ),
               const SizedBox(width: 5),
               Text(
                 'FEATURED',
                 style: PixelText.title(
                   size: 22,
-                  color: AppColors.textDark,
+                  color: AppColors.parchment,
                 ).copyWith(shadows: _textShadows),
               ),
               const Spacer(),
               // Featured-races settings (auto-join toggle).
               IconButton(
-                icon: const Icon(
+                icon: Icon(
                   Icons.settings_rounded,
                   size: 22,
-                  color: AppColors.textDark,
+                  color: AppColors.parchment.withValues(alpha: 0.85),
                 ),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
@@ -422,7 +427,7 @@ class _RacesTabState extends State<RacesTab> {
           ),
         ),
         SizedBox(
-          height: 226,
+          height: 232,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -507,27 +512,40 @@ class _RacesTabState extends State<RacesTab> {
   }) {
     final state = _effectiveRacesState;
     if (state.shouldShowInitialLoading) {
-      return const KeyedSubtree(
-        key: Key('races-loading-skeleton'),
-        child: Padding(
-          padding: EdgeInsets.only(top: 4),
-          child: ListSkeleton(itemCount: 4),
+      return KeyedSubtree(
+        key: const Key('races-loading-skeleton'),
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+          decoration: BoxDecoration(
+            color: AppColors.parchment,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: AppColors.roofDark.withValues(alpha: 0.55),
+              width: 2,
+            ),
+            boxShadow: _raceCardShadow,
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: const ListSkeleton(itemCount: 4),
         ),
       );
     }
 
     if (state.isError && !state.hasData) {
-      return LoadErrorPanel(
-        title: 'Couldn’t load races',
-        message: state.error ?? 'Check your connection and try again.',
-        onRetry: () {
-          final refresh = widget.onRefresh;
-          if (refresh != null) {
-            refresh();
-          } else {
-            widget.onRacesChanged();
-          }
-        },
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        child: LoadErrorPanel(
+          title: 'Couldn’t load races',
+          message: state.error ?? 'Check your connection and try again.',
+          onRetry: () {
+            final refresh = widget.onRefresh;
+            if (refresh != null) {
+              refresh();
+            } else {
+              widget.onRacesChanged();
+            }
+          },
+        ),
       );
     }
 
@@ -546,34 +564,46 @@ class _RacesTabState extends State<RacesTab> {
             ),
           ),
         if (invites.isNotEmpty)
-          _buildRaceSection(
-            title: 'INVITES',
-            sectionKey: 'invites',
-            races: invites,
-            isInvite: true,
+          StaggerIn(
+            index: 1,
+            child: _buildRaceSection(
+              title: 'INVITES',
+              sectionKey: 'invites',
+              races: invites,
+              isInvite: true,
+            ),
           ),
         if (waiting.isNotEmpty)
-          _buildRaceSection(
-            title: 'PENDING',
-            sectionKey: 'waiting',
-            races: waiting,
+          StaggerIn(
+            index: 2,
+            child: _buildRaceSection(
+              title: 'PENDING',
+              sectionKey: 'waiting',
+              races: waiting,
+            ),
           ),
         if (active.isNotEmpty)
-          _buildRaceSection(
-            title: 'ACTIVE RACES',
-            sectionKey: 'active',
-            races: active,
-            showCount: false,
-            firstCardKey: widget.tutorialCardKey,
-            firstBoxKey: widget.tutorialBoxKey,
-            showInFeedAd: true,
+          StaggerIn(
+            index: 3,
+            child: _buildRaceSection(
+              title: 'ACTIVE RACES',
+              sectionKey: 'active',
+              races: active,
+              showCount: false,
+              firstCardKey: widget.tutorialCardKey,
+              firstBoxKey: widget.tutorialBoxKey,
+              showInFeedAd: true,
+            ),
           ),
         if (completed.isNotEmpty)
-          _buildRaceSection(
-            title: 'COMPLETED',
-            sectionKey: 'completed',
-            races: completed,
-            showCount: false,
+          StaggerIn(
+            index: 4,
+            child: _buildRaceSection(
+              title: 'COMPLETED',
+              sectionKey: 'completed',
+              races: completed,
+              showCount: false,
+            ),
           ),
       ],
     );
@@ -591,7 +621,7 @@ class _RacesTabState extends State<RacesTab> {
   }) {
     final collapsed = _collapsedSections.contains(sectionKey);
     return Padding(
-      padding: const EdgeInsets.only(left: 10, right: 10, bottom: 4),
+      padding: const EdgeInsets.only(left: 10, right: 10, bottom: 8),
       child: Column(
         children: [
           _buildSectionHeader(
@@ -602,12 +632,26 @@ class _RacesTabState extends State<RacesTab> {
             showCount: showCount,
           ),
           if (!collapsed)
-            _buildRaceList(
-              races,
-              isInvite: isInvite,
-              firstCardKey: firstCardKey,
-              firstBoxKey: firstBoxKey,
-              showInFeedAd: showInFeedAd,
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: AppColors.parchment,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: AppColors.roofDark.withValues(alpha: 0.55),
+                  width: 2,
+                ),
+                boxShadow: _raceCardShadow,
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: _buildRaceList(
+                  races,
+                  isInvite: isInvite,
+                  firstCardKey: firstCardKey,
+                  firstBoxKey: firstBoxKey,
+                  showInFeedAd: showInFeedAd,
+                ),
+              ),
             ),
         ],
       ),
@@ -656,8 +700,13 @@ class _RacesTabState extends State<RacesTab> {
       margin: const EdgeInsets.symmetric(horizontal: 10),
       padding: const EdgeInsets.fromLTRB(18, 34, 18, 36),
       decoration: BoxDecoration(
-        color: AppColors.parchmentDark.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(8),
+        color: AppColors.parchment,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppColors.roofDark.withValues(alpha: 0.55),
+          width: 2,
+        ),
+        boxShadow: _raceCardShadow,
       ),
       child: Column(
         children: [
@@ -697,21 +746,24 @@ class _RacesTabState extends State<RacesTab> {
       onTap: () => _toggleSection(sectionKey),
       behavior: HitTestBehavior.opaque,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(10, 14, 10, 7),
-        decoration: BoxDecoration(
-          border: Border(
-            top: BorderSide(
-              color: AppColors.parchmentBorder.withValues(alpha: 0.72),
-            ),
-          ),
-        ),
+        padding: const EdgeInsets.fromLTRB(2, 12, 2, 8),
         child: Row(
           children: [
+            Container(
+              width: 6,
+              height: 18,
+              decoration: BoxDecoration(
+                color: AppColors.pillGold,
+                borderRadius: BorderRadius.circular(3),
+                border: Border.all(color: AppColors.pillGoldDark),
+              ),
+            ),
+            const SizedBox(width: 8),
             Text(
               title,
               style: PixelText.title(
-                size: 22,
-                color: AppColors.textDark,
+                size: 20,
+                color: AppColors.parchment,
               ).copyWith(shadows: _textShadows),
             ),
             if (showCount) ...[
@@ -719,15 +771,18 @@ class _RacesTabState extends State<RacesTab> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: Colors.transparent,
+                  color: Colors.white.withValues(alpha: 0.07),
                   borderRadius: BorderRadius.circular(999),
                   border: Border.all(
-                    color: AppColors.parchmentBorder.withValues(alpha: 0.9),
+                    color: Colors.white.withValues(alpha: 0.30),
                   ),
                 ),
                 child: Text(
                   '$count',
-                  style: PixelText.title(size: 13, color: AppColors.textMid),
+                  style: PixelText.title(
+                    size: 13,
+                    color: AppColors.parchment.withValues(alpha: 0.92),
+                  ),
                 ),
               ),
             ],
@@ -1122,7 +1177,7 @@ class _SectionToggleButton extends StatelessWidget {
           child: Icon(
             collapsed ? Icons.add_rounded : Icons.remove_rounded,
             size: 20,
-            color: AppColors.textMid,
+            color: AppColors.parchment.withValues(alpha: 0.85),
           ),
         ),
       ),

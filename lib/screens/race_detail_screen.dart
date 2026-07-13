@@ -2612,10 +2612,23 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         _race?['seedKind'] as String?,
         _race?['name'] as String? ?? 'a race',
       );
+      // Taunt with my live step count in this race when available — a
+      // personal challenge opens better than a generic invite.
+      final participants =
+          (_race?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
+          const [];
+      final mySteps = participants
+          .where((p) => (p['userId'] as String?) == _myUserId)
+          .map((p) => (p['totalSteps'] as num?)?.toInt() ?? 0)
+          .fold<int>(0, (a, b) => a > b ? a : b);
+      final text = mySteps > 0
+          ? 'I\'ve logged ${_formatSteps(mySteps)} steps in "$raceName" on '
+                'Bara. Think you can catch me? $url'
+          : 'Race me in "$raceName" on Bara — bet you can\'t keep up! $url';
       await shareText(
         _shareButtonKey.currentContext ?? context,
-        'Join me in "$raceName" on Bara! $url',
-        subject: 'Join my step race on Bara',
+        text,
+        subject: 'Race me on Bara',
       );
     } on ApiException catch (e) {
       if (mounted) showErrorToast(context, e.message);

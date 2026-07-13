@@ -193,7 +193,8 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
         const SizedBox(width: 8),
         Text(
           "Today's coins",
-          style: PixelText.title(size: 22, color: AppColors.textDark),
+          // Light on the home tab's dark felt backdrop.
+          style: PixelText.title(size: 22, color: AppColors.parchment),
         ),
         const Spacer(),
         Container(

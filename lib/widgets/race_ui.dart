@@ -8,7 +8,8 @@ import 'home_course_track.dart' show CapybaraSpriteWithAccessories;
 /// featured strip, race detail). Extracted so the look stays consistent and
 /// the patterns aren't re-implemented per screen.
 
-/// Canonical card decoration: parchment fill, 14px radius, 2px roofDark border.
+/// Canonical card decoration: parchment fill, 14px radius, 2px roofDark
+/// border, and the hard-offset "game piece" shadow shared with the home tab.
 BoxDecoration raceCardDecoration() => BoxDecoration(
   color: AppColors.parchment,
   borderRadius: BorderRadius.circular(14),
@@ -16,6 +17,9 @@ BoxDecoration raceCardDecoration() => BoxDecoration(
     color: AppColors.roofDark.withValues(alpha: 0.55),
     width: 2,
   ),
+  boxShadow: const [
+    BoxShadow(color: Color(0x66000000), offset: Offset(0, 4), blurRadius: 0),
+  ],
 );
 
 /// Section title row (optional icon + title + optional trailing widget). Sits

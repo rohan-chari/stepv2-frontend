@@ -11,7 +11,7 @@ class GameContainer extends StatelessWidget {
     this.padding = const EdgeInsets.all(12),
     this.frameColor,
     this.glowColor,
-    this.borderRadius = 8,
+    this.borderRadius = 14,
     this.surfaceColor,
   });
 
@@ -24,7 +24,7 @@ class GameContainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final border = frameColor ?? AppColors.textDark;
+    final border = frameColor ?? AppColors.roofDark.withValues(alpha: 0.55);
     final surface = surfaceColor ?? AppColors.parchment;
 
     return DecoratedBox(
@@ -32,12 +32,21 @@ class GameContainer extends StatelessWidget {
         color: surface,
         borderRadius: BorderRadius.circular(borderRadius),
         border: Border.all(color: border, width: 2),
+        // Game-piece language: a hard straight-down drop by default; callers
+        // that pass glowColor (reward reveals) get a soft halo instead.
         boxShadow: [
-          BoxShadow(
-            color: (glowColor ?? border).withValues(alpha: 0.18),
-            offset: const Offset(4, 4),
-            blurRadius: 0,
-          ),
+          if (glowColor == null)
+            const BoxShadow(
+              color: Color(0x66000000),
+              offset: Offset(0, 4),
+              blurRadius: 0,
+            )
+          else
+            BoxShadow(
+              color: glowColor!.withValues(alpha: 0.45),
+              blurRadius: 16,
+              spreadRadius: 1,
+            ),
         ],
       ),
       child: ClipRRect(

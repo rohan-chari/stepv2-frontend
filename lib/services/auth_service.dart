@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -5,6 +6,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
+import 'ad_service.dart';
 import 'backend_api_service.dart';
 
 /// The Firebase project's **Web** OAuth client id, passed to GoogleSignIn as
@@ -64,7 +66,9 @@ class AuthService extends ChangeNotifier {
   static const _keyTutorialOnboardingSeen = 'auth_tutorial_onboarding_seen';
   static const _keyHiddenFromLeaderboard = 'auth_hidden_from_leaderboard';
   static const _keyAutoJoinFeaturedRaces = 'auth_auto_join_featured_races';
+  static const _keyBannerAdsEnabled = 'auth_banner_ads_enabled';
   static const _keyPendingShareToken = 'auth_pending_share_token';
+  static const _keyPendingInviterRace = 'auth_pending_inviter_race';
   static const _keyPendingReferralCode = 'auth_pending_referral_code';
   static const _keyPendingReferralCapturedAt =
       'auth_pending_referral_captured_at';
@@ -94,7 +98,9 @@ class AuthService extends ChangeNotifier {
   bool _tutorialOnboardingSeen = false;
   bool _hiddenFromLeaderboard = false;
   bool _autoJoinFeaturedRaces = false;
+  bool _bannerAdsEnabled = false;
   String? _pendingShareToken;
+  Map<String, String>? _pendingInviterRace;
   String? _pendingReferralCode;
   int? _pendingReferralCapturedAtMs;
   String? _welcomeReferralCode;
@@ -114,6 +120,11 @@ class AuthService extends ChangeNotifier {
   bool get tutorialOnboardingSeen => _tutorialOnboardingSeen;
   bool get hiddenFromLeaderboard => _hiddenFromLeaderboard;
   bool get autoJoinFeaturedRaces => _autoJoinFeaturedRaces;
+
+  /// Remote kill switch for banner ads (backend `featureFlags.bannerAdsEnabled`
+  /// on /auth/me, toggleable from Admin → Settings). Mirrored into
+  /// [AdService.remoteBannersEnabled] wherever it changes.
+  bool get bannerAdsEnabled => _bannerAdsEnabled;
 
   /// A race share token captured from a deep link that has not yet been
   /// consumed (joined). Persisted so it survives the sign-in/onboarding gap on
@@ -168,7 +179,18 @@ class AuthService extends ChangeNotifier {
         prefs.getBool(_keyHiddenFromLeaderboard) ?? false;
     _autoJoinFeaturedRaces =
         prefs.getBool(_keyAutoJoinFeaturedRaces) ?? false;
+    _bannerAdsEnabled = prefs.getBool(_keyBannerAdsEnabled) ?? false;
+    AdService.remoteBannersEnabled = _bannerAdsEnabled;
     _pendingShareToken = prefs.getString(_keyPendingShareToken);
+    final rawInviterRace = prefs.getString(_keyPendingInviterRace);
+    if (rawInviterRace != null) {
+      try {
+        _pendingInviterRace = (jsonDecode(rawInviterRace) as Map)
+            .map((k, v) => MapEntry(k.toString(), v.toString()));
+      } catch (_) {
+        _pendingInviterRace = null;
+      }
+    }
     _pendingReferralCode = prefs.getString(_keyPendingReferralCode);
     _pendingReferralCapturedAtMs = prefs.getInt(_keyPendingReferralCapturedAt);
     _welcomeReferralCode = prefs.getString(_keyWelcomeReferralCode);
@@ -470,6 +492,15 @@ class AuthService extends ChangeNotifier {
       _autoJoinFeaturedRaces =
           backendUser['autoJoinFeaturedRaces'] as bool? ?? false;
     }
+    // Remote feature flags (additive `featureFlags` map on /auth/me). Only
+    // override when present so an older backend never flips a cached value;
+    // any absent/null flag reads as false (banners stay hidden).
+    if (backendUser.containsKey('featureFlags')) {
+      final flags = backendUser['featureFlags'];
+      _bannerAdsEnabled =
+          flags is Map && flags['bannerAdsEnabled'] == true;
+      AdService.remoteBannersEnabled = _bannerAdsEnabled;
+    }
   }
 
   Future<void> syncFromBackendUser(Map<String, dynamic> backendUser) async {
@@ -529,7 +560,10 @@ class AuthService extends ChangeNotifier {
     await prefs.remove(_keyTutorialOnboardingSeen);
     await prefs.remove(_keyHiddenFromLeaderboard);
     await prefs.remove(_keyAutoJoinFeaturedRaces);
+    await prefs.remove(_keyBannerAdsEnabled);
     await prefs.remove(_keyPendingShareToken);
+    _pendingInviterRace = null;
+    await prefs.remove(_keyPendingInviterRace);
     notifyListeners();
   }
 
@@ -546,6 +580,27 @@ class AuthService extends ChangeNotifier {
     } else {
       _pendingShareToken = null;
       await prefs.remove(_keyPendingShareToken);
+    }
+    notifyListeners();
+  }
+
+  /// The inviter's joinable race for a referred install (fetched from the
+  /// referral preview by MainShell), pending the one-tap "race your friend"
+  /// offer once onboarding completes. Keys: raceId, raceName, inviterName.
+  /// Persisted so it survives an app restart mid-onboarding; cleared after the
+  /// offer is shown (any outcome) and on sign-out.
+  Map<String, String>? get pendingInviterRace => _pendingInviterRace;
+
+  Future<void> setPendingInviterRace(Map<String, String>? race) async {
+    _pendingInviterRace = (race == null || race['raceId'] == null) ? null : race;
+    final prefs = await SharedPreferences.getInstance();
+    if (_pendingInviterRace != null) {
+      await prefs.setString(
+        _keyPendingInviterRace,
+        jsonEncode(_pendingInviterRace),
+      );
+    } else {
+      await prefs.remove(_keyPendingInviterRace);
     }
     notifyListeners();
   }
@@ -725,5 +780,6 @@ class AuthService extends ChangeNotifier {
     await prefs.setBool(_keyFirstRaceOnboardingSeen, _firstRaceOnboardingSeen);
     await prefs.setBool(_keyTutorialOnboardingSeen, _tutorialOnboardingSeen);
     await prefs.setBool(_keyHiddenFromLeaderboard, _hiddenFromLeaderboard);
+    await prefs.setBool(_keyBannerAdsEnabled, _bannerAdsEnabled);
   }
 }

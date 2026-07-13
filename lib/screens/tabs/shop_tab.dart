@@ -6,6 +6,7 @@ import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
 import '../../widgets/accessory_thumbnail.dart';
+import '../../widgets/arcade_fx.dart';
 import '../../widgets/ad_banner_slot.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/error_toast.dart';
@@ -423,25 +424,21 @@ class _ShopTabState extends State<ShopTab> {
   Widget _buildBody() {
     final state = _catalogState;
     if (state.shouldShowInitialLoading || (_loading && _catalog == null)) {
-      return const ColoredBox(
-        color: AppColors.parchment,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(16, 16, 16, 16),
-          child: ListSkeleton(itemCount: 3),
-        ),
+      return Container(
+        margin: const EdgeInsets.fromLTRB(10, 12, 10, 8),
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: _shopCardDecoration(),
+        child: const ListSkeleton(itemCount: 3),
       );
     }
 
     if (state.isError && !state.hasData) {
-      return ColoredBox(
-        color: AppColors.parchment,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-          child: LoadErrorPanel(
-            title: 'Couldn’t load the shop',
-            message: state.error ?? 'Check your connection and try again.',
-            onRetry: _loadCatalog,
-          ),
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(10, 12, 10, 8),
+        child: LoadErrorPanel(
+          title: 'Couldn’t load the shop',
+          message: state.error ?? 'Check your connection and try again.',
+          onRetry: _loadCatalog,
         ),
       );
     }
@@ -451,28 +448,335 @@ class _ShopTabState extends State<ShopTab> {
         (_catalog?['items'] as List?)?.cast<Map<String, dynamic>>() ??
         [];
 
-    return ColoredBox(
-      color: AppColors.parchment,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (state.isRefreshing)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 4),
-                child: LinearProgressIndicator(
-                  minHeight: 2,
-                  color: AppColors.accent,
-                  backgroundColor: Colors.transparent,
-                ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (state.isRefreshing)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 4),
+              child: LinearProgressIndicator(
+                minHeight: 2,
+                color: AppColors.accent,
+                backgroundColor: Colors.transparent,
               ),
-            if (_section == _ShopSection.store)
-              ..._buildStore(items)
-            else
-              ..._buildInventory(items),
-          ],
+            ),
+          if (_section == _ShopSection.store)
+            ..._buildStore(items)
+          else
+            ..._buildInventory(items),
+        ],
+      ),
+    );
+  }
+
+  /// Parchment game-piece card — same language as the other tabs.
+  BoxDecoration _shopCardDecoration() {
+    return BoxDecoration(
+      color: AppColors.parchment,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(
+        color: AppColors.roofDark.withValues(alpha: 0.55),
+        width: 2,
+      ),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x66000000),
+          offset: Offset(0, 4),
+          blurRadius: 0,
         ),
+      ],
+    );
+  }
+
+  /// A titled section: gold-tick header + a Clash-style grid of item tiles,
+  /// bouncing in with the section's stagger position.
+  Widget _buildSectionGroup(
+    String title,
+    List<Widget> tiles, {
+    required int staggerIndex,
+  }) {
+    return StaggerIn(
+      index: staggerIndex,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildSectionHeader(title),
+          GridView.count(
+            crossAxisCount: 3,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(10, 2, 10, 6),
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 10,
+            childAspectRatio: 0.66,
+            children: tiles,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Full-detail bottom sheet for a tile: big art, the COMPLETE description
+  /// (tiles are too small for it), and the primary action.
+  Future<void> _showItemSheet({
+    required Widget art,
+    required String name,
+    String? slotLabel,
+    String? description,
+    String? badge,
+    List<Widget> actions = const [],
+  }) {
+    return showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.parchment,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 96,
+                height: 96,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.parchmentDark,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: AppColors.roofDark.withValues(alpha: 0.4),
+                    width: 2,
+                  ),
+                ),
+                child: art,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                name,
+                textAlign: TextAlign.center,
+                style: PixelText.title(size: 20, color: AppColors.textDark),
+              ),
+              if (slotLabel != null || badge != null) ...[
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (slotLabel != null)
+                      _sheetChip(slotLabel, AppColors.textMid),
+                    if (slotLabel != null && badge != null)
+                      const SizedBox(width: 6),
+                    if (badge != null) _sheetChip(badge, AppColors.accent),
+                  ],
+                ),
+              ],
+              if (description != null && description.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(
+                  description,
+                  textAlign: TextAlign.center,
+                  style: PixelText.body(size: 14, color: AppColors.textMid),
+                ),
+              ],
+              if (actions.isNotEmpty) ...[
+                const SizedBox(height: 18),
+                ...actions,
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _sheetChip(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(label, style: PixelText.title(size: 10, color: color)),
+    );
+  }
+
+  static const _slotLabels = {
+    'HEAD': 'HEAD',
+    'FACE': 'FACE',
+    'NECK': 'NECK',
+    'BACK': 'BACK',
+    'FEET': 'FEET',
+    'CHARACTER': 'CHARACTER',
+  };
+
+  Widget _cosmeticArt(Map<String, dynamic> item, {double iconSize = 28}) {
+    final assetKey = item['assetKey'] as String? ?? '';
+    final isCharacter = item['slot'] == 'CHARACTER';
+    final equipped = item['equipped'] == true;
+    return isCharacter
+        ? AccessoryThumbnail(
+            assetKey: assetKey,
+            assetPath: animalSpriteFor(assetKey).asset,
+            animationFrames: animalSpriteFor(assetKey).frameCount,
+            errorBuilder: (context, error, stackTrace) => Icon(
+              Icons.pets_rounded,
+              size: iconSize,
+              color: equipped ? AppColors.accent : AppColors.textMid,
+            ),
+          )
+        : AccessoryThumbnail(
+            assetKey: assetKey,
+            animationFrames: AccessoryThumbnail.framesOf(item),
+            errorBuilder: (context, error, stackTrace) => Icon(
+              Icons.checkroom_rounded,
+              size: iconSize,
+              color: equipped ? AppColors.accent : AppColors.textMid,
+            ),
+          );
+  }
+
+  /// STORE tile for a cosmetic/character: art + name + gold price strip.
+  Widget _storeCosmeticTile(Map<String, dynamic> item) {
+    final name = item['name'] as String? ?? 'Accessory';
+    final price = item['priceCoins'] as int? ?? 0;
+    return _ShopTile(
+      art: _cosmeticArt(item),
+      name: name,
+      stripLabel: '$price',
+      stripIcon: Icons.monetization_on_rounded,
+      stripEnabled: !_saving,
+      onStrip: () => _purchase(item),
+      onTap: () => _showItemSheet(
+        art: _cosmeticArt(item, iconSize: 48),
+        name: name,
+        slotLabel: _slotLabels[item['slot']],
+        description: item['description'] as String? ?? '',
+        actions: [
+          PillButton(
+            label: 'BUY · $price',
+            icon: Icons.monetization_on_rounded,
+            variant: PillButtonVariant.secondary,
+            fontSize: 14,
+            fullWidth: true,
+            onPressed: _saving
+                ? null
+                : () {
+                    Navigator.of(context).pop();
+                    _purchase(item);
+                  },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// INVENTORY tile for a cosmetic/character: art + name + EQUIP/CLEAR strip.
+  Widget _inventoryCosmeticTile(Map<String, dynamic> item) {
+    final name = item['name'] as String? ?? 'Accessory';
+    final equipped = item['equipped'] == true;
+    final slot = item['slot'] as String? ?? '';
+    final id = item['id'] as String?;
+    void doEquip() => _equip(slot, id);
+    void doClear() => _equip(slot, null);
+    return _ShopTile(
+      art: _cosmeticArt(item),
+      name: name,
+      badge: equipped ? 'EQUIPPED' : null,
+      highlighted: equipped,
+      stripLabel: equipped ? 'CLEAR' : 'EQUIP',
+      stripIcon: equipped ? Icons.close_rounded : Icons.check_rounded,
+      stripEnabled: !_saving,
+      onStrip: equipped ? doClear : doEquip,
+      onTap: () => _showItemSheet(
+        art: _cosmeticArt(item, iconSize: 48),
+        name: name,
+        slotLabel: _slotLabels[item['slot']],
+        badge: equipped ? 'EQUIPPED' : null,
+        description: item['description'] as String? ?? '',
+        actions: [
+          PillButton(
+            label: equipped ? 'CLEAR' : 'EQUIP',
+            icon: equipped ? Icons.close_rounded : Icons.check_rounded,
+            variant: equipped
+                ? PillButtonVariant.secondary
+                : PillButtonVariant.primary,
+            fontSize: 14,
+            fullWidth: true,
+            onPressed: _saving
+                ? null
+                : () {
+                    Navigator.of(context).pop();
+                    (equipped ? doClear : doEquip)();
+                  },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// STORE tile for a re-buyable powerup.
+  Widget _storePowerupTile(Map<String, dynamic> item) {
+    final name = item['name'] as String? ?? 'Powerup';
+    final price = (item['priceCoins'] as num?)?.toInt() ?? 0;
+    final type = item['powerupType'] as String? ?? '';
+    final owned = _ownedQuantityFor(item);
+    return _ShopTile(
+      art: PowerupIcon(type: type, size: 44),
+      name: name,
+      badge: owned > 0 ? 'x$owned' : null,
+      stripLabel: '$price',
+      stripIcon: Icons.monetization_on_rounded,
+      stripEnabled: !_saving,
+      onStrip: () => _purchasePowerup(item),
+      onTap: () => _showItemSheet(
+        art: PowerupIcon(type: type, size: 64),
+        name: name,
+        badge: owned > 0 ? 'OWNED x$owned' : null,
+        description: item['description'] as String? ?? '',
+        actions: [
+          PillButton(
+            label: 'BUY · $price',
+            icon: Icons.monetization_on_rounded,
+            variant: PillButtonVariant.secondary,
+            fontSize: 14,
+            fullWidth: true,
+            onPressed: _saving
+                ? null
+                : () {
+                    Navigator.of(context).pop();
+                    _purchasePowerup(item);
+                  },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// INVENTORY tile for an owned powerup (no action, just the count).
+  Widget _ownedPowerupTile(String type, int quantity) {
+    const names = {
+      'IMPOSTER': 'Imposter',
+      'RAINSTORM': 'Rainstorm',
+      'MIRROR': 'Mirror',
+      'CLEANSE': 'Cleanse',
+    };
+    final name = names[type] ?? type;
+    return _ShopTile(
+      art: PowerupIcon(type: type, size: 44),
+      name: name,
+      badge: 'x$quantity',
+      stripLabel: 'x$quantity',
+      stripIcon: Icons.inventory_2_rounded,
+      stripEnabled: false,
+      onStrip: null,
+      onTap: () => _showItemSheet(
+        art: PowerupIcon(type: type, size: 64),
+        name: name,
+        badge: 'OWNED x$quantity',
+        description: 'Use it from a race to unleash it on your rivals.',
       ),
     );
   }
@@ -480,113 +784,81 @@ class _ShopTabState extends State<ShopTab> {
   static bool _isCharacter(Map<String, dynamic> item) =>
       item['slot'] == 'CHARACTER';
 
-  // ── STORE: unowned cosmetics + re-buyable powerups ─────────────────────────
+  // ── STORE: unowned cosmetics + re-buyable powerups ─────────────────────
   List<Widget> _buildStore(List<Map<String, dynamic>> items) {
     final unowned = items.where((i) => i['owned'] != true).toList();
     final unownedCharacters = unowned.where(_isCharacter).toList();
-    final unownedCosmetics =
-        unowned.where((i) => !_isCharacter(i)).toList();
+    final unownedCosmetics = unowned.where((i) => !_isCharacter(i)).toList();
 
+    var stagger = 0;
     return [
-      if (_powerupsAvailable && _powerupStoreItems.isNotEmpty) ...[
-        _buildSectionHeader('POWERUPS'),
-        for (int i = 0; i < _powerupStoreItems.length; i++)
-          _PowerupStoreRow(
-            item: _powerupStoreItems[i],
-            index: i,
-            ownedQuantity: _ownedQuantityFor(_powerupStoreItems[i]),
-            saving: _saving,
-            onBuy: () => _purchasePowerup(_powerupStoreItems[i]),
-          ),
-      ],
-      if (unownedCharacters.isNotEmpty) ...[
-        _buildSectionHeader('CHARACTERS'),
-        for (int i = 0; i < unownedCharacters.length; i++)
-          _ShopItemRow(
-            item: unownedCharacters[i],
-            index: i,
-            saving: _saving,
-            onBuy: () => _purchase(unownedCharacters[i]),
-            onEquip: () {},
-            onClear: () {},
-          ),
-      ],
-      _buildSectionHeader('ACCESSORIES'),
+      if (_powerupsAvailable && _powerupStoreItems.isNotEmpty)
+        _buildSectionGroup('POWERUPS', [
+          for (final item in _powerupStoreItems) _storePowerupTile(item),
+        ], staggerIndex: stagger++),
+      if (unownedCharacters.isNotEmpty)
+        _buildSectionGroup('CHARACTERS', [
+          for (final item in unownedCharacters) _storeCosmeticTile(item),
+        ], staggerIndex: stagger++),
       if (unownedCosmetics.isEmpty)
-        _buildEmptyState(
-          icon: Icons.checkroom_rounded,
-          message: 'You own all the gear! Check your Inventory.',
+        StaggerIn(
+          index: stagger++,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildSectionHeader('ACCESSORIES'),
+              _buildEmptyState(
+                icon: Icons.checkroom_rounded,
+                message: 'You own all the gear! Check your Inventory.',
+              ),
+            ],
+          ),
         )
       else
-        for (int i = 0; i < unownedCosmetics.length; i++)
-          _ShopItemRow(
-            item: unownedCosmetics[i],
-            index: i,
-            saving: _saving,
-            onBuy: () => _purchase(unownedCosmetics[i]),
-            onEquip: () {},
-            onClear: () {},
-          ),
+        _buildSectionGroup('ACCESSORIES', [
+          for (final item in unownedCosmetics) _storeCosmeticTile(item),
+        ], staggerIndex: stagger++),
     ];
   }
 
-  // ── INVENTORY: owned cosmetics + owned powerups ────────────────────────────
+  // ── INVENTORY: owned cosmetics + owned powerups ────────────────────────
   List<Widget> _buildInventory(List<Map<String, dynamic>> items) {
     final owned = items.where((i) => i['owned'] == true).toList();
     final ownedCharacters = owned.where(_isCharacter).toList();
     final ownedCosmetics = owned.where((i) => !_isCharacter(i)).toList();
-    final ownedPowerups = _powerupInventory.entries
-        .where((e) => e.value > 0)
-        .toList()
-      ..sort((a, b) => a.key.compareTo(b.key));
+    final ownedPowerups =
+        _powerupInventory.entries.where((e) => e.value > 0).toList()
+          ..sort((a, b) => a.key.compareTo(b.key));
 
+    var stagger = 0;
     return [
-      if (ownedPowerups.isNotEmpty) ...[
-        _buildSectionHeader('POWERUPS'),
-        for (int i = 0; i < ownedPowerups.length; i++)
-          _OwnedPowerupRow(
-            powerupType: ownedPowerups[i].key,
-            quantity: ownedPowerups[i].value,
-            index: i,
-          ),
-      ],
-      if (ownedCharacters.isNotEmpty) ...[
-        _buildSectionHeader('CHARACTERS'),
-        for (int i = 0; i < ownedCharacters.length; i++)
-          _ShopItemRow(
-            item: ownedCharacters[i],
-            index: i,
-            saving: _saving,
-            onBuy: () {},
-            onEquip: () => _equip(
-              ownedCharacters[i]['slot'] as String? ?? '',
-              ownedCharacters[i]['id'] as String?,
-            ),
-            // Clearing the CHARACTER slot goes back to the capybara.
-            onClear: () =>
-                _equip(ownedCharacters[i]['slot'] as String? ?? '', null),
-          ),
-      ],
-      _buildSectionHeader('ACCESSORIES'),
+      if (ownedPowerups.isNotEmpty)
+        _buildSectionGroup('POWERUPS', [
+          for (final entry in ownedPowerups)
+            _ownedPowerupTile(entry.key, entry.value),
+        ], staggerIndex: stagger++),
+      if (ownedCharacters.isNotEmpty)
+        _buildSectionGroup('CHARACTERS', [
+          for (final item in ownedCharacters) _inventoryCosmeticTile(item),
+        ], staggerIndex: stagger++),
       if (ownedCosmetics.isEmpty)
-        _buildEmptyState(
-          icon: Icons.inventory_2_rounded,
-          message: 'No gear yet — buy some from the Store.',
+        StaggerIn(
+          index: stagger++,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildSectionHeader('ACCESSORIES'),
+              _buildEmptyState(
+                icon: Icons.inventory_2_rounded,
+                message: 'No gear yet — buy some from the Store.',
+              ),
+            ],
+          ),
         )
       else
-        for (int i = 0; i < ownedCosmetics.length; i++)
-          _ShopItemRow(
-            item: ownedCosmetics[i],
-            index: i,
-            saving: _saving,
-            onBuy: () {},
-            onEquip: () => _equip(
-              ownedCosmetics[i]['slot'] as String? ?? '',
-              ownedCosmetics[i]['id'] as String?,
-            ),
-            onClear: () =>
-                _equip(ownedCosmetics[i]['slot'] as String? ?? '', null),
-          ),
+        _buildSectionGroup('ACCESSORIES', [
+          for (final item in ownedCosmetics) _inventoryCosmeticTile(item),
+        ], staggerIndex: stagger++),
     ];
   }
 
@@ -599,20 +871,27 @@ class _ShopTabState extends State<ShopTab> {
   Widget _buildSectionHeader(String title) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(10, 14, 10, 7),
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(
-            color: AppColors.parchmentBorder.withValues(alpha: 0.72),
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 8),
+      child: Row(
+        children: [
+          Container(
+            width: 6,
+            height: 16,
+            decoration: BoxDecoration(
+              color: AppColors.pillGold,
+              borderRadius: BorderRadius.circular(3),
+              border: Border.all(color: AppColors.pillGoldDark),
+            ),
           ),
-        ),
-      ),
-      child: Text(
-        title,
-        style: PixelText.title(
-          size: 16,
-          color: AppColors.textDark,
-        ).copyWith(shadows: _textShadows),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: PixelText.title(
+              size: 16,
+              color: AppColors.parchment,
+            ).copyWith(shadows: _textShadows),
+          ),
+        ],
       ),
     );
   }
@@ -621,17 +900,10 @@ class _ShopTabState extends State<ShopTab> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 26),
-      decoration: BoxDecoration(
-        color: AppColors.parchmentDark.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(8),
-      ),
+      decoration: _shopCardDecoration(),
       child: Column(
         children: [
-          Icon(
-            icon,
-            size: 32,
-            color: AppColors.textMid.withValues(alpha: 0.7),
-          ),
+          Icon(icon, size: 32, color: AppColors.textMid.withValues(alpha: 0.7)),
           const SizedBox(height: 8),
           Text(
             message,
@@ -644,328 +916,174 @@ class _ShopTabState extends State<ShopTab> {
   }
 }
 
-class _ShopItemRow extends StatelessWidget {
-  const _ShopItemRow({
-    required this.item,
-    required this.index,
-    required this.saving,
-    required this.onBuy,
-    required this.onEquip,
-    required this.onClear,
+/// Clash-style shop tile: art-dominant game-piece card with the name and a
+/// bottom action strip (price / EQUIP / quantity). Tapping the tile opens the
+/// detail sheet with the full description.
+class _ShopTile extends StatelessWidget {
+  const _ShopTile({
+    required this.art,
+    required this.name,
+    required this.stripLabel,
+    required this.stripIcon,
+    required this.stripEnabled,
+    required this.onStrip,
+    required this.onTap,
+    this.badge,
+    this.highlighted = false,
   });
 
-  final Map<String, dynamic> item;
-  final int index;
-  final bool saving;
-  final VoidCallback onBuy;
-  final VoidCallback onEquip;
-  final VoidCallback onClear;
+  final Widget art;
+  final String name;
+  final String stripLabel;
+  final IconData stripIcon;
+  final bool stripEnabled;
+  final VoidCallback? onStrip;
+  final VoidCallback onTap;
+
+  /// Small chip over the art (EQUIPPED / xN).
+  final String? badge;
+
+  /// Gold frame for equipped items.
+  final bool highlighted;
 
   @override
   Widget build(BuildContext context) {
-    final owned = item['owned'] == true;
-    final equipped = item['equipped'] == true;
-    final isCharacter = item['slot'] == 'CHARACTER';
-    final assetKey = item['assetKey'] as String? ?? '';
-    final name = item['name'] as String? ?? 'Accessory';
-    final description = item['description'] as String? ?? '';
-    final price = item['priceCoins'] as int? ?? 0;
-
-    final stripeColor = index.isOdd
-        ? AppColors.parchmentDark.withValues(alpha: 0.45)
-        : Colors.transparent;
-
-    return Container(
-      color: stripeColor,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: AppColors.parchmentDark,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: equipped ? AppColors.accent : AppColors.parchmentBorder,
-                width: equipped ? 2 : 1,
+    return GestureDetector(
+      onTap: onTap,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.parchment,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: highlighted
+                ? AppColors.pillGoldDark
+                : AppColors.roofDark.withValues(alpha: 0.55),
+            width: 2,
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x66000000),
+              offset: Offset(0, 4),
+              blurRadius: 0,
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Art area
+              Expanded(
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: ColoredBox(
+                        color: AppColors.parchmentDark.withValues(alpha: 0.6),
+                        child: Padding(
+                          padding: const EdgeInsets.all(10),
+                          child: Center(child: art),
+                        ),
+                      ),
+                    ),
+                    if (badge != null)
+                      Positioned(
+                        top: 4,
+                        right: 4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: highlighted
+                                ? AppColors.pillGold
+                                : AppColors.roofMid,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: highlighted
+                                  ? AppColors.pillGoldDark
+                                  : AppColors.roofDark,
+                            ),
+                          ),
+                          child: Text(
+                            badge!,
+                            style: PixelText.title(
+                              size: 8,
+                              color: highlighted
+                                  ? AppColors.textDark
+                                  : AppColors.parchment,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
-            padding: const EdgeInsets.all(5),
-            child: isCharacter
-                ? AccessoryThumbnail(
-                    assetKey: assetKey,
-                    assetPath: animalSpriteFor(assetKey).asset,
-                    animationFrames: animalSpriteFor(assetKey).frameCount,
-                    errorBuilder: (context, error, stackTrace) => Icon(
-                      Icons.pets_rounded,
-                      color: equipped ? AppColors.accent : AppColors.textMid,
-                    ),
-                  )
-                : AccessoryThumbnail(
-                    assetKey: assetKey,
-                    animationFrames: AccessoryThumbnail.framesOf(item),
-                    errorBuilder: (context, error, stackTrace) => Icon(
-                      Icons.checkroom_rounded,
-                      color: equipped ? AppColors.accent : AppColors.textMid,
-                    ),
-                  ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        name,
-                        style: PixelText.title(
-                          size: 15,
-                          color: AppColors.textDark,
-                        ),
-                        overflow: TextOverflow.ellipsis,
+              // Name
+              Container(
+                height: 34,
+                alignment: Alignment.center,
+                padding: const EdgeInsets.symmetric(horizontal: 5),
+                child: Text(
+                  name,
+                  maxLines: 2,
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                  style: PixelText.title(size: 11, color: AppColors.textDark),
+                ),
+              ),
+              // Action strip
+              GestureDetector(
+                onTap: stripEnabled ? onStrip : null,
+                child: Container(
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: onStrip == null
+                        ? AppColors.parchmentDark
+                        : AppColors.pillGold.withValues(
+                            alpha: stripEnabled ? 1 : 0.5,
+                          ),
+                    border: Border(
+                      top: BorderSide(
+                        color: onStrip == null
+                            ? AppColors.parchmentBorder
+                            : AppColors.pillGoldDark,
+                        width: 1.5,
                       ),
                     ),
-                    if (equipped) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.accent.withValues(alpha: 0.16),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        stripIcon,
+                        size: 13,
+                        color: onStrip == null
+                            ? AppColors.textMid
+                            : AppColors.pillGoldShadow,
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
                         child: Text(
-                          'EQUIPPED',
+                          stripLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: PixelText.title(
-                            size: 9,
-                            color: AppColors.accent,
+                            size: 12,
+                            color: onStrip == null
+                                ? AppColors.textMid
+                                : AppColors.textDark,
                           ),
                         ),
                       ),
                     ],
-                  ],
-                ),
-                if (description.isNotEmpty) ...[
-                  const SizedBox(height: 3),
-                  Text(
-                    description,
-                    style: PixelText.body(size: 12, color: AppColors.textMid),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                   ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          if (!owned)
-            PillButton(
-              label: '$price',
-              icon: Icons.monetization_on_rounded,
-              onPressed: saving ? null : onBuy,
-              fontSize: 12,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            )
-          else if (equipped)
-            PillButton(
-              label: 'CLEAR',
-              icon: Icons.close_rounded,
-              variant: PillButtonVariant.secondary,
-              onPressed: saving ? null : onClear,
-              fontSize: 12,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            )
-          else
-            PillButton(
-              label: 'EQUIP',
-              icon: Icons.check_rounded,
-              onPressed: saving ? null : onEquip,
-              fontSize: 12,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// A re-buyable powerup in the store (price + buy button + owned count).
-class _PowerupStoreRow extends StatelessWidget {
-  const _PowerupStoreRow({
-    required this.item,
-    required this.index,
-    required this.ownedQuantity,
-    required this.saving,
-    required this.onBuy,
-  });
-
-  final Map<String, dynamic> item;
-  final int index;
-  final int ownedQuantity;
-  final bool saving;
-  final VoidCallback onBuy;
-
-  @override
-  Widget build(BuildContext context) {
-    final name = item['name'] as String? ?? 'Powerup';
-    final description = item['description'] as String? ?? '';
-    final price = (item['priceCoins'] as num?)?.toInt() ?? 0;
-    final type = item['powerupType'] as String? ?? '';
-
-    final stripeColor = index.isOdd
-        ? AppColors.parchmentDark.withValues(alpha: 0.45)
-        : Colors.transparent;
-
-    return Container(
-      color: stripeColor,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: AppColors.parchmentDark,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.parchmentBorder),
-            ),
-            padding: const EdgeInsets.all(7),
-            child: PowerupIcon(type: type, size: 34),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        name,
-                        style: PixelText.title(
-                          size: 15,
-                          color: AppColors.textDark,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (ownedQuantity > 0) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.accent.withValues(alpha: 0.16),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          'OWNED x$ownedQuantity',
-                          style: PixelText.title(
-                            size: 9,
-                            color: AppColors.accent,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
                 ),
-                if (description.isNotEmpty) ...[
-                  const SizedBox(height: 3),
-                  Text(
-                    description,
-                    style: PixelText.body(size: 12, color: AppColors.textMid),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ],
-            ),
+              ),
+            ],
           ),
-          const SizedBox(width: 10),
-          PillButton(
-            label: '$price',
-            icon: Icons.monetization_on_rounded,
-            onPressed: saving ? null : onBuy,
-            fontSize: 12,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// An owned powerup in the inventory (icon + name + quantity badge).
-class _OwnedPowerupRow extends StatelessWidget {
-  const _OwnedPowerupRow({
-    required this.powerupType,
-    required this.quantity,
-    required this.index,
-  });
-
-  final String powerupType;
-  final int quantity;
-  final int index;
-
-  static const _names = {
-    'IMPOSTER': 'Imposter',
-    'RAINSTORM': 'Rainstorm',
-    'MIRROR': 'Mirror',
-    'CLEANSE': 'Cleanse',
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final name = _names[powerupType] ?? powerupType;
-    final stripeColor = index.isOdd
-        ? AppColors.parchmentDark.withValues(alpha: 0.45)
-        : Colors.transparent;
-
-    return Container(
-      color: stripeColor,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: AppColors.parchmentDark,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.parchmentBorder),
-            ),
-            padding: const EdgeInsets.all(7),
-            child: PowerupIcon(type: powerupType, size: 34),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              name,
-              style: PixelText.title(size: 15, color: AppColors.textDark),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppColors.parchmentDark,
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: AppColors.parchmentBorder),
-            ),
-            child: Text(
-              'x$quantity',
-              style: PixelText.title(size: 13, color: AppColors.textDark),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

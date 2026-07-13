@@ -51,12 +51,23 @@ class AdService implements ExtraSpinAdController {
       String.fromEnvironment('ADMOB_BANNER_AD_UNIT_ID');
   static const _testBannerIos = 'ca-app-pub-3940256099942544/2934735716';
 
-  /// Banners render ONLY on iOS builds that baked in a real
-  /// ADMOB_BANNER_AD_UNIT_ID — mirrors the rewarded-ad gating so Android (no
-  /// AdMob app registered) and misconfigured builds show nothing at all. When
-  /// off, [AdBannerSlot] collapses to zero size.
+  /// Remote kill switch, set from the backend's `featureFlags.bannerAdsEnabled`
+  /// (AuthService mirrors it here on restore and on every /auth/me sync, and it
+  /// is toggleable from Admin → Settings without an app release). Defaults OFF:
+  /// no flag from the backend means no banners.
+  static bool remoteBannersEnabled = false;
+
+  /// Banners render ONLY when the backend flag is on AND this is an iOS build
+  /// that baked in a real ADMOB_BANNER_AD_UNIT_ID — the unit id is compile-time
+  /// (keep passing the dart-define in prod builds so the remote switch can turn
+  /// banners back on later). Android (no AdMob app registered) and
+  /// misconfigured builds show nothing at all. When off, [AdBannerSlot]
+  /// collapses to zero size.
   static bool get bannersEnabled =>
-      !kIsWeb && Platform.isIOS && _envBannerAdUnitId.isNotEmpty;
+      remoteBannersEnabled &&
+      !kIsWeb &&
+      Platform.isIOS &&
+      _envBannerAdUnitId.isNotEmpty;
 
   /// Ad unit for [AdBannerSlot]. The real unit when injected at build time,
   /// otherwise Google's public test banner (only reached in dev, since

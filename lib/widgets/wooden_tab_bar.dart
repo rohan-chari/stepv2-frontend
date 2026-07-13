@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'home_chrome.dart';
+import '../styles.dart';
 
 class WoodenTabItem {
   final IconData icon;
@@ -37,17 +37,16 @@ class WoodenTabBar extends StatelessWidget {
     final bottomPadding = MediaQuery.of(context).padding.bottom;
 
     return DecoratedBox(
+      // Deep forest bar so the arcade-green tabs sit on a darker "ledge";
+      // matches the ink borders of the game-piece cards above it.
       decoration: BoxDecoration(
-        color: HomeColors.surface,
-        border: Border(
-          top: BorderSide(
-            color: HomeColors.lineSoft.withValues(alpha: 0.95),
-            width: 2,
-          ),
+        color: AppColors.roofDark,
+        border: const Border(
+          top: BorderSide(color: AppColors.roofEdge, width: 2),
         ),
         boxShadow: [
           BoxShadow(
-            color: HomeColors.ink.withValues(alpha: 0.14),
+            color: Colors.black.withValues(alpha: 0.30),
             blurRadius: 0,
             offset: const Offset(0, -3),
           ),
@@ -96,8 +95,12 @@ class _TabItemWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? HomeColors.ink : HomeColors.muted;
-    final background = selected ? HomeColors.surfaceMuted : Colors.transparent;
+    // Selected tab reads like the gold game buttons; the rest stay quiet
+    // parchment silhouettes on the dark ledge.
+    final color = selected
+        ? AppColors.textDark
+        : AppColors.parchment.withValues(alpha: 0.72);
+    final background = selected ? AppColors.pillGold : Colors.transparent;
 
     return Material(
       color: Colors.transparent,
@@ -113,9 +116,7 @@ class _TabItemWidget extends StatelessWidget {
             color: background,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: selected
-                  ? HomeColors.lineSoft.withValues(alpha: 0.95)
-                  : Colors.transparent,
+              color: selected ? AppColors.pillGoldDark : Colors.transparent,
               width: 2,
             ),
           ),
@@ -140,10 +141,8 @@ class _TabItemWidget extends StatelessWidget {
                 item.label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: HomeText.body(
-                  size: 10,
-                  color: color,
-                  weight: selected ? FontWeight.w800 : FontWeight.w700,
+                style: PixelText.body(size: 10, color: color).copyWith(
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
                   height: 1,
                 ),
               ),
@@ -164,20 +163,18 @@ class _Badge extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: HomeColors.clay,
+        color: AppColors.pillTerra,
         shape: BoxShape.circle,
-        border: Border.all(color: HomeColors.surface, width: 1.5),
+        border: Border.all(color: AppColors.roofDark, width: 1.5),
       ),
       child: Padding(
         padding: const EdgeInsets.all(4),
         child: Text(
           '$count',
-          style: HomeText.body(
+          style: PixelText.body(
             size: 9,
             color: Colors.white,
-            weight: FontWeight.w900,
-            height: 1,
-          ),
+          ).copyWith(fontWeight: FontWeight.w900, height: 1),
         ),
       ),
     );

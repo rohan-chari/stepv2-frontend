@@ -4,8 +4,8 @@ import '../models/loadable.dart';
 import '../widgets/wooden_tab_bar.dart';
 import '../screens/tabs/home_tab.dart';
 import '../screens/tabs/races_tab.dart';
-import '../screens/tabs/ranked_tab.dart';
 import '../screens/tabs/leaderboard_tab.dart';
+import '../screens/tabs/profile_tab.dart';
 import '../screens/tabs/friends_tab.dart';
 import '../screens/race_detail_screen.dart';
 import 'tutorial_preview_data.dart';
@@ -36,17 +36,26 @@ class TutorialRealHost extends StatelessWidget {
   int? get _tabIndex => switch (page) {
     TutorialMockPage.home => 0,
     TutorialMockPage.races => 1,
-    TutorialMockPage.ranked => 2,
+    TutorialMockPage.friends => 2,
     TutorialMockPage.leaderboard => 3,
-    // Friends and the race-detail view are pushed screens in the real app —
-    // no bottom bar.
-    TutorialMockPage.friends => null,
+    TutorialMockPage.profile => 4,
+    // Race detail is a pushed screen in the real app — no bottom bar.
     TutorialMockPage.raceDetail => null,
   };
 
   @override
   Widget build(BuildContext context) {
     final tabIndex = _tabIndex;
+    // Freeze entrance/ambient animations (StaggerIn, PulseGlow, ShineSweep,
+    // hero drift) inside the tutorial: the spotlight measures its target rect
+    // right after a page mounts, and a mid-bounce element measures misaligned.
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(disableAnimations: true),
+      child: _buildHost(tabIndex),
+    );
+  }
+
+  Widget _buildHost(int? tabIndex) {
     return Stack(
       children: [
         Positioned.fill(child: _buildPage()),
@@ -59,16 +68,16 @@ class TutorialRealHost extends StatelessWidget {
               child: WoodenTabBar(
                 currentIndex: tabIndex,
                 onTap: (_) {},
-                // Index 2 = Ranked; keyed so the tutorial can spotlight the
-                // real tab. Other slots stay unkeyed.
-                itemKeys: [null, null, keys['ranked.tab'], null, null],
+                // Index 2 = Friends; keyed so the tutorial can spotlight the
+                // real tab. Mirrors MainShell's live tab set.
+                itemKeys: [null, null, keys['nav.friends'], null, null],
                 items: const [
                   WoodenTabItem(icon: Icons.home_rounded, label: 'Home'),
                   WoodenTabItem(
                     icon: Icons.directions_run_rounded,
                     label: 'Races',
                   ),
-                  WoodenTabItem(icon: Icons.shield_rounded, label: 'Ranked'),
+                  WoodenTabItem(icon: Icons.people_rounded, label: 'Friends'),
                   WoodenTabItem(
                     icon: Icons.leaderboard_rounded,
                     label: 'Boards',
@@ -128,8 +137,16 @@ class TutorialRealHost extends StatelessWidget {
           backendApiService: api,
           tutorialPowerupsKey: keys['raceDetail.powerups'],
         );
-      case TutorialMockPage.ranked:
-        return RankedTab(authService: authService, backendApiService: api);
+      case TutorialMockPage.profile:
+        return ProfileTab(
+          authService: authService,
+          backendApiService: api,
+          displayName: 'Rohan',
+          email: null,
+          onSettingsChanged: () {},
+          showBackButton: false,
+          tutorialInviteKey: keys['profile.invite'],
+        );
       case TutorialMockPage.leaderboard:
         return LeaderboardTab(
           authService: authService,

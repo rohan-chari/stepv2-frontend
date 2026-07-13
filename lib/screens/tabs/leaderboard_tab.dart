@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../config/animals.dart';
 import '../../models/loadable.dart';
+import '../../widgets/arcade_fx.dart';
 import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
@@ -373,12 +374,28 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     return Column(
       children: [
         _buildRankingControls(),
-        ColoredBox(
-          color: AppColors.parchment,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
-            child: _buildLeaderboardState(),
-          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 12, 10, 8),
+          child: _buildLeaderboardState(),
+        ),
+      ],
+    );
+  }
+
+  /// Parchment game-piece card — same language as the home/races tabs.
+  BoxDecoration _boardCardDecoration() {
+    return BoxDecoration(
+      color: AppColors.parchment,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(
+        color: AppColors.roofDark.withValues(alpha: 0.55),
+        width: 2,
+      ),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x66000000),
+          offset: Offset(0, 4),
+          blurRadius: 0,
         ),
       ],
     );
@@ -387,18 +404,22 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   Widget _buildLeaderboardState() {
     final state = _leaderboardState;
     if (state.shouldShowInitialLoading || (_isLoading && _top100.isEmpty)) {
-      return Column(
-        children: const [
-          _PodiumSkeleton(),
-          SizedBox(height: 14),
-          ListSkeleton(itemCount: 5, showAvatar: true),
-        ],
+      return Container(
+        decoration: _boardCardDecoration(),
+        padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
+        child: Column(
+          children: const [
+            _PodiumSkeleton(),
+            SizedBox(height: 14),
+            ListSkeleton(itemCount: 5, showAvatar: true),
+          ],
+        ),
       );
     }
 
     if (state.isError && !state.hasData) {
       return LoadErrorPanel(
-        title: 'Couldn’t load leaderboard',
+        title: 'Couldn\u2019t load leaderboard',
         message: 'Check your connection and try again.',
         onRetry: _loadLeaderboard,
       );
@@ -407,15 +428,19 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     if (_top100.isEmpty) {
       // Keep the scope toggle reachable when the board is empty (e.g. on the
       // Friends scope with no friends yet) — otherwise the user is stranded.
-      return Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(6, 2, 6, 0),
-            child: _buildScopeHeader(),
-          ),
-          const SizedBox(height: 6),
-          _buildEmptyState(),
-        ],
+      return Container(
+        decoration: _boardCardDecoration(),
+        padding: const EdgeInsets.fromLTRB(10, 12, 10, 4),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(6, 2, 6, 0),
+              child: _buildScopeHeader(),
+            ),
+            const SizedBox(height: 6),
+            _buildEmptyState(),
+          ],
+        ),
       );
     }
 
@@ -641,10 +666,23 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
 
     return Column(
       children: [
-        _buildPodiumSection(podiumRows),
+        StaggerIn(index: 0, child: _buildPodiumSection(podiumRows)),
         if (listRows.isNotEmpty || pinnedMeRow != null) ...[
-          const SizedBox(height: 10),
-          _buildRankingsList(listRows, startIndex: 3, pinnedMeRow: pinnedMeRow),
+          const SizedBox(height: 12),
+          StaggerIn(
+            index: 1,
+            child: Container(
+              decoration: _boardCardDecoration(),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: _buildRankingsList(
+                  listRows,
+                  startIndex: 3,
+                  pinnedMeRow: pinnedMeRow,
+                ),
+              ),
+            ),
+          ),
         ],
       ],
     );
@@ -665,38 +703,39 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     // in the centre, every rank is colour-coded and numbered, so the top 3 read
     // as one unmistakable ranking — clearly apart from the #4+ list.
     return DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.parchmentDark,
+      decoration: _boardCardDecoration(),
+      child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.parchmentBorder, width: 1),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x14000000),
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-        child: Column(
-          children: [
-            _buildScopeHeader(),
-            const SizedBox(height: 10),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
+        child: ShineSweep(
+          period: const Duration(milliseconds: 4200),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+            child: Column(
               children: [
-                Expanded(flex: 10, child: _buildPodiumTile(second, place: 2)),
-                const SizedBox(width: 6),
-                Expanded(
-                  flex: 12,
-                  child: _buildPodiumTile(first, place: 1, featured: true),
+                _buildScopeHeader(),
+                const SizedBox(height: 10),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      flex: 10,
+                      child: _buildPodiumTile(second, place: 2),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      flex: 12,
+                      child: _buildPodiumTile(first, place: 1, featured: true),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      flex: 10,
+                      child: _buildPodiumTile(third, place: 3),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 6),
-                Expanded(flex: 10, child: _buildPodiumTile(third, place: 3)),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );

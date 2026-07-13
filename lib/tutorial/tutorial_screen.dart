@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../styles.dart';
 import '../widgets/game_container.dart';
-import '../widgets/home_chrome.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/spinning_coin.dart';
 import 'spotlight_overlay.dart';
@@ -17,7 +16,7 @@ import 'tutorial_real_screens.dart';
 /// backend is authoritative for the actual grant (and its idempotency).
 const int kTutorialRewardCoins = 100;
 
-enum TutorialMockPage { home, races, raceDetail, ranked, leaderboard, friends }
+enum TutorialMockPage { home, races, raceDetail, leaderboard, friends, profile }
 
 class TutorialStep {
   const TutorialStep({
@@ -66,11 +65,11 @@ List<TutorialStep> _buildSteps() {
     ),
     TutorialStep(
       page: TutorialMockPage.home,
-      targetKey: 'home.friends',
+      targetKey: 'nav.friends',
       title: 'Find friends',
       body:
-          'Tap here to add friends and find people to race. Friends power your '
-          'races and leaderboards.',
+          'Friends live in their own tab. Add people here to race and rank '
+          'against each other.',
     ),
     TutorialStep(
       page: TutorialMockPage.friends,
@@ -79,6 +78,14 @@ List<TutorialStep> _buildSteps() {
       body:
           'Search by display name to send a request. Once they accept, you can '
           'race and rank against each other.',
+    ),
+    TutorialStep(
+      page: TutorialMockPage.profile,
+      targetKey: 'profile.invite',
+      title: 'Invite friends, earn coins',
+      body:
+          'Share your invite link from Profile — when a friend joins Bara '
+          'with it, you BOTH earn coins.',
     ),
     TutorialStep(
       page: TutorialMockPage.races,
@@ -103,14 +110,6 @@ List<TutorialStep> _buildSteps() {
       body:
           'Walking earns mystery boxes of powerups — boosts and shields, plus '
           'attacks that freeze or steal steps from rivals.',
-    ),
-    TutorialStep(
-      page: TutorialMockPage.ranked,
-      targetKey: 'ranked.tab',
-      title: 'Climb the ranks',
-      body:
-          'Ranked drops you into a weekly cohort your size. Out-walk them to '
-          'climb tiers and earn rewards.',
     ),
     TutorialStep(
       page: TutorialMockPage.leaderboard,

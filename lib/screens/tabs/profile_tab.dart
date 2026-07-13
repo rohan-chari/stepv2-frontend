@@ -8,6 +8,7 @@ import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../services/notification_service.dart';
 import '../../styles.dart';
+import '../../widgets/arcade_fx.dart';
 import '../../tutorial/tutorial_screen.dart';
 import '../../utils/at_name.dart';
 import '../../widgets/app_avatar.dart';
@@ -17,7 +18,6 @@ import '../../widgets/pixel_switch.dart';
 import '../../widgets/trail_sign.dart';
 import '../../widgets/step_calendar.dart';
 import '../../widgets/loading_skeleton.dart';
-import '../../widgets/tier_badge.dart';
 import '../admin_screen.dart';
 import '../display_name_screen.dart';
 import '../referral_screen.dart';
@@ -37,6 +37,10 @@ class ProfileTab extends StatefulWidget {
   final Future<void> Function()? onRemoveProfilePhoto;
   final bool showBackButton;
 
+  // Optional tutorial spotlight anchor for the invite-friends button (null in
+  // the shipped app; the tutorial passes a key so its overlay can measure it).
+  final GlobalKey? tutorialInviteKey;
+
   const ProfileTab({
     super.key,
     required this.authService,
@@ -51,6 +55,7 @@ class ProfileTab extends StatefulWidget {
     this.onAddProfilePhoto,
     this.onRemoveProfilePhoto,
     this.showBackButton = true,
+    this.tutorialInviteKey,
   });
 
   @override
@@ -365,7 +370,9 @@ class _ProfileTabState extends State<ProfileTab> {
                             email,
                             style: PixelText.body(
                               size: 13,
-                              color: AppColors.parchment.withValues(alpha: 0.85),
+                              color: AppColors.parchment.withValues(
+                                alpha: 0.85,
+                              ),
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -403,74 +410,138 @@ class _ProfileTabState extends State<ProfileTab> {
   }
 
   Widget _buildBody() {
-    return ColoredBox(
-      color: AppColors.parchment,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Column(
-          children: [
-            _buildSectionHeader('INVITE FRIENDS'),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-              child: PillButton(
-                label: 'INVITE FRIENDS & EARN COINS',
-                icon: Icons.group_add_rounded,
-                variant: PillButtonVariant.primary,
-                fontSize: 13,
-                fullWidth: true,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        children: [
+          StaggerIn(
+            index: 0,
+            child: Column(
+              children: [
+                _buildSectionHeader('INVITE FRIENDS'),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
+                  child: KeyedSubtree(
+                    key: widget.tutorialInviteKey,
+                    child: PulseGlow(
+                      child: PillButton(
+                        label: 'INVITE FRIENDS & EARN COINS',
+                        icon: Icons.group_add_rounded,
+                        // Gold, not green — the primary green pill vanishes
+                        // against the checkered green backdrop.
+                        variant: PillButtonVariant.secondary,
+                        fontSize: 13,
+                        fullWidth: true,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 12,
+                        ),
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => ReferralScreen(
+                                authService: widget.authService,
+                                backendApiService: _api,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
                 ),
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => ReferralScreen(
+              ],
+            ),
+          ),
+          StaggerIn(
+            index: 1,
+            child: Column(
+              children: [
+                _buildSectionHeader('STEP CALENDAR'),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
+                  child: Container(
+                    decoration: _profileCardDecoration(),
+                    padding: const EdgeInsets.all(10),
+                    child: StepCalendar(
+                      authService: widget.authService,
+                      backendApiService: _api,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          StaggerIn(
+            index: 2,
+            child: Column(
+              children: [
+                _buildSectionHeader('STATS'),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
+                  child: Container(
+                    decoration: _profileCardDecoration(),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: _StatsSection(
+                        key: _statsKey,
                         authService: widget.authService,
                         backendApiService: _api,
                       ),
                     ),
-                  );
-                },
-              ),
+                  ),
+                ),
+              ],
             ),
-            _buildSectionHeader('STEP CALENDAR'),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-              child: StepCalendar(
-                authService: widget.authService,
-                backendApiService: _api,
-              ),
-            ),
-            _buildSectionHeader('STATS'),
-            _StatsSection(
-              key: _statsKey,
-              authService: widget.authService,
-              backendApiService: _api,
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+  }
+
+  /// Parchment game-piece card — same language as the home/races tabs.
+  BoxDecoration _profileCardDecoration() {
+    return BoxDecoration(
+      color: AppColors.parchment,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(
+        color: AppColors.roofDark.withValues(alpha: 0.55),
+        width: 2,
+      ),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x66000000),
+          offset: Offset(0, 4),
+          blurRadius: 0,
+        ),
+      ],
     );
   }
 
   Widget _buildSectionHeader(String title) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(10, 14, 10, 7),
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(
-            color: AppColors.parchmentBorder.withValues(alpha: 0.72),
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 8),
+      child: Row(
+        children: [
+          Container(
+            width: 6,
+            height: 16,
+            decoration: BoxDecoration(
+              color: AppColors.pillGold,
+              borderRadius: BorderRadius.circular(3),
+              border: Border.all(color: AppColors.pillGoldDark),
+            ),
           ),
-        ),
-      ),
-      child: Text(
-        title,
-        style: PixelText.title(
-          size: 16,
-          color: AppColors.textDark,
-        ).copyWith(shadows: _textShadows),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: PixelText.title(
+              size: 16,
+              color: AppColors.parchment,
+            ).copyWith(shadows: _textShadows),
+          ),
+        ],
       ),
     );
   }
@@ -500,8 +571,6 @@ class _StatsSectionState extends State<_StatsSection> {
   int? _avgPerDayYear;
   int _allTime = 0;
   int _streak = 0;
-  String? _rankedTier;
-  int? _rankedDivision;
   Loadable<Map<String, dynamic>> _statsState = const Loadable.initial();
 
   @override
@@ -547,12 +616,6 @@ class _StatsSectionState extends State<_StatsSection> {
           _avgPerDayYear = (stats['avgPerDayYear'] as num?)?.toInt();
           _allTime = (stats['allTime'] as num?)?.toInt() ?? 0;
           _streak = (stats['streak'] as num?)?.toInt() ?? 0;
-          // Prefer the weekly-cohort home tier (v2); fall back to the legacy
-          // season tier for backends that predate it. v2 has no divisions.
-          final tierV2 = stats['rankedTierV2'] as String?;
-          _rankedTier = tierV2 ?? stats['rankedTier'] as String?;
-          _rankedDivision =
-              tierV2 != null ? null : (stats['rankedDivision'] as num?)?.toInt();
           _statsState = Loadable.success(stats);
           _isLoading = false;
         });
@@ -615,59 +678,28 @@ class _StatsSectionState extends State<_StatsSection> {
               backgroundColor: Colors.transparent,
             ),
           ),
-        _buildRankedRow(0),
         _buildStatRow(
           'Steps/Day This Week',
           _formatPlain(_avgPerDayWeek ?? _thisWeek),
-          1,
+          0,
         ),
         _buildStatRow(
           'Steps/Day This Month',
           _formatPlain(_avgPerDayMonth ?? _thisMonth),
-          2,
+          1,
         ),
         _buildStatRow(
           'Steps/Day This Year',
           _formatPlain(_avgPerDayYear ?? _thisYear),
-          3,
+          2,
         ),
-        _buildStatRow('All Time', _formatSteps(_allTime), 4),
+        _buildStatRow('All Time', _formatSteps(_allTime), 3),
         _buildStatRow(
           'Goal Streak',
           '$_streak day${_streak == 1 ? '' : 's'}',
-          5,
+          4,
         ),
       ],
-    );
-  }
-
-  Widget _buildRankedRow(int index) {
-    final tier = rankedTierFromKey(_rankedTier);
-    final ranked = tier != RankedTier.unranked;
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 14),
-      decoration: BoxDecoration(
-        color: index.isOdd
-            ? AppColors.parchmentDark.withValues(alpha: 0.45)
-            : Colors.transparent,
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              'Ranked Tier',
-              style: PixelText.body(size: 16, color: AppColors.textMid),
-            ),
-          ),
-          if (ranked)
-            TierBadge(tier: tier, division: _rankedDivision)
-          else
-            Text(
-              'Unranked',
-              style: PixelText.title(size: 16, color: AppColors.textMid),
-            ),
-        ],
-      ),
     );
   }
 

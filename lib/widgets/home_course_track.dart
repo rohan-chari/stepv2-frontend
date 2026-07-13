@@ -506,11 +506,16 @@ class CapybaraCustomizationPreview extends StatefulWidget {
     required this.accessories,
     this.size = 118,
     this.animal,
+    this.showShadow = true,
   });
 
   final List<Map<String, dynamic>> accessories;
   final double size;
   final String? animal;
+
+  /// The floating ellipse shadow under the sprite. Callers that stand the
+  /// capybara on a drawn ground line (e.g. the home hero scene) turn it off.
+  final bool showShadow;
 
   @override
   State<CapybaraCustomizationPreview> createState() =>
@@ -555,19 +560,20 @@ class _CapybaraCustomizationPreviewState
               clipBehavior: Clip.none,
               alignment: Alignment.bottomCenter,
               children: [
-                Positioned(
-                  bottom: widget.size * 0.08,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: HomeColors.ink.withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(widget.size * 0.08),
-                    ),
-                    child: SizedBox(
-                      width: widget.size * 0.78,
-                      height: widget.size * 0.08,
+                if (widget.showShadow)
+                  Positioned(
+                    bottom: widget.size * 0.08,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: HomeColors.ink.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(widget.size * 0.08),
+                      ),
+                      child: SizedBox(
+                        width: widget.size * 0.78,
+                        height: widget.size * 0.08,
+                      ),
                     ),
                   ),
-                ),
                 Positioned(
                   bottom: 0,
                   child: CapybaraSpriteWithAccessories(

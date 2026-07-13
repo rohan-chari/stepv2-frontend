@@ -104,6 +104,11 @@ abstract final class AppColors {
   static const coinDark = Color(0xFFB8860B);
   static const coinEdge = Color(0xFF8B6914);
 
+  // Deep "game felt" panel surfaces (home below-the-fold; reusable by other
+  // tabs adopting the arcade look). Light cards pop hard against these.
+  static const felt = Color(0xFF1A2B20);
+  static const feltLine = Color(0x1FFFFFFF);
+
   // Pill button palette (3 colors)
   // Primary – forest green
   static const pillGreen = roofLight;

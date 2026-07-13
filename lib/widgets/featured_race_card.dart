@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../styles.dart';
 import '../utils/race_display.dart';
+import 'arcade_fx.dart';
 import 'pill_button.dart';
 import 'race_ui.dart';
 
@@ -220,13 +221,16 @@ class FeaturedRaceCard extends StatelessWidget {
     final joinLabel = isUpcoming
         ? (isJoining ? 'OPTING IN…' : 'OPT IN')
         : (isJoining ? 'JOINING…' : 'JOIN');
-    return PillButton(
-      label: joinLabel,
-      variant: PillButtonVariant.primary,
-      fontSize: 13,
-      fullWidth: true,
-      padding: padding,
-      onPressed: isJoining ? null : onJoin,
+    // The one actionable moment on the card gets the arcade glow.
+    return PulseGlow(
+      child: PillButton(
+        label: joinLabel,
+        variant: PillButtonVariant.primary,
+        fontSize: 13,
+        fullWidth: true,
+        padding: padding,
+        onPressed: isJoining ? null : onJoin,
+      ),
     );
   }
 }

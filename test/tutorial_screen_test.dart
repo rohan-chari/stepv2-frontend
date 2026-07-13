@@ -19,7 +19,8 @@ Future<void> _next(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('walks the real home / friends / races / ranked / boards screens',
+  testWidgets(
+      'walks the real home / friends / profile / races / boards screens',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(600, 1000));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -33,25 +34,27 @@ void main() {
     expect(find.text('SHOP'), findsWidgets);
     expect(find.text('EDIT GOAL'), findsNothing);
 
-    // Advance through the four home steps to the real Friends screen.
+    // Advance through the four home steps (last one spotlights the Friends
+    // tab in the nav bar) to the real Friends screen.
     await _next(tester); // milestones
     await _next(tester); // shop
-    await _next(tester); // friends button
+    await _next(tester); // nav.friends
     await _next(tester); // -> friends.search
     expect(find.text('Search by display name'), findsOneWidget);
     expect(find.text('@Maya Chen'), findsWidgets);
 
-    // Races (steps 6-8): real RACES header + seeded active race.
+    // Profile (step 6): the referral invite button.
+    await _next(tester);
+    expect(find.text('INVITE FRIENDS & EARN COINS'), findsOneWidget);
+
+    // Races (steps 7-8): real RACES header + seeded active race.
     await _next(tester);
     expect(find.text('RACES'), findsWidgets);
     expect(find.text('Weekend 10K'), findsWidgets);
 
-    // Ranked (step 9): real weekly-cohort screen.
+    // Race detail (step 9): powerups & boxes.
     await _next(tester); // races.pot
-    await _next(tester); // races.box
-    await _next(tester); // -> ranked.tab
-    expect(find.text('RANKED'), findsWidgets);
-    expect(find.text('Your group'), findsOneWidget);
+    await _next(tester); // -> raceDetail.powerups
 
     // Boards (step 10): real leaderboard.
     await _next(tester);

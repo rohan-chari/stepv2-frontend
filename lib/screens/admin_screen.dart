@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
+import '../services/backend_api_service.dart';
 import '../styles.dart';
 import '../widgets/content_board.dart';
 import '../widgets/error_toast.dart' as error_toast;
@@ -132,6 +133,300 @@ const _powerupEntries = [
   ),
 ];
 
+/// Runtime feature flags (backend AppSetting rows) — currently just the banner
+/// ads kill switch. Toggling here changes what every client sees on its next
+/// /auth/me sync; no app release needed.
+class _AdminSettingsCard extends StatefulWidget {
+  const _AdminSettingsCard({
+    required this.width,
+    required this.authService,
+    required this.showErrorToast,
+  });
+
+  final double width;
+  final AuthService authService;
+  final void Function(BuildContext context, String message) showErrorToast;
+
+  @override
+  State<_AdminSettingsCard> createState() => _AdminSettingsCardState();
+}
+
+class _AdminSettingsCardState extends State<_AdminSettingsCard> {
+  final _api = BackendApiService();
+  Map<String, dynamic>? _settings;
+  bool _loading = true;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final token = widget.authService.authToken;
+    if (token == null) return;
+    try {
+      final settings = await _api.fetchAdminSettings(identityToken: token);
+      if (mounted) {
+        setState(() {
+          _settings = settings;
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _setBannerAds(bool enabled) async {
+    final token = widget.authService.authToken;
+    if (token == null || _saving) return;
+    final previous = _settings;
+    setState(() {
+      _saving = true;
+      _settings = {...?_settings, 'bannerAdsEnabled': enabled};
+    });
+    try {
+      final updated = await _api.updateAdminSettings(
+        identityToken: token,
+        settings: {'bannerAdsEnabled': enabled},
+      );
+      if (mounted) setState(() => _settings = updated);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _settings = previous);
+        widget.showErrorToast(context, 'Couldn\'t save the setting.');
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bannerAdsEnabled = _settings?['bannerAdsEnabled'] == true;
+    return ContentBoard(
+      width: widget.width,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'SETTINGS',
+            style: PixelText.title(size: 16, color: AppColors.textDark),
+          ),
+          const SizedBox(height: 8),
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            )
+          else if (_settings == null)
+            Text(
+              'Couldn\'t load settings.',
+              style: PixelText.body(size: 12, color: AppColors.textMid),
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Banner ads (iOS)',
+                        style: PixelText.title(
+                          size: 13,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      Text(
+                        'Remote kill switch — applies on each client\'s '
+                        'next launch/resume.',
+                        style: PixelText.body(
+                          size: 11,
+                          color: AppColors.textMid,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: bannerAdsEnabled,
+                  onChanged: _saving ? null : _setBannerAds,
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Product-health snapshot (GET /admin/stats): invite funnel, friends
+/// distribution, DAU-in-race, and D1/D7 retention split by has-friend.
+class _AdminStatsCard extends StatefulWidget {
+  const _AdminStatsCard({required this.width, required this.authService});
+
+  final double width;
+  final AuthService authService;
+
+  @override
+  State<_AdminStatsCard> createState() => _AdminStatsCardState();
+}
+
+class _AdminStatsCardState extends State<_AdminStatsCard> {
+  final _api = BackendApiService();
+  Map<String, dynamic>? _stats;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final token = widget.authService.authToken;
+    if (token == null) return;
+    setState(() => _loading = true);
+    try {
+      final stats = await _api.fetchAdminStats(identityToken: token);
+      if (mounted) {
+        setState(() {
+          _stats = stats.isEmpty ? null : stats;
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Widget _row(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: PixelText.body(size: 12, color: AppColors.textMid),
+            ),
+          ),
+          Text(
+            value,
+            style: PixelText.title(size: 13, color: AppColors.textDark),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _section(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10, bottom: 4),
+      child: Text(
+        title,
+        style: PixelText.title(size: 12, color: AppColors.textDark),
+      ),
+    );
+  }
+
+  String _retentionLine(Map<String, dynamic>? side, String day) {
+    if (side == null) return '—';
+    final cohort = (side['${day}Cohort'] as num?)?.toInt() ?? 0;
+    final retained = (side['${day}Retained'] as num?)?.toInt() ?? 0;
+    if (cohort == 0) return '—';
+    final pct = ((retained / cohort) * 100).round();
+    return '$retained/$cohort ($pct%)';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final stats = _stats;
+    final users = stats?['users'] as Map<String, dynamic>?;
+    final activity = stats?['activity'] as Map<String, dynamic>?;
+    final friends =
+        (stats?['friends'] as Map<String, dynamic>?)?['distribution']
+            as Map<String, dynamic>?;
+    final retention = stats?['retention'] as Map<String, dynamic>?;
+    final withFriend = retention?['withFriend'] as Map<String, dynamic>?;
+    final withoutFriend = retention?['withoutFriend'] as Map<String, dynamic>?;
+    final funnel = stats?['referralFunnel'] as Map<String, dynamic>?;
+
+    return ContentBoard(
+      width: widget.width,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'STATISTICS',
+                  style: PixelText.title(size: 16, color: AppColors.textDark),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(
+                  Icons.refresh,
+                  size: 18,
+                  color: AppColors.textDark,
+                ),
+                onPressed: _loading ? null : _load,
+              ),
+            ],
+          ),
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            )
+          else if (stats == null)
+            Text(
+              'Couldn\'t load stats (older backend?).',
+              style: PixelText.body(size: 12, color: AppColors.textMid),
+            )
+          else ...[
+            _section('USERS'),
+            _row('Total', '${users?['total'] ?? '—'}'),
+            _row('New (7d / 30d)',
+                '${users?['newLast7Days'] ?? '—'} / ${users?['newLast30Days'] ?? '—'}'),
+            _section('TODAY'),
+            _row('DAU (stepped today)', '${activity?['dauToday'] ?? '—'}'),
+            _row(
+              'In an active race',
+              '${activity?['dauInActiveRace'] ?? '—'} '
+              '(${activity?['pctDauInActiveRace'] ?? '—'}%)',
+            ),
+            _section('FRIENDS PER USER'),
+            _row(
+              '0 / 1 / 2 / 3-5 / 6+',
+              '${friends?['0'] ?? 0} / ${friends?['1'] ?? 0} / '
+              '${friends?['2'] ?? 0} / ${friends?['3-5'] ?? 0} / '
+              '${friends?['6+'] ?? 0}',
+            ),
+            _section('RETENTION (LAST 32D COHORT)'),
+            _row('D1 with friend', _retentionLine(withFriend, 'd1')),
+            _row('D1 no friend', _retentionLine(withoutFriend, 'd1')),
+            _row('D7 with friend', _retentionLine(withFriend, 'd7')),
+            _row('D7 no friend', _retentionLine(withoutFriend, 'd7')),
+            _section('INVITE FUNNEL'),
+            _row('Link opens (7d / all)',
+                '${funnel?['linkOpensLast7Days'] ?? '—'} / ${funnel?['linkOpensTotal'] ?? '—'}'),
+            _row('Referred signups (7d / all)',
+                '${funnel?['signupsLast7Days'] ?? '—'} / ${funnel?['signups'] ?? '—'}'),
+            _row('Joined a race', '${funnel?['joinedRace'] ?? '—'}'),
+            _row('Finished a race', '${funnel?['finishedRace'] ?? '—'}'),
+            _row('Rewarded', '${funnel?['rewarded'] ?? '—'}'),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class AdminScreen extends StatelessWidget {
   const AdminScreen({
     super.key,
@@ -172,6 +467,14 @@ class AdminScreen extends StatelessWidget {
                     textAlign: TextAlign.center,
                   ),
                 ),
+                const SizedBox(height: 24),
+                _AdminSettingsCard(
+                  width: boardWidth,
+                  authService: authService,
+                  showErrorToast: showErrorToast,
+                ),
+                const SizedBox(height: 24),
+                _AdminStatsCard(width: boardWidth, authService: authService),
                 const SizedBox(height: 24),
                 ContentBoard(
                   width: boardWidth,

@@ -40,26 +40,25 @@ class AccessoryThumbnail extends StatelessWidget {
         this.assetPath ?? 'assets/images/accessories/$assetKey.png';
     final frames = animationFrames < 1 ? 1 : animationFrames;
 
-    if (frames == 1) {
-      return Image.asset(
-        assetPath,
-        fit: BoxFit.contain,
-        filterQuality: FilterQuality.none,
-        errorBuilder: errorBuilder,
-      );
-    }
-
-    // Frame-sheet art is drawn in-world (positioned/scaled by renderMetadata),
-    // so a frame can be mostly transparent and make a tiny icon. A bundled
-    // `<name>_thumb.png` — the frame-0 art cropped to its content — wins when
-    // present; otherwise fall back to cropping frame 0 out of the sheet.
+    // A bundled `<name>_thumb.png` — the art content-cropped out of its
+    // canvas (frame 0 for animation sheets) — always wins when present. It
+    // both fills the tile properly for art that floats in a padded canvas
+    // AND keeps sheets rendering correctly even if the backend's
+    // renderMetadata.animationFrames was lost (tuner-wipe incident): without
+    // it, an unknown sheet renders as every frame side by side.
     final thumbPath = assetPath.replaceFirst(RegExp(r'\.png$'), '_thumb.png');
     return Image.asset(
       thumbPath,
       fit: BoxFit.contain,
       filterQuality: FilterQuality.none,
-      errorBuilder: (context, error, stackTrace) =>
-          _frameZeroCrop(assetPath, frames),
+      errorBuilder: (context, error, stackTrace) => frames == 1
+          ? Image.asset(
+              assetPath,
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.none,
+              errorBuilder: errorBuilder,
+            )
+          : _frameZeroCrop(assetPath, frames),
     );
   }
 

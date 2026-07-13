@@ -18,7 +18,8 @@ class RetroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final border = highlightColor ?? AppColors.parchmentBorder;
+    final border =
+        highlightColor ?? AppColors.roofDark.withValues(alpha: 0.55);
     final fill = highlightColor == null
         ? AppColors.parchment
         : Color.lerp(highlightColor, AppColors.parchment, 0.82)!;
@@ -26,11 +27,19 @@ class RetroCard extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: fill,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: border, width: 2),
+        // Game-piece hard drop, matching the redesigned tabs' cards.
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x66000000),
+            offset: Offset(0, 4),
+            blurRadius: 0,
+          ),
+        ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(12),
         child: Stack(
           children: [
             const Positioned.fill(

@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
+import '../services/health_service.dart';
 import '../styles.dart';
 import '../utils/at_name.dart';
 import '../utils/share_helper.dart';
 import 'referral_rules_screen.dart';
 import '../widgets/app_avatar.dart';
+import '../widgets/arcade_fx.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/info_toast.dart';
 import '../widgets/loading_skeleton.dart';
@@ -169,7 +171,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
     final topInset = MediaQuery.of(context).padding.top;
 
     return Scaffold(
-      backgroundColor: AppColors.parchment,
+      backgroundColor: AppColors.roofLight,
       body: Stack(
         children: [
           const Positioned.fill(
@@ -191,13 +193,10 @@ class _ReferralScreenState extends State<ReferralScreen> {
                     onRefresh: _load,
                     color: AppColors.accent,
                     backgroundColor: AppColors.parchment,
-                    child: ColoredBox(
-                      color: AppColors.parchment,
-                      child: ListView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
-                        children: _buildBody(),
-                      ),
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+                      children: _buildBody(),
                     ),
                   ),
                 ),
@@ -227,7 +226,10 @@ class _ReferralScreenState extends State<ReferralScreen> {
                 child: IconButton(
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
-                  icon: const Icon(Icons.arrow_back, color: AppColors.parchment),
+                  icon: const Icon(
+                    Icons.arrow_back,
+                    color: AppColors.parchment,
+                  ),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
               ),
@@ -257,8 +259,12 @@ class _ReferralScreenState extends State<ReferralScreen> {
 
   List<Widget> _buildBody() {
     if (_loading) {
-      return const [
-        Padding(padding: EdgeInsets.all(12), child: ListSkeleton(itemCount: 4)),
+      return [
+        Container(
+          decoration: _referralCardDecoration(),
+          padding: const EdgeInsets.all(12),
+          child: const ListSkeleton(itemCount: 4),
+        ),
       ];
     }
     if (_error) {
@@ -267,13 +273,19 @@ class _ReferralScreenState extends State<ReferralScreen> {
         Text(
           "Couldn't load your invites",
           textAlign: TextAlign.center,
-          style: PixelText.title(size: 18, color: AppColors.textDark),
+          style: PixelText.title(
+            size: 18,
+            color: AppColors.parchment,
+          ).copyWith(shadows: _textShadows),
         ),
         const SizedBox(height: 8),
         Text(
           'Check your connection and try again.',
           textAlign: TextAlign.center,
-          style: PixelText.body(size: 14, color: AppColors.textMid),
+          style: PixelText.body(
+            size: 14,
+            color: AppColors.parchment.withValues(alpha: 0.88),
+          ),
         ),
         const SizedBox(height: 16),
         Center(
@@ -287,38 +299,61 @@ class _ReferralScreenState extends State<ReferralScreen> {
     }
 
     return [
-      _buildStatsCard(),
+      StaggerIn(index: 0, child: _buildStatsCard()),
       const SizedBox(height: 16),
-      PillButton(
-        label: 'SHARE YOUR INVITE',
-        icon: Icons.ios_share_rounded,
-        variant: PillButtonVariant.primary,
-        fullWidth: true,
-        onPressed: (_code != null && _url != null) ? _share : null,
+      StaggerIn(
+        index: 1,
+        child: PulseGlow(
+          child: PillButton(
+            label: 'SHARE YOUR INVITE',
+            icon: Icons.ios_share_rounded,
+            // Gold — the primary green pill vanishes on the green checker.
+            variant: PillButtonVariant.secondary,
+            fullWidth: true,
+            onPressed: (_code != null && _url != null) ? _share : null,
+          ),
+        ),
       ),
       if (_code != null) ...[
         const SizedBox(height: 10),
         Center(
           child: Text(
             'Your code: $_code',
-            style: PixelText.body(size: 14, color: AppColors.textMid),
+            style: PixelText.body(
+              size: 14,
+              color: AppColors.parchment.withValues(alpha: 0.92),
+            ).copyWith(shadows: _textShadows),
           ),
         ),
       ],
-      const SizedBox(height: 24),
-      _buildSectionHeader('YOUR INVITES'),
-      const SizedBox(height: 8),
-      if (_friends.isEmpty)
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 20),
-          child: Text(
-            "No invites yet — share your link to get started.",
-            textAlign: TextAlign.center,
-            style: PixelText.body(size: 14, color: AppColors.textMid),
-          ),
-        )
-      else
-        ..._friends.map(_buildFriendRow),
+      const SizedBox(height: 20),
+      StaggerIn(
+        index: 2,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildSectionHeader('YOUR INVITES'),
+            const SizedBox(height: 8),
+            Container(
+              decoration: _referralCardDecoration(),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              child: _friends.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      child: Text(
+                        "No invites yet — share your link to get started.",
+                        textAlign: TextAlign.center,
+                        style: PixelText.body(
+                          size: 14,
+                          color: AppColors.textMid,
+                        ),
+                      ),
+                    )
+                  : Column(children: _friends.map(_buildFriendRow).toList()),
+            ),
+          ],
+        ),
+      ),
       const SizedBox(height: 24),
       Center(
         child: TextButton(
@@ -327,7 +362,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
             'Have an invite code?',
             style: PixelText.body(
               size: 14,
-              color: AppColors.textMid,
+              color: AppColors.parchment.withValues(alpha: 0.92),
             ).copyWith(decoration: TextDecoration.underline),
           ),
         ),
@@ -336,16 +371,14 @@ class _ReferralScreenState extends State<ReferralScreen> {
         child: TextButton(
           onPressed: () {
             Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const ReferralRulesScreen(),
-              ),
+              MaterialPageRoute(builder: (_) => const ReferralRulesScreen()),
             );
           },
           child: Text(
             'Program rules',
             style: PixelText.body(
               size: 13,
-              color: AppColors.textMid.withValues(alpha: 0.8),
+              color: AppColors.parchment.withValues(alpha: 0.75),
             ).copyWith(decoration: TextDecoration.underline),
           ),
         ),
@@ -353,23 +386,34 @@ class _ReferralScreenState extends State<ReferralScreen> {
     ];
   }
 
+  /// Parchment game-piece card — same language as the redesigned tabs.
+  BoxDecoration _referralCardDecoration() {
+    return BoxDecoration(
+      color: AppColors.parchment,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(
+        color: AppColors.roofDark.withValues(alpha: 0.55),
+        width: 2,
+      ),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x66000000),
+          offset: Offset(0, 4),
+          blurRadius: 0,
+        ),
+      ],
+    );
+  }
+
   Widget _buildStatsCard() {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-      decoration: BoxDecoration(
-        color: AppColors.parchmentLight,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.parchmentBorder, width: 1.5),
-      ),
+      decoration: _referralCardDecoration(),
       child: Row(
         children: [
-          Expanded(
-            child: _buildStat('$_referredCount', 'Invited'),
-          ),
+          Expanded(child: _buildStat('$_referredCount', 'Invited')),
           _divider(),
-          Expanded(
-            child: _buildStat('$_completedCount', 'Completed'),
-          ),
+          Expanded(child: _buildStat('$_completedCount', 'Completed')),
           _divider(),
           Expanded(child: _buildCoinStat()),
         ],
@@ -386,7 +430,10 @@ class _ReferralScreenState extends State<ReferralScreen> {
   Widget _buildStat(String value, String label) {
     return Column(
       children: [
-        Text(value, style: PixelText.title(size: 22, color: AppColors.textDark)),
+        Text(
+          value,
+          style: PixelText.title(size: 22, color: AppColors.textDark),
+        ),
         const SizedBox(height: 4),
         Text(label, style: PixelText.body(size: 12, color: AppColors.textMid)),
       ],
@@ -408,15 +455,35 @@ class _ReferralScreenState extends State<ReferralScreen> {
           ],
         ),
         const SizedBox(height: 4),
-        Text('Earned', style: PixelText.body(size: 12, color: AppColors.textMid)),
+        Text(
+          'Earned',
+          style: PixelText.body(size: 12, color: AppColors.textMid),
+        ),
       ],
     );
   }
 
   Widget _buildSectionHeader(String title) {
-    return Text(
-      title,
-      style: PixelText.title(size: 16, color: AppColors.textDark),
+    return Row(
+      children: [
+        Container(
+          width: 6,
+          height: 16,
+          decoration: BoxDecoration(
+            color: AppColors.pillGold,
+            borderRadius: BorderRadius.circular(3),
+            border: Border.all(color: AppColors.pillGoldDark),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: PixelText.title(
+            size: 16,
+            color: AppColors.parchment,
+          ).copyWith(shadows: _textShadows),
+        ),
+      ],
     );
   }
 
@@ -446,18 +513,45 @@ class _ReferralScreenState extends State<ReferralScreen> {
   }
 }
 
-/// Benefit-framed share copy. Embeds both the raw code and the link so a friend
-/// who lands on the App Store can still type the code manually if the deferred
-/// match misses. Public so other entry points (home empty-state) reuse it.
+/// Challenge-framed share copy: a personal taunt with today's live step count
+/// beats a generic referral blurb for open rates. Embeds both the raw code and
+/// the link so a friend who lands on the App Store can still type the code
+/// manually if the deferred match misses. Public so other entry points (home
+/// empty-state) reuse it.
 Future<void> shareReferral(
   BuildContext context, {
   required String code,
   required String url,
-}) {
-  final text =
-      "I'm racing on Bara — bet you can't out-step me. Use my code $code "
-      "and we'll both earn coins when you finish your first race: $url";
+}) async {
+  // Best-effort live step count for the taunt; ~2s budget, silent fallback to
+  // the countless copy (share must never hang or fail on a Health hiccup).
+  int? steps;
+  try {
+    final data = await HealthService().getStepsToday().timeout(
+      const Duration(seconds: 2),
+    );
+    steps = data.steps;
+  } catch (_) {}
+  if (!context.mounted) return;
+
+  final text = steps != null && steps > 0
+      ? "I'm at ${formatStepsWithCommas(steps)} steps today — think you can "
+            "beat me? Race me on Bara with code $code and we'll both earn "
+            "coins when you finish your first race: $url"
+      : "Bet you can't out-step me. Race me on Bara with code $code and "
+            "we'll both earn coins when you finish your first race: $url";
   return shareText(context, text);
+}
+
+/// 8432 -> "8,432". Local helper (shared with the race-detail share copy).
+String formatStepsWithCommas(int steps) {
+  final digits = steps.toString();
+  final buffer = StringBuffer();
+  for (var i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) buffer.write(',');
+    buffer.write(digits[i]);
+  }
+  return buffer.toString();
 }
 
 class _StageBadge extends StatelessWidget {
