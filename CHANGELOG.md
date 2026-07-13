@@ -24,6 +24,10 @@ Update this file after every major/minor change. Add new work under
 
 ## [Unreleased]
 
+---
+
+## [1.5.3] — 2026-07-12
+
 ### Added
 - New cosmetic accessories (cape, hydration pack) and additional accessory
   artwork, generated via the Codex `imagegen` pipeline and pre-tested.
