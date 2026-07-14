@@ -94,6 +94,7 @@ const _powerupNames = {
   'CLEANSE': 'Cleanse',
   'IMPOSTER': 'Imposter',
   'RAINSTORM': 'Rainstorm',
+  'SIGNAL_JAMMER': 'Signal Jammer',
 };
 
 const _powerupDescriptions = {
@@ -122,6 +123,8 @@ const _powerupDescriptions = {
   'IMPOSTER': 'Swap leaderboard positions with a rival for 1 hour (cosmetic)',
   'RAINSTORM':
       'Everyone else\'s steps count for half for 1 hour (shields protect)',
+  'SIGNAL_JAMMER':
+      'Jam a rival\'s signal — they can\'t use any powerups for 1 hour',
 };
 
 // Short-form descriptions used in the active-effects list, where the
@@ -140,6 +143,7 @@ const _powerupShortDescriptions = {
   'TRAIL_MINE': 'Mine planted',
   'MIRROR': 'Reflects next attack',
   'RAINSTORM': 'Steps halved by rain',
+  'SIGNAL_JAMMER': 'Powerups jammed',
 };
 
 const _targetedPowerups = [
@@ -151,6 +155,8 @@ const _targetedPowerups = [
   // IMPOSTER picks a rival to swap leaderboard display with — uses the same
   // target-picker flow as the other targeted powerups.
   'IMPOSTER',
+  // SIGNAL_JAMMER picks a rival to jam — same target-picker flow.
+  'SIGNAL_JAMMER',
 ];
 
 const _rarityColors = {
@@ -159,16 +165,19 @@ const _rarityColors = {
   'RARE': Color(0xFFD4A017),
 };
 
-// Powerup upgrade tables — must match backend src/utils/powerupUpgrades.js
+// Powerup upgrade price tables — FALLBACK ONLY. The backend is authoritative:
+// getRaceProgress powerupData.upgradeCosts carries the live ladders and wins
+// when present (see _upgradeCostFor). These bundled copies are used only
+// against an older backend that doesn't send them yet.
 const _upgradeCosts = {
-  'COMMON': [0, 25, 75, 225],
-  'UNCOMMON': [0, 45, 135, 400],
-  'RARE': [0, 50, 150, 450],
+  'COMMON': [0, 5, 15, 45],
+  'UNCOMMON': [0, 10, 30, 90],
+  'RARE': [0, 15, 45, 135],
 };
 
-const _upgradeCostsByType = {
-  'LUCKY_HORSESHOE': [0, 250, 600, 1200],
-};
+// Per-type overrides of the rarity ladder. Currently empty (Lucky Horseshoe's
+// premium ladder was retired — it now prices as plain RARE).
+const _upgradeCostsByType = <String, List<int>>{};
 
 // Per-tier effect labels for the use-modal. Index 0 = base.
 const _upgradeEffectLabels = {
@@ -226,14 +235,22 @@ const _upgradeEffectLabels = {
 
 bool _isUpgradeable(String? type) => _upgradeEffectLabels.containsKey(type);
 
-int _upgradeCostForType(String? type, String rarity, int level) {
-  final typeTiers = _upgradeCostsByType[type];
-  if (typeTiers != null && level >= 0 && level < typeTiers.length) {
-    return typeTiers[level];
-  }
-  final tiers = _upgradeCosts[rarity];
-  if (tiers == null || level < 0 || level >= tiers.length) return 0;
-  return tiers[level];
+// Defensively parse a {KEY: [int, int, int, int]} cost table from the backend.
+// Returns null when absent/malformed so callers can fall back to the bundled
+// tables (older backends don't send upgradeCosts at all).
+Map<String, List<int>>? _parseCostTable(dynamic raw) {
+  if (raw is! Map) return null;
+  final out = <String, List<int>>{};
+  raw.forEach((key, value) {
+    if (key is String && value is List) {
+      final tiers = value
+          .map((e) => e is num ? e.toInt() : null)
+          .whereType<int>()
+          .toList();
+      if (tiers.length >= 4) out[key] = tiers;
+    }
+  });
+  return out;
 }
 
 class _RaceDetailScreenState extends State<RaceDetailScreen> {
@@ -1519,6 +1536,32 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     );
   }
 
+  // Upgrade price for a powerup tier. Prefers the backend's live ladders
+  // (powerupData.upgradeCosts from getRaceProgress) so the label always shows
+  // what the server will actually charge; falls back to the bundled tables
+  // when talking to an older backend that doesn't send them.
+  int _upgradeCostFor(String? type, String rarity, int level) {
+    var byRarity = _upgradeCosts;
+    var byType = _upgradeCostsByType;
+    final serverCosts = _powerupData?['upgradeCosts'];
+    if (serverCosts is Map) {
+      final serverByRarity = _parseCostTable(serverCosts['byRarity']);
+      if (serverByRarity != null && serverByRarity.isNotEmpty) {
+        byRarity = serverByRarity;
+        // An empty byType from the server is meaningful ("no overrides"), so
+        // it replaces the bundled overrides rather than falling back to them.
+        byType = _parseCostTable(serverCosts['byType']) ?? const {};
+      }
+    }
+    final typeTiers = byType[type];
+    if (typeTiers != null && level >= 0 && level < typeTiers.length) {
+      return typeTiers[level];
+    }
+    final tiers = byRarity[rarity];
+    if (tiers == null || level < 0 || level >= tiers.length) return 0;
+    return tiers[level];
+  }
+
   List<Widget> _buildTierButtons(
     BuildContext ctx,
     Map<String, dynamic> powerup,
@@ -1529,7 +1572,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   ) {
     final buttons = <Widget>[];
     for (int level = 0; level <= 3; level++) {
-      final cost = _upgradeCostForType(type, rarity, level);
+      final cost = _upgradeCostFor(type, rarity, level);
       final affordable = myCoins >= cost;
       final isBase = level == 0;
       final label = isBase

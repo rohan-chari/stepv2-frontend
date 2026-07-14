@@ -26,6 +26,8 @@ void main() {
     'SNEAKY_SWAP',
     'CLEANSE',
     'IMPOSTER',
+    'RAINSTORM',
+    'SIGNAL_JAMMER',
   ]) {
     testWidgets('PowerupIcon renders the image asset for $type', (
       tester,

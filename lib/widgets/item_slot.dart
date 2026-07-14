@@ -30,6 +30,7 @@ const _powerupNames = {
   'CLEANSE': 'Cleanse',
   'IMPOSTER': 'Imposter',
   'RAINSTORM': 'Rainstorm',
+  'SIGNAL_JAMMER': 'Signal Jammer',
 };
 
 enum ItemSlotState { empty, held, mysteryBox }

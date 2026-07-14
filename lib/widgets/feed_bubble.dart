@@ -18,6 +18,7 @@ const _powerupDisplayNames = {
   'BANANA_PEEL': 'Banana Peel',
   'IMPOSTER': 'Imposter',
   'RAINSTORM': 'Rainstorm',
+  'SIGNAL_JAMMER': 'Signal Jammer',
 };
 
 const _offensiveTypes = {
@@ -31,6 +32,8 @@ const _offensiveTypes = {
   'IMPOSTER',
   // RAINSTORM debuffs every other racer at once — offensive accent.
   'RAINSTORM',
+  // SIGNAL_JAMMER stops a rival from using powerups for 1 hour — offensive.
+  'SIGNAL_JAMMER',
 };
 
 const _shieldTypes = {'COMPRESSION_SOCKS', 'MIRROR'};

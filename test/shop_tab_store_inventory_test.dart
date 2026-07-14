@@ -9,7 +9,7 @@ import 'package:step_tracker/services/backend_api_service.dart';
 //
 // STORE shows:
 //   - cosmetics the user does NOT yet own (owned cosmetics leave the store)
-//   - purchasable powerups (e.g. Imposter, 500 coins) which are RE-BUYABLE
+//   - purchasable powerups (e.g. Imposter, 75 coins) which are RE-BUYABLE
 // INVENTORY shows:
 //   - owned cosmetics
 //   - owned powerups with their quantity counts
@@ -122,9 +122,17 @@ Map<String, dynamic> _powerupCatalog() => {
           'sku': 'POWERUP_IMPOSTER',
           'name': 'Imposter',
           'description': 'Swap leaderboard positions for 1 hour',
-          'priceCoins': 500,
+          'priceCoins': 75,
           'powerupType': 'IMPOSTER',
           'ownedQuantity': 2,
+        },
+        {
+          'sku': 'POWERUP_SIGNAL_JAMMER',
+          'name': 'Signal Jammer',
+          'description': 'Jam a rival — they can\'t use powerups for 1 hour',
+          'priceCoins': 75,
+          'powerupType': 'SIGNAL_JAMMER',
+          'ownedQuantity': 0,
         },
       ],
     };
@@ -159,7 +167,7 @@ Future<void> _selectSegment(WidgetTester tester, String label) async {
 }
 
 void main() {
-  testWidgets('STORE shows Imposter (500 coins) as a purchasable powerup',
+  testWidgets('STORE shows Imposter (75 coins) as a purchasable powerup',
       (tester) async {
     final auth = await _createAuthService();
     final api = _FakeShopApi(
@@ -172,8 +180,23 @@ void main() {
     await _selectSegment(tester, 'STORE');
 
     expect(find.text('Imposter'), findsWidgets);
-    // The 500-coin price is shown as a buy affordance in the store.
-    expect(find.text('500'), findsWidgets);
+    // The 75-coin price is shown as a buy affordance in the store.
+    expect(find.text('75'), findsWidgets);
+  });
+
+  testWidgets('STORE shows the Signal Jammer as a purchasable powerup',
+      (tester) async {
+    final auth = await _createAuthService();
+    final api = _FakeShopApi(
+      catalog: _catalog(),
+      powerupCatalog: _powerupCatalog(),
+      inventory: _inventory(),
+    );
+
+    await _pumpShop(tester, auth, api);
+    await _selectSegment(tester, 'STORE');
+
+    expect(find.text('Signal Jammer'), findsWidgets);
   });
 
   testWidgets('STORE shows unowned cosmetics but NOT owned ones',

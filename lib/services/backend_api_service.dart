@@ -66,8 +66,8 @@ class BackendApiService {
   );
   static final String clientFeaturesHeader =
       (!kIsWeb && Platform.isIOS && _adUnitId.isNotEmpty)
-      ? 'characters,ads'
-      : 'characters';
+      ? 'characters,ads,jammer'
+      : 'characters,jammer';
   final HttpClient _httpClient;
   String? _cachedTimeZone;
   String? _cachedReleaseChannel;

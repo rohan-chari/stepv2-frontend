@@ -8,6 +8,7 @@ import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
 import '../widgets/accessory_thumbnail.dart';
+import '../widgets/ad_banner_slot.dart';
 import '../widgets/case_opening_strip.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/game_container.dart';
@@ -319,28 +320,37 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
               ),
             ),
           ),
-          SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(14, 18, 14, 24),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 460),
-                  child: _isLoading
-                      ? _buildLoading()
-                      : _claimedReward != null
-                      ? _RewardReveal(
-                          reward: _claimedReward!,
-                          onSettled: () => _applyReward(_claimedReward!),
-                          onClose: () => Navigator.of(context).pop(true),
-                        )
-                      : _opening
-                      ? _buildOpening()
-                      : _box != null
-                      ? _buildBox()
-                      : _buildLadder(),
+          Column(
+            children: [
+              Expanded(
+                child: SafeArea(
+                  child: Center(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(14, 18, 14, 24),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 460),
+                        child: _isLoading
+                            ? _buildLoading()
+                            : _claimedReward != null
+                            ? _RewardReveal(
+                                reward: _claimedReward!,
+                                onSettled: () => _applyReward(_claimedReward!),
+                                onClose: () => Navigator.of(context).pop(true),
+                              )
+                            : _opening
+                            ? _buildOpening()
+                            : _box != null
+                            ? _buildBox()
+                            : _buildLadder(),
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
+              // Screen-bottom trackside footer (same treatment as the
+              // leaderboard/shop tabs); collapses to zero size when adless.
+              const AdBannerSlot(withBottomSafeArea: true),
+            ],
           ),
         ],
       ),

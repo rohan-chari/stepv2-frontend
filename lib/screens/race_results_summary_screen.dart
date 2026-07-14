@@ -45,62 +45,71 @@ class RaceResultsSummaryScreen extends StatelessWidget {
               ),
             ),
           ),
-          SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(14, 18, 14, 24),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 460),
-                  child: GameContainer(
-                    padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
-                    frameColor: AppColors.accent,
-                    surfaceColor: AppColors.parchmentLight,
-                    glowColor: AppColors.coinMid,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          single ? 'RACE FINISHED' : 'RACES FINISHED',
-                          textAlign: TextAlign.center,
-                          style: HomeText.display(size: 28, color: HomeColors.ink),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          single
-                              ? 'Here\'s how you did.'
-                              : '${races.length} of your races wrapped up.',
-                          textAlign: TextAlign.center,
-                          style: HomeText.body(
-                            size: 13,
-                            color: HomeColors.muted,
-                            weight: FontWeight.w700,
+          Column(
+            children: [
+              Expanded(
+                child: SafeArea(
+                  child: Center(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(14, 18, 14, 24),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 460),
+                        child: GameContainer(
+                          padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+                          frameColor: AppColors.accent,
+                          surfaceColor: AppColors.parchmentLight,
+                          glowColor: AppColors.coinMid,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                single ? 'RACE FINISHED' : 'RACES FINISHED',
+                                textAlign: TextAlign.center,
+                                style: HomeText.display(
+                                  size: 28,
+                                  color: HomeColors.ink,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                single
+                                    ? 'Here\'s how you did.'
+                                    : '${races.length} of your races wrapped up.',
+                                textAlign: TextAlign.center,
+                                style: HomeText.body(
+                                  size: 13,
+                                  color: HomeColors.muted,
+                                  weight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              for (var i = 0; i < races.length; i++) ...[
+                                if (i > 0) const SizedBox(height: 10),
+                                _ResultCard(race: races[i]),
+                              ],
+                              const SizedBox(height: 18),
+                              PillButton(
+                                label: 'NICE',
+                                variant: PillButtonVariant.primary,
+                                fullWidth: true,
+                                // TODO(ads-interstitial): frequency-capped
+                                // interstitial fires after this pop (see ADS_TODO.md)
+                                onPressed: () => Navigator.of(context).pop(),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 16),
-                        for (var i = 0; i < races.length; i++) ...[
-                          if (i > 0) const SizedBox(height: 10),
-                          _ResultCard(race: races[i]),
-                        ],
-                        const SizedBox(height: 18),
-                        PillButton(
-                          label: 'NICE',
-                          variant: PillButtonVariant.primary,
-                          fullWidth: true,
-                          // TODO(ads-interstitial): frequency-capped
-                          // interstitial fires after this pop (see ADS_TODO.md)
-                          onPressed: () => Navigator.of(context).pop(),
-                        ),
-                        // Banner below the action so it never delays the
-                        // dismiss; collapses to zero size when adless (its own
-                        // top padding provides the gap when an ad shows).
-                        const AdBannerSlot(style: AdBannerStyle.inCard),
-                      ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
+              // Screen-bottom trackside footer (same treatment as the
+              // leaderboard/shop tabs) instead of a banner nested in the card;
+              // collapses to zero size when adless.
+              const AdBannerSlot(withBottomSafeArea: true),
+            ],
           ),
           if (placedTop3) const Positioned.fill(child: CelebrationConfetti()),
         ],
@@ -154,7 +163,9 @@ class _ResultCard extends StatelessWidget {
                     ? Icons.emoji_events_rounded
                     : Icons.flag_rounded,
                 size: 18,
-                color: myPlacement == 1 ? AppColors.coinDark : AppColors.textMid,
+                color: myPlacement == 1
+                    ? AppColors.coinDark
+                    : AppColors.textMid,
               ),
               const SizedBox(width: 6),
               Text(

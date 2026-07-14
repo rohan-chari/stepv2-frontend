@@ -41,6 +41,7 @@ class PowerupIcon extends StatelessWidget {
     'CLEANSE': 'cleanse',
     'IMPOSTER': 'imposter',
     'RAINSTORM': 'rainstorm',
+    'SIGNAL_JAMMER': 'signal_jammer',
   };
 
   static int get knownTypeCount => _assetNames.length;

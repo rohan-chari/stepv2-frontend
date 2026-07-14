@@ -11,6 +11,7 @@ import '../../styles.dart';
 import '../../widgets/arcade_fx.dart';
 import '../../tutorial/tutorial_screen.dart';
 import '../../utils/at_name.dart';
+import '../../widgets/ad_banner_slot.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/pill_button.dart';
@@ -229,19 +230,31 @@ class _ProfileTabState extends State<ProfileTab> {
           ),
           Padding(
             padding: EdgeInsets.only(top: topInset, bottom: bottomPadding),
-            child: RefreshIndicator(
-              onRefresh: _handleRefresh,
-              color: AppColors.accent,
-              backgroundColor: AppColors.parchment,
-              child: CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: _buildProfileHeader(showBackButton: showBackButton),
+            child: Column(
+              children: [
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: _handleRefresh,
+                    color: AppColors.accent,
+                    backgroundColor: AppColors.parchment,
+                    child: CustomScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      slivers: [
+                        SliverToBoxAdapter(
+                          child: _buildProfileHeader(
+                            showBackButton: showBackButton,
+                          ),
+                        ),
+                        SliverToBoxAdapter(child: _buildBody()),
+                      ],
+                    ),
                   ),
-                  SliverToBoxAdapter(child: _buildBody()),
-                ],
-              ),
+                ),
+                // Bottom banner, in-flow below the list so it reserves its own
+                // space (mirrors the leaderboard tab). Collapses to zero size
+                // unless banners are enabled AND an ad loads.
+                const AdBannerSlot(),
+              ],
             ),
           ),
         ],

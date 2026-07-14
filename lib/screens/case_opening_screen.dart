@@ -34,6 +34,7 @@ const _powerupNames = {
   'CLEANSE': 'Cleanse',
   'IMPOSTER': 'Imposter',
   'RAINSTORM': 'Rainstorm',
+  'SIGNAL_JAMMER': 'Signal Jammer',
 };
 
 const _powerupEntries = [

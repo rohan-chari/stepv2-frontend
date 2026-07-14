@@ -773,6 +773,7 @@ class _ShopTabState extends State<ShopTab> {
     const names = {
       'IMPOSTER': 'Imposter',
       'RAINSTORM': 'Rainstorm',
+      'SIGNAL_JAMMER': 'Signal Jammer',
       'MIRROR': 'Mirror',
       'CLEANSE': 'Cleanse',
     };

@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:step_tracker/screens/daily_reward_screen.dart';
 import 'package:step_tracker/screens/race_detail_screen.dart';
 import 'package:step_tracker/screens/race_results_summary_screen.dart';
+import 'package:step_tracker/screens/tabs/friends_tab.dart';
 import 'package:step_tracker/screens/tabs/leaderboard_tab.dart';
+import 'package:step_tracker/screens/tabs/profile_tab.dart';
 import 'package:step_tracker/screens/tabs/races_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/widgets/ad_banner_slot.dart';
 import 'package:step_tracker/widgets/ad_inline_card.dart';
+import 'package:step_tracker/widgets/game_container.dart';
 import 'package:step_tracker/widgets/pill_button.dart';
 
 // ---------------------------------------------------------------------------
@@ -93,6 +97,60 @@ class _LeaderboardApi extends BackendApiService {
         'displayName': 'AceWinner',
         'totalSteps': 12000,
         'inTop100': true,
+      },
+    };
+  }
+}
+
+class _FriendsApi extends BackendApiService {
+  @override
+  Future<Map<String, dynamic>> fetchFriends({
+    required String identityToken,
+  }) async {
+    return const {
+      'friends': [],
+      'pending': {'incoming': [], 'outgoing': []},
+    };
+  }
+}
+
+class _ProfileApi extends BackendApiService {
+  @override
+  Future<Map<String, dynamic>> fetchStats({
+    required String identityToken,
+  }) async {
+    return const {
+      'thisWeek': 12000,
+      'thisMonth': 45000,
+      'thisYear': 150000,
+      'allTime': 300000,
+      'streak': 4,
+      'wins': 3,
+      'losses': 1,
+    };
+  }
+}
+
+class _DailyRewardApi extends BackendApiService {
+  @override
+  Future<Map<String, dynamic>> fetchDailyRewardStatus({
+    required String identityToken,
+    required String localDate,
+  }) async {
+    return {
+      'cycleLength': 6,
+      'currentDay': 1,
+      'claimedToday': true,
+      'ladder': const [],
+      'box': {
+        'streak': 7,
+        'streakCap': 30,
+        'odds': {'COMMON': 0.6, 'UNCOMMON': 0.27, 'RARE': 0.13},
+        'coinRanges': {
+          'COMMON': [10, 30],
+          'UNCOMMON': [40, 80],
+        },
+        'accessoryPool': const [],
       },
     };
   }
@@ -215,10 +273,87 @@ void main() {
       await tester.pump();
 
       expect(find.byType(AdBannerSlot), findsOneWidget);
+      // Footer style: the banner sits at the screen bottom, not nested
+      // inside the parchment results card.
+      expect(
+        find.descendant(
+          of: find.byType(GameContainer),
+          matching: find.byType(AdBannerSlot),
+        ),
+        findsNothing,
+      );
 
       await tester.tap(find.widgetWithText(PillButton, 'NICE'));
       await tester.pumpAndSettle();
       expect(find.text('RACE FINISHED'), findsNothing);
+    });
+  });
+
+  group('friends / profile / daily spin banners', () {
+    testWidgets('FriendsTab hosts exactly one AdBannerSlot', (tester) async {
+      final authService = await _createAuthService();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: FriendsTab(
+              authService: authService,
+              onFriendsChanged: () {},
+              backendApiService: _FriendsApi(),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.byType(AdBannerSlot), findsOneWidget);
+    });
+
+    testWidgets('ProfileTab hosts exactly one AdBannerSlot', (tester) async {
+      final authService = await _createAuthService();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ProfileTab(
+              authService: authService,
+              displayName: 'Trail Walker',
+              onSettingsChanged: () {},
+              backendApiService: _ProfileApi(),
+              showBackButton: false,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.byType(AdBannerSlot), findsOneWidget);
+    });
+
+    testWidgets('DailyRewardScreen hosts a footer AdBannerSlot', (
+      tester,
+    ) async {
+      final authService = await _createAuthService();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: DailyRewardScreen(
+            authService: authService,
+            backendApiService: _DailyRewardApi(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.byType(AdBannerSlot), findsOneWidget);
+      // Footer style: at the screen bottom, not inside the reward card.
+      expect(
+        find.descendant(
+          of: find.byType(GameContainer),
+          matching: find.byType(AdBannerSlot),
+        ),
+        findsNothing,
+      );
     });
   });
 

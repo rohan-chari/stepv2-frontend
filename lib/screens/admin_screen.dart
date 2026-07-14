@@ -131,6 +131,12 @@ const _powerupEntries = [
     description:
         'Everyone else\'s steps count for half for 1 hour (shields protect)',
   ),
+  (
+    type: 'SIGNAL_JAMMER',
+    name: 'Signal Jammer',
+    description:
+        'Jam a rival\'s signal — they can\'t use any powerups for 1 hour',
+  ),
 ];
 
 /// Runtime feature flags (backend AppSetting rows) — currently just the banner
