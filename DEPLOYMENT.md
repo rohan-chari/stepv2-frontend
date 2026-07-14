@@ -231,9 +231,12 @@ flutter build appbundle --release --flavor staging \
   --dart-define=BACKEND_BASE_URL=https://staging.steptracker-api.org \
   --build-number=<versionCode>
 
-# Prod
+# Prod (ads enabled — pass the Android ad unit defines + the app id, below)
 flutter build appbundle --release --flavor prod \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
+  --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/4587493133 \
+  --dart-define=ADMOB_BANNER_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/8844513901 \
+  --dart-define=ADMOB_NATIVE_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/4905268896 \
   --build-number=<versionCode>
 ```
 
@@ -244,16 +247,41 @@ Release signing needs `android/key.properties` (gitignored; template in
 debug signing and Play rejects the bundle — check the signature if unsure:
 `keytool -printcert -jarfile <aab>`.
 
-No ad defines on Android: ads are iOS-only (AdService gates on Platform.isIOS),
-and the manifest carries Google's public test AdMob app id only so the SDK's
-startup provider doesn't crash. Replace it with a real Android AdMob app id
-before ever enabling ads on Android.
+Android ads (full parity with iOS: footer banners, native in-feed card, and the
+rewarded extra-spin / get-coins flow) turn on ONLY when the build supplies the
+Android ad units — the ids are per-platform in AdMob, so Android uses its own
+`_ANDROID` defines, separate from the iOS `ADMOB_*` ones:
+
+- `ADMOB_EXTRA_SPIN_AD_UNIT_ID_ANDROID` — rewarded unit. Its presence also makes
+  the build advertise the `ads` client-feature to the backend, so the extra-spin
+  offer appears. Like iOS, this bakes in the SSV target; omit it and the offer
+  never shows.
+- `ADMOB_BANNER_AD_UNIT_ID_ANDROID` — footer display banner. Banners still
+  require the backend `bannerAdsEnabled` remote switch to be on.
+- `ADMOB_NATIVE_AD_UNIT_ID_ANDROID` — races-tab in-feed native ad (gated by the
+  same banner switch).
+
+Omit any of these and that surface stays OFF on Android (empty id → the
+`*Enabled` getters return false), exactly as before. With none of them passed,
+Android behaves identically to the old iOS-only builds: no ads, no crash.
+
+The AdMob **app id** (distinct from the unit ids) is injected into the manifest
+via the `${admobAppId}` Gradle placeholder. It defaults to Google's public TEST
+app id (so the SDK provider never crashes). Supply the real Android AdMob app id
+one of three ways (first match wins):
+
+1. `-PADMOB_ANDROID_APP_ID=ca-app-pub-XXXX~YYYY` on the build command, or
+2. `admobAppId=ca-app-pub-XXXX~YYYY` in `android/key.properties` (gitignored;
+   template in `android/key.properties.example`), or
+3. the `ADMOB_ANDROID_APP_ID` environment variable.
+
+Set the real app id before shipping a prod Android build with ads enabled.
 
 ### First-upload checklist (Play Console, one-time)
 
 - [ ] Create the Play app (com.rohanchari.steptracker) and enroll in Play App Signing with the upload key.
 - [ ] Register BOTH SHA-1s (upload key + Play App Signing key, from Play Console → App integrity) on the prod Android app in Firebase (`bara-590e1`) and re-download `google-services.json` — Google Sign-In fails with DEVELOPER_ERROR otherwise.
-- [ ] Data safety form: steps/health data (app functionality, not shared), account identifiers, device IDs (AD_ID is declared in the merged manifest via google_mobile_ads even though Android shows no ads).
+- [ ] Data safety form: steps/health data (app functionality, not shared), account identifiers, device IDs (AD_ID is declared in the merged manifest via google_mobile_ads; a build carrying the `_ANDROID` ad unit defines actually serves AdMob ads).
 - [ ] Health apps declaration + Health Connect access request (Play Console policy section) — cite the privacy policy's Health Data section (barastep.com / steptracker-api.org `/privacy.html`, includes background reads).
 - [ ] Background health-data access justification (READ_HEALTH_DATA_IN_BACKGROUND).
 - [ ] Store listing (screenshots, icon, descriptions) + content rating questionnaire.

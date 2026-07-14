@@ -57,18 +57,28 @@ class BackendApiService {
   );
 
   // The `ads` capability is advertised ONLY when this build can actually
-  // complete a rewarded-ad flow: iOS with a real ad unit injected at build
-  // time. This keeps the extra-spin offer off Android builds (no AdMob app
-  // registered yet) and off any build where the dart-define was forgotten —
-  // otherwise users would see an offer whose reward can never verify.
-  static const String _adUnitId = String.fromEnvironment(
+  // complete a rewarded-ad flow: a build that baked in a real rewarded ad unit
+  // for THIS platform (iOS: ADMOB_EXTRA_SPIN_AD_UNIT_ID; Android:
+  // ADMOB_EXTRA_SPIN_AD_UNIT_ID_ANDROID). This keeps the extra-spin offer off
+  // any build where the platform's dart-define was forgotten — otherwise users
+  // would see an offer whose reward can never verify.
+  static const String _adUnitIdIos = String.fromEnvironment(
     'ADMOB_EXTRA_SPIN_AD_UNIT_ID',
   );
+  static const String _adUnitIdAndroid = String.fromEnvironment(
+    'ADMOB_EXTRA_SPIN_AD_UNIT_ID_ANDROID',
+  );
+  static bool get _adsSupported {
+    if (kIsWeb) return false;
+    if (Platform.isIOS) return _adUnitIdIos.isNotEmpty;
+    if (Platform.isAndroid) return _adUnitIdAndroid.isNotEmpty;
+    return false;
+  }
+
   // `spinpowerups` tells the backend this build can render a shop-powerup prize
   // won from the daily-reward box (reel tile + reveal). Old binaries omit it and
   // never get offered a powerup — they'd mis-render it as "+0 coins".
-  static final String clientFeaturesHeader =
-      (!kIsWeb && Platform.isIOS && _adUnitId.isNotEmpty)
+  static final String clientFeaturesHeader = _adsSupported
       ? 'characters,ads,jammer,spinpowerups'
       : 'characters,jammer,spinpowerups';
   final HttpClient _httpClient;

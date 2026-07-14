@@ -21,6 +21,19 @@ if (hasReleaseKeystore) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
+// AdMob Android app id, injected into the manifest's ads APPLICATION_ID
+// meta-data placeholder (${admobAppId}). Resolution order:
+//   1. -PADMOB_ANDROID_APP_ID=… (Gradle property / CI)
+//   2. admobAppId=… in android/key.properties (gitignored; see key.properties.example)
+//   3. ADMOB_ANDROID_APP_ID env var
+//   4. Google's PUBLIC TEST app id (default) — safe placeholder so the SDK
+//      provider doesn't crash; serves no real ads. See DEPLOYMENT.md.
+val admobAppId: String =
+    (project.findProperty("ADMOB_ANDROID_APP_ID") as String?)
+        ?: (keystoreProperties["admobAppId"] as String?)
+        ?: System.getenv("ADMOB_ANDROID_APP_ID")
+        ?: "ca-app-pub-3940256099942544~3347511713"
+
 android {
     namespace = "com.rohanchari.steptracker"
     compileSdk = flutter.compileSdkVersion
@@ -45,6 +58,11 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // Injected into AndroidManifest.xml's AdMob APPLICATION_ID meta-data.
+        // Defaults to Google's public test app id (see above) until a real
+        // Android AdMob app id is supplied at build time.
+        manifestPlaceholders["admobAppId"] = admobAppId
     }
 
     // Mirror the iOS two-listing model (see DEPLOYMENT.md): build with

@@ -15,3 +15,10 @@ storeFile=/absolute/path/to/bara-upload-key.jks
 storePassword=CHANGE_ME
 keyAlias=upload
 keyPassword=CHANGE_ME
+
+# Optional — real Android AdMob app id (format ca-app-pub-XXXX~YYYY), injected
+# into AndroidManifest.xml's AdMob APPLICATION_ID meta-data. Omit to keep
+# Google's public TEST app id (the SDK provider won't crash, but serves no real
+# ads). Can also be passed as -PADMOB_ANDROID_APP_ID=… or the ADMOB_ANDROID_APP_ID
+# env var at build time. Set this before a prod release that enables Android ads.
+#admobAppId=ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY

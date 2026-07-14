@@ -98,13 +98,16 @@
             android:name="com.yalantis.ucrop.UCropActivity"
             android:screenOrientation="portrait"
             android:theme="@style/Ucrop.CropTheme" />
-        <!-- AdMob app ID (rewarded extra daily spin). This is Google's PUBLIC
-             TEST app ID — replace with the real per-flavor AdMob app ID before
-             a prod release (AD_REWARD_DESIGN.md release checklist). The SDK
-             crashes on launch if this meta-data is missing. -->
+        <!-- AdMob app ID (banners + rewarded extra daily spin). Injected by
+             Gradle via the ${admobAppId} manifest placeholder (see
+             android/app/build.gradle.kts). Defaults to Google's PUBLIC TEST app
+             id so the SDK provider doesn't crash; supply the real Android AdMob
+             app id via -PADMOB_ANDROID_APP_ID / android/key.properties /
+             ADMOB_ANDROID_APP_ID env before a prod release (see DEPLOYMENT.md).
+             The SDK crashes on launch if this meta-data is missing. -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713" />
+            android:value="${admobAppId}" />
 
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

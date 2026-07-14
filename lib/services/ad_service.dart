@@ -38,7 +38,13 @@ abstract class ExtraSpinAdController {
 class AdService implements ExtraSpinAdController {
   AdService({String? adUnitId}) : _adUnitIdOverride = adUnitId;
 
+  // Ad unit IDs are per-platform in AdMob. iOS uses the original defines;
+  // Android uses the parallel `_ANDROID` defines (added so Android can reach
+  // full parity without changing the iOS ids). An absent/empty id for a surface
+  // disables that surface on this platform (see the *Enabled getters below).
   static const _envAdUnitId = String.fromEnvironment('ADMOB_EXTRA_SPIN_AD_UNIT_ID');
+  static const _envAdUnitIdAndroid =
+      String.fromEnvironment('ADMOB_EXTRA_SPIN_AD_UNIT_ID_ANDROID');
   // Google's documented test rewarded ad units.
   static const _testAdUnitAndroid = 'ca-app-pub-3940256099942544/5224354917';
   static const _testAdUnitIos = 'ca-app-pub-3940256099942544/1712485313';
@@ -49,15 +55,45 @@ class AdService implements ExtraSpinAdController {
   // public test banner so dev/staging shows a placeholder ad, never a real one.
   static const _envBannerAdUnitId =
       String.fromEnvironment('ADMOB_BANNER_AD_UNIT_ID');
+  static const _envBannerAdUnitIdAndroid =
+      String.fromEnvironment('ADMOB_BANNER_AD_UNIT_ID_ANDROID');
   static const _testBannerIos = 'ca-app-pub-3940256099942544/2934735716';
+  static const _testBannerAndroid = 'ca-app-pub-3940256099942544/6300978111';
 
   // Native in-feed placement (races tab list row). Same deal as the banner
-  // unit: real id baked in per-build via --dart-define, Google's public iOS
+  // unit: real id baked in per-build via --dart-define, Google's public
   // "native advanced" test unit otherwise. Gated by the SAME bannersEnabled
   // switch — natives are just a better-dressed banner, not a new ad surface.
   static const _envNativeAdUnitId =
       String.fromEnvironment('ADMOB_NATIVE_AD_UNIT_ID');
+  static const _envNativeAdUnitIdAndroid =
+      String.fromEnvironment('ADMOB_NATIVE_AD_UNIT_ID_ANDROID');
   static const _testNativeIos = 'ca-app-pub-3940256099942544/3986624511';
+  static const _testNativeAndroid = 'ca-app-pub-3940256099942544/2247696110';
+
+  /// The real (injected) rewarded/banner/native unit id for the CURRENT
+  /// platform, or '' when this platform has no id baked in (which disables the
+  /// surface). Web has no ads SDK, so always ''.
+  static String get _platformExtraSpinUnitId {
+    if (kIsWeb) return '';
+    if (Platform.isIOS) return _envAdUnitId;
+    if (Platform.isAndroid) return _envAdUnitIdAndroid;
+    return '';
+  }
+
+  static String get _platformBannerUnitId {
+    if (kIsWeb) return '';
+    if (Platform.isIOS) return _envBannerAdUnitId;
+    if (Platform.isAndroid) return _envBannerAdUnitIdAndroid;
+    return '';
+  }
+
+  static String get _platformNativeUnitId {
+    if (kIsWeb) return '';
+    if (Platform.isIOS) return _envNativeAdUnitId;
+    if (Platform.isAndroid) return _envNativeAdUnitIdAndroid;
+    return '';
+  }
 
   /// Remote kill switch, set from the backend's `featureFlags.bannerAdsEnabled`
   /// (AuthService mirrors it here on restore and on every /auth/me sync, and it
@@ -65,30 +101,36 @@ class AdService implements ExtraSpinAdController {
   /// no flag from the backend means no banners.
   static bool remoteBannersEnabled = false;
 
-  /// Banners render ONLY when the backend flag is on AND this is an iOS build
-  /// that baked in a real ADMOB_BANNER_AD_UNIT_ID — the unit id is compile-time
+  /// Banners render ONLY when the backend flag is on AND this build baked in a
+  /// real banner unit id for the current platform — the unit id is compile-time
   /// (keep passing the dart-define in prod builds so the remote switch can turn
-  /// banners back on later). Android (no AdMob app registered) and
-  /// misconfigured builds show nothing at all. When off, [AdBannerSlot]
-  /// collapses to zero size.
+  /// banners back on later). iOS uses ADMOB_BANNER_AD_UNIT_ID; Android uses
+  /// ADMOB_BANNER_AD_UNIT_ID_ANDROID. Builds that omit their platform's define
+  /// (and web) show nothing at all. When off, [AdBannerSlot] collapses to zero
+  /// size.
   static bool get bannersEnabled =>
       remoteBannersEnabled &&
       !kIsWeb &&
-      Platform.isIOS &&
-      _envBannerAdUnitId.isNotEmpty;
+      _platformBannerUnitId.isNotEmpty;
 
   /// Ad unit for [AdBannerSlot]. The real unit when injected at build time,
-  /// otherwise Google's public test banner (only reached in dev, since
-  /// [bannersEnabled] is false without the define).
-  static String get bannerAdUnitId =>
-      _envBannerAdUnitId.isNotEmpty ? _envBannerAdUnitId : _testBannerIos;
+  /// otherwise Google's public test banner for this platform (only reached in
+  /// dev, since [bannersEnabled] is false without the define).
+  static String get bannerAdUnitId {
+    final id = _platformBannerUnitId;
+    if (id.isNotEmpty) return id;
+    return (!kIsWeb && Platform.isAndroid) ? _testBannerAndroid : _testBannerIos;
+  }
 
   /// Ad unit for [AdInlineCard]'s native in-feed ad. The real unit when
-  /// injected at build time, otherwise Google's public test native unit (only
-  /// reached in dev, since [bannersEnabled] is false without the banner
-  /// define).
-  static String get nativeAdUnitId =>
-      _envNativeAdUnitId.isNotEmpty ? _envNativeAdUnitId : _testNativeIos;
+  /// injected at build time, otherwise Google's public test native unit for
+  /// this platform (only reached in dev, since [bannersEnabled] is false
+  /// without the banner define).
+  static String get nativeAdUnitId {
+    final id = _platformNativeUnitId;
+    if (id.isNotEmpty) return id;
+    return (!kIsWeb && Platform.isAndroid) ? _testNativeAndroid : _testNativeIos;
+  }
 
   /// Initialize the ads SDK once (with an iOS ATT prompt on first run). Shared
   /// by the rewarded-ad path and [AdBannerSlot] so neither owns SDK setup.
@@ -135,8 +177,9 @@ class AdService implements ExtraSpinAdController {
     if (_adUnitIdOverride != null && _adUnitIdOverride.isNotEmpty) {
       return _adUnitIdOverride;
     }
-    if (_envAdUnitId.isNotEmpty) return _envAdUnitId;
-    return Platform.isAndroid ? _testAdUnitAndroid : _testAdUnitIos;
+    final id = _platformExtraSpinUnitId;
+    if (id.isNotEmpty) return id;
+    return (!kIsWeb && Platform.isAndroid) ? _testAdUnitAndroid : _testAdUnitIos;
   }
 
   @override
