@@ -14,6 +14,7 @@ import '../widgets/error_toast.dart';
 import '../widgets/game_container.dart';
 import '../widgets/home_chrome.dart';
 import '../widgets/pill_button.dart';
+import '../widgets/powerup_icon.dart';
 import '../widgets/spinning_coin.dart';
 
 String _todayLocalDate() {
@@ -706,6 +707,11 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
     final accessoryPool = (box['accessoryPool'] as List? ?? const [])
         .whereType<Map<String, dynamic>>()
         .toList();
+    // Powerup prizes (spinPowerups feature). Absent on old backends → empty, so
+    // the reel keeps showing accessory-only RARE tiles exactly as before.
+    final powerupPool = (box['powerupPool'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
 
     final rng = Random();
     // Coin payouts read better as round numbers, so pick a random multiple of
@@ -735,12 +741,25 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
             'UNCOMMON',
           ),
         );
-      } else if (accessoryPool.isNotEmpty) {
-        items.add(
-          _DailyStripItem.accessory(
-            accessoryPool[rng.nextInt(accessoryPool.length)],
-          ),
-        );
+      } else if (accessoryPool.isNotEmpty || powerupPool.isNotEmpty) {
+        // RARE decoy: mix accessories and powerups from whatever's winnable.
+        // When both pools have stock, roughly half-and-half (mirrors the
+        // backend's 50/50 RARE sub-roll); otherwise draw from the non-empty one.
+        final usePowerup = powerupPool.isNotEmpty &&
+            (accessoryPool.isEmpty || rng.nextBool());
+        if (usePowerup) {
+          items.add(
+            _DailyStripItem.powerup(
+              powerupPool[rng.nextInt(powerupPool.length)],
+            ),
+          );
+        } else {
+          items.add(
+            _DailyStripItem.accessory(
+              accessoryPool[rng.nextInt(accessoryPool.length)],
+            ),
+          );
+        }
       } else {
         items.add(const _DailyStripItem.mysteryAccessory());
       }
@@ -758,6 +777,20 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
       if (v == null) return '—';
       return '${(v * 100).round()}%';
     }
+
+    // RARE can now pay an accessory OR a shop powerup (spinPowerups feature).
+    // Describe whichever the backend says is in play; fall back to the legacy
+    // "new accessory" copy when the mix field is absent (old backend).
+    final mix = box?['rarePrizeMix'] is Map<String, dynamic>
+        ? box!['rarePrizeMix'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    final accessoryShare = (mix['ACCESSORY'] as num?)?.toDouble() ?? 1.0;
+    final powerupShare = (mix['POWERUP'] as num?)?.toDouble() ?? 0.0;
+    final rareDetail = powerupShare > 0 && accessoryShare > 0
+        ? 'new accessory or powerup'
+        : powerupShare > 0
+        ? 'a shop powerup'
+        : 'new accessory';
 
     showDialog<void>(
       context: context,
@@ -806,7 +839,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
               const SizedBox(height: 6),
               _OddsRow(
                 label: 'RARE',
-                detail: 'new accessory',
+                detail: rareDetail,
                 pct: pct('RARE'),
                 color: _rarityColor('RARE'),
               ),
@@ -837,6 +870,9 @@ class _DailyStripItem {
   final String? assetKey;
   final String? name;
   final int animationFrames;
+  // Set when this tile is a shop powerup (spinPowerups feature): drives the
+  // PowerupIcon face. Null for coin/accessory tiles.
+  final String? powerupType;
 
   const _DailyStripItem._({
     required this.rarity,
@@ -844,6 +880,7 @@ class _DailyStripItem {
     this.assetKey,
     this.name,
     this.animationFrames = 1,
+    this.powerupType,
   });
 
   const _DailyStripItem.coins(int amount, String rarity)
@@ -861,8 +898,22 @@ class _DailyStripItem {
     );
   }
 
+  factory _DailyStripItem.powerup(Map<String, dynamic> powerup) {
+    return _DailyStripItem._(
+      rarity: 'RARE',
+      powerupType: powerup['powerupType'] as String?,
+      name: powerup['name'] as String? ?? 'Powerup',
+    );
+  }
+
   factory _DailyStripItem.fromResult(Map<String, dynamic> result) {
     final rarity = (result['rarity'] as String? ?? 'COMMON').toUpperCase();
+    // Shop powerup prize (additive field; absent on old backends / other
+    // reward types). Read defensively so a partial payload never crashes.
+    final powerup = result['powerup'] as Map<String, dynamic>?;
+    if (result['rewardType'] == 'POWERUP' && powerup != null) {
+      return _DailyStripItem.powerup(powerup);
+    }
     final shopItem = result['shopItem'] as Map<String, dynamic>?;
     if (shopItem != null) {
       return _DailyStripItem._(
@@ -878,7 +929,9 @@ class _DailyStripItem {
     );
   }
 
-  bool get isAccessory => coinAmount == null;
+  bool get isPowerup => powerupType != null;
+  bool get isCoins => coinAmount != null;
+  bool get isAccessory => coinAmount == null && powerupType == null;
 }
 
 class _DailyReelTile extends StatelessWidget {
@@ -897,7 +950,7 @@ class _DailyReelTile extends StatelessWidget {
           Expanded(child: Center(child: _buildFace())),
           const SizedBox(height: 3),
           Text(
-            item.isAccessory ? (item.name ?? '???') : '+${item.coinAmount}',
+            item.isCoins ? '+${item.coinAmount}' : (item.name ?? '???'),
             style: PixelText.body(size: 10, color: AppColors.textDark),
             textAlign: TextAlign.center,
             maxLines: 2,
@@ -909,7 +962,7 @@ class _DailyReelTile extends StatelessWidget {
   }
 
   Widget _buildFace() {
-    if (!item.isAccessory) {
+    if (item.isCoins) {
       // Static coin face — dozens of tiles scroll past, so no spin animation.
       return Image.asset(
         'assets/images/coin.png',
@@ -919,6 +972,9 @@ class _DailyReelTile extends StatelessWidget {
         errorBuilder: (_, _, _) =>
             const Icon(Icons.paid_rounded, size: 38, color: AppColors.coinDark),
       );
+    }
+    if (item.isPowerup) {
+      return PowerupIcon(type: item.powerupType!, size: 46);
     }
     if (item.assetKey != null) {
       return SizedBox(
@@ -1124,6 +1180,11 @@ class _RewardRevealState extends State<_RewardReveal> {
     final type = widget.reward['rewardType'] as String? ?? 'COINS';
     final coinAmount = (widget.reward['coinAmount'] as num?)?.toInt() ?? 0;
     final shopItem = widget.reward['shopItem'] as Map<String, dynamic>?;
+    // Shop powerup prize (spinPowerups feature). Read defensively — a POWERUP
+    // rewardType with a missing payload falls through to the coin card rather
+    // than crashing.
+    final powerup = widget.reward['powerup'] as Map<String, dynamic>?;
+    final isPowerup = type == 'POWERUP' && powerup != null;
     // Present only on daily-box claims; legacy ladder claims have no rarity.
     final rarity = widget.reward['rarity'] as String?;
     final rarityColor = rarity != null ? _rarityColor(rarity) : null;
@@ -1183,7 +1244,38 @@ class _RewardRevealState extends State<_RewardReveal> {
               ),
             ],
             const SizedBox(height: 16),
-            if (type == 'ACCESSORY' && shopItem != null) ...[
+            if (isPowerup) ...[
+              Center(
+                child: Container(
+                  width: 130,
+                  height: 130,
+                  decoration: BoxDecoration(
+                    color: AppColors.parchmentDark,
+                    border: Border.all(color: AppColors.coinDark, width: 3),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.all(14),
+                  child: Center(
+                    child: PowerupIcon(
+                      type: powerup['powerupType'] as String? ?? '',
+                      size: 96,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                powerup['name'] as String? ?? 'Powerup',
+                textAlign: TextAlign.center,
+                style: PixelText.title(size: 22, color: AppColors.textDark),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Added to your powerups',
+                textAlign: TextAlign.center,
+                style: PixelText.body(size: 12, color: AppColors.textMid),
+              ),
+            ] else if (type == 'ACCESSORY' && shopItem != null) ...[
               Center(
                 child: Container(
                   width: 130,

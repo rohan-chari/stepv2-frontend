@@ -64,10 +64,13 @@ class BackendApiService {
   static const String _adUnitId = String.fromEnvironment(
     'ADMOB_EXTRA_SPIN_AD_UNIT_ID',
   );
+  // `spinpowerups` tells the backend this build can render a shop-powerup prize
+  // won from the daily-reward box (reel tile + reveal). Old binaries omit it and
+  // never get offered a powerup — they'd mis-render it as "+0 coins".
   static final String clientFeaturesHeader =
       (!kIsWeb && Platform.isIOS && _adUnitId.isNotEmpty)
-      ? 'characters,ads,jammer'
-      : 'characters,jammer';
+      ? 'characters,ads,jammer,spinpowerups'
+      : 'characters,jammer,spinpowerups';
   final HttpClient _httpClient;
   String? _cachedTimeZone;
   String? _cachedReleaseChannel;

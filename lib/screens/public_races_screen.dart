@@ -5,6 +5,7 @@ import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
 import '../utils/at_name.dart';
+import '../widgets/ad_banner_slot.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/loading_skeleton.dart';
@@ -169,6 +170,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
                   child: _buildBody(),
                 ),
               ),
+              const AdBannerSlot(),
             ],
           ),
         ),

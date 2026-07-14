@@ -642,19 +642,31 @@ class HomeTab extends StatelessWidget {
 
     final Widget hud;
     if (isLoading && stepData == null) {
-      hud = const Padding(
-        padding: EdgeInsets.only(top: 48),
-        // (sits below topInset via the HUD's Positioned offset)
-        child: Center(
-          child: SizedBox(
-            width: 36,
-            height: 36,
-            child: CircularProgressIndicator(
-              color: AppColors.parchment,
-              strokeWidth: 3,
+      // Mirror the loaded HUD (big step-count block above a small label bar)
+      // rather than a bare spinner. Uses the same static-bar skeleton style as
+      // the race-strip tickets below, in a parchment tone so it reads on the
+      // sky. Sits where the real number lands via the HUD's Positioned offset.
+      hud = Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: compact ? 168 : 196,
+            height: compact ? 52 : 60,
+            decoration: BoxDecoration(
+              color: AppColors.parchment.withValues(alpha: 0.30),
+              borderRadius: BorderRadius.circular(14),
             ),
           ),
-        ),
+          const SizedBox(height: 10),
+          Container(
+            width: 120,
+            height: 13,
+            decoration: BoxDecoration(
+              color: AppColors.parchment.withValues(alpha: 0.26),
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+        ],
       );
     } else if (error != null) {
       hud = Column(

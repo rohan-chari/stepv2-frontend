@@ -6,10 +6,19 @@ import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 
 class _BoxModeApi extends BackendApiService {
-  _BoxModeApi({this.claimedToday = false, this.odds});
+  _BoxModeApi({
+    this.claimedToday = false,
+    this.odds,
+    this.powerupPool,
+    this.rarePrizeMix,
+    this.boxResult,
+  });
 
   final bool claimedToday;
   final Map<String, dynamic>? odds;
+  final List<Map<String, dynamic>>? powerupPool;
+  final Map<String, dynamic>? rarePrizeMix;
+  final Map<String, dynamic>? boxResult;
   int legacyClaimCalls = 0;
   int boxClaimCalls = 0;
 
@@ -34,6 +43,8 @@ class _BoxModeApi extends BackendApiService {
         'accessoryPool': [
           {'id': 'a1', 'assetKey': 'cowboy_hat', 'name': 'Cowboy Hat'},
         ],
+        if (powerupPool != null) 'powerupPool': powerupPool,
+        if (rarePrizeMix != null) 'rarePrizeMix': rarePrizeMix,
       },
     };
   }
@@ -53,14 +64,15 @@ class _BoxModeApi extends BackendApiService {
     required String localDate,
   }) async {
     boxClaimCalls += 1;
-    return const {
-      'rarity': 'UNCOMMON',
-      'rewardType': 'COINS',
-      'coinAmount': 55,
-      'shopItem': null,
-      'coins': 155,
-      'streak': 7,
-    };
+    return boxResult ??
+        const {
+          'rarity': 'UNCOMMON',
+          'rewardType': 'COINS',
+          'coinAmount': 55,
+          'shopItem': null,
+          'coins': 155,
+          'streak': 7,
+        };
   }
 }
 
@@ -199,6 +211,62 @@ void main() {
 
     expect(find.text('SWIPE OR TAP'), findsOneWidget);
     expect(find.text('Cowboy Hat'), findsWidgets);
+  });
+
+  testWidgets('winning a powerup reveals its name and inventory note', (
+    WidgetTester tester,
+  ) async {
+    final auth = await _authService();
+    final api = _BoxModeApi(
+      powerupPool: [
+        {'sku': 'POWERUP_IMPOSTER', 'name': 'Imposter', 'powerupType': 'IMPOSTER'},
+      ],
+      rarePrizeMix: {'ACCESSORY': 0.0, 'POWERUP': 1.0},
+      boxResult: const {
+        'rarity': 'RARE',
+        'rewardType': 'POWERUP',
+        'coinAmount': null,
+        'shopItem': null,
+        'powerup': {
+          'sku': 'POWERUP_IMPOSTER',
+          'name': 'Imposter',
+          'powerupType': 'IMPOSTER',
+        },
+        'coins': 100,
+        'streak': 7,
+      },
+    );
+    await _pumpScreen(tester, api, auth);
+
+    await tester.tap(find.text('SWIPE OR TAP'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(api.boxClaimCalls, 1);
+    await tester.pump(const Duration(milliseconds: 4100));
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(find.text('CLAIMED!'), findsOneWidget);
+    expect(find.text('RARE'), findsOneWidget);
+    expect(find.text('Imposter'), findsOneWidget);
+    expect(find.text('Added to your powerups'), findsOneWidget);
+  });
+
+  testWidgets('odds sheet describes RARE as accessory or powerup', (
+    WidgetTester tester,
+  ) async {
+    final auth = await _authService();
+    final api = _BoxModeApi(
+      powerupPool: [
+        {'sku': 'POWERUP_IMPOSTER', 'name': 'Imposter', 'powerupType': 'IMPOSTER'},
+      ],
+      rarePrizeMix: {'ACCESSORY': 0.5, 'POWERUP': 0.5},
+    );
+    await _pumpScreen(tester, api, auth);
+
+    await tester.tap(find.text('?').first);
+    await tester.pumpAndSettle();
+    expect(find.text('new accessory or powerup'), findsOneWidget);
   });
 
   testWidgets('already-claimed box mode shows come-back state, no claim', (

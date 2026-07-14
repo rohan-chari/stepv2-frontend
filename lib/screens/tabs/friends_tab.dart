@@ -9,7 +9,6 @@ import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
 import '../../utils/at_name.dart';
-import '../../widgets/ad_banner_slot.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/loading_skeleton.dart';
@@ -346,34 +345,23 @@ class _FriendsTabState extends State<FriendsTab> {
           ),
           Padding(
             padding: EdgeInsets.only(top: topInset + 14, bottom: tabBarHeight),
-            child: Column(
-              children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => FocusScope.of(context).unfocus(),
-                    behavior: HitTestBehavior.opaque,
-                    child: RefreshIndicator(
-                      onRefresh: _handleRefresh,
-                      color: AppColors.accent,
-                      backgroundColor: AppColors.parchment,
-                      child: CustomScrollView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        slivers: [
-                          SliverToBoxAdapter(
-                            child: _buildFriendsHeader(showBackButton: canPop),
-                          ),
-                          SliverToBoxAdapter(child: _buildBody(state: state)),
-                        ],
-                      ),
+            child: GestureDetector(
+              onTap: () => FocusScope.of(context).unfocus(),
+              behavior: HitTestBehavior.opaque,
+              child: RefreshIndicator(
+                onRefresh: _handleRefresh,
+                color: AppColors.accent,
+                backgroundColor: AppColors.parchment,
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: _buildFriendsHeader(showBackButton: canPop),
                     ),
-                  ),
+                    SliverToBoxAdapter(child: _buildBody(state: state)),
+                  ],
                 ),
-                // Bottom banner, in-flow below the list so it reserves its own
-                // space (mirrors the leaderboard tab). Collapses to zero size
-                // unless banners are enabled AND an ad loads; hidden while the
-                // search keyboard is up so results keep the room.
-                const AdBannerSlot(hideWhenKeyboardOpen: true),
-              ],
+              ),
             ),
           ),
         ],

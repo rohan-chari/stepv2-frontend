@@ -4,6 +4,7 @@ import '../services/ad_service.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
+import '../widgets/ad_banner_slot.dart';
 import '../widgets/coin_balance_badge.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/pill_button.dart';
@@ -282,6 +283,7 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
                     ),
                   ),
                 ),
+                const AdBannerSlot(withBottomSafeArea: true),
               ],
             ),
           ),

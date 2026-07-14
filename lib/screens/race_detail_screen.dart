@@ -120,11 +120,12 @@ const _powerupDescriptions = {
   'SNEAKY_SWAP': 'Steal a random powerup from a rival',
   'MIRROR': 'Reflect the next attack back at the attacker',
   'CLEANSE': 'Remove all debuffs an opponent placed on you',
-  'IMPOSTER': 'Swap leaderboard positions with a rival for 1 hour (cosmetic)',
+  'IMPOSTER':
+      'Swap leaderboard positions with a rival for 1 hour (cosmetic). Mirrors can\'t reflect it; Compression Socks block it',
   'RAINSTORM':
-      'Everyone else\'s steps count for half for 1 hour (shields protect)',
+      'Everyone else\'s steps count for half for 1 hour. Mirrors can\'t reflect it; Compression Socks keep a racer dry',
   'SIGNAL_JAMMER':
-      'Jam a rival\'s signal — they can\'t use any powerups for 1 hour',
+      'Jam a rival\'s signal — they can\'t use any powerups for 1 hour. Mirrors can\'t reflect it; Compression Socks block it',
 };
 
 // Short-form descriptions used in the active-effects list, where the

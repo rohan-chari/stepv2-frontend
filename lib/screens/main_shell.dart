@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
@@ -16,6 +17,7 @@ import '../services/background_sync_bootstrap_service.dart';
 import '../services/health_service.dart';
 import '../services/notification_service.dart';
 import '../services/review_prompt_service.dart';
+import '../widgets/ad_banner_slot.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/info_toast.dart';
@@ -72,6 +74,13 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   int _currentTab = 0;
   late final PageController _pageController;
+
+  /// Visual height of the single shell-level footer banner (0 while it is
+  /// collapsed / unloaded / hidden). The nav tabs inflate their bottom inset by
+  /// this much so the banner — an overlay pinned above the tab bar — never
+  /// covers scroll content. Reported by the [_MeasureSize] wrapper around the
+  /// shell's one [AdBannerSlot].
+  final ValueNotifier<double> _bannerHeight = ValueNotifier<double>(0);
   bool _healthAuthorized = false;
   bool?
   _notificationsState; // null = not prompted, true = granted, false = denied
@@ -181,6 +190,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     );
     _foregroundPollTimer?.cancel();
     _pageController.dispose();
+    _bannerHeight.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -1518,8 +1528,25 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
             )
           else
             Positioned.fill(
-              child: PageView(
-                controller: _pageController,
+              child: ValueListenableBuilder<double>(
+                valueListenable: _bannerHeight,
+                builder: (context, bannerH, _) {
+                  final mq = MediaQuery.of(context);
+                  // Home shows no shell banner, so it keeps its normal inset;
+                  // every other tab reserves room for the banner overlay (pinned
+                  // above the tab bar) by inflating the bottom padding the tabs
+                  // read when they clear the tab bar.
+                  final extraBottom = _currentTab == _homeTabIndex
+                      ? 0.0
+                      : bannerH;
+                  return MediaQuery(
+                    data: mq.copyWith(
+                      padding: mq.padding.copyWith(
+                        bottom: mq.padding.bottom + extraBottom,
+                      ),
+                    ),
+                    child: PageView(
+                      controller: _pageController,
                 physics: const PageScrollPhysics(),
                 onPageChanged: (index) {
                   setState(() {
@@ -1622,6 +1649,28 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     showBackButton: false,
                   ),
                 ],
+                    ),
+                  );
+                },
+              ),
+            ),
+
+          // Single shell-level footer banner: loads once, survives tab switches,
+          // and sits directly above the tab bar. Hidden on the home tab (and
+          // while the keyboard is up). Not shown during onboarding.
+          if (!isOnboarding && _currentTab != _homeTabIndex)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 77.5 + MediaQuery.of(context).padding.bottom,
+              child: _MeasureSize(
+                onChange: (size) {
+                  final h = size.height;
+                  if (_bannerHeight.value != h) {
+                    _bannerHeight.value = h;
+                  }
+                },
+                child: const AdBannerSlot(hideWhenKeyboardOpen: true),
               ),
             ),
 
@@ -1664,5 +1713,43 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         ],
       ),
     );
+  }
+}
+
+/// Reports its child's laid-out size via [onChange]. Used to measure the shell
+/// footer banner so the nav tabs can reserve exactly its rendered height (0
+/// while it is collapsed) without hard-coding a banner height. The callback is
+/// deferred to after the frame so it is safe to drive layout-affecting state.
+class _MeasureSize extends SingleChildRenderObjectWidget {
+  const _MeasureSize({required this.onChange, required super.child});
+
+  final ValueChanged<Size> onChange;
+
+  @override
+  _MeasureSizeRenderObject createRenderObject(BuildContext context) =>
+      _MeasureSizeRenderObject(onChange);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _MeasureSizeRenderObject renderObject,
+  ) {
+    renderObject.onChange = onChange;
+  }
+}
+
+class _MeasureSizeRenderObject extends RenderProxyBox {
+  _MeasureSizeRenderObject(this.onChange);
+
+  ValueChanged<Size> onChange;
+  Size? _oldSize;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    final newSize = child?.size ?? Size.zero;
+    if (_oldSize == newSize) return;
+    _oldSize = newSize;
+    WidgetsBinding.instance.addPostFrameCallback((_) => onChange(newSize));
   }
 }

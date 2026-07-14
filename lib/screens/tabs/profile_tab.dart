@@ -11,7 +11,6 @@ import '../../styles.dart';
 import '../../widgets/arcade_fx.dart';
 import '../../tutorial/tutorial_screen.dart';
 import '../../utils/at_name.dart';
-import '../../widgets/ad_banner_slot.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/pill_button.dart';
@@ -230,31 +229,21 @@ class _ProfileTabState extends State<ProfileTab> {
           ),
           Padding(
             padding: EdgeInsets.only(top: topInset, bottom: bottomPadding),
-            child: Column(
-              children: [
-                Expanded(
-                  child: RefreshIndicator(
-                    onRefresh: _handleRefresh,
-                    color: AppColors.accent,
-                    backgroundColor: AppColors.parchment,
-                    child: CustomScrollView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      slivers: [
-                        SliverToBoxAdapter(
-                          child: _buildProfileHeader(
-                            showBackButton: showBackButton,
-                          ),
-                        ),
-                        SliverToBoxAdapter(child: _buildBody()),
-                      ],
+            child: RefreshIndicator(
+              onRefresh: _handleRefresh,
+              color: AppColors.accent,
+              backgroundColor: AppColors.parchment,
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: _buildProfileHeader(
+                      showBackButton: showBackButton,
                     ),
                   ),
-                ),
-                // Bottom banner, in-flow below the list so it reserves its own
-                // space (mirrors the leaderboard tab). Collapses to zero size
-                // unless banners are enabled AND an ad loads.
-                const AdBannerSlot(),
-              ],
+                  SliverToBoxAdapter(child: _buildBody()),
+                ],
+              ),
             ),
           ),
         ],
@@ -666,10 +655,7 @@ class _StatsSectionState extends State<_StatsSection> {
   Widget build(BuildContext context) {
     final state = _statsState;
     if (state.shouldShowInitialLoading || (_isLoading && !state.hasData)) {
-      return const Padding(
-        padding: EdgeInsets.all(12),
-        child: ListSkeleton(itemCount: 5),
-      );
+      return const _StatsLoadingSkeleton();
     }
 
     if (state.isError && !state.hasData) {
@@ -737,6 +723,47 @@ class _StatsSectionState extends State<_StatsSection> {
             style: PixelText.title(size: 18, color: AppColors.textDark),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Loading placeholder for the stats card. Mirrors the real stat rows — a
+/// left label bar and a shorter right value bar, sharing the same padding and
+/// zebra striping as [_StatsSectionState._buildStatRow].
+class _StatsLoadingSkeleton extends StatelessWidget {
+  const _StatsLoadingSkeleton();
+
+  static const _labelWidths = <double>[132, 138, 128, 84, 96];
+  static const _valueWidths = <double>[64, 66, 60, 52, 58];
+
+  Widget _row(int index) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 14),
+      decoration: BoxDecoration(
+        color: index.isOdd
+            ? AppColors.parchmentDark.withValues(alpha: 0.45)
+            : Colors.transparent,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: SkeletonLine(width: _labelWidths[index], height: 13),
+            ),
+          ),
+          SkeletonLine(width: _valueWidths[index], height: 15),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LoadingSkeleton(
+      child: Column(
+        children: [for (var i = 0; i < _labelWidths.length; i++) _row(i)],
       ),
     );
   }

@@ -512,22 +512,9 @@ class _RacesTabState extends State<RacesTab> {
   }) {
     final state = _effectiveRacesState;
     if (state.shouldShowInitialLoading) {
-      return KeyedSubtree(
-        key: const Key('races-loading-skeleton'),
-        child: Container(
-          margin: const EdgeInsets.fromLTRB(10, 8, 10, 4),
-          decoration: BoxDecoration(
-            color: AppColors.parchment,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: AppColors.roofDark.withValues(alpha: 0.55),
-              width: 2,
-            ),
-            boxShadow: _raceCardShadow,
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: const ListSkeleton(itemCount: 4),
-        ),
+      return const KeyedSubtree(
+        key: Key('races-loading-skeleton'),
+        child: _RacesLoadingSkeleton(),
       );
     }
 
@@ -592,7 +579,10 @@ class _RacesTabState extends State<RacesTab> {
               showCount: false,
               firstCardKey: widget.tutorialCardKey,
               firstBoxKey: widget.tutorialBoxKey,
-              showInFeedAd: true,
+              // In-feed native ad retired in favor of the footer AdBannerSlot;
+              // the showInFeedAd/adAfterIndex/AdInlineCard plumbing is kept
+              // intact for future native-ad use.
+              showInFeedAd: false,
             ),
           ),
         if (completed.isNotEmpty)
@@ -1072,6 +1062,141 @@ class _RacesTabState extends State<RacesTab> {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(label, style: PixelText.title(size: 11, color: textColor)),
+    );
+  }
+}
+
+/// Loading placeholder for the race list. Mirrors the real layout — two
+/// titled sections (gold-tick header + count pill + collapse chevron) each
+/// over a parchment card of race-row skeletons. The first section stands in
+/// for ACTIVE races: its rows carry the 4-slot inventory crate strip. The
+/// second stands in for a placement section: its rows carry a trailing chip.
+class _RacesLoadingSkeleton extends StatelessWidget {
+  const _RacesLoadingSkeleton();
+
+  // Header sits on the arcade-green surface where text is parchment-toned, so
+  // its skeleton bars are light rather than the dark on-card tone.
+  static final Color _headerTone = AppColors.parchment.withValues(alpha: 0.5);
+
+  Widget _header({required bool showPill}) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 12, 2, 8),
+      child: Row(
+        children: [
+          Container(
+            width: 6,
+            height: 18,
+            decoration: BoxDecoration(
+              color: AppColors.pillGold,
+              borderRadius: BorderRadius.circular(3),
+              border: Border.all(color: AppColors.pillGoldDark),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SkeletonLine(width: 132, height: 18, color: _headerTone),
+          if (showPill) ...[
+            const SizedBox(width: 6),
+            SkeletonBox(width: 26, height: 20, radius: 10, color: _headerTone),
+          ],
+          const Spacer(),
+          SkeletonBox(width: 22, height: 22, radius: 6, color: _headerTone),
+        ],
+      ),
+    );
+  }
+
+  Widget _row({required bool striped, required bool withCrate}) {
+    return Container(
+      color: striped ? AppColors.parchmentLight : AppColors.parchment,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SkeletonLine(width: 148, height: 15),
+                const SizedBox(height: 6),
+                const SkeletonLine(width: 96, height: 11),
+                if (withCrate) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      for (var i = 0; i < 4; i++) ...[
+                        if (i > 0) const SizedBox(width: 3),
+                        const SkeletonBox(width: 18, height: 18, radius: 4),
+                      ],
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (!withCrate) ...[
+            const SizedBox(width: 10),
+            const SkeletonBox(width: 54, height: 22, radius: 11),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _card({required int rows, required bool withCrate}) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.parchment,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppColors.roofDark.withValues(alpha: 0.55),
+          width: 2,
+        ),
+        boxShadow: _raceCardShadow,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Column(
+          children: [
+            for (var i = 0; i < rows; i++) ...[
+              if (i > 0)
+                Container(
+                  height: 1,
+                  color: AppColors.parchmentBorder.withValues(alpha: 0.9),
+                ),
+              _row(striped: i.isOdd, withCrate: withCrate),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _section({
+    required bool showPill,
+    required int rows,
+    required bool withCrate,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 10, right: 10, bottom: 8),
+      child: Column(
+        children: [
+          _header(showPill: showPill),
+          _card(rows: rows, withCrate: withCrate),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LoadingSkeleton(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _section(showPill: false, rows: 2, withCrate: true),
+          _section(showPill: true, rows: 3, withCrate: false),
+        ],
+      ),
     );
   }
 }

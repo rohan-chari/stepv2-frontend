@@ -7,7 +7,6 @@ import '../../services/backend_api_service.dart';
 import '../../styles.dart';
 import '../../widgets/accessory_thumbnail.dart';
 import '../../widgets/arcade_fx.dart';
-import '../../widgets/ad_banner_slot.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/info_toast.dart';
@@ -277,30 +276,19 @@ class _ShopTabState extends State<ShopTab> {
           ),
           Padding(
             padding: EdgeInsets.only(top: topInset + 14, bottom: tabBarHeight),
-            child: Column(
-              children: [
-                Expanded(
-                  child: RefreshIndicator(
-                    onRefresh: _loadCatalog,
-                    color: AppColors.accent,
-                    backgroundColor: AppColors.parchment,
-                    child: CustomScrollView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      slivers: [
-                        SliverToBoxAdapter(
-                          child: _buildHeader(showBackButton: showBackButton),
-                        ),
-                        SliverToBoxAdapter(child: _buildBody()),
-                      ],
-                    ),
+            child: RefreshIndicator(
+              onRefresh: _loadCatalog,
+              color: AppColors.accent,
+              backgroundColor: AppColors.parchment,
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: _buildHeader(showBackButton: showBackButton),
                   ),
-                ),
-                // Bottom banner, in-flow below the list so it reserves its own
-                // space (never overlaps the last row). AdBannerSlot collapses to
-                // zero size unless banners are enabled AND an ad loads, so no
-                // gap appears otherwise.
-                const AdBannerSlot(),
-              ],
+                  SliverToBoxAdapter(child: _buildBody()),
+                ],
+              ),
             ),
           ),
         ],
@@ -424,12 +412,7 @@ class _ShopTabState extends State<ShopTab> {
   Widget _buildBody() {
     final state = _catalogState;
     if (state.shouldShowInitialLoading || (_loading && _catalog == null)) {
-      return Container(
-        margin: const EdgeInsets.fromLTRB(10, 12, 10, 8),
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: _shopCardDecoration(),
-        child: const ListSkeleton(itemCount: 3),
-      );
+      return const _ShopLoadingSkeleton();
     }
 
     if (state.isError && !state.hasData) {
@@ -925,6 +908,126 @@ class _ShopTabState extends State<ShopTab> {
             textAlign: TextAlign.center,
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Loading placeholder for the store. Mirrors the real layout — titled
+/// sections over a 3-column grid of tile skeletons, each tile a game-piece
+/// card with the art box, name line, and price strip in the real tile's
+/// proportions (childAspectRatio 0.66).
+class _ShopLoadingSkeleton extends StatelessWidget {
+  const _ShopLoadingSkeleton();
+
+  // Section headers sit on the arcade-green surface (parchment-toned text), so
+  // their skeleton bars are light rather than the dark on-card tone.
+  static final Color _headerTone = AppColors.parchment.withValues(alpha: 0.5);
+
+  Widget _header() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 8),
+      child: Row(
+        children: [
+          Container(
+            width: 6,
+            height: 16,
+            decoration: BoxDecoration(
+              color: AppColors.pillGold,
+              borderRadius: BorderRadius.circular(3),
+              border: Border.all(color: AppColors.pillGoldDark),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SkeletonLine(width: 108, height: 16, color: _headerTone),
+        ],
+      ),
+    );
+  }
+
+  Widget _tile() {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.parchment,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppColors.roofDark.withValues(alpha: 0.55),
+          width: 2,
+        ),
+        boxShadow: const [
+          BoxShadow(color: Color(0x66000000), offset: Offset(0, 4), blurRadius: 0),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Art box
+            Expanded(
+              child: ColoredBox(
+                color: AppColors.parchmentDark.withValues(alpha: 0.6),
+                child: const Center(
+                  child: SkeletonBox(width: 46, height: 46, radius: 8),
+                ),
+              ),
+            ),
+            // Name
+            Container(
+              height: 34,
+              alignment: Alignment.center,
+              child: const SkeletonLine(width: 52, height: 10),
+            ),
+            // Price strip
+            Container(
+              height: 30,
+              decoration: const BoxDecoration(
+                color: AppColors.parchmentDark,
+                border: Border(
+                  top: BorderSide(color: AppColors.parchmentBorder, width: 1.5),
+                ),
+              ),
+              alignment: Alignment.center,
+              child: const SkeletonBox(width: 46, height: 14, radius: 7),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _section(int tileCount) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _header(),
+        GridView.count(
+          crossAxisCount: 3,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(10, 2, 10, 6),
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 10,
+          childAspectRatio: 0.66,
+          children: [for (var i = 0; i < tileCount; i++) _tile()],
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LoadingSkeleton(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _section(6),
+            _section(3),
+          ],
+        ),
       ),
     );
   }
