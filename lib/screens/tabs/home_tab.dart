@@ -7,6 +7,7 @@ import '../../styles.dart';
 import '../../models/step_data.dart';
 import '../../utils/at_name.dart';
 import '../../utils/race_display.dart';
+import '../../utils/team_race.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../widgets/arcade_fx.dart';
@@ -19,6 +20,7 @@ import '../../widgets/home_course_track.dart' show CapybaraCustomizationPreview;
 import '../../widgets/home_hero_scene.dart';
 import '../../widgets/race_opportunity_card.dart';
 import '../../widgets/race_ui.dart';
+import '../../widgets/team_scoreline.dart';
 import '../../tutorial/tutorial_screen.dart';
 import '../display_name_screen.dart';
 import '../public_races_screen.dart';
@@ -409,6 +411,9 @@ class HomeTab extends StatelessWidget {
               placement: placement,
               participantCount: participantCount,
               top3: top3,
+              // TR-809: team-aware ticket chrome; all fields optional so an
+              // individual race (or older backend) renders exactly as before.
+              race: race,
               onTap: raceId.isEmpty ? null : () => onOpenRace?.call(raceId),
             ),
           );
@@ -1301,6 +1306,7 @@ class _HomeActiveRaceTicket extends StatelessWidget {
     required this.participantCount,
     required this.top3,
     required this.onTap,
+    this.race = const {},
     this.sweepDelay = Duration.zero,
   });
 
@@ -1311,6 +1317,9 @@ class _HomeActiveRaceTicket extends StatelessWidget {
   final int participantCount;
   final List<Map<String, dynamic>> top3;
   final VoidCallback? onTap;
+
+  /// The raw race-card entry — read defensively for TR-809 team chrome.
+  final Map<String, dynamic> race;
 
   /// Staggers the shine sweep so a rail of tickets doesn't flash in unison.
   final Duration sweepDelay;
@@ -1342,6 +1351,9 @@ class _HomeActiveRaceTicket extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final endsAt = this.endsAt;
+    final isTeamRace = TeamRace.isTeamRace(race);
+    final teamSize = TeamRace.teamSize(race);
+    final teamTotals = isTeamRace ? TeamRace.listTeamTotals(race) : null;
     final info = [
       '$participantCount racer${participantCount == 1 ? '' : 's'}',
       if (endsAt != null) _compactTimeLeft(endsAt),
@@ -1385,7 +1397,12 @@ class _HomeActiveRaceTicket extends StatelessWidget {
                       ),
                       child: Center(
                         child: WobbleBadge(
-                          child: PlacementPill(placement: placement),
+                          // TR-809/TR-685: inside a team race the ticket
+                          // leads with the team format, not an individual
+                          // placement.
+                          child: isTeamRace && teamSize != null
+                              ? TeamFormatChip(teamSize: teamSize)
+                              : PlacementPill(placement: placement),
                         ),
                       ),
                     ),
@@ -1408,16 +1425,32 @@ class _HomeActiveRaceTicket extends StatelessWidget {
                             const Spacer(),
                             RacerAvatarStack(entries: top3),
                             const SizedBox(height: 8),
-                            Text(
-                              info,
-                              maxLines: 1,
-                              textAlign: TextAlign.center,
-                              overflow: TextOverflow.ellipsis,
-                              style: PixelText.body(
-                                size: 12,
-                                color: AppColors.textMid,
+                            // TR-809: compact rope-knot scoreline where the
+                            // racer-count line shows on individual tickets.
+                            if (teamTotals != null)
+                              TeamScoreline(
+                                teamAName: TeamRace.teamName(
+                                  race,
+                                  RaceTeam.teamA,
+                                ),
+                                teamBName: TeamRace.teamName(
+                                  race,
+                                  RaceTeam.teamB,
+                                ),
+                                teamATotal: teamTotals.$1,
+                                teamBTotal: teamTotals.$2,
+                              )
+                            else
+                              Text(
+                                info,
+                                maxLines: 1,
+                                textAlign: TextAlign.center,
+                                overflow: TextOverflow.ellipsis,
+                                style: PixelText.body(
+                                  size: 12,
+                                  color: AppColors.textMid,
+                                ),
                               ),
-                            ),
                             const SizedBox(height: 10),
                             PulseGlow(
                               borderRadius: 8,

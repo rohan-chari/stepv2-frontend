@@ -17,6 +17,16 @@ import '../get_coins_screen.dart';
 
 enum _ShopSection { store, inventory }
 
+enum _ShopCategory { powerups, characters, accessories }
+
+extension on _ShopCategory {
+  String get label => switch (this) {
+    _ShopCategory.powerups => 'POWERUPS',
+    _ShopCategory.characters => 'CHARACTERS',
+    _ShopCategory.accessories => 'ACCESSORIES',
+  };
+}
+
 class ShopTab extends StatefulWidget {
   const ShopTab({
     super.key,
@@ -51,6 +61,7 @@ class _ShopTabState extends State<ShopTab> {
   bool _loading = true;
   bool _saving = false;
   _ShopSection _section = _ShopSection.store;
+  _ShopCategory _category = _ShopCategory.powerups;
 
   @override
   void initState() {
@@ -361,6 +372,8 @@ class _ShopTabState extends State<ShopTab> {
               ),
               const SizedBox(height: 12),
               _buildSegmentControl(),
+              const SizedBox(height: 8),
+              _buildCategoryPills(),
             ],
           ),
         ),
@@ -405,6 +418,72 @@ class _ShopTabState extends State<ShopTab> {
           const SizedBox(width: 3),
           segment('INVENTORY', _ShopSection.inventory),
         ],
+      ),
+    );
+  }
+
+  /// Categories offered as pills. POWERUPS drops out entirely when the
+  /// powerup endpoints are missing (older backend) — the same condition that
+  /// hides the powerup section today, so those users never see a dead pill.
+  List<_ShopCategory> get _visibleCategories => [
+    if (_powerupsAvailable) _ShopCategory.powerups,
+    _ShopCategory.characters,
+    _ShopCategory.accessories,
+  ];
+
+  /// The active category, coerced into the visible set. Guards the case where
+  /// powerups vanish after a refresh while POWERUPS is selected.
+  _ShopCategory get _activeCategory {
+    final visible = _visibleCategories;
+    return visible.contains(_category) ? _category : visible.first;
+  }
+
+  Widget _buildCategoryPills() {
+    final visible = _visibleCategories;
+    final active = _activeCategory;
+
+    return Row(
+      children: [
+        for (var i = 0; i < visible.length; i++) ...[
+          if (i > 0) const SizedBox(width: 6),
+          Expanded(child: _categoryPill(visible[i], visible[i] == active)),
+        ],
+      ],
+    );
+  }
+
+  Widget _categoryPill(_ShopCategory category, bool selected) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => setState(() => _category = category),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(vertical: 7),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? AppColors.pillGold : Colors.black.withValues(
+            alpha: 0.18,
+          ),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: selected
+                ? AppColors.pillGoldDark
+                : Colors.black.withValues(alpha: 0.12),
+            width: 1.5,
+          ),
+        ),
+        child: Text(
+          category.label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: PixelText.title(
+            size: 11,
+            color: selected
+                ? AppColors.textDark
+                : AppColors.parchment.withValues(alpha: 0.75),
+          ),
+        ),
       ),
     );
   }
@@ -473,24 +552,19 @@ class _ShopTabState extends State<ShopTab> {
     );
   }
 
-  /// A titled section: gold-tick header + a Clash-style grid of item tiles,
-  /// bouncing in with the section's stagger position.
-  Widget _buildSectionGroup(
-    String title,
-    List<Widget> tiles, {
-    required int staggerIndex,
-  }) {
+  /// A Clash-style grid of item tiles for the active category. The category
+  /// name lives in the pill row now, so the grid carries no header of its own.
+  Widget _buildSectionGroup(List<Widget> tiles, {required int staggerIndex}) {
     return StaggerIn(
       index: staggerIndex,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildSectionHeader(title),
           GridView.count(
-            crossAxisCount: 3,
+            crossAxisCount: 4,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(10, 2, 10, 6),
+            padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
             mainAxisSpacing: 12,
             crossAxisSpacing: 10,
             childAspectRatio: 0.66,
@@ -781,116 +855,91 @@ class _ShopTabState extends State<ShopTab> {
   static bool _isCharacter(Map<String, dynamic> item) =>
       item['slot'] == 'CHARACTER';
 
+  /// Wraps a category's tiles, falling back to an empty state so a selected
+  /// pill never lands on a blank page.
+  List<Widget> _buildCategoryBody(
+    List<Widget> tiles, {
+    required IconData emptyIcon,
+    required String emptyMessage,
+  }) {
+    if (tiles.isEmpty) {
+      return [
+        StaggerIn(
+          index: 0,
+          child: _buildEmptyState(icon: emptyIcon, message: emptyMessage),
+        ),
+      ];
+    }
+    return [_buildSectionGroup(tiles, staggerIndex: 0)];
+  }
+
   // ── STORE: unowned cosmetics + re-buyable powerups ─────────────────────
   List<Widget> _buildStore(List<Map<String, dynamic>> items) {
     final unowned = items.where((i) => i['owned'] != true).toList();
-    final unownedCharacters = unowned.where(_isCharacter).toList();
-    final unownedCosmetics = unowned.where((i) => !_isCharacter(i)).toList();
 
-    var stagger = 0;
-    return [
-      if (_powerupsAvailable && _powerupStoreItems.isNotEmpty)
-        _buildSectionGroup('POWERUPS', [
-          for (final item in _powerupStoreItems) _storePowerupTile(item),
-        ], staggerIndex: stagger++),
-      if (unownedCharacters.isNotEmpty)
-        _buildSectionGroup('CHARACTERS', [
-          for (final item in unownedCharacters) _storeCosmeticTile(item),
-        ], staggerIndex: stagger++),
-      if (unownedCosmetics.isEmpty)
-        StaggerIn(
-          index: stagger++,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildSectionHeader('ACCESSORIES'),
-              _buildEmptyState(
-                icon: Icons.checkroom_rounded,
-                message: 'You own all the gear! Check your Inventory.',
-              ),
-            ],
-          ),
-        )
-      else
-        _buildSectionGroup('ACCESSORIES', [
-          for (final item in unownedCosmetics) _storeCosmeticTile(item),
-        ], staggerIndex: stagger++),
-    ];
+    return switch (_activeCategory) {
+      _ShopCategory.powerups => _buildCategoryBody(
+        [for (final item in _powerupStoreItems) _storePowerupTile(item)],
+        emptyIcon: Icons.bolt_rounded,
+        emptyMessage: 'No powerups for sale right now.',
+      ),
+      _ShopCategory.characters => _buildCategoryBody(
+        [
+          for (final item in unowned.where(_isCharacter))
+            _storeCosmeticTile(item),
+        ],
+        emptyIcon: Icons.pets_rounded,
+        emptyMessage: 'You own every character! Check your Inventory.',
+      ),
+      _ShopCategory.accessories => _buildCategoryBody(
+        [
+          for (final item in unowned.where((i) => !_isCharacter(i)))
+            _storeCosmeticTile(item),
+        ],
+        emptyIcon: Icons.checkroom_rounded,
+        emptyMessage: 'You own all the gear! Check your Inventory.',
+      ),
+    };
   }
 
   // ── INVENTORY: owned cosmetics + owned powerups ────────────────────────
   List<Widget> _buildInventory(List<Map<String, dynamic>> items) {
     final owned = items.where((i) => i['owned'] == true).toList();
-    final ownedCharacters = owned.where(_isCharacter).toList();
-    final ownedCosmetics = owned.where((i) => !_isCharacter(i)).toList();
-    final ownedPowerups =
-        _powerupInventory.entries.where((e) => e.value > 0).toList()
-          ..sort((a, b) => a.key.compareTo(b.key));
 
-    var stagger = 0;
-    return [
-      if (ownedPowerups.isNotEmpty)
-        _buildSectionGroup('POWERUPS', [
-          for (final entry in ownedPowerups)
+    return switch (_activeCategory) {
+      _ShopCategory.powerups => _buildCategoryBody(
+        [
+          for (final entry
+              in _powerupInventory.entries.where((e) => e.value > 0).toList()
+                ..sort((a, b) => a.key.compareTo(b.key)))
             _ownedPowerupTile(entry.key, entry.value),
-        ], staggerIndex: stagger++),
-      if (ownedCharacters.isNotEmpty)
-        _buildSectionGroup('CHARACTERS', [
-          for (final item in ownedCharacters) _inventoryCosmeticTile(item),
-        ], staggerIndex: stagger++),
-      if (ownedCosmetics.isEmpty)
-        StaggerIn(
-          index: stagger++,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildSectionHeader('ACCESSORIES'),
-              _buildEmptyState(
-                icon: Icons.inventory_2_rounded,
-                message: 'No gear yet — buy some from the Store.',
-              ),
-            ],
-          ),
-        )
-      else
-        _buildSectionGroup('ACCESSORIES', [
-          for (final item in ownedCosmetics) _inventoryCosmeticTile(item),
-        ], staggerIndex: stagger++),
-    ];
+        ],
+        emptyIcon: Icons.bolt_rounded,
+        emptyMessage: 'No powerups yet — buy some from the Store.',
+      ),
+      _ShopCategory.characters => _buildCategoryBody(
+        [
+          for (final item in owned.where(_isCharacter))
+            _inventoryCosmeticTile(item),
+        ],
+        emptyIcon: Icons.pets_rounded,
+        emptyMessage: 'No extra characters yet — buy some from the Store.',
+      ),
+      _ShopCategory.accessories => _buildCategoryBody(
+        [
+          for (final item in owned.where((i) => !_isCharacter(i)))
+            _inventoryCosmeticTile(item),
+        ],
+        emptyIcon: Icons.inventory_2_rounded,
+        emptyMessage: 'No gear yet — buy some from the Store.',
+      ),
+    };
   }
 
   int _ownedQuantityFor(Map<String, dynamic> item) {
     final fromInventory = _powerupInventory[item['powerupType'] as String?];
     if (fromInventory != null) return fromInventory;
     return (item['ownedQuantity'] as num?)?.toInt() ?? 0;
-  }
-
-  Widget _buildSectionHeader(String title) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 14, 12, 8),
-      child: Row(
-        children: [
-          Container(
-            width: 6,
-            height: 16,
-            decoration: BoxDecoration(
-              color: AppColors.pillGold,
-              borderRadius: BorderRadius.circular(3),
-              border: Border.all(color: AppColors.pillGoldDark),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            title,
-            style: PixelText.title(
-              size: 16,
-              color: AppColors.parchment,
-            ).copyWith(shadows: _textShadows),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildEmptyState({required IconData icon, required String message}) {
@@ -919,32 +968,6 @@ class _ShopTabState extends State<ShopTab> {
 /// proportions (childAspectRatio 0.66).
 class _ShopLoadingSkeleton extends StatelessWidget {
   const _ShopLoadingSkeleton();
-
-  // Section headers sit on the arcade-green surface (parchment-toned text), so
-  // their skeleton bars are light rather than the dark on-card tone.
-  static final Color _headerTone = AppColors.parchment.withValues(alpha: 0.5);
-
-  Widget _header() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 14, 12, 8),
-      child: Row(
-        children: [
-          Container(
-            width: 6,
-            height: 16,
-            decoration: BoxDecoration(
-              color: AppColors.pillGold,
-              borderRadius: BorderRadius.circular(3),
-              border: Border.all(color: AppColors.pillGoldDark),
-            ),
-          ),
-          const SizedBox(width: 8),
-          SkeletonLine(width: 108, height: 16, color: _headerTone),
-        ],
-      ),
-    );
-  }
 
   Widget _tile() {
     return DecoratedBox(
@@ -998,21 +1021,15 @@ class _ShopLoadingSkeleton extends StatelessWidget {
   }
 
   Widget _section(int tileCount) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _header(),
-        GridView.count(
-          crossAxisCount: 3,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(10, 2, 10, 6),
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 10,
-          childAspectRatio: 0.66,
-          children: [for (var i = 0; i < tileCount; i++) _tile()],
-        ),
-      ],
+    return GridView.count(
+      crossAxisCount: 4,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
+      mainAxisSpacing: 12,
+      crossAxisSpacing: 10,
+      childAspectRatio: 0.66,
+      children: [for (var i = 0; i < tileCount; i++) _tile()],
     );
   }
 
@@ -1021,13 +1038,9 @@ class _ShopLoadingSkeleton extends StatelessWidget {
     return LoadingSkeleton(
       child: Padding(
         padding: const EdgeInsets.only(bottom: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _section(6),
-            _section(3),
-          ],
-        ),
+        // One category is shown at a time now, so the skeleton is a single
+        // grid rather than a stack of headed sections.
+        child: _section(8),
       ),
     );
   }

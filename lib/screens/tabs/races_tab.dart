@@ -12,8 +12,10 @@ import '../../widgets/ad_inline_card.dart';
 import '../../widgets/info_toast.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
+import '../../utils/team_race.dart';
 import '../../widgets/powerup_icon.dart';
 import '../../widgets/spinning_crate.dart';
+import '../../widgets/team_scoreline.dart';
 import '../create_race_screen.dart';
 import '../public_races_screen.dart';
 import '../race_detail_screen.dart';
@@ -819,6 +821,12 @@ class _RacesTabState extends State<RacesTab> {
     final slotItems =
         (race['slotItems'] as List?)?.whereType<Map>().toList() ?? const [];
 
+    // TR-806: team-race chrome for list rows. All reads are defensive — an
+    // individual race (or an old payload) has none of these fields.
+    final isTeamRace = TeamRace.isTeamRace(race);
+    final teamSize = TeamRace.teamSize(race);
+    final teamTotals = isTeamRace ? TeamRace.listTeamTotals(race) : null;
+
     String statusLabel;
     Color badgeColor;
     if (isInvite && !isCreator) {
@@ -891,14 +899,24 @@ class _RacesTabState extends State<RacesTab> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        name,
-                        style: PixelText.title(
-                          size: 18,
-                          color: AppColors.textDark,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              name,
+                              style: PixelText.title(
+                                size: 18,
+                                color: AppColors.textDark,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                          ),
+                          if (isTeamRace && teamSize != null) ...[
+                            const SizedBox(width: 6),
+                            TeamFormatChip(teamSize: teamSize),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 3),
                       // Active races show time-left then the user's race inventory
@@ -912,6 +930,20 @@ class _RacesTabState extends State<RacesTab> {
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
                         ),
+                        // TR-806: mini team scoreline (only when the payload
+                        // carries totals — older backends simply omit it).
+                        if (teamTotals != null) ...[
+                          const SizedBox(height: 4),
+                          TeamScoreline(
+                            teamAName:
+                                TeamRace.teamName(race, RaceTeam.teamA),
+                            teamBName:
+                                TeamRace.teamName(race, RaceTeam.teamB),
+                            teamATotal: teamTotals.$1,
+                            teamBTotal: teamTotals.$2,
+                            showRope: false,
+                          ),
+                        ],
                         const SizedBox(height: 4),
                         _buildInventoryRow(
                           slotItems,

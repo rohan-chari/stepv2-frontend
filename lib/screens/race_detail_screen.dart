@@ -15,6 +15,7 @@ import '../utils/at_name.dart';
 import '../utils/race_display.dart';
 import '../utils/race_participant_display.dart';
 import '../utils/share_helper.dart';
+import '../utils/team_race.dart';
 import '../widgets/ad_banner_slot.dart';
 import '../widgets/arcade_fx.dart';
 import '../widgets/arcade_tab_selector.dart';
@@ -36,8 +37,9 @@ import '../widgets/spinning_crate.dart';
 import '../widgets/game_container.dart';
 import '../widgets/friend_request_sheet.dart';
 import '../widgets/leaderboard_plank.dart';
+import '../widgets/team_h2h_banner.dart';
+import '../widgets/team_lobby_board.dart';
 import '../widgets/loading_skeleton.dart';
-import '../widgets/race_finishers_banner.dart';
 import '../widgets/race_ui.dart';
 import '../widgets/item_slot.dart';
 import '../widgets/feed_bubble.dart';
@@ -254,7 +256,47 @@ Map<String, List<int>>? _parseCostTable(dynamic raw) {
   return out;
 }
 
-class _RaceDetailScreenState extends State<RaceDetailScreen> {
+/// What the race-detail screen should do to its progress poll in response to an
+/// app-lifecycle change. Kept as a pure function (no State, no timers) so the
+/// pause/resume decision is unit-testable without standing up the whole screen
+/// and its API harness.
+enum RacePollLifecycleAction {
+  /// Do nothing to the poll: a transient state (inactive/detached), or a resume
+  /// for a screen that was never polling (e.g. a finished or scheduled race).
+  none,
+
+  /// Went off-screen (backgrounded/hidden): cancel the poll timer.
+  pause,
+
+  /// Came back to the foreground after having polled: refresh once immediately,
+  /// then restart the periodic poll.
+  resume,
+}
+
+/// Decides the poll action for [state] given whether the screen was actively
+/// polling ([wasPolling]). `paused`/`hidden` pause; a `resumed` only resumes
+/// when we were polling before (so we never start polling on a screen that
+/// never did — e.g. a finished race); everything else is a no-op.
+RacePollLifecycleAction racePollLifecycleAction(
+  AppLifecycleState state, {
+  required bool wasPolling,
+}) {
+  switch (state) {
+    case AppLifecycleState.paused:
+    case AppLifecycleState.hidden:
+      return RacePollLifecycleAction.pause;
+    case AppLifecycleState.resumed:
+      return wasPolling
+          ? RacePollLifecycleAction.resume
+          : RacePollLifecycleAction.none;
+    case AppLifecycleState.inactive:
+    case AppLifecycleState.detached:
+      return RacePollLifecycleAction.none;
+  }
+}
+
+class _RaceDetailScreenState extends State<RaceDetailScreen>
+    with WidgetsBindingObserver {
   Map<String, dynamic>? _race;
   Map<String, dynamic>? _progress;
   Map<String, dynamic>? _powerupData;
@@ -272,6 +314,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   bool _isActing = false;
   Timer? _pollTimer;
   Timer? _countdownTimer;
+  // Whether this screen wants to be polling progress (true only for an ACTIVE
+  // race). Drives lifecycle resume: we restart the poll on foreground only when
+  // it was running, never on a screen that never polled (finished/pending).
+  // Stays true across a pause so resume knows to restart; cleared when polling
+  // stops for good (race COMPLETED).
+  bool _pollingActive = false;
+  // Whether the 1s countdown ticker should be running (ACTIVE races and PENDING
+  // scheduled races). Same lifecycle contract as _pollingActive.
+  bool _countdownActive = false;
   // Monotonic id of the newest fetchRaceProgress request — see _loadProgress.
   int _progressFetchSeq = 0;
   late DateTime _countdownNow;
@@ -353,9 +404,40 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _countdownNow = DateTime.now();
     _messageFocus.addListener(_onComposerFocusChanged);
     _loadDetails();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (racePollLifecycleAction(state, wasPolling: _pollingActive)) {
+      case RacePollLifecycleAction.pause:
+        // Off-screen: stop the network poll AND the 1s countdown ticker. The
+        // ticker only drives UI (setState of _countdownNow), so ticking it
+        // while backgrounded is wasted work; both are restarted on resume via
+        // the flags below. The flags stay set so resume knows to restart.
+        _pollTimer?.cancel();
+        _countdownTimer?.cancel();
+        break;
+      case RacePollLifecycleAction.resume:
+        // Foreground again after having polled: fetch once immediately for an
+        // instant catch-up (the seq guard in _loadProgress keeps ordering
+        // correct), then restart the periodic poll. _startPolling re-guards
+        // its own timer.
+        _loadProgress();
+        _startPolling();
+        break;
+      case RacePollLifecycleAction.none:
+        break;
+    }
+    // Restart the countdown ticker on any resume where it was running — covers
+    // both ACTIVE races (which also resumed polling above) and PENDING
+    // scheduled races (which tick a countdown but never poll).
+    if (state == AppLifecycleState.resumed && _countdownActive) {
+      _startCountdown();
+    }
   }
 
   // The composer lives inside the page's SingleChildScrollView, so the
@@ -377,6 +459,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pollTimer?.cancel();
     _countdownTimer?.cancel();
     _messageInput.dispose();
@@ -616,6 +699,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       }
 
       if (progress['status'] == 'COMPLETED') {
+        // Polling stops for good — clear the flags so a later app resume does
+        // not restart the poll/countdown on a now-finished race.
+        _pollingActive = false;
+        _countdownActive = false;
         _pollTimer?.cancel();
         _countdownTimer?.cancel();
         _loadDetails();
@@ -646,6 +733,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   }
 
   void _startPolling() {
+    _pollingActive = true;
     _pollTimer?.cancel();
     _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       _loadProgress();
@@ -653,6 +741,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   }
 
   void _startCountdown() {
+    _countdownActive = true;
     _countdownTimer?.cancel();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
@@ -755,6 +844,247 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         _loadDetails();
       } else {
         Navigator.of(context).pop(true);
+      }
+    } catch (e) {
+      if (mounted) showErrorToast(context, e.toString());
+    } finally {
+      if (mounted) setState(() => _isActing = false);
+    }
+  }
+
+  /// TR-802: a tap on an empty lobby peg. ACCEPTED members switch sides
+  /// (TR-203); INVITED members accept onto that side (TR-201). Errors map
+  /// through the playful team-race copy (TEAM_FULL etc.).
+  Future<void> _onLobbySlotTap(RaceTeam team) async {
+    if (_isActing) return;
+    final myStatus = _race?['myStatus'] as String? ?? '';
+    final myTeam = _myLobbyTeam();
+    if (myStatus == 'ACCEPTED' && myTeam == team) return; // already there
+    setState(() => _isActing = true);
+    try {
+      final token = widget.authService.authToken;
+      if (token == null || token.isEmpty) return;
+
+      if (myStatus == 'INVITED') {
+        final confirmed = await _confirmPaidInvite(activeRace: false);
+        if (!confirmed) return;
+        await _api.acceptTeamRaceInvite(
+          identityToken: token,
+          raceId: widget.raceId,
+          team: team.wireValue,
+        );
+        await _refreshWallet();
+        if (mounted) showInfoToast(context, 'You joined the race!');
+      } else if (myStatus == 'ACCEPTED') {
+        await _api.setRaceTeam(
+          identityToken: token,
+          raceId: widget.raceId,
+          team: team.wireValue,
+        );
+      } else {
+        return;
+      }
+      await _loadDetails();
+    } on ApiException catch (e) {
+      if (mounted) {
+        showErrorToast(
+          context,
+          e.code != null ? teamRaceErrorCopy(e.code) : e.message,
+        );
+      }
+    } catch (e) {
+      if (mounted) showErrorToast(context, e.toString());
+    } finally {
+      if (mounted) setState(() => _isActing = false);
+    }
+  }
+
+  /// TR-207: both sides at their `teamSize` cap — a surplus invitee can't
+  /// accept onto either side until someone leaves.
+  bool _bothSidesFull() {
+    final race = _race;
+    if (race == null || !TeamRace.isTeamRace(race)) return false;
+    final size = TeamRace.teamSize(race);
+    if (size == null || size <= 0) return false;
+    final participants =
+        (race['participants'] as List?)?.cast<Map<String, dynamic>>() ??
+            const <Map<String, dynamic>>[];
+    final accepted =
+        participants.where((p) => p['status'] == 'ACCEPTED').toList();
+    final a = accepted
+        .where((p) => TeamRace.participantTeam(p) == RaceTeam.teamA)
+        .length;
+    final b = accepted
+        .where((p) => TeamRace.participantTeam(p) == RaceTeam.teamB)
+        .length;
+    return a >= size && b >= size;
+  }
+
+  RaceTeam? _myLobbyTeam() {
+    final participants =
+        (_race?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
+            const [];
+    for (final p in participants) {
+      if (p['userId'] == _myUserId) return TeamRace.participantTeam(p);
+    }
+    return null;
+  }
+
+  /// TR-601: mid-race forfeit for a team race. Permanent and consequential, so
+  /// the dialog states all three outcomes plainly before anything happens:
+  /// steps freeze but STAY with the team, no refund, no rejoin.
+  Future<void> _forfeitTeamRace() async {
+    final myTeam = _myLobbyTeam();
+    final teamName = myTeam != null
+        ? TeamRace.teamName(_race ?? const {}, myTeam)
+        : 'your team';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.parchment,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.parchmentBorder, width: 2),
+        ),
+        title: Text(
+          'Forfeit the race?',
+          style: PixelText.title(size: 16, color: AppColors.textDark),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _forfeitConsequence(
+              Icons.ac_unit_rounded,
+              'Your steps freeze now and stay with $teamName — they still '
+                  'count toward the team total.',
+            ),
+            const SizedBox(height: 8),
+            _forfeitConsequence(
+              Icons.money_off_rounded,
+              'No refund. Your buy-in stays in the pot, and you get no cut '
+                  'even if your team wins.',
+            ),
+            const SizedBox(height: 8),
+            _forfeitConsequence(
+              Icons.block_rounded,
+              "This is permanent — you can't rejoin this race.",
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(
+              'KEEP RACING',
+              style: PixelText.button(size: 13, color: AppColors.accent),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(
+              'FORFEIT ANYWAY',
+              style: PixelText.button(size: 13, color: AppColors.error),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isActing = true);
+    try {
+      final token = widget.authService.authToken;
+      if (token == null || token.isEmpty) return;
+      await _api.forfeitRace(identityToken: token, raceId: widget.raceId);
+      await _refreshWallet();
+      // A forfeit can settle the race outright (team collapse, TR-603) — a
+      // full reload lets the screen fall into whatever state it's now in.
+      await _loadDetails();
+      await _loadProgress();
+    } on ApiException catch (e) {
+      if (mounted) {
+        showErrorToast(
+          context,
+          e.code != null ? teamRaceErrorCopy(e.code) : e.message,
+        );
+      }
+    } catch (e) {
+      if (mounted) showErrorToast(context, e.toString());
+    } finally {
+      if (mounted) setState(() => _isActing = false);
+    }
+  }
+
+  Widget _forfeitConsequence(IconData icon, String text) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: AppColors.textMid),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: PixelText.body(size: 12.5, color: AppColors.textMid),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// TR-205: leaving a PENDING team lobby is free (hold released, rejoin ok).
+  Future<void> _leaveTeamLobby() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.parchment,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.parchmentBorder, width: 2),
+        ),
+        title: Text(
+          'Leave the lobby?',
+          style: PixelText.title(size: 16, color: AppColors.textDark),
+        ),
+        content: Text(
+          'Your buy-in hold is released and your peg opens up. '
+          'You can rejoin any time before the race starts.',
+          style: PixelText.body(size: 13, color: AppColors.textMid),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(
+              'STAY',
+              style: PixelText.button(size: 13, color: AppColors.textMid),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(
+              'LEAVE',
+              style: PixelText.button(size: 13, color: AppColors.error),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isActing = true);
+    try {
+      final token = widget.authService.authToken;
+      if (token == null || token.isEmpty) return;
+      await _api.leaveRace(identityToken: token, raceId: widget.raceId);
+      await _refreshWallet();
+      if (mounted) Navigator.of(context).pop(true);
+    } on ApiException catch (e) {
+      if (mounted) {
+        showErrorToast(
+          context,
+          e.code != null ? teamRaceErrorCopy(e.code) : e.message,
+        );
       }
     } catch (e) {
       if (mounted) showErrorToast(context, e.toString());
@@ -892,6 +1222,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         builder: (context) => RaceInviteScreen(
           friends: widget.friends,
           existingParticipantIds: existingIds,
+          // TR-708: gray out friends who can't accept a team-race invite.
+          teamRaceMode: TeamRace.isTeamRace(_race ?? const {}),
         ),
       ),
     );
@@ -934,12 +1266,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     final participants =
         (_progress?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
         [];
-    final targets = participants
-        .where(
-          (p) =>
-              (p['userId'] as String?) != _myUserId && (p['stealthed'] != true),
-        )
-        .toList();
+    // TR-651/657: enemy-team members only (no friendly fire) and no
+    // forfeiters — an invalid target is never presented. Individual races keep
+    // today's "everyone but me, minus stealthed" pool.
+    final targets = TeamRace.offensiveTargets(
+      participants: participants,
+      myUserId: _myUserId,
+      race: _race ?? const {},
+    );
 
     if (type == 'PINECONE_TOSS') {
       targetDirection = await _showPineconeDirectionPicker();
@@ -960,19 +1294,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       targetUserId = await _showTargetPicker(swapTargets, type);
       if (targetUserId == null) return;
     } else if (_targetedPowerups.contains(type)) {
-      final participants =
-          (_progress?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
-          [];
-      final targets = participants
-          .where(
-            (p) =>
-                (p['userId'] as String?) != _myUserId &&
-                (p['stealthed'] != true),
-          )
-          .toList();
-
       if (targets.isEmpty) {
-        if (mounted) showErrorToast(context, 'No targets available');
+        if (mounted) {
+          showErrorToast(
+            context,
+            TeamRace.isTeamRace(_race ?? const {})
+                ? 'No enemy racers to target right now'
+                : 'No targets available',
+          );
+        }
         return;
       }
 
@@ -1296,6 +1626,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               ),
               Flexible(
                 child: ListView.builder(
+                  key: const Key('powerup-target-list'),
                   shrinkWrap: true,
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                   itemCount: targets.length,
@@ -1836,20 +2167,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
   Widget _buildRaceHero({
     required List<GoalTrackRunner> runners,
-    int? goalSteps,
-    double? milestoneProgress,
-    String? milestoneLabel,
     List<Widget> chips = const [],
   }) {
+    // TR-901: the goal-line/milestone marker is gone with target-steps races;
+    // the hero course is purely leader-relative now.
     return Stack(
       children: [
         HomeCourseTrack(
           height: 286,
           backdropAsset: _raceDayAsset,
           frameless: true,
-          goalSteps: goalSteps,
-          milestoneProgress: milestoneProgress,
-          milestoneLabel: milestoneLabel,
           runners: runners,
         ),
         // HUD chips float over the empty sky band, clear of the bunting and
@@ -2136,6 +2463,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     // ET midnight — so an opted-in user must see "you're in", not "waiting for the
     // creator to start".
     final isSeeded = (_race!['seedKind'] as String?) != null;
+    final isTeamRace = TeamRace.isTeamRace(_race!);
     final participants =
         (_race!['participants'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final acceptedCount = participants
@@ -2204,22 +2532,100 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
         _sectionCard(child: _buildRaceInfoCard()),
         const SizedBox(height: 16),
 
-        _checkerSectionHeader(
-          'PARTICIPANTS',
-          trailing: Pill(
-            label: '$acceptedCount',
-            background: AppColors.parchmentDark,
-            foreground: AppColors.textMid,
-            fontSize: 12,
+        if (isTeamRace) ...[
+          // TR-802: the LoL-style lobby replaces the flat participants list.
+          _checkerSectionHeader('TEAM LOBBY'),
+          _sectionCard(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TeamLobbyBoard(
+                  race: _race!,
+                  participants: participants,
+                  myUserId: _myUserId,
+                  onTapEmptySlot:
+                      (_isActing || myStatus == 'DECLINED')
+                          ? null
+                          : _onLobbySlotTap,
+                ),
+                if (myStatus == 'INVITED' && _bothSidesFull()) ...[
+                  // TR-207: over-inviting is allowed and the first to accept
+                  // get in. A surplus invitee keeps their invite — it just
+                  // can't be accepted until someone leaves (TR-205).
+                  const SizedBox(height: 12),
+                  Container(
+                    key: const Key('team-lobby-race-full'),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.parchmentDark,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AppColors.parchmentBorder,
+                        width: 2,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.hourglass_top_rounded,
+                          size: 18,
+                          color: AppColors.textMid.withValues(alpha: 0.8),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Both teams are full — someone beat you to it! '
+                            'Your invite stays put: if a spot frees up, hop '
+                            'straight in.',
+                            style: PixelText.body(
+                              size: 12.5,
+                              color: AppColors.textMid,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else if (myStatus == 'INVITED') ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Tap an empty peg to pick your side and join!',
+                    textAlign: TextAlign.center,
+                    style: PixelText.body(size: 13, color: AppColors.textMid),
+                  ),
+                ] else if (myStatus == 'ACCEPTED') ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Tap an empty peg on the other side to switch teams',
+                    textAlign: TextAlign.center,
+                    style: PixelText.body(size: 12, color: AppColors.textMid),
+                  ),
+                ],
+              ],
+            ),
           ),
-        ),
-        _sectionCard(
-          padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [for (final p in participants) _buildParticipantRow(p)],
+        ] else ...[
+          _checkerSectionHeader(
+            'PARTICIPANTS',
+            trailing: Pill(
+              label: '$acceptedCount',
+              background: AppColors.parchmentDark,
+              foreground: AppColors.textMid,
+              fontSize: 12,
+            ),
           ),
-        ),
+          _sectionCard(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [for (final p in participants) _buildParticipantRow(p)],
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
 
         Padding(
@@ -2246,9 +2652,81 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     required bool scheduledInFuture,
     required DateTime? scheduledStartAt,
   }) {
+    // TR-301 gating for team races: both sides equal and nonzero. The lever
+    // stays visibly disabled with live "Teams must be even — 2v1" copy.
+    final isTeamRace = TeamRace.isTeamRace(_race ?? const {});
+    final participants =
+        (_race?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
+            const <Map<String, dynamic>>[];
+    final accepted =
+        participants.where((p) => p['status'] == 'ACCEPTED').toList();
+    final teamACount = accepted
+        .where((p) => TeamRace.participantTeam(p) == RaceTeam.teamA)
+        .length;
+    final teamBCount = accepted
+        .where((p) => TeamRace.participantTeam(p) == RaceTeam.teamB)
+        .length;
+    final teamsEvenAndReady =
+        teamACount == teamBCount && teamACount > 0;
+    final startBlocked = isTeamRace
+        ? !teamsEvenAndReady
+        : acceptedCount < 2;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // TR-304: a scheduled team race whose start time has passed while the
+        // teams are uneven — the cron skipped it and keeps retrying, so the
+        // race just sits PENDING. Say so, or the elapsed countdown reads as a
+        // bug.
+        if (isTeamRace &&
+            scheduledStartAt != null &&
+            !scheduledInFuture &&
+            !teamsEvenAndReady) ...[
+          RetroCard(
+            key: const Key('team-scheduled-uneven-banner'),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.pause_circle_filled_rounded,
+                  size: 18,
+                  color: AppColors.error,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'START PAUSED — WAITING FOR EVEN TEAMS',
+                        style: PixelText.title(
+                          size: 12,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        teamACount == 0 || teamBCount == 0
+                            ? "Both teams need at least 1 racer. We'll start "
+                                  'it automatically as soon as they even up.'
+                            : "It's ${teamACount}v$teamBCount right now — "
+                                  "we'll start it automatically as soon as "
+                                  'the teams are even.',
+                        style: PixelText.body(
+                          size: 12,
+                          color: AppColors.textMid,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+
         // 1.1.7: scheduled auto-start banner, shown to every viewer of a
         // PENDING race that has a future scheduledStartAt. Live countdown,
         // driven by the same 1s ticker the active-race countdown uses.
@@ -2326,22 +2804,30 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             onPressed: _isActing ? null : _inviteMore,
           ),
           const SizedBox(height: 10),
-          PillButton(
-            label: scheduledInFuture
-                ? 'AUTO-START SCHEDULED'
-                : (_isActing ? 'STARTING...' : 'START RACE'),
-            variant: PillButtonVariant.primary,
-            fontSize: 14,
-            fullWidth: true,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-            onPressed: (scheduledInFuture || _isActing || acceptedCount < 2)
-                ? null
-                : _startRace,
+          _StartLeverPulse(
+            armed: !scheduledInFuture && !_isActing && !startBlocked,
+            child: PillButton(
+              label: scheduledInFuture
+                  ? 'AUTO-START SCHEDULED'
+                  : (_isActing ? 'STARTING...' : 'START RACE'),
+              variant: PillButtonVariant.primary,
+              fontSize: 14,
+              fullWidth: true,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+              onPressed: (scheduledInFuture || _isActing || startBlocked)
+                  ? null
+                  : _startRace,
+            ),
           ),
-          if (!scheduledInFuture && acceptedCount < 2) ...[
+          if (!scheduledInFuture && startBlocked) ...[
             const SizedBox(height: 6),
             Text(
-              'Need at least 2 participants to start',
+              isTeamRace
+                  ? (teamACount == 0 && teamBCount == 0
+                        ? 'Both teams need at least 1 racer'
+                        : 'Teams must be even — ${teamACount}v$teamBCount')
+                  : 'Need at least 2 participants to start',
               style: PixelText.body(
                 size: 12,
                 color: AppColors.parchment.withValues(alpha: 0.9),
@@ -2349,6 +2835,17 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               textAlign: TextAlign.center,
             ),
           ],
+        ] else if (myStatus == 'INVITED' && isTeamRace) ...[
+          // TR-802: team invites are accepted by tapping a peg in the lobby
+          // above — only Decline lives down here.
+          PillButton(
+            label: 'DECLINE INVITE',
+            variant: PillButtonVariant.accent,
+            fontSize: 13,
+            fullWidth: true,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            onPressed: _isActing ? null : () => _respondToInvite(false),
+          ),
         ] else if (myStatus == 'INVITED') ...[
           PillButton(
             label: _isActing ? 'JOINING...' : 'ACCEPT',
@@ -2408,6 +2905,20 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
               ),
             ],
           ),
+          if (isTeamRace) ...[
+            // TR-205/208: members can leave a PENDING team lobby freely;
+            // the creator's exits stay cancel/delete.
+            const SizedBox(height: 10),
+            PillButton(
+              label: 'LEAVE LOBBY',
+              variant: PillButtonVariant.accent,
+              fontSize: 13,
+              fullWidth: true,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              onPressed: _isActing ? null : _leaveTeamLobby,
+            ),
+          ],
         ],
       ],
     );
@@ -2482,7 +2993,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   }
 
   Widget _buildActiveContent() {
-    final targetSteps = _readInt(_race!['targetSteps'], fallback: 0);
+    // TR-901: target-steps races are gone — `targetSteps` may still arrive on
+    // the wire from the backend (compat, TR-903) but is deliberately ignored.
     final buyInAmount = _readInt(_race!['buyInAmount'], fallback: 0);
     final finishReward = _race!['finishReward'] as Map<String, dynamic>?;
     final finishRewardPool = finishReward != null
@@ -2542,26 +3054,18 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     final participants = sortRaceParticipantsForDisplay(
       (progress['participants'] as List?)?.cast<Map<String, dynamic>>() ?? [],
     );
-    final finishedCount = participants
-        .where((p) => p['finishedAt'] != null)
-        .length;
+    final isTeamRace = TeamRace.isTeamRace(_race!);
 
     // Position runners against the expected-pace denominator (leader-capped)
     // so time-based races show sane positions from minute one — see
     // _courseDenominator.
     final leaderSteps = _leaderSteps(participants);
     final courseDenominator = _courseDenominator(leaderSteps);
-    final milestoneProgress = targetSteps > 0 && courseDenominator > 0
-        ? (targetSteps / courseDenominator).clamp(0.0, 1.0).toDouble()
-        : null;
 
     return Column(
       children: [
         // THE RACE — full-bleed race-day hero with HUD chips on the sky.
         _buildRaceHero(
-          goalSteps: targetSteps,
-          milestoneProgress: milestoneProgress,
-          milestoneLabel: _formatStepsCompact(targetSteps),
           chips: chips,
           runners: [
             for (final p in participants)
@@ -2570,7 +3074,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                     ? '???'
                     : (p['displayName'] as String? ?? '???'),
                 progress: p['stealthed'] == true
-                    ? _jitterProgress(p['userId'] as String? ?? '', targetSteps)
+                    ? _jitterProgress(p['userId'] as String? ?? '')
                     : _courseProgress(p['totalSteps'], courseDenominator),
                 isUser: (p['userId'] as String?) == _myUserId,
                 isStealthed: p['stealthed'] == true,
@@ -2581,6 +3085,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                 animal: p['stealthed'] == true
                     ? null
                     : animalFromJson(p['animal']),
+                // TR-804: team glow + pennant chrome on course capys.
+                teamColor: isTeamRace
+                    ? switch (TeamRace.participantTeam(p)) {
+                        final team? => TeamRace.color(team),
+                        null => null,
+                      }
+                    : null,
               ),
           ],
         ),
@@ -2603,7 +3114,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
             child: banner,
           ),
 
-        if (targetSteps > 0 || finishRewardPool > 0 || endsAt == null)
+        if (finishRewardPool > 0 || endsAt == null)
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
             child: SizedBox(
@@ -2621,15 +3132,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                         size: 16,
                         color: AppColors.pillGold,
                       ).copyWith(shadows: _headerTextShadows),
-                    ),
-                  if (targetSteps > 0)
-                    Text(
-                      'Goal: ${_formatStepsCompact(targetSteps)}',
-                      textAlign: TextAlign.center,
-                      style: PixelText.body(
-                        size: 13,
-                        color: AppColors.parchment.withValues(alpha: 0.9),
-                      ),
                     ),
                   if (finishRewardPool > 0) ...[
                     const SizedBox(height: 2),
@@ -2652,38 +3154,51 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
           ),
         const SizedBox(height: 18),
 
+        // HEAD TO HEAD — team tug-of-war banner (TR-803). Totals come from
+        // the backend team block when present (always honest, TR-658) and
+        // fall back to summing visible planks on older payloads.
+        if (isTeamRace) ...[
+          StaggerIn(
+            index: 0,
+            child: Column(
+              children: [
+                _checkerSectionHeader('HEAD TO HEAD'),
+                _sectionCard(
+                  padding: const EdgeInsets.all(14),
+                  child: TeamH2HBanner(
+                    teamAName: TeamRace.teamName(_race!, RaceTeam.teamA),
+                    teamBName: TeamRace.teamName(_race!, RaceTeam.teamB),
+                    teamATotal: _teamTotalFromProgress(
+                      progress,
+                      participants,
+                      RaceTeam.teamA,
+                    ),
+                    teamBTotal: _teamTotalFromProgress(
+                      progress,
+                      participants,
+                      RaceTeam.teamB,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+        ],
+
         // STANDINGS
         StaggerIn(
           index: 0,
           child: Column(
             children: [
-              _checkerSectionHeader(
-                'STANDINGS',
-                trailing: finishedCount > 0
-                    ? Pill(
-                        label: '$finishedCount FINISHED',
-                        background: AppColors.pillGreen,
-                        foreground: AppColors.pillGreenDark,
-                        fontSize: 11,
-                      )
-                    : null,
-              ),
+              _checkerSectionHeader('STANDINGS'),
               _sectionCard(
                 padding: const EdgeInsets.all(8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (finishedCount > 0) ...[
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
-                        child: RaceFinishersBanner(
-                          finishedCount: finishedCount,
-                          targetSteps: targetSteps,
-                        ),
-                      ),
-                    ],
-                    ..._buildLeaderboardRows(participants),
-                  ],
+                  children: isTeamRace
+                      ? _buildTeamGroupedRows(participants)
+                      : [..._buildLeaderboardRows(participants)],
                 ),
               ),
             ],
@@ -2740,9 +3255,39 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
         // ACTIVITY & CHAT
         StaggerIn(index: 2, child: _buildActivityTabsSection()),
+
+        // TR-601: mid-race forfeit — team races only, and only while you're
+        // still in play. Deliberately last and low-key: it's a destructive,
+        // permanent exit, not a headline action.
+        if (isTeamRace && !_iHaveForfeited(participants)) ...[
+          const SizedBox(height: 18),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: PillButton(
+              label: 'FORFEIT',
+              variant: PillButtonVariant.accent,
+              fontSize: 13,
+              fullWidth: true,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 12,
+              ),
+              onPressed: _isActing ? null : _forfeitTeamRace,
+            ),
+          ),
+        ],
         const SizedBox(height: 24),
       ],
     );
+  }
+
+  /// True once the signed-in user has forfeited this race (frozen, out of
+  /// play). `forfeitedAt` is additive — absent on older payloads.
+  bool _iHaveForfeited(List<Map<String, dynamic>> participants) {
+    for (final p in participants) {
+      if (p['userId'] == _myUserId) return TeamRace.hasForfeited(p);
+    }
+    return false;
   }
 
   // "2x STEPS — ends in mm:ss" banner for an active global step-multiplier
@@ -3590,12 +4135,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
 
   Widget _buildCompletedContent() {
     final winner = _race!['winner'] as Map<String, dynamic>?;
+    // TR-402/404: team races record winnerTeam (winnerUserId stays null), and
+    // a completed team race with no winnerTeam is a TIE — never the plain
+    // individual "No winner" state.
+    final isTeamRace = TeamRace.isTeamRace(_race!);
+    final winnerTeam = TeamRace.winnerTeam(_race!);
     final participants = sortRaceParticipantsForDisplay(
       (_progress?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
           (_race!['participants'] as List?)?.cast<Map<String, dynamic>>() ??
           [],
     );
-    final targetSteps = _readInt(_race!['targetSteps'], fallback: 0);
     final completedLeaderSteps = _leaderSteps(participants);
     final winnerId = winner?['id'] as String?;
     final winnerEntry = participants.firstWhere(
@@ -3612,11 +4161,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
       children: [
         // The finished race on the race-day course, final positions held.
         _buildRaceHero(
-          goalSteps: targetSteps,
-          milestoneProgress: targetSteps > 0 && completedLeaderSteps > 0
-              ? (targetSteps / completedLeaderSteps).clamp(0.0, 1.0).toDouble()
-              : null,
-          milestoneLabel: _formatStepsCompact(targetSteps),
           chips: [
             _heroChip(
               child: Row(
@@ -3660,12 +4204,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
           index: 0,
           child: Column(
             children: [
-              _checkerSectionHeader('WINNER'),
+              _checkerSectionHeader(isTeamRace ? 'WINNING TEAM' : 'WINNER'),
               _sectionCard(
                 padding: const EdgeInsets.all(18),
                 child: Column(
                   children: [
-                    if (winner != null) ...[
+                    if (isTeamRace)
+                      _buildTeamWinnerBoard(winnerTeam, participants)
+                    else if (winner != null) ...[
                       RacerAvatar(
                         rank: 1,
                         accessories: winnerAccessories,
@@ -3712,7 +4258,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
                 padding: const EdgeInsets.all(8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: _buildLeaderboardRows(participants),
+                  children: isTeamRace
+                      ? _buildTeamGroupedRows(participants)
+                      : _buildLeaderboardRows(participants),
                 ),
               ),
             ],
@@ -4041,6 +4589,203 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     }
   }
 
+  /// Team total for the H2H banner: prefer the backend's honest team block
+  /// (contract §7 — includes stealthed members' hidden steps, TR-658); fall
+  /// back to summing visible planks when the block is absent.
+  static int _teamTotalFromProgress(
+    Map<String, dynamic> progress,
+    List<Map<String, dynamic>> participants,
+    RaceTeam team,
+  ) {
+    final teams = progress['teams'];
+    if (teams is Map) {
+      final block = teams[team == RaceTeam.teamA ? 'teamA' : 'teamB'];
+      if (block is Map) {
+        final total = block['totalSteps'];
+        if (total is num) return total.toInt();
+      }
+    }
+    return TeamRace.teamTotal(participants, team);
+  }
+
+  /// TR-402/403/404: the settled team-race crown — winning team plaque with
+  /// its members, or the dedicated tie state (all buy-ins refunded).
+  Widget _buildTeamWinnerBoard(
+    RaceTeam? winnerTeam,
+    List<Map<String, dynamic>> participants,
+  ) {
+    if (winnerTeam == null) {
+      return Column(
+        children: [
+          const Icon(
+            Icons.handshake_rounded,
+            size: 44,
+            color: AppColors.textMid,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'It\u2019s a tie \u2014 buy-ins refunded',
+            textAlign: TextAlign.center,
+            style: PixelText.title(size: 16, color: AppColors.textDark),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Both teams finished dead even. Everyone got their coins back.',
+            textAlign: TextAlign.center,
+            style: PixelText.body(size: 12, color: AppColors.textMid),
+          ),
+        ],
+      );
+    }
+
+    final members = TeamRace.membersOf(participants, winnerTeam);
+    final color = TeamRace.color(winnerTeam);
+    final colorLight = TeamRace.colorLight(winnerTeam);
+    final colorDark = TeamRace.colorDark(winnerTeam);
+
+    return Column(
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [colorLight, color],
+            ),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: colorDark, width: 2.5),
+            boxShadow: [
+              BoxShadow(
+                color: colorDark,
+                offset: const Offset(0, 3),
+                blurRadius: 0,
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.emoji_events_rounded,
+                size: 18,
+                color: Colors.white,
+              ),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  TeamRace.teamName(_race!, winnerTeam).toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: PixelText.title(size: 18, color: Colors.white)
+                      .copyWith(
+                        shadows: const [
+                          Shadow(
+                            color: Color(0x66000000),
+                            offset: Offset(0, 1),
+                            blurRadius: 0,
+                          ),
+                        ],
+                      ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (members.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 14,
+            runSpacing: 10,
+            children: [
+              for (final m in members)
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    RacerAvatar(
+                      rank: 1,
+                      accessories:
+                          (m['accessories'] as List?)
+                              ?.cast<Map<String, dynamic>>() ??
+                          const [],
+                      size: 52,
+                      ringColor: color,
+                      animal: animalFromJson(m['animal']),
+                    ),
+                    const SizedBox(height: 5),
+                    SizedBox(
+                      width: 76,
+                      child: Text(
+                        atName(m['displayName'] as String? ?? '???'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: PixelText.body(
+                          size: 11,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 8),
+        const PlacementPill(placement: 1),
+      ],
+    );
+  }
+
+  /// TR-803: individual planks grouped by team under color/name headers.
+  /// Plank rank stays the participant's OVERALL standing so the shield
+  /// numbers still mean "place in the race".
+  List<Widget> _buildTeamGroupedRows(List<Map<String, dynamic>> participants) {
+    final rows = <Widget>[];
+    for (final team in RaceTeam.values) {
+      final sideLetter = team == RaceTeam.teamA ? 'A' : 'B';
+      final color = TeamRace.color(team);
+      final colorDark = TeamRace.colorDark(team);
+      rows.add(
+        Padding(
+          key: Key('team-group-$sideLetter'),
+          padding: EdgeInsets.fromLTRB(4, team == RaceTeam.teamA ? 2 : 12, 4, 6),
+          child: Row(
+            children: [
+              Icon(Icons.flag_rounded, size: 14, color: color),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  TeamRace.teamName(_race ?? const {}, team).toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: PixelText.title(size: 12, color: colorDark),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      for (var i = 0; i < participants.length; i++) {
+        if (TeamRace.participantTeam(participants[i]) == team) {
+          rows.add(_buildLeaderboardPlank(participants[i], i));
+        }
+      }
+    }
+    // Defensive: a mismatched payload may carry team-less participants —
+    // never drop anyone from the standings.
+    final unassigned = [
+      for (var i = 0; i < participants.length; i++)
+        if (TeamRace.participantTeam(participants[i]) == null) i,
+    ];
+    for (final i in unassigned) {
+      rows.add(_buildLeaderboardPlank(participants[i], i));
+    }
+    return rows;
+  }
+
   List<Widget> _buildLeaderboardRows(List<Map<String, dynamic>> participants) {
     var finishedSeen = 0;
     final rows = <Widget>[];
@@ -4112,7 +4857,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
   /// Returns a fake progress value for stealthed runners, jittered ±10%.
   /// Seeded by userId + current minute so it's stable within a minute but
   /// shifts each poll cycle.
-  static double _jitterProgress(String userId, int targetSteps) {
+  static double _jitterProgress(String userId) {
     final seed = userId.hashCode ^ (DateTime.now().minute * 7);
     final rng = math.Random(seed);
     final jitter = (rng.nextDouble() * 0.20) + 0.05; // 5%–25%
@@ -4201,11 +4946,68 @@ class _RaceDetailScreenState extends State<RaceDetailScreen> {
     return '${minutes}m ${seconds.toString().padLeft(2, '0')}s';
   }
 
-  /// Compact step label for milestone markers / subtitles (e.g. 50000 -> 50K).
-  static String _formatStepsCompact(int n) {
-    if (n >= 1000 && n % 1000 == 0) return '${n ~/ 1000}K';
-    if (n >= 10000) return '${(n / 1000).round()}K';
-    return _formatSteps(n);
+}
+
+/// TR-802: the Start lever "glows/wiggles" once teams are even — an obvious,
+/// looping arm pulse (scale + rotate) so the creator can't miss that it's go
+/// time. Inert (and animation-free) while disarmed.
+class _StartLeverPulse extends StatefulWidget {
+  const _StartLeverPulse({required this.armed, required this.child});
+
+  final bool armed;
+  final Widget child;
+
+  @override
+  State<_StartLeverPulse> createState() => _StartLeverPulseState();
+}
+
+class _StartLeverPulseState extends State<_StartLeverPulse>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    );
+    if (widget.armed) _controller.repeat();
+  }
+
+  @override
+  void didUpdateWidget(_StartLeverPulse oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.armed && !_controller.isAnimating) {
+      _controller.repeat();
+    } else if (!widget.armed && _controller.isAnimating) {
+      _controller.stop();
+      _controller.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.armed) return widget.child;
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final t = _controller.value;
+        // Two quick wiggles then a beat of rest each cycle.
+        final burst = t < 0.45 ? math.sin(t / 0.45 * math.pi * 2) : 0.0;
+        return Transform.rotate(
+          angle: burst * 0.02,
+          child: Transform.scale(scale: 1 + burst.abs() * 0.03, child: child),
+        );
+      },
+      child: widget.child,
+    );
   }
 }
 

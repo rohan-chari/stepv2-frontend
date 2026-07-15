@@ -17,10 +17,12 @@ import '../services/background_sync_bootstrap_service.dart';
 import '../services/health_service.dart';
 import '../services/notification_service.dart';
 import '../services/review_prompt_service.dart';
+import '../utils/team_race.dart';
 import '../widgets/ad_banner_slot.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/info_toast.dart';
+import '../widgets/team_side_picker.dart';
 import '../widgets/step_milestones_section.dart';
 import '../widgets/streak_chip.dart';
 import '../widgets/wooden_tab_bar.dart';
@@ -249,13 +251,60 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     String? raceId;
     String? errorMessage;
     try {
-      final result = await _backendApiService.joinRaceByShareToken(
-        identityToken: identityToken,
-        token: token,
-        // Server-gated one-time welcome boxes: a fresh share-link user gets
-        // them; anyone already in the ledger is a no-op. See joinRaceCore.
-        onboarding: true,
-      );
+      // TR-201/204: a team race needs a side before the join call, and a team
+      // race that already started can't be joined at all. Resolve the public
+      // preview first — share-link opens are rare, so the extra GET is cheap,
+      // and it lets us branch without relying on an error response. Failure
+      // here falls through to the plain join (older backends, individual
+      // races), preserving today's behavior.
+      Map<String, dynamic>? preview;
+      try {
+        preview = await _backendApiService.fetchSharedRace(
+          token: token,
+          identityToken: identityToken,
+        );
+      } catch (_) {}
+
+      String? team;
+      if (preview != null && TeamRace.isTeamRace(preview)) {
+        final status = preview['status'] as String?;
+        if (status != null && status != 'PENDING') {
+          // TR-204: locked at start — land them on the race with a friendly
+          // note instead of a failed join.
+          raceId = preview['id'] as String?;
+          errorMessage = raceId == null
+              ? teamRaceErrorCopy('RACE_ALREADY_STARTED')
+              : null;
+          if (raceId != null && mounted) {
+            showInfoToast(context, teamRaceErrorCopy('RACE_ALREADY_STARTED'));
+          }
+          return;
+        }
+        if (!mounted) return;
+        team = await showTeamSidePicker(context: context, race: preview);
+        if (team == null) {
+          // Dismissed the side picker: leave them where they are. The token is
+          // still consumed below so the drain can't loop.
+          raceId = preview['id'] as String?;
+          return;
+        }
+      }
+
+      final result = team != null
+          ? await _backendApiService.joinRaceByShareTokenOnTeam(
+              identityToken: identityToken,
+              token: token,
+              team: team,
+              onboarding: true,
+            )
+          : await _backendApiService.joinRaceByShareToken(
+              identityToken: identityToken,
+              token: token,
+              // Server-gated one-time welcome boxes: a fresh share-link user
+              // gets them; anyone already in the ledger is a no-op. See
+              // joinRaceCore.
+              onboarding: true,
+            );
       raceId = result['raceId'] as String?;
     } on ApiException catch (e) {
       // Already a member / full / closed: still try to land them on the race by
@@ -854,12 +903,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
 
     // Happy-moment hook: the user just dismissed a results modal that included
-    // a top-3 finish. The service applies its own warm-up/cooldown/never-again
-    // guards, so most calls are no-ops.
-    final placedTop3 = unseen.any((race) {
-      final placement = (race['myPlacement'] as num?)?.toInt();
-      return placement != null && placement >= 1 && placement <= 3;
-    });
+    // a top-3 finish — or, for team races, a strict team WIN (TR-807: ties
+    // and forfeited members never qualify). The service applies its own
+    // warm-up/cooldown/never-again guards, so most calls are no-ops.
+    final placedTop3 = unseen.any(raceCountsAsReviewHappyMoment);
     if (placedTop3 && mounted) {
       await _reviewPromptService.recordHappyMomentAndMaybePrompt(context);
     }

@@ -488,7 +488,6 @@ Map<String, dynamic> tutorialPreviewRaceDetail() {
     'isCreator': false,
     'maxDurationDays': 3,
     'buyInAmount': 0,
-    'targetSteps': 30000,
     'endsAt': now.add(const Duration(days: 2, hours: 4)).toIso8601String(),
     'participants': tutorialPreviewRaceParticipants(),
   };

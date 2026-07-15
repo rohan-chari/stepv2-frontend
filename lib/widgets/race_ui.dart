@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../config/animals.dart';
 import '../styles.dart';
+import '../utils/team_race.dart';
 import 'home_course_track.dart' show CapybaraSpriteWithAccessories;
 
 /// Shared UI primitives for the redesigned race surfaces (home active cards,
@@ -228,11 +229,16 @@ class RacerAvatarStack extends StatelessWidget {
                   .toList() ??
               const <Map<String, dynamic>>[]);
     final animal = isStealthed ? null : animalFromJson(entry['animal']);
+    // TR-809/TR-804: entries from a team race carry `team` — ring the capy
+    // in its team color. Absent (individual race / old backend) -> null,
+    // keeping today's medal ring.
+    final team = parseRaceTeam(entry['team']);
     return RacerAvatar(
       rank: rank,
       accessories: accessories,
       size: size,
       animal: animal,
+      ringColor: team != null ? TeamRace.color(team) : null,
     );
   }
 }

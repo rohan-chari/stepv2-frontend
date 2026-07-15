@@ -5,6 +5,7 @@ import '../models/race_payouts.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
+import '../utils/team_race.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/pill_button.dart';
@@ -64,6 +65,19 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
   late final bool _buyInLocked;
   late final int _acceptedCount;
 
+  // TR-105: team names + size are editable while PENDING. `isTeamRace` itself
+  // is immutable, so it's read once and never offered as a control.
+  late final bool _isTeamRace;
+  late final String _initialTeamAName;
+  late final String _initialTeamBName;
+  late final int _initialTeamSize;
+  late final TextEditingController _teamANameController;
+  late final TextEditingController _teamBNameController;
+  late int _teamSize;
+  // Accepted members per side — a shrink below either is rejected (TR-105).
+  late final int _teamACount;
+  late final int _teamBCount;
+
   static const _textShadows = [
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
@@ -98,6 +112,28 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
       final status = p['buyInStatus'] as String?;
       return status == 'HELD' || status == 'COMMITTED';
     });
+
+    _isTeamRace = TeamRace.isTeamRace(race);
+    _initialTeamAName = TeamRace.teamName(race, RaceTeam.teamA);
+    _initialTeamBName = TeamRace.teamName(race, RaceTeam.teamB);
+    _initialTeamSize = (TeamRace.teamSize(race) ?? 1).clamp(1, 5);
+    _teamSize = _initialTeamSize;
+    _teamANameController = TextEditingController(text: _initialTeamAName);
+    _teamBNameController = TextEditingController(text: _initialTeamBName);
+    _teamACount = participants
+        .where(
+          (p) =>
+              p['status'] == 'ACCEPTED' &&
+              TeamRace.participantTeam(p) == RaceTeam.teamA,
+        )
+        .length;
+    _teamBCount = participants
+        .where(
+          (p) =>
+              p['status'] == 'ACCEPTED' &&
+              TeamRace.participantTeam(p) == RaceTeam.teamB,
+        )
+        .length;
 
     _nameController = TextEditingController(text: _initialName);
     _buyInController = TextEditingController(
@@ -142,6 +178,200 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
     );
   }
 
+  /// TR-105: the PENDING team-race editor — the two team-name plaques and
+  /// the carved size stepper, matching the create flow's signpost language.
+  Widget _buildTeamCard() {
+    return RetroCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'TEAMS',
+            style: PixelText.title(size: 13, color: AppColors.textMid),
+          ),
+          const SizedBox(height: 10),
+          _buildTeamSizeStepper(),
+          const SizedBox(height: 14),
+          Text(
+            'TEAM NAMES',
+            style: PixelText.body(size: 11, color: AppColors.textMid),
+          ),
+          const SizedBox(height: 8),
+          _teamNamePlaque(
+            key: const Key('edit-team-plaque-a'),
+            team: RaceTeam.teamA,
+            controller: _teamANameController,
+          ),
+          const SizedBox(height: 8),
+          _teamNamePlaque(
+            key: const Key('edit-team-plaque-b'),
+            team: RaceTeam.teamB,
+            controller: _teamBNameController,
+          ),
+          if (_teamACount > 0 || _teamBCount > 0) ...[
+            const SizedBox(height: 8),
+            Text(
+              '$_teamACount on ${_teamANameController.text.trim()}, '
+              '$_teamBCount on ${_teamBNameController.text.trim()} already.',
+              style: PixelText.body(size: 11, color: AppColors.textMid),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTeamSizeStepper() {
+    // Can't shrink below whichever side is fuller (TR-105).
+    final floor = _teamACount > _teamBCount ? _teamACount : _teamBCount;
+    return Container(
+      key: const Key('edit-team-size-stepper'),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+      decoration: BoxDecoration(
+        color: AppColors.parchmentDark,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.parchmentBorder, width: 2),
+      ),
+      child: Row(
+        children: [
+          _teamStepperButton(
+            key: const Key('edit-team-size-minus'),
+            icon: Icons.remove_rounded,
+            enabled: _teamSize > 1,
+            onTap: () => setState(() => _teamSize = (_teamSize - 1).clamp(1, 5)),
+          ),
+          Expanded(
+            child: Column(
+              children: [
+                Text(
+                  '${_teamSize}v$_teamSize',
+                  style: PixelText.number(size: 30, color: AppColors.textDark),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _teamSize < floor
+                      ? 'TOO SMALL — $floor ALREADY IN'
+                      : '${_teamSize * 2} RACERS MAX',
+                  style: PixelText.body(
+                    size: 10,
+                    color: _teamSize < floor
+                        ? AppColors.error
+                        : AppColors.textMid,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _teamStepperButton(
+            key: const Key('edit-team-size-plus'),
+            icon: Icons.add_rounded,
+            enabled: _teamSize < 5,
+            onTap: () => setState(() => _teamSize = (_teamSize + 1).clamp(1, 5)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _teamStepperButton({
+    required Key key,
+    required IconData icon,
+    required bool enabled,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      key: key,
+      onTap: enabled ? onTap : null,
+      child: Opacity(
+        opacity: enabled ? 1 : 0.35,
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [AppColors.buttonLight, AppColors.buttonFace],
+            ),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.buttonDark, width: 2.5),
+            boxShadow: const [
+              BoxShadow(
+                color: AppColors.buttonShadow,
+                offset: Offset(0, 3),
+                blurRadius: 0,
+              ),
+            ],
+          ),
+          child: Icon(icon, size: 26, color: Colors.white),
+        ),
+      ),
+    );
+  }
+
+  Widget _teamNamePlaque({
+    required Key key,
+    required RaceTeam team,
+    required TextEditingController controller,
+  }) {
+    final color = TeamRace.color(team);
+    final colorLight = TeamRace.colorLight(team);
+    final colorDark = TeamRace.colorDark(team);
+    return Container(
+      key: key,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [colorLight, color],
+        ),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: colorDark, width: 2.5),
+        boxShadow: [
+          BoxShadow(color: colorDark, offset: const Offset(0, 3), blurRadius: 0),
+        ],
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.flag_rounded,
+            size: 16,
+            color: Colors.white.withValues(alpha: 0.9),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              maxLength: 24,
+              onChanged: (_) => setState(() {}),
+              style: PixelText.title(size: 14, color: Colors.white),
+              cursorColor: Colors.white,
+              decoration: InputDecoration(
+                counterText: '',
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+                hintText: team == RaceTeam.teamA ? 'Team A' : 'Team B',
+                hintStyle: PixelText.title(
+                  size: 14,
+                  color: Colors.white.withValues(alpha: 0.5),
+                ),
+              ),
+            ),
+          ),
+          Icon(
+            Icons.edit_outlined,
+            size: 14,
+            color: Colors.white.withValues(alpha: 0.7),
+          ),
+        ],
+      ),
+    );
+  }
+
   int _readInt(dynamic value, int fallback) {
     if (value is int) return value;
     if (value is num) return value.toInt();
@@ -160,6 +390,8 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
   void dispose() {
     _nameController.dispose();
     _buyInController.dispose();
+    _teamANameController.dispose();
+    _teamBNameController.dispose();
     super.dispose();
   }
 
@@ -173,6 +405,15 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
     }
     if (_isPublic != _initialIsPublic) return true;
     if (_maxParticipants != _initialMaxParticipants) return true;
+    if (_isTeamRace) {
+      if (_teamANameController.text.trim() != _initialTeamAName.trim()) {
+        return true;
+      }
+      if (_teamBNameController.text.trim() != _initialTeamBName.trim()) {
+        return true;
+      }
+      if (_teamSize != _initialTeamSize) return true;
+    }
 
     final effectiveBuyIn = _buyInEnabled ? _buyInAmount : 0;
     if (effectiveBuyIn != _initialBuyInAmount) return true;
@@ -208,12 +449,36 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
       return;
     }
 
-    if (_maxParticipants != null && _maxParticipants! < _acceptedCount) {
+    if (!_isTeamRace &&
+        _maxParticipants != null &&
+        _maxParticipants! < _acceptedCount) {
       showErrorToast(
         context,
         'Cannot reduce max runners below $_acceptedCount accepted',
       );
       return;
+    }
+
+    // TR-105 team edits: names must be present and distinct; the size can't
+    // shrink below either side's accepted member count (server also answers
+    // TEAM_SIZE_TOO_SMALL / TEAM_NAMES_IDENTICAL).
+    var teamAName = '';
+    var teamBName = '';
+    if (_isTeamRace) {
+      teamAName = _teamANameController.text.trim();
+      teamBName = _teamBNameController.text.trim();
+      if (teamAName.isEmpty || teamBName.isEmpty) {
+        showErrorToast(context, 'Give both teams a name');
+        return;
+      }
+      if (teamAName.toLowerCase() == teamBName.toLowerCase()) {
+        showErrorToast(context, teamRaceErrorCopy('TEAM_NAMES_IDENTICAL'));
+        return;
+      }
+      if (_teamSize < _teamACount || _teamSize < _teamBCount) {
+        showErrorToast(context, teamRaceErrorCopy('TEAM_SIZE_TOO_SMALL'));
+        return;
+      }
     }
 
     // Build a sparse PATCH body — only send changed fields.
@@ -229,8 +494,18 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
       updates['powerupStepInterval'] = _powerupInterval;
     }
     if (_isPublic != _initialIsPublic) updates['isPublic'] = _isPublic;
-    if (_maxParticipants != _initialMaxParticipants) {
+    // maxParticipants is derived (2 x teamSize) for team races — never sent.
+    if (!_isTeamRace && _maxParticipants != _initialMaxParticipants) {
       updates['maxParticipants'] = _maxParticipants;
+    }
+    if (_isTeamRace) {
+      if (teamAName != _initialTeamAName.trim()) {
+        updates['teamAName'] = teamAName;
+      }
+      if (teamBName != _initialTeamBName.trim()) {
+        updates['teamBName'] = teamBName;
+      }
+      if (_teamSize != _initialTeamSize) updates['teamSize'] = _teamSize;
     }
 
     final effectiveBuyIn = _buyInEnabled ? _buyInAmount : 0;
@@ -268,6 +543,9 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
         payoutPreset: updates['payoutPreset'] as String?,
         maxParticipants: updates['maxParticipants'] as int?,
         setMaxParticipantsUnlimited: maxChanged && _maxParticipants == null,
+        teamAName: updates['teamAName'] as String?,
+        teamBName: updates['teamBName'] as String?,
+        teamSize: updates['teamSize'] as int?,
       );
 
       if (mounted) {
@@ -371,6 +649,13 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                           ),
                         ),
                         const SizedBox(height: 12),
+
+                        // TR-105: team names + size, editable while PENDING.
+                        // isTeamRace itself is immutable — no control for it.
+                        if (_isTeamRace) ...[
+                          _buildTeamCard(),
+                          const SizedBox(height: 12),
+                        ],
 
                         // Duration
                         RetroCard(
@@ -775,6 +1060,10 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                   ),
                                 ],
                               ),
+                              // TR-101/105: a team race's field cap is derived
+                              // (2 x teamSize) — the runner-cap chips don't
+                              // apply; the size stepper above owns it.
+                              if (!_isTeamRace) ...[
                               const SizedBox(height: 12),
                               Text(
                                 'MAX RUNNERS',
@@ -819,6 +1108,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                     color: AppColors.textMid,
                                   ),
                                 ),
+                              ],
                               ],
                             ],
                           ),

@@ -491,7 +491,7 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip> {
     'PINECONE_TOSS': 'UNCOMMON',
     'SNEAKY_SWAP': 'RARE',
     'MIRROR': 'RARE',
-    'CLEANSE': 'UNCOMMON',
+    'CLEANSE': 'RARE',
   };
 
   // Weighted random: common 50%, uncommon 35%, rare 15%
@@ -511,7 +511,6 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip> {
     'STEALTH_MODE',
     'WRONG_TURN',
     'PINECONE_TOSS',
-    'CLEANSE',
   ];
   static const _rareTypes = [
     'RED_CARD',
@@ -522,6 +521,7 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip> {
     'POCKET_WATCH',
     'TRAIL_MINE',
     'SNEAKY_SWAP',
+    'CLEANSE',
     'MIRROR',
   ];
 

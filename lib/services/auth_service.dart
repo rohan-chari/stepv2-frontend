@@ -67,6 +67,7 @@ class AuthService extends ChangeNotifier {
   static const _keyHiddenFromLeaderboard = 'auth_hidden_from_leaderboard';
   static const _keyAutoJoinFeaturedRaces = 'auth_auto_join_featured_races';
   static const _keyBannerAdsEnabled = 'auth_banner_ads_enabled';
+  static const _keyTeamRacesEnabled = 'auth_team_races_enabled';
   static const _keyPendingShareToken = 'auth_pending_share_token';
   static const _keyPendingInviterRace = 'auth_pending_inviter_race';
   static const _keyPendingReferralCode = 'auth_pending_referral_code';
@@ -99,6 +100,7 @@ class AuthService extends ChangeNotifier {
   bool _hiddenFromLeaderboard = false;
   bool _autoJoinFeaturedRaces = false;
   bool _bannerAdsEnabled = false;
+  bool _teamRacesEnabled = true;
   String? _pendingShareToken;
   Map<String, String>? _pendingInviterRace;
   String? _pendingReferralCode;
@@ -125,6 +127,12 @@ class AuthService extends ChangeNotifier {
   /// on /auth/me, toggleable from Admin → Settings). Mirrored into
   /// [AdService.remoteBannersEnabled] wherever it changes.
   bool get bannerAdsEnabled => _bannerAdsEnabled;
+
+  /// Remote kill switch for team-race CREATION (TR-107, backend
+  /// `featureFlags.teamRacesEnabled`). Defaults ON; only an explicit `false`
+  /// from the backend hides the create-flow team toggle. Existing team races
+  /// are unaffected by the switch (they render, run, and pay out normally).
+  bool get teamRacesEnabled => _teamRacesEnabled;
 
   /// A race share token captured from a deep link that has not yet been
   /// consumed (joined). Persisted so it survives the sign-in/onboarding gap on
@@ -181,6 +189,7 @@ class AuthService extends ChangeNotifier {
         prefs.getBool(_keyAutoJoinFeaturedRaces) ?? false;
     _bannerAdsEnabled = prefs.getBool(_keyBannerAdsEnabled) ?? false;
     AdService.remoteBannersEnabled = _bannerAdsEnabled;
+    _teamRacesEnabled = prefs.getBool(_keyTeamRacesEnabled) ?? true;
     _pendingShareToken = prefs.getString(_keyPendingShareToken);
     final rawInviterRace = prefs.getString(_keyPendingInviterRace);
     if (rawInviterRace != null) {
@@ -500,6 +509,16 @@ class AuthService extends ChangeNotifier {
       _bannerAdsEnabled =
           flags is Map && flags['bannerAdsEnabled'] == true;
       AdService.remoteBannersEnabled = _bannerAdsEnabled;
+      // TR-107 team-race creation kill switch. Opposite default from banners:
+      // the feature ships ON, so only an explicit false disables it — an older
+      // backend that omits the key must not hide the toggle.
+      _teamRacesEnabled = !(flags is Map && flags['teamRacesEnabled'] == false);
+    }
+    // Contract §12 names the envelope `appSettings`; accept it too so either
+    // backend shape flips the switch. Only an explicit false disables.
+    final appSettings = backendUser['appSettings'];
+    if (appSettings is Map && appSettings.containsKey('teamRacesEnabled')) {
+      _teamRacesEnabled = appSettings['teamRacesEnabled'] != false;
     }
   }
 
@@ -781,5 +800,6 @@ class AuthService extends ChangeNotifier {
     await prefs.setBool(_keyTutorialOnboardingSeen, _tutorialOnboardingSeen);
     await prefs.setBool(_keyHiddenFromLeaderboard, _hiddenFromLeaderboard);
     await prefs.setBool(_keyBannerAdsEnabled, _bannerAdsEnabled);
+    await prefs.setBool(_keyTeamRacesEnabled, _teamRacesEnabled);
   }
 }

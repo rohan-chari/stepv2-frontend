@@ -11,10 +11,18 @@ class RaceInviteScreen extends StatefulWidget {
   final List<Map<String, dynamic>> friends;
   final Set<String> existingParticipantIds;
 
+  /// TR-708: when inviting to a TEAM race, friends whose last-seen client
+  /// lacks the team_races capability (`teamRaceEligible: false`) are grayed
+  /// out with a "needs app update" badge instead of failing after selection.
+  /// A missing flag (older backend) stays selectable — the server still
+  /// hard-blocks at invite time (TR-707).
+  final bool teamRaceMode;
+
   const RaceInviteScreen({
     super.key,
     required this.friends,
     this.existingParticipantIds = const {},
+    this.teamRaceMode = false,
   });
 
   @override
@@ -155,52 +163,87 @@ class _RaceInviteScreenState extends State<RaceInviteScreen> {
     final name = friend['displayName'] as String? ?? '???';
     final profilePhotoUrl = friend['profilePhotoUrl'] as String?;
     final selected = _selectedIds.contains(id);
+    // Only an explicit false blocks (defensive: older backends omit the flag).
+    final ineligible =
+        widget.teamRaceMode && friend['teamRaceEligible'] == false;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: GestureDetector(
-        onTap: () {
-          setState(() {
-            if (selected) {
-              _selectedIds.remove(id);
-            } else {
-              _selectedIds.add(id);
-            }
-          });
-        },
-        child: RetroCard(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
-            children: [
-              Container(
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: selected
-                      ? AppColors.pillGreenDark
-                      : Colors.transparent,
-                  border: Border.all(
+        onTap: ineligible
+            ? null
+            : () {
+                setState(() {
+                  if (selected) {
+                    _selectedIds.remove(id);
+                  } else {
+                    _selectedIds.add(id);
+                  }
+                });
+              },
+        child: Opacity(
+          opacity: ineligible ? 0.55 : 1,
+          child: RetroCard(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
                     color: selected
                         ? AppColors.pillGreenDark
-                        : AppColors.textMid,
-                    width: 2,
+                        : Colors.transparent,
+                    border: Border.all(
+                      color: selected
+                          ? AppColors.pillGreenDark
+                          : AppColors.textMid,
+                      width: 2,
+                    ),
+                    borderRadius: BorderRadius.circular(6),
                   ),
-                  borderRadius: BorderRadius.circular(6),
+                  child: selected
+                      ? const Icon(Icons.check, size: 16, color: Colors.white)
+                      : null,
                 ),
-                child: selected
-                    ? const Icon(Icons.check, size: 16, color: Colors.white)
-                    : null,
-              ),
-              const SizedBox(width: 12),
-              AppAvatar(name: name, imageUrl: profilePhotoUrl, size: 34),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  atName(name),
-                  style: PixelText.title(size: 18, color: AppColors.textDark),
+                const SizedBox(width: 12),
+                AppAvatar(name: name, imageUrl: profilePhotoUrl, size: 34),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    atName(name),
+                    style: PixelText.title(
+                      size: 18,
+                      color: ineligible
+                          ? AppColors.textMid
+                          : AppColors.textDark,
+                    ),
+                  ),
                 ),
-              ),
-            ],
+                if (ineligible)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.parchmentDark,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: AppColors.parchmentBorder,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Text(
+                      'NEEDS APP UPDATE',
+                      style: PixelText.title(
+                        size: 8.5,
+                        color: AppColors.textMid,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),

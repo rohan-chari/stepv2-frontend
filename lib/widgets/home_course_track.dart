@@ -487,21 +487,47 @@ class _CapybaraRunnerMarker extends StatelessWidget {
         ? '???'
         : (runner.isUser ? 'You' : atName(runner.name));
 
+    final teamColor = runner.teamColor;
+
     return SizedBox(
       width: 96,
       height: capybaraSize + 38,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _RunnerNameTag(label: name, isUser: runner.isUser),
+          // TR-804: team pennant beside the name — UI chrome, not artwork.
+          if (teamColor != null)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.flag_rounded, size: 11, color: teamColor),
+                const SizedBox(width: 2),
+                Flexible(child: _RunnerNameTag(label: name, isUser: runner.isUser)),
+              ],
+            )
+          else
+            _RunnerNameTag(label: name, isUser: runner.isUser),
           Icon(
             Icons.arrow_drop_down_rounded,
             size: 18,
             color: runner.isUser ? HomeColors.gold : HomeColors.ink,
           ),
-          SizedBox(
+          Container(
             width: capybaraSize,
             height: capybaraSize,
+            // TR-804: team-colored outline glow around the course capy.
+            decoration: teamColor != null
+                ? BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: teamColor.withValues(alpha: 0.75),
+                        blurRadius: 9,
+                        spreadRadius: 1.5,
+                      ),
+                    ],
+                  )
+                : null,
             child: CapybaraSpriteWithAccessories(
               accessories: runner.accessories,
               capybaraSize: capybaraSize,

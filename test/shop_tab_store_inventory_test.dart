@@ -166,6 +166,17 @@ Future<void> _selectSegment(WidgetTester tester, String label) async {
   }
 }
 
+/// Taps a category pill (POWERUPS / CHARACTERS / ACCESSORIES). One category is
+/// shown at a time, so a test wanting cosmetics must select ACCESSORIES first.
+Future<void> _selectCategory(WidgetTester tester, String label) async {
+  final pill = find.text(label);
+  if (pill.evaluate().isNotEmpty) {
+    await tester.tap(pill.first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+  }
+}
+
 void main() {
   testWidgets('STORE shows Imposter (75 coins) as a purchasable powerup',
       (tester) async {
@@ -210,6 +221,7 @@ void main() {
 
     await _pumpShop(tester, auth, api);
     await _selectSegment(tester, 'STORE');
+    await _selectCategory(tester, 'ACCESSORIES');
 
     // Unowned cosmetic is offered in the store...
     expect(find.text('Blue Hat'), findsWidgets);
@@ -229,11 +241,14 @@ void main() {
     await _pumpShop(tester, auth, api);
     await _selectSegment(tester, 'INVENTORY');
 
-    // Owned cosmetic appears in inventory.
-    expect(find.text('Red Scarf'), findsWidgets);
-    // Owned powerup appears with its quantity (x2).
+    // Owned powerup appears under POWERUPS with its quantity (x2).
+    await _selectCategory(tester, 'POWERUPS');
     expect(find.text('Imposter'), findsWidgets);
     expect(find.textContaining('2'), findsWidgets);
+
+    // Owned cosmetic appears under ACCESSORIES.
+    await _selectCategory(tester, 'ACCESSORIES');
+    expect(find.text('Red Scarf'), findsWidgets);
   });
 
   testWidgets('degrades gracefully when powerup endpoints are unavailable',
@@ -246,12 +261,17 @@ void main() {
       powerupEndpointsAvailable: false,
     );
 
-    // Should not throw; cosmetics still render.
+    // Should not throw; cosmetics still render. With powerups unavailable the
+    // POWERUPS pill is absent entirely, so it must not be selectable.
     await _pumpShop(tester, auth, api);
     await _selectSegment(tester, 'STORE');
+    expect(find.text('POWERUPS'), findsNothing);
+
+    await _selectCategory(tester, 'ACCESSORIES');
     expect(find.text('Blue Hat'), findsWidgets);
 
     await _selectSegment(tester, 'INVENTORY');
+    await _selectCategory(tester, 'ACCESSORIES');
     expect(find.text('Red Scarf'), findsWidgets);
   });
 }

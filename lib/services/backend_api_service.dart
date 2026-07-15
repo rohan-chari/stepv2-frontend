@@ -15,7 +15,12 @@ import '../models/step_sample_data.dart';
 class ApiException implements Exception {
   final String message;
   final int? statusCode;
-  const ApiException(this.message, {this.statusCode});
+
+  /// Machine-readable backend error code when the response includes one
+  /// (e.g. TEAM_FULL, TEAMS_UNEVEN, UPDATE_REQUIRED). Null on older backends
+  /// or plain-message errors — callers must treat it as optional.
+  final String? code;
+  const ApiException(this.message, {this.statusCode, this.code});
 
   @override
   String toString() => message;
@@ -78,9 +83,12 @@ class BackendApiService {
   // `spinpowerups` tells the backend this build can render a shop-powerup prize
   // won from the daily-reward box (reel tile + reveal). Old binaries omit it and
   // never get offered a powerup — they'd mis-render it as "+0 coins".
+  // `team_races` tells the backend this build can render team races (H2H banner,
+  // team-grouped planks, team-aware join). Old binaries omit it, so the backend
+  // filters team races out of their lists and rejects their team joins (TR-701).
   static final String clientFeaturesHeader = _adsSupported
-      ? 'characters,ads,jammer,spinpowerups'
-      : 'characters,jammer,spinpowerups';
+      ? 'characters,ads,jammer,spinpowerups,team_races'
+      : 'characters,jammer,spinpowerups,team_races';
   final HttpClient _httpClient;
   String? _cachedTimeZone;
   String? _cachedReleaseChannel;
@@ -841,6 +849,58 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  /// Creates a TEAM race (TR-101/103/104, contract §3). Separate from
+  /// [createRace] so the individual-race wire shape (and every existing
+  /// override in tests) stays byte-identical.
+  Future<Map<String, dynamic>> createTeamRace({
+    required String identityToken,
+    required String name,
+    required int teamSize,
+    int maxDurationDays = 7,
+    bool powerupsEnabled = false,
+    int? powerupStepInterval,
+    int buyInAmount = 0,
+    bool isPublic = false,
+    DateTime? scheduledStartAt,
+    String? teamAName,
+    String? teamBName,
+    // The creator's chosen side (TR-104); server defaults TEAM_A when omitted.
+    String? creatorTeam,
+  }) async {
+    final body = <String, dynamic>{
+      'name': name,
+      'maxDurationDays': maxDurationDays,
+      'buyInAmount': buyInAmount,
+      // TR-102: ignored for team races server-side; stored for display compat.
+      'payoutPreset': 'WINNER_TAKES_ALL',
+      'isPublic': isPublic,
+      // TR-101: the field cap is always 2 x teamSize (server derives it too).
+      'maxParticipants': teamSize * 2,
+      'isTeamRace': true,
+      'teamSize': teamSize,
+      'teamAName': ?teamAName,
+      'teamBName': ?teamBName,
+      // Contract §3: the creator's side rides the `team` key.
+      'team': ?creatorTeam,
+    };
+    if (powerupsEnabled) {
+      body['powerupsEnabled'] = true;
+      body['powerupStepInterval'] = powerupStepInterval;
+    }
+    if (scheduledStartAt != null) {
+      body['scheduledStartAt'] = scheduledStartAt.toUtc().toIso8601String();
+    }
+
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races',
+      body: body,
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
   Future<Map<String, dynamic>> fetchRaces({
     required String identityToken,
   }) async {
@@ -894,6 +954,24 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  /// TR-201: accepts a TEAM-race invite, picking a side. Separate from
+  /// [respondToRaceInvite] so existing overrides/signatures stay untouched.
+  /// Declines don't need a side — use [respondToRaceInvite] for those.
+  Future<Map<String, dynamic>> acceptTeamRaceInvite({
+    required String identityToken,
+    required String raceId,
+    required String team,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'PUT',
+      path: '/races/$raceId/respond',
+      body: {'accept': true, 'team': team},
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
   Future<List<Map<String, dynamic>>> fetchPublicRaces({
     required String identityToken,
   }) async {
@@ -933,6 +1011,102 @@ class BackendApiService {
       // the body keep working; when true the backend grants mystery boxes if
       // eligible (server-enforced).
       body: onboarding ? const {'onboarding': true} : const {},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  /// TR-201: joins a public TEAM race on a chosen side. Separate from
+  /// [joinPublicRace] so existing overrides/signatures stay untouched.
+  Future<Map<String, dynamic>> joinPublicRaceOnTeam({
+    required String identityToken,
+    required String raceId,
+    required String team,
+    bool onboarding = false,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races/$raceId/join',
+      body: {
+        if (onboarding) 'onboarding': true,
+        'team': team,
+      },
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  /// TR-103/TR-801 (contract §3b): a fresh pair of DISTINCT team names from
+  /// the real backend pool, for the create screen's plaques + dice-reroll
+  /// before the race exists. Read-only and side-effect free — safe to call on
+  /// every dice tap.
+  ///
+  /// Returns null on ANY failure (older backend without the route, offline,
+  /// malformed/blank payload) so the caller can fall back to the local preview
+  /// pool. Suggestions are cosmetic: they must never block race creation.
+  Future<(String, String)?> fetchTeamNameSuggestion({
+    required String identityToken,
+  }) async {
+    try {
+      final response = await _sendGetRequest(
+        path: '/races/team-names/suggest',
+        identityToken: identityToken,
+      );
+      final payload = await _decodeJsonResponse(response);
+      final a = payload['teamAName'];
+      final b = payload['teamBName'];
+      if (a is String && b is String && a.trim().isNotEmpty && b.trim().isNotEmpty) {
+        return (a.trim(), b.trim());
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// TR-205: leaves a PENDING team-race lobby (buy-in hold released;
+  /// re-joining later is a fresh join on either side). Team races only —
+  /// the backend 400s for individual races and the creator (TR-208).
+  Future<Map<String, dynamic>> leaveRace({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races/$raceId/leave',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  /// TR-601: forfeits an ACTIVE team race. Permanent — steps freeze as-is and
+  /// stay in the team total; no refund; no rejoin. A team collapse settles the
+  /// race instantly (TR-603), reflected in the returned race state.
+  Future<Map<String, dynamic>> forfeitRace({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races/$raceId/forfeit',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  /// TR-203: switches the caller's side in a PENDING team race. Locked once
+  /// ACTIVE (server-enforced); a full destination side answers 409 TEAM_FULL.
+  Future<Map<String, dynamic>> setRaceTeam({
+    required String identityToken,
+    required String raceId,
+    required String team,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'PUT',
+      path: '/races/$raceId/team',
+      body: {'team': team},
       identityToken: identityToken,
     );
     return _decodeJsonResponse(response);
@@ -1050,6 +1224,26 @@ class BackendApiService {
       method: 'POST',
       path: '/races/share/$token/join',
       body: onboarding ? const {'onboarding': true} : const {},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  /// TR-201: joins a TEAM race behind a share [token], picking a side.
+  /// Separate from [joinRaceByShareToken] so existing overrides stay valid.
+  Future<Map<String, dynamic>> joinRaceByShareTokenOnTeam({
+    required String identityToken,
+    required String token,
+    required String team,
+    bool onboarding = false,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races/share/$token/join',
+      body: {
+        if (onboarding) 'onboarding': true,
+        'team': team,
+      },
       identityToken: identityToken,
     );
     return _decodeJsonResponse(response);
@@ -1210,9 +1404,17 @@ class BackendApiService {
     // "no limit" (unlimited). Needed because a null value can't otherwise be
     // distinguished from "unchanged" in this sparse PATCH body.
     bool setMaxParticipantsUnlimited = false,
+    // TR-105: team names and size are editable while PENDING. isTeamRace
+    // itself is immutable and intentionally has no parameter here.
+    String? teamAName,
+    String? teamBName,
+    int? teamSize,
   }) async {
     final body = <String, dynamic>{};
     if (name != null) body['name'] = name;
+    if (teamAName != null) body['teamAName'] = teamAName;
+    if (teamBName != null) body['teamBName'] = teamBName;
+    if (teamSize != null) body['teamSize'] = teamSize;
     if (maxDurationDays != null) body['maxDurationDays'] = maxDurationDays;
     if (isPublic != null) body['isPublic'] = isPublic;
     if (powerupsEnabled != null) body['powerupsEnabled'] = powerupsEnabled;
@@ -1722,14 +1924,19 @@ class BackendApiService {
     }
 
     final message = parsedBody['error'];
+    // Optional machine-readable code (team-race errors and future features).
+    // Read defensively: absent on older backends.
+    final rawCode = parsedBody['code'];
+    final code = rawCode is String && rawCode.isNotEmpty ? rawCode : null;
 
     if (message is String && message.isNotEmpty) {
-      throw ApiException(message, statusCode: response.statusCode);
+      throw ApiException(message, statusCode: response.statusCode, code: code);
     }
 
     throw ApiException(
       'Something went wrong. Please try again.',
       statusCode: response.statusCode,
+      code: code,
     );
   }
 

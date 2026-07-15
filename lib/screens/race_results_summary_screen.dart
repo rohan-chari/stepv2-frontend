@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../styles.dart';
 import '../utils/at_name.dart';
 import '../utils/race_participant_display.dart';
+import '../utils/team_race.dart';
 import '../widgets/ad_banner_slot.dart';
 import '../widgets/celebration_confetti.dart';
 import '../widgets/game_container.dart';
@@ -28,11 +29,10 @@ class RaceResultsSummaryScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final single = races.length == 1;
-    // Celebrate if any of the finished races landed a top-3 finish.
-    final placedTop3 = races.any((race) {
-      final placement = (race['myPlacement'] as num?)?.toInt();
-      return placement != null && placement >= 1 && placement <= 3;
-    });
+    // Celebrate a top-3 finish — or, for team races, a real team WIN
+    // (TR-807: ties and losses never confetti; race finishes are the one
+    // approved confetti moment).
+    final placedTop3 = races.any(raceCountsAsReviewHappyMoment);
     return Material(
       color: Colors.transparent,
       child: Stack(
@@ -133,6 +133,12 @@ class _ResultCard extends StatelessWidget {
     final winner = race['winner'] as Map<String, dynamic>?;
     final winnerName = winner?['displayName'] as String?;
 
+    // TR-807: team-framed result. Tie = winnerTeam null on a completed team
+    // race (TR-404). All reads defensive — old payloads have none of this.
+    if (TeamRace.isTeamRace(race)) {
+      return _buildTeamResult(payoutCoins: payoutCoins, raceName: name);
+    }
+
     final placeText = myPlacement == null
         ? 'Did not finish'
         : participantCount > 0
@@ -200,6 +206,135 @@ class _ResultCard extends StatelessWidget {
                     textAlign: TextAlign.right,
                     style: PixelText.title(size: 13, color: AppColors.textDark),
                     maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (payoutCoins > 0) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                const SpinningCoin(size: 18),
+                const SizedBox(width: 6),
+                Text(
+                  'PAYOUT',
+                  style: PixelText.body(size: 11, color: AppColors.textMid),
+                ),
+                const Spacer(),
+                Text(
+                  '+$payoutCoins',
+                  style: PixelText.number(size: 14, color: AppColors.coinDark),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// TR-807: team-framed variant — outcome banner (VICTORY / DEFEAT / tie
+  /// refund copy), winning team plaque + members, and the user's payout.
+  Widget _buildTeamResult({required int payoutCoins, required String raceName}) {
+    final winnerTeam = TeamRace.winnerTeam(race);
+    final myTeam = parseRaceTeam(race['myTeam']);
+    final isTie = winnerTeam == null;
+    final won = !isTie && myTeam != null && myTeam == winnerTeam;
+
+    final participants =
+        (race['participants'] as List?)?.cast<Map<String, dynamic>>() ??
+            const <Map<String, dynamic>>[];
+    final winnerMembers = winnerTeam == null
+        ? const <Map<String, dynamic>>[]
+        : TeamRace.membersOf(participants, winnerTeam);
+
+    final outcomeColor = isTie
+        ? AppColors.textMid
+        : won
+        ? AppColors.pillGreenDark
+        : AppColors.error;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.parchmentDark,
+        border: Border.all(color: AppColors.coinDark, width: 2),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            raceName,
+            style: PixelText.title(size: 15, color: AppColors.textDark),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(
+                isTie
+                    ? Icons.handshake_rounded
+                    : won
+                    ? Icons.emoji_events_rounded
+                    : Icons.flag_rounded,
+                size: 18,
+                color: isTie ? AppColors.textMid : outcomeColor,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  isTie ? 'It’s a tie — buy-ins refunded' : 'YOUR TEAM',
+                  style: PixelText.body(size: 11, color: AppColors.textMid),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (!isTie)
+                Text(
+                  won ? 'VICTORY' : 'DEFEAT',
+                  style: PixelText.number(size: 14, color: outcomeColor),
+                ),
+            ],
+          ),
+          if (winnerTeam != null) ...[
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.military_tech_rounded,
+                  size: 18,
+                  color: TeamRace.colorDark(winnerTeam),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'WINNERS',
+                  style: PixelText.body(size: 11, color: AppColors.textMid),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    [
+                      TeamRace.teamName(race, winnerTeam).toUpperCase(),
+                      if (winnerMembers.isNotEmpty)
+                        winnerMembers
+                            .map(
+                              (m) => atName(
+                                m['displayName'] as String? ?? '???',
+                              ),
+                            )
+                            .join(', '),
+                    ].join(' — '),
+                    textAlign: TextAlign.right,
+                    style: PixelText.title(
+                      size: 12,
+                      color: TeamRace.colorDark(winnerTeam),
+                    ),
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),

@@ -5,12 +5,14 @@ import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
 import '../utils/at_name.dart';
+import '../utils/team_race.dart';
 import '../widgets/ad_banner_slot.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/loading_skeleton.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/retro_card.dart';
+import '../widgets/team_side_picker.dart';
 import 'create_race_screen.dart';
 
 class PublicRacesScreen extends StatefulWidget {
@@ -98,12 +100,28 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
       showErrorToast(context, 'Not enough gold for this buy-in');
       return;
     }
+
+    // TR-201: team races need a side before the join call fires.
+    String? team;
+    if (TeamRace.isTeamRace(race)) {
+      team = await showTeamSidePicker(context: context, race: race);
+      if (team == null || !mounted) return; // dismissed the sheet
+    }
+
     setState(() => _joiningRaceId = raceId);
     try {
-      await widget.backendApiService.joinPublicRace(
-        identityToken: token,
-        raceId: raceId,
-      );
+      if (team != null) {
+        await widget.backendApiService.joinPublicRaceOnTeam(
+          identityToken: token,
+          raceId: raceId,
+          team: team,
+        );
+      } else {
+        await widget.backendApiService.joinPublicRace(
+          identityToken: token,
+          raceId: raceId,
+        );
+      }
       try {
         final user = await widget.backendApiService.fetchMe(
           identityToken: token,
@@ -117,6 +135,15 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
       } catch (_) {}
       if (!mounted) return;
       Navigator.of(context).pop(true);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _joiningRaceId = null);
+      // TEAM_FULL / RACE_ALREADY_STARTED / UPDATE_REQUIRED get the playful
+      // team-race copy; older backends without codes keep their message.
+      showErrorToast(
+        context,
+        e.code != null ? teamRaceErrorCopy(e.code) : e.message,
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => _joiningRaceId = null);
@@ -341,6 +368,32 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
               'BY ${atName(creatorName)}'.toUpperCase(),
               style: PixelText.body(size: 11, color: AppColors.textMid),
             ),
+            // TR-206: team format + open-slot line ("2v2 · 1 slot left on
+            // Blue"). Absent entirely for individual races.
+            if (TeamRace.isTeamRace(race)) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Icon(
+                    Icons.groups_rounded,
+                    size: 14,
+                    color: TeamRace.colorDark(RaceTeam.teamA),
+                  ),
+                  const SizedBox(width: 5),
+                  Flexible(
+                    child: Text(
+                      TeamRace.publicSlotsLabel(race),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: PixelText.title(
+                        size: 12,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 12),
             Row(
               children: [

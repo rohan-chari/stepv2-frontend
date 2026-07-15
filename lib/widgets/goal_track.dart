@@ -31,6 +31,11 @@ class GoalTrackRunner {
   /// Base character assetKey (e.g. 'corgi_puppy'); null = default capybara.
   final String? animal;
 
+  /// TR-804: team-race chrome — the runner's team color drives an outline
+  /// glow on the course capy and a pennant beside the name. Null on
+  /// individual races (no team chrome at all).
+  final Color? teamColor;
+
   const GoalTrackRunner({
     required this.name,
     this.profilePhotoUrl,
@@ -39,6 +44,7 @@ class GoalTrackRunner {
     this.isStealthed = false,
     this.accessories = const [],
     this.animal,
+    this.teamColor,
   });
 
   /// Deterministic color based on name hash.

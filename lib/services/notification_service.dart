@@ -251,7 +251,7 @@ class NotificationService {
 
   void _onNotificationTap(Map<String, dynamic> payload) {
     final type = payload['type'] as String?;
-    final route = _routeFromType(type);
+    final route = routeFromType(type);
     if (route == null) return;
 
     final nested = payload['params'] is Map
@@ -270,7 +270,7 @@ class NotificationService {
   /// object (see backend G2). Reuses the same [_routeFromType] map.
   void _onNotificationTapFromData(Map<String, dynamic> data) {
     final type = data['type'] as String?;
-    final route = _routeFromType(type);
+    final route = routeFromType(type);
     if (route == null) return;
 
     final params = <String, String>{};
@@ -290,7 +290,9 @@ class NotificationService {
     pendingAction.value = NotificationAction(route: route, params: params);
   }
 
-  NotificationRoute? _routeFromType(String? type) {
+  /// Maps a push `type` to an in-app deep-link route. Public for tests.
+  @visibleForTesting
+  NotificationRoute? routeFromType(String? type) {
     switch (type) {
       case 'RACE_INVITE_SENT':
       case 'RACE_INVITE_ACCEPTED':
@@ -302,6 +304,15 @@ class NotificationService {
       // opens the race. Additive type — older apps fall through to default/null and
       // simply ignore it (the alert still shows; only deep-link routing is skipped).
       case 'PLACEMENT_CHANGED':
+      // Team-race pushes (TR-681/683): lead flips and the gentle slacker
+      // nudge both open the race. Additive types — older apps fall through
+      // to default/null and just show the alert without deep-link routing.
+      case 'TEAM_LEAD_CHANGE':
+      case 'TEAM_SLACKER_NUDGE':
+      case 'TEAM_FINAL_STRETCH':
+      // One-time creator nudge when a scheduled team race can't auto-start
+      // because the teams are uneven (TR-304) — opens the lobby to fix it.
+      case 'TEAM_RACE_SCHEDULED_UNEVEN':
         return NotificationRoute.raceDetail;
       case 'RACE_CANCELLED':
         return NotificationRoute.races;
