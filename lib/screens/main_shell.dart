@@ -1160,9 +1160,20 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       }
       await _fetchRaceCard();
       _openRaceFromCard(raceId);
-    } catch (e) {
+    } on ApiException catch (e) {
       if (mounted) {
-        showErrorToast(context, 'Could not join: $e');
+        showErrorToast(
+          context,
+          e.code != null
+              ? teamRaceErrorCopy(e.code)
+              : (e.message.trim().isNotEmpty
+                    ? e.message
+                    : 'Could not join. Give it another try!'),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        showErrorToast(context, 'Could not join. Give it another try!');
       }
     }
   }
@@ -1261,8 +1272,21 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       if (mounted) showInfoToast(context, 'Accepted.');
       await _fetchRaceCard();
       _openRaceFromCard(raceId);
-    } catch (e) {
-      if (mounted) showErrorToast(context, 'Could not accept: $e');
+    } on ApiException catch (e) {
+      if (mounted) {
+        showErrorToast(
+          context,
+          e.code != null
+              ? teamRaceErrorCopy(e.code)
+              : (e.message.trim().isNotEmpty
+                    ? e.message
+                    : 'Could not accept. Give it another try!'),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        showErrorToast(context, 'Could not accept. Give it another try!');
+      }
     }
   }
 

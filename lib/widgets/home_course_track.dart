@@ -483,9 +483,10 @@ class _CapybaraRunnerMarker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = runner.isStealthed
-        ? '???'
-        : (runner.isUser ? 'You' : atName(runner.name));
+    final name = runner.label ??
+        (runner.isStealthed
+            ? '???'
+            : (runner.isUser ? 'You' : atName(runner.name)));
 
     final teamColor = runner.teamColor;
 
@@ -1483,16 +1484,17 @@ class _LegendRow extends StatelessWidget {
                       height: 8,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: runners[i].color,
+                        color: runners[i].teamColor ?? runners[i].color,
                       ),
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      runners[i].isStealthed
-                          ? '???'
-                          : (runners[i].isUser
-                                ? 'You'
-                                : atName(runners[i].name)),
+                      runners[i].label ??
+                          (runners[i].isStealthed
+                              ? '???'
+                              : (runners[i].isUser
+                                    ? 'You'
+                                    : atName(runners[i].name))),
                       style: HomeText.body(size: 12, color: HomeColors.inkSoft),
                     ),
                   ],

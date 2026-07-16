@@ -61,8 +61,11 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
   // null => no participant limit (unlimited).
   late int? _maxParticipants;
 
-  // Locked = participants have paid in; buy-in becomes non-editable
-  late final bool _buyInLocked;
+  // Issue 4: the buy-in stays EDITABLE while PENDING even when runners have
+  // paid in (raise / lower / toggle paid<->free); the backend reconciles
+  // refunds and re-charges. The consequence warning shows whenever there are
+  // accepted runners to reconcile. A raise nobody can afford is blocked
+  // server-side (BUYIN_UNAFFORDABLE), naming the offending player.
   late final int _acceptedCount;
 
   // TR-105: team names + size are editable while PENDING. `isTeamRace` itself
@@ -108,11 +111,6 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
     _acceptedCount = participants
         .where((p) => p['status'] == 'ACCEPTED')
         .length;
-    _buyInLocked = participants.any((p) {
-      final status = p['buyInStatus'] as String?;
-      return status == 'HELD' || status == 'COMMITTED';
-    });
-
     _isTeamRace = TeamRace.isTeamRace(race);
     _initialTeamAName = TeamRace.teamName(race, RaceTeam.teamA);
     _initialTeamBName = TeamRace.teamName(race, RaceTeam.teamB);
@@ -551,12 +549,31 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
       if (mounted) {
         Navigator.of(context).pop(result['race'] as Map<String, dynamic>?);
       }
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() => _isSaving = false);
+        showErrorToast(context, _friendlyEditError(e));
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _isSaving = false);
-        showErrorToast(context, e.toString());
+        showErrorToast(context, 'Could not save changes. Give it another try!');
       }
     }
+  }
+
+  /// Issue 4: for BUYIN_UNAFFORDABLE the server puts the specific player
+  /// name(s) in `error`, so we show that verbatim (falling back to the generic
+  /// only if the message is somehow empty). Other coded errors map to the
+  /// playful team-race copy; an uncoded error shows the server message.
+  String _friendlyEditError(ApiException e) {
+    if (e.code == 'BUYIN_UNAFFORDABLE') {
+      final msg = e.message.trim();
+      return msg.isNotEmpty ? msg : teamRaceErrorCopy(e.code);
+    }
+    if (e.code != null) return teamRaceErrorCopy(e.code);
+    final msg = e.message.trim();
+    return msg.isNotEmpty ? msg : 'Could not save changes. Give it another try!';
   }
 
   @override
@@ -812,12 +829,9 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                     MainAxisAlignment.spaceBetween,
                                 children: [
                                   GestureDetector(
-                                    onTap: _buyInLocked
-                                        ? null
-                                        : () => setState(
-                                              () => _buyInEnabled =
-                                                  !_buyInEnabled,
-                                            ),
+                                    onTap: () => setState(
+                                      () => _buyInEnabled = !_buyInEnabled,
+                                    ),
                                     child: Column(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
@@ -831,18 +845,14 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                         ),
                                         const SizedBox(height: 2),
                                         Text(
-                                          _buyInLocked
-                                              ? 'LOCKED — RUNNERS PAID'
-                                              : (_buyInEnabled
-                                                  ? 'PAID RACE'
-                                                  : 'FREE RACE'),
+                                          _buyInEnabled
+                                              ? 'PAID RACE'
+                                              : 'FREE RACE',
                                           style: PixelText.body(
                                             size: 11,
-                                            color: _buyInLocked
-                                                ? AppColors.textMid
-                                                : (_buyInEnabled
-                                                    ? AppColors.coinDark
-                                                    : AppColors.textMid),
+                                            color: _buyInEnabled
+                                                ? AppColors.coinDark
+                                                : AppColors.textMid,
                                           ),
                                         ),
                                       ],
@@ -852,17 +862,61 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                     height: 28,
                                     child: Switch.adaptive(
                                       value: _buyInEnabled,
-                                      activeTrackColor:
-                                          AppColors.pillGreenDark,
-                                      onChanged: _buyInLocked
-                                          ? null
-                                          : (value) => setState(
-                                                () => _buyInEnabled = value,
-                                              ),
+                                      activeTrackColor: AppColors.pillGreenDark,
+                                      onChanged: (value) => setState(
+                                        () => _buyInEnabled = value,
+                                      ),
                                     ),
                                   ),
                                 ],
                               ),
+                              // Issue 4: changing the buy-in on a race that
+                              // already has runners reconciles their coins.
+                              if (_acceptedCount > 0) ...[
+                                const SizedBox(height: 10),
+                                Container(
+                                  key: const Key('edit-buyin-consequence'),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.coinLight.withValues(
+                                      alpha: 0.16,
+                                    ),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: AppColors.coinDark.withValues(
+                                        alpha: 0.4,
+                                      ),
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Icon(
+                                        Icons.info_outline_rounded,
+                                        size: 15,
+                                        color: AppColors.coinDark,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'Changing the buy-in refunds or '
+                                          're-charges everyone who\'s already '
+                                          'joined.',
+                                          style: PixelText.body(
+                                            size: 11.5,
+                                            color: AppColors.textDark,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                               if (_buyInEnabled) ...[
                                 const SizedBox(height: 12),
                                 Text(
@@ -874,6 +928,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 Container(
+                                  key: const Key('edit-buyin-input'),
                                   decoration: BoxDecoration(
                                     color: AppColors.parchment,
                                     border: Border.all(
@@ -899,7 +954,6 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                       Expanded(
                                         child: TextField(
                                           controller: _buyInController,
-                                          enabled: !_buyInLocked,
                                           keyboardType: TextInputType.number,
                                           inputFormatters: [
                                             FilteringTextInputFormatter
@@ -936,16 +990,6 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                     ],
                                   ),
                                 ),
-                                if (_buyInLocked) ...[
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Buy-in is locked — a runner has already paid in.',
-                                    style: PixelText.body(
-                                      size: 11,
-                                      color: AppColors.textMid,
-                                    ),
-                                  ),
-                                ],
                                 const SizedBox(height: 12),
                                 Text(
                                   'PAYOUT MODE',

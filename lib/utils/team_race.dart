@@ -27,18 +27,20 @@ RaceTeam? parseRaceTeam(dynamic value) {
 }
 
 /// Team colors for chrome (plaques, glow, pennants, rope). Locked palette from
-/// TR-802/803: Team A warm red, Team B lake blue. Chosen to sit inside the
-/// app's wood/parchment world without clashing.
+/// TR-802/803: teams are drawn straight from the app's own palette so they sit
+/// inside the wood/parchment world instead of clashing — Team A is campfire
+/// clay ([AppColors.pillTerra]), Team B is forest green ([AppColors.pillGreen]/
+/// roof greens). Warm-vs-cool keeps the two sides instantly readable.
 abstract final class TeamColors {
-  // Team A — warm terracotta red.
-  static const teamA = Color(0xFFC15A46);
-  static const teamALight = Color(0xFFDB8272);
-  static const teamADark = Color(0xFF8E3A2B);
+  // Team A — trail gold (warm).
+  static const teamA = Color(0xFFECC86A); // pillGold
+  static const teamALight = Color(0xFFF4DD9C);
+  static const teamADark = Color(0xFF9A7A2D); // pillGoldShadow
 
-  // Team B — lake blue.
-  static const teamB = Color(0xFF3E7CB1);
-  static const teamBLight = Color(0xFF6BA3D0);
-  static const teamBDark = Color(0xFF285A85);
+  // Team B — forest green (cool).
+  static const teamB = Color(0xFF4F8A6A); // roofLight / pillGreen
+  static const teamBLight = Color(0xFF77A98B); // roofRidge
+  static const teamBDark = Color(0xFF2E5D47); // roofMid
 }
 
 /// Defensive read/format helpers over the race/participant JSON maps that flow
@@ -320,6 +322,24 @@ String teamRaceErrorCopy(String? code, {String? friendName}) {
       return "That can't be changed once the race is set up.";
     case 'INVALID_TARGET':
       return 'You can only target the enemy team.';
+    // Issue 3c — respond/join failures surfaced from the homepage handlers.
+    case 'RACE_NOT_FOUND':
+      return "That race is gone — it may have been cancelled.";
+    case 'RACE_NOT_ACCEPTING':
+      return "This race isn't taking new racers right now.";
+    case 'NOT_INVITED':
+      return 'You need an invite to hop into this one.';
+    case 'ALREADY_RESPONDED':
+      return "You're already in this race!";
+    case 'PAID_RACE_LOCKED':
+      return "Someone already finished — this paid race is locked.";
+    case 'INSUFFICIENT_COINS':
+      return "You don't have enough coins for the buy-in.";
+    // Issue 4 — buy-in edit. The server normally names the offending player in
+    // the `error` message (the edit screen shows that directly); this generic
+    // only covers the unexpected empty-message case.
+    case 'BUYIN_UNAFFORDABLE':
+      return "Someone can't afford the new buy-in yet.";
     default:
       return 'Something went sideways. Give it another try!';
   }

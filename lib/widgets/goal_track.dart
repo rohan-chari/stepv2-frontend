@@ -36,6 +36,11 @@ class GoalTrackRunner {
   /// individual races (no team chrome at all).
   final Color? teamColor;
 
+  /// Overrides the on-track name tag + legend label verbatim (no `@` prefix,
+  /// no "You" substitution). Used for team races, where each track capy
+  /// represents its TEAM (the team's leader), so it's labelled by team name.
+  final String? label;
+
   const GoalTrackRunner({
     required this.name,
     this.profilePhotoUrl,
@@ -45,6 +50,7 @@ class GoalTrackRunner {
     this.accessories = const [],
     this.animal,
     this.teamColor,
+    this.label,
   });
 
   /// Deterministic color based on name hash.

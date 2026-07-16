@@ -19,6 +19,14 @@ class LeaderboardPlank extends StatelessWidget {
   final List<Widget> effectIcons;
   final String? profilePhotoUrl;
 
+  // Issue 1: team races render larger, more legible rows. These default to the
+  // solo/ranked values so those layouts are UNCHANGED; the team-grouped
+  // standings pass bumped sizes.
+  final double avatarSize;
+  final double nameSize;
+  final double stepsSize;
+  final double verticalPadding;
+
   const LeaderboardPlank({
     super.key,
     required this.rank,
@@ -31,6 +39,10 @@ class LeaderboardPlank extends StatelessWidget {
     this.finishPlace,
     this.effectIcons = const [],
     this.profilePhotoUrl,
+    this.avatarSize = 32,
+    this.nameSize = 15,
+    this.stepsSize = 16,
+    this.verticalPadding = 8,
   });
 
   Color? get _medalColor {
@@ -56,7 +68,7 @@ class LeaderboardPlank extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.only(top: rank == 0 ? 0 : 4),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding: EdgeInsets.symmetric(horizontal: 10, vertical: verticalPadding),
         decoration: BoxDecoration(
           color: isFinished
               ? AppColors.coinLight.withValues(alpha: 0.14)
@@ -97,7 +109,7 @@ class LeaderboardPlank extends StatelessWidget {
             AppAvatar(
               name: displayName,
               imageUrl: isStealthed ? null : profilePhotoUrl,
-              size: 32,
+              size: avatarSize,
               isUser: isUser,
               isStealthed: isStealthed,
               borderColor: isUser ? AppColors.accent : Colors.white,
@@ -111,7 +123,7 @@ class LeaderboardPlank extends StatelessWidget {
                     child: Text(
                       atName(displayName),
                       style: PixelText.body(
-                        size: 15,
+                        size: nameSize,
                         color: isStealthed
                             ? AppColors.textMid.withValues(alpha: 0.5)
                             : isUser
@@ -182,7 +194,7 @@ class LeaderboardPlank extends StatelessWidget {
             Text(
               isStealthed ? '???' : formattedSteps,
               style: PixelText.number(
-                size: 16,
+                size: stepsSize,
                 color: isStealthed
                     ? AppColors.textMid.withValues(alpha: 0.5)
                     : AppColors.textMid,

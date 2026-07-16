@@ -941,54 +941,60 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: AppColors.parchment,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: AppColors.parchmentBorder, width: 2),
-        ),
-        title: Text(
-          'Forfeit the race?',
-          style: PixelText.title(size: 16, color: AppColors.textDark),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _forfeitConsequence(
-              Icons.ac_unit_rounded,
-              'Your steps freeze now and stay with $teamName — they still '
-                  'count toward the team total.',
-            ),
-            const SizedBox(height: 8),
-            _forfeitConsequence(
-              Icons.money_off_rounded,
-              'No refund. Your buy-in stays in the pot, and you get no cut '
-                  'even if your team wins.',
-            ),
-            const SizedBox(height: 8),
-            _forfeitConsequence(
-              Icons.block_rounded,
-              "This is permanent — you can't rejoin this race.",
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(
-              'KEEP RACING',
-              style: PixelText.button(size: 13, color: AppColors.accent),
-            ),
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: TrailSign(
+          width: 330,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'FORFEIT THE RACE?',
+                style: PixelText.title(size: 18, color: AppColors.textDark),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 14),
+              _forfeitConsequence(
+                Icons.ac_unit_rounded,
+                'Your steps freeze now and stay with $teamName — they still '
+                    'count toward the team total.',
+              ),
+              const SizedBox(height: 10),
+              _forfeitConsequence(
+                Icons.money_off_rounded,
+                'No refund. Your buy-in stays in the pot, and you get no cut '
+                    'even if your team wins.',
+              ),
+              const SizedBox(height: 10),
+              _forfeitConsequence(
+                Icons.block_rounded,
+                "This is permanent — you can't rejoin this race.",
+              ),
+              const SizedBox(height: 18),
+              PillButton(
+                label: 'KEEP RACING',
+                variant: PillButtonVariant.primary,
+                fullWidth: true,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+              ),
+              const SizedBox(height: 10),
+              PillButton(
+                label: 'FORFEIT ANYWAY',
+                variant: PillButtonVariant.accent,
+                fullWidth: true,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(
-              'FORFEIT ANYWAY',
-              style: PixelText.button(size: 13, color: AppColors.error),
-            ),
-          ),
-        ],
+        ),
       ),
     );
     if (confirmed != true || !mounted) return;
@@ -1037,37 +1043,58 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   Future<void> _leaveTeamLobby() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: AppColors.parchment,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: AppColors.parchmentBorder, width: 2),
-        ),
-        title: Text(
-          'Leave the lobby?',
-          style: PixelText.title(size: 16, color: AppColors.textDark),
-        ),
-        content: Text(
-          'Your buy-in hold is released and your peg opens up. '
-          'You can rejoin any time before the race starts.',
-          style: PixelText.body(size: 13, color: AppColors.textMid),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(
-              'STAY',
-              style: PixelText.button(size: 13, color: AppColors.textMid),
-            ),
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: TrailSign(
+          width: 320,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'LEAVE THE LOBBY?',
+                style: PixelText.title(size: 18, color: AppColors.textDark),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Your buy-in hold is released and your peg opens up. '
+                'You can rejoin any time before the race starts.',
+                style: PixelText.body(size: 14, color: AppColors.textMid),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: PillButton(
+                      label: 'STAY',
+                      variant: PillButtonVariant.secondary,
+                      fontSize: 13,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 11,
+                      ),
+                      onPressed: () => Navigator.of(dialogContext).pop(false),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: PillButton(
+                      label: 'LEAVE',
+                      variant: PillButtonVariant.accent,
+                      fontSize: 13,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 11,
+                      ),
+                      onPressed: () => Navigator.of(dialogContext).pop(true),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(
-              'LEAVE',
-              style: PixelText.button(size: 13, color: AppColors.error),
-            ),
-          ),
-        ],
+        ),
       ),
     );
     if (confirmed != true || !mounted) return;
@@ -1187,6 +1214,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     );
     if (!mounted) return;
     if (result != null) {
+      // Issue 4: a buy-in edit can refund/re-charge the owner, so refresh the
+      // wallet alongside the race detail.
+      await _refreshWallet();
       await _loadDetails();
     }
   }
@@ -3068,7 +3098,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         _buildRaceHero(
           chips: chips,
           runners: [
-            for (final p in participants)
+            // Team races: only the two team leaders run the track (one capy per
+            // side). Solo/ranked: every racer as before.
+            for (final p in (isTeamRace
+                ? _twoTeamLeaders(participants)
+                : participants))
               GoalTrackRunner(
                 name: p['stealthed'] == true
                     ? '???'
@@ -3089,6 +3123,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 teamColor: isTeamRace
                     ? switch (TeamRace.participantTeam(p)) {
                         final team? => TeamRace.color(team),
+                        null => null,
+                      }
+                    : null,
+                // The two track capys represent their TEAM (its leader), so
+                // label them by team name, not the leader's username.
+                label: isTeamRace
+                    ? switch (TeamRace.participantTeam(p)) {
+                        final team? => TeamRace.teamName(_race!, team),
                         null => null,
                       }
                     : null,
@@ -3154,52 +3196,45 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           ),
         const SizedBox(height: 18),
 
-        // HEAD TO HEAD — team tug-of-war banner (TR-803). Totals come from
-        // the backend team block when present (always honest, TR-658) and
-        // fall back to summing visible planks on older payloads.
-        if (isTeamRace) ...[
-          StaggerIn(
-            index: 0,
-            child: Column(
-              children: [
-                _checkerSectionHeader('HEAD TO HEAD'),
-                _sectionCard(
-                  padding: const EdgeInsets.all(14),
-                  child: TeamH2HBanner(
-                    teamAName: TeamRace.teamName(_race!, RaceTeam.teamA),
-                    teamBName: TeamRace.teamName(_race!, RaceTeam.teamB),
-                    teamATotal: _teamTotalFromProgress(
-                      progress,
-                      participants,
-                      RaceTeam.teamA,
-                    ),
-                    teamBTotal: _teamTotalFromProgress(
-                      progress,
-                      participants,
-                      RaceTeam.teamB,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
-        ],
-
-        // STANDINGS
+        // SCOREBOARD (team) — honest combined totals + lead on top, then the
+        // two rosters as color-matched columns beneath their plaques. Totals
+        // come from the backend team block (always honest, TR-658), falling
+        // back to summing visible planks on older payloads. Solo races keep the
+        // single STANDINGS list.
         StaggerIn(
           index: 0,
           child: Column(
             children: [
-              _checkerSectionHeader('STANDINGS'),
+              _checkerSectionHeader(isTeamRace ? 'SCOREBOARD' : 'STANDINGS'),
               _sectionCard(
-                padding: const EdgeInsets.all(8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: isTeamRace
-                      ? _buildTeamGroupedRows(participants)
-                      : [..._buildLeaderboardRows(participants)],
-                ),
+                padding: EdgeInsets.all(isTeamRace ? 14 : 8),
+                child: isTeamRace
+                    ? Column(
+                        children: [
+                          TeamH2HBanner(
+                            teamAName:
+                                TeamRace.teamName(_race!, RaceTeam.teamA),
+                            teamBName:
+                                TeamRace.teamName(_race!, RaceTeam.teamB),
+                            teamATotal: _teamTotalFromProgress(
+                              progress,
+                              participants,
+                              RaceTeam.teamA,
+                            ),
+                            teamBTotal: _teamTotalFromProgress(
+                              progress,
+                              participants,
+                              RaceTeam.teamB,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          _buildTeamTwoColumns(participants),
+                        ],
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [..._buildLeaderboardRows(participants)],
+                      ),
               ),
             ],
           ),
@@ -4746,31 +4781,21 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final rows = <Widget>[];
     for (final team in RaceTeam.values) {
       final sideLetter = team == RaceTeam.teamA ? 'A' : 'B';
-      final color = TeamRace.color(team);
-      final colorDark = TeamRace.colorDark(team);
+      // Vertical separation between the two rosters (Issue 1).
+      if (team == RaceTeam.teamB) {
+        rows.add(const SizedBox(height: 16));
+      }
       rows.add(
-        Padding(
+        _teamStandingsBanner(
           key: Key('team-group-$sideLetter'),
-          padding: EdgeInsets.fromLTRB(4, team == RaceTeam.teamA ? 2 : 12, 4, 6),
-          child: Row(
-            children: [
-              Icon(Icons.flag_rounded, size: 14, color: color),
-              const SizedBox(width: 5),
-              Expanded(
-                child: Text(
-                  TeamRace.teamName(_race ?? const {}, team).toUpperCase(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: PixelText.title(size: 12, color: colorDark),
-                ),
-              ),
-            ],
-          ),
+          team: team,
+          memberCount: _sideMemberCount(participants, team),
         ),
       );
+      rows.add(const SizedBox(height: 8));
       for (var i = 0; i < participants.length; i++) {
         if (TeamRace.participantTeam(participants[i]) == team) {
-          rows.add(_buildLeaderboardPlank(participants[i], i));
+          rows.add(_buildLeaderboardPlank(participants[i], i, large: true));
         }
       }
     }
@@ -4781,9 +4806,270 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         if (TeamRace.participantTeam(participants[i]) == null) i,
     ];
     for (final i in unassigned) {
-      rows.add(_buildLeaderboardPlank(participants[i], i));
+      rows.add(_buildLeaderboardPlank(participants[i], i, large: true));
     }
     return rows;
+  }
+
+  int _sideMemberCount(
+    List<Map<String, dynamic>> participants,
+    RaceTeam team,
+  ) {
+    return participants
+        .where((p) => TeamRace.participantTeam(p) == team)
+        .length;
+  }
+
+  /// Issue 1: a bold, Clash-Royale-clear team header — a color plaque with the
+  /// side name and its roster count — anchoring each roster in the standings.
+  /// The prominent combined step totals live in the enlarged H2H banner
+  /// directly above (kept there so the honest, stealth-safe totals aren't
+  /// duplicated, TR-658). Stays on the parchment/wood identity via TeamColors.
+  Widget _teamStandingsBanner({
+    required Key key,
+    required RaceTeam team,
+    required int memberCount,
+  }) {
+    final color = TeamRace.color(team);
+    final colorLight = TeamRace.colorLight(team);
+    final colorDark = TeamRace.colorDark(team);
+    return Container(
+      key: key,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [colorLight, color],
+        ),
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: colorDark, width: 2.5),
+        boxShadow: [
+          BoxShadow(color: colorDark, offset: const Offset(0, 3), blurRadius: 0),
+        ],
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.flag_rounded,
+            size: 19,
+            color: Colors.white.withValues(alpha: 0.95),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              TeamRace.teamName(_race ?? const {}, team).toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: PixelText.title(size: 19, color: Colors.white).copyWith(
+                shadows: const [
+                  Shadow(
+                    color: Color(0x66000000),
+                    offset: Offset(0, 1.5),
+                    blurRadius: 0,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+            decoration: BoxDecoration(
+              color: colorDark.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.groups_rounded,
+                  size: 14,
+                  color: Colors.white.withValues(alpha: 0.95),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '$memberCount',
+                  style: PixelText.number(size: 15, color: Colors.white),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The current front-runner of each team (highest steps), for the race-track
+  /// hero — one capy per side. Skips a side with no members. Order: Team A, B.
+  List<Map<String, dynamic>> _twoTeamLeaders(
+    List<Map<String, dynamic>> participants,
+  ) {
+    final leaders = <Map<String, dynamic>>[];
+    for (final team in RaceTeam.values) {
+      Map<String, dynamic>? best;
+      var bestSteps = -1;
+      for (final p in participants) {
+        if (TeamRace.participantTeam(p) != team) continue;
+        final steps = (p['totalSteps'] as num?)?.toInt() ?? 0;
+        if (steps > bestSteps) {
+          bestSteps = steps;
+          best = p;
+        }
+      }
+      if (best != null) leaders.add(best);
+    }
+    return leaders;
+  }
+
+  /// Team standings as two color-matched columns (Team A | Team B) sitting
+  /// under the scoreboard plaques. Bold compact cells; rank shields keep the
+  /// participant's OVERALL race place.
+  Widget _buildTeamTwoColumns(List<Map<String, dynamic>> participants) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: _teamRosterColumn(participants, RaceTeam.teamA)),
+        const SizedBox(width: 10),
+        Expanded(child: _teamRosterColumn(participants, RaceTeam.teamB)),
+      ],
+    );
+  }
+
+  Widget _teamRosterColumn(
+    List<Map<String, dynamic>> participants,
+    RaceTeam team,
+  ) {
+    final cells = <Widget>[];
+    for (var i = 0; i < participants.length; i++) {
+      if (TeamRace.participantTeam(participants[i]) != team) continue;
+      if (cells.isNotEmpty) cells.add(const SizedBox(height: 8));
+      cells.add(_teamColumnCell(participants[i], i, team));
+    }
+    if (cells.isEmpty) {
+      cells.add(
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 18),
+          alignment: Alignment.center,
+          child: Text(
+            'No one yet',
+            style: PixelText.body(size: 12.5, color: AppColors.textLight),
+          ),
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: cells,
+    );
+  }
+
+  /// One racer in a team column: overall-rank shield, capy avatar, then a bold
+  /// name + step count. Color-matched to its team; tapping a non-self,
+  /// non-stealthed racer opens the friend-request sheet (parity with the plank).
+  Widget _teamColumnCell(
+    Map<String, dynamic> p,
+    int overallRank,
+    RaceTeam team,
+  ) {
+    final name = p['displayName'] as String? ?? '???';
+    final totalSteps = (p['totalSteps'] as num?)?.toInt() ?? 0;
+    final userId = p['userId'] as String? ?? '';
+    final isMe = userId == _myUserId;
+    final isStealthed = p['stealthed'] == true;
+    final isForfeited = TeamRace.hasForfeited(p);
+    final colorLight = TeamRace.colorLight(team);
+    final colorDark = TeamRace.colorDark(team);
+    final accessories = isStealthed
+        ? const <Map<String, dynamic>>[]
+        : (p['accessories'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+    final animal = isStealthed ? null : animalFromJson(p['animal']);
+
+    final cell = Opacity(
+      opacity: isForfeited ? 0.5 : 1.0,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(8, 10, 8, 10),
+        decoration: BoxDecoration(
+          color: isMe
+              ? colorLight.withValues(alpha: 0.22)
+              : AppColors.parchmentLight,
+          borderRadius: BorderRadius.circular(11),
+          border: Border.all(
+            color: isMe ? colorDark : AppColors.parchmentBorder,
+            width: isMe ? 2 : 1.5,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Capy avatar (the racer's own capybara + cosmetics) with the
+            // overall-rank shield tucked into its corner.
+            SizedBox(
+              width: 52,
+              height: 46,
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
+                children: [
+                  CapybaraSpriteWithAccessories(
+                    accessories: accessories,
+                    capybaraSize: 46,
+                    frameIndex: 0,
+                    animal: animal,
+                  ),
+                  Positioned(
+                    top: -3,
+                    left: -2,
+                    child: Container(
+                      width: 21,
+                      height: 21,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: colorDark,
+                        borderRadius: BorderRadius.circular(7),
+                        border: Border.all(color: Colors.white, width: 1.5),
+                      ),
+                      child: Text(
+                        '${overallRank + 1}',
+                        style: PixelText.number(size: 11, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 7),
+            Text(
+              isMe ? '${atName(name)} (you)' : atName(name),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: PixelText.body(size: 15, color: AppColors.textDark),
+            ),
+            const SizedBox(height: 1),
+            Text(
+              _formatSteps(totalSteps),
+              textAlign: TextAlign.center,
+              style: PixelText.number(size: 18, color: colorDark),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (isMe || isStealthed || userId.isEmpty) return cell;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => showFriendRequestSheet(
+        context: context,
+        authService: widget.authService,
+        backendApiService: _api,
+        userId: userId,
+        displayName: name,
+        profilePhotoUrl: p['profilePhotoUrl'] as String?,
+      ),
+      child: cell,
+    );
   }
 
   List<Widget> _buildLeaderboardRows(List<Map<String, dynamic>> participants) {
@@ -4807,6 +5093,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     Map<String, dynamic> p,
     int rank, {
     int? finishPlace,
+    bool large = false,
   }) {
     final name = p['displayName'] as String? ?? '???';
     final totalSteps = (p['totalSteps'] as num?)?.toInt() ?? 0;
@@ -4832,6 +5119,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       isStealthed: isStealthed,
       isFinished: isFinished,
       finishPlace: finishPlace,
+      // Issue 1: team standings rows are larger for legibility; solo/ranked
+      // keep the defaults.
+      avatarSize: large ? 40 : 32,
+      nameSize: large ? 17 : 15,
+      stepsSize: large ? 18 : 16,
+      verticalPadding: large ? 11 : 8,
       effectIcons: [
         for (final e in activeEffects)
           _EffectIconWithTooltip(type: e['type'] as String? ?? ''),

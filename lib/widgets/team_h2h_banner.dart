@@ -5,13 +5,13 @@ import 'package:flutter/material.dart';
 import '../styles.dart';
 import '../utils/team_race.dart';
 
-/// TR-803 — the head-to-head tug-of-war banner for ACTIVE team races.
+/// TR-803 — the head-to-head SCOREBOARD for team races: each side's plaque with
+/// its combined total side by side, and a pill calling out the current lead.
+/// Sits at the top of the team standings section (the two rosters render as
+/// color-matched columns directly beneath these plaques).
 ///
-/// Team plaques anchor each end, combined totals sit beneath them, and a rope
-/// with a knot marker slides toward whichever side is winning. Rendered as
-/// board content (the race-detail screen wraps it in its section card — one
-/// parchment board, never a floating card). Totals are ALWAYS honest: stealth
-/// and imposter illusions touch individual planks only (TR-658).
+/// Totals are ALWAYS honest; stealth/imposter illusions touch individual planks
+/// only (TR-658). Rendered as board content (the caller wraps it in a card).
 class TeamH2HBanner extends StatelessWidget {
   const TeamH2HBanner({
     super.key,
@@ -26,18 +26,6 @@ class TeamH2HBanner extends StatelessWidget {
   final int teamATotal;
   final int teamBTotal;
 
-  /// 0.0 = knot fully at Team A's end, 1.0 = fully at Team B's end.
-  /// The knot moves AWAY from the leader (they're reeling it in): Team A
-  /// leading pulls the knot toward A, i.e. share < 0.5.
-  double get _share {
-    final total = teamATotal + teamBTotal;
-    if (total <= 0) return 0.5;
-    // Map A's fraction of steps [0..1] onto knot travel [1..0], softened so
-    // the knot never sits flush against a plaque.
-    final aFraction = teamATotal / total;
-    return (1 - aFraction).clamp(0.12, 0.88);
-  }
-
   String _formatSteps(int n) {
     final s = n.toString();
     final buf = StringBuffer();
@@ -50,34 +38,24 @@ class TeamH2HBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lead = teamATotal - teamBTotal;
-
-    return Column(
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: _endPost(
-                team: RaceTeam.teamA,
-                name: teamAName,
-                total: teamATotal,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _endPost(
-                team: RaceTeam.teamB,
-                name: teamBName,
-                total: teamBTotal,
-              ),
-            ),
-          ],
+        Expanded(
+          child: _endPost(
+            team: RaceTeam.teamA,
+            name: teamAName,
+            total: teamATotal,
+          ),
         ),
-        const SizedBox(height: 10),
-        TeamTugRope(share: _share),
-        const SizedBox(height: 8),
-        _leadPill(lead),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _endPost(
+            team: RaceTeam.teamB,
+            name: teamBName,
+            total: teamBTotal,
+          ),
+        ),
       ],
     );
   }
@@ -90,24 +68,28 @@ class TeamH2HBanner extends StatelessWidget {
     final color = TeamRace.color(team);
     final colorLight = TeamRace.colorLight(team);
     final colorDark = TeamRace.colorDark(team);
+    // Light plaques (e.g. the gold team) can't carry white text — flip the
+    // title to the team's dark tone and drop the dark drop-shadow.
+    final lightPlaque = color.computeLuminance() > 0.55;
+    final onPlaque = lightPlaque ? colorDark : Colors.white;
 
     return Column(
       children: [
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [colorLight, color],
             ),
-            borderRadius: BorderRadius.circular(9),
-            border: Border.all(color: colorDark, width: 2.5),
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(color: colorDark, width: 3),
             boxShadow: [
               BoxShadow(
                 color: colorDark,
-                offset: const Offset(0, 3),
+                offset: const Offset(0, 4),
                 blurRadius: 0,
               ),
             ],
@@ -117,70 +99,37 @@ class TeamH2HBanner extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: PixelText.title(size: 12, color: Colors.white).copyWith(
-              shadows: const [
-                Shadow(
-                  color: Color(0x66000000),
-                  offset: Offset(0, 1),
-                  blurRadius: 0,
-                ),
-              ],
+            style: PixelText.title(size: 16, color: onPlaque).copyWith(
+              shadows: lightPlaque
+                  ? null
+                  : const [
+                      Shadow(
+                        color: Color(0x66000000),
+                        offset: Offset(0, 1.5),
+                        blurRadius: 0,
+                      ),
+                    ],
             ),
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Text(
           _formatSteps(total),
-          style: PixelText.number(size: 20, color: colorDark),
+          style: PixelText.number(size: 30, color: colorDark),
         ),
         Text(
           'STEPS',
-          style: PixelText.body(size: 9, color: AppColors.textMid),
+          style: PixelText.body(size: 11, color: AppColors.textMid),
         ),
       ],
     );
   }
 
-  Widget _leadPill(int lead) {
-    if (lead == 0) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-        decoration: BoxDecoration(
-          color: AppColors.parchmentDark,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppColors.parchmentBorder, width: 1.5),
-        ),
-        child: Text(
-          'ALL TIED',
-          style: PixelText.title(size: 10.5, color: AppColors.textMid),
-        ),
-      );
-    }
-    final leadingTeam = lead > 0 ? RaceTeam.teamA : RaceTeam.teamB;
-    final name = (lead > 0 ? teamAName : teamBName).toUpperCase();
-    final color = TeamRace.color(leadingTeam);
-    final colorDark = TeamRace.colorDark(leadingTeam);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: colorDark, width: 1.5),
-        boxShadow: [
-          BoxShadow(color: colorDark, offset: const Offset(0, 2), blurRadius: 0),
-        ],
-      ),
-      child: Text(
-        '$name LEAD +${_formatSteps(lead.abs())}',
-        style: PixelText.title(size: 10.5, color: Colors.white),
-      ),
-    );
-  }
 }
 
 /// The tug-of-war rope: a sagging line with a wrapped knot that slides to
-/// [share] (0 = Team A end, 1 = Team B end). Knot movement animates so lead
-/// changes are impossible to miss. Pure chrome — lines and circles only.
+/// [share] (0 = Team A end, 1 = Team B end). Used by the compact race-card
+/// scoreline ([TeamScoreline]); the detail scoreboard no longer draws it.
 class TeamTugRope extends StatelessWidget {
   const TeamTugRope({super.key, required this.share});
 
@@ -194,7 +143,7 @@ class TeamTugRope extends StatelessWidget {
       curve: Curves.easeOutBack,
       builder: (context, animatedShare, _) {
         return SizedBox(
-          height: 30,
+          height: 36,
           width: double.infinity,
           child: CustomPaint(
             painter: _TugRopePainter(
@@ -225,7 +174,6 @@ class _TugRopePainter extends CustomPainter {
     final midY = size.height / 2;
     final knotX = size.width * share;
 
-    // Rope halves, tinted per side so the pull direction reads at a glance.
     final ropeA = Paint()
       ..color = teamAColor
       ..strokeWidth = 4
@@ -237,7 +185,6 @@ class _TugRopePainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
 
-    // Slight sag on each half (quadratic droop toward the knot).
     final pathA = Path()
       ..moveTo(0, midY - 3)
       ..quadraticBezierTo(knotX * 0.5, midY + 5, knotX, midY);
@@ -252,7 +199,6 @@ class _TugRopePainter extends CustomPainter {
     canvas.drawPath(pathA, ropeA);
     canvas.drawPath(pathB, ropeB);
 
-    // Center stake: the line to beat.
     final stake = Paint()
       ..color = AppColors.textMid.withValues(alpha: 0.5)
       ..strokeWidth = 2;
@@ -262,18 +208,9 @@ class _TugRopePainter extends CustomPainter {
       stake,
     );
 
-    // The knot: wooden ball with rope wraps.
     final knotCenter = Offset(knotX, midY);
-    canvas.drawCircle(
-      knotCenter,
-      8,
-      Paint()..color = AppColors.dirtDark,
-    );
-    canvas.drawCircle(
-      knotCenter,
-      6.2,
-      Paint()..color = AppColors.dirtMid,
-    );
+    canvas.drawCircle(knotCenter, 8, Paint()..color = AppColors.dirtDark);
+    canvas.drawCircle(knotCenter, 6.2, Paint()..color = AppColors.dirtMid);
     final wrap = Paint()
       ..color = AppColors.dirtDark
       ..strokeWidth = 1.4

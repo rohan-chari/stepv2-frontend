@@ -7,6 +7,63 @@ import '../utils/at_name.dart';
 import '../utils/team_race.dart';
 import 'home_course_track.dart' show AnimatedCapybaraWithAccessories;
 
+// --- extracted hop kinematics (pure, unit-testable) -------------------------
+
+/// Analytic center of slot [index] within its column.
+///
+/// Slots are uniform, so ANY center — including the departed "from" slot that
+/// no longer exists in the widget tree after a team switch rebuild — is
+/// computed from the measured [columnWidth] + the fixed slot metrics and the
+/// known index. This is what lets the hop anchor its takeoff on a slot that's
+/// already gone (Issue 2, revision-log pass 2 #6).
+@visibleForTesting
+Offset lobbySlotCenter({
+  required RaceTeam team,
+  required int index,
+  required double columnWidth,
+  required double slotHeight,
+  required double slotGap,
+  required double columnGap,
+}) {
+  final dy = index * (slotHeight + slotGap) + slotHeight / 2;
+  final dx = team == RaceTeam.teamA
+      ? columnWidth / 2
+      : columnWidth + columnGap + columnWidth / 2;
+  return Offset(dx, dy);
+}
+
+/// Distance-scaled arc peak height (px the capy rises above the higher slot).
+/// A fixed peak made short and long jumps look wrong; this scales with the
+/// takeoff→landing distance, clamped to a sane range.
+@visibleForTesting
+double lobbyHopPeak(Offset from, Offset to) {
+  final dist = (to - from).distance;
+  return (dist * 0.42).clamp(46.0, 140.0);
+}
+
+/// Pure hop position for a raw controller value [t] in [0,1].
+///
+/// ONE easing curve (easeInOut) applied ONCE — no bezier stacked on top of a
+/// second curve. Horizontal travel is a straight lerp; the vertical arc is a
+/// parabola that is 0 at both ends and peaks (upward) at the midpoint, its
+/// height scaled by [lobbyHopPeak].
+@visibleForTesting
+Offset lobbyHopPosition({
+  required Offset from,
+  required Offset to,
+  required double t,
+}) {
+  final e = Curves.easeInOut.transform(t.clamp(0.0, 1.0));
+  final x = _lerpDouble(from.dx, to.dx, e);
+  final baseY = _lerpDouble(from.dy, to.dy, e);
+  final peak = lobbyHopPeak(from, to);
+  // -4·peak·e·(1-e): 0 at e∈{0,1}, minimum (highest on screen) −peak at e=0.5.
+  final arc = -4 * peak * e * (1 - e);
+  return Offset(x, baseY + arc);
+}
+
+double _lerpDouble(double a, double b, double t) => a + (b - a) * t;
+
 /// TR-802 — the LoL-custom-lobby team picker, rendered as content for one
 /// parchment board (the caller wraps it in the race-detail section card).
 ///
@@ -17,8 +74,9 @@ import 'home_course_track.dart' show AnimatedCapybaraWithAccessories;
 /// button). A side at cap simply has no pegs left (TR-202 made physical).
 ///
 /// When the local user's slot moves across the divider the board plays the
-/// hop: their capy arcs over the VS medallion, lands with a dust puff, and
-/// the receiving slot wobbles.
+/// hop: their capy arcs over the VS medallion on a single easing curve, its
+/// arc height scaled to the jump distance, and cross-fades into the receiving
+/// slot (which also wobbles) instead of popping in on a single frame.
 class TeamLobbyBoard extends StatefulWidget {
   const TeamLobbyBoard({
     super.key,
@@ -42,12 +100,18 @@ class TeamLobbyBoard extends StatefulWidget {
 
 class _TeamLobbyBoardState extends State<TeamLobbyBoard>
     with SingleTickerProviderStateMixin {
-  static const double _slotHeight = 56;
-  static const double _slotGap = 8;
+  // Issue 2: roomier slots so the (now larger) username + capy aren't cramped.
+  static const double _slotHeight = 64;
+  static const double _slotGap = 10;
   static const double _columnGap = 12;
+  static const double _avatarSize = 42;
+  static const double _hopCapySize = 46;
+
+  // The last fraction of the flight where the traveling capy dissolves into
+  // its landing slot (cross-fade handoff — no single-frame pop).
+  static const double _landFadeStart = 0.80;
 
   late final AnimationController _hopController;
-  ({RaceTeam team, int index})? _mySlot;
   ({RaceTeam team, int index})? _hopFrom;
   ({RaceTeam team, int index})? _hopTo;
   List<Map<String, dynamic>> _hopAccessories = const [];
@@ -58,35 +122,38 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
     super.initState();
     _hopController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 700),
+      duration: const Duration(milliseconds: 640),
     )..addStatusListener((status) {
         if (status == AnimationStatus.completed) {
+          if (!mounted) return;
           setState(() {
             _hopFrom = null;
             _hopTo = null;
           });
         }
       });
-    _mySlot = _locateMySlot();
   }
 
   @override
   void didUpdateWidget(TeamLobbyBoard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final next = _locateMySlot();
-    final prev = _mySlot;
-    if (prev != null && next != null && prev.team != next.team) {
-      // My capy hopped the divider — fly it across.
-      _hopFrom = prev;
-      _hopTo = next;
+    // Derive both anchors from the actual participant lists: the takeoff index
+    // from oldWidget (the slot is gone from the new tree), the landing index
+    // from the new list. Unrelated rebuilds (poll refreshes, step updates)
+    // keep the same team on both sides → no hop is (re)started.
+    final from = _locateSlot(oldWidget.participants);
+    final to = _locateSlot(widget.participants);
+    if (from != null && to != null && from.team != to.team) {
+      _hopFrom = from;
+      _hopTo = to;
       final me = _findMe();
       _hopAccessories =
           (me?['accessories'] as List?)?.cast<Map<String, dynamic>>() ??
               const [];
       _hopAnimal = me?['animal'] as String?;
+      // A genuine side change (even mid-flight) replaces the arc cleanly.
       _hopController.forward(from: 0);
     }
-    _mySlot = next;
   }
 
   @override
@@ -102,8 +169,11 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
     return null;
   }
 
-  List<Map<String, dynamic>> _sideMembers(RaceTeam team) {
-    return widget.participants
+  List<Map<String, dynamic>> _sideMembersOf(
+    List<Map<String, dynamic>> participants,
+    RaceTeam team,
+  ) {
+    return participants
         .where(
           (p) =>
               p['status'] == 'ACCEPTED' &&
@@ -112,9 +182,15 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
         .toList(growable: false);
   }
 
-  ({RaceTeam team, int index})? _locateMySlot() {
+  List<Map<String, dynamic>> _sideMembers(RaceTeam team) =>
+      _sideMembersOf(widget.participants, team);
+
+  /// My (team, index-within-side) in an arbitrary participant list, or null.
+  ({RaceTeam team, int index})? _locateSlot(
+    List<Map<String, dynamic>> participants,
+  ) {
     for (final team in RaceTeam.values) {
-      final members = _sideMembers(team);
+      final members = _sideMembersOf(participants, team);
       for (var i = 0; i < members.length; i++) {
         if (members[i]['userId'] == widget.myUserId) {
           return (team: team, index: i);
@@ -140,8 +216,7 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
   @override
   Widget build(BuildContext context) {
     final teamSize = _teamSize;
-    final columnsHeight =
-        teamSize * _slotHeight + (teamSize - 1) * _slotGap;
+    final columnsHeight = teamSize * _slotHeight + (teamSize - 1) * _slotGap;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -155,11 +230,10 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
             Expanded(child: _teamPlaque(RaceTeam.teamB)),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         LayoutBuilder(
           builder: (context, constraints) {
-            final columnWidth =
-                (constraints.maxWidth - _columnGap) / 2;
+            final columnWidth = (constraints.maxWidth - _columnGap) / 2;
             return SizedBox(
               height: columnsHeight,
               child: Stack(
@@ -196,19 +270,23 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
     final colorDark = TeamRace.colorDark(team);
     final name = TeamRace.teamName(widget.race, team).toUpperCase();
     final filled = _sideMembers(team).length;
+    // Light plaques (the gold team) can't carry white text — flip the title to
+    // the team's dark tone and drop the dark drop-shadow.
+    final lightPlaque = color.computeLuminance() > 0.55;
+    final onPlaque = lightPlaque ? colorDark : Colors.white;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [colorLight, color],
         ),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: colorDark, width: 2.5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colorDark, width: 3),
         boxShadow: [
-          BoxShadow(color: colorDark, offset: const Offset(0, 3), blurRadius: 0),
+          BoxShadow(color: colorDark, offset: const Offset(0, 4), blurRadius: 0),
         ],
       ),
       child: Column(
@@ -218,22 +296,28 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: PixelText.title(size: 12, color: Colors.white).copyWith(
-              shadows: const [
-                Shadow(
-                  color: Color(0x66000000),
-                  offset: Offset(0, 1),
-                  blurRadius: 0,
-                ),
-              ],
+            style: PixelText.title(size: 15, color: onPlaque).copyWith(
+              shadows: lightPlaque
+                  ? null
+                  : const [
+                      Shadow(
+                        color: Color(0x66000000),
+                        offset: Offset(0, 1.5),
+                        blurRadius: 0,
+                      ),
+                    ],
             ),
           ),
-          const SizedBox(height: 3),
-          Text(
-            '$filled/$_teamSize',
-            style: PixelText.number(
-              size: 11,
-              color: Colors.white.withValues(alpha: 0.9),
+          const SizedBox(height: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: colorDark.withValues(alpha: 0.85),
+              borderRadius: BorderRadius.circular(7),
+            ),
+            child: Text(
+              '$filled/$_teamSize',
+              style: PixelText.number(size: 14, color: Colors.white),
             ),
           ),
         ],
@@ -243,8 +327,8 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
 
   Widget _vsMedallion() {
     return Container(
-      width: 46,
-      height: 46,
+      width: 52,
+      height: 52,
       margin: const EdgeInsets.symmetric(horizontal: 6),
       decoration: BoxDecoration(
         shape: BoxShape.circle,
@@ -265,7 +349,7 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
       child: Center(
         child: Text(
           'VS',
-          style: PixelText.title(size: 15, color: Colors.white).copyWith(
+          style: PixelText.title(size: 17, color: Colors.white).copyWith(
             shadows: const [
               Shadow(
                 color: Color(0x80000000),
@@ -299,10 +383,10 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
                 key: Key('lobby-slot-$sideLetter-$i'),
                 team: team,
                 member: members[i],
-                // While the hop is in flight the traveling capy lives in the
-                // overlay, not the destination slot.
-                hideCapy: hopActive &&
-                    members[i]['userId'] == widget.myUserId,
+                // The arriving capy cross-fades in over the last leg of the
+                // flight; until then it lives in the overlay, not the slot.
+                isArriving:
+                    hopActive && members[i]['userId'] == widget.myUserId,
               ),
             )
           else
@@ -321,10 +405,11 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
       animation: _hopController,
       builder: (context, inner) {
         final t = _hopController.value;
-        // The plank only shakes once the capy lands (last 30% of the flight).
-        final localT = t < 0.7 ? 0.0 : (t - 0.7) / 0.3;
-        final angle =
-            math.sin(localT * math.pi * 3) * (1 - localT) * 0.05;
+        // The plank only shakes once the capy lands (the cross-fade window).
+        final localT = t < _landFadeStart
+            ? 0.0
+            : (t - _landFadeStart) / (1 - _landFadeStart);
+        final angle = math.sin(localT * math.pi * 3) * (1 - localT) * 0.05;
         return Transform.rotate(angle: angle, child: inner);
       },
       child: child,
@@ -335,7 +420,7 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
     required Key key,
     required RaceTeam team,
     required Map<String, dynamic> member,
-    bool hideCapy = false,
+    bool isArriving = false,
   }) {
     final color = TeamRace.color(team);
     final colorDark = TeamRace.colorDark(team);
@@ -345,22 +430,32 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
         (member['accessories'] as List?)?.cast<Map<String, dynamic>>() ??
             const <Map<String, dynamic>>[];
 
+    final capy = SizedBox(
+      width: _avatarSize,
+      height: _avatarSize,
+      child: AnimatedCapybaraWithAccessories(
+        accessories: accessories,
+        size: _avatarSize,
+        animal: member['animal'] as String?,
+      ),
+    );
+
     return Container(
       key: key,
       height: _slotHeight,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(10),
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isMe ? color : color.withValues(alpha: 0.45),
-          width: isMe ? 2.5 : 1.5,
+          width: isMe ? 3 : 1.5,
         ),
         boxShadow: isMe
             ? [
                 BoxShadow(
                   color: color.withValues(alpha: 0.45),
-                  blurRadius: 7,
+                  blurRadius: 8,
                   spreadRadius: 1,
                 ),
               ]
@@ -368,19 +463,18 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
       ),
       child: Row(
         children: [
-          Opacity(
-            opacity: hideCapy ? 0 : 1,
-            child: SizedBox(
-              width: 34,
-              height: 34,
-              child: AnimatedCapybaraWithAccessories(
-                accessories: accessories,
-                size: 34,
-                animal: member['animal'] as String?,
-              ),
-            ),
-          ),
-          const SizedBox(width: 6),
+          // Arriving capy dissolves in over the cross-fade window; everyone
+          // else is fully opaque.
+          if (isArriving)
+            AnimatedBuilder(
+              animation: _hopController,
+              builder: (context, inner) =>
+                  Opacity(opacity: _landFade(_hopController.value), child: inner),
+              child: capy,
+            )
+          else
+            capy,
+          const SizedBox(width: 9),
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -391,24 +485,24 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: PixelText.body(
-                    size: 11,
+                    size: 14.5,
                     color: AppColors.textDark,
                   ),
                 ),
                 if (isMe)
                   Container(
-                    margin: const EdgeInsets.only(top: 2),
+                    margin: const EdgeInsets.only(top: 3),
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 5,
-                      vertical: 1,
+                      horizontal: 7,
+                      vertical: 2,
                     ),
                     decoration: BoxDecoration(
                       color: colorDark,
-                      borderRadius: BorderRadius.circular(5),
+                      borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
                       'YOU',
-                      style: PixelText.title(size: 7.5, color: Colors.white),
+                      style: PixelText.title(size: 9, color: Colors.white),
                     ),
                   ),
               ],
@@ -417,6 +511,13 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
         ],
       ),
     );
+  }
+
+  /// Opacity of the arriving capy as it dissolves into its slot: 0 for most of
+  /// the flight, ramping 0→1 across the final [_landFadeStart..1] window.
+  double _landFade(double t) {
+    if (t <= _landFadeStart) return 0.0;
+    return ((t - _landFadeStart) / (1 - _landFadeStart)).clamp(0.0, 1.0);
   }
 
   Widget _emptySlot({required Key key, required RaceTeam team}) {
@@ -439,18 +540,18 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
                 children: [
                   Icon(
                     Icons.add_circle_outline_rounded,
-                    size: 15,
-                    color: color.withValues(alpha: 0.8),
+                    size: 19,
+                    color: color.withValues(alpha: 0.85),
                   ),
-                  const SizedBox(width: 5),
+                  const SizedBox(width: 7),
                   Flexible(
                     child: Text(
                       'TAP TO JOIN',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: PixelText.title(
-                        size: 9.5,
-                        color: color.withValues(alpha: 0.8),
+                        size: 12,
+                        color: color.withValues(alpha: 0.85),
                       ),
                     ),
                   ),
@@ -466,48 +567,51 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
   // --- the hop ---------------------------------------------------------------
 
   Offset _slotCenter(({RaceTeam team, int index}) slot, double columnWidth) {
-    final dy = slot.index * (_slotHeight + _slotGap) + _slotHeight / 2;
-    final dx = slot.team == RaceTeam.teamA
-        ? columnWidth / 2
-        : columnWidth + _columnGap + columnWidth / 2;
-    return Offset(dx, dy);
+    return lobbySlotCenter(
+      team: slot.team,
+      index: slot.index,
+      columnWidth: columnWidth,
+      slotHeight: _slotHeight,
+      slotGap: _slotGap,
+      columnGap: _columnGap,
+    );
   }
 
   Widget _hopOverlay(double columnWidth) {
     final from = _slotCenter(_hopFrom!, columnWidth);
     final to = _slotCenter(_hopTo!, columnWidth);
-    const capySize = 38.0;
+    const capySize = _hopCapySize;
 
     return AnimatedBuilder(
       key: const Key('lobby-hop-overlay'),
       animation: _hopController,
       builder: (context, child) {
-        final t = Curves.easeInOut.transform(_hopController.value);
-        // Quadratic bezier arcing well above both slots — the capy clears the
-        // VS divider in one showy jump.
-        final peak = Offset(
-          (from.dx + to.dx) / 2,
-          math.min(from.dy, to.dy) - 52,
-        );
-        final u = 1 - t;
-        final pos = from * (u * u) + peak * (2 * u * t) + to * (t * t);
-        // A touch of squash-and-stretch: stretch mid-air, squash on landing.
-        final scale = 1 + 0.18 * math.sin(t * math.pi);
-        final landing = t > 0.78;
+        final t = _hopController.value;
+        final pos = lobbyHopPosition(from: from, to: to, t: t);
+        final e = Curves.easeInOut.transform(t);
+        // Squash-and-stretch tied to the same single curve: stretch mid-air.
+        final scale = 1 + 0.16 * math.sin(e * math.pi);
+        // Dissolve the traveler out as its slot capy dissolves in.
+        final overlayOpacity = 1 - _landFade(t);
+        final landing = t > _landFadeStart;
 
         return Stack(
           clipBehavior: Clip.none,
           children: [
-            if (landing) ..._dustPuffs(to, (t - 0.78) / 0.22),
+            if (landing)
+              ..._dustPuffs(to, (t - _landFadeStart) / (1 - _landFadeStart)),
             Positioned(
               left: pos.dx - capySize / 2,
               top: pos.dy - capySize / 2,
-              child: Transform.scale(
-                scale: scale,
-                child: Transform.rotate(
-                  angle: math.sin(t * math.pi) *
-                      (_hopTo!.team == RaceTeam.teamB ? 0.16 : -0.16),
-                  child: child,
+              child: Opacity(
+                opacity: overlayOpacity,
+                child: Transform.scale(
+                  scale: scale,
+                  child: Transform.rotate(
+                    angle: math.sin(e * math.pi) *
+                        (_hopTo!.team == RaceTeam.teamB ? 0.16 : -0.16),
+                    child: child,
+                  ),
                 ),
               ),
             ),
@@ -560,7 +664,7 @@ class _DashedPegPainter extends CustomPainter {
       ..strokeWidth = 2;
     final rrect = RRect.fromRectAndRadius(
       Offset.zero & size,
-      const Radius.circular(10),
+      const Radius.circular(12),
     );
     final path = Path()..addRRect(rrect);
     const dash = 7.0;
