@@ -6,10 +6,12 @@ import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
 import '../utils/team_race.dart';
+import '../utils/tournament.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/retro_card.dart';
+import 'tournament_detail_screen.dart';
 
 class CreateRaceScreen extends StatefulWidget {
   final AuthService authService;
@@ -59,6 +61,13 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
   // doesn't re-fetch (and clobber) names the user may have typed.
   bool _teamNamesSeeded = false;
   bool _suggestingNames = false;
+
+  // Tournaments (spec §9). A single-elimination bracket mode, mutually
+  // exclusive with FFA/Teams. Buy-in follows the D4 ladder (max scales with
+  // bracket size) and re-clamps when the bracket size changes.
+  bool _isTournament = false;
+  int _bracketSize = 8;
+  int _matchupDuration = 1;
 
   @override
   void initState() {
@@ -261,8 +270,15 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
       return;
     }
 
-    if (!_isTeamRace && !_noLimit && _maxParticipants == null) {
+    if (!_isTeamRace && !_isTournament && !_noLimit && _maxParticipants == null) {
       showErrorToast(context, 'Pick a max runners option');
+      return;
+    }
+
+    // Tournament name is capped tighter (1–30) so the generated matchup-race
+    // names fit (spec §6.1/§6.5).
+    if (_isTournament && name.length > 30) {
+      showErrorToast(context, 'Tournament name must be 30 characters or less');
       return;
     }
 
@@ -288,7 +304,18 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
       return;
     }
 
-    if (_buyInEnabled && _buyInAmount > 200) {
+    if (_isTournament) {
+      // D4 ladder: 0 or 10..max(bracketSize).
+      if (_buyInEnabled &&
+          !isValidTournamentBuyIn(_buyInAmount, _bracketSize)) {
+        final max = tournamentBuyInMaxForSize(_bracketSize);
+        showErrorToast(
+          context,
+          'Buy-in must be 0 or 10–$max for a $_bracketSize-racer bracket',
+        );
+        return;
+      }
+    } else if (_buyInEnabled && _buyInAmount > 200) {
       showErrorToast(context, 'Buy-in cannot exceed 200 coins');
       return;
     }
@@ -303,6 +330,49 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
     try {
       final token = widget.authService.authToken;
       if (token == null || token.isEmpty) return;
+
+      if (_isTournament) {
+        final res = await widget.backendApiService.createTournament(
+          identityToken: token,
+          name: name,
+          bracketSize: _bracketSize,
+          matchupDurationDays: _matchupDuration,
+          buyInAmount: _buyInEnabled ? _buyInAmount : 0,
+          powerupsEnabled: _powerupsEnabled,
+          powerupStepInterval: _powerupsEnabled ? _powerupInterval : null,
+          isPublic: _isPublic,
+          inviteeIds: widget.presetInviteeIds,
+        );
+        final t = res['tournament'] as Map<String, dynamic>?;
+        final tournamentId = t?['id'] as String?;
+        // Keep the wallet fresh (a paid bracket holds the creator's buy-in).
+        try {
+          final user =
+              await widget.backendApiService.fetchMe(identityToken: token);
+          await widget.authService.updateCoins(
+            user['coins'] as int? ?? widget.authService.coins,
+          );
+          await widget.authService.updateHeldCoins(
+            user['heldCoins'] as int? ?? widget.authService.heldCoins,
+          );
+        } catch (_) {}
+        if (!mounted) return;
+        if (tournamentId != null) {
+          // Replace this screen with the new bracket lobby.
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => TournamentDetailScreen(
+                authService: widget.authService,
+                tournamentId: tournamentId,
+                backendApiService: widget.backendApiService,
+              ),
+            ),
+          );
+        } else {
+          Navigator.of(context).pop();
+        }
+        return;
+      }
 
       final result = _isTeamRace
           ? await widget.backendApiService.createTeamRace(
@@ -358,6 +428,16 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
       if (mounted) {
         Navigator.of(context).pop(result['race'] as Map<String, dynamic>?);
       }
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() => _isCreating = false);
+        showErrorToast(
+          context,
+          _isTournament && e.code != null
+              ? tournamentErrorCopy(e.code)
+              : e.message,
+        );
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _isCreating = false);
@@ -392,10 +472,13 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
               children: [
                 _formatSegment(
                   key: const Key('race-format-ffa'),
-                  label: 'FREE-FOR-ALL',
+                  label: 'SOLO',
                   icon: Icons.emoji_events_rounded,
-                  selected: !_isTeamRace,
-                  onTap: () => setState(() => _isTeamRace = false),
+                  selected: !_isTeamRace && !_isTournament,
+                  onTap: () => setState(() {
+                    _isTeamRace = false;
+                    _isTournament = false;
+                  }),
                 ),
                 const SizedBox(width: 4),
                 _formatSegment(
@@ -404,15 +487,45 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                   icon: Icons.groups_rounded,
                   selected: _isTeamRace,
                   onTap: () {
-                    setState(() => _isTeamRace = true);
+                    setState(() {
+                      _isTeamRace = true;
+                      _isTournament = false;
+                    });
                     // Upgrade the locally-seeded plaques to the real backend
                     // pool the first time Teams is opened (TR-103). Guarded so
                     // it never clobbers a name the user typed.
                     _suggestTeamNames();
                   },
                 ),
+                const SizedBox(width: 4),
+                _formatSegment(
+                  key: const Key('race-format-tournament'),
+                  label: 'BRACKET',
+                  icon: Icons.account_tree_rounded,
+                  selected: _isTournament,
+                  onTap: () => setState(() {
+                    final entering = !_isTournament;
+                    _isTournament = true;
+                    _isTeamRace = false;
+                    // Powerups default ON for tournaments — set only on entry so
+                    // a later manual toggle-off isn't stomped by re-tapping.
+                    if (entering) _powerupsEnabled = true;
+                    // Keep the buy-in inside the D4 ladder for the current
+                    // bracket size the moment the mode is entered.
+                    _clampTournamentBuyIn();
+                  }),
+                ),
               ],
             ),
+          ),
+          // Tournament reveal — bracket size + matchup duration pickers.
+          AnimatedSize(
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOutBack,
+            alignment: Alignment.topCenter,
+            child: _isTournament
+                ? _buildTournamentReveal()
+                : const SizedBox(width: double.infinity),
           ),
           // Teams reveal — size stepper, plaques, your-side pick.
           AnimatedSize(
@@ -566,15 +679,20 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
             children: [
               Icon(
                 icon,
-                size: 16,
+                size: 15,
                 color: selected ? Colors.white : AppColors.textMid,
               ),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: PixelText.title(
-                  size: 12,
-                  color: selected ? Colors.white : AppColors.textMid,
+              const SizedBox(width: 5),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.fade,
+                  style: PixelText.title(
+                    size: 11.5,
+                    color: selected ? Colors.white : AppColors.textMid,
+                  ),
                 ),
               ),
             ],
@@ -582,6 +700,116 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
         ),
       ),
     );
+  }
+
+  /// The tournament reveal: bracket-size picker (4/8/16) + matchup-duration
+  /// chips (1/2/3 days). Buy-in / powerups / public are the shared cards below.
+  Widget _buildTournamentReveal() {
+    final maxBuyIn = tournamentBuyInMaxForSize(_bracketSize);
+    final potCap = _bracketSize * maxBuyIn;
+    return Column(
+      key: const Key('tournament-reveal'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 16),
+        Text('BRACKET SIZE',
+            style: PixelText.body(size: 11, color: AppColors.textMid)),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            for (final size in kTournamentBracketSizes) ...[
+              if (size != kTournamentBracketSizes.first)
+                const SizedBox(width: 8),
+              Expanded(
+                child: GestureDetector(
+                  key: Key('bracket-size-$size'),
+                  onTap: () => setState(() {
+                    _bracketSize = size;
+                    // Re-clamp so a stale 100 can't survive a switch to 16 (D4).
+                    _clampTournamentBuyIn();
+                  }),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: _bracketSize == size
+                          ? AppColors.pillGreenDark
+                          : AppColors.parchmentDark,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text('$size',
+                        style: PixelText.title(
+                          size: 16,
+                          color: _bracketSize == size
+                              ? Colors.white
+                              : AppColors.textDark,
+                        )),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(Tournament.sizeSubcopy(_bracketSize),
+            style: PixelText.body(size: 11, color: AppColors.textMid)),
+        const SizedBox(height: 16),
+        Text('MATCHUP LENGTH',
+            style: PixelText.body(size: 11, color: AppColors.textMid)),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            for (final days in kTournamentDurations) ...[
+              if (days != kTournamentDurations.first) const SizedBox(width: 8),
+              Expanded(
+                child: GestureDetector(
+                  key: Key('matchup-duration-$days'),
+                  onTap: () => setState(() => _matchupDuration = days),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: _matchupDuration == days
+                          ? AppColors.pillGreenDark
+                          : AppColors.parchmentDark,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text('${days}d',
+                        style: PixelText.title(
+                          size: 15,
+                          color: _matchupDuration == days
+                              ? Colors.white
+                              : AppColors.textDark,
+                        )),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Every round is a $_matchupDuration-day 1v1. '
+          'Winner takes the whole pot.',
+          style: PixelText.body(size: 11, color: AppColors.textMid),
+        ),
+        const SizedBox(height: 4),
+        Text('Buy-in max $maxBuyIn · pot up to $potCap coins',
+            key: const Key('tournament-buyin-hint'),
+            style: PixelText.body(size: 11, color: AppColors.coinDark)),
+      ],
+    );
+  }
+
+  /// Snaps the buy-in field into the current bracket size's D4 window when the
+  /// bracket size changes (a stale 100 can't survive a switch to a 16-bracket,
+  /// which caps at 62).
+  void _clampTournamentBuyIn() {
+    final clamped = clampTournamentBuyIn(_buyInAmount, _bracketSize);
+    if (clamped != _buyInAmount) {
+      _buyInAmount = clamped;
+      _buyInController.text = clamped == 0 ? '' : '$clamped';
+    }
   }
 
   Widget _buildTeamSizeStepper() {
@@ -886,6 +1114,10 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                         const SizedBox(height: 12),
                       ],
 
+                      // Duration + scheduled-start are hidden for tournaments:
+                      // matchup length is fixed by the bracket picker and
+                      // tournaments never schedule-auto-start (spec §9).
+                      if (!_isTournament) ...[
                       // Duration
                       RetroCard(
                         padding: const EdgeInsets.all(16),
@@ -1042,6 +1274,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
+                      ],
 
                       // Powerups
                       RetroCard(
@@ -1252,8 +1485,12 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                               ),
                               // TR-102: payout presets are ignored for team
                               // races (the team pot splits evenly) — hide the
-                              // picker in Teams mode.
-                              if (!_isTeamRace) ...[
+                              // picker in Teams mode. Tournaments are always
+                              // winner-takes-all (champion takes the pot), so
+                              // hide it there too (spec §9).
+                              if (_isTournament) ...[
+                                // Nothing to pick — WTA is implied.
+                              ] else if (!_isTeamRace) ...[
                               const SizedBox(height: 12),
                               Text(
                                 'PAYOUT MODE',
@@ -1379,7 +1616,24 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                             ),
                             // TR-101: a team race's field cap is fixed at
                             // 2 x teamSize — no free-form runner cap.
-                            if (!_isTeamRace) ...[
+                            if (_isTournament) ...[
+                              const SizedBox(height: 12),
+                              Text(
+                                'FIELD SIZE',
+                                style: PixelText.body(
+                                  size: 11,
+                                  color: AppColors.textMid,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                Tournament.sizeSubcopy(_bracketSize),
+                                style: PixelText.title(
+                                  size: 13,
+                                  color: AppColors.textDark,
+                                ),
+                              ),
+                            ] else if (!_isTeamRace) ...[
                               const SizedBox(height: 12),
                               Text(
                                 'MAX RUNNERS',

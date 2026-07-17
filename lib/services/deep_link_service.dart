@@ -37,6 +37,12 @@ class DeepLinkService {
   /// to join immediately when a link is tapped while the app is already open.
   final ValueNotifier<String?> pendingToken = ValueNotifier<String?>(null);
 
+  /// The most recently captured-but-undrained TOURNAMENT share token (`/t/…`).
+  /// Kept on a separate notifier + AuthService slot so a race link and a
+  /// tournament link never clobber each other.
+  final ValueNotifier<String?> pendingTournamentToken =
+      ValueNotifier<String?>(null);
+
   /// Shared extraction of the `<token>` from a `/r/<token>` (https) or
   /// `bara://join|race/<token>` / `bara:///r/<token>` (custom scheme) link.
   /// Returns the raw (un-normalized) token, or null. The charset guard bounds
@@ -72,6 +78,45 @@ class DeepLinkService {
 
     return null;
   }
+
+  /// Shared extraction of the `<token>` from a `/t/<token>` (https) or
+  /// `bara://tournament/<token>` / `bara:///t/<token>` (custom scheme) link —
+  /// the tournament analog of [_extractRToken]. Returns the raw token or null.
+  static String? _extractTToken(Uri uri) {
+    bool isValid(String t) =>
+        t.isNotEmpty && RegExp(r'^[A-Za-z0-9_-]{1,128}$').hasMatch(t);
+
+    String? fromTPath(List<String> segments) {
+      if (segments.length >= 2 && segments[0] == 't' && isValid(segments[1])) {
+        return segments[1];
+      }
+      return null;
+    }
+
+    if (uri.scheme == 'https' || uri.scheme == 'http') {
+      // Universal/App Link: https://<host>/t/<token>
+      return fromTPath(uri.pathSegments);
+    }
+
+    if (uri.scheme == kAppUrlScheme) {
+      // Custom scheme: bara://tournament/<token>. The action lands in `host`,
+      // the token in the first path segment.
+      if (uri.host == 'tournament' &&
+          uri.pathSegments.isNotEmpty &&
+          isValid(uri.pathSegments.first)) {
+        return uri.pathSegments.first;
+      }
+      // Also tolerate bara:///t/<token>.
+      return fromTPath(uri.pathSegments);
+    }
+
+    return null;
+  }
+
+  /// Pure URI -> tournament share-token extraction (`/t/<token>` or
+  /// `bara://tournament/<token>`). Side-effect-free + unit-testable. Returns
+  /// null for anything that isn't a tournament share link.
+  static String? parseTournamentShareToken(Uri uri) => _extractTToken(uri);
 
   /// Pure URI -> race share-token extraction. Static + side-effect-free so it's
   /// trivially unit-testable. Returns null for any link that isn't a race share
@@ -134,6 +179,14 @@ class DeepLinkService {
       return;
     }
 
+    // A tournament share link (`/t/<token>`) rides its own path + slot.
+    final tournamentToken = parseTournamentShareToken(uri);
+    if (tournamentToken != null) {
+      await _authService.setPendingTournamentShareToken(tournamentToken);
+      pendingTournamentToken.value = tournamentToken;
+      return;
+    }
+
     final token = parseShareToken(uri);
     if (token == null) return;
     await _authService.setPendingShareToken(token);
@@ -143,5 +196,6 @@ class DeepLinkService {
   void dispose() {
     _subscription?.cancel();
     pendingToken.dispose();
+    pendingTournamentToken.dispose();
   }
 }

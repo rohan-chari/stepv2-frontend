@@ -3,10 +3,13 @@ import 'package:flutter/material.dart';
 
 import '../../models/loadable.dart';
 import '../../services/auth_service.dart';
+import '../../services/backend_api_service.dart';
 import '../../styles.dart';
 import '../../utils/at_name.dart';
 import '../../utils/race_participant_display.dart';
+import '../../utils/tournament.dart';
 import '../../widgets/arcade_fx.dart';
+import '../../widgets/error_toast.dart';
 import '../../widgets/featured_race_card.dart';
 import '../../widgets/ad_inline_card.dart';
 import '../../widgets/info_toast.dart';
@@ -14,11 +17,14 @@ import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
 import '../../utils/team_race.dart';
 import '../../widgets/powerup_icon.dart';
+import '../../widgets/spinning_coin.dart';
 import '../../widgets/spinning_crate.dart';
 import '../../widgets/team_scoreline.dart';
+import '../../widgets/tournament_game_card.dart';
 import '../create_race_screen.dart';
 import '../public_races_screen.dart';
 import '../race_detail_screen.dart';
+import '../tournament_detail_screen.dart';
 
 // Hard-offset "game piece" shadow shared with the home tab's card language.
 const _raceCardShadow = [
@@ -31,11 +37,17 @@ class RacesTab extends StatefulWidget {
   final Loadable<Map<String, dynamic>>? racesState;
   final List<Map<String, dynamic>> friendsSteps;
   final List<Map<String, dynamic>> featuredRaces;
+  // D13: featured (seeded) tournaments merged into the same featured row.
+  // Defaults to const [] so an older backend / missing key → race-only row.
+  final List<Map<String, dynamic>> featuredTournaments;
   final Future<void> Function() onRacesChanged;
   final Future<void> Function()? onRefresh;
   // Joins a featured (seeded) race; returns true on success. The card shows a
   // confirmation toast and flips to VIEW once the refreshed data comes back.
   final Future<bool> Function(String raceId)? onJoinFeaturedRace;
+  // D13: joins a featured (seeded) tournament; returns true on success, then the
+  // callback opens the lobby. Mirrors [onJoinFeaturedRace].
+  final Future<bool> Function(String tournamentId)? onJoinFeaturedTournament;
   // Number of joinable public races (matches PublicRacesScreen's list). Shown
   // inline in the PUBLIC RACES button label. Defaults to 0 until loaded; the
   // parent keeps the last known value on a fetch error.
@@ -48,6 +60,9 @@ class RacesTab extends StatefulWidget {
   final GlobalKey? tutorialPotKey;
   final GlobalKey? tutorialCardKey;
   final GlobalKey? tutorialBoxKey;
+  // Injected only by tests; production creates its own. Used for the tournament
+  // invite accept/decline calls.
+  final BackendApiService? backendApiService;
 
   const RacesTab({
     super.key,
@@ -56,20 +71,27 @@ class RacesTab extends StatefulWidget {
     this.racesState,
     required this.friendsSteps,
     this.featuredRaces = const [],
+    this.featuredTournaments = const [],
     required this.onRacesChanged,
     this.onRefresh,
     this.onJoinFeaturedRace,
+    this.onJoinFeaturedTournament,
     this.publicRacesCount = 0,
     this.displayName,
     this.onOpenProfile,
     this.tutorialPotKey,
     this.tutorialCardKey,
     this.tutorialBoxKey,
+    this.backendApiService,
   });
 
   @override
   State<RacesTab> createState() => _RacesTabState();
 }
+
+/// D13: the ALL / RACES / TOURNAMENTS list filter below the featured row. The
+/// featured row itself stays visible in every mode.
+enum _ContentFilter { all, races, tournaments }
 
 class _RacesTabState extends State<RacesTab> {
   static const _textShadows = [
@@ -80,6 +102,10 @@ class _RacesTabState extends State<RacesTab> {
   final Set<String> _collapsedSections = {'completed'};
   // Guards against double-pushing RaceDetailScreen from rapid taps.
   bool _navigatingToRace = false;
+  // D13 list filter (featured row is unaffected).
+  _ContentFilter _contentFilter = _ContentFilter.all;
+  // tournamentId being joined from a featured card (shows JOINING… state).
+  String? _joiningFeaturedTournamentId;
 
   // raceId currently being joined from a featured card (shows JOINING… state).
   String? _joiningFeaturedId;
@@ -94,6 +120,19 @@ class _RacesTabState extends State<RacesTab> {
     if (joined) {
       showInfoToast(context, "You're in!");
     }
+  }
+
+  Future<void> _joinFeaturedTournament(String tournamentId) async {
+    final onJoin = widget.onJoinFeaturedTournament;
+    if (onJoin == null ||
+        tournamentId.isEmpty ||
+        _joiningFeaturedTournamentId != null) {
+      return;
+    }
+    setState(() => _joiningFeaturedTournamentId = tournamentId);
+    await onJoin(tournamentId);
+    if (!mounted) return;
+    setState(() => _joiningFeaturedTournamentId = null);
   }
 
   void _toggleSection(String sectionKey) {
@@ -134,6 +173,87 @@ class _RacesTabState extends State<RacesTab> {
 
   List<Map<String, dynamic>> get _completed =>
       (_raceData?['completed'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+
+  BackendApiService? _lazyApi;
+  BackendApiService get _api =>
+      widget.backendApiService ?? (_lazyApi ??= BackendApiService());
+
+  // The additive `tournaments` bucket from GET /races (spec §6.3). Absent on an
+  // older backend → empty, so there's simply no tournaments section. Read every
+  // field defensively via [Tournament].
+  List<Map<String, dynamic>> get _tournaments =>
+      (_raceData?['tournaments'] as List?)
+          ?.whereType<Map>()
+          .map((e) => e.cast<String, dynamic>())
+          .where((t) => Tournament.myStatus(t) != 'DECLINED')
+          .toList() ??
+      const [];
+
+  /// Tournaments I've been invited to but haven't answered (still PENDING).
+  List<Map<String, dynamic>> get _tournamentInvites => _tournaments
+      .where((t) => Tournament.amInvited(t) && Tournament.isPending(t))
+      .toList();
+
+  /// The rest of my brackets (ACCEPTED, or any non-invite state).
+  List<Map<String, dynamic>> get _myTournaments =>
+      _tournaments.where((t) => !Tournament.amInvited(t)).toList();
+
+  bool _navigatingToTournament = false;
+  String? _respondingTournamentId;
+
+  void _navigateToTournamentDetail(String tournamentId) {
+    if (_navigatingToTournament || tournamentId.isEmpty) return;
+    _navigatingToTournament = true;
+    Navigator.of(context)
+        .push<bool>(
+          MaterialPageRoute(
+            builder: (context) => TournamentDetailScreen(
+              authService: widget.authService,
+              tournamentId: tournamentId,
+              friends: widget.friendsSteps,
+            ),
+          ),
+        )
+        .then((_) {
+          _navigatingToTournament = false;
+          if (mounted) widget.onRacesChanged();
+        });
+  }
+
+  Future<void> _respondToTournamentInvite(
+    String tournamentId,
+    bool accept,
+  ) async {
+    if (_respondingTournamentId != null || tournamentId.isEmpty) return;
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) return;
+    setState(() => _respondingTournamentId = tournamentId);
+    try {
+      await _api.respondToTournamentInvite(
+        identityToken: token,
+        tournamentId: tournamentId,
+        accept: accept,
+      );
+      if (mounted) {
+        showInfoToast(
+          context,
+          accept ? "You're in the bracket!" : 'Invite declined.',
+        );
+      }
+      await widget.onRacesChanged();
+    } on ApiException catch (e) {
+      if (mounted) {
+        showErrorToast(
+          context,
+          e.code != null ? tournamentErrorCopy(e.code) : e.message,
+        );
+      }
+    } catch (_) {
+      if (mounted) showErrorToast(context, 'Something went wrong. Try again.');
+    } finally {
+      if (mounted) setState(() => _respondingTournamentId = null);
+    }
+  }
 
   Loadable<Map<String, dynamic>> get _effectiveRacesState {
     final state = widget.racesState;
@@ -252,17 +372,20 @@ class _RacesTabState extends State<RacesTab> {
     final invites = _invites;
     final waiting = _waiting;
     final completed = _completed;
-    final hasRaces =
-        active.isNotEmpty ||
-        invites.isNotEmpty ||
-        waiting.isNotEmpty ||
-        completed.isNotEmpty;
+    final tournaments = _myTournaments;
+    final tournamentInvites = _tournamentInvites;
+
+    // D13 (revised): the pill controls the FEATURED ROW ONLY, so it sits ABOVE
+    // that row and is shown whenever the row has any featured content (races or
+    // seeded tournaments). The user's own races/brackets are never filtered.
+    final hasFeatured = widget.featuredRaces.isNotEmpty ||
+        widget.featuredTournaments.isNotEmpty;
 
     return Column(
       children: [
         _buildRacesHeader(
           activeCount: active.length,
-          inviteCount: invites.length,
+          inviteCount: invites.length + tournamentInvites.length,
           waitingCount: waiting.length,
           potKey: widget.tutorialPotKey,
         ),
@@ -270,18 +393,290 @@ class _RacesTabState extends State<RacesTab> {
           padding: const EdgeInsets.only(bottom: 8),
           child: Column(
             children: [
-              StaggerIn(index: 0, child: _buildFeaturedSection()),
+              if (hasFeatured)
+                StaggerIn(index: 0, child: _buildContentFilterPills()),
+              StaggerIn(index: 1, child: _buildFeaturedSection()),
               _buildRaceListState(
-                hasRaces: hasRaces,
                 invites: invites,
                 waiting: waiting,
                 active: active,
                 completed: completed,
+                tournamentInvites: tournamentInvites,
+                tournaments: tournaments,
               ),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  /// D13 ALL / RACES / TOURNAMENTS segmented control. Selects which FEATURED
+  /// items appear in the row directly below it — the user's own races/brackets
+  /// are never affected.
+  Widget _buildContentFilterPills() {
+    Widget seg(String label, _ContentFilter value, Key key) {
+      final selected = _contentFilter == value;
+      return Expanded(
+        child: GestureDetector(
+          key: key,
+          onTap: () => setState(() => _contentFilter = value),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            curve: Curves.easeOut,
+            padding: const EdgeInsets.symmetric(vertical: 9),
+            decoration: BoxDecoration(
+              gradient: selected
+                  ? const LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [AppColors.pillGold, AppColors.pillGoldDark],
+                    )
+                  : null,
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(
+                color: selected ? AppColors.pillGoldShadow : Colors.transparent,
+                width: 2,
+              ),
+              boxShadow: selected
+                  ? const [
+                      BoxShadow(
+                        color: AppColors.pillGoldShadow,
+                        offset: Offset(0, 2),
+                      ),
+                    ]
+                  : null,
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              label,
+              style: PixelText.title(
+                size: 12,
+                color: selected ? AppColors.textDark : AppColors.parchment,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      // Top gap (divider→pill) = 12; bottom gap = pill(4) + featured-header top(4)
+      // = 8.
+      padding: const EdgeInsets.fromLTRB(10, 12, 10, 4),
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: AppColors.roofDark.withValues(alpha: 0.45),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.roofDark, width: 1.5),
+        ),
+        child: Row(
+          children: [
+            seg('ALL', _ContentFilter.all, const Key('content-filter-all')),
+            const SizedBox(width: 4),
+            seg('RACES', _ContentFilter.races,
+                const Key('content-filter-races')),
+            const SizedBox(width: 4),
+            seg('TOURNAMENTS', _ContentFilter.tournaments,
+                const Key('content-filter-tournaments')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The TOURNAMENTS section — invited brackets (with inline accept/decline)
+  /// first, then my joined/active/completed brackets as summary tickets. Each
+  /// ticket taps into the bracket screen. All fields read defensively (spec §9).
+  Widget _buildTournamentsSection(
+    List<Map<String, dynamic>> invites,
+    List<Map<String, dynamic>> mine,
+  ) {
+    final collapsed = _collapsedSections.contains('tournaments');
+    return Padding(
+      padding: const EdgeInsets.only(left: 10, right: 10, bottom: 8),
+      child: Column(
+        children: [
+          // "MY BRACKETS" (not "TOURNAMENTS") so the section header reads
+          // distinctly from the D13 TOURNAMENTS filter pill above it.
+          _buildSectionHeader(
+            'MY BRACKETS',
+            invites.length + mine.length,
+            'tournaments',
+            collapsed,
+          ),
+          if (!collapsed)
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: AppColors.parchment,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: AppColors.roofDark.withValues(alpha: 0.55),
+                width: 2,
+              ),
+              boxShadow: _raceCardShadow,
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Column(
+                children: [
+                  for (var i = 0; i < invites.length; i++) ...[
+                    if (i > 0) const Divider(height: 1, thickness: 1),
+                    _buildTournamentTicket(invites[i], i, isInvite: true),
+                  ],
+                  for (var i = 0; i < mine.length; i++) ...[
+                    if (invites.isNotEmpty || i > 0)
+                      const Divider(height: 1, thickness: 1),
+                    _buildTournamentTicket(
+                      mine[i],
+                      invites.length + i,
+                      isInvite: false,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTournamentTicket(
+    Map<String, dynamic> t,
+    int index, {
+    required bool isInvite,
+  }) {
+    final id = Tournament.id(t) ?? '';
+    final name = Tournament.name(t);
+    final statusLine = Tournament.ticketStatusLine(t);
+    final winnings = Tournament.championWinnings(t);
+    final elim = Tournament.myEliminatedInRound(t);
+    final isChamp = Tournament.isChampion(t, widget.authService.userId);
+    final stripeColor =
+        index.isOdd ? AppColors.parchmentLight : AppColors.parchment;
+    final responding = _respondingTournamentId == id;
+
+    Color badgeColor;
+    String badgeLabel;
+    if (isInvite) {
+      badgeLabel = 'INVITE';
+      badgeColor = AppColors.pillGoldDark;
+    } else if (isChamp) {
+      badgeLabel = 'CHAMPION';
+      badgeColor = AppColors.pillGold;
+    } else if (elim != null) {
+      badgeLabel = 'OUT';
+      badgeColor = AppColors.textMid;
+    } else if (Tournament.isActive(t)) {
+      badgeLabel = 'ALIVE';
+      badgeColor = AppColors.pillGreenDark;
+    } else if (Tournament.isPending(t)) {
+      badgeLabel = 'LOBBY';
+      badgeColor = AppColors.pillGoldDark;
+    } else {
+      badgeLabel = '';
+      badgeColor = AppColors.textMid;
+    }
+
+    return GestureDetector(
+      onTap: () => _navigateToTournamentDetail(id),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        color: stripeColor,
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: PixelText.title(size: 15, color: AppColors.textDark),
+                  ),
+                ),
+                if (badgeLabel.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: badgeColor,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      badgeLabel,
+                      style: PixelText.title(
+                        size: 9,
+                        color: badgeColor == AppColors.pillGold
+                            ? AppColors.textDark
+                            : AppColors.parchment,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    statusLine,
+                    style: PixelText.body(size: 12, color: AppColors.textMid),
+                  ),
+                ),
+                if (winnings > 0) ...[
+                  Text(
+                    '$winnings',
+                    style: PixelText.body(size: 12, color: AppColors.coinDark),
+                  ),
+                  const SizedBox(width: 4),
+                  const SpinningCoin(size: 13),
+                ],
+              ],
+            ),
+            if (isInvite) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: PillButton(
+                      key: Key('tournament-accept-$id'),
+                      label: responding ? '…' : 'ACCEPT',
+                      variant: PillButtonVariant.primary,
+                      fontSize: 13,
+                      fullWidth: true,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      onPressed: responding
+                          ? null
+                          : () => _respondToTournamentInvite(id, true),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: PillButton(
+                      key: Key('tournament-decline-$id'),
+                      label: 'DECLINE',
+                      variant: PillButtonVariant.accent,
+                      fontSize: 13,
+                      fullWidth: true,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      onPressed: responding
+                          ? null
+                          : () => _respondToTournamentInvite(id, false),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -301,7 +696,7 @@ class _RacesTabState extends State<RacesTab> {
         child: KeyedSubtree(
           key: potKey,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 15, 16, 14),
+            padding: const EdgeInsets.fromLTRB(16, 15, 16, 8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -370,24 +765,40 @@ class _RacesTabState extends State<RacesTab> {
     );
   }
 
-  // Pinned "Featured" strip — the live seeded daily/weekly races. Always shown
-  // (even with no personal races) as a discovery hook. Hidden only when the
-  // backend returns nothing (e.g. older backend, or the brief gap between a
-  // race ending and the next being seeded).
+  // Pinned "Featured" strip — the live seeded daily/weekly races + seeded
+  // tournaments. Always shown (even with no personal races) as a discovery
+  // hook. Hidden only when the backend returns nothing at all. D13 (revised):
+  // the ALL/RACES/TOURNAMENTS pill above selects which featured items appear —
+  // ALL shows both, RACES only featured races, TOURNAMENTS only seeded brackets;
+  // an empty selection shows a small note so the pill state always reads clearly.
   Widget _buildFeaturedSection() {
     final featured = widget.featuredRaces;
-    if (featured.isEmpty) return const SizedBox.shrink();
+    final featuredTournaments = widget.featuredTournaments;
+    // Hidden only when BOTH are empty (older backend, or the seeding gap).
+    if (featured.isEmpty && featuredTournaments.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
-    // Flatten to a card list: each live seeded race, immediately followed by its
-    // pre-registerable "next" race (when present) so the opt-in card sits right
-    // next to the live one.
+    final showRaces = _contentFilter != _ContentFilter.tournaments;
+    final showTournaments = _contentFilter != _ContentFilter.races;
+
+    // Flatten to a card list per the pill. Featured tournaments lead (novel +
+    // time-boxed), then each live seeded race followed by its pre-registerable
+    // "next" race.
     final cards = <Widget>[];
-    for (final race in featured) {
-      cards.add(_buildFeaturedCard(race));
-      final upcoming = race['upcoming'] as Map<String, dynamic>?;
-      final upcomingId = upcoming?['raceId'] as String?;
-      if (upcoming != null && upcomingId != null && upcomingId.isNotEmpty) {
-        cards.add(_buildUpcomingCard(race, upcoming));
+    if (showTournaments) {
+      for (final t in featuredTournaments) {
+        cards.add(_buildFeaturedTournamentCard(t));
+      }
+    }
+    if (showRaces) {
+      for (final race in featured) {
+        cards.add(_buildFeaturedCard(race));
+        final upcoming = race['upcoming'] as Map<String, dynamic>?;
+        final upcomingId = upcoming?['raceId'] as String?;
+        if (upcoming != null && upcomingId != null && upcomingId.isNotEmpty) {
+          cards.add(_buildUpcomingCard(race, upcoming));
+        }
       }
     }
 
@@ -395,7 +806,7 @@ class _RacesTabState extends State<RacesTab> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(10, 14, 10, 9),
+          padding: const EdgeInsets.fromLTRB(10, 4, 10, 9),
           child: Row(
             children: [
               const WobbleBadge(
@@ -428,19 +839,44 @@ class _RacesTabState extends State<RacesTab> {
             ],
           ),
         ),
-        SizedBox(
-          height: 232,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            physics: const BouncingScrollPhysics(),
-            itemCount: cards.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 10),
-            itemBuilder: (context, i) => cards[i],
+        if (cards.isEmpty)
+          _buildFeaturedEmptyNote()
+        else
+          SizedBox(
+            height: 232,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              physics: const BouncingScrollPhysics(),
+              itemCount: cards.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 10),
+              itemBuilder: (context, i) => cards[i],
+            ),
           ),
-        ),
         const SizedBox(height: 4),
       ],
+    );
+  }
+
+  /// Small in-row note when the selected featured filter has no items, so the
+  /// pill state always reads clearly instead of leaving a blank strip.
+  Widget _buildFeaturedEmptyNote() {
+    final message = _contentFilter == _ContentFilter.tournaments
+        ? 'No featured tournaments right now'
+        : 'No featured races right now';
+    return Container(
+      key: const Key('featured-empty-note'),
+      height: 64,
+      alignment: Alignment.center,
+      margin: const EdgeInsets.symmetric(horizontal: 10),
+      child: Text(
+        message,
+        textAlign: TextAlign.center,
+        style: PixelText.body(
+          size: 13,
+          color: AppColors.parchment.withValues(alpha: 0.9),
+        ),
+      ),
     );
   }
 
@@ -505,12 +941,67 @@ class _RacesTabState extends State<RacesTab> {
     );
   }
 
+  /// D13 featured-row card for a seeded tournament. Same width/visual language
+  /// as [FeaturedRaceCard] (leads with a badge, name, key stats, one-tap CTA)
+  /// but wired to the tournament join/view flow. D12: JOIN is
+  /// pre-disabled while I'm still alive in another same-seed bracket.
+  Widget _buildFeaturedTournamentCard(Map<String, dynamic> t) {
+    final id = Tournament.id(t) ?? '';
+    final joined = Tournament.amIn(t);
+    final full = Tournament.isFull(t);
+    final aliveElsewhere = !joined &&
+        Tournament.aliveInSeed(_myTournaments, Tournament.seedKind(t));
+    final isJoining = _joiningFeaturedTournamentId == id;
+
+    final String label;
+    final PillButtonVariant variant;
+    final VoidCallback? onPressed;
+    var glow = false;
+    if (joined) {
+      label = 'VIEW';
+      variant = PillButtonVariant.secondary;
+      onPressed = () => _navigateToTournamentDetail(id);
+    } else if (aliveElsewhere) {
+      label = 'IN A BRACKET';
+      variant = PillButtonVariant.secondary;
+      onPressed = null;
+    } else if (full) {
+      label = 'FULL';
+      variant = PillButtonVariant.secondary;
+      onPressed = null;
+    } else {
+      label = isJoining ? 'JOINING…' : 'JOIN';
+      variant = PillButtonVariant.primary;
+      glow = !isJoining;
+      onPressed = isJoining ? null : () => _joinFeaturedTournament(id);
+    }
+
+    return TournamentGameCard(
+      width: 250,
+      name: Tournament.name(t),
+      metaLine: '${Tournament.sizeSubcopy(Tournament.bracketSize(t))} · '
+          '${Tournament.durationSubcopy(Tournament.matchupDurationDays(t))}',
+      filledLabel:
+          '${Tournament.acceptedCount(t)}/${Tournament.bracketSize(t)} IN',
+      prizeLabel: 'CHAMPION WINS',
+      prizeValue: Tournament.championPrizeCoins(t),
+      ctaKey: Key('featured-tournament-join-$id'),
+      ctaLabel: label,
+      ctaVariant: variant,
+      ctaGlow: glow,
+      onPressed: onPressed,
+    );
+  }
+
+  // D13 (revised): the user's OWN races and brackets are never filtered by the
+  // featured pill — always render every section that has content.
   Widget _buildRaceListState({
-    required bool hasRaces,
     required List<Map<String, dynamic>> invites,
     required List<Map<String, dynamic>> waiting,
     required List<Map<String, dynamic>> active,
     required List<Map<String, dynamic>> completed,
+    required List<Map<String, dynamic>> tournamentInvites,
+    required List<Map<String, dynamic>> tournaments,
   }) {
     final state = _effectiveRacesState;
     if (state.shouldShowInitialLoading) {
@@ -538,7 +1029,13 @@ class _RacesTabState extends State<RacesTab> {
       );
     }
 
-    if (!hasRaces) return _buildEmptyState();
+    final anyRaces = invites.isNotEmpty ||
+        waiting.isNotEmpty ||
+        active.isNotEmpty ||
+        completed.isNotEmpty;
+    final anyTournaments =
+        tournamentInvites.isNotEmpty || tournaments.isNotEmpty;
+    if (!anyRaces && !anyTournaments) return _buildEmptyState();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -551,6 +1048,11 @@ class _RacesTabState extends State<RacesTab> {
               color: AppColors.accent,
               backgroundColor: Colors.transparent,
             ),
+          ),
+        if (anyTournaments)
+          StaggerIn(
+            index: 0,
+            child: _buildTournamentsSection(tournamentInvites, tournaments),
           ),
         if (invites.isNotEmpty)
           StaggerIn(

@@ -69,6 +69,8 @@ class AuthService extends ChangeNotifier {
   static const _keyBannerAdsEnabled = 'auth_banner_ads_enabled';
   static const _keyTeamRacesEnabled = 'auth_team_races_enabled';
   static const _keyPendingShareToken = 'auth_pending_share_token';
+  static const _keyPendingTournamentShareToken =
+      'auth_pending_tournament_share_token';
   static const _keyPendingInviterRace = 'auth_pending_inviter_race';
   static const _keyPendingReferralCode = 'auth_pending_referral_code';
   static const _keyPendingReferralCapturedAt =
@@ -102,6 +104,7 @@ class AuthService extends ChangeNotifier {
   bool _bannerAdsEnabled = false;
   bool _teamRacesEnabled = true;
   String? _pendingShareToken;
+  String? _pendingTournamentShareToken;
   Map<String, String>? _pendingInviterRace;
   String? _pendingReferralCode;
   int? _pendingReferralCapturedAtMs;
@@ -140,6 +143,12 @@ class AuthService extends ChangeNotifier {
   /// and the token is drained once they land in the app. See DeepLinkService
   /// and MainShell's drain logic.
   String? get pendingShareToken => _pendingShareToken;
+
+  /// A tournament share token captured from a `/t/<token>` deep link that has
+  /// not yet been consumed (joined). Parallels [pendingShareToken] but rides a
+  /// separate slot so a race link and a tournament link never clobber each
+  /// other. Drained by MainShell once signed-in and onboarded.
+  String? get pendingTournamentShareToken => _pendingTournamentShareToken;
 
   /// A referral code captured from a deep link / install referrer / clipboard
   /// that hasn't been attributed yet. Returns null once older than
@@ -191,6 +200,9 @@ class AuthService extends ChangeNotifier {
     AdService.remoteBannersEnabled = _bannerAdsEnabled;
     _teamRacesEnabled = prefs.getBool(_keyTeamRacesEnabled) ?? true;
     _pendingShareToken = prefs.getString(_keyPendingShareToken);
+    _pendingTournamentShareToken = prefs.getString(
+      _keyPendingTournamentShareToken,
+    );
     final rawInviterRace = prefs.getString(_keyPendingInviterRace);
     if (rawInviterRace != null) {
       try {
@@ -564,6 +576,7 @@ class AuthService extends ChangeNotifier {
     _hiddenFromLeaderboard = false;
     _autoJoinFeaturedRaces = false;
     _pendingShareToken = null;
+    _pendingTournamentShareToken = null;
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyIdentityToken);
@@ -581,6 +594,7 @@ class AuthService extends ChangeNotifier {
     await prefs.remove(_keyAutoJoinFeaturedRaces);
     await prefs.remove(_keyBannerAdsEnabled);
     await prefs.remove(_keyPendingShareToken);
+    await prefs.remove(_keyPendingTournamentShareToken);
     _pendingInviterRace = null;
     await prefs.remove(_keyPendingInviterRace);
     notifyListeners();
@@ -599,6 +613,20 @@ class AuthService extends ChangeNotifier {
     } else {
       _pendingShareToken = null;
       await prefs.remove(_keyPendingShareToken);
+    }
+    notifyListeners();
+  }
+
+  /// Records (or clears) a tournament share token from a `/t/<token>` deep link,
+  /// to be joined once signed-in and onboarded. Parallels [setPendingShareToken].
+  Future<void> setPendingTournamentShareToken(String? token) async {
+    _pendingTournamentShareToken = token;
+    final prefs = await SharedPreferences.getInstance();
+    if (token != null && token.isNotEmpty) {
+      await prefs.setString(_keyPendingTournamentShareToken, token);
+    } else {
+      _pendingTournamentShareToken = null;
+      await prefs.remove(_keyPendingTournamentShareToken);
     }
     notifyListeners();
   }

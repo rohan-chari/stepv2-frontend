@@ -32,7 +32,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   }
 }
 
-enum NotificationRoute { home, friends, raceDetail, races }
+enum NotificationRoute { home, friends, raceDetail, races, tournamentDetail }
 
 class NotificationAction {
   final NotificationRoute route;
@@ -251,8 +251,6 @@ class NotificationService {
 
   void _onNotificationTap(Map<String, dynamic> payload) {
     final type = payload['type'] as String?;
-    final route = routeFromType(type);
-    if (route == null) return;
 
     final nested = payload['params'] is Map
         ? Map<String, dynamic>.from(payload['params'] as Map)
@@ -261,6 +259,14 @@ class NotificationService {
     if (nested['raceId'] is String) {
       params['raceId'] = nested['raceId'] as String;
     }
+    // Tournament pushes carry `tournamentId`; read defensively (older apps that
+    // don't know the type fall through to a null route and just ignore it).
+    if (nested['tournamentId'] is String) {
+      params['tournamentId'] = nested['tournamentId'] as String;
+    }
+
+    final route = resolveRoute(type, params);
+    if (route == null) return;
 
     pendingAction.value = NotificationAction(route: route, params: params);
   }
@@ -270,24 +276,46 @@ class NotificationService {
   /// object (see backend G2). Reuses the same [_routeFromType] map.
   void _onNotificationTapFromData(Map<String, dynamic> data) {
     final type = data['type'] as String?;
-    final route = routeFromType(type);
-    if (route == null) return;
 
     final params = <String, String>{};
     if (data['raceId'] is String) {
       params['raceId'] = data['raceId'] as String;
     }
+    if (data['tournamentId'] is String) {
+      params['tournamentId'] = data['tournamentId'] as String;
+    }
     final rawParams = data['params'];
     if (rawParams is String && rawParams.isNotEmpty) {
       try {
         final decoded = jsonDecode(rawParams);
-        if (decoded is Map && decoded['raceId'] is String) {
-          params['raceId'] = decoded['raceId'] as String;
+        if (decoded is Map) {
+          if (decoded['raceId'] is String) {
+            params['raceId'] = decoded['raceId'] as String;
+          }
+          if (decoded['tournamentId'] is String) {
+            params['tournamentId'] = decoded['tournamentId'] as String;
+          }
         }
       } catch (_) {}
     }
 
+    final route = resolveRoute(type, params);
+    if (route == null) return;
+
     pendingAction.value = NotificationAction(route: route, params: params);
+  }
+
+  /// Resolves the final route for a push, given its already-extracted [params].
+  /// Most types map straight through [routeFromType]; the tournament round/start
+  /// pushes deep-link to the specific matchup race when one is carried
+  /// (`raceId` present) and otherwise fall back to the bracket. Public for tests.
+  @visibleForTesting
+  NotificationRoute? resolveRoute(String? type, Map<String, String> params) {
+    if ((type == 'TOURNAMENT_STARTED' || type == 'TOURNAMENT_ROUND_STARTED') &&
+        params.containsKey('raceId')) {
+      return NotificationRoute.raceDetail;
+    }
+    return routeFromType(type);
   }
 
   /// Maps a push `type` to an in-app deep-link route. Public for tests.
@@ -314,6 +342,20 @@ class NotificationService {
       // because the teams are uneven (TR-304) — opens the lobby to fix it.
       case 'TEAM_RACE_SCHEDULED_UNEVEN':
         return NotificationRoute.raceDetail;
+      // Tournament pushes (spec §8). All land on the bracket by default;
+      // TOURNAMENT_STARTED / TOURNAMENT_ROUND_STARTED are re-pointed at the
+      // player's specific matchup race in [resolveRoute] when a raceId rides
+      // the params. Additive types — older apps fall through to null and just
+      // show the alert without deep-link routing (the #1 rule).
+      case 'TOURNAMENT_INVITE_SENT':
+      case 'TOURNAMENT_STARTED':
+      case 'TOURNAMENT_ROUND_STARTED':
+      case 'TOURNAMENT_MATCHUP_WON':
+      case 'TOURNAMENT_ELIMINATED':
+      case 'TOURNAMENT_CHAMPION':
+      case 'TOURNAMENT_COMPLETED':
+      case 'TOURNAMENT_CANCELLED':
+        return NotificationRoute.tournamentDetail;
       case 'RACE_CANCELLED':
         return NotificationRoute.races;
       case 'FRIEND_REQUEST_SENT':

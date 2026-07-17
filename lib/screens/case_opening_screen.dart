@@ -46,7 +46,7 @@ const _powerupEntries = [
   (
     type: 'RED_CARD',
     name: 'Red Card',
-    description: 'Remove 10% of the leader\'s steps',
+    description: 'Remove 5% of the leader\'s steps',
   ),
   (
     type: 'SHORTCUT',

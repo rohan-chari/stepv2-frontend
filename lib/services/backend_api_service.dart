@@ -86,9 +86,13 @@ class BackendApiService {
   // `team_races` tells the backend this build can render team races (H2H banner,
   // team-grouped planks, team-aware join). Old binaries omit it, so the backend
   // filters team races out of their lists and rejects their team joins (TR-701).
+  // `tournaments` tells the backend this build can render bracket tournaments
+  // (lobby/bracket/champion screens, matchup races). Old binaries omit it, so
+  // the backend keeps `/races` byte-identical for them, hides matchup races from
+  // every listing, and rejects their tournament create/join (spec §4).
   static final String clientFeaturesHeader = _adsSupported
-      ? 'characters,ads,jammer,spinpowerups,team_races'
-      : 'characters,jammer,spinpowerups,team_races';
+      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments'
+      : 'characters,jammer,spinpowerups,team_races,tournaments';
   final HttpClient _httpClient;
   String? _cachedTimeZone;
   String? _cachedReleaseChannel;
@@ -1122,6 +1126,257 @@ class BackendApiService {
     final response = await _sendJsonRequest(
       method: 'POST',
       path: '/races/$raceId/share-link',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  // ---- Tournaments (spec §6) ----------------------------------------------
+  // Single-elimination bracket layer over the existing race engine. All new
+  // endpoints; the `tournaments` X-Client-Features token gates them. Each method
+  // is a small sibling of the race methods above — existing race methods stay
+  // byte-identical (the createTeamRace precedent). Callers read every response
+  // field defensively via lib/utils/tournament.dart (#1 rule: backend may be a
+  // different version than this build).
+
+  /// Creates a tournament (§6.1). `buyInAmount` 0 (free) or 10..max per the D4
+  /// ladder; the caller validates against [kTournamentBuyInMax] first. Returns
+  /// `{tournament: {...}}`.
+  Future<Map<String, dynamic>> createTournament({
+    required String identityToken,
+    required String name,
+    required int bracketSize,
+    required int matchupDurationDays,
+    int buyInAmount = 0,
+    bool powerupsEnabled = false,
+    int? powerupStepInterval,
+    bool isPublic = false,
+    List<String> inviteeIds = const [],
+  }) async {
+    final body = <String, dynamic>{
+      'name': name,
+      'bracketSize': bracketSize,
+      'matchupDurationDays': matchupDurationDays,
+      'buyInAmount': buyInAmount,
+      'isPublic': isPublic,
+    };
+    if (powerupsEnabled) {
+      body['powerupsEnabled'] = true;
+      body['powerupStepInterval'] = powerupStepInterval;
+    }
+    if (inviteeIds.isNotEmpty) {
+      body['inviteeIds'] = inviteeIds;
+    }
+
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/tournaments',
+      body: body,
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  /// Full bracket payload for one tournament (§6.4). Returns `{tournament: {...}}`.
+  Future<Map<String, dynamic>> fetchTournament({
+    required String identityToken,
+    required String tournamentId,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/tournaments/$tournamentId',
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  /// Browsable public + featured tournaments (§6.3/§6.10). Returns
+  /// `{featured: [...], tournaments: [...]}`; both keys default to `[]` on an
+  /// older backend so the public screen simply shows no tournament section.
+  Future<Map<String, dynamic>> fetchPublicTournaments({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/tournaments/public',
+      identityToken: identityToken,
+    );
+    final decoded = await _decodeJsonResponse(response);
+    return {
+      'featured': (decoded['featured'] as List? ?? const [])
+          .whereType<Map>()
+          .map((e) => e.cast<String, dynamic>())
+          .toList(growable: false),
+      'tournaments': (decoded['tournaments'] as List? ?? const [])
+          .whereType<Map>()
+          .map((e) => e.cast<String, dynamic>())
+          .toList(growable: false),
+    };
+  }
+
+  /// Public join of an open bracket (§6.2). Returns the full tournament payload.
+  Future<Map<String, dynamic>> joinTournament({
+    required String identityToken,
+    required String tournamentId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/tournaments/$tournamentId/join',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  /// Share-link join (§6.2) — possession of the token IS the invite (bypasses
+  /// `isPublic`). Returns the full tournament payload.
+  Future<Map<String, dynamic>> joinTournamentByShareToken({
+    required String identityToken,
+    required String token,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/tournaments/share/$token/join',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  /// Unauthed preview of a shared tournament (§6.2), for the pre-join screen.
+  /// Returns the `tournament` preview map (name/bracketSize/filled/buyIn), or an
+  /// empty map on 404 / older backend so callers default safely.
+  Future<Map<String, dynamic>> fetchSharedTournament({
+    required String token,
+    String? identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/tournaments/share/$token',
+      identityToken: identityToken,
+    );
+    final body = await _decodeJsonResponse(response);
+    final tournament = body['tournament'];
+    return tournament is Map<String, dynamic>
+        ? tournament
+        : <String, dynamic>{};
+  }
+
+  /// Accept/decline a tournament invite (§6.2). Accept holds the buy-in.
+  Future<Map<String, dynamic>> respondToTournamentInvite({
+    required String identityToken,
+    required String tournamentId,
+    required bool accept,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'PUT',
+      path: '/tournaments/$tournamentId/respond',
+      body: {'accept': accept},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  /// Creator-only post-create invites (§6.2). Returns
+  /// `{invited: [...], needsUpdate: [...]}` (plus the tournament payload) so the
+  /// lobby can explain skipped old-client friends.
+  Future<Map<String, dynamic>> inviteToTournament({
+    required String identityToken,
+    required String tournamentId,
+    required List<String> userIds,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/tournaments/$tournamentId/invite',
+      body: {'userIds': userIds},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  /// Leave a PENDING lobby (§6.2) — refunds the held buy-in; creator must
+  /// cancel instead.
+  Future<Map<String, dynamic>> leaveTournament({
+    required String identityToken,
+    required String tournamentId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/tournaments/$tournamentId/leave',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  /// Creator-only kick from a PENDING lobby (§6.2) — soft-removes + refunds.
+  Future<Map<String, dynamic>> kickTournamentParticipant({
+    required String identityToken,
+    required String tournamentId,
+    required String userId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/tournaments/$tournamentId/kick',
+      body: {'userId': userId},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  /// Creator-only manual start (§6.5) — allowed only when the bracket is full.
+  Future<Map<String, dynamic>> startTournament({
+    required String identityToken,
+    required String tournamentId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/tournaments/$tournamentId/start',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  /// Forfeit my live matchup (§6.7) — opponent advances, no refund. Returns the
+  /// updated tournament payload.
+  Future<Map<String, dynamic>> forfeitTournament({
+    required String identityToken,
+    required String tournamentId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/tournaments/$tournamentId/forfeit',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  /// Creator-only cancel of a PENDING bracket (§6.8) — refunds every held
+  /// buy-in.
+  Future<void> cancelTournament({
+    required String identityToken,
+    required String tournamentId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'DELETE',
+      path: '/tournaments/$tournamentId',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+    await _decodeJsonResponse(response);
+  }
+
+  /// Mints (or returns) the shareable link for a tournament. Returns the backend
+  /// payload `{shareToken, url}`; share the `url`. Mirrors [createRaceShareLink].
+  Future<Map<String, dynamic>> createTournamentShareLink({
+    required String identityToken,
+    required String tournamentId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/tournaments/$tournamentId/share-link',
       body: const <String, dynamic>{},
       identityToken: identityToken,
     );

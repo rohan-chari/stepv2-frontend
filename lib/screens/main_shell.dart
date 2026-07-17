@@ -18,6 +18,7 @@ import '../services/health_service.dart';
 import '../services/notification_service.dart';
 import '../services/review_prompt_service.dart';
 import '../utils/team_race.dart';
+import '../utils/tournament.dart';
 import '../widgets/ad_banner_slot.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
@@ -37,6 +38,7 @@ import 'tabs/leaderboard_tab.dart';
 import 'tabs/profile_tab.dart';
 import 'create_race_screen.dart';
 import 'race_detail_screen.dart';
+import 'tournament_detail_screen.dart';
 import 'tabs/races_tab.dart';
 import 'tabs/shop_tab.dart';
 
@@ -99,6 +101,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   Loadable<Map<String, dynamic>> _racesState = const Loadable.initial();
   // Live seeded daily/weekly races for the Featured strip on the Races tab.
   List<Map<String, dynamic>> _featuredRaces = const [];
+  // D13: featured (seeded) tournaments merged into the races-tab featured row.
+  // Best-effort — an older backend / missing `featured` key → empty, so the row
+  // simply shows only featured races (no crash, the #1 rule).
+  List<Map<String, dynamic>> _featuredTournaments = const [];
   // Count of joinable public races, surfaced inline on the Races tab's PUBLIC
   // RACES button. Defaults to 0; on a fetch error we keep the last known value.
   int _publicRacesCount = 0;
@@ -123,6 +129,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   Future<void>? _homeRefreshInFlight;
   // Guards against double-pushing RaceDetailScreen from rapid taps.
   bool _openingRaceDetail = false;
+  bool _openingTournament = false;
+  bool _drainingTournament = false;
   // Races whose results popup we've already surfaced this session, so a race
   // finishing mid-session (or a re-fetch) doesn't re-interrupt. The server ack
   // (markRaceResultsSeen) is the durable source of truth across sessions.
@@ -154,6 +162,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     // the final onboarding step may have just completed — either way, try to
     // drain. Idempotent: no-ops when there's no token or onboarding isn't done.
     _maybeDrainPendingSharedRace();
+    _maybeDrainPendingSharedTournament();
     _maybeCaptureInviterRace();
     _maybeOfferInviterRace();
   }
@@ -221,6 +230,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         break;
       case NotificationRoute.home:
         _pageController.jumpToPage(_homeTabIndex);
+        break;
+      case NotificationRoute.tournamentDetail:
+        final tournamentId = action.params['tournamentId'];
+        if (tournamentId != null && tournamentId.isNotEmpty) {
+          _openTournament(tournamentId);
+        }
         break;
     }
   }
@@ -329,6 +344,64 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     if (raceId != null) {
       _fetchRaces();
       _openRaceFromCard(raceId);
+    } else if (errorMessage != null) {
+      showErrorToast(context, errorMessage);
+    }
+  }
+
+  /// The tournament analog of [_maybeDrainPendingSharedRace] — joins the bracket
+  /// behind a `/t/<token>` share link (captured by [DeepLinkService]) once past
+  /// onboarding, then opens it. Runs on its own guard so it can't collide with
+  /// the race-share drain. Best-effort: any failure consumes the token (it's
+  /// re-tappable) rather than looping, and maps tournament error codes.
+  Future<void> _maybeDrainPendingSharedTournament() async {
+    if (_drainingTournament) return;
+    final token = widget.authService.pendingTournamentShareToken;
+    if (token == null || token.isEmpty) return;
+
+    final isOnboarding =
+        !_healthAuthorized ||
+        _notificationsState == null ||
+        !widget.authService.firstRaceOnboardingSeen;
+    if (isOnboarding) return;
+
+    final identityToken = widget.authService.authToken;
+    if (identityToken == null || identityToken.isEmpty) return;
+
+    _drainingTournament = true;
+    String? tournamentId;
+    String? errorMessage;
+    try {
+      final result = await _backendApiService.joinTournamentByShareToken(
+        identityToken: identityToken,
+        token: token,
+      );
+      final t = result['tournament'];
+      tournamentId = t is Map ? t['id'] as String? : null;
+    } on ApiException catch (e) {
+      // Already a member / full / started: still try to land them on the
+      // bracket by resolving its id from the share preview.
+      try {
+        final preview = await _backendApiService.fetchSharedTournament(
+          token: token,
+          identityToken: identityToken,
+        );
+        tournamentId = preview['id'] as String?;
+      } catch (_) {}
+      if (tournamentId == null) {
+        errorMessage = e.code != null ? tournamentErrorCopy(e.code) : e.message;
+      }
+    } catch (_) {
+      // Network/transient: drop the token (re-tappable) rather than loop.
+    } finally {
+      await widget.authService.setPendingTournamentShareToken(null);
+      _drainingTournament = false;
+    }
+
+    if (!mounted) return;
+    if (tournamentId != null) {
+      _fetchRaces();
+      _openTournament(tournamentId);
     } else if (errorMessage != null) {
       showErrorToast(context, errorMessage);
     }
@@ -764,6 +837,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       // never disrupts the races load above.
       await _fetchFeaturedRaces();
       await _fetchPublicRaces();
+      // Fire-and-forget so the featured-tournaments fetch never delays the
+      // races list or the public-races count (D13).
+      unawaited(_fetchFeaturedTournaments());
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -814,6 +890,25 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     } catch (_) {
       // Featured is a non-critical discovery surface; on error keep the last
       // known list rather than disturbing the races page.
+    }
+  }
+
+  /// D13: pulls featured (seeded) tournaments for the merged featured row. Kept
+  /// SEPARATE from [_fetchFeaturedRaces] and invoked fire-and-forget so it never
+  /// serializes ahead of the public-races count fetch. Best-effort: an older
+  /// backend / missing `featured` key keeps the last known list.
+  Future<void> _fetchFeaturedTournaments() async {
+    final identityToken = widget.authService.authToken;
+    if (identityToken == null || identityToken.isEmpty) return;
+    try {
+      final res = await _backendApiService.fetchPublicTournaments(
+        identityToken: identityToken,
+      );
+      final featured =
+          (res['featured'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+      if (mounted) setState(() => _featuredTournaments = featured);
+    } catch (_) {
+      // Older backend / missing key → keep the last known list (usually empty).
     }
   }
 
@@ -1001,6 +1096,35 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
   }
 
+  /// D13 join-featured-tournament callback (mirrors [_joinFeaturedRace]): joins
+  /// the free featured bracket, refreshes, then opens its lobby. Maps tournament
+  /// error codes (e.g. ALREADY_IN_FEATURED → the D12 copy).
+  Future<bool> _joinFeaturedTournament(String tournamentId) async {
+    final identityToken = widget.authService.authToken;
+    if (identityToken == null || identityToken.isEmpty) return false;
+    try {
+      await _backendApiService.joinTournament(
+        identityToken: identityToken,
+        tournamentId: tournamentId,
+      );
+      await _fetchRaces();
+      await _fetchFeaturedTournaments();
+      if (mounted) _openTournament(tournamentId);
+      return true;
+    } on ApiException catch (e) {
+      if (mounted) {
+        showErrorToast(
+          context,
+          e.code != null ? tournamentErrorCopy(e.code) : e.message,
+        );
+      }
+      return false;
+    } catch (e) {
+      if (mounted) showErrorToast(context, 'Could not join: $e');
+      return false;
+    }
+  }
+
   Future<void> _fetchShopCatalog() async {
     final previous = _shopCatalogState.data;
     if (mounted) {
@@ -1145,6 +1269,27 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           ),
         )
         .whenComplete(() => _openingRaceDetail = false);
+  }
+
+  /// Opens a tournament bracket screen (from a push tap or a share-link drain),
+  /// guarding against rapid double-pushes like [_openRaceFromCard].
+  void _openTournament(String tournamentId) {
+    if (_openingTournament) return;
+    _openingTournament = true;
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => TournamentDetailScreen(
+              authService: widget.authService,
+              tournamentId: tournamentId,
+              friends: _friendsSteps,
+            ),
+          ),
+        )
+        .whenComplete(() {
+          _openingTournament = false;
+          if (mounted) _fetchRaces();
+        });
   }
 
   Future<void> _joinRaceFromCard(String raceId) async {
@@ -1677,9 +1822,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     racesState: _racesState,
                     friendsSteps: _friendsSteps,
                     featuredRaces: _featuredRaces,
+                    featuredTournaments: _featuredTournaments,
                     onRacesChanged: _fetchRaces,
                     onRefresh: _refreshRacesTab,
                     onJoinFeaturedRace: _joinFeaturedRace,
+                    onJoinFeaturedTournament: _joinFeaturedTournament,
                     publicRacesCount: _publicRacesCount,
                     displayName: _displayName,
                     onOpenProfile: _openProfile,

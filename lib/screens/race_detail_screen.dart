@@ -46,6 +46,7 @@ import '../widgets/feed_bubble.dart';
 import '../widgets/player_avatar.dart';
 import 'case_opening_screen.dart';
 import 'edit_race_screen.dart';
+import 'tournament_detail_screen.dart';
 import 'race_invite_screen.dart';
 
 class RaceDetailScreen extends StatefulWidget {
@@ -101,7 +102,7 @@ const _powerupNames = {
 
 const _powerupDescriptions = {
   'LEG_CRAMP': 'Freeze a rival\'s steps for 2 hours',
-  'RED_CARD': 'Remove 10% of the leader\'s steps',
+  'RED_CARD': 'Remove 5% of the leader\'s steps',
   'SHORTCUT': 'Steal 1,000 steps from a rival',
   'COMPRESSION_SOCKS': 'Shield against the next attack',
   'PROTEIN_SHAKE': '+1,500 bonus steps instantly',
@@ -2081,7 +2082,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                             ),
                           ),
                         ),
+                      // A matchup race (tournamentId set) is owned by the
+                      // tournament engine — edit/cancel are locked server-side
+                      // (TOURNAMENT_RACE_LOCKED), so hide the options entry
+                      // entirely (spec §6.5/§9).
                       if (_race != null &&
+                          _race!['tournamentId'] == null &&
                           (_race!['isCreator'] as bool? ?? false) &&
                           (_race!['status'] == 'PENDING' ||
                               _race!['status'] == 'ACTIVE'))
@@ -3148,6 +3154,24 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             ),
           ),
 
+        // TOURNAMENT MATCHUP banner — a tappable link back to the bracket,
+        // shown only when this race is a tournament matchup (additive fields,
+        // absent on non-matchup / older responses; read defensively, spec §9).
+        if (_buildTournamentBanner() case final banner?)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: banner,
+          ),
+
+        // SPECTATING indicator — shown when the viewer isn't one of the race's
+        // racers (e.g. a tournament participant watching another matchup). The
+        // race renders read-only; this makes that explicit.
+        if (_isSpectator)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: _buildSpectatorBanner(),
+          ),
+
         // GLOBAL STEP EVENT — "2x STEPS" banner with a countdown, shown only
         // while an event window is active. Absent for old responses.
         if (_buildGlobalEventBanner() case final banner?)
@@ -3241,7 +3265,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         ),
         const SizedBox(height: 18),
 
-        // POWERUPS — slots, stash, and active effects on one card.
+        // POWERUPS — slots, stash, and active effects on one card. Hidden for
+        // a spectator (they hold no powerups and can take no actions here).
+        if (!_isSpectator)
         StaggerIn(
           index: 1,
           child: Column(
@@ -3293,8 +3319,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
         // TR-601: mid-race forfeit — team races only, and only while you're
         // still in play. Deliberately last and low-key: it's a destructive,
-        // permanent exit, not a headline action.
-        if (isTeamRace && !_iHaveForfeited(participants)) ...[
+        // permanent exit, not a headline action. Hidden entirely for a
+        // tournament matchup — the bracket screen owns forfeit there, and the
+        // race-level path is locked server-side (spec §6.5/§6.7).
+        if (isTeamRace &&
+            !_isSpectator &&
+            _race?['tournamentId'] == null &&
+            !_iHaveForfeited(participants)) ...[
           const SizedBox(height: 18),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -3328,6 +3359,116 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   // "2x STEPS — ends in mm:ss" banner for an active global step-multiplier
   // event. Returns null when there is no active event (or the response omitted
   // the field, e.g. an older backend), or once the countdown has elapsed.
+  /// Tappable banner linking a tournament matchup race back to its bracket.
+  /// Reads the additive `tournamentId` / `tournamentRoundLabel` / `tournamentName`
+  /// fields defensively — absent on non-matchup or older responses → no banner
+  /// (spec §6.3/§9). Null-safe throughout: a missing label degrades to a plain
+  /// "TOURNAMENT MATCHUP" line rather than crashing.
+  /// True when the signed-in viewer is NOT one of this race's racers — i.e.
+  /// they're spectating (a tournament participant watching another matchup, per
+  /// the relaxed race-view auth). Read defensively: only true once participants
+  /// are loaded and the viewer isn't among them, so a mid-load frame never
+  /// flashes "spectating".
+  bool get _isSpectator {
+    final race = _race;
+    if (race == null) return false;
+    final participants =
+        (race['participants'] as List?)?.whereType<Map>().toList();
+    if (participants == null || participants.isEmpty) return false;
+    return !participants.any((p) => p['userId'] == _myUserId);
+  }
+
+  Widget _buildSpectatorBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: AppColors.woodDark,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.roofEdge, width: 2),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.visibility_rounded,
+              size: 16, color: Colors.white.withValues(alpha: 0.9)),
+          const SizedBox(width: 8),
+          Text(
+            'SPECTATING · READ-ONLY',
+            style: PixelText.title(
+                size: 12, color: Colors.white.withValues(alpha: 0.92)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget? _buildTournamentBanner() {
+    final race = _race;
+    if (race == null) return null;
+    final tournamentId = race['tournamentId'];
+    if (tournamentId is! String || tournamentId.isEmpty) return null;
+
+    final rawLabel = race['tournamentRoundLabel'];
+    final label = (rawLabel is String && rawLabel.trim().isNotEmpty)
+        ? rawLabel.trim().toUpperCase()
+        : 'MATCHUP';
+    final rawName = race['tournamentName'];
+    final name = (rawName is String && rawName.trim().isNotEmpty)
+        ? rawName.trim()
+        : 'Tournament';
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => TournamentDetailScreen(
+              authService: widget.authService,
+              tournamentId: tournamentId,
+              friends: widget.friends,
+            ),
+          ),
+        );
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [AppColors.pillGold, AppColors.pillGoldDark],
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.pillGoldShadow, width: 2),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$label — ${name.toUpperCase()}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: PixelText.title(size: 12, color: AppColors.textDark),
+                  ),
+                  Text(
+                    'Tap to see the bracket',
+                    style: PixelText.body(size: 11, color: AppColors.textDark),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded,
+                color: AppColors.textDark, size: 22),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget? _buildGlobalEventBanner() {
     final event = _globalEvent;
     if (event == null) return null;
@@ -4099,7 +4240,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     if (!_canPostMessage) {
       final status = race['status'] as String? ?? '';
       final myStatus = race['myStatus'] as String? ?? '';
-      final reason = status == 'COMPLETED'
+      final reason = _isSpectator
+          ? "You're spectating. Chat is read-only."
+          : status == 'COMPLETED'
           ? 'This race is finished. Chat is read-only.'
           : status == 'CANCELLED'
           ? 'This race was cancelled. Chat is read-only.'

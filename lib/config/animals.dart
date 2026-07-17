@@ -22,7 +22,7 @@ const Map<String, AnimalSprite> kAnimalSprites = {
     frameCount: 6,
   ),
   'corgi_puppy': AnimalSprite(
-    asset: 'assets/images/corgi_puppy_walk_right.png',
+    asset: 'assets/images/corgi_puppy_walk_right_short_ears.png',
     frameCount: 6,
   ),
 };

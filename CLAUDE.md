@@ -63,6 +63,76 @@ verify **both** platforms before considering a build/release change done.
 
 See `DEPLOYMENT.md` for build/release flow.
 
+## New feature requests: PM/BA spec-first workflow (DEFAULT for any "add a feature" ask)
+
+When I ask for a **new feature** (not a bug fix, not a one-line tweak), do NOT
+jump to code. This pipeline runs **automatically** for any request that reads as
+a new feature. Put on a **PM/BA hat** and produce a written spec first; only
+after I approve it do you write code.
+
+### Phase 1 — Explore & draft the spec
+1. Explore the codebase for everything this feature touches (models, endpoints,
+   screens, existing similar features, DB shape). Cite real files/lines.
+2. Write a spec to `docs/<feature-kebab>-requirements.md` using the template
+   below. It must describe both **what** the feature is and **the exact path a
+   developer takes to implement it** (files, endpoints, migrations, order of ops).
+
+### Phase 2 — Two fresh-eyes gap passes
+3. Re-read the spec from scratch as if you didn't write it. Find gaps, ambiguity,
+   unhandled edge cases, and violations of this file's hard rules. Fix them.
+4. Do it **again** — a second independent pass. Log what each pass changed in a
+   "Revision log" section at the bottom so the tightening is visible.
+
+### Phase 3 — Interview me on anything unresolved
+5. Any requirement that's still ambiguous → **interview me** (batch related
+   questions with AskUserQuestion; don't dribble one at a time). Fold answers
+   back into the spec. Repeat Phase 2→3 until there are zero open questions.
+
+### Phase 4 — Approval gate
+6. Present the finished spec and **wait for my explicit approval.** Do not spawn
+   implementation agents before I say go.
+
+### Phase 5 — Two Opus 4.8 implementation agents (medium effort)
+Spawn exactly two agents, model `claude-opus-4-8`, medium reasoning effort, told
+to follow the spec's steps **in order**:
+- **Backend developer** — owns the API contract (request/response shapes,
+  status codes, new/changed endpoints, DB migrations). The contract is the
+  interface between the two agents; it must be pinned in the spec BEFORE either
+  agent implements. Backend also owns backend-compat for old clients.
+- **Frontend developer** — consumes the backend's contract exactly as written;
+  never invents fields the contract doesn't define. Owns iOS + Android in
+  lockstep and loads the design skills before any UI work.
+
+**Sequencing:** contract first, then parallel. The backend agent pins and lands
+the API contract first; once the contract is locked, both agents implement in
+parallel against it. The frontend agent never codes against a moving contract.
+
+Both agents, without exception:
+- **Write tests FIRST**, then the business logic. (Backend: use
+  `test:unit` / `test:integration`, never bare `npm test`. Never point tests at
+  the prod DB.)
+- **Never modify or delete existing tests.** If an existing test seems wrong,
+  surface it to me — do not "fix" it to make things pass.
+- Implement business logic only after the new tests exist and fail for the right
+  reason.
+
+### The spec document MUST contain
+- **Summary & user story** — what, for whom, why.
+- **Scope / non-goals** — explicitly what's out.
+- **API contract** — every new/changed endpoint with exact request & response
+  JSON, error cases, and how the *backend* stays compatible with **older app
+  versions still in the wild** (the #1 rule in this file).
+- **Data model / migrations** — tables/columns, backfill, default-safe reads.
+- **Frontend plan** — screens/widgets, states (loading/empty/error), and how the
+  UI **degrades safely when a field is missing** (backend may be a different
+  version). iOS + Android both covered.
+- **Backward-compat & rollout** — deploy order (backend first, then app), what a
+  frozen old client does when it hits the new backend, and any `testOnly`/feature
+  gating needed until the App Store build rolls out (~a week, phased).
+- **Test plan** — the tests-first list each agent writes before coding.
+- **Acceptance criteria / definition of done** — checklist to call it complete.
+- **Revision log** — what Phase 2's two gap passes changed.
+
 ## NEVER hand-draw artwork — always use the Codex imagegen pipeline
 
 Claude must not author shippable artwork by hand: no CustomPainter scene

@@ -103,6 +103,11 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
   int get _remainingToday =>
       (_adCoinReward?['remainingToday'] as num?)?.toInt() ?? 0;
   int get _coinAmount => (_adCoinReward?['coinAmount'] as num?)?.toInt() ?? 25;
+
+  /// Watches allowed per day. Server-driven so a retuned cap reaches this build
+  /// without an App Store cycle; the fallback matches the backend default for a
+  /// backend too old to send it.
+  int get _dailyCap => (_adCoinReward?['dailyCap'] as num?)?.toInt() ?? 3;
   bool get _pendingGrant => _adCoinReward?['pendingGrant'] == true;
   bool get _offerLive =>
       _adCoinReward != null &&
@@ -412,7 +417,7 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
       title: 'WATCH AN AD',
       subtitle: exhausted
           ? 'You earned all your ad coins for today.'
-          : 'Earn $_coinAmount coins per ad · $_remainingToday of 3 left today',
+          : 'Earn $_coinAmount coins per ad · $_remainingToday of $_dailyCap left today',
       action: PillButton(
         label: label,
         variant: PillButtonVariant.primary,
