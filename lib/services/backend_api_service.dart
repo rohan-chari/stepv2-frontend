@@ -90,9 +90,13 @@ class BackendApiService {
   // (lobby/bracket/champion screens, matchup races). Old binaries omit it, so
   // the backend keeps `/races` byte-identical for them, hides matchup races from
   // every listing, and rejects their tournament create/join (spec §4).
+  // `powerups2` tells the backend this build can render the second-wave shop
+  // powerups (Leech, X-Ray/DEFENSE_SCAN): their icons, the Leech victim badge,
+  // and the X-Ray recon sheet. Old binaries omit it, so the gated catalog never
+  // offers them and the app can't crash on the unknown enum values.
   static final String clientFeaturesHeader = _adsSupported
-      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments'
-      : 'characters,jammer,spinpowerups,team_races,tournaments';
+      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,powerups2'
+      : 'characters,jammer,spinpowerups,team_races,tournaments,powerups2';
   final HttpClient _httpClient;
   String? _cachedTimeZone;
   String? _cachedReleaseChannel;
@@ -1745,6 +1749,33 @@ class BackendApiService {
       method: 'POST',
       path: '/races/$raceId/powerups/$powerupId/open',
       body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
+  /// Opens several mystery boxes in one call (item #1 "Open All"): the given
+  /// slot [powerupIds] plus, when [includeQueued] is true, up to [maxCount]
+  /// server-materialized queued/overflow boxes. Mirrors the single-open result
+  /// shape per box so the reveal reuses existing code. Additive endpoint —
+  /// older backends 404 here, so callers MUST feature-detect and fall back to N
+  /// single `/open` calls (and omit queued, which have no client-side ids).
+  Future<Map<String, dynamic>> openMysteryBoxBatch({
+    required String identityToken,
+    required String raceId,
+    required List<String> powerupIds,
+    bool includeQueued = true,
+    int maxCount = 20,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races/$raceId/powerups/open-batch',
+      body: <String, dynamic>{
+        'powerupIds': powerupIds,
+        'includeQueued': includeQueued,
+        'maxCount': maxCount,
+      },
       identityToken: identityToken,
     );
 

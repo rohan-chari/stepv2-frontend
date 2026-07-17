@@ -354,6 +354,15 @@ abstract final class Tournament {
   static int playerSteps(Map<String, dynamic> player) =>
       (player['totalSteps'] as num?)?.toInt() ?? 0;
 
+  /// True when this matchup player's score is masked/hidden (detour/stealth), so
+  /// the UI should render `???` instead of a number — matching the race
+  /// leaderboard convention. Driven by the backend `stealthed` flag when present;
+  /// falls back to `totalSteps == null` so it works against the current prod
+  /// backend before the explicit flag ships (a real 0 arrives as `0`, not null).
+  static bool playerStealthed(Map<String, dynamic> player) =>
+      player['stealthed'] == true ||
+      (player.containsKey('totalSteps') && player['totalSteps'] == null);
+
   static bool playerForfeited(Map<String, dynamic> player) =>
       player['forfeited'] == true;
 

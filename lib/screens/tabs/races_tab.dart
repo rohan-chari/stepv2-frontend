@@ -794,11 +794,10 @@ class _RacesTabState extends State<RacesTab> {
     if (showRaces) {
       for (final race in featured) {
         cards.add(_buildFeaturedCard(race));
-        final upcoming = race['upcoming'] as Map<String, dynamic>?;
-        final upcomingId = upcoming?['raceId'] as String?;
-        if (upcoming != null && upcomingId != null && upcomingId.isNotEmpty) {
-          cards.add(_buildUpcomingCard(race, upcoming));
-        }
+        // Item 5: the featured row no longer shows the upcoming/opt-in "next
+        // race" card — auto-join (managed by the gear toggle above) covers the
+        // next daily/weekly. The backend still sends `race['upcoming']`; we
+        // simply ignore it here (old clients keep rendering it, which is fine).
       }
     }
 
@@ -906,35 +905,6 @@ class _RacesTabState extends State<RacesTab> {
       finishRewardPlaces: (reward?['paidPlaces'] as num?)?.toInt() ?? 0,
       isJoined: race['myStatus'] != null,
       isFull: race['isFull'] as bool? ?? false,
-      isJoining: _joiningFeaturedId == raceId,
-      onJoin: () => _joinFeatured(raceId),
-      onView: () => _navigateToRaceDetail(raceId),
-    );
-  }
-
-  // The pre-registerable "next" race for a seed. Reuses FeaturedRaceCard in its
-  // upcoming mode: counts down to scheduledStartAt and the CTA is OPT IN /
-  // YOU'RE IN. Opting in joins the PENDING race (allowed server-side); once the
-  // race starts at midnight, every opt-in begins together at 0.
-  Widget _buildUpcomingCard(
-    Map<String, dynamic> race,
-    Map<String, dynamic> upcoming,
-  ) {
-    final raceId = upcoming['raceId'] as String? ?? '';
-    final reward = race['finishReward'] as Map<String, dynamic>?;
-    return FeaturedRaceCard(
-      name: race['name'] as String? ?? 'Race',
-      seedKind: race['seedKind'] as String?,
-      isUpcoming: true,
-      startsAt: DateTime.tryParse(
-        upcoming['scheduledStartAt'] as String? ?? '',
-      ),
-      endsAt: DateTime.tryParse(upcoming['endsAt'] as String? ?? ''),
-      participantCount: (upcoming['participantCount'] as num?)?.toInt() ?? 0,
-      finishRewardPool: (reward?['pool'] as num?)?.toInt() ?? 0,
-      finishRewardPlaces: (reward?['paidPlaces'] as num?)?.toInt() ?? 0,
-      isJoined: upcoming['myStatus'] != null,
-      isFull: upcoming['isFull'] as bool? ?? false,
       isJoining: _joiningFeaturedId == raceId,
       onJoin: () => _joinFeatured(raceId),
       onView: () => _navigateToRaceDetail(raceId),

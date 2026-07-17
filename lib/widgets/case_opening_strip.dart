@@ -26,6 +26,16 @@ class CaseOpeningReel extends StatefulWidget {
   /// future is pending the reel shows PREPARING. Null spins immediately.
   final Future<bool> Function()? onSpinRequested;
 
+  /// Optional external trigger (item #1 "Open All"): each time this notifier
+  /// fires, the reel spins programmatically — exactly as a swipe/tap would,
+  /// including the [onSpinRequested] gate. Lets one "SPIN ALL" control drive a
+  /// whole grid of reels at once. Null keeps the reel swipe/tap-only.
+  final Listenable? spinTrigger;
+
+  /// When true, hides the "SWIPE OR TAP" affordance and per-reel swipe hint —
+  /// used by the Open-All grid where spinning is driven centrally, not per reel.
+  final bool hideSwipeHint;
+
   const CaseOpeningReel({
     super.key,
     required this.itemCount,
@@ -35,6 +45,8 @@ class CaseOpeningReel extends StatefulWidget {
     this.height = 116,
     this.itemWidth = 86.0,
     this.onSpinRequested,
+    this.spinTrigger,
+    this.hideSwipeHint = false,
   });
 
   @override
@@ -78,6 +90,16 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
       }
     });
     _waitingForSwipe = true;
+    widget.spinTrigger?.addListener(_startSpin);
+  }
+
+  @override
+  void didUpdateWidget(CaseOpeningReel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.spinTrigger != widget.spinTrigger) {
+      oldWidget.spinTrigger?.removeListener(_startSpin);
+      widget.spinTrigger?.addListener(_startSpin);
+    }
   }
 
   /// Fires a selection tick each time a new tile scrolls under the centre
@@ -95,6 +117,7 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
 
   @override
   void dispose() {
+    widget.spinTrigger?.removeListener(_startSpin);
     _controller.dispose();
     super.dispose();
   }
@@ -185,7 +208,7 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
                   _requestingSpin
                       ? 'PREPARING...'
                       : _waitingForSwipe
-                      ? 'SWIPE OR TAP'
+                      ? (widget.hideSwipeHint ? 'READY' : 'SWIPE OR TAP')
                       : 'OPENING...',
                   style: PixelText.title(size: 14, color: AppColors.textMid),
                 ),
@@ -342,7 +365,7 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
                     ),
                   ],
                 ),
-                if (_waitingForSwipe) ...[
+                if (_waitingForSwipe && !widget.hideSwipeHint) ...[
                   const SizedBox(height: 10),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -449,6 +472,11 @@ class CaseOpeningStrip extends StatefulWidget {
   final double height;
   final Future<bool> Function()? onSpinRequested;
 
+  /// External spin trigger + hint suppression for the Open-All grid (item #1).
+  /// See [CaseOpeningReel.spinTrigger] / [CaseOpeningReel.hideSwipeHint].
+  final Listenable? spinTrigger;
+  final bool hideSwipeHint;
+
   const CaseOpeningStrip({
     super.key,
     required this.resultType,
@@ -456,6 +484,8 @@ class CaseOpeningStrip extends StatefulWidget {
     required this.onComplete,
     this.height = 116,
     this.onSpinRequested,
+    this.spinTrigger,
+    this.hideSwipeHint = false,
   });
 
   @override
@@ -585,6 +615,8 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip> {
       height: widget.height,
       itemWidth: _itemWidth,
       onSpinRequested: widget.onSpinRequested,
+      spinTrigger: widget.spinTrigger,
+      hideSwipeHint: widget.hideSwipeHint,
       itemBuilder: (context, index, isResult) {
         final item = _items[index];
         return CaseReelTile(

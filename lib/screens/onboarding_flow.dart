@@ -22,8 +22,7 @@ class OnboardingFlow extends StatelessWidget {
     required this.onEnableNotifications,
     required this.onStartTutorial,
     required this.onSkipTutorial,
-    required this.onFetchOnboardingRaces,
-    required this.onJoinOnboardingRace,
+    required this.onEnterDaily,
     required this.onSkipFirstRace,
     this.firstRaceShareTokenPending = false,
     this.welcomeReferralCode,
@@ -53,14 +52,14 @@ class OnboardingFlow extends StatelessWidget {
   /// Skips the tutorial step (marks seen, no reward).
   final VoidCallback onSkipTutorial;
 
-  /// Fetches public races for the onboarding step (already restricted to the
-  /// qualifying set will be applied by the step itself). Returns null on error.
-  final Future<List<Map<String, dynamic>>?> Function() onFetchOnboardingRaces;
+  /// Confirms the auto-enrollment and drops the user into the live Daily race.
+  /// The host (MainShell) closes the first-race onboarding gate, then routes to
+  /// the active Daily race — or falls back to Home when none is available — so
+  /// this step never has to know about races or navigation.
+  final Future<void> Function() onEnterDaily;
 
-  /// Joins a race with the onboarding flag set. Returns true on success.
-  final Future<bool> Function(String raceId) onJoinOnboardingRace;
-
-  /// Skips the first-race step (marks seen on the backend + locally).
+  /// Skips the first-race step (marks seen on the backend + locally). Used for
+  /// the pending-share precedence path (a specific race is already queued).
   final VoidCallback onSkipFirstRace;
 
   /// True when a race share link is waiting to be joined. The first-race step
@@ -132,10 +131,11 @@ class OnboardingFlow extends StatelessWidget {
       );
     }
 
-    // Step 4: join your first race.
-    return OnboardingFirstRaceStep(
-      onFetchOnboardingRaces: onFetchOnboardingRaces,
-      onJoinOnboardingRace: onJoinOnboardingRace,
+    // Step 4: you're auto-enrolled — confirm + drop into the live Daily race.
+    // Enrollment already happened server-side on account creation, so this step
+    // only celebrates it and routes; it never joins a race itself.
+    return OnboardingAutoEnrolledStep(
+      onEnterDaily: onEnterDaily,
       onSkip: onSkipFirstRace,
       skipForPendingShare: firstRaceShareTokenPending,
     );
@@ -459,101 +459,94 @@ class OnboardingTutorialStep extends StatelessWidget {
   }
 }
 
-/// "Join your first race" onboarding step. Fetches public races, filters to
-/// free + powerups-enabled races, and lets the user join one (granting mystery
-/// boxes) or skip. Empty/error → auto-skips so onboarding never dead-ends.
-class OnboardingFirstRaceStep extends StatefulWidget {
-  const OnboardingFirstRaceStep({
+/// Onboarding step 4 (redesigned): the user is ALREADY auto-enrolled in the
+/// Daily & Weekly challenge server-side on account creation (see
+/// `autoEnrollNewUser.js`), so this step no longer asks them to pick a race. It
+/// celebrates the enrollment, tells them the 3 welcome boxes are waiting and how
+/// to opt out, then drops them straight into the live Daily race.
+///
+/// This step never joins a race itself (that already happened) — the CTA hands
+/// off to [onEnterDaily], which closes the onboarding gate and routes to the
+/// active Daily race, or falls back to Home when none is available.
+class OnboardingAutoEnrolledStep extends StatefulWidget {
+  const OnboardingAutoEnrolledStep({
     super.key,
-    required this.onFetchOnboardingRaces,
-    required this.onJoinOnboardingRace,
+    required this.onEnterDaily,
     required this.onSkip,
     this.skipForPendingShare = false,
   });
 
-  final Future<List<Map<String, dynamic>>?> Function() onFetchOnboardingRaces;
-  final Future<bool> Function(String raceId) onJoinOnboardingRace;
+  /// Closes the first-race gate and routes into the live Daily race (or Home on
+  /// fallback). Awaited so the button can show a pressed/working state.
+  final Future<void> Function() onEnterDaily;
+
+  /// Used only for the pending-share precedence path: a specific race is already
+  /// queued, so skip this celebration and let MainShell open that race instead.
   final VoidCallback onSkip;
 
-  /// When true, skip the generic public picker entirely (a share link is
-  /// pending — MainShell will join that specific race after onboarding).
+  /// When true, a share link is pending — auto-skip so onboarding hands off to
+  /// the queued race rather than the generic Daily drop-in.
   final bool skipForPendingShare;
 
   @override
-  State<OnboardingFirstRaceStep> createState() =>
-      _OnboardingFirstRaceStepState();
+  State<OnboardingAutoEnrolledStep> createState() =>
+      _OnboardingAutoEnrolledStepState();
 }
 
-class _OnboardingFirstRaceStepState extends State<OnboardingFirstRaceStep> {
-  bool _loading = true;
-  List<Map<String, dynamic>> _races = const [];
-  String? _joiningRaceId;
-  bool _skipping = false;
+class _OnboardingAutoEnrolledStepState extends State<OnboardingAutoEnrolledStep>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _intro;
+  bool _entering = false;
 
   @override
   void initState() {
     super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    // A pending share link means the user already has a specific race to join
-    // (MainShell joins + opens it once onboarding ends). Skip the generic
-    // picker straight through so onboarding doesn't dead-end on it.
+    _intro = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 620),
+    );
+    // A pending share link means the user already has a specific race queued;
+    // hand off immediately rather than showing the generic Daily celebration.
     if (widget.skipForPendingShare) {
-      widget.onSkip();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onSkip();
+      });
       return;
     }
-
-    final races = await widget.onFetchOnboardingRaces();
-    if (!mounted) return;
-
-    // Fetch error → auto-skip so the user never dead-ends here.
-    if (races == null) {
-      widget.onSkip();
-      return;
-    }
-
-    final qualifying = races.where((race) {
-      final buyIn = race['buyInAmount'] as int? ?? 0;
-      final powerupsEnabled = race['powerupsEnabled'] as bool? ?? false;
-      return buyIn == 0 && powerupsEnabled;
-    }).toList(growable: false);
-
-    // No qualifying races → auto-skip.
-    if (qualifying.isEmpty) {
-      widget.onSkip();
-      return;
-    }
-
-    setState(() {
-      _races = qualifying;
-      _loading = false;
-    });
+    _intro.forward();
   }
 
-  Future<void> _join(Map<String, dynamic> race) async {
-    if (_joiningRaceId != null || _skipping) return;
-    final raceId = race['id'] as String?;
-    if (raceId == null) return;
-    setState(() => _joiningRaceId = raceId);
-    final success = await widget.onJoinOnboardingRace(raceId);
-    if (!mounted) return;
-    if (!success) {
-      setState(() => _joiningRaceId = null);
-    }
-    // On success MainShell exits onboarding + navigates to the race; this
-    // widget will be torn down, so no further state changes needed.
+  @override
+  void dispose() {
+    _intro.dispose();
+    super.dispose();
   }
 
-  void _skip() {
-    if (_skipping || _joiningRaceId != null) return;
-    setState(() => _skipping = true);
-    widget.onSkip();
+  Future<void> _enter() async {
+    if (_entering) return;
+    setState(() => _entering = true);
+    // On success MainShell exits onboarding + routes (Daily race or Home); this
+    // widget is torn down, so the mounted guard covers the fallback path.
+    await widget.onEnterDaily();
+    if (mounted) setState(() => _entering = false);
   }
 
   @override
   Widget build(BuildContext context) {
+    // While a share link is pending we're auto-skipping — render a neutral
+    // holding view (no CTA) so the celebration never flashes before the handoff.
+    if (widget.skipForPendingShare) {
+      return const ColoredBox(
+        color: AppColors.roofLight,
+        child: Center(
+          child: CircularProgressIndicator(
+            color: AppColors.parchment,
+            strokeWidth: 3,
+          ),
+        ),
+      );
+    }
+
     return ColoredBox(
       color: AppColors.roofLight,
       child: Stack(
@@ -574,15 +567,19 @@ class _OnboardingFirstRaceStepState extends State<OnboardingFirstRaceStep> {
                         physics: const ClampingScrollPhysics(),
                         padding: EdgeInsets.fromLTRB(
                           24,
-                          compact ? 24 : 48,
+                          compact ? 24 : 52,
                           24,
-                          128,
+                          132,
                         ),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
+                            _EnrolledEmblem(
+                              animation: _intro,
+                              size: compact ? 132 : 158,
+                            ),
+                            SizedBox(height: compact ? 18 : 24),
                             Text(
-                              'FIRST RACE',
+                              "YOU'RE IN",
                               style: HomeText.label(
                                 size: 13,
                                 color: AppColors.parchmentLight.withValues(
@@ -593,51 +590,47 @@ class _OnboardingFirstRaceStepState extends State<OnboardingFirstRaceStep> {
                             ),
                             const SizedBox(height: 10),
                             Text(
-                              'Join your first race',
+                              'Entered in the Daily & Weekly challenge',
                               style: HomeText.title(
-                                size: 32,
+                                size: compact ? 28 : 32,
                                 color: AppColors.parchment,
                               ),
                               textAlign: TextAlign.center,
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              'Pick a free race to get going — join now and we’ll '
-                              'drop 3 mystery boxes in your bag.',
+                              'We saved you a spot in both races and dropped '
+                              '3 mystery boxes in your bag. You can turn '
+                              'auto-join off anytime on the Races page.',
                               style: HomeText.body(
                                 size: 15,
                                 color: AppColors.parchmentLight.withValues(
                                   alpha: 0.92,
                                 ),
-                                height: 1.38,
+                                height: 1.4,
                               ),
                               textAlign: TextAlign.center,
                             ),
-                            const SizedBox(height: 24),
-                            if (_loading)
-                              const Padding(
-                                padding: EdgeInsets.only(top: 32),
-                                child: Center(
-                                  child: CircularProgressIndicator(
-                                    color: AppColors.parchment,
-                                    strokeWidth: 3,
-                                  ),
+                            SizedBox(height: compact ? 18 : 24),
+                            const Wrap(
+                              alignment: WrapAlignment.center,
+                              spacing: 10,
+                              runSpacing: 10,
+                              children: [
+                                _EnrolledChip(
+                                  icon: Icons.bolt_rounded,
+                                  label: 'DAILY 10K',
                                 ),
-                              )
-                            else
-                              ..._races.map(
-                                (race) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 12),
-                                  child: _OnboardingRaceCard(
-                                    race: race,
-                                    isJoining:
-                                        _joiningRaceId == race['id'] as String?,
-                                    disabled: _joiningRaceId != null ||
-                                        _skipping,
-                                    onJoin: () => _join(race),
-                                  ),
+                                _EnrolledChip(
+                                  icon: Icons.calendar_month_rounded,
+                                  label: 'WEEKLY',
                                 ),
-                              ),
+                                _EnrolledChip(
+                                  icon: Icons.card_giftcard_rounded,
+                                  label: '3 BOXES',
+                                ),
+                              ],
+                            ),
                           ],
                         ),
                       ),
@@ -645,20 +638,19 @@ class _OnboardingFirstRaceStepState extends State<OnboardingFirstRaceStep> {
                     Align(
                       alignment: Alignment.bottomCenter,
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 60),
-                        child: TextButton(
-                          onPressed: (_joiningRaceId != null || _skipping)
-                              ? null
-                              : _skip,
-                          child: Text(
-                            'Maybe later',
-                            style: HomeText.body(
-                              size: 15,
-                              color: AppColors.parchmentLight.withValues(
-                                alpha: 0.92,
-                              ),
-                              weight: FontWeight.w800,
-                            ),
+                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 52),
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: 54,
+                          child: PillButton(
+                            label: _entering
+                                ? 'STARTING...'
+                                : 'START THE DAILY CHALLENGE',
+                            variant: PillButtonVariant.secondary,
+                            fullWidth: true,
+                            padding: EdgeInsets.zero,
+                            icon: Icons.play_arrow_rounded,
+                            onPressed: _entering ? null : _enter,
                           ),
                         ),
                       ),
@@ -674,117 +666,79 @@ class _OnboardingFirstRaceStepState extends State<OnboardingFirstRaceStep> {
   }
 }
 
-/// A single selectable public-race card styled for the onboarding (green)
-/// background. The shared `PublicRacesScreen` card uses a parchment `RetroCard`
-/// that clashes with the onboarding aesthetic, so this is a themed variant.
-class _OnboardingRaceCard extends StatelessWidget {
-  const _OnboardingRaceCard({
-    required this.race,
-    required this.isJoining,
-    required this.disabled,
-    required this.onJoin,
-  });
+/// The celebratory badge at the top of the auto-enrolled step. A soft ring with
+/// a checkmark that pops in on entry (scale + fade) — juice without confetti
+/// (confetti is reserved for actual race finishes).
+class _EnrolledEmblem extends StatelessWidget {
+  const _EnrolledEmblem({required this.animation, required this.size});
 
-  final Map<String, dynamic> race;
-  final bool isJoining;
-  final bool disabled;
-  final VoidCallback onJoin;
-
-  String _timeLeftLabel() {
-    final endsAt = DateTime.tryParse(race['endsAt'] as String? ?? '');
-    final maxDurationDays = race['maxDurationDays'] as int? ?? 7;
-    if (endsAt == null) return '${maxDurationDays}d';
-    final remaining = endsAt.difference(DateTime.now());
-    if (remaining.isNegative) return 'soon';
-    if (remaining.inDays > 0) {
-      return '${remaining.inDays}d ${remaining.inHours.remainder(24)}h';
-    }
-    if (remaining.inHours > 0) {
-      return '${remaining.inHours}h ${remaining.inMinutes.remainder(60)}m';
-    }
-    return '${remaining.inMinutes}m';
-  }
+  final Animation<double> animation;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
-    final name = race['name'] as String? ?? 'Race';
-    final creator = race['creator'] as Map<String, dynamic>?;
-    final creatorName = creator?['displayName'] as String? ?? 'Someone';
-    final participantCount = race['participantCount'] as int? ?? 0;
-    // null => no participant limit (unlimited).
-    final maxParticipants = race['maxParticipants'] as int?;
-    final runnersLabel = maxParticipants == null
-        ? '$participantCount'
-        : '$participantCount/$maxParticipants';
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.parchment.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: AppColors.parchmentLight.withValues(alpha: 0.30),
-          width: 2,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            name.toUpperCase(),
-            style: HomeText.title(size: 16, color: AppColors.parchment),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'BY ${atName(creatorName)}'.toUpperCase(),
-            style: HomeText.label(
-              size: 11,
-              color: AppColors.parchmentLight.withValues(alpha: 0.80),
+    final pop = CurvedAnimation(parent: animation, curve: Curves.elasticOut);
+    final fade = CurvedAnimation(
+      parent: animation,
+      curve: const Interval(0, 0.5, curve: Curves.easeOut),
+    );
+    return FadeTransition(
+      opacity: fade,
+      child: ScaleTransition(
+        scale: Tween<double>(begin: 0.55, end: 1).animate(pop),
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: AppColors.parchment.withValues(alpha: 0.12),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: AppColors.parchmentLight.withValues(alpha: 0.30),
+              width: 3,
             ),
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _stat('ENDS IN', _timeLeftLabel()),
-              const SizedBox(width: 16),
-              _stat('RUNNERS', runnersLabel),
-              const SizedBox(width: 16),
-              _stat('BUY-IN', 'FREE'),
-              const SizedBox(width: 16),
-              _stat('POWERUPS', 'ON'),
-            ],
+          alignment: Alignment.center,
+          child: Icon(
+            Icons.check_rounded,
+            size: size * 0.5,
+            color: AppColors.parchment,
           ),
-          const SizedBox(height: 14),
-          PillButton(
-            label: isJoining ? 'JOINING...' : 'JOIN',
-            variant: PillButtonVariant.secondary,
-            fontSize: 13,
-            fullWidth: true,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            onPressed: (disabled || isJoining) ? null : onJoin,
-          ),
-        ],
+        ),
       ),
     );
   }
+}
 
-  Widget _stat(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: HomeText.label(
-            size: 10,
-            color: AppColors.parchmentLight.withValues(alpha: 0.75),
+/// A small labeled pill summarizing what the user was auto-enrolled into.
+class _EnrolledChip extends StatelessWidget {
+  const _EnrolledChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+      decoration: BoxDecoration(
+        color: AppColors.parchment.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: AppColors.parchmentLight.withValues(alpha: 0.28),
+          width: 1.5,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: AppColors.parchment),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: HomeText.label(size: 11, color: AppColors.parchment),
           ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: HomeText.title(size: 14, color: AppColors.parchment),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

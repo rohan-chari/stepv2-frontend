@@ -45,6 +45,7 @@ import '../widgets/item_slot.dart';
 import '../widgets/feed_bubble.dart';
 import '../widgets/player_avatar.dart';
 import 'case_opening_screen.dart';
+import 'multi_case_opening_screen.dart';
 import 'edit_race_screen.dart';
 import 'tournament_detail_screen.dart';
 import 'race_invite_screen.dart';
@@ -98,6 +99,8 @@ const _powerupNames = {
   'IMPOSTER': 'Imposter',
   'RAINSTORM': 'Rainstorm',
   'SIGNAL_JAMMER': 'Signal Jammer',
+  'LEECH': 'Leech',
+  'DEFENSE_SCAN': 'X-Ray',
 };
 
 const _powerupDescriptions = {
@@ -129,6 +132,10 @@ const _powerupDescriptions = {
       'Everyone else\'s steps count for half for 1 hour. Mirrors can\'t reflect it; Compression Socks keep a racer dry',
   'SIGNAL_JAMMER':
       'Jam a rival\'s signal — they can\'t use any powerups for 1 hour. Mirrors can\'t reflect it; Compression Socks block it',
+  'LEECH':
+      'For 30 min, every step you take drains one step from a chosen rival (up to 3,000). Compression Socks block it; Mirrors can\'t reflect it',
+  'DEFENSE_SCAN':
+      'Instantly reveal every opponent\'s active defenses (shields and mirrors)',
 };
 
 // Short-form descriptions used in the active-effects list, where the
@@ -148,6 +155,7 @@ const _powerupShortDescriptions = {
   'MIRROR': 'Reflects next attack',
   'RAINSTORM': 'Steps halved by rain',
   'SIGNAL_JAMMER': 'Powerups jammed',
+  'LEECH': 'Steps being leeched',
 };
 
 const _targetedPowerups = [
@@ -161,6 +169,9 @@ const _targetedPowerups = [
   'IMPOSTER',
   // SIGNAL_JAMMER picks a rival to jam — same target-picker flow.
   'SIGNAL_JAMMER',
+  // LEECH picks a rival to drain — same target-picker flow. Each step the
+  // leecher takes removes one from the chosen rival for 30 min.
+  'LEECH',
 ];
 
 const _rarityColors = {
@@ -168,6 +179,11 @@ const _rarityColors = {
   'UNCOMMON': Color(0xFF4A90D9),
   'RARE': Color(0xFFD4A017),
 };
+
+// Powerup types hidden from this build's inventory/store surfaces even if a
+// user still owns one. Currently only IMPOSTER, which is disabled server-side
+// (item #3); the DB rows are left intact so re-enabling is a single flag flip.
+const _hiddenPowerupTypes = {'IMPOSTER'};
 
 // Powerup upgrade price tables — FALLBACK ONLY. The backend is authoritative:
 // getRaceProgress powerupData.upgradeCosts carries the live ladders and wins
@@ -1374,7 +1390,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       // Blocked/Reflected get a reveal-style modal (matching the mystery-box
       // UNBOX reveal); a normal/APPLIED outcome keeps the success toast.
       final outcome = attackOutcomeFromResult(res);
-      if (outcome == AttackOutcome.blocked ||
+      if (type == 'DEFENSE_SCAN') {
+        // X-Ray is an instantaneous intel read: the reveal rides back on the
+        // use response as `scan` (contract puts it top-level; also check the
+        // nested result for backend variance). Degrade safely if it's absent
+        // (older backend that consumed the item but returns no snapshot).
+        final scan =
+            (result['scan'] as Map<String, dynamic>?) ??
+            (res?['scan'] as Map<String, dynamic>?);
+        await _showDefenseScanSheet(scan);
+      } else if (outcome == AttackOutcome.blocked ||
           outcome == AttackOutcome.reflected) {
         await showAttackOutcomeModal(context, res ?? const {});
       } else if (type == 'SNEAKY_SWAP') {
@@ -3272,7 +3297,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           index: 1,
           child: Column(
             children: [
-              _checkerSectionHeader('POWERUPS', trailing: _queuedBoxesChip()),
+              _checkerSectionHeader(
+                'POWERUPS',
+                trailing: _powerupsHeaderTrailing(),
+              ),
               _sectionCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -3512,6 +3540,138 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       'You earn a powerup every ${_formatSteps(powerupStepInterval)} steps this race. ${_formatSteps(stepsUntilNextPowerup)} to go.',
       style: PixelText.body(size: 13, color: AppColors.textMid),
     );
+  }
+
+  /// Slot mystery boxes the user can open right now (status MYSTERY_BOX).
+  List<String> get _openableSlotBoxIds {
+    final inventory =
+        (_powerupData?['inventory'] as List?)?.cast<Map<String, dynamic>>() ??
+        const [];
+    return [
+      for (final p in inventory)
+        if ((p['status'] as String?) == 'MYSTERY_BOX' && p['id'] is String)
+          p['id'] as String,
+    ];
+  }
+
+  /// Total openable boxes (slot + queued overflow) — drives the "Open All"
+  /// affordance, which only appears when there are at least two.
+  int get _openableBoxCount => _openableSlotBoxIds.length + _queuedBoxCount;
+
+  /// Trailing widget for the POWERUPS header: the "Open All" button (when ≥2
+  /// boxes are openable) alongside the existing queued-count chip.
+  Widget? _powerupsHeaderTrailing() {
+    final chip = _queuedBoxesChip();
+    final showOpenAll = _openableBoxCount >= 2;
+    if (chip == null && !showOpenAll) return null;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (showOpenAll) ...[
+          _OpenAllButton(
+            onTap: _isActing ? null : _openAllBoxes,
+          ),
+          if (chip != null) const SizedBox(width: 6),
+        ],
+        ?chip,
+      ],
+    );
+  }
+
+  /// Opens every openable box (slots + queued) in one action via the multi-reel
+  /// screen. Feature-detects the batch endpoint and falls back to N single
+  /// opens (queued omitted) on an older backend.
+  Future<void> _openAllBoxes() async {
+    if (_isActing) return;
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) return;
+    final slotIds = _openableSlotBoxIds;
+    final queued = _queuedBoxCount;
+    final total = (slotIds.length + queued).clamp(0, 20);
+    if (total < 1) return;
+
+    setState(() => _isActing = true);
+    try {
+      await Navigator.of(context).push(
+        PageRouteBuilder(
+          opaque: false,
+          pageBuilder: (_, _, _) => MultiCaseOpeningScreen(
+            boxCount: total,
+            includesQueued: queued > 0,
+            onResults: (results) {
+              for (final r in results) {
+                final id = r['powerupId'] as String?;
+                if (id != null) _optimisticallyApplyBoxOpen(id, r);
+              }
+            },
+            openAll: () => _performOpenAll(token, slotIds),
+          ),
+          transitionsBuilder: (_, anim, _, child) =>
+              FadeTransition(opacity: anim, child: child),
+          transitionDuration: const Duration(milliseconds: 300),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isActing = false);
+        _loadProgress();
+      }
+    }
+  }
+
+  /// Resolves the batch-open, feature-detecting the endpoint. On a 404 (or a
+  /// non-JSON error body from an old backend) it falls back to N single opens
+  /// for the known slot ids and omits queued boxes (which have no client ids).
+  Future<List<Map<String, dynamic>>> _performOpenAll(
+    String token,
+    List<String> slotIds,
+  ) async {
+    try {
+      final resp = await _api.openMysteryBoxBatch(
+        identityToken: token,
+        raceId: widget.raceId,
+        powerupIds: slotIds,
+        includeQueued: true,
+        maxCount: 20,
+      );
+      return (resp['results'] as List?)?.cast<Map<String, dynamic>>() ??
+          const [];
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) return _fallbackSingleOpens(token, slotIds);
+      rethrow;
+    } on FormatException {
+      // Old backend 404 with an empty/non-JSON body — treat as unavailable.
+      return _fallbackSingleOpens(token, slotIds);
+    }
+  }
+
+  /// Opens each slot box with a parallel single-open call and normalizes the
+  /// results into the batch result shape (queued boxes are unreachable here).
+  Future<List<Map<String, dynamic>>> _fallbackSingleOpens(
+    String token,
+    List<String> slotIds,
+  ) async {
+    final responses = await Future.wait([
+      for (final id in slotIds)
+        _api.openMysteryBox(
+          identityToken: token,
+          raceId: widget.raceId,
+          powerupId: id,
+        ),
+    ]);
+    final out = <Map<String, dynamic>>[];
+    for (int i = 0; i < slotIds.length; i++) {
+      final r = responses[i];
+      final res = (r['result'] as Map<String, dynamic>?) ?? r;
+      out.add({
+        'powerupId': slotIds[i],
+        'type': res['type'],
+        'rarity': res['rarity'] ?? 'COMMON',
+        'autoActivated': res['autoActivated'] == true,
+        'queued': false,
+      });
+    }
+    return out;
   }
 
   Future<void> _openMysteryBox(String boxId) async {
@@ -3758,7 +3918,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// (which is also the case on an older backend without the inventory endpoint).
   List<Widget> _buildGlobalPowerupStash() {
     final entries =
-        _globalPowerupInventory.entries.where((e) => e.value > 0).toList()
+        _globalPowerupInventory.entries
+            // Imposter is disabled on this build (item #3): the server rejects
+            // its use and drops it from the catalog. Hide any still-owned
+            // Imposter from the stash so there's no dead "USE" button. The row
+            // stays in the DB untouched and reappears if we re-enable.
+            .where((e) => e.value > 0 && !_hiddenPowerupTypes.contains(e.key))
+            .toList()
           ..sort((a, b) => a.key.compareTo(b.key));
     if (entries.isEmpty) return const [];
 
@@ -5195,6 +5361,25 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               textAlign: TextAlign.center,
               style: PixelText.number(size: 18, color: colorDark),
             ),
+            // #6: powerup effect badges (rainstorm, leech, etc.) on opponents in
+            // team races, mirroring the solo leaderboard plank. Hidden for
+            // stealthed rows (no effects surfaced) to match the plank behavior.
+            if (!isStealthed)
+              Builder(
+                builder: (context) {
+                  final icons = _effectIconsFor(userId);
+                  if (icons.isEmpty) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 5),
+                    child: Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 0,
+                      runSpacing: 3,
+                      children: icons,
+                    ),
+                  );
+                },
+              ),
           ],
         ),
       ),
@@ -5232,6 +5417,240 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     return rows;
   }
 
+  /// X-Ray recon sheet (item #2): shows every opponent's currently-active
+  /// defenses from the DEFENSE_SCAN use response. [scan] is the response's
+  /// `scan` object; null means an older backend consumed the item but returned
+  /// no snapshot — degrade to a friendly "recon unavailable" state.
+  Future<void> _showDefenseScanSheet(Map<String, dynamic>? scan) async {
+    final opponents =
+        (scan?['opponents'] as List?)?.cast<Map<String, dynamic>>() ??
+        const [];
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.parchment,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      isScrollControlled: true,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.7,
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.woodMid,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const PowerupIcon(type: 'DEFENSE_SCAN', size: 26),
+                    const SizedBox(width: 8),
+                    Text(
+                      'X-RAY RECON',
+                      style: PixelText.title(size: 20, color: AppColors.textDark),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  scan == null
+                      ? 'Recon unavailable right now.'
+                      : 'Active defenses across the field',
+                  textAlign: TextAlign.center,
+                  style: PixelText.body(size: 12, color: AppColors.textMid),
+                ),
+                const SizedBox(height: 14),
+                if (scan == null)
+                  _reconEmptyState(
+                    'This build could not read the scan. Try again later.',
+                  )
+                else if (opponents.isEmpty)
+                  _reconEmptyState('No opponents to scan right now.')
+                else
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: opponents.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      itemBuilder: (context, i) => _reconOpponentRow(opponents[i]),
+                    ),
+                  ),
+                const SizedBox(height: 16),
+                PillButton(
+                  label: 'Done',
+                  icon: Icons.check_rounded,
+                  fullWidth: true,
+                  onPressed: () => Navigator.of(ctx).pop(),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _reconEmptyState(String message) {
+    return GameContainer(
+      padding: const EdgeInsets.all(16),
+      frameColor: AppColors.parchmentBorder,
+      child: Row(
+        children: [
+          const Icon(Icons.radar_rounded, color: AppColors.textMid, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: PixelText.body(size: 13, color: AppColors.textMid),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _reconOpponentRow(Map<String, dynamic> opponent) {
+    final name = opponent['displayName'] as String? ?? '???';
+    final defenses =
+        (opponent['defenses'] as List?)?.cast<Map<String, dynamic>>() ??
+        const [];
+    return GameContainer(
+      padding: const EdgeInsets.all(10),
+      frameColor: defenses.isEmpty
+          ? AppColors.parchmentBorder
+          : AppColors.accent,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            atName(name),
+            style: PixelText.title(size: 14, color: AppColors.textDark),
+          ),
+          const SizedBox(height: 6),
+          if (defenses.isEmpty)
+            Row(
+              children: [
+                const Icon(
+                  Icons.lock_open_rounded,
+                  size: 16,
+                  color: AppColors.pillGreen,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'No defenses up — safe to attack',
+                  style: PixelText.body(size: 12, color: AppColors.textMid),
+                ),
+              ],
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                for (final d in defenses)
+                  _reconDefenseChip(
+                    d['type'] as String? ?? '',
+                    d['expiresAt'] as String?,
+                  ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _reconDefenseChip(String type, String? expiresAt) {
+    final remaining = _expiresInLabel(expiresAt);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppColors.parchmentDark,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.parchmentBorder, width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          PowerupIcon(type: type, size: 18),
+          const SizedBox(width: 6),
+          Text(
+            _powerupNames[type] ?? type,
+            style: PixelText.body(size: 12, color: AppColors.textDark),
+          ),
+          if (remaining != null) ...[
+            const SizedBox(width: 6),
+            Text(
+              remaining,
+              style: PixelText.body(size: 11, color: AppColors.textMid),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// "3h"/"12m"/"soon" remaining until [iso], or null when absent/past.
+  String? _expiresInLabel(String? iso) {
+    if (iso == null) return null;
+    final dt = DateTime.tryParse(iso);
+    if (dt == null) return null;
+    final diff = dt.difference(DateTime.now());
+    if (diff.isNegative) return null;
+    if (diff.inMinutes < 1) return 'soon';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m';
+    if (diff.inHours < 24) return '${diff.inHours}h';
+    return '${diff.inDays}d';
+  }
+
+  /// Builds the active-effect badge widgets targeting [userId] — the shared
+  /// filter+render used by both the solo leaderboard plank and the team-race
+  /// cell (#6), so opponents show rainstorm/leech/etc. badges identically in
+  /// both layouts. Leech badges resolve their attacker's name for the tooltip.
+  List<Widget> _effectIconsFor(String userId) {
+    final effects =
+        (_powerupData?['activeEffects'] as List?)
+            ?.cast<Map<String, dynamic>>()
+            .where((e) => e['targetUserId'] == userId)
+            .toList() ??
+        const [];
+    if (effects.isEmpty) return const [];
+    return [
+      for (final e in effects)
+        _EffectIconWithTooltip(
+          type: e['type'] as String? ?? '',
+          attackerName: _displayNameForUser(e['sourceUserId'] as String?),
+        ),
+    ];
+  }
+
+  /// Resolves a participant's display name from a userId, for effect tooltips.
+  /// Returns null when the id is absent or not found (defensive — the effect
+  /// still renders, just without an attacker suffix).
+  String? _displayNameForUser(String? userId) {
+    if (userId == null || userId.isEmpty) return null;
+    final participants =
+        (_progress?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
+        const [];
+    for (final p in participants) {
+      if (p['userId'] == userId) return p['displayName'] as String?;
+    }
+    return null;
+  }
+
   Widget _buildLeaderboardPlank(
     Map<String, dynamic> p,
     int rank, {
@@ -5244,13 +5663,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final isMe = userId == _myUserId;
     final isStealthed = p['stealthed'] == true;
     final isFinished = p['finishedAt'] != null;
-
-    final activeEffects =
-        (_powerupData?['activeEffects'] as List?)
-            ?.cast<Map<String, dynamic>>()
-            .where((e) => e['targetUserId'] == userId)
-            .toList() ??
-        [];
 
     final plank = LeaderboardPlank(
       rank: rank,
@@ -5268,10 +5680,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       nameSize: large ? 17 : 15,
       stepsSize: large ? 18 : 16,
       verticalPadding: large ? 11 : 8,
-      effectIcons: [
-        for (final e in activeEffects)
-          _EffectIconWithTooltip(type: e['type'] as String? ?? ''),
-      ],
+      effectIcons: _effectIconsFor(userId),
     );
 
     // Tap a non-self, non-stealthed runner to open a friend-request sheet.
@@ -5505,9 +5914,68 @@ class _RaceProgressSkeleton extends StatelessWidget {
   }
 }
 
+/// Compact gold "Open All" pill for the POWERUPS header (item #1). Disabled
+/// (greyed, non-tappable) while another powerup action is in flight.
+class _OpenAllButton extends StatelessWidget {
+  const _OpenAllButton({required this.onTap});
+
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.5,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Ink(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: AppColors.pillGold,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.pillGoldDark, width: 1.5),
+              boxShadow: const [
+                BoxShadow(
+                  color: AppColors.pillGoldShadow,
+                  offset: Offset(2, 2),
+                  blurRadius: 0,
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 14,
+                  color: AppColors.textDark,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'OPEN ALL',
+                  style: PixelText.pill(size: 11, color: AppColors.textDark),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _EffectIconWithTooltip extends StatefulWidget {
   final String type;
-  const _EffectIconWithTooltip({required this.type});
+
+  /// Optional attacker/source display name, appended to the tooltip (e.g. the
+  /// Leech badge shown on the victim reads "…from @Otter42"). Null for effects
+  /// with no distinct source.
+  final String? attackerName;
+
+  const _EffectIconWithTooltip({required this.type, this.attackerName});
 
   @override
   State<_EffectIconWithTooltip> createState() => _EffectIconWithTooltipState();
@@ -5519,8 +5987,12 @@ class _EffectIconWithTooltipState extends State<_EffectIconWithTooltip> {
   void _show() {
     _dismiss();
     final name = _powerupNames[widget.type] ?? widget.type;
-    final desc = _powerupDescriptions[widget.type] ?? '';
+    var desc = _powerupDescriptions[widget.type] ?? '';
     if (desc.isEmpty) return;
+    final attacker = widget.attackerName;
+    if (attacker != null && attacker.isNotEmpty) {
+      desc = '$desc — from ${atName(attacker)}';
+    }
 
     final box = context.findRenderObject() as RenderBox;
     final offset = box.localToGlobal(Offset.zero);

@@ -6,6 +6,15 @@ import 'package:step_tracker/screens/tabs/home_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 
+// Item 8: the hero "?" help button was removed (the sun baked into the sky PNG
+// covered it). Help/tutorial stays reachable from the Profile tab, so nothing is
+// orphaned. This asserts the icon no longer renders on the home hero.
+//
+// NOTE: this directly contradicts the pre-existing assertion in
+// home_tab_no_add_friends_test.dart ("The help button stays" → findsOneWidget),
+// which is now outdated by this approved change. Per repo rules that existing
+// test is left untouched and flagged for Rohan to invert.
+
 class _FakeBackendApiService extends BackendApiService {}
 
 Future<AuthService> _createAuthService() async {
@@ -26,9 +35,8 @@ Future<AuthService> _createAuthService() async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('home hero no longer renders the add-friends button', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('home hero no longer renders the "?" help button',
+      (WidgetTester tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final authService = await _createAuthService();
@@ -56,11 +64,6 @@ void main() {
     );
     await tester.pump();
 
-    // The friends/add-friends hero button (which used this icon) was removed;
-    // it must not appear anywhere on the home screen.
-    expect(find.byIcon(Icons.person_add_alt_1_rounded), findsNothing);
-    // The help '?' hero button was removed (it was covered by the sun; help is
-    // still reachable from the Profile tab).
     expect(find.byIcon(Icons.help_outline_rounded), findsNothing);
   });
 }

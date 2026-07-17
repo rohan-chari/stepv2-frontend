@@ -327,6 +327,11 @@ class NotificationService {
       case 'RACE_STARTED':
       case 'RACE_COMPLETED':
       case 'POWERUP_USED':
+      // Leech victim alert (item #2): "you're being leeched" opens the race so
+      // the victim can react. The backend may tag it POWERUP_USED (shared
+      // offensive path) or a dedicated LEECH_APPLIED — route both to the race.
+      // Additive types; older apps fall through to null and just show the alert.
+      case 'LEECH_APPLIED':
       case 'race_message':
       // Live placement change (Phase 0/3). Tapping the "you've been passed" alert
       // opens the race. Additive type — older apps fall through to default/null and

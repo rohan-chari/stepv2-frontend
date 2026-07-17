@@ -406,6 +406,11 @@ class _AdminStatsCardState extends State<_AdminStatsCard> {
               '${activity?['dauInActiveRace'] ?? '—'} '
               '(${activity?['pctDauInActiveRace'] ?? '—'}%)',
             ),
+            // Item 9: avg unique users opening an in-race mystery box per ET day.
+            // Null-safe — the backend field only exists after the box-open
+            // logging deploy, and reads '—' until data accrues.
+            _row('Avg box openers/day',
+                '${activity?['avgUniqueBoxOpenersPerDay'] ?? '—'}'),
             _section('FRIENDS PER USER'),
             _row(
               '0 / 1 / 2 / 3-5 / 6+',

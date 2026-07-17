@@ -21,7 +21,6 @@ import '../../widgets/home_hero_scene.dart';
 import '../../widgets/race_opportunity_card.dart';
 import '../../widgets/race_ui.dart';
 import '../../widgets/team_scoreline.dart';
-import '../../tutorial/tutorial_screen.dart';
 import '../display_name_screen.dart';
 import '../public_races_screen.dart';
 import '../get_coins_screen.dart';
@@ -814,19 +813,9 @@ class HomeTab extends StatelessWidget {
                 ),
               ),
             ),
-            // Last child so it paints and hit-tests above the hero content,
-            // pinned to the scene's true top-right corner.
-            Positioned(
-              top: topInset + 10,
-              right: 10,
-              child: _HelpHeroButton(
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => TutorialScreen(authService: authService),
-                  ),
-                ),
-              ),
-            ),
+            // Item 8: the hero "?" help button was removed — the baked-in sun in
+            // the sky PNG visually covered it. Help/tutorial is still reachable
+            // from the Profile tab, so nothing is orphaned.
           ],
         ),
       ),
@@ -1680,56 +1669,3 @@ class _SectionTick extends StatelessWidget {
   }
 }
 
-/// Tappable "find friends" entry point shown in the top-right of the home hero.
-/// Shows a small badge when there are incoming friend requests.
-class _HelpHeroButton extends StatefulWidget {
-  final VoidCallback? onTap;
-
-  const _HelpHeroButton({this.onTap});
-
-  @override
-  State<_HelpHeroButton> createState() => _HelpHeroButtonState();
-}
-
-class _HelpHeroButtonState extends State<_HelpHeroButton> {
-  static const _shadows = [
-    Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
-  ];
-
-  bool _pressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final button = Container(
-      decoration: BoxDecoration(
-        color: AppColors.parchment.withValues(alpha: 0.16),
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: AppColors.parchment.withValues(alpha: 0.5),
-          width: 1.5,
-        ),
-      ),
-      padding: const EdgeInsets.all(8),
-      child: Icon(
-        Icons.help_outline_rounded,
-        size: 22,
-        color: AppColors.parchment,
-        shadows: _shadows,
-      ),
-    );
-
-    return GestureDetector(
-      onTap: widget.onTap,
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) => setState(() => _pressed = false),
-      onTapCancel: () => setState(() => _pressed = false),
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedScale(
-        scale: _pressed ? 0.92 : 1.0,
-        duration: const Duration(milliseconds: 90),
-        curve: Curves.easeOut,
-        child: button,
-      ),
-    );
-  }
-}

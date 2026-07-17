@@ -15,6 +15,10 @@ import '../../widgets/pill_button.dart';
 import '../../widgets/powerup_icon.dart';
 import '../get_coins_screen.dart';
 
+// Powerup types hidden from this build's store even if the backend still lists
+// them. Currently only IMPOSTER, disabled server-side (item #3).
+const _hiddenShopPowerupTypes = {'IMPOSTER'};
+
 enum _ShopSection { store, inventory }
 
 enum _ShopCategory { powerups, characters, accessories }
@@ -155,7 +159,12 @@ class _ShopTabState extends State<ShopTab> {
         if (type != null && qty > 0) inventory[type] = qty;
       }
 
-      _powerupStoreItems = storeItems;
+      // Imposter is disabled on this build (item #3). The backend catalog also
+      // filters it out, but guard here too so a not-yet-deployed backend can't
+      // surface a purchasable-but-inert Imposter tile.
+      _powerupStoreItems = storeItems
+          .where((item) => !_hiddenShopPowerupTypes.contains(item['powerupType']))
+          .toList();
       _powerupInventory = inventory;
       _powerupsAvailable = true;
     } catch (_) {

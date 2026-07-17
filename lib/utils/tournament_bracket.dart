@@ -31,6 +31,7 @@ class BracketSlot {
     this.displayName,
     this.steps = 0,
     this.forfeited = false,
+    this.stealthed = false,
     this.isMe = false,
     this.participant,
   });
@@ -40,6 +41,9 @@ class BracketSlot {
   final String? displayName;
   final int steps;
   final bool forfeited;
+
+  /// The player's score is masked/hidden (detour/stealth); render `???`.
+  final bool stealthed;
   final bool isMe;
 
   /// The participant map (avatar / animal / equippedAccessories), when known.
@@ -365,6 +369,7 @@ BracketSlot _slotFromMatchupPlayer(
     displayName: Tournament.displayName(t, player),
     steps: Tournament.playerSteps(player),
     forfeited: Tournament.playerForfeited(player),
+    stealthed: Tournament.playerStealthed(player),
     isMe: userId != null && userId == myUserId,
     participant: Tournament.participantById(t, userId),
   );

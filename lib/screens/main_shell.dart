@@ -1323,44 +1323,57 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
   }
 
-  /// Fetches public races for the first-race onboarding step. Returns null on
-  /// error so the step can auto-skip rather than dead-end.
-  Future<List<Map<String, dynamic>>?> _fetchOnboardingRaces() async {
-    final identityToken = widget.authService.authToken;
-    if (identityToken == null || identityToken.isEmpty) return null;
-    try {
-      return await _backendApiService.fetchPublicRaces(
-        identityToken: identityToken,
+  /// Confirms the (already server-side) auto-enrollment from the onboarding step
+  /// and drops the user into the live Daily race. Enrollment into the daily +
+  /// weekly seeded races already happened on account creation
+  /// (`autoEnrollNewUser.js`), so this NEVER joins a race — it only closes the
+  /// first-race gate and routes. Falls back to Home with a gentle toast when no
+  /// active Daily race is available (backend variance / version) so onboarding
+  /// never blocks on a missing race.
+  Future<void> _enterDailyRaceOnboarding() async {
+    // Resolve the destination before closing the gate so we know where to land.
+    final dailyRaceId = await _fetchActiveDailyRaceId();
+    // Close the gate (backend idempotent + local) so onboarding exits to tabs.
+    await _skipFirstRaceOnboarding();
+    // Refresh surfaces that now reflect the enrolled races / welcome boxes.
+    _fetchRaces();
+    _fetchShopCatalog();
+    _refreshMe();
+    if (!mounted) return;
+    if (dailyRaceId != null && dailyRaceId.isNotEmpty) {
+      // Exiting onboarding rebuilds into the tab PageView; open the race on top.
+      _openRaceFromCard(dailyRaceId);
+    } else {
+      // Safe fallback: land Home rather than blocking on a missing daily race.
+      _pageController.jumpToPage(_homeTabIndex);
+      showInfoToast(
+        context,
+        "You're all set — find your races on the Races tab.",
       );
-    } catch (_) {
-      return null;
     }
   }
 
-  /// Joins a race during onboarding (grants mystery boxes server-side). On
-  /// success: marks the step seen locally so onboarding exits, then navigates
-  /// to the race detail. Returns true on success.
-  Future<bool> _joinOnboardingRace(String raceId) async {
+  /// Finds the id of the currently ACTIVE featured Daily (`DAILY_10K`) race, or
+  /// null when the backend returns none (older backend / seeding gap). The
+  /// featured payload exposes the race id as `raceId` and the stable seed
+  /// identity as `seedKind`. Best-effort: any error yields null so the caller
+  /// falls back to Home.
+  Future<String?> _fetchActiveDailyRaceId() async {
     final identityToken = widget.authService.authToken;
-    if (identityToken == null || identityToken.isEmpty) return false;
+    if (identityToken == null || identityToken.isEmpty) return null;
     try {
-      await _backendApiService.joinPublicRace(
+      final featured = await _backendApiService.fetchFeaturedRaces(
         identityToken: identityToken,
-        raceId: raceId,
-        onboarding: true,
       );
-      await widget.authService.markFirstRaceOnboardingSeenLocally();
-      // Refresh surfaces that now include the joined race / new boxes.
-      _fetchRaces();
-      _fetchShopCatalog();
-      _refreshMe();
-      if (!mounted) return true;
-      // Exiting onboarding rebuilds into the tab PageView; open the race on top.
-      _openRaceFromCard(raceId);
-      return true;
-    } catch (e) {
-      if (mounted) showErrorToast(context, 'Could not join: $e');
-      return false;
+      for (final race in featured) {
+        if (race['seedKind'] == 'DAILY_10K') {
+          final raceId = race['raceId'] as String?;
+          if (raceId != null && raceId.isNotEmpty) return raceId;
+        }
+      }
+      return null;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -1727,8 +1740,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                 onEnableNotifications: _enableNotifications,
                 onStartTutorial: _startTutorialOnboarding,
                 onSkipTutorial: _skipTutorialOnboarding,
-                onFetchOnboardingRaces: _fetchOnboardingRaces,
-                onJoinOnboardingRace: _joinOnboardingRace,
+                onEnterDaily: _enterDailyRaceOnboarding,
                 onSkipFirstRace: _skipFirstRaceOnboarding,
                 firstRaceShareTokenPending:
                     widget.authService.pendingShareToken != null,

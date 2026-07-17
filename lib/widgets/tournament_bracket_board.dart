@@ -5,6 +5,7 @@ import '../utils/at_name.dart';
 import '../utils/tournament.dart';
 import '../utils/tournament_bracket.dart';
 import 'app_avatar.dart';
+import 'tournament_sponsor_card.dart';
 
 /// A pannable / zoomable March-Madness bracket rendered on the app's checkered
 /// green arcade grid — the grid IS the draggable board. Rounds progress
@@ -277,6 +278,20 @@ class _TournamentBracketBoardState extends State<TournamentBracketBoard> {
       ),
     );
 
+    // "Presented by" sponsor card tucked under the champion cap — a labeled,
+    // policy-compliant native ad (gated by the remote kill switch; renders
+    // nothing when off, a house ad when there's no fill). Pans/zooms with the
+    // board so it reads as part of the finals frame.
+    const sponsorW = 220.0;
+    children.add(
+      Positioned(
+        left: _championCenter.dx - sponsorW / 2,
+        top: _championCenter.dy + 44 + 14,
+        width: sponsorW,
+        child: const TournamentSponsorCard(width: sponsorW),
+      ),
+    );
+
     return Stack(clipBehavior: Clip.none, children: children);
   }
 
@@ -498,6 +513,11 @@ class _TournamentBracketBoardState extends State<TournamentBracketBoard> {
             else if (won)
               const Icon(Icons.check_circle_rounded,
                   size: 14, color: AppColors.roofLight)
+            else if (slot.stealthed)
+              Text(
+                '???',
+                style: PixelText.body(size: 10.5, color: AppColors.textMid),
+              )
             else if (slot.steps > 0)
               Text(
                 _fmt(slot.steps),
