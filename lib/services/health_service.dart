@@ -187,6 +187,14 @@ class HealthService {
     return entries;
   }
 
+  /// Maximum number of platform aggregate reads kept in flight while bucketing
+  /// hourly samples. Bounded (D13) so a highly active user with many hours does
+  /// not fan out an unbounded burst of HealthKit/Health Connect calls, while
+  /// still overlapping I/O for a real speedup over the old one-at-a-time loop.
+  /// If either platform proves unstable under concurrency, lower this to 2 — do
+  /// not revert to unbounded.
+  static const int _hourlyConcurrency = 4;
+
   Future<List<StepSampleData>> getHourlySteps({
     required DateTime startTime,
     required DateTime endTime,
@@ -195,7 +203,11 @@ class HealthService {
     // via [_stepsInInterval]: iOS uses HealthKit's deduped, manual-excluded
     // cumulativeSum; Android uses Health Connect's de-duplicated aggregate minus
     // manually-entered steps. See [_stepsInInterval] / ANDROID.md §C-5.
-    final samples = <StepSampleData>[];
+    //
+    // Windows are built in chronological order, evaluated with bounded
+    // concurrency, then re-assembled BY INDEX so the emitted samples are byte-
+    // for-byte identical (order + values) to the old sequential loop.
+    final windows = <_HourWindow>[];
     var bucketStart = DateTime(
       startTime.year,
       startTime.month,
@@ -214,22 +226,65 @@ class HealthService {
         bucketStart.hour,
       ).add(const Duration(hours: 1));
       final bucketEnd = nextHour.isBefore(endTime) ? nextHour : endTime;
+      windows.add(_HourWindow(bucketStart, bucketEnd));
+      bucketStart = bucketEnd;
+    }
 
-      final steps = await _stepsInInterval(bucketStart, bucketEnd);
+    final totals = await _mapWithConcurrency<_HourWindow, int?>(
+      windows,
+      _hourlyConcurrency,
+      (w) => _stepsInInterval(w.start, w.end),
+    );
 
+    final samples = <StepSampleData>[];
+    for (var i = 0; i < windows.length; i++) {
+      final steps = totals[i];
       if (steps != null && steps > 0) {
         samples.add(
           StepSampleData(
-            periodStart: bucketStart.toUtc(),
-            periodEnd: bucketEnd.toUtc(),
+            periodStart: windows[i].start.toUtc(),
+            periodEnd: windows[i].end.toUtc(),
             steps: steps,
           ),
         );
       }
-
-      bucketStart = bucketEnd;
     }
 
     return samples;
   }
+
+  /// Runs [task] over [items] with at most [maxConcurrent] futures in flight,
+  /// returning results positionally aligned to [items]. Work is dispatched in
+  /// list order (each task is started before its first suspension), which keeps
+  /// any order-sensitive fake/platform bookkeeping deterministic.
+  static Future<List<R>> _mapWithConcurrency<T, R>(
+    List<T> items,
+    int maxConcurrent,
+    Future<R> Function(T item) task,
+  ) async {
+    if (items.isEmpty) return <R>[];
+    final results = List<R?>.filled(items.length, null);
+    var nextIndex = 0;
+
+    Future<void> worker() async {
+      while (true) {
+        final i = nextIndex;
+        if (i >= items.length) return;
+        nextIndex += 1;
+        results[i] = await task(items[i]);
+      }
+    }
+
+    final workerCount = maxConcurrent < items.length
+        ? maxConcurrent
+        : items.length;
+    await Future.wait([for (var k = 0; k < workerCount; k++) worker()]);
+    return results.cast<R>();
+  }
+}
+
+class _HourWindow {
+  const _HourWindow(this.start, this.end);
+  final DateTime start;
+  final DateTime end;
 }
