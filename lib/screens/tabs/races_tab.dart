@@ -343,7 +343,15 @@ class _RacesTabState extends State<RacesTab> {
             backgroundColor: AppColors.parchment,
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [SliverToBoxAdapter(child: _buildContent())],
+              // §9.5: lazily-built slivers. The header/pills/featured block stays
+              // one eager adapter (the featured horizontal strip needs a box
+              // context and misbehaves as a bare sibling sliver); each EXPANDED
+              // race section below builds its rows through a SliverList.builder,
+              // so initial build work is bounded by visible rows + cache extent,
+              // not total list size. Collapsed sections emit only their header
+              // (no child race cards). Visuals, order, keys, and states are
+              // unchanged — this is a perf refactor, not a redesign.
+              slivers: _buildContentSlivers(),
             ),
           ),
         ),
@@ -367,7 +375,11 @@ class _RacesTabState extends State<RacesTab> {
     return sorted;
   }
 
-  Widget _buildContent() {
+  /// §9.5: the Races content as lazily-built slivers, replacing the former
+  /// single `SliverToBoxAdapter` → `Column`. The header/pills/featured block is
+  /// ONE eager adapter (the featured horizontal strip needs a box context and
+  /// misbehaves as a bare sibling sliver); race sections build their rows lazily.
+  List<Widget> _buildContentSlivers() {
     final active = _sortByTimeLeft(_active);
     final invites = _invites;
     final waiting = _waiting;
@@ -381,34 +393,33 @@ class _RacesTabState extends State<RacesTab> {
     final hasFeatured = widget.featuredRaces.isNotEmpty ||
         widget.featuredTournaments.isNotEmpty;
 
-    return Column(
-      children: [
-        _buildRacesHeader(
-          activeCount: active.length,
-          inviteCount: invites.length + tournamentInvites.length,
-          waitingCount: waiting.length,
-          potKey: widget.tutorialPotKey,
+    return <Widget>[
+      SliverToBoxAdapter(
+        child: Column(
+          children: [
+            _buildRacesHeader(
+              activeCount: active.length,
+              inviteCount: invites.length + tournamentInvites.length,
+              waitingCount: waiting.length,
+              potKey: widget.tutorialPotKey,
+            ),
+            if (hasFeatured)
+              StaggerIn(index: 0, child: _buildContentFilterPills()),
+            StaggerIn(index: 1, child: _buildFeaturedSection()),
+          ],
         ),
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Column(
-            children: [
-              if (hasFeatured)
-                StaggerIn(index: 0, child: _buildContentFilterPills()),
-              StaggerIn(index: 1, child: _buildFeaturedSection()),
-              _buildRaceListState(
-                invites: invites,
-                waiting: waiting,
-                active: active,
-                completed: completed,
-                tournamentInvites: tournamentInvites,
-                tournaments: tournaments,
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
+      ),
+      ..._raceListStateSlivers(
+        invites: invites,
+        waiting: waiting,
+        active: active,
+        completed: completed,
+        tournamentInvites: tournamentInvites,
+        tournaments: tournaments,
+      ),
+      // Preserves the former outer group's bottom padding (was Padding bottom:8).
+      const SliverToBoxAdapter(child: SizedBox(height: 8)),
+    ];
   }
 
   /// D13 ALL / RACES / TOURNAMENTS segmented control. Selects which FEATURED
@@ -964,8 +975,9 @@ class _RacesTabState extends State<RacesTab> {
   }
 
   // D13 (revised): the user's OWN races and brackets are never filtered by the
-  // featured pill — always render every section that has content.
-  Widget _buildRaceListState({
+  // featured pill — always render every section that has content. §9.5: emitted
+  // as slivers so each expanded race section's rows build lazily.
+  List<Widget> _raceListStateSlivers({
     required List<Map<String, dynamic>> invites,
     required List<Map<String, dynamic>> waiting,
     required List<Map<String, dynamic>> active,
@@ -975,28 +987,36 @@ class _RacesTabState extends State<RacesTab> {
   }) {
     final state = _effectiveRacesState;
     if (state.shouldShowInitialLoading) {
-      return const KeyedSubtree(
-        key: Key('races-loading-skeleton'),
-        child: _RacesLoadingSkeleton(),
-      );
+      return const [
+        SliverToBoxAdapter(
+          child: KeyedSubtree(
+            key: Key('races-loading-skeleton'),
+            child: _RacesLoadingSkeleton(),
+          ),
+        ),
+      ];
     }
 
     if (state.isError && !state.hasData) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        child: LoadErrorPanel(
-          title: 'Couldn’t load races',
-          message: state.error ?? 'Check your connection and try again.',
-          onRetry: () {
-            final refresh = widget.onRefresh;
-            if (refresh != null) {
-              refresh();
-            } else {
-              widget.onRacesChanged();
-            }
-          },
+      return [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: LoadErrorPanel(
+              title: 'Couldn’t load races',
+              message: state.error ?? 'Check your connection and try again.',
+              onRetry: () {
+                final refresh = widget.onRefresh;
+                if (refresh != null) {
+                  refresh();
+                } else {
+                  widget.onRacesChanged();
+                }
+              },
+            ),
+          ),
         ),
-      );
+      ];
     }
 
     final anyRaces = invites.isNotEmpty ||
@@ -1005,13 +1025,14 @@ class _RacesTabState extends State<RacesTab> {
         completed.isNotEmpty;
     final anyTournaments =
         tournamentInvites.isNotEmpty || tournaments.isNotEmpty;
-    if (!anyRaces && !anyTournaments) return _buildEmptyState();
+    if (!anyRaces && !anyTournaments) {
+      return [SliverToBoxAdapter(child: _buildEmptyState())];
+    }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (state.isRefreshing)
-          const Padding(
+    return <Widget>[
+      if (state.isRefreshing)
+        const SliverToBoxAdapter(
+          child: Padding(
             padding: EdgeInsets.only(bottom: 8),
             child: LinearProgressIndicator(
               minHeight: 2,
@@ -1019,64 +1040,64 @@ class _RacesTabState extends State<RacesTab> {
               backgroundColor: Colors.transparent,
             ),
           ),
-        if (anyTournaments)
-          StaggerIn(
+        ),
+      if (anyTournaments)
+        SliverToBoxAdapter(
+          child: StaggerIn(
             index: 0,
             child: _buildTournamentsSection(tournamentInvites, tournaments),
           ),
-        if (invites.isNotEmpty)
-          StaggerIn(
-            index: 1,
-            child: _buildRaceSection(
-              title: 'INVITES',
-              sectionKey: 'invites',
-              races: invites,
-              isInvite: true,
-            ),
-          ),
-        if (waiting.isNotEmpty)
-          StaggerIn(
-            index: 2,
-            child: _buildRaceSection(
-              title: 'PENDING',
-              sectionKey: 'waiting',
-              races: waiting,
-            ),
-          ),
-        if (active.isNotEmpty)
-          StaggerIn(
-            index: 3,
-            child: _buildRaceSection(
-              title: 'ACTIVE RACES',
-              sectionKey: 'active',
-              races: active,
-              showCount: false,
-              firstCardKey: widget.tutorialCardKey,
-              firstBoxKey: widget.tutorialBoxKey,
-              // In-feed native ad retired in favor of the footer AdBannerSlot;
-              // the showInFeedAd/adAfterIndex/AdInlineCard plumbing is kept
-              // intact for future native-ad use.
-              showInFeedAd: false,
-            ),
-          ),
-        if (completed.isNotEmpty)
-          StaggerIn(
-            index: 4,
-            child: _buildRaceSection(
-              title: 'COMPLETED',
-              sectionKey: 'completed',
-              races: completed,
-              showCount: false,
-            ),
-          ),
-      ],
-    );
+        ),
+      if (invites.isNotEmpty)
+        ..._raceSectionSlivers(
+          title: 'INVITES',
+          sectionKey: 'invites',
+          races: invites,
+          staggerIndex: 1,
+          isInvite: true,
+        ),
+      if (waiting.isNotEmpty)
+        ..._raceSectionSlivers(
+          title: 'PENDING',
+          sectionKey: 'waiting',
+          races: waiting,
+          staggerIndex: 2,
+        ),
+      if (active.isNotEmpty)
+        ..._raceSectionSlivers(
+          title: 'ACTIVE RACES',
+          sectionKey: 'active',
+          races: active,
+          staggerIndex: 3,
+          showCount: false,
+          firstCardKey: widget.tutorialCardKey,
+          firstBoxKey: widget.tutorialBoxKey,
+          // In-feed native ad retired in favor of the footer AdBannerSlot; the
+          // showInFeedAd/adAfterIndex/AdInlineCard plumbing is kept intact for
+          // future native-ad use.
+          showInFeedAd: false,
+        ),
+      if (completed.isNotEmpty)
+        ..._raceSectionSlivers(
+          title: 'COMPLETED',
+          sectionKey: 'completed',
+          races: completed,
+          staggerIndex: 4,
+          showCount: false,
+        ),
+    ];
   }
 
-  Widget _buildRaceSection({
+  /// One race section as slivers: a header adapter, then — only when expanded —
+  /// the rounded parchment card wrapping a `SliverList.builder` of rows. A
+  /// collapsed section emits ONLY the header sliver (no child race cards are
+  /// instantiated). The card fill/border/shadow are painted by [DecoratedSliver]
+  /// so the visual matches the former `DecoratedBox` while rows build lazily.
+  List<Widget> _raceSectionSlivers({
     required String title,
     required String sectionKey,
     required List<Map<String, dynamic>> races,
+    required int staggerIndex,
     bool isInvite = false,
     bool showCount = true,
     GlobalKey? firstCardKey,
@@ -1084,78 +1105,77 @@ class _RacesTabState extends State<RacesTab> {
     bool showInFeedAd = false,
   }) {
     final collapsed = _collapsedSections.contains(sectionKey);
-    return Padding(
-      padding: const EdgeInsets.only(left: 10, right: 10, bottom: 8),
-      child: Column(
-        children: [
-          _buildSectionHeader(
+    final header = SliverToBoxAdapter(
+      child: StaggerIn(
+        index: staggerIndex,
+        child: Padding(
+          padding: const EdgeInsets.only(left: 10, right: 10),
+          child: _buildSectionHeader(
             title,
             races.length,
             sectionKey,
             collapsed,
             showCount: showCount,
           ),
-          if (!collapsed)
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: AppColors.parchment,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: AppColors.roofDark.withValues(alpha: 0.55),
-                  width: 2,
-                ),
-                boxShadow: _raceCardShadow,
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: _buildRaceList(
-                  races,
-                  isInvite: isInvite,
-                  firstCardKey: firstCardKey,
-                  firstBoxKey: firstBoxKey,
-                  showInFeedAd: showInFeedAd,
-                ),
-              ),
-            ),
-        ],
+        ),
       ),
     );
-  }
 
-  Widget _buildRaceList(
-    List<Map<String, dynamic>> races, {
-    bool isInvite = false,
-    GlobalKey? firstCardKey,
-    GlobalKey? firstBoxKey,
-    bool showInFeedAd = false,
-  }) {
-    // Single in-feed ad for the section: after the 4th row on longer lists so
-    // it reads as part of the feed, else after the last row. The card
-    // collapses to zero size unless banners are enabled AND an ad loads, so
-    // rows and dividers are untouched in the adless case.
-    final adAfterIndex = showInFeedAd
-        ? (races.length > 4 ? 3 : races.length - 1)
-        : -1;
-    return Column(
-      children: [
-        for (int i = 0; i < races.length; i++) ...[
-          _buildRaceRow(
-            races[i],
-            i,
-            isInvite: isInvite,
-            cardKey: i == 0 ? firstCardKey : null,
-            boxKey: i == 0 ? firstBoxKey : null,
-          ),
-          if (i == adAfterIndex)
-            const AdInlineCard(key: Key('active-section-ad')),
-          if (i != races.length - 1)
-            Container(
-              height: 1,
-              color: AppColors.parchmentBorder.withValues(alpha: 0.9),
+    if (collapsed) {
+      // Header only — no rows are instantiated for a collapsed section. The
+      // 8px gap matches the former section's bottom padding.
+      return [header, const SliverToBoxAdapter(child: SizedBox(height: 8))];
+    }
+
+    // Single in-feed ad for the section: after the 4th row on longer lists so it
+    // reads as part of the feed, else after the last row. The card collapses to
+    // zero size unless banners are enabled AND an ad loads, so rows and dividers
+    // are untouched in the adless case.
+    final adAfterIndex =
+        showInFeedAd ? (races.length > 4 ? 3 : races.length - 1) : -1;
+
+    final rows = SliverList.builder(
+      itemCount: races.length,
+      itemBuilder: (context, i) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildRaceRow(
+              races[i],
+              i,
+              isInvite: isInvite,
+              cardKey: i == 0 ? firstCardKey : null,
+              boxKey: i == 0 ? firstBoxKey : null,
             ),
-        ],
-      ],
+            if (i == adAfterIndex)
+              const AdInlineCard(key: Key('active-section-ad')),
+            if (i != races.length - 1)
+              Container(
+                height: 1,
+                color: AppColors.parchmentBorder.withValues(alpha: 0.9),
+              ),
+          ],
+        );
+      },
     );
+
+    final card = SliverPadding(
+      padding: const EdgeInsets.only(left: 10, right: 10, bottom: 8),
+      sliver: DecoratedSliver(
+        decoration: BoxDecoration(
+          color: AppColors.parchment,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: AppColors.roofDark.withValues(alpha: 0.55),
+            width: 2,
+          ),
+          boxShadow: _raceCardShadow,
+        ),
+        sliver: rows,
+      ),
+    );
+
+    return [header, card];
   }
 
   Widget _buildEmptyState() {

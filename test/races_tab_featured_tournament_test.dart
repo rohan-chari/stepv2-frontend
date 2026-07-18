@@ -151,6 +151,19 @@ void main() {
   testWidgets(
       'pill filters the FEATURED ROW only; user races/brackets stay visible',
       (tester) async {
+    // §9.5: the Races content now builds lazily (CustomScrollView +
+    // SliverList-per-section), so offscreen sections are intentionally NOT built
+    // on first frame. This test interleaves top-of-page checks (featured cards,
+    // filter pills) with lower-section checks (ACTIVE RACES, the MY BRACKETS
+    // "ALIVE" ticket) and taps the pills between them, so it can't just scroll.
+    // We instead give the test a tall viewport so the whole page lays out at
+    // once and every lazy sliver is in view — this changes ONLY how the widgets
+    // are brought into view for layout, not what the test asserts is true.
+    tester.view.physicalSize = const Size(1200, 4000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await _pump(
       tester,
       featuredRaces: [_featuredRace()],

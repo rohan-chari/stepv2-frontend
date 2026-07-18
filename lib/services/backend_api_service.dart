@@ -1,15 +1,25 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/services.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../config/backend_config.dart';
+import '../models/race_discovery_summary.dart';
+import '../models/race_resolution_status.dart';
 import '../models/step_data.dart';
 import '../models/step_sample_data.dart';
+import '../models/step_sync_v2_result.dart';
+
+/// Session-scoped support state for an additive endpoint. Only a definite `404`
+/// downgrades an endpoint to [unsupported] (spec §9.1 / D6); a timeout or `5xx`
+/// never does. Reset on sign-out, authenticated-user change, or backend base URL
+/// change — but NOT on ordinary session-token rotation.
+enum EndpointSupport { unknown, supported, unsupported }
 
 /// An API error with a user-friendly message.
 class ApiException implements Exception {
@@ -101,6 +111,83 @@ class BackendApiService {
   String? _cachedTimeZone;
   String? _cachedReleaseChannel;
   String? _cachedAppVersion;
+
+  // Session-scoped capability caches for the additive endpoints (spec §9.1).
+  // Only a 404 flips one to `unsupported`; timeouts/5xx leave it untouched so a
+  // transient blip never permanently strands the app on the legacy path.
+  EndpointSupport _syncV2Support = EndpointSupport.unknown;
+  EndpointSupport _discoverySummarySupport = EndpointSupport.unknown;
+  EndpointSupport _raceResolutionStatusSupport = EndpointSupport.unknown;
+  // Identity guards: capability caches are keyed to (user, base URL). A plain
+  // token refresh for the SAME user must not clear them.
+  String? _sessionUserId;
+  String? _sessionBaseUrl;
+
+  static final Random _uuidRandom = Random.secure();
+
+  @visibleForTesting
+  EndpointSupport get syncV2Support => _syncV2Support;
+  @visibleForTesting
+  EndpointSupport get discoverySummarySupport => _discoverySummarySupport;
+  @visibleForTesting
+  EndpointSupport get raceResolutionStatusSupport =>
+      _raceResolutionStatusSupport;
+
+  /// Clears every session-scoped capability cache. Call on sign-out.
+  void resetSessionCapabilities() {
+    _syncV2Support = EndpointSupport.unknown;
+    _discoverySummarySupport = EndpointSupport.unknown;
+    _raceResolutionStatusSupport = EndpointSupport.unknown;
+    _sessionUserId = null;
+  }
+
+  /// Records the authenticated user for this session. Clears capability caches
+  /// only when the user or backend base URL actually changed — an ordinary
+  /// session-token rotation for the same user is a no-op.
+  void onAuthenticatedUser(String userId) {
+    final baseUrl = BackendConfig.baseUrl;
+    if (_sessionUserId != userId || _sessionBaseUrl != baseUrl) {
+      _syncV2Support = EndpointSupport.unknown;
+      _discoverySummarySupport = EndpointSupport.unknown;
+      _raceResolutionStatusSupport = EndpointSupport.unknown;
+      _sessionUserId = userId;
+      _sessionBaseUrl = baseUrl;
+    }
+  }
+
+  /// A canonical v4 UUID string (36 chars) for the sync-v2 `Idempotency-Key`.
+  /// The same key is reused for the single permitted retry.
+  static String generateIdempotencyKey() {
+    final bytes = List<int>.generate(16, (_) => _uuidRandom.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+    bytes[8] = (bytes[8] & 0x3f) | 0x80; // RFC 4122 variant
+    String hex(int b) => b.toRadixString(16).padLeft(2, '0');
+    final s = bytes.map(hex).join();
+    return '${s.substring(0, 8)}-${s.substring(8, 12)}-${s.substring(12, 16)}'
+        '-${s.substring(16, 20)}-${s.substring(20)}';
+  }
+
+  /// Builds the ONE immutable, normalized sync-v2 body for a sync attempt group:
+  /// samples pre-sorted chronologically (periodStart, then periodEnd) in UTC ISO
+  /// with integer step values. The same object is reused for the retry so the
+  /// server's canonical hash matches and the idempotency key never conflicts.
+  static Map<String, dynamic> buildStepSyncV2Payload({
+    required StepData stepData,
+    required List<StepSampleData> samples,
+  }) {
+    final sorted = [...samples]..sort((a, b) {
+      final byStart = a.periodStart.toUtc().compareTo(b.periodStart.toUtc());
+      if (byStart != 0) return byStart;
+      return a.periodEnd.toUtc().compareTo(b.periodEnd.toUtc());
+    });
+    final month = stepData.date.month.toString().padLeft(2, '0');
+    final day = stepData.date.day.toString().padLeft(2, '0');
+    return <String, dynamic>{
+      'date': '${stepData.date.year}-$month-$day',
+      'steps': stepData.steps,
+      'samples': sorted.map((s) => s.toJson()).toList(growable: false),
+    };
+  }
 
   // The running build's version (e.g. "1.3.0"), sent on every request so the
   // backend can gate responses by client capability instead of guessing.
@@ -277,6 +364,213 @@ class BackendApiService {
     );
 
     await _decodeJsonResponse(response);
+  }
+
+  /// `POST /steps/sync-v2` (spec §6.4): persists the daily total + optional
+  /// hourly samples and returns the uploader-current reconciliation state plus a
+  /// durable job handle. [payload] must be the immutable normalized body from
+  /// [buildStepSyncV2Payload]; [idempotencyKey] must be reused verbatim across
+  /// this call's single internal retry. All non-2xx/ambiguous cases are mapped
+  /// to a [StepSyncV2Result] the orchestration layer can act on defensively —
+  /// only a definite 404 or pre-persistence `ASYNC_DISABLED` permits a legacy
+  /// write.
+  Future<StepSyncV2Result> recordStepSyncV2({
+    required String identityToken,
+    required String idempotencyKey,
+    required Map<String, dynamic> payload,
+  }) async {
+    if (_syncV2Support == EndpointSupport.unsupported) {
+      return const StepSyncV2Result(kind: StepSyncV2Kind.unsupported);
+    }
+
+    var result = await _attemptStepSyncV2(identityToken, idempotencyKey, payload);
+    if (result.kind == StepSyncV2Kind.ambiguousFailure) {
+      // The single permitted retry — SAME key, SAME immutable payload. The
+      // server may have committed the first attempt, so we never fall back to a
+      // legacy write from here.
+      result = await _attemptStepSyncV2(identityToken, idempotencyKey, payload);
+    }
+    return result;
+  }
+
+  Future<StepSyncV2Result> _attemptStepSyncV2(
+    String identityToken,
+    String idempotencyKey,
+    Map<String, dynamic> payload,
+  ) async {
+    HttpClientResponse response;
+    try {
+      response = await _sendJsonRequest(
+        method: 'POST',
+        path: '/steps/sync-v2',
+        body: payload,
+        identityToken: identityToken,
+        headers: {'Idempotency-Key': idempotencyKey},
+      );
+    } on ApiException {
+      // Connection loss / timeout / handshake — ambiguous and retryable.
+      return const StepSyncV2Result(kind: StepSyncV2Kind.ambiguousFailure);
+    }
+
+    final raw = await _readRawResponse(response);
+    final status = raw.statusCode;
+
+    if (status == 404) {
+      _syncV2Support = EndpointSupport.unsupported;
+      return const StepSyncV2Result(kind: StepSyncV2Kind.unsupported);
+    }
+
+    // A definite HTTP reply from the route proves it exists this session.
+    _syncV2Support = EndpointSupport.supported;
+
+    if (status >= 200 && status < 300) {
+      if (raw.decodeFailed || raw.json == null) {
+        // Persisted-but-status-unknown: never legacy-write, use live Home.
+        return const StepSyncV2Result(
+          kind: StepSyncV2Kind.persistedStatusUnknown,
+          diagnostic: 'sync-v2 success body was not a JSON object',
+        );
+      }
+      return _parseStepSyncV2Success(raw.json!);
+    }
+
+    if (status == 503 && raw.code == 'ASYNC_DISABLED') {
+      // Guaranteed pre-persistence — safe to run the legacy flow.
+      return const StepSyncV2Result(kind: StepSyncV2Kind.asyncDisabled);
+    }
+
+    if (status >= 500) {
+      return const StepSyncV2Result(kind: StepSyncV2Kind.ambiguousFailure);
+    }
+
+    if (status == 409) {
+      // Idempotency conflict: the server may already hold the first input.
+      return const StepSyncV2Result(
+        kind: StepSyncV2Kind.persistedStatusUnknown,
+        diagnostic: 'sync-v2 idempotency conflict (409)',
+      );
+    }
+
+    // 400 / 401 / 413 and any other definite rejection: no legacy write.
+    return const StepSyncV2Result(kind: StepSyncV2Kind.failed);
+  }
+
+  StepSyncV2Result _parseStepSyncV2Success(Map<String, dynamic> json) {
+    final recon = json['uploaderReconciliation'];
+    final reconMap =
+        recon is Map<String, dynamic> ? recon : const <String, dynamic>{};
+    // Absent/unknown state degrades to DEFERRED so a stale own card can never
+    // replace good UI.
+    final isCurrent = reconMap['state'] == 'CURRENT';
+    final rawResolved = reconMap['resolvedRaceCount'];
+    final boxCurrent = reconMap['boxStateCurrent'];
+
+    final job = json['raceResolution'];
+    final jobMap = job is Map<String, dynamic> ? job : const <String, dynamic>{};
+    final rawJobId = jobMap['jobId'];
+    final rawGeneration = jobMap['generation'];
+
+    return StepSyncV2Result(
+      kind: isCurrent ? StepSyncV2Kind.current : StepSyncV2Kind.deferred,
+      jobId: rawJobId is String && rawJobId.isNotEmpty ? rawJobId : null,
+      generation: rawGeneration is int ? rawGeneration : null,
+      resolvedRaceCount:
+          rawResolved is int && rawResolved >= 0 ? rawResolved : 0,
+      boxStateCurrent: isCurrent && boxCurrent == true,
+    );
+  }
+
+  /// `GET /steps/race-resolution/:jobId?generation=` (spec §6.5). Optional,
+  /// never blocks any indicator. A 404 (job unknown/not-owned) stops the poll
+  /// loop; malformed/transient reads return [RaceResolutionState.unknown] so the
+  /// loop may retry on its fixed schedule.
+  Future<RaceResolutionStatus> fetchRaceResolutionStatus({
+    required String identityToken,
+    required String jobId,
+    required int generation,
+  }) async {
+    HttpClientResponse response;
+    try {
+      response = await _sendGetRequest(
+        path: '/steps/race-resolution/$jobId?generation=$generation',
+        identityToken: identityToken,
+      );
+    } on ApiException {
+      return const RaceResolutionStatus(RaceResolutionState.unknown);
+    }
+
+    final raw = await _readRawResponse(response);
+    final status = raw.statusCode;
+
+    // 404 here means the specific job is unknown/not-owned (or the endpoint is
+    // absent). Either way the poll must stop — but we do NOT permanently cache
+    // "unsupported", because a job-not-found on one poll must not disable status
+    // reads for later jobs.
+    if (status == 404) {
+      return const RaceResolutionStatus(RaceResolutionState.notFound);
+    }
+    // 400 = invalid generation: nothing to poll.
+    if (status == 400) {
+      return const RaceResolutionStatus(RaceResolutionState.notFound);
+    }
+
+    _raceResolutionStatusSupport = EndpointSupport.supported;
+
+    if (status >= 200 &&
+        status < 300 &&
+        raw.json != null &&
+        !raw.decodeFailed) {
+      final rr = raw.json!['raceResolution'];
+      final state = rr is Map<String, dynamic>
+          ? RaceResolutionStatus.parseState(rr['state'])
+          : RaceResolutionState.unknown;
+      return RaceResolutionStatus(state);
+    }
+
+    return const RaceResolutionStatus(RaceResolutionState.unknown);
+  }
+
+  /// `GET /races/discovery-summary` (spec §6.2): one compact request replacing
+  /// the featured/public/tournament background calls. A 404 marks the endpoint
+  /// unsupported for the session and signals the caller to run the legacy
+  /// discovery calls in parallel; malformed/transient failures retain the last
+  /// known values (no legacy fallback, no data erasure).
+  Future<RaceDiscoverySummary> fetchRaceDiscoverySummary({
+    required String identityToken,
+  }) async {
+    if (_discoverySummarySupport == EndpointSupport.unsupported) {
+      return RaceDiscoverySummary.unsupportedResult;
+    }
+
+    HttpClientResponse response;
+    try {
+      response = await _sendGetRequest(
+        path: '/races/discovery-summary',
+        identityToken: identityToken,
+      );
+    } on ApiException {
+      return RaceDiscoverySummary.empty;
+    }
+
+    final raw = await _readRawResponse(response);
+    final status = raw.statusCode;
+
+    if (status == 404) {
+      _discoverySummarySupport = EndpointSupport.unsupported;
+      return RaceDiscoverySummary.unsupportedResult;
+    }
+
+    _discoverySummarySupport = EndpointSupport.supported;
+
+    if (status >= 200 &&
+        status < 300 &&
+        raw.json != null &&
+        !raw.decodeFailed) {
+      return RaceDiscoverySummary.fromJson(raw.json!);
+    }
+
+    // 401 / 5xx / malformed: retain last known values.
+    return RaceDiscoverySummary.empty;
   }
 
   Future<Map<String, dynamic>> fetchMe({required String identityToken}) async {
@@ -658,6 +952,7 @@ class BackendApiService {
 
   Future<Map<String, dynamic>> fetchHomeRaceCard({
     required String identityToken,
+    bool usePersistedTotals = false,
   }) async {
     // Opt-in flag: tells the backend this build understands the new
     // ACTIVE_RACES list state (horizontal row of active-race cards). Older app
@@ -668,11 +963,19 @@ class BackendApiService {
     // the rest of the home page instead of racing its own request. Old
     // backends ignore the param; the field is then absent and the milestones
     // widget falls back to its standalone fetch.
+    //
+    // homePersistedTotals=1 (spec §6.3): opt-in, sent ONLY after a sync-v2 whose
+    // uploaderReconciliation was CURRENT. It tells the backend to build active
+    // race entries from persisted RaceParticipant.totalSteps instead of
+    // recomputing live windows for every participant. An old backend ignores it
+    // and keeps live computation, so it is always safe.
     final now = DateTime.now();
     String two(int n) => n.toString().padLeft(2, '0');
     final localDate = '${now.year}-${two(now.month)}-${two(now.day)}';
+    final persistedParam = usePersistedTotals ? '&homePersistedTotals=1' : '';
     final response = await _sendGetRequest(
-      path: '/home/race-card?homeActiveRaces=1&localDate=$localDate',
+      path: '/home/race-card?homeActiveRaces=1&localDate=$localDate'
+          '$persistedParam',
       identityToken: identityToken,
     );
 
@@ -2226,10 +2529,45 @@ class BackendApiService {
     );
   }
 
+  /// Reads a response body WITHOUT throwing on a non-2xx status or malformed
+  /// body — the additive endpoints need to branch on the raw status/code and
+  /// treat an unparseable success as a distinct outcome. `decodeFailed` is true
+  /// when a non-empty body was not a JSON object.
+  Future<_RawResponse> _readRawResponse(HttpClientResponse response) async {
+    final rawBody = await response.transform(utf8.decoder).join();
+    Map<String, dynamic>? json;
+    var decodeFailed = false;
+    if (rawBody.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(rawBody);
+        if (decoded is Map<String, dynamic>) {
+          json = decoded;
+        } else {
+          decodeFailed = true;
+        }
+      } catch (_) {
+        decodeFailed = true;
+      }
+    }
+    final rawCode = json?['code'];
+    final code = rawCode is String && rawCode.isNotEmpty ? rawCode : null;
+    return _RawResponse(response.statusCode, json, code, decodeFailed);
+  }
+
   String _formatDate(DateTime date) {
     final month = date.month.toString().padLeft(2, '0');
     final day = date.day.toString().padLeft(2, '0');
 
     return '${date.year}-$month-$day';
   }
+}
+
+/// A read HTTP response that does not throw on non-2xx/malformed bodies, so the
+/// additive endpoints can branch on status/code defensively.
+class _RawResponse {
+  const _RawResponse(this.statusCode, this.json, this.code, this.decodeFailed);
+  final int statusCode;
+  final Map<String, dynamic>? json;
+  final String? code;
+  final bool decodeFailed;
 }
