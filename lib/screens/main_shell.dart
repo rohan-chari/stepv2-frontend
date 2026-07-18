@@ -11,6 +11,7 @@ import '../config/animals.dart';
 import '../models/loadable.dart';
 import '../models/step_data.dart';
 import '../models/step_sample_data.dart';
+import '../services/async_ttl_cache.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../services/background_sync_bootstrap_service.dart';
@@ -127,6 +128,23 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   // second trigger while one runs shares its future instead of re-fanning out.
   Future<void>? _homeLoadInFlight;
   Future<void>? _homeRefreshInFlight;
+  // Coalesces overlapping Races refreshes (tab reveal, pull, route-return, Home
+  // initial load, profile-triggered). A trigger while one runs rides it (§9.4).
+  Future<void>? _racesRefreshInFlight;
+  // Monotonic generation guarding race-list/discovery state commits so a slower
+  // old response can never overwrite a newer refresh (§9.4).
+  int _racesGeneration = 0;
+  int _discoveryGeneration = 0;
+  DateTime? _friendsFetchedAt;
+  // 15-minute authenticated-session shop catalog cache (§9.3): fresh reads skip
+  // the network, concurrent misses share one request, invalidated on
+  // purchase/equip/character change and cleared on sign-out.
+  final AsyncTtlCache<Map<String, dynamic>> _shopCatalogCache =
+      AsyncTtlCache<Map<String, dynamic>>(ttl: const Duration(minutes: 15));
+  // Bounded foreground poll of the durable race-resolution job (§6.5). Never
+  // blocks any indicator; stops on terminal state, navigation, pause, or the
+  // fourth poll.
+  int _jobPollToken = 0;
   // Guards against double-pushing RaceDetailScreen from rapid taps.
   bool _openingRaceDetail = false;
   bool _openingTournament = false;
@@ -200,6 +218,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _onNotificationAction,
     );
     _foregroundPollTimer?.cancel();
+    _jobPollToken += 1; // invalidate any in-flight job polling loop
     _pageController.dispose();
     _bannerHeight.dispose();
     WidgetsBinding.instance.removeObserver(this);
@@ -517,6 +536,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _startForegroundPolling();
     } else if (state == AppLifecycleState.paused) {
       _stopForegroundPolling();
+      // Stop background job polling so a paused app issues no requests / leaks
+      // no timers (§6.5).
+      _jobPollToken += 1;
     }
   }
 
@@ -581,6 +603,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       return true;
     } catch (error) {
       if (isAuthenticationFailure(error)) {
+        // Sign-out clears every session-scoped cache: shop catalog + additive
+        // endpoint capability states (§9.1/§9.3).
+        _shopCatalogCache.clear();
+        _backendApiService.resetSessionCapabilities();
+        _jobPollToken += 1; // cancel any in-flight job polling
         await widget.authService.signOut();
         if (!mounted) return false;
 
@@ -668,6 +695,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     setState(() => _notificationsState = granted);
   }
 
+  /// Reads local health (daily total + hourly samples) and persists it, then
+  /// refreshes friends + me. This preserves the original `_fetchSteps` contract
+  /// (used by initial load, resume, the 5-minute foreground poll, and the health
+  /// enable flow) while routing persistence through the shared [_persistSteps]
+  /// v2/legacy orchestration. It intentionally does NOT fetch the home batch —
+  /// the poll keeps its narrow behavior (§9.2).
   Future<void> _fetchSteps() async {
     setState(() {
       _isLoading = true;
@@ -675,82 +708,168 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     });
 
     try {
-      final identityToken = widget.authService.authToken;
-      // Pre-read both HealthKit windows in parallel so we know whether samples
-      // will follow before posting /steps. When samples are coming, /steps can
-      // skip race-state resolution (the samples endpoint will re-resolve with
-      // fresher sample data).
-      final now = DateTime.now();
-      final results = await Future.wait([
-        _healthService.getStepsToday(),
-        _healthService.getHourlySteps(
-          startTime: DateTime(now.year, now.month, now.day),
-          endTime: now,
-        ),
-      ]);
-      final stepData = results[0] as StepData;
-      final hourlySamples = results[1] as List<StepSampleData>;
-      final stepEntries = [stepData];
-      bool syncFailed = false;
-
-      if (identityToken != null && identityToken.isNotEmpty) {
-        final willPostSamples = hourlySamples.isNotEmpty;
-
-        Future<void> pushSteps() async {
-          for (final dailyStep in stepEntries) {
-            await _backendApiService.recordSteps(
-              identityToken: identityToken,
-              stepData: dailyStep,
-              skipRaceResolution: willPostSamples,
-            );
-          }
-        }
-
-        try {
-          await pushSteps();
-        } catch (_) {
-          // Cold-start blip from background → foreground is common.
-          // Silently retry once before flagging the sync as stale.
-          await Future<void>.delayed(const Duration(seconds: 1));
-          try {
-            await pushSteps();
-          } catch (_) {
-            syncFailed = true;
-          }
-        }
-
-        if (!syncFailed && willPostSamples) {
-          try {
-            await _backendApiService.recordStepSamples(
-              identityToken: identityToken,
-              samples: hourlySamples,
-            );
-          } catch (_) {
-            // Don't fail the main sync if hourly samples fail. Race resolution
-            // will catch up on the next refresh because the next /steps call
-            // will run with skipRaceResolution=false (no samples to follow) or
-            // be paired with a successful /steps/samples.
-          }
-        }
-      }
-
+      final outcome = await _persistSteps();
       setState(() {
-        _stepData = stepData;
         _isLoading = false;
         _error = null;
       });
-
-      // Awaited so every caller of _fetchSteps gets the post-settlement
-      // refresh of friends + me (coins/boxes minted by /steps/samples) without
-      // having to fetch them again itself — this is the ONLY place a steps
-      // sync refreshes those two surfaces.
+      // Post-settlement refresh of friends + me (coins/boxes). Preserved as the
+      // one place a steps sync refreshes those two surfaces.
       await Future.wait([_fetchFriendsSteps(), _refreshMe()]);
+      // Job success can update an already-loaded home surface; the placement job
+      // remains the worst-case safety net, so this is best-effort.
+      if (outcome.jobId != null && outcome.generation != null) {
+        _startJobPolling(outcome.jobId!, outcome.generation!);
+      }
     } catch (e) {
       setState(() {
         _isLoading = false;
         _error = 'Failed to fetch steps:\n$e';
       });
     }
+  }
+
+  /// Shared step persistence (§9.2). Reads device health, then tries
+  /// `POST /steps/sync-v2` with one immutable normalized payload and a fresh
+  /// idempotency key. Falls back to legacy `/steps` (+ `/steps/samples`) ONLY on
+  /// a definite 404 or pre-persistence `ASYNC_DISABLED`; every ambiguous or
+  /// persisted-unknown outcome forbids a legacy write. Always updates
+  /// [_stepData] from the truthful local read. May throw if the local health
+  /// read fails — callers decide how to surface that.
+  Future<_StepSyncOutcome> _persistSteps() async {
+    final identityToken = widget.authService.authToken;
+    final now = DateTime.now();
+    final results = await Future.wait([
+      _healthService.getStepsToday(),
+      _healthService.getHourlySteps(
+        startTime: DateTime(now.year, now.month, now.day),
+        endTime: now,
+      ),
+    ]);
+    final stepData = results[0] as StepData;
+    final hourlySamples = results[1] as List<StepSampleData>;
+
+    if (identityToken == null || identityToken.isEmpty) {
+      if (mounted) setState(() => _stepData = stepData);
+      return const _StepSyncOutcome(persisted: false, error: true);
+    }
+
+    final payload = BackendApiService.buildStepSyncV2Payload(
+      stepData: stepData,
+      samples: hourlySamples,
+    );
+    final key = BackendApiService.generateIdempotencyKey();
+
+    final v2 = await _backendApiService.recordStepSyncV2(
+      identityToken: identityToken,
+      idempotencyKey: key,
+      payload: payload,
+    );
+
+    // Local step display is always truthful from the device read, regardless of
+    // the server outcome.
+    if (mounted) setState(() => _stepData = stepData);
+
+    if (v2.shouldLegacyFallback) {
+      final ok = await _legacySyncSteps(identityToken, stepData, hourlySamples);
+      return _StepSyncOutcome(persisted: ok, error: !ok);
+    }
+
+    if (v2.diagnostic != null) {
+      debugPrint('[sync-v2 contract alarm] ${v2.diagnostic}');
+    }
+
+    return _StepSyncOutcome(
+      persisted: v2.persisted,
+      usePersistedHome: v2.usePersistedHome,
+      error: v2.isError,
+      jobId: v2.jobId,
+      generation: v2.generation,
+    );
+  }
+
+  /// The pre-existing synchronous step flow, reused only when sync-v2 is
+  /// unsupported or async is disabled. Retries the daily post once on a
+  /// cold-start blip, then posts hourly samples best-effort.
+  Future<bool> _legacySyncSteps(
+    String identityToken,
+    StepData stepData,
+    List<StepSampleData> hourlySamples,
+  ) async {
+    final willPostSamples = hourlySamples.isNotEmpty;
+
+    Future<void> pushSteps() => _backendApiService.recordSteps(
+      identityToken: identityToken,
+      stepData: stepData,
+      skipRaceResolution: willPostSamples,
+    );
+
+    var syncFailed = false;
+    try {
+      await pushSteps();
+    } catch (_) {
+      await Future<void>.delayed(const Duration(seconds: 1));
+      try {
+        await pushSteps();
+      } catch (_) {
+        syncFailed = true;
+      }
+    }
+
+    if (!syncFailed && willPostSamples) {
+      try {
+        await _backendApiService.recordStepSamples(
+          identityToken: identityToken,
+          samples: hourlySamples,
+        );
+      } catch (_) {
+        // Don't fail the main sync if hourly samples fail; the next sync
+        // re-resolves.
+      }
+    }
+    return !syncFailed;
+  }
+
+  /// Polls the durable race-resolution job at 750 ms, 1.5 s, 3 s, 5 s while
+  /// foregrounded (§6.5). Never blocks any indicator. Stops on a terminal state,
+  /// navigation/pause/sign-out (via the token guard), or the fourth poll. On
+  /// SUCCEEDED it silently refreshes home cards, personal races (if loaded), and
+  /// profile — coalesced, no new indicator.
+  void _startJobPolling(String jobId, int generation) {
+    final token = ++_jobPollToken;
+    const schedule = [
+      Duration(milliseconds: 750),
+      Duration(milliseconds: 1500),
+      Duration(seconds: 3),
+      Duration(seconds: 5),
+    ];
+
+    Future<void> poll(int index) async {
+      if (index >= schedule.length) return;
+      await Future<void>.delayed(schedule[index]);
+      if (!mounted || token != _jobPollToken) return;
+      final identityToken = widget.authService.authToken;
+      if (identityToken == null || identityToken.isEmpty) return;
+
+      final status = await _backendApiService.fetchRaceResolutionStatus(
+        identityToken: identityToken,
+        jobId: jobId,
+        generation: generation,
+      );
+      if (!mounted || token != _jobPollToken) return;
+
+      if (status.isSucceeded) {
+        // Silent catch-up: cached rival totals close the gap.
+        unawaited(_fetchRaceCard());
+        if (_racesData != null) unawaited(_fetchRacesCore());
+        unawaited(_refreshMe());
+        return;
+      }
+      if (status.isTerminal) return; // FAILED/SUPERSEDED/notFound: stop.
+      await poll(index + 1);
+    }
+
+    unawaited(poll(0));
   }
 
   Future<void> _fetchFriendsSteps() async {
@@ -786,6 +905,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         date: date,
       );
 
+      _friendsFetchedAt = DateTime.now();
       if (mounted) {
         setState(() {
           _friendsSteps = friends;
@@ -800,7 +920,31 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
   }
 
+  /// Refreshes friends only when the data is absent, older than 60 s, or was
+  /// invalidated (§9.4). Never awaited from a Races pull.
+  void _maybeRefreshFriends() {
+    final at = _friendsFetchedAt;
+    final stale =
+        at == null || DateTime.now().difference(at) > const Duration(seconds: 60);
+    if (_friendsSteps.isEmpty || stale) {
+      unawaited(_fetchFriendsSteps());
+    }
+  }
+
+  /// Public races entrypoint (§9.4). Awaits ONLY the core `GET /races` list and
+  /// fires discovery (featured/public/tournaments) in the background so callers
+  /// never block on non-critical discovery data. Kept as the shared entrypoint
+  /// for the many existing triggers (joins, tournament return, onboarding, etc.).
   Future<void> _fetchRaces() async {
+    await _fetchRacesCore();
+    unawaited(_refreshRacesDiscovery());
+  }
+
+  /// Loads and commits only the user's core personal race list. Guarded by a
+  /// monotonic generation so a slower old response cannot overwrite a newer
+  /// refresh (§9.4). No database await for discovery here.
+  Future<void> _fetchRacesCore() async {
+    final gen = ++_racesGeneration;
     final previous = _racesData;
     if (mounted) {
       setState(() {
@@ -813,7 +957,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     try {
       final identityToken = widget.authService.authToken;
       if (identityToken == null || identityToken.isEmpty) {
-        if (mounted) {
+        if (mounted && gen == _racesGeneration) {
           setState(() {
             _racesState = Loadable.error('Not signed in.', data: previous);
           });
@@ -825,27 +969,56 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         identityToken: identityToken,
       );
 
-      if (mounted) {
-        setState(() {
-          _racesData = data;
-          _racesState = Loadable.success(data);
-        });
-      }
-
-      // Featured strip + public-races count ride along with the races list so
-      // they stay in sync (e.g. after a join). Self-contained error handling —
-      // never disrupts the races load above.
-      await _fetchFeaturedRaces();
-      await _fetchPublicRaces();
-      // Fire-and-forget so the featured-tournaments fetch never delays the
-      // races list or the public-races count (D13).
-      unawaited(_fetchFeaturedTournaments());
+      // Drop a stale response: a newer refresh generation already started.
+      if (!mounted || gen != _racesGeneration) return;
+      setState(() {
+        _racesData = data;
+        _racesState = Loadable.success(data);
+      });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || gen != _racesGeneration) return;
       setState(() {
         _racesState = Loadable.error(e.toString(), data: previous);
       });
     }
+  }
+
+  /// Background discovery refresh (§9.4). One compact `discovery-summary` request
+  /// replaces three legacy calls; on a cached 404 it falls back to the legacy
+  /// featured/public/tournament calls IN PARALLEL. Each field is committed only
+  /// when its `resolved` bit was true (via the null fields of the parsed
+  /// summary), so a partial backend failure never erases last-known values.
+  Future<void> _refreshRacesDiscovery() async {
+    final identityToken = widget.authService.authToken;
+    if (identityToken == null || identityToken.isEmpty) return;
+
+    final gen = ++_discoveryGeneration;
+    final summary = await _backendApiService.fetchRaceDiscoverySummary(
+      identityToken: identityToken,
+    );
+    if (!mounted || gen != _discoveryGeneration) return;
+
+    if (summary.unsupported) {
+      // Legacy discovery — parallel, never serial, never awaited by a pull.
+      await Future.wait([
+        _fetchFeaturedRaces(),
+        _fetchPublicRaces(),
+        _fetchFeaturedTournaments(),
+      ]);
+      return;
+    }
+
+    setState(() {
+      if (summary.publicRaceCount != null) {
+        _publicRacesCount = summary.publicRaceCount!;
+      }
+      if (summary.featuredRaces != null) {
+        _featuredRaces = summary.featuredRaces!;
+      }
+      if (summary.featuredTournaments != null) {
+        _featuredTournaments = summary.featuredTournaments!;
+      }
+    });
   }
 
   /// Loads every home-page surface in parallel and, once they have ALL
@@ -865,15 +1038,31 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   Future<void> _loadHomeAndShowResultsInner() async {
+    // Persist first so the home batch and persisted-total opt-in reflect the new
+    // daily total. A local health-read failure still lets the other surfaces load.
+    _StepSyncOutcome? outcome;
+    try {
+      outcome = await _persistSteps();
+    } catch (_) {
+      // Keep prior surfaces; continue loading the rest.
+    }
+
     await Future.wait([
-      // _fetchSteps also refreshes friends + me after the steps/samples sync
-      // settles server-side — fresher than fetching them in parallel here, and
-      // it halves the calls per load.
-      _fetchSteps(),
-      _fetchRaceCard(),
-      _fetchRaces(),
+      _fetchRaceCard(usePersistedTotals: outcome?.usePersistedHome ?? false),
+      // Await ONLY the core race list — result-modal detection consumes
+      // completed races. Discovery must not gate the load (§9.4).
+      _fetchRacesCore(),
       _fetchShopCatalog(),
+      _fetchFriendsSteps(),
+      _refreshMe(),
     ]);
+
+    // Discovery runs in the background; never blocks the home load.
+    unawaited(_refreshRacesDiscovery());
+    if (outcome?.jobId != null && outcome?.generation != null) {
+      _startJobPolling(outcome!.jobId!, outcome.generation!);
+    }
+
     if (!mounted) return;
     _maybeShowRaceResults();
     _maybeShowRankedResults();
@@ -1125,8 +1314,35 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _fetchShopCatalog() async {
+  /// Fetches the shop catalog through the 15-minute session cache (§9.3): a fresh
+  /// value renders without a network call, concurrent misses share one request,
+  /// and the last catalog stays visible while a refresh runs. [force] bypasses
+  /// the TTL (used after an invalidation event).
+  Future<void> _fetchShopCatalog({bool force = false}) async {
     final previous = _shopCatalogState.data;
+
+    // Serve a fresh cached catalog without touching the network or the loading
+    // state (stale-while-revalidate is handled by the Loadable below only when
+    // an actual fetch runs).
+    if (!force && _shopCatalogCache.isFresh) {
+      final cached = _shopCatalogCache.value;
+      if (cached != null) {
+        _applyShopCatalog(cached);
+        if (mounted) setState(() => _shopCatalogState = Loadable.success(cached));
+        return;
+      }
+    }
+
+    final identityToken = widget.authService.authToken;
+    if (identityToken == null || identityToken.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _shopCatalogState = Loadable.error('Not signed in.', data: previous);
+        });
+      }
+      return;
+    }
+
     if (mounted) {
       setState(() {
         _shopCatalogState = previous == null
@@ -1136,21 +1352,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
 
     try {
-      final identityToken = widget.authService.authToken;
-      if (identityToken == null || identityToken.isEmpty) {
-        if (mounted) {
-          setState(() {
-            _shopCatalogState = Loadable.error(
-              'Not signed in.',
-              data: previous,
-            );
-          });
-        }
-        return;
-      }
-
-      final data = await _backendApiService.fetchShopCatalog(
-        identityToken: identityToken,
+      final data = await _shopCatalogCache.get(
+        () => _backendApiService.fetchShopCatalog(identityToken: identityToken),
+        forceRefresh: force,
       );
       _applyShopCatalog(data);
       if (mounted) {
@@ -1161,6 +1365,18 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       setState(() {
         _shopCatalogState = Loadable.error(e.toString(), data: previous);
       });
+    }
+  }
+
+  /// The shop tab pushes a fresh catalog after any load/purchase/equip/character
+  /// change. That is the §9.3 invalidation event: rather than dropping the cache
+  /// and refetching, we seed it with the authoritative post-change catalog so the
+  /// home surfaces stay current and the TTL window resets.
+  void _onShopCatalogChanged(Map<String, dynamic> catalog) {
+    _shopCatalogCache.set(catalog);
+    _applyShopCatalog(catalog);
+    if (mounted) {
+      setState(() => _shopCatalogState = Loadable.success(catalog));
     }
   }
 
@@ -1191,8 +1407,20 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _refreshRacesTab() async {
-    await Future.wait([_fetchRaces(), _fetchFriendsSteps()]);
+  Future<void> _refreshRacesTab() {
+    // Coalesce overlapping Races refreshes (tab reveal, pull, route-return,
+    // Home initial load, profile-triggered). A trigger while one runs rides it.
+    return _racesRefreshInFlight ??= _refreshRacesTabInner().whenComplete(() {
+      _racesRefreshInFlight = null;
+    });
+  }
+
+  Future<void> _refreshRacesTabInner() async {
+    // The pull awaits ONLY the core personal race list (§9.4/D3).
+    await _fetchRacesCore();
+    // Discovery + friends are stale-while-revalidate; never block the pull.
+    unawaited(_refreshRacesDiscovery());
+    _maybeRefreshFriends();
   }
 
   Future<void> _refreshHomeTab() {
@@ -1206,16 +1434,36 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   Future<void> _refreshHomeTabInner() async {
-    await Future.wait([
-      _fetchSteps(),
-      _fetchShopCatalog(),
-      _fetchRaceCard(),
-      _streakChipKey.currentState?.refresh() ?? Future<void>.value(),
-      _stepMilestonesKey.currentState?.refresh() ?? Future<void>.value(),
-    ]);
+    if (mounted) setState(() => _error = null);
+    _StepSyncOutcome outcome;
+    try {
+      // Stages 2-4: read health, persist (v2/legacy), update _stepData.
+      outcome = await _persistSteps();
+    } catch (_) {
+      // Local health read failed: keep prior server-derived surfaces and end
+      // the pull (existing error presentation lives in the step display).
+      return;
+    }
+
+    // Stage 5: fetch the home batch AFTER persistence so milestones/reward use
+    // the new daily total. Persisted-total path only when uploaderReconciliation
+    // was CURRENT; otherwise the backend's live-computation fallback.
+    await _fetchRaceCard(usePersistedTotals: outcome.usePersistedHome);
+
+    // Stage 6: the refresh indicator completes when this method returns.
+    // Stage 7: background, coalesced, non-blocking. The streak/milestone widgets
+    // now consume dailyReward/stepMilestones from the batch above; their
+    // standalone fallback only runs when the field is absent (see the widgets).
+    unawaited(_refreshMe());
+    unawaited(_fetchFriendsSteps());
+    // Shop only touches the network when the 15-minute cache is absent/expired.
+    unawaited(_fetchShopCatalog());
+    if (outcome.jobId != null && outcome.generation != null) {
+      _startJobPolling(outcome.jobId!, outcome.generation!);
+    }
   }
 
-  Future<void> _fetchRaceCard() async {
+  Future<void> _fetchRaceCard({bool usePersistedTotals = false}) async {
     final identityToken = widget.authService.authToken;
     if (identityToken == null || identityToken.isEmpty) {
       if (mounted) setState(() => _raceCardLoading = false);
@@ -1227,6 +1475,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     try {
       final data = await _backendApiService.fetchHomeRaceCard(
         identityToken: identityToken,
+        usePersistedTotals: usePersistedTotals,
       );
       if (mounted) {
         setState(() {
@@ -1669,7 +1918,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         builder: (context) => ShopTab(
           authService: widget.authService,
           backendApiService: _backendApiService,
-          onShopChanged: _applyShopCatalog,
+          onShopChanged: _onShopCatalogChanged,
         ),
       ),
     );
@@ -1683,6 +1932,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       final user = await _backendApiService.fetchMe(
         identityToken: identityToken,
       );
+      // Key session capability caches to the authenticated user; a plain token
+      // rotation for the same user is a no-op (§9.1).
+      final userId = user['id'] as String?;
+      if (userId != null && userId.isNotEmpty) {
+        _backendApiService.onAuthenticatedUser(userId);
+      }
       final incoming = user['incomingFriendRequests'] as int? ?? 0;
       final displayName = user['displayName'] as String?;
       final email = user['email'] as String?;
@@ -1982,4 +2237,29 @@ class _MeasureSizeRenderObject extends RenderProxyBox {
     _oldSize = newSize;
     WidgetsBinding.instance.addPostFrameCallback((_) => onChange(newSize));
   }
+}
+
+/// Result of the shared step-persistence orchestration ([_persistSteps], §9.2):
+/// what the Home flow needs to decide its home-batch strategy and job polling.
+class _StepSyncOutcome {
+  const _StepSyncOutcome({
+    required this.persisted,
+    this.usePersistedHome = false,
+    this.error = false,
+    this.jobId,
+    this.generation,
+  });
+
+  /// Step/sample data is (very likely) on the server.
+  final bool persisted;
+
+  /// The uploader's own totals/box state are CURRENT -> fetch Home with
+  /// `homePersistedTotals=1`.
+  final bool usePersistedHome;
+
+  /// The sync could not be acknowledged as successful.
+  final bool error;
+
+  final String? jobId;
+  final int? generation;
 }

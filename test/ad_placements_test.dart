@@ -13,6 +13,8 @@ import 'package:step_tracker/screens/tabs/profile_tab.dart';
 import 'package:step_tracker/screens/tabs/races_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/models/step_sync_v2_result.dart';
+import 'package:step_tracker/models/race_discovery_summary.dart';
 import 'package:step_tracker/services/background_sync_bootstrap_service.dart';
 import 'package:step_tracker/services/health_service.dart';
 import 'package:step_tracker/widgets/ad_banner_slot.dart';
@@ -246,8 +248,21 @@ class _ShellApi extends BackendApiService {
   }) async {}
 
   @override
+  Future<StepSyncV2Result> recordStepSyncV2({
+    required String identityToken,
+    required String idempotencyKey,
+    required Map<String, dynamic> payload,
+  }) async => const StepSyncV2Result(kind: StepSyncV2Kind.unsupported);
+
+  @override
+  Future<RaceDiscoverySummary> fetchRaceDiscoverySummary({
+    required String identityToken,
+  }) async => RaceDiscoverySummary.unsupportedResult;
+
+  @override
   Future<Map<String, dynamic>> fetchHomeRaceCard({
     required String identityToken,
+    bool usePersistedTotals = false,
   }) async => const {'state': 'EMPTY'};
 
   @override
