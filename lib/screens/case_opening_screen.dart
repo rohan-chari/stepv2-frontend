@@ -149,7 +149,17 @@ const _powerupEntries = [
 class CaseOpeningScreen extends StatefulWidget {
   final Future<Map<String, dynamic>> Function() openMysteryBox;
 
-  const CaseOpeningScreen({super.key, required this.openMysteryBox});
+  /// Invoked once the reel LANDS on the result (spec §6), carrying the raw
+  /// server response. The host commits the visible-inventory transition here —
+  /// never on the API response — so the rolled powerup (or an auto-activated
+  /// Fanny Pack row deletion) can't appear behind the still-spinning reel.
+  final void Function(Map<String, dynamic> result)? onRevealed;
+
+  const CaseOpeningScreen({
+    super.key,
+    required this.openMysteryBox,
+    this.onRevealed,
+  });
 
   @override
   State<CaseOpeningScreen> createState() => _CaseOpeningScreenState();
@@ -158,19 +168,30 @@ class CaseOpeningScreen extends StatefulWidget {
 class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
   bool _revealed = false;
   bool _resultReady = false;
+  // True once the server roll has begun and the reel is committed to spinning;
+  // gates dismissal (PopScope + X) until the result is revealed. Reset to false
+  // if the roll fails so the user can back out of the re-armed reel.
+  bool _spinning = false;
   String _resultType = '';
   String _resultRarity = 'COMMON';
   bool _autoActivated = false;
+  Map<String, dynamic>? _result;
+
+  // Whether the overlay can currently be dismissed: before the roll starts
+  // (nothing consumed) or after the reveal has landed. Never mid-spin.
+  bool get _canDismiss => _revealed || !_spinning;
 
   // The server roll fires HERE, from the reel's swipe gate — never on screen
   // open. Backing out with the X before swiping leaves the box unopened in
   // the inventory. Returns false (re-arming the reel) if the roll fails.
   Future<bool> _rollResult() async {
+    setState(() => _spinning = true);
     try {
       final result = await widget.openMysteryBox();
       if (!mounted) return false;
       final openResult = result['result'] as Map<String, dynamic>? ?? result;
       setState(() {
+        _result = result;
         _resultType = openResult['type'] as String? ?? '';
         _resultRarity = openResult['rarity'] as String? ?? 'COMMON';
         _autoActivated = openResult['autoActivated'] == true;
@@ -178,7 +199,11 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
       });
       return true;
     } catch (_) {
-      if (mounted) showErrorToast(context, 'Failed to open mystery box');
+      // Roll failed: the reel re-arms, so let the user back out again.
+      if (mounted) {
+        setState(() => _spinning = false);
+        showErrorToast(context, 'Failed to open mystery box');
+      }
       return false;
     }
   }
@@ -186,17 +211,26 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
   void _onStripComplete() {
     if (_revealed || !_resultReady) return;
     setState(() => _revealed = true);
+    // Commit the inventory transition only now that the reel has landed.
+    final result = _result;
+    if (result != null) widget.onRevealed?.call(result);
   }
 
   void _closeOverlay() {
+    // A committed spin cannot be dismissed midway (spec §6).
+    if (!_canDismiss) return;
     Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: Stack(
+    return PopScope(
+      // Block the Android back button and the iOS swipe-back gesture while the
+      // reel is mid-spin; allow it before the roll and after the reveal.
+      canPop: _canDismiss,
+      child: Material(
+        color: Colors.transparent,
+        child: Stack(
         children: [
           Positioned.fill(
             child: BackdropFilter(
@@ -242,6 +276,7 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
             ),
           ),
         ],
+        ),
       ),
     );
   }

@@ -109,7 +109,8 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
         Navigator.of(context).pop();
         return;
       }
-      widget.onResults?.call(results);
+      // Defer the parent inventory commit until every reel lands (spec §6) —
+      // firing it here would spoil the results behind the still-spinning grid.
       setState(() {
         _results = results;
         _phase = _Phase.revealing;
@@ -131,15 +132,31 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
     _completed++;
     if (_completed >= _results.length && _phase == _Phase.revealing) {
       HapticFeedback.mediumImpact();
+      // Every reel has landed: commit all results together in one shot. This
+      // covers the batch endpoint and the 404-compat _fallbackSingleOpens path,
+      // since both resolve through widget.openAll before reaching here.
+      widget.onResults?.call(_results);
       setState(() => _phase = _Phase.done);
     }
   }
 
+  // Dismissal is allowed only before the boxes are opened or after the whole
+  // grid has landed — never while the reels are loading/spinning (spec §6).
+  bool get _canDismiss => _phase == _Phase.idle || _phase == _Phase.done;
+
+  void _close() {
+    if (!_canDismiss) return;
+    Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: Stack(
+    return PopScope(
+      // Block Android back + iOS swipe-back while the grid is loading/spinning.
+      canPop: _canDismiss,
+      child: Material(
+        color: Colors.transparent,
+        child: Stack(
         children: [
           Positioned.fill(
             child: BackdropFilter(
@@ -177,6 +194,7 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -199,7 +217,7 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
                   style: HomeText.display(size: 28, color: HomeColors.ink),
                 ),
               ),
-              _CloseButton(onTap: () => Navigator.of(context).pop()),
+              _CloseButton(onTap: _close),
             ],
           ),
           const SizedBox(height: 4),

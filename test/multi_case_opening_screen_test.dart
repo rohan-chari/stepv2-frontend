@@ -41,13 +41,20 @@ void main() {
     await tester.tap(find.widgetWithText(PillButton, 'OPEN ALL'));
     await tester.pump(); // resolve openAll future -> revealing
     await tester.pump(); // post-frame trigger fires the reels
-    expect(handedBack, isNotNull);
-    expect(handedBack!.length, 3);
+
+    // §6 reveal sync: the inventory commit is DEFERRED until the reels land, so
+    // onResults must NOT have fired yet while the reels are still spinning
+    // (previously it fired here, spoiling the result behind the reel).
+    expect(handedBack, isNull);
 
     // Let all reels finish (4s spin + 600ms dramatic pause).
     await tester.pump(const Duration(milliseconds: 4200));
     await tester.pump(const Duration(milliseconds: 700));
     await tester.pump();
+
+    // Only now — after every reel has landed — is the batch handed back.
+    expect(handedBack, isNotNull);
+    expect(handedBack!.length, 3);
 
     // Aggregate summary.
     expect(find.text('YOU OPENED 3'), findsOneWidget);

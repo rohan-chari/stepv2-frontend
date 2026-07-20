@@ -130,6 +130,7 @@ class _ProfileTabState extends State<ProfileTab> {
       builder: (context) => _SettingsSheet(
         authService: widget.authService,
         notificationService: widget.notificationService,
+        backendApiService: _api,
         onSettingsChanged: widget.onSettingsChanged,
       ),
     );
@@ -772,11 +773,13 @@ class _StatsLoadingSkeleton extends StatelessWidget {
 class _SettingsSheet extends StatefulWidget {
   final AuthService authService;
   final NotificationService? notificationService;
+  final BackendApiService? backendApiService;
   final VoidCallback onSettingsChanged;
 
   const _SettingsSheet({
     required this.authService,
     this.notificationService,
+    this.backendApiService,
     required this.onSettingsChanged,
   });
 
@@ -911,6 +914,15 @@ class _SettingsSheetState extends State<_SettingsSheet> {
             _NotificationToggle(
               notificationService: widget.notificationService!,
               authToken: widget.authService.authToken,
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (widget.notificationService != null &&
+              widget.backendApiService != null) ...[
+            _DailyRewardReminderToggle(
+              authService: widget.authService,
+              notificationService: widget.notificationService!,
+              backendApiService: widget.backendApiService!,
             ),
             const SizedBox(height: 10),
           ],
@@ -1101,6 +1113,131 @@ class _LeaderboardVisibilityToggleState
           PixelSwitch(
             value: widget.authService.hiddenFromLeaderboard,
             onChanged: _toggle,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Toggles the evening "your daily box is waiting" reminder pushes (spec §7).
+/// Mirrors [_LeaderboardVisibilityToggle]: optimistic flip, revert on backend
+/// failure. Backed by the additive `/notifications/preferences` API (§9.1):
+/// - Reads the stored preference only when OS push permission is granted;
+///   defaults ON when the field/endpoint is unavailable (older backend).
+/// - When OS permission is denied/absent, shows off + disabled with guidance
+///   and never re-triggers the OS prompt.
+class _DailyRewardReminderToggle extends StatefulWidget {
+  final AuthService authService;
+  final NotificationService notificationService;
+  final BackendApiService backendApiService;
+
+  const _DailyRewardReminderToggle({
+    required this.authService,
+    required this.notificationService,
+    required this.backendApiService,
+  });
+
+  @override
+  State<_DailyRewardReminderToggle> createState() =>
+      _DailyRewardReminderToggleState();
+}
+
+class _DailyRewardReminderToggleState
+    extends State<_DailyRewardReminderToggle> {
+  bool? _osGranted;
+  bool _enabled = true;
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final granted = await widget.notificationService.getPermissionState();
+    var enabled = true;
+    // Only consult the backend preference when OS notifications are on — a
+    // denied user can't receive these regardless, so we show the row off.
+    if (granted == true) {
+      final token = widget.authService.authToken;
+      if (token != null && token.isNotEmpty) {
+        try {
+          enabled = await widget.backendApiService
+              .fetchDailyRewardRemindersEnabled(identityToken: token);
+        } catch (_) {
+          // Old backend / offline: default ON (the documented default) rather
+          // than crashing or silently flipping the displayed value.
+          enabled = true;
+        }
+      }
+    }
+    if (mounted) {
+      setState(() {
+        _osGranted = granted;
+        _enabled = enabled;
+        _ready = true;
+      });
+    }
+  }
+
+  Future<void> _toggle(bool value) async {
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) return;
+
+    final previous = _enabled;
+    setState(() => _enabled = value); // optimistic
+    try {
+      final persisted = await widget.backendApiService
+          .updateDailyRewardRemindersEnabled(
+            identityToken: token,
+            enabled: value,
+          );
+      if (mounted) setState(() => _enabled = persisted);
+    } catch (_) {
+      if (mounted) setState(() => _enabled = previous); // revert on failure
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_ready) return const SizedBox.shrink();
+    final granted = _osGranted == true;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+      decoration: BoxDecoration(
+        color: AppColors.parchmentLight,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.parchmentBorder, width: 1.5),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Remind me to open my daily box',
+                  style: PixelText.body(size: 13, color: AppColors.textDark),
+                ),
+                if (!granted) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Turn on notifications to get reminders',
+                    style: PixelText.body(size: 11, color: AppColors.textMid),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          PixelSwitch(
+            // Off + disabled when OS permission isn't granted; no re-prompt.
+            value: granted && _enabled,
+            onChanged: granted ? _toggle : null,
           ),
         ],
       ),

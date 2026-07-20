@@ -30,6 +30,16 @@ flutter_ios_podfile_setup
 target 'Runner' do
   use_frameworks!
 
+  # AdMob Open Bidding adapter for Meta Audience Network (FAN). The adapter
+  # brings in the compatible Meta Audience Network SDK transitively.
+  # 6.21.1.1 is the newest adapter compatible with google_mobile_ads 9.0.0's
+  # native Google Mobile Ads SDK constraint (~> 13.3.0).
+  pod 'GoogleMobileAdsMediationFacebook', '6.21.1.1'
+
+  # AdMob Open Bidding adapter for AppLovin. Pin the adapter tested with
+  # google_mobile_ads 9.0.0; it shares the existing Google Ads 13.3.x SDK.
+  pod 'GoogleMobileAdsMediationAppLovin', '13.6.3.0'
+
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   target 'RunnerTests' do
     inherit! :search_paths

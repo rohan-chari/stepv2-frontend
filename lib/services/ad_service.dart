@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 
 import 'package:app_tracking_transparency/app_tracking_transparency.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 /// Contract the daily-reward screen talks to for the rewarded-ad extra spin,
@@ -37,6 +38,8 @@ abstract class ExtraSpinAdController {
 /// BACKEND_BASE_URL (see DEPLOYMENT.md).
 class AdService implements ExtraSpinAdController {
   AdService({String? adUnitId}) : _adUnitIdOverride = adUnitId;
+
+  static const _metaAdsChannel = MethodChannel('com.steptracker/meta_ads');
 
   // Ad unit IDs are per-platform in AdMob. iOS uses the original defines;
   // Android uses the parallel `_ANDROID` defines (added so Android can reach
@@ -141,13 +144,19 @@ class AdService implements ExtraSpinAdController {
     // ads, which is fine — the reward/banner flows are identical.
     if (!kIsWeb && Platform.isIOS) {
       try {
-        final status =
-            await AppTrackingTransparency.trackingAuthorizationStatus;
+        var status = await AppTrackingTransparency.trackingAuthorizationStatus;
         if (status == TrackingStatus.notDetermined) {
-          await AppTrackingTransparency.requestTrackingAuthorization();
+          status = await AppTrackingTransparency.requestTrackingAuthorization();
         }
+        // Meta Audience Network requires this explicit flag before AdMob
+        // initializes. Never infer consent: only ATT "authorized" maps to true.
+        await _metaAdsChannel.invokeMethod<void>(
+          'setAdvertiserTrackingEnabled',
+          status == TrackingStatus.authorized,
+        );
       } catch (_) {
-        // ATT unavailable (simulator/old iOS) — proceed without it.
+        // ATT or the optional Meta bridge is unavailable — proceed without
+        // personalized tracking rather than blocking every ad source.
       }
     }
     // Debug builds only: mark our own devices as AdMob test devices so we can

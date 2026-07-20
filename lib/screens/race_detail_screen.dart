@@ -133,7 +133,7 @@ const _powerupDescriptions = {
   'SIGNAL_JAMMER':
       'Jam a rival\'s signal — they can\'t use any powerups for 1 hour. Mirrors can\'t reflect it; Compression Socks block it',
   'LEECH':
-      'For 30 min, every step you take drains one step from a chosen rival (up to 3,000). Compression Socks block it; Mirrors can\'t reflect it',
+      'For 30 min, every 2 steps you take steals 1 step from a chosen rival and adds it to your score. Compression Socks block it; Mirrors can\'t reflect it',
   'DEFENSE_SCAN':
       'Instantly reveal every opponent\'s active defenses (shields and mirrors)',
 };
@@ -155,7 +155,7 @@ const _powerupShortDescriptions = {
   'MIRROR': 'Reflects next attack',
   'RAINSTORM': 'Steps halved by rain',
   'SIGNAL_JAMMER': 'Powerups jammed',
-  'LEECH': 'Steps being leeched',
+  'LEECH': 'Steps being stolen',
 };
 
 const _targetedPowerups = [
@@ -3689,23 +3689,23 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         PageRouteBuilder(
           opaque: false,
           pageBuilder: (_, _, _) => CaseOpeningScreen(
-            openMysteryBox: () async {
-              final result = await _api.openMysteryBox(
-                identityToken: token,
-                raceId: widget.raceId,
-                powerupId: boxId,
-              );
+            openMysteryBox: () => _api.openMysteryBox(
+              identityToken: token,
+              raceId: widget.raceId,
+              powerupId: boxId,
+            ),
+            onRevealed: (result) {
               // The overlay is non-opaque, so the inventory row stays visible
-              // behind the reveal. Mirror the server's state transition
-              // locally as soon as it confirms: the box row becomes the
-              // rolled HELD powerup (or empties if it auto-activated), so
-              // the slot never shows a stale unopened box while waiting for
-              // the follow-up _loadProgress() round-trip.
+              // behind the reel. Mirror the server's state transition locally
+              // only once the reel LANDS (spec §6): the box row becomes the
+              // rolled HELD powerup (or empties if it auto-activated). Firing
+              // this on the API response instead spoiled the result — and, for
+              // an auto-activated Fanny Pack, deleted the row — behind the
+              // still-spinning reel.
               _optimisticallyApplyBoxOpen(
                 boxId,
                 result['result'] as Map<String, dynamic>? ?? result,
               );
-              return result;
             },
           ),
           transitionsBuilder: (_, anim, _, child) =>
@@ -5294,7 +5294,66 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         : (p['accessories'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
     final animal = isStealthed ? null : animalFromJson(p['animal']);
 
+    // Rank/avatar + name + steps, centered in the space left of the rail.
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Capy avatar (the racer's own capybara + cosmetics) with the
+        // overall-rank shield tucked into its corner.
+        SizedBox(
+          width: 52,
+          height: 46,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              CapybaraSpriteWithAccessories(
+                accessories: accessories,
+                capybaraSize: 46,
+                frameIndex: 0,
+                animal: animal,
+              ),
+              Positioned(
+                top: -3,
+                left: -2,
+                child: Container(
+                  width: 21,
+                  height: 21,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: colorDark,
+                    borderRadius: BorderRadius.circular(7),
+                    border: Border.all(color: Colors.white, width: 1.5),
+                  ),
+                  child: Text(
+                    '${overallRank + 1}',
+                    style: PixelText.number(size: 11, color: Colors.white),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 7),
+        Text(
+          isMe ? '${atName(name)} (you)' : atName(name),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: PixelText.body(size: 15, color: AppColors.textDark),
+        ),
+        const SizedBox(height: 1),
+        Text(
+          _formatSteps(totalSteps),
+          textAlign: TextAlign.center,
+          style: PixelText.number(size: 18, color: colorDark),
+        ),
+      ],
+    );
+
     final cell = Opacity(
+      key: ValueKey('team-cell-$userId'),
       opacity: isForfeited ? 0.5 : 1.0,
       child: Container(
         padding: const EdgeInsets.fromLTRB(8, 10, 8, 10),
@@ -5308,78 +5367,29 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             width: isMe ? 2 : 1.5,
           ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
+        // Every cell is at least [_kTeamCellContentMinHeight] tall and reserves
+        // the effect rail on the right, so opposing cells stay aligned no
+        // matter how many effects sit on each racer (spec §4). The min-height
+        // child sizes the Stack; the rail (#6: rainstorm/leech/etc. on
+        // opponents) is stretched to that same height beside it — hidden for
+        // stealthed rows to match the plank.
+        child: Stack(
           children: [
-            // Capy avatar (the racer's own capybara + cosmetics) with the
-            // overall-rank shield tucked into its corner.
-            SizedBox(
-              width: 52,
-              height: 46,
-              child: Stack(
-                clipBehavior: Clip.none,
-                alignment: Alignment.center,
-                children: [
-                  CapybaraSpriteWithAccessories(
-                    accessories: accessories,
-                    capybaraSize: 46,
-                    frameIndex: 0,
-                    animal: animal,
-                  ),
-                  Positioned(
-                    top: -3,
-                    left: -2,
-                    child: Container(
-                      width: 21,
-                      height: 21,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: colorDark,
-                        borderRadius: BorderRadius.circular(7),
-                        border: Border.all(color: Colors.white, width: 1.5),
-                      ),
-                      child: Text(
-                        '${overallRank + 1}',
-                        style: PixelText.number(size: 11, color: Colors.white),
-                      ),
-                    ),
-                  ),
-                ],
+            ConstrainedBox(
+              constraints: const BoxConstraints(
+                minHeight: _kTeamCellContentMinHeight,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.only(right: _kTeamEffectRailWidth),
+                child: Center(child: content),
               ),
             ),
-            const SizedBox(height: 7),
-            Text(
-              isMe ? '${atName(name)} (you)' : atName(name),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: PixelText.body(size: 15, color: AppColors.textDark),
+            Positioned(
+              top: 0,
+              bottom: 0,
+              right: 0,
+              child: _teamEffectRail(userId, visible: !isStealthed),
             ),
-            const SizedBox(height: 1),
-            Text(
-              _formatSteps(totalSteps),
-              textAlign: TextAlign.center,
-              style: PixelText.number(size: 18, color: colorDark),
-            ),
-            // #6: powerup effect badges (rainstorm, leech, etc.) on opponents in
-            // team races, mirroring the solo leaderboard plank. Hidden for
-            // stealthed rows (no effects surfaced) to match the plank behavior.
-            if (!isStealthed)
-              Builder(
-                builder: (context) {
-                  final icons = _effectIconsFor(userId);
-                  if (icons.isEmpty) return const SizedBox.shrink();
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 5),
-                    child: Wrap(
-                      alignment: WrapAlignment.center,
-                      spacing: 0,
-                      runSpacing: 3,
-                      children: icons,
-                    ),
-                  );
-                },
-              ),
           ],
         ),
       ),
@@ -5621,20 +5631,72 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// cell (#6), so opponents show rainstorm/leech/etc. badges identically in
   /// both layouts. Leech badges resolve their attacker's name for the tooltip.
   List<Widget> _effectIconsFor(String userId) {
+    return [
+      for (final d in _effectDataFor(userId))
+        _EffectIconWithTooltip(type: d.type, attackerName: d.attackerName),
+    ];
+  }
+
+  /// The raw active-effect data targeting [userId] (type + resolved attacker
+  /// name), shared by the solo plank's [_effectIconsFor] and the team cell's
+  /// vertical effect rail. Kept separate from widget construction so the rail
+  /// can measure/overflow the list before rendering.
+  List<({String type, String? attackerName})> _effectDataFor(String userId) {
     final effects =
         (_powerupData?['activeEffects'] as List?)
             ?.cast<Map<String, dynamic>>()
             .where((e) => e['targetUserId'] == userId)
             .toList() ??
         const [];
-    if (effects.isEmpty) return const [];
     return [
       for (final e in effects)
-        _EffectIconWithTooltip(
+        (
           type: e['type'] as String? ?? '',
           attackerName: _displayNameForUser(e['sourceUserId'] as String?),
         ),
     ];
+  }
+
+  /// The narrow right-hand effect rail for a team-roster cell (spec §4). Always
+  /// occupies [_kTeamEffectRailWidth] so reserving it never shifts only the
+  /// affected cells; stacks every active-effect icon vertically, and collapses
+  /// any overflow past what fits into a trailing `+N` chip (multi-line tooltip)
+  /// so the card never grows. Empty (but still width-reserving) when the racer
+  /// is stealthed or has no effects.
+  Widget _teamEffectRail(String userId, {required bool visible}) {
+    final data = visible
+        ? _effectDataFor(userId)
+        : const <({String type, String? attackerName})>[];
+    return SizedBox(
+      width: _kTeamEffectRailWidth,
+      child: data.isEmpty
+          ? const SizedBox.shrink()
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final available = constraints.maxHeight.isFinite
+                    ? constraints.maxHeight
+                    : _kTeamCellContentMinHeight;
+                var maxSlots = (available / _kTeamEffectSlotHeight).floor();
+                if (maxSlots < 1) maxSlots = 1;
+                final overflowing = data.length > maxSlots;
+                final iconCount = overflowing ? maxSlots - 1 : data.length;
+                final shown = data.take(iconCount).toList();
+                final rest = data.skip(iconCount).toList();
+                return Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (final d in shown)
+                      _EffectIconWithTooltip(
+                        type: d.type,
+                        attackerName: d.attackerName,
+                        railMode: true,
+                      ),
+                    if (overflowing) _EffectOverflowChip(effects: rest),
+                  ],
+                );
+              },
+            ),
+    );
   }
 
   /// Resolves a participant's display name from a userId, for effect tooltips.
@@ -5967,6 +6029,89 @@ class _OpenAllButton extends StatelessWidget {
   }
 }
 
+// Team-roster effect rail geometry (spec §4). The rail is deliberately narrow
+// and the 44pt hit-target guideline is relaxed to ~28-32pt for effect icons —
+// a 44pt rail would starve the name/steps in a half-width column.
+const double _kTeamCellContentMinHeight = 104;
+const double _kTeamEffectRailWidth = 34;
+const double _kTeamEffectSlotHeight = 32; // icon hit-target + vertical spacing
+
+/// Builds an overlay tooltip bubble anchored to [anchorContext]'s widget but
+/// CLAMPED to the screen bounds (spec §4): pinned inside an 8pt margin on both
+/// sides so a right-edge rail icon can't push it off-screen, capped at 200pt
+/// wide, and flipped below the icon when there's no room above. Replaces the
+/// old hardcoded `dx-60 / dy-68` offsets. The caller owns insert/remove.
+OverlayEntry _buildClampedEffectTooltip({
+  required BuildContext anchorContext,
+  required Widget child,
+  required VoidCallback onDismiss,
+}) {
+  const margin = 8.0;
+  const estBubbleHeight = 96.0;
+  final box = anchorContext.findRenderObject() as RenderBox;
+  final overlayBox =
+      Overlay.of(anchorContext).context.findRenderObject() as RenderBox;
+  final anchorCenter = box.localToGlobal(
+    box.size.center(Offset.zero),
+    ancestor: overlayBox,
+  );
+  final overlaySize = overlayBox.size;
+  final placeLeft = anchorCenter.dx <= overlaySize.width / 2;
+  final topSafe = (MediaQuery.maybeOf(anchorContext)?.padding.top ?? 0) + margin;
+  var top = anchorCenter.dy - box.size.height / 2 - estBubbleHeight;
+  if (top < topSafe) {
+    // Not enough room above: drop the bubble below the icon.
+    top = anchorCenter.dy + box.size.height / 2 + 8;
+  }
+
+  return OverlayEntry(
+    builder: (ctx) => GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: onDismiss,
+      child: Stack(
+        children: [
+          Positioned(
+            // Constraining to [margin, width - margin] guarantees the bubble is
+            // always fully on-screen horizontally regardless of the icon's x.
+            left: margin,
+            right: margin,
+            top: top,
+            child: Align(
+              alignment: placeLeft
+                  ? Alignment.centerLeft
+                  : Alignment.centerRight,
+              child: Material(
+                color: Colors.transparent,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 200),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.woodDark,
+                      borderRadius: BorderRadius.circular(6),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Colors.black38,
+                          blurRadius: 6,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: child,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 class _EffectIconWithTooltip extends StatefulWidget {
   final String type;
 
@@ -5975,7 +6120,16 @@ class _EffectIconWithTooltip extends StatefulWidget {
   /// with no distinct source.
   final String? attackerName;
 
-  const _EffectIconWithTooltip({required this.type, this.attackerName});
+  /// True inside the team-roster vertical rail (spec §4): vertical spacing and
+  /// a relaxed ~28-32pt tap target instead of the plank's tight horizontal
+  /// packing. Default false keeps the solo-plank layout unchanged.
+  final bool railMode;
+
+  const _EffectIconWithTooltip({
+    required this.type,
+    this.attackerName,
+    this.railMode = false,
+  });
 
   @override
   State<_EffectIconWithTooltip> createState() => _EffectIconWithTooltipState();
@@ -5994,46 +6148,12 @@ class _EffectIconWithTooltipState extends State<_EffectIconWithTooltip> {
       desc = '$desc — from ${atName(attacker)}';
     }
 
-    final box = context.findRenderObject() as RenderBox;
-    final offset = box.localToGlobal(Offset.zero);
-
-    _entry = OverlayEntry(
-      builder: (ctx) => GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: _dismiss,
-        child: Stack(
-          children: [
-            Positioned(
-              left: offset.dx - 60,
-              top: offset.dy - 68,
-              child: Material(
-                color: Colors.transparent,
-                child: Container(
-                  constraints: const BoxConstraints(maxWidth: 200),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.woodDark,
-                    borderRadius: BorderRadius.circular(6),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Colors.black38,
-                        blurRadius: 6,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Text(
-                    '$name: $desc',
-                    style: PixelText.body(size: 11, color: AppColors.parchment),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
+    _entry = _buildClampedEffectTooltip(
+      anchorContext: context,
+      onDismiss: _dismiss,
+      child: Text(
+        '$name: $desc',
+        style: PixelText.body(size: 11, color: AppColors.parchment),
       ),
     );
     Overlay.of(context).insert(_entry!);
@@ -6053,24 +6173,131 @@ class _EffectIconWithTooltipState extends State<_EffectIconWithTooltip> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 3),
-      child: GestureDetector(
-        onTap: _show,
-        child: Container(
-          decoration: BoxDecoration(
-            color: AppColors.woodDark,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: AppColors.woodShadow, width: 0.5),
-          ),
-          padding: const EdgeInsets.all(1.5),
-          child: Container(
-            padding: const EdgeInsets.all(3),
-            decoration: BoxDecoration(
-              color: AppColors.parchment,
-              borderRadius: BorderRadius.circular(4.5),
+    final name = _powerupNames[widget.type] ?? widget.type;
+    final icon = Container(
+      decoration: BoxDecoration(
+        color: AppColors.woodDark,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppColors.woodShadow, width: 0.5),
+      ),
+      padding: const EdgeInsets.all(1.5),
+      child: Container(
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          color: AppColors.parchment,
+          borderRadius: BorderRadius.circular(4.5),
+        ),
+        child: PowerupIcon(type: widget.type, size: 18),
+      ),
+    );
+
+    return Semantics(
+      label: name,
+      button: true,
+      child: Padding(
+        padding: widget.railMode
+            ? const EdgeInsets.symmetric(vertical: 2)
+            : const EdgeInsets.only(right: 3),
+        child: GestureDetector(
+          behavior: widget.railMode
+              ? HitTestBehavior.opaque
+              : HitTestBehavior.deferToChild,
+          onTap: _show,
+          child: widget.railMode
+              ? ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: 30, minHeight: 28),
+                  child: Center(child: icon),
+                )
+              : icon,
+        ),
+      ),
+    );
+  }
+}
+
+/// The `+N` overflow chip closing a team-roster effect rail when more effects
+/// are active than fit (spec §4). Tapping it shows a multi-line tooltip listing
+/// the remaining effects (with attacker suffixes), clamped on-screen like the
+/// per-icon bubble.
+class _EffectOverflowChip extends StatefulWidget {
+  final List<({String type, String? attackerName})> effects;
+
+  const _EffectOverflowChip({required this.effects});
+
+  @override
+  State<_EffectOverflowChip> createState() => _EffectOverflowChipState();
+}
+
+class _EffectOverflowChipState extends State<_EffectOverflowChip> {
+  OverlayEntry? _entry;
+
+  void _show() {
+    _dismiss();
+    final lines = <Widget>[];
+    for (final e in widget.effects) {
+      final name = _powerupNames[e.type] ?? e.type;
+      final attacker = e.attackerName;
+      final text = (attacker != null && attacker.isNotEmpty)
+          ? '$name — from ${atName(attacker)}'
+          : name;
+      if (lines.isNotEmpty) lines.add(const SizedBox(height: 3));
+      lines.add(
+        Text(
+          text,
+          style: PixelText.body(size: 11, color: AppColors.parchment),
+        ),
+      );
+    }
+
+    _entry = _buildClampedEffectTooltip(
+      anchorContext: context,
+      onDismiss: _dismiss,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: lines,
+      ),
+    );
+    Overlay.of(context).insert(_entry!);
+    Future.delayed(const Duration(seconds: 3), _dismiss);
+  }
+
+  void _dismiss() {
+    _entry?.remove();
+    _entry = null;
+  }
+
+  @override
+  void dispose() {
+    _dismiss();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: '${widget.effects.length} more effects',
+      button: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _show,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 30, minHeight: 28),
+            child: Container(
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppColors.woodDark,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: AppColors.woodShadow, width: 0.5),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Text(
+                '+${widget.effects.length}',
+                style: PixelText.number(size: 12, color: AppColors.parchment),
+              ),
             ),
-            child: PowerupIcon(type: widget.type, size: 18),
           ),
         ),
       ),

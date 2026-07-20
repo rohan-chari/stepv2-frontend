@@ -1,4 +1,5 @@
 import BackgroundTasks
+import FBAudienceNetwork
 import Flutter
 import HealthKit
 import UIKit
@@ -11,6 +12,7 @@ import google_mobile_ads
   private var backgroundSyncChannel: FlutterMethodChannel?
   private var appInfoChannel: FlutterMethodChannel?
   private var referralChannel: FlutterMethodChannel?
+  private var metaAdsChannel: FlutterMethodChannel?
   private let healthStore = HKHealthStore()
   private var hasRegisteredHealthObserver = false
   private lazy var backgroundSyncCoordinator = BackgroundStepSyncCoordinator(
@@ -41,6 +43,32 @@ import google_mobile_ads
     )
 
     let controller = window!.rootViewController as! FlutterViewController
+
+    // Meta requires its advertiser-tracking flag to be set from the app's ATT
+    // result before Google Mobile Ads initializes. Dart owns the ATT prompt, so
+    // this small bridge forwards that result to the native Meta SDK.
+    metaAdsChannel = FlutterMethodChannel(
+      name: "com.steptracker/meta_ads",
+      binaryMessenger: controller.binaryMessenger
+    )
+    metaAdsChannel?.setMethodCallHandler { call, result in
+      guard call.method == "setAdvertiserTrackingEnabled" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      guard let enabled = call.arguments as? Bool else {
+        result(
+          FlutterError(
+            code: "invalid_argument",
+            message: "Expected a boolean advertiser-tracking value.",
+            details: nil
+          )
+        )
+        return
+      }
+      FBAdSettings.setAdvertiserTrackingEnabled(enabled)
+      result(nil)
+    }
 
     notificationChannel = FlutterMethodChannel(
       name: "com.steptracker/notifications",

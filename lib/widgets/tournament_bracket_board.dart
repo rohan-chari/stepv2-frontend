@@ -5,7 +5,6 @@ import '../utils/at_name.dart';
 import '../utils/tournament.dart';
 import '../utils/tournament_bracket.dart';
 import 'app_avatar.dart';
-import 'tournament_sponsor_card.dart';
 
 /// A pannable / zoomable March-Madness bracket rendered on the app's checkered
 /// green arcade grid — the grid IS the draggable board. Rounds progress
@@ -278,19 +277,11 @@ class _TournamentBracketBoardState extends State<TournamentBracketBoard> {
       ),
     );
 
-    // "Presented by" sponsor card tucked under the champion cap — a labeled,
-    // policy-compliant native ad (gated by the remote kill switch; renders
-    // nothing when off, a house ad when there's no fill). Pans/zooms with the
-    // board so it reads as part of the finals frame.
-    const sponsorW = 220.0;
-    children.add(
-      Positioned(
-        left: _championCenter.dx - sponsorW / 2,
-        top: _championCenter.dy + 44 + 14,
-        width: sponsorW,
-        child: const TournamentSponsorCard(width: sponsorW),
-      ),
-    );
+    // The sponsored banner used to sit here under the champion cap as a NATIVE
+    // ad inside the pan/zoom transform, which triggered AdMob "MediaView too
+    // small" / "assets outside native ad view" warnings (spec §3). It moved to
+    // a fixed AdBannerSlot above the board in TournamentDetailScreen, so the
+    // champion area reclaims this space and the ad never pans or zooms.
 
     return Stack(clipBehavior: Clip.none, children: children);
   }

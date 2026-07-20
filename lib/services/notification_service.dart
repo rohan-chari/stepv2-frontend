@@ -32,7 +32,14 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   }
 }
 
-enum NotificationRoute { home, friends, raceDetail, races, tournamentDetail }
+enum NotificationRoute {
+  home,
+  friends,
+  raceDetail,
+  races,
+  tournamentDetail,
+  dailyReward,
+}
 
 class NotificationAction {
   final NotificationRoute route;
@@ -346,7 +353,18 @@ class NotificationService {
       // One-time creator nudge when a scheduled team race can't auto-start
       // because the teams are uneven (TR-304) — opens the lobby to fix it.
       case 'TEAM_RACE_SCHEDULED_UNEVEN':
+      // Race-ending-soon reminder (spec §8): a ~2h-out "final push" nudge on a
+      // timed race. Opens the race so the user can react. Additive type —
+      // older apps fall through to null and just show the alert. raceId rides
+      // in params, so [resolveRoute]'s param extraction already deep-links it.
+      case 'RACE_ENDING_SOON':
         return NotificationRoute.raceDetail;
+      // Daily-reward reminders (spec §7): the 5 PM and 9 PM nudges both open
+      // the daily-reward screen. No params. Additive types — older apps fall
+      // through to null and just show the alert without deep-linking.
+      case 'DAILY_REWARD_REMINDER_17':
+      case 'DAILY_REWARD_REMINDER_21':
+        return NotificationRoute.dailyReward;
       // Tournament pushes (spec §8). All land on the bracket by default;
       // TOURNAMENT_STARTED / TOURNAMENT_ROUND_STARTED are re-pointed at the
       // player's specific matchup race in [resolveRoute] when a raceId rides

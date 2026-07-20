@@ -38,6 +38,7 @@ import 'tabs/home_tab.dart';
 import 'tabs/leaderboard_tab.dart';
 import 'tabs/profile_tab.dart';
 import 'create_race_screen.dart';
+import 'daily_reward_screen.dart';
 import 'race_detail_screen.dart';
 import 'tournament_detail_screen.dart';
 import 'tabs/races_tab.dart';
@@ -148,6 +149,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   // Guards against double-pushing RaceDetailScreen from rapid taps.
   bool _openingRaceDetail = false;
   bool _openingTournament = false;
+  bool _openingDailyReward = false;
   bool _drainingTournament = false;
   // Races whose results popup we've already surfaced this session, so a race
   // finishing mid-session (or a re-fetch) doesn't re-interrupt. The server ack
@@ -256,7 +258,38 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           _openTournament(tournamentId);
         }
         break;
+      case NotificationRoute.dailyReward:
+        // Daily-reward reminder tap (spec §7): open the same blurred-overlay
+        // daily-reward screen the home StreakChip / Get Coins hub push, so the
+        // user lands directly on the unclaimed box.
+        _openDailyReward();
+        break;
     }
+  }
+
+  /// Opens the daily-reward reveal screen as a non-opaque overlay (matching the
+  /// StreakChip / Get Coins entry points). Reached from a DAILY_REWARD_REMINDER
+  /// push tap. The rewarded-ad extra spin is omitted here (no ad controller in
+  /// the shell); the core claim flow is unaffected.
+  void _openDailyReward() {
+    if (_openingDailyReward) return;
+    _openingDailyReward = true;
+    Navigator.of(context)
+        .push(
+          PageRouteBuilder(
+            opaque: false,
+            transitionDuration: const Duration(milliseconds: 250),
+            reverseTransitionDuration: const Duration(milliseconds: 200),
+            pageBuilder: (_, _, _) => DailyRewardScreen(
+              authService: widget.authService,
+              backendApiService: _backendApiService,
+              onClaimed: _markDailyRewardClaimed,
+            ),
+            transitionsBuilder: (_, animation, _, child) =>
+                FadeTransition(opacity: animation, child: child),
+          ),
+        )
+        .whenComplete(() => _openingDailyReward = false);
   }
 
   /// Joins the race behind a pending share-link token (captured by

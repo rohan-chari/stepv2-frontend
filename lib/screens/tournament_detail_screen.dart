@@ -8,6 +8,7 @@ import '../styles.dart';
 import '../utils/share_helper.dart';
 import '../utils/tournament.dart';
 import '../utils/tournament_bracket.dart';
+import '../widgets/ad_banner_slot.dart';
 import '../widgets/celebration_confetti.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/home_chrome.dart';
@@ -562,6 +563,12 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     return Column(
       children: [
         _infoStrip(t),
+        // Sponsored banner (spec §3): a fixed AdBannerSlot pinned above the
+        // bracket, OUTSIDE the pannable/zoomable board, so the AdMob creative
+        // renders at a stable size (no "MediaView too small" warnings). Uses
+        // the trackside style (SPONSOR label) + the banner ad unit, and
+        // collapses to zero height on no-fill or when the kill switch is off.
+        const AdBannerSlot(style: AdBannerStyle.trackside),
         Expanded(
           child: TournamentBracketBoard(
             model: buildTournamentBracket(t, _myUserId),

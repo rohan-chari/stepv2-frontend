@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:step_tracker/utils/tournament_bracket.dart';
 import 'package:step_tracker/widgets/tournament_bracket_board.dart';
-import 'package:step_tracker/widgets/tournament_sponsor_card.dart';
 
-// Item 11 (render) + Item 12 (gate): the bracket board shows `???` for a masked
-// player instead of a blank, and the sponsor card is fully collapsed while the
-// banner-ads kill switch is off (the default in tests).
+// Item 11 (render): the bracket board shows `???` for a masked player instead
+// of a blank.
+//
+// The former "sponsor card collapses when the kill switch is off" case was
+// removed with TournamentSponsorCard (spec §3 — retired native ad replaced by a
+// fixed AdBannerSlot in TournamentDetailScreen). Collapse-to-zero on no-fill is
+// now covered by AdBannerSlot's own contract and the §3 tournament banner test.
 
 Widget _host(Widget child) => MaterialApp(
       home: Scaffold(
@@ -66,22 +69,5 @@ void main() {
     expect(find.text('???'), findsOneWidget);
     // Visible players still show their formatted step counts (1200 → "1.2k").
     expect(find.text('1.2k'), findsOneWidget);
-  });
-
-  testWidgets('sponsor card collapses to nothing when kill switch is off',
-      (tester) async {
-    // Default in the test host: no banner unit + remote flag off → disabled.
-    await tester.pumpWidget(
-      _host(const Align(
-        alignment: Alignment.topLeft,
-        child: TournamentSponsorCard(),
-      )),
-    );
-    await tester.pump();
-
-    expect(tester.takeException(), isNull);
-    expect(find.text('SPONSOR'), findsNothing);
-    final size = tester.getSize(find.byType(TournamentSponsorCard));
-    expect(size.height, 0);
   });
 }

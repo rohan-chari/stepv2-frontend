@@ -686,6 +686,42 @@ class BackendApiService {
     return user;
   }
 
+  /// GET /notifications/preferences (spec §9.1). Reads the daily-reward
+  /// reminder opt-in. Additive endpoint — older backends 404 and the caller
+  /// defaults to enabled; an absent/non-boolean field also reads as `true`
+  /// (the documented default). Throws [ApiException] on non-2xx so callers can
+  /// distinguish an unreachable/unversioned backend and degrade to the default.
+  Future<bool> fetchDailyRewardRemindersEnabled({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/notifications/preferences',
+      identityToken: identityToken,
+    );
+    final payload = await _decodeJsonResponse(response);
+    final value = payload['dailyRewardRemindersEnabled'];
+    return value is bool ? value : true;
+  }
+
+  /// PATCH /notifications/preferences (spec §9.1). Persists the daily-reward
+  /// reminder opt-in and returns the stored value. Additive endpoint; unknown
+  /// fields are ignored server-side. Falls back to the requested value if the
+  /// response omits the field.
+  Future<bool> updateDailyRewardRemindersEnabled({
+    required String identityToken,
+    required bool enabled,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'PATCH',
+      path: '/notifications/preferences',
+      body: {'dailyRewardRemindersEnabled': enabled},
+      identityToken: identityToken,
+    );
+    final payload = await _decodeJsonResponse(response);
+    final value = payload['dailyRewardRemindersEnabled'];
+    return value is bool ? value : enabled;
+  }
+
   Future<Map<String, dynamic>> checkDisplayName({
     required String identityToken,
     required String name,
