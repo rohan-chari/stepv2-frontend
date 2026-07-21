@@ -111,6 +111,7 @@ Future<void> _pump(
       home: CreateRaceScreen(
         authService: authService,
         backendApiService: api,
+        initialCustomizeExpanded: true,
       ),
     ),
   );
@@ -126,8 +127,9 @@ Future<void> _switchToTeams(WidgetTester tester) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('TR-801: signpost shows both formats, defaults to free-for-all',
-      (tester) async {
+  testWidgets('TR-801: signpost shows both formats, defaults to free-for-all', (
+    tester,
+  ) async {
     final authService = await _createAuthService();
     await _pump(tester, authService, _RecordingApi());
 
@@ -138,8 +140,9 @@ void main() {
     expect(find.byKey(const Key('team-plaque-a')), findsNothing);
   });
 
-  testWidgets('TR-107: kill switch off hides the Teams signpost entirely',
-      (tester) async {
+  testWidgets('TR-107: kill switch off hides the Teams signpost entirely', (
+    tester,
+  ) async {
     final authService = await _createAuthService(teamRacesEnabled: false);
     await _pump(tester, authService, _RecordingApi());
 
@@ -148,40 +151,41 @@ void main() {
   });
 
   testWidgets(
-      'TR-801: picking Teams reveals the stepper and two distinct name plaques',
-      (tester) async {
-    final authService = await _createAuthService();
-    await _pump(tester, authService, _RecordingApi());
-    await _switchToTeams(tester);
+    'TR-801: picking Teams reveals the stepper and two distinct name plaques',
+    (tester) async {
+      final authService = await _createAuthService();
+      await _pump(tester, authService, _RecordingApi());
+      await _switchToTeams(tester);
 
-    expect(find.byKey(const Key('team-size-stepper')), findsOneWidget);
-    expect(find.text('2v2'), findsOneWidget); // default size
-    expect(find.byKey(const Key('team-plaque-a')), findsOneWidget);
-    expect(find.byKey(const Key('team-plaque-b')), findsOneWidget);
-    expect(find.byKey(const Key('team-name-reroll')), findsOneWidget);
+      expect(find.byKey(const Key('team-size-stepper')), findsOneWidget);
+      expect(find.text('2v2'), findsOneWidget); // default size
+      expect(find.byKey(const Key('team-plaque-a')), findsOneWidget);
+      expect(find.byKey(const Key('team-plaque-b')), findsOneWidget);
+      expect(find.byKey(const Key('team-name-reroll')), findsOneWidget);
 
-    final nameA = tester
-        .widget<TextField>(
-          find.descendant(
-            of: find.byKey(const Key('team-plaque-a')),
-            matching: find.byType(TextField),
-          ),
-        )
-        .controller!
-        .text;
-    final nameB = tester
-        .widget<TextField>(
-          find.descendant(
-            of: find.byKey(const Key('team-plaque-b')),
-            matching: find.byType(TextField),
-          ),
-        )
-        .controller!
-        .text;
-    expect(nameA, isNotEmpty);
-    expect(nameB, isNotEmpty);
-    expect(nameA.toLowerCase(), isNot(equals(nameB.toLowerCase())));
-  });
+      final nameA = tester
+          .widget<TextField>(
+            find.descendant(
+              of: find.byKey(const Key('team-plaque-a')),
+              matching: find.byType(TextField),
+            ),
+          )
+          .controller!
+          .text;
+      final nameB = tester
+          .widget<TextField>(
+            find.descendant(
+              of: find.byKey(const Key('team-plaque-b')),
+              matching: find.byType(TextField),
+            ),
+          )
+          .controller!
+          .text;
+      expect(nameA, isNotEmpty);
+      expect(nameB, isNotEmpty);
+      expect(nameA.toLowerCase(), isNot(equals(nameB.toLowerCase())));
+    },
+  );
 
   testWidgets('TR-101: stepper clamps team size to 1..5', (tester) async {
     final authService = await _createAuthService();
@@ -205,8 +209,9 @@ void main() {
     expect(find.text('1v1'), findsOneWidget);
   });
 
-  testWidgets('TR-801: dice reroll swaps in a fresh distinct pair',
-      (tester) async {
+  testWidgets('TR-801: dice reroll swaps in a fresh distinct pair', (
+    tester,
+  ) async {
     final authService = await _createAuthService();
     await _pump(tester, authService, _RecordingApi());
     await _switchToTeams(tester);
@@ -231,53 +236,56 @@ void main() {
   });
 
   testWidgets(
-      'TR-101/104: creating a 2v2 calls createTeamRace with size, names, and '
-      'the picked side', (tester) async {
-    final authService = await _createAuthService();
-    final api = _RecordingApi();
-    await _pump(tester, authService, api);
-    await _switchToTeams(tester);
+    'TR-101/104: creating a 2v2 calls createTeamRace with size, names, and '
+    'the picked side',
+    (tester) async {
+      final authService = await _createAuthService();
+      final api = _RecordingApi();
+      await _pump(tester, authService, api);
+      await _switchToTeams(tester);
 
-    await tester.enterText(
-      find.descendant(
-        of: find.byKey(const Key('team-plaque-a')),
-        matching: find.byType(TextField),
-      ),
-      'Mossy Rockets',
-    );
-    await tester.enterText(
-      find.descendant(
-        of: find.byKey(const Key('team-plaque-b')),
-        matching: find.byType(TextField),
-      ),
-      'Puddle Jumpers',
-    );
+      await tester.enterText(
+        find.descendant(
+          of: find.byKey(const Key('team-plaque-a')),
+          matching: find.byType(TextField),
+        ),
+        'Mossy Rockets',
+      );
+      await tester.enterText(
+        find.descendant(
+          of: find.byKey(const Key('team-plaque-b')),
+          matching: find.byType(TextField),
+        ),
+        'Puddle Jumpers',
+      );
 
-    // Creator picks Team B (default is Team A, TR-104).
-    await tester.ensureVisible(find.byKey(const Key('team-side-b')));
-    await tester.tap(find.byKey(const Key('team-side-b')));
-    await tester.pump();
+      // Creator picks Team B (default is Team A, TR-104).
+      await tester.ensureVisible(find.byKey(const Key('team-side-b')));
+      await tester.tap(find.byKey(const Key('team-side-b')));
+      await tester.pump();
 
-    await tester.enterText(
-      find.byKey(const Key('race-name-field')),
-      'Capy Cup',
-    );
+      await tester.enterText(
+        find.byKey(const Key('race-name-field')),
+        'Capy Cup',
+      );
 
-    await tester.ensureVisible(find.text('CREATE RACE'));
-    await tester.tap(find.text('CREATE RACE'));
-    await tester.pump();
+      await tester.ensureVisible(find.text('CREATE RACE'));
+      await tester.tap(find.text('CREATE RACE'));
+      await tester.pump();
 
-    expect(api.lastCreateRaceCall, isNull);
-    expect(api.lastCreateTeamRaceCall, isNotNull);
-    expect(api.lastCreateTeamRaceCall!['name'], 'Capy Cup');
-    expect(api.lastCreateTeamRaceCall!['teamSize'], 2);
-    expect(api.lastCreateTeamRaceCall!['teamAName'], 'Mossy Rockets');
-    expect(api.lastCreateTeamRaceCall!['teamBName'], 'Puddle Jumpers');
-    expect(api.lastCreateTeamRaceCall!['creatorTeam'], 'TEAM_B');
-  });
+      expect(api.lastCreateRaceCall, isNull);
+      expect(api.lastCreateTeamRaceCall, isNotNull);
+      expect(api.lastCreateTeamRaceCall!['name'], 'Capy Cup');
+      expect(api.lastCreateTeamRaceCall!['teamSize'], 2);
+      expect(api.lastCreateTeamRaceCall!['teamAName'], 'Mossy Rockets');
+      expect(api.lastCreateTeamRaceCall!['teamBName'], 'Puddle Jumpers');
+      expect(api.lastCreateTeamRaceCall!['creatorTeam'], 'TEAM_B');
+    },
+  );
 
-  testWidgets('TR-102: Teams mode hides payout-preset picker and max runners',
-      (tester) async {
+  testWidgets('TR-102: Teams mode hides payout-preset picker and max runners', (
+    tester,
+  ) async {
     final authService = await _createAuthService();
     await _pump(tester, authService, _RecordingApi());
 
@@ -307,7 +315,9 @@ void main() {
         .controller!
         .text;
 
-    testWidgets('plaques show names from the real backend pool', (tester) async {
+    testWidgets('plaques show names from the real backend pool', (
+      tester,
+    ) async {
       final authService = await _createAuthService();
       final api = _RecordingApi(
         suggestions: const [('Server Alphas', 'Server Betas')],
@@ -321,8 +331,9 @@ void main() {
       expect(nameOf(tester, 'team-plaque-b'), 'Server Betas');
     });
 
-    testWidgets('the dice pulls a fresh pair from the server pool',
-        (tester) async {
+    testWidgets('the dice pulls a fresh pair from the server pool', (
+      tester,
+    ) async {
       final authService = await _createAuthService();
       final api = _RecordingApi(
         suggestions: const [
@@ -344,8 +355,9 @@ void main() {
       expect(nameOf(tester, 'team-plaque-b'), 'Second Roll B');
     });
 
-    testWidgets('server names ride the create body as creator overrides',
-        (tester) async {
+    testWidgets('server names ride the create body as creator overrides', (
+      tester,
+    ) async {
       final authService = await _createAuthService();
       final api = _RecordingApi(
         suggestions: const [('Server Alphas', 'Server Betas')],
@@ -399,8 +411,9 @@ void main() {
       expect(api.lastCreateTeamRaceCall, isNotNull);
     });
 
-    testWidgets('a name the user typed survives a rebuild (no clobbering)',
-        (tester) async {
+    testWidgets('a name the user typed survives a rebuild (no clobbering)', (
+      tester,
+    ) async {
       final authService = await _createAuthService();
       final api = _RecordingApi(
         suggestions: const [('Server Alphas', 'Server Betas')],
@@ -427,38 +440,40 @@ void main() {
     });
   });
 
-  testWidgets('TR-103: identical custom names are rejected before the API call',
-      (tester) async {
-    final authService = await _createAuthService();
-    final api = _RecordingApi();
-    await _pump(tester, authService, api);
-    await _switchToTeams(tester);
+  testWidgets(
+    'TR-103: identical custom names are rejected before the API call',
+    (tester) async {
+      final authService = await _createAuthService();
+      final api = _RecordingApi();
+      await _pump(tester, authService, api);
+      await _switchToTeams(tester);
 
-    await tester.enterText(
-      find.descendant(
-        of: find.byKey(const Key('team-plaque-a')),
-        matching: find.byType(TextField),
-      ),
-      'Same Name',
-    );
-    await tester.enterText(
-      find.descendant(
-        of: find.byKey(const Key('team-plaque-b')),
-        matching: find.byType(TextField),
-      ),
-      'same name',
-    );
-    await tester.enterText(
-      find.byKey(const Key('race-name-field')),
-      'Capy Cup',
-    );
+      await tester.enterText(
+        find.descendant(
+          of: find.byKey(const Key('team-plaque-a')),
+          matching: find.byType(TextField),
+        ),
+        'Same Name',
+      );
+      await tester.enterText(
+        find.descendant(
+          of: find.byKey(const Key('team-plaque-b')),
+          matching: find.byType(TextField),
+        ),
+        'same name',
+      );
+      await tester.enterText(
+        find.byKey(const Key('race-name-field')),
+        'Capy Cup',
+      );
 
-    await tester.ensureVisible(find.text('CREATE RACE'));
-    await tester.tap(find.text('CREATE RACE'));
-    await tester.pump();
+      await tester.ensureVisible(find.text('CREATE RACE'));
+      await tester.tap(find.text('CREATE RACE'));
+      await tester.pump();
 
-    expect(api.lastCreateTeamRaceCall, isNull);
-    expect(find.text('Give the two teams different names.'), findsOneWidget);
-    await tester.pump(const Duration(seconds: 4));
-  });
+      expect(api.lastCreateTeamRaceCall, isNull);
+      expect(find.text('Give the two teams different names.'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 4));
+    },
+  );
 }

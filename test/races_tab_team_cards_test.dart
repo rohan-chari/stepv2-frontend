@@ -106,6 +106,11 @@ void main() {
   testWidgets('TR-806: PENDING team race row shows the format chip',
       (tester) async {
     await _pump(tester, _teamRace(status: 'PENDING'));
+    // §4: the personal list is now state pills defaulting to ACTIVE, so a
+    // PENDING row lives behind the PENDING pill. Navigate to it — the
+    // assertion below is unchanged.
+    await tester.tap(find.byKey(const Key('personal-state-pending')));
+    await tester.pump(const Duration(milliseconds: 200));
     expect(find.text('2v2'), findsOneWidget);
   });
 

@@ -89,7 +89,11 @@ Future<void> _pump(
 ) async {
   await tester.pumpWidget(
     MaterialApp(
-      home: CreateRaceScreen(authService: authService, backendApiService: api),
+      home: CreateRaceScreen(
+        authService: authService,
+        backendApiService: api,
+        initialCustomizeExpanded: true,
+      ),
     ),
   );
   await tester.pump();
@@ -104,8 +108,9 @@ Future<void> _switchToTournament(WidgetTester tester) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('third BRACKET segment exists and reveals the pickers',
-      (tester) async {
+  testWidgets('third BRACKET segment exists and reveals the pickers', (
+    tester,
+  ) async {
     final auth = await _createAuthService();
     await _pump(tester, auth, _RecordingApi());
 
@@ -123,8 +128,9 @@ void main() {
     expect(find.byKey(const Key('matchup-duration-3')), findsOneWidget);
   });
 
-  testWidgets('FFA/team-only controls are hidden in tournament mode',
-      (tester) async {
+  testWidgets('FFA/team-only controls are hidden in tournament mode', (
+    tester,
+  ) async {
     final auth = await _createAuthService();
     await _pump(tester, auth, _RecordingApi());
     await _switchToTournament(tester);
@@ -146,10 +152,7 @@ void main() {
     await _switchToTournament(tester);
 
     // Default 8-bracket → max 100, pot up to 800.
-    expect(
-      find.textContaining('Buy-in max 100'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Buy-in max 100'), findsOneWidget);
 
     // Switch to 16 → max 62, pot up to 992.
     await tester.tap(find.byKey(const Key('bracket-size-16')));
@@ -157,8 +160,9 @@ void main() {
     expect(find.textContaining('Buy-in max 62'), findsOneWidget);
   });
 
-  testWidgets('submit calls createTournament with the picked shape',
-      (tester) async {
+  testWidgets('submit calls createTournament with the picked shape', (
+    tester,
+  ) async {
     final auth = await _createAuthService();
     final api = _RecordingApi();
     await _pump(tester, auth, api);

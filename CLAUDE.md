@@ -18,6 +18,42 @@ So **every change — frontend or backend — must keep working for users on
 previous app versions.** This is the first thing to check for any change,
 before correctness or style.
 
+## Integration tests over unit tests — always
+
+**If a behavior is worth testing, test it end-to-end.** Default to an
+integration test. Reach for a unit test only when an integration test
+*structurally cannot* express the property.
+
+I do not care about unit-test counts. I care about proof that the feature
+actually works through the real path a user (or client) takes. A green unit
+suite over mocked collaborators proves the pieces agree with your mocks — it
+does not prove the feature works.
+
+### What this means in practice
+- **Backend:** write it in `test/integration/` — real HTTP request, real DB,
+  real handler chain. Assert on the API response a client would actually
+  receive, not on a helper's return value.
+- **Frontend:** pump the real screen/widget and assert what renders. Testing a
+  pure helper in isolation is the fallback, not the goal.
+- **Don't `require()`/import an internal utility inside an integration test to
+  shortcut the public path.** If the assertion is worth making, make it through
+  the endpoint or the widget. Reaching past the boundary silently converts an
+  integration test into a unit test wearing the wrong filename.
+- **"It's covered by the unit parity suite" is not sufficient** when the risk is
+  that two code paths diverge. Unit tests prove a function is deterministic given
+  identical inputs; only an end-to-end test proves both paths actually *call* it
+  the same way, with the same arguments and context.
+
+### When a unit test is the right tool
+- Pure algorithmic/date/tz math with many cases, where an integration test would
+  need dozens of fixtures to cover the same ground.
+- Structural guards over source (for example, asserting every scoring-assembly
+  site inserts a required term).
+- A property genuinely unreachable through the public path.
+
+Even then: if there is *any* doubt, write the integration test. Note that these
+must never point at the prod DB — see the next section.
+
 ## Never run integration tests against the prod database
 
 Integration/e2e tests create, mutate, and delete rows (users, races, coin

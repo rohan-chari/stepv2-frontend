@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:step_tracker/screens/multi_case_opening_screen.dart';
+import 'package:step_tracker/widgets/case_opening_strip.dart';
 import 'package:step_tracker/widgets/pill_button.dart';
 
 void main() {
@@ -17,8 +18,9 @@ void main() {
       },
   ];
 
-  testWidgets('one tap opens all boxes and shows the aggregate summary (#1)',
-      (tester) async {
+  testWidgets('one tap opens all boxes and shows the aggregate summary (#1)', (
+    tester,
+  ) async {
     List<Map<String, dynamic>>? handedBack;
 
     await tester.pumpWidget(
@@ -42,6 +44,20 @@ void main() {
     await tester.pump(); // resolve openAll future -> revealing
     await tester.pump(); // post-frame trigger fires the reels
 
+    // Open All is a vertical slot-machine bank: every reel keeps the same
+    // full-width proportions as a single-box reel instead of being clipped
+    // into a multi-column grid.
+    final reels = find.byType(CaseOpeningStrip);
+    expect(reels, findsNWidgets(3));
+    final reelRects = [
+      for (var i = 0; i < 3; i++)
+        tester.getRect(find.byKey(ValueKey('reel_$i'))),
+    ];
+    expect(reelRects.every((rect) => rect.width > 350), isTrue);
+    expect(reelRects.map((rect) => rect.width).toSet().length, 1);
+    expect(reelRects[1].top, greaterThan(reelRects[0].bottom));
+    expect(reelRects[2].top, greaterThan(reelRects[1].bottom));
+
     // §6 reveal sync: the inventory commit is DEFERRED until the reels land, so
     // onResults must NOT have fired yet while the reels are still spinning
     // (previously it fired here, spoiling the result behind the reel).
@@ -62,8 +78,9 @@ void main() {
     expect(find.textContaining('queued'), findsOneWidget);
   });
 
-  testWidgets('empty results (nothing to open) closes without a summary',
-      (tester) async {
+  testWidgets('empty results (nothing to open) closes without a summary', (
+    tester,
+  ) async {
     var resultsCallbackFired = false;
 
     await tester.pumpWidget(

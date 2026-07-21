@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'config/backend_config.dart';
+import 'constants/powerup_copy.dart';
 import 'screens/display_name_screen.dart';
 import 'screens/main_shell.dart';
 import 'screens/start_screen.dart';
@@ -122,6 +123,21 @@ class _VersionGateState extends State<_VersionGate>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _check();
+    _bootstrapPowerupCopy();
+  }
+
+  /// §9.5.4: load the persisted last-known-good powerup copy, then refresh from
+  /// the backend. Both are non-blocking and never throw — a failure just leaves
+  /// the bundled emergency copy in place until the next launch/foreground.
+  Future<void> _bootstrapPowerupCopy() async {
+    await PowerupCopy.loadPersisted();
+    await _refreshPowerupCopy();
+  }
+
+  Future<void> _refreshPowerupCopy() {
+    // Concurrent calls are coalesced inside PowerupCopy, so a resume racing the
+    // cold-start fetch issues only one request.
+    return PowerupCopy.refresh(fetch: _api.fetchPowerupCatalog);
   }
 
   @override
@@ -136,6 +152,10 @@ class _VersionGateState extends State<_VersionGate>
     // next time the app comes to the foreground, not only on a cold start.
     if (state == AppLifecycleState.resumed) {
       _check();
+      // A copy fix on the backend reaches users on the next foreground, with no
+      // App Store release. A 404/timeout/5xx here is transient by contract, so
+      // every later foreground retries.
+      _refreshPowerupCopy();
     }
   }
 
@@ -233,12 +253,12 @@ class _SessionGateState extends State<_SessionGate> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    if (_hasSession && widget.authService.displayName != null) {
+    if (_hasSession &&
+        (widget.authService.displayName != null ||
+            widget.authService.onboardingV2Enabled)) {
       return MainShell(
         authService: widget.authService,
         notificationService: widget.notificationService,
@@ -283,10 +303,7 @@ class _EnvironmentBanner extends StatelessWidget {
             Container(
               width: double.infinity,
               color: color,
-              padding: const EdgeInsets.symmetric(
-                vertical: 10,
-                horizontal: 16,
-              ),
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
               child: Center(
                 child: Text(
                   label,

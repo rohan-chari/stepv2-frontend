@@ -3,6 +3,11 @@ import '../styles.dart';
 /// Lifecycle of a bracket (contract §5 `TournamentStatus`).
 enum TournamentStatus { pending, active, completed, cancelled }
 
+/// Where a personal tournament belongs in the Races tab (§4.2).
+///
+/// [invite] is the pinned strip above the pills, not a pill.
+enum TournamentListState { invite, active, pending, completed }
+
 /// Parses a wire status string into a [TournamentStatus].
 ///
 /// Returns null for anything absent/unknown — a newer-or-older backend must
@@ -90,7 +95,14 @@ int clampTournamentBuyIn(int amount, int bracketSize) {
 abstract final class Tournament {
   // -- Scalar readers ------------------------------------------------------
 
-  static String? id(Map<String, dynamic> t) => t['id'] as String?;
+  /// Reads a string field without ever throwing. A wrong-typed value from a
+  /// different backend version reads as absent rather than crashing the list.
+  static String? _str(dynamic value) => value is String ? value : null;
+
+  /// Reads a numeric field without ever throwing, for the same reason as [_str].
+  static num? _num(dynamic value) => value is num ? value : null;
+
+  static String? id(Map<String, dynamic> t) => _str(t['id']);
 
   static String name(Map<String, dynamic> t) {
     final raw = t['name'];
@@ -144,10 +156,10 @@ abstract final class Tournament {
     return tournamentRoundsForSize(bracketSize(t));
   }
 
-  static String? creatorId(Map<String, dynamic> t) => t['creatorId'] as String?;
+  static String? creatorId(Map<String, dynamic> t) => _str(t['creatorId']);
 
   static String? championUserId(Map<String, dynamic> t) =>
-      t['championUserId'] as String?;
+      _str(t['championUserId']);
 
   /// ACCEPTED count (filled slots). Reads the summary `acceptedCount`, else
   /// counts ACCEPTED participants, else 0.
@@ -166,18 +178,112 @@ abstract final class Tournament {
 
   /// The viewer's own participation status string (ACCEPTED/INVITED/DECLINED/…),
   /// or null when absent.
-  static String? myStatus(Map<String, dynamic> t) => t['myStatus'] as String?;
+  static String? myStatus(Map<String, dynamic> t) => _str(t['myStatus']);
 
   static bool amIn(Map<String, dynamic> t) => myStatus(t) == 'ACCEPTED';
   static bool amInvited(Map<String, dynamic> t) => myStatus(t) == 'INVITED';
 
   /// Round I was eliminated in (summary bucket), or null if still alive/champ.
   static int? myEliminatedInRound(Map<String, dynamic> t) =>
-      (t['myEliminatedInRound'] as num?)?.toInt();
+      _num(t['myEliminatedInRound'])?.toInt();
 
   /// The raceId of my live matchup right now (summary bucket), null if none.
   static String? myCurrentMatchRaceId(Map<String, dynamic> t) =>
-      t['myCurrentMatchRaceId'] as String?;
+      _str(t['myCurrentMatchRaceId']);
+
+  // -- §5 additive live-matchup summary ------------------------------------
+
+  /// The additive `myCurrentMatch` object, or null.
+  ///
+  /// Null on an older backend that hasn't shipped it, and null (rather than a
+  /// throw) for any non-map value. Callers then render empty slots and fall
+  /// back to bracket navigation.
+  static Map<String, dynamic>? myCurrentMatch(Map<String, dynamic> t) {
+    final raw = t['myCurrentMatch'];
+    if (raw is Map) return raw.cast<String, dynamic>();
+    return null;
+  }
+
+  static String? matchRaceId(Map<String, dynamic>? m) => _str(m?['raceId']);
+
+  static DateTime? matchEndsAt(Map<String, dynamic>? m) =>
+      DateTime.tryParse(_str(m?['endsAt']) ?? '');
+
+  static int? matchPlacement(Map<String, dynamic>? m) =>
+      _num(m?['myPlacement'])?.toInt();
+
+  /// Detour Sign masks placement; absent/malformed reads as "not masked".
+  static bool matchPlacementHidden(Map<String, dynamic>? m) =>
+      m?['myPlacementHidden'] == true;
+
+  static int matchQueuedBoxCount(Map<String, dynamic>? m) =>
+      _num(m?['queuedBoxCount'])?.toInt() ?? 0;
+
+  static int matchMysteryBoxCount(Map<String, dynamic>? m) =>
+      _num(m?['mysteryBoxCount'])?.toInt() ?? 0;
+
+  /// Per-slot inventory for the live matchup. Keeps only well-formed maps, so
+  /// a malformed entry costs one slot rather than the whole row.
+  static List<Map<String, dynamic>> matchSlotItems(Map<String, dynamic>? m) {
+    final raw = m?['slotItems'];
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map>()
+        .map((e) => e.cast<String, dynamic>())
+        .toList(growable: false);
+  }
+
+  /// The raceId to open for a live matchup, preferring the additive object and
+  /// falling back to the retained legacy top-level field so a live matchup
+  /// stays navigable against a backend that predates `myCurrentMatch`.
+  static String? liveMatchRaceId(Map<String, dynamic> t) {
+    final fromMatch = matchRaceId(myCurrentMatch(t));
+    if (fromMatch != null && fromMatch.isNotEmpty) return fromMatch;
+    final legacy = myCurrentMatchRaceId(t);
+    if (legacy != null && legacy.isNotEmpty) return legacy;
+    return null;
+  }
+
+  /// True when the viewer has a matchup to act on right now, by either signal.
+  static bool hasLiveMatchup(Map<String, dynamic> t) =>
+      myCurrentMatch(t) != null || liveMatchRaceId(t) != null;
+
+  // -- §4.2 personal-list classification ------------------------------------
+
+  /// Classifies a personal tournament by what the user can DO with it.
+  ///
+  /// Deliberately action-first rather than status-first: an eliminated player
+  /// in a still-`ACTIVE` bracket has nothing left to do, while a live matchup
+  /// is actionable in exactly the same way an active race is.
+  ///
+  /// Never throws. An accepted tournament with no live matchup and no
+  /// conclusive completed/eliminated signal defaults to [pending].
+  static TournamentListState personalListState(
+    Map<String, dynamic> t, {
+    required String? userId,
+  }) {
+    // Unanswered invites are pinned above the pills so they can never be
+    // hidden behind a filter — including invites to a bracket that already
+    // started, which render as expired with Decline only.
+    if (amInvited(t)) return TournamentListState.invite;
+
+    // Table order (§4.2) puts a live matchup ABOVE the eliminated check. If a
+    // backend ever sends both, surfacing the actionable state is the safer
+    // failure mode.
+    if (hasLiveMatchup(t)) return TournamentListState.active;
+
+    if (myEliminatedInRound(t) != null) return TournamentListState.completed;
+    if (isChampion(t, userId)) return TournamentListState.completed;
+
+    final status = Tournament.status(t);
+    if (status == TournamentStatus.completed ||
+        status == TournamentStatus.cancelled) {
+      return TournamentListState.completed;
+    }
+
+    // Lobby, between rounds, or an unknown status from a newer backend.
+    return TournamentListState.pending;
+  }
 
   // -- Featured (seeded) ---------------------------------------------------
 
@@ -186,7 +292,7 @@ abstract final class Tournament {
   static bool isFeatured(Map<String, dynamic> t) =>
       (t['seedId'] as String?) != null || (t['seedKind'] as String?) != null;
 
-  static String? seedKind(Map<String, dynamic> t) => t['seedKind'] as String?;
+  static String? seedKind(Map<String, dynamic> t) => _str(t['seedKind']);
 
   /// The minted champion prize for a featured bracket (0 when absent / paid).
   static int championPrizeCoins(Map<String, dynamic> t) =>

@@ -143,8 +143,10 @@ void main() {
         'completed': const [],
       },
     );
-    // Race content renders; no tournament ticket badge anywhere.
-    expect(find.text('ACTIVE RACES'), findsOneWidget);
+    // Race content renders; no tournament row badge anywhere.
+    // §4 removed the ACTIVE RACES section header — the personal list is now
+    // pills + rows, so assert the user's own race ROW instead.
+    expect(find.text('My Race'), findsOneWidget);
     expect(find.text('ALIVE'), findsNothing);
   });
 
@@ -154,8 +156,8 @@ void main() {
     // §9.5: the Races content now builds lazily (CustomScrollView +
     // SliverList-per-section), so offscreen sections are intentionally NOT built
     // on first frame. This test interleaves top-of-page checks (featured cards,
-    // filter pills) with lower-section checks (ACTIVE RACES, the MY BRACKETS
-    // "ALIVE" ticket) and taps the pills between them, so it can't just scroll.
+    // filter pills) with lower-list checks (the user's own race row, the
+    // bracket row) and taps the pills between them, so it can't just scroll.
     // We instead give the test a tall viewport so the whole page lays out at
     // once and every lazy sliver is in view — this changes ONLY how the widgets
     // are brought into view for layout, not what the test asserts is true.
@@ -177,30 +179,35 @@ void main() {
     );
 
     // ALL (default): featured row shows BOTH a race card and a tournament card;
-    // the user's own race section + bracket ticket are visible.
+    // the user's own ACTIVE race row is visible underneath.
     expect(find.byKey(const Key('content-filter-all')), findsOneWidget);
     expect(find.byType(FeaturedRaceCard), findsOneWidget);
     expect(find.byKey(const Key('featured-tournament-join-ft1')), findsOneWidget);
-    expect(find.text('ACTIVE RACES'), findsOneWidget);
-    expect(find.text('ALIVE'), findsOneWidget);
+    expect(find.text('My Race'), findsOneWidget);
 
     // RACES: featured row shows ONLY the race card; the featured tournament is
-    // hidden — but the user's own races AND brackets stay put.
+    // hidden — but the user's own personal list stays put.
     await tester.tap(find.byKey(const Key('content-filter-races')));
     await tester.pump();
     expect(find.byType(FeaturedRaceCard), findsOneWidget);
     expect(find.byKey(const Key('featured-tournament-join-ft1')), findsNothing);
-    expect(find.text('ACTIVE RACES'), findsOneWidget); // NOT filtered
-    expect(find.text('ALIVE'), findsOneWidget); // NOT filtered
+    expect(find.text('My Race'), findsOneWidget); // NOT filtered
 
     // TOURNAMENTS: featured row shows ONLY the seeded tournament card; the
-    // featured race is hidden — user races AND brackets still visible.
+    // featured race is hidden — the personal list is still untouched.
     await tester.tap(find.byKey(const Key('content-filter-tournaments')));
     await tester.pump();
     expect(find.byType(FeaturedRaceCard), findsNothing);
     expect(find.byKey(const Key('featured-tournament-join-ft1')), findsOneWidget);
-    expect(find.text('ACTIVE RACES'), findsOneWidget); // still visible
-    expect(find.text('ALIVE'), findsOneWidget); // still visible
+    expect(find.text('My Race'), findsOneWidget); // still visible
+
+    // And the user's own bracket is still reachable in its own state pill,
+    // regardless of which featured filter is selected. (§4.2 puts an alive
+    // bracket with no live matchup in PENDING.)
+    await tester.tap(find.byKey(const Key('personal-state-pending')));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('Gauntlet'), findsOneWidget);
+    expect(find.text('ALIVE'), findsOneWidget);
   });
 
   testWidgets('TOURNAMENTS filter with no featured tournaments shows the '
@@ -221,7 +228,7 @@ void main() {
     // The featured race card is filtered out of the row...
     expect(find.byType(FeaturedRaceCard), findsNothing);
     // ...but the user's own race list is untouched.
-    expect(find.text('ACTIVE RACES'), findsOneWidget);
+    expect(find.text('My Race'), findsOneWidget);
   });
 
   testWidgets('pill is hidden when there is no featured content at all',
@@ -236,6 +243,6 @@ void main() {
     );
     expect(find.byKey(const Key('content-filter-all')), findsNothing);
     // User content still renders normally.
-    expect(find.text('ACTIVE RACES'), findsOneWidget);
+    expect(find.text('My Race'), findsOneWidget);
   });
 }

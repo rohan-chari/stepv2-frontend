@@ -150,7 +150,7 @@ flutter run -d 00008150-000171DE2638401C --device-connection=attached \
 # GOOGLE_IOS_CLIENT_ID here is the PROD iOS OAuth client (prod backend only
 # accepts this one — the staging client would fail with "audience is invalid").
 flutter run -d 00008150-000171DE2638401C --device-connection=attached --debug \
-  --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
+  --dart-define=BACKEND_BASE_URL=https://staging.steptracker-api.org \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
   --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
   --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \

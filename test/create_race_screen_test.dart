@@ -35,10 +35,7 @@ class _FakeBackendApiService extends BackendApiService {
     };
 
     return {
-      'race': {
-        'id': 'race-1',
-        'name': name,
-      },
+      'race': {'id': 'race-1', 'name': name},
     };
   }
 
@@ -67,6 +64,40 @@ Future<AuthService> _createAuthService() async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets(
+    'quick create uses safe solo defaults with customization collapsed',
+    (WidgetTester tester) async {
+      final authService = await _createAuthService();
+      final backendApiService = _FakeBackendApiService();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CreateRaceScreen(
+            authService: authService,
+            backendApiService: backendApiService,
+          ),
+        ),
+      );
+
+      expect(find.text('CUSTOMIZE RACE'), findsOneWidget);
+      expect(find.text('BUY-IN'), findsNothing);
+      expect(find.text('POWERUPS'), findsNothing);
+      await tester.enterText(
+        find.byKey(const Key('race-name-field')),
+        'Lunch Lap',
+      );
+      await tester.ensureVisible(find.text('CREATE RACE'));
+      await tester.tap(find.text('CREATE RACE'));
+      await tester.pumpAndSettle();
+
+      final call = backendApiService.lastCreateRaceCall!;
+      expect(call['maxDurationDays'], 3);
+      expect(call['powerupsEnabled'], isFalse);
+      expect(call['buyInAmount'], 0);
+      expect(call['isPublic'], isFalse);
+      expect(call['maxParticipants'], 10);
+    },
+  );
+
   testWidgets('CreateRaceScreen sends buy-in and payout preset selections', (
     WidgetTester tester,
   ) async {
@@ -78,6 +109,7 @@ void main() {
         home: CreateRaceScreen(
           authService: authService,
           backendApiService: backendApiService,
+          initialCustomizeExpanded: true,
         ),
       ),
     );
@@ -85,6 +117,7 @@ void main() {
     await tester.enterText(find.byType(TextField).at(0), 'Gold Rush');
 
     // Enable buy-in (defaults to 100 coins) so the payout mode picker shows.
+    await tester.ensureVisible(find.text('BUY-IN'));
     await tester.tap(find.text('BUY-IN'));
     await tester.pump();
 

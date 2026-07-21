@@ -13,6 +13,7 @@ import '../widgets/case_opening_strip.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/game_container.dart';
 import '../widgets/home_chrome.dart';
+import '../widgets/odds_sheet.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/powerup_icon.dart';
 import '../widgets/spinning_coin.dart';
@@ -100,6 +101,11 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
     final box = _status?['box'];
     return box is Map<String, dynamic> ? box : null;
   }
+
+  /// Exact box odds (spec §5.3 `box.itemOdds`). Null when the backend omits it
+  /// OR sends something incoherent — both hide the ODDS affordance entirely,
+  /// because a wrong odds display is worse than none (§6.3.B.10).
+  OddsBreakdown? get _itemOdds => OddsBreakdown.parseItemOdds(_box?['itemOdds']);
 
   /// Rewarded-ad extra spin offer — present only when the backend has the
   /// feature enabled AND this build declared the `ads` capability. Older
@@ -478,6 +484,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
                   style: HomeText.display(size: 26, color: HomeColors.ink),
                 ),
               ),
+              _OddsEntry(odds: _itemOdds),
               _InfoButton(onTap: _showOddsInfo),
               const SizedBox(width: 8),
               _CloseButton(onTap: () => Navigator.of(context).pop(false)),
@@ -597,6 +604,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
                   style: HomeText.display(size: 28, color: HomeColors.ink),
                 ),
               ),
+              _OddsEntry(odds: _itemOdds),
               _InfoButton(onTap: _showOddsInfo),
               const SizedBox(width: 8),
               // Before the swipe nothing is claimed — closing keeps today's
@@ -686,8 +694,16 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
     final odds = box['odds'] is Map<String, dynamic>
         ? box['odds'] as Map<String, dynamic>
         : const <String, dynamic>{};
-    final commonOdds = (odds['COMMON'] as num?)?.toDouble() ?? 0.50;
-    final uncommonOdds = (odds['UNCOMMON'] as num?)?.toDouble() ?? 0.35;
+    // Audit register #8: the old 0.50 / 0.35 fallbacks matched NO backend row
+    // (every real row is 0.70/0.25/0.05 at streak 1 or 0.20/0.35/0.45 at cap),
+    // so an old backend that omits `odds` used to fill the reel with decoys the
+    // box could never actually pay at that rate. Fall back to the real
+    // streak-1 row instead — the conservative end of the curve.
+    final commonOdds =
+        (odds['COMMON'] as num?)?.toDouble() ?? dailyBoxFallbackOdds['COMMON']!;
+    final uncommonOdds =
+        (odds['UNCOMMON'] as num?)?.toDouble() ??
+        dailyBoxFallbackOdds['UNCOMMON']!;
 
     final ranges = box['coinRanges'] is Map<String, dynamic>
         ? box['coinRanges'] as Map<String, dynamic>
@@ -858,6 +874,15 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
 }
 
 Color _rarityColor(String rarity) => caseRarityColor(rarity);
+
+/// Daily-box decoy odds used ONLY when the backend omits `box.odds` (older
+/// backend). This is the real streak-1 row from the balance config — not an
+/// invented curve. Audit register #8.
+const dailyBoxFallbackOdds = <String, double>{
+  'COMMON': 0.70,
+  'UNCOMMON': 0.25,
+  'RARE': 0.05,
+};
 
 /// One tile on the daily-box reel: a coin stack or an accessory.
 class _DailyStripItem {
@@ -1034,6 +1059,30 @@ class _OddsRow extends StatelessWidget {
           Text(pct, style: PixelText.number(size: 13, color: color)),
         ],
       ),
+    );
+  }
+}
+
+/// The exact-odds entry point plus its trailing gap, collapsed to nothing
+/// when the backend didn't send usable odds so the header doesn't gain a
+/// stray 8px gutter on older backends.
+class _OddsEntry extends StatelessWidget {
+  const _OddsEntry({required this.odds});
+  final OddsBreakdown? odds;
+
+  @override
+  Widget build(BuildContext context) {
+    if (odds == null) return const SizedBox.shrink();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        OddsAffordance(
+          odds: odds,
+          title: 'BOX ODDS',
+          subtitle: 'Exactly what today\'s box can pay at your streak.',
+        ),
+        const SizedBox(width: 8),
+      ],
     );
   }
 }

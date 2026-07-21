@@ -102,6 +102,26 @@ class HealthService {
     return _authorized;
   }
 
+  /// Drops the persisted authorization flag.
+  ///
+  /// This is device-scoped state that must not outlive the account that
+  /// granted it. Account deletion is server-side only, so without this a
+  /// re-signup on the same device restores `_authorized = true` before the
+  /// first frame and the onboarding health gate becomes unreachable — the new
+  /// user is never asked, and on Android (where the OS grant is revocable
+  /// independently) may never be connected at all.
+  static Future<void> clearPersistedAuthState() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_keyHealthAuthorized);
+  }
+
+  /// Instance form of [clearPersistedAuthState] that also resets the in-memory
+  /// flag, for callers holding a live service.
+  Future<void> clearAuthState() async {
+    await clearPersistedAuthState();
+    _authorized = false;
+  }
+
   /// Ensures the platform health store is ready, then requests READ access to
   /// steps. On iOS this is just [requestAuthorization]. On Android it first
   /// verifies Health Connect is installed/updated — if not, it sends the user to

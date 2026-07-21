@@ -44,6 +44,11 @@ class PowerupIcon extends StatelessWidget {
     'SIGNAL_JAMMER': 'signal_jammer',
     'LEECH': 'leech',
     'DEFENSE_SCAN': 'defense_scan',
+    // §7/§8 store-only additions. Both ship 128x128 art plus a tightly-cropped
+    // `_thumb` variant, so thumb-first rendering doesn't repeat the
+    // leech/defense_scan gap.
+    'HITCHHIKE': 'hitchhike',
+    'QUICK_RINSE': 'quick_rinse',
   };
 
   static int get knownTypeCount => _assetNames.length;

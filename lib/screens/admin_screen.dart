@@ -12,6 +12,8 @@ import '../widgets/powerup_icon.dart';
 import '../widgets/spinning_crate.dart';
 import '../widgets/trail_sign.dart';
 import 'admin_accessory_tuner_screen.dart';
+import 'admin_balance_config_screen.dart';
+import 'admin_powerup_shop_screen.dart';
 
 const _powerupEntries = [
   (
@@ -625,6 +627,58 @@ class AdminScreen extends StatelessWidget {
                         onPressed: () => Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (context) => AdminAccessoryTunerScreen(
+                              authService: authService,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                ContentBoard(
+                  width: boardWidth,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'ECONOMY',
+                        style: PixelText.title(
+                          size: 16,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      PillButton(
+                        label: 'BALANCE CONFIG',
+                        variant: PillButtonVariant.primary,
+                        fontSize: 13,
+                        fullWidth: true,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 12,
+                        ),
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => AdminBalanceConfigScreen(
+                              authService: authService,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      PillButton(
+                        label: 'POWERUP SHOP',
+                        variant: PillButtonVariant.primary,
+                        fontSize: 13,
+                        fullWidth: true,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 12,
+                        ),
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => AdminPowerupShopScreen(
                               authService: authService,
                             ),
                           ),

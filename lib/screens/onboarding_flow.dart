@@ -24,6 +24,11 @@ class OnboardingFlow extends StatelessWidget {
     required this.onSkipTutorial,
     required this.onEnterDaily,
     required this.onSkipFirstRace,
+    this.onboardingV2Enabled = false,
+    this.displayName,
+    this.onFetchActiveDaily,
+    this.onEnterVerifiedDaily,
+    this.onFindRace,
     this.firstRaceShareTokenPending = false,
     this.welcomeReferralCode,
     this.onWelcomeDismissed,
@@ -61,6 +66,13 @@ class OnboardingFlow extends StatelessWidget {
   /// Skips the first-race step (marks seen on the backend + locally). Used for
   /// the pending-share precedence path (a specific race is already queued).
   final VoidCallback onSkipFirstRace;
+
+  /// Explicit remote opt-in. False/missing retains every v1 gate above.
+  final bool onboardingV2Enabled;
+  final String? displayName;
+  final Future<Map<String, dynamic>?> Function()? onFetchActiveDaily;
+  final Future<void> Function(String raceId)? onEnterVerifiedDaily;
+  final Future<void> Function()? onFindRace;
 
   /// True when a race share link is waiting to be joined. The first-race step
   /// then auto-skips the generic public picker — the user already has a
@@ -112,6 +124,13 @@ class OnboardingFlow extends StatelessWidget {
     }
 
     // Step 2: notification permission (granted or denied both advance).
+    //
+    // Runs for V2 too, and deliberately sits AFTER health and BEFORE the daily
+    // intro. V2 used to return the daily intro above this check, which left
+    // the gate unreachable — a brand-new user was never asked, even on a fresh
+    // install, and ended up with notifications permanently off unless they
+    // happened to find the Profile or race-detail opt-in. Only an undetermined
+    // state prompts, so a previous grant or denial is still never re-nagged.
     if (notificationsState == null) {
       return OnboardingPermissionGate(
         label: 'NOTIFICATIONS',
@@ -120,6 +139,19 @@ class OnboardingFlow extends StatelessWidget {
             'Get race invites, friend requests, and important match updates as they happen.',
         icon: Icons.notifications_rounded,
         onContinue: onEnableNotifications,
+      );
+    }
+
+    // V2 intentionally removes the tutorial blocking gate. A pending share
+    // takes precedence inside this step after Health succeeds.
+    if (onboardingV2Enabled) {
+      return OnboardingDailyIntroStep(
+        displayName: displayName,
+        skipForPendingShare: firstRaceShareTokenPending,
+        onSkipForShare: onSkipFirstRace,
+        onFetchDaily: onFetchActiveDaily,
+        onEnterDaily: onEnterVerifiedDaily,
+        onFindRace: onFindRace,
       );
     }
 
@@ -138,6 +170,205 @@ class OnboardingFlow extends StatelessWidget {
       onEnterDaily: onEnterDaily,
       onSkip: onSkipFirstRace,
       skipForPendingShare: firstRaceShareTokenPending,
+    );
+  }
+}
+
+/// V2's final gate is backed by a real, accepted Daily race. Until the payload
+/// proves ACTIVE + ACCEPTED, this screen never claims enrollment or rewards.
+class OnboardingDailyIntroStep extends StatefulWidget {
+  const OnboardingDailyIntroStep({
+    super.key,
+    required this.displayName,
+    required this.skipForPendingShare,
+    required this.onSkipForShare,
+    this.onFetchDaily,
+    this.onEnterDaily,
+    this.onFindRace,
+  });
+
+  final String? displayName;
+  final bool skipForPendingShare;
+  final VoidCallback onSkipForShare;
+  final Future<Map<String, dynamic>?> Function()? onFetchDaily;
+  final Future<void> Function(String raceId)? onEnterDaily;
+  final Future<void> Function()? onFindRace;
+
+  @override
+  State<OnboardingDailyIntroStep> createState() =>
+      _OnboardingDailyIntroStepState();
+}
+
+class _OnboardingDailyIntroStepState extends State<OnboardingDailyIntroStep> {
+  Map<String, dynamic>? _daily;
+  bool _loading = true;
+  bool _entering = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.skipForPendingShare) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onSkipForShare();
+      });
+    } else {
+      _load();
+    }
+  }
+
+  Future<void> _load() async {
+    try {
+      final value = await widget.onFetchDaily?.call();
+      if (!mounted) return;
+      setState(() {
+        _daily = value;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  String get _timeRemaining {
+    final raw = _daily?['endsAt'];
+    final end = raw is String ? DateTime.tryParse(raw) : null;
+    if (end == null) return 'Ends today';
+    final remaining = end.difference(DateTime.now());
+    if (remaining.isNegative) return 'Ending soon';
+    if (remaining.inHours > 0) {
+      return '${remaining.inHours}h ${remaining.inMinutes.remainder(60)}m left';
+    }
+    return '${remaining.inMinutes.clamp(1, 59)}m left';
+  }
+
+  Future<void> _enter() async {
+    final raceId = (_daily?['raceId'] ?? _daily?['id']) as String?;
+    if (raceId == null || raceId.isEmpty || _entering) return;
+    setState(() => _entering = true);
+    await widget.onEnterDaily?.call(raceId);
+    if (mounted) setState(() => _entering = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.skipForPendingShare || _loading) {
+      return const ColoredBox(
+        color: AppColors.roofLight,
+        child: Center(
+          child: CircularProgressIndicator(color: AppColors.parchment),
+        ),
+      );
+    }
+
+    final daily = _daily;
+    final verified = daily != null;
+    final racerName = widget.displayName?.trim();
+    final handle = atName(
+      racerName == null || racerName.isEmpty ? 'Racer' : racerName,
+    );
+    final title = verified
+        ? (daily['name'] as String? ?? 'Daily Race')
+        : 'Your first race is waiting';
+
+    return ColoredBox(
+      color: AppColors.roofLight,
+      child: Stack(
+        children: [
+          const Positioned.fill(
+            child: CustomPaint(
+              painter: ArcadeCheckerPainter(drawBottomStripe: false),
+            ),
+          ),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 36, 24, 44),
+              child: Column(
+                children: [
+                  const Icon(
+                    Icons.emoji_events_rounded,
+                    size: 74,
+                    color: AppColors.pillGold,
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    verified ? 'TODAY’S RACE' : 'READY TO RACE',
+                    style: HomeText.label(
+                      size: 13,
+                      color: AppColors.parchmentLight,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: HomeText.title(size: 31, color: AppColors.parchment),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    verified
+                        ? '$_timeRemaining · Move at your own pace. Most steps at the finish wins.'
+                        : 'We couldn’t confirm a Daily spot right now. You can still enter Bara and find a race.',
+                    textAlign: TextAlign.center,
+                    style: HomeText.body(
+                      size: 15,
+                      height: 1.4,
+                      color: AppColors.parchmentLight,
+                    ),
+                  ),
+                  if (verified) ...[
+                    const SizedBox(height: 28),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: AppColors.parchment,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: AppColors.roofDark, width: 2),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            handle,
+                            style: HomeText.title(
+                              size: 24,
+                              color: AppColors.textDark,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'This is your racer tag—the name other players see. It won’t change how you sign in, and you can update it anytime in Profile.',
+                            textAlign: TextAlign.center,
+                            style: HomeText.body(
+                              size: 13,
+                              height: 1.35,
+                              color: AppColors.textMid,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const Spacer(),
+                  PillButton(
+                    key: const Key('onboarding-v2-primary'),
+                    label: verified
+                        ? (_entering ? 'OPENING...' : 'SEE MY RACE')
+                        : 'FIND A RACE',
+                    variant: PillButtonVariant.secondary,
+                    fullWidth: true,
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                    onPressed: _entering
+                        ? null
+                        : verified
+                        ? _enter
+                        : widget.onFindRace,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

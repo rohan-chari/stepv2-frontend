@@ -13,6 +13,7 @@ import '../../widgets/info_toast.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/powerup_icon.dart';
+import '../../constants/powerup_copy.dart';
 import '../get_coins_screen.dart';
 
 // Powerup types hidden from this build's store even if the backend still lists
@@ -836,14 +837,11 @@ class _ShopTabState extends State<ShopTab> {
 
   /// INVENTORY tile for an owned powerup (no action, just the count).
   Widget _ownedPowerupTile(String type, int quantity) {
-    const names = {
-      'IMPOSTER': 'Imposter',
-      'RAINSTORM': 'Rainstorm',
-      'SIGNAL_JAMMER': 'Signal Jammer',
-      'MIRROR': 'Mirror',
-      'CLEANSE': 'Cleanse',
-    };
-    final name = names[type] ?? type;
+    // Was a local 5-entry map, so any owned powerup outside it (Hitchhike,
+    // Quick Rinse, Leech, X-Ray…) rendered as its raw enum name. Reads from the
+    // consolidated copy source instead — an eighth duplicate the §9.4 checklist
+    // didn't enumerate.
+    final name = PowerupCopy.nameFor(type);
     return _ShopTile(
       art: _powerupArt(type),
       name: name,

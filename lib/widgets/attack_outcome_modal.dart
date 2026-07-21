@@ -7,15 +7,12 @@ import 'game_container.dart';
 import 'home_chrome.dart';
 import 'pill_button.dart';
 import 'powerup_icon.dart';
+import '../constants/powerup_copy.dart';
 
 /// How an offensive powerup landed on the target, from the use-powerup result.
 enum AttackOutcome { applied, blocked, reflected }
 
 /// Friendly display names for the powerups that can intercept an attack.
-const _powerupNames = {
-  'COMPRESSION_SOCKS': 'Compression Socks',
-  'MIRROR': 'Mirror',
-};
 
 /// Classifies a use-powerup result DEFENSIVELY.
 ///
@@ -90,7 +87,7 @@ class AttackOutcomeModal extends StatelessWidget {
   Widget build(BuildContext context) {
     final interceptorType = _interceptorType;
     final interceptorName =
-        _powerupNames[interceptorType.toUpperCase()] ?? interceptorType;
+        PowerupCopy.nameFor(interceptorType);
     final accent = _accentColor;
 
     return TweenAnimationBuilder<double>(

@@ -5,33 +5,8 @@ import 'package:flutter/material.dart';
 import '../styles.dart';
 import 'powerup_icon.dart';
 import 'spinning_crate.dart';
+import '../constants/powerup_copy.dart';
 
-const _powerupNames = {
-  'LEG_CRAMP': 'Leg Cramp',
-  'RED_CARD': 'Red Card',
-  'SHORTCUT': 'Shortcut',
-  'COMPRESSION_SOCKS': 'Compression Socks',
-  'PROTEIN_SHAKE': 'Protein Shake',
-  'RUNNERS_HIGH': "Runner's High",
-  'SECOND_WIND': 'Second Wind',
-  'STEALTH_MODE': 'Stealth Mode',
-  'WRONG_TURN': 'Wrong Turn',
-  'FANNY_PACK': 'Fanny Pack',
-  'TRAIL_MIX': 'Trail Mix',
-  'DETOUR_SIGN': 'Detour Sign',
-  'LUCKY_HORSESHOE': 'Lucky Horseshoe',
-  'CAMPFIRE_REST': 'Campfire Rest',
-  'TRAIL_MAGNET': 'Trail Magnet',
-  'POCKET_WATCH': 'Pocket Watch',
-  'TRAIL_MINE': 'Trail Mine',
-  'PINECONE_TOSS': 'Pinecone Toss',
-  'SNEAKY_SWAP': 'Sneaky Swap',
-  'MIRROR': 'Mirror',
-  'CLEANSE': 'Cleanse',
-  'IMPOSTER': 'Imposter',
-  'RAINSTORM': 'Rainstorm',
-  'SIGNAL_JAMMER': 'Signal Jammer',
-};
 
 enum ItemSlotState { empty, held, mysteryBox }
 
@@ -211,7 +186,7 @@ class _ItemSlotState extends State<ItemSlot>
           ),
           const SizedBox(height: 4),
           Text(
-            _powerupNames[widget.powerupType] ?? widget.powerupType ?? '',
+            PowerupCopy.nameFor(widget.powerupType),
             style: PixelText.title(size: 8, color: AppColors.textDark),
             textAlign: TextAlign.center,
             maxLines: 2,

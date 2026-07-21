@@ -71,7 +71,8 @@ class _StartScreenState extends State<StartScreen> {
 
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (context) => _authService.displayName != null
+        builder: (context) =>
+            _authService.displayName != null || _authService.onboardingV2Enabled
             ? MainShell(
                 authService: _authService,
                 notificationService: widget.notificationService,
@@ -92,7 +93,9 @@ class _StartScreenState extends State<StartScreen> {
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (context) => _authService.displayName != null
+          builder: (context) =>
+              _authService.displayName != null ||
+                  _authService.onboardingV2Enabled
               ? MainShell(
                   authService: _authService,
                   notificationService: widget.notificationService,
@@ -116,7 +119,9 @@ class _StartScreenState extends State<StartScreen> {
     if (success) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (context) => _authService.displayName != null
+          builder: (context) =>
+              _authService.displayName != null ||
+                  _authService.onboardingV2Enabled
               ? MainShell(
                   authService: _authService,
                   notificationService: widget.notificationService,
@@ -283,7 +288,8 @@ class _StartScreenState extends State<StartScreen> {
                       ),
                     ),
                   if (Platform.isAndroid || isGoogleSignInAvailable) ...[
-                    if (!Platform.isAndroid) SizedBox(height: compact ? 10 : 12),
+                    if (!Platform.isAndroid)
+                      SizedBox(height: compact ? 10 : 12),
                     SizedBox(
                       width: double.infinity,
                       child: _buildGoogleSignInButton(compact: compact),

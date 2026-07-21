@@ -51,39 +51,40 @@ Future<AuthService> _createAuthService({int coins = 5000}) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets(
-    'Submission blocked when buy-in exceeds 200 coins (max)',
-    (WidgetTester tester) async {
-      final authService = await _createAuthService();
-      final backend = _FakeBackendApiService();
+  testWidgets('Submission blocked when buy-in exceeds 200 coins (max)', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _createAuthService();
+    final backend = _FakeBackendApiService();
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: CreateRaceScreen(
-            authService: authService,
-            backendApiService: backend,
-          ),
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CreateRaceScreen(
+          authService: authService,
+          backendApiService: backend,
+          initialCustomizeExpanded: true,
         ),
-      );
+      ),
+    );
 
-      await tester.enterText(find.byType(TextField).at(0), 'Big Race');
-      await tester.enterText(find.byType(TextField).at(1), '5000');
+    await tester.enterText(find.byType(TextField).at(0), 'Big Race');
+    await tester.ensureVisible(find.text('BUY-IN'));
+    await tester.tap(find.text('BUY-IN'));
+    await tester.pump();
 
-      await tester.tap(find.text('BUY-IN'));
-      await tester.pump();
+    final buyIn = find.byType(TextField).at(1);
+    await tester.ensureVisible(buyIn);
+    await tester.enterText(buyIn, '201');
+    await tester.pump();
 
-      final buyIn = find.byType(TextField).at(2);
-      await tester.ensureVisible(buyIn);
-      await tester.enterText(buyIn, '201');
-      await tester.pump();
+    tester.testTextInput.hide();
+    await tester.pump();
+    await tester.ensureVisible(find.text('CREATE RACE'));
+    await tester.tap(find.text('CREATE RACE'));
+    await tester.pump();
 
-      await tester.ensureVisible(find.text('CREATE RACE'));
-      await tester.tap(find.text('CREATE RACE'));
-      await tester.pump();
-
-      expect(backend.lastCreateRaceCall, isNull);
-    },
-  );
+    expect(backend.lastCreateRaceCall, isNull);
+  });
 
   testWidgets(
     'Submission allowed when buy-in is exactly 200 coins (boundary)',
@@ -96,21 +97,23 @@ void main() {
           home: CreateRaceScreen(
             authService: authService,
             backendApiService: backend,
+            initialCustomizeExpanded: true,
           ),
         ),
       );
 
       await tester.enterText(find.byType(TextField).at(0), 'Big Race');
-      await tester.enterText(find.byType(TextField).at(1), '5000');
-
+      await tester.ensureVisible(find.text('BUY-IN'));
       await tester.tap(find.text('BUY-IN'));
       await tester.pump();
 
-      final buyIn = find.byType(TextField).at(2);
+      final buyIn = find.byType(TextField).at(1);
       await tester.ensureVisible(buyIn);
       await tester.enterText(buyIn, '200');
       await tester.pump();
 
+      tester.testTextInput.hide();
+      await tester.pump();
       await tester.ensureVisible(find.text('CREATE RACE'));
       await tester.tap(find.text('CREATE RACE'));
       await tester.pumpAndSettle();

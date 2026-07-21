@@ -7,35 +7,11 @@ import '../widgets/case_opening_strip.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/game_container.dart';
 import '../widgets/home_chrome.dart';
+import '../widgets/odds_sheet.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/powerup_icon.dart';
+import '../constants/powerup_copy.dart';
 
-const _powerupNames = {
-  'LEG_CRAMP': 'Leg Cramp',
-  'RED_CARD': 'Red Card',
-  'SHORTCUT': 'Shortcut',
-  'COMPRESSION_SOCKS': 'Compression Socks',
-  'PROTEIN_SHAKE': 'Protein Shake',
-  'RUNNERS_HIGH': "Runner's High",
-  'SECOND_WIND': 'Second Wind',
-  'STEALTH_MODE': 'Stealth Mode',
-  'WRONG_TURN': 'Wrong Turn',
-  'FANNY_PACK': 'Fanny Pack',
-  'TRAIL_MIX': 'Trail Mix',
-  'DETOUR_SIGN': 'Detour Sign',
-  'LUCKY_HORSESHOE': 'Lucky Horseshoe',
-  'CAMPFIRE_REST': 'Campfire Rest',
-  'TRAIL_MAGNET': 'Trail Magnet',
-  'POCKET_WATCH': 'Pocket Watch',
-  'TRAIL_MINE': 'Trail Mine',
-  'PINECONE_TOSS': 'Pinecone Toss',
-  'SNEAKY_SWAP': 'Sneaky Swap',
-  'MIRROR': 'Mirror',
-  'CLEANSE': 'Cleanse',
-  'IMPOSTER': 'Imposter',
-  'RAINSTORM': 'Rainstorm',
-  'SIGNAL_JAMMER': 'Signal Jammer',
-};
 
 const _powerupEntries = [
   (
@@ -149,6 +125,16 @@ const _powerupEntries = [
 class CaseOpeningScreen extends StatefulWidget {
   final Future<Map<String, dynamic>> Function() openMysteryBox;
 
+  /// Raw `powerupData.dropOdds` from getRaceProgress (spec §5.3). Null on an
+  /// older backend; malformed on a backend this build doesn't understand.
+  /// Either way the ODDS affordance is hidden entirely — a wrong odds display
+  /// is worse than none.
+  final Map<String, dynamic>? dropOdds;
+
+  /// Server-authoritative `rarityByType`; the reel's bundled table is a
+  /// fallback. Null on an older backend.
+  final Map<String, String>? rarityByType;
+
   /// Invoked once the reel LANDS on the result (spec §6), carrying the raw
   /// server response. The host commits the visible-inventory transition here —
   /// never on the API response — so the rolled powerup (or an auto-activated
@@ -159,6 +145,8 @@ class CaseOpeningScreen extends StatefulWidget {
     super.key,
     required this.openMysteryBox,
     this.onRevealed,
+    this.dropOdds,
+    this.rarityByType,
   });
 
   @override
@@ -180,6 +168,27 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
   // Whether the overlay can currently be dismissed: before the roll starts
   // (nothing consumed) or after the reveal has landed. Never mid-spin.
   bool get _canDismiss => _revealed || !_spinning;
+
+  // Parsed once per build-cycle input rather than per build: null whenever the
+  // payload is absent OR incoherent, which is what hides the affordance.
+  OddsBreakdown? _parsedDropOdds;
+  bool _parsedDropOddsFor = false;
+
+  OddsBreakdown? get _dropOdds {
+    if (!_parsedDropOddsFor) {
+      _parsedDropOdds = OddsBreakdown.parseDropOdds(widget.dropOdds);
+      _parsedDropOddsFor = true;
+    }
+    return _parsedDropOdds;
+  }
+
+  @override
+  void didUpdateWidget(CaseOpeningScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.dropOdds, widget.dropOdds)) {
+      _parsedDropOddsFor = false;
+    }
+  }
 
   // The server roll fires HERE, from the reel's swipe gate — never on screen
   // open. Backing out with the X before swiping leaves the box unopened in
@@ -300,6 +309,13 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
                   style: HomeText.display(size: 28, color: HomeColors.ink),
                 ),
               ),
+              // Renders nothing unless the server sent well-formed dropOdds.
+              OddsAffordance(
+                odds: _dropOdds,
+                title: 'DROP ODDS',
+                subtitle: 'Exactly what this box can roll for you right now.',
+              ),
+              if (_dropOdds != null) const SizedBox(width: 8),
               _GuideButton(onTap: () => _showPowerupGuide(context)),
               const SizedBox(width: 8),
               _CloseButton(onTap: _closeOverlay),
@@ -320,6 +336,7 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
             resultRarity: _resultRarity,
             onSpinRequested: _rollResult,
             onComplete: _onStripComplete,
+            rarityByType: widget.rarityByType,
           ),
         ],
       ),
@@ -334,8 +351,10 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
   }
 
   Widget _buildRevealCard() {
-    final rarityColor = _rarityColor(_resultRarity);
-    final name = _powerupNames[_resultType] ?? _resultType;
+    // Shared with every other reel surface (case_opening_strip.caseRarityColor)
+    // — this screen used to carry a byte-identical private copy.
+    final rarityColor = caseRarityColor(_resultRarity);
+    final name = PowerupCopy.nameFor(_resultType);
     final description = _descriptionFor(_resultType);
 
     return TweenAnimationBuilder<double>(
@@ -517,16 +536,6 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
     );
   }
 
-  static Color _rarityColor(String rarity) {
-    switch (rarity.toUpperCase()) {
-      case 'RARE':
-        return AppColors.coinDark;
-      case 'UNCOMMON':
-        return const Color(0xFF4A90D9);
-      default:
-        return AppColors.woodMid;
-    }
-  }
 }
 
 class _GuideButton extends StatelessWidget {

@@ -1,25 +1,8 @@
 import 'package:flutter/material.dart';
 import '../styles.dart';
 import 'player_avatar.dart';
+import '../constants/powerup_copy.dart';
 
-const _powerupDisplayNames = {
-  'LEG_CRAMP': 'Leg Cramp',
-  'RED_CARD': 'Red Card',
-  'SHORTCUT': 'Shortcut',
-  'COMPRESSION_SOCKS': 'Compression Socks',
-  'PROTEIN_SHAKE': 'Protein Shake',
-  'RUNNERS_HIGH': "Runner's High",
-  'SECOND_WIND': 'Second Wind',
-  'STEALTH_MODE': 'Stealth Mode',
-  'WRONG_TURN': 'Wrong Turn',
-  'FANNY_PACK': 'Fanny Pack',
-  'TRAIL_MIX': 'Trail Mix',
-  'DETOUR_SIGN': 'Detour Sign',
-  'BANANA_PEEL': 'Banana Peel',
-  'IMPOSTER': 'Imposter',
-  'RAINSTORM': 'Rainstorm',
-  'SIGNAL_JAMMER': 'Signal Jammer',
-};
 
 const _offensiveTypes = {
   'LEG_CRAMP',
@@ -111,8 +94,11 @@ class FeedBubble extends StatelessWidget {
 
   Widget _buildRichDescription() {
     if (powerupType != null) {
-      final powerupName = _powerupDisplayNames[powerupType];
-      if (powerupName != null && description.contains(powerupName)) {
+      // Highlights the powerup's name inside the server-authored description.
+      // Resolves through the consolidated copy source so a backend copy change
+      // keeps matching the sentence the backend sent.
+      final powerupName = PowerupCopy.nameFor(powerupType);
+      if (powerupName.isNotEmpty && description.contains(powerupName)) {
         final parts = description.split(powerupName);
         final spans = <TextSpan>[];
         for (int i = 0; i < parts.length; i++) {

@@ -83,6 +83,8 @@ void main() {
     expect(find.text('Gold Sprint'.toUpperCase()), findsOneWidget);
     await tester.tap(find.text('JOIN'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('LOCK IT IN'));
+    await tester.pumpAndSettle();
 
     expect(api.joined, isTrue);
     expect(authService.coins, 320);
@@ -106,6 +108,8 @@ void main() {
       await tester.pump();
 
       await tester.tap(find.text('JOIN'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('LOCK IT IN'));
       await tester.pumpAndSettle();
 
       expect(api.joined, isTrue);

@@ -10,51 +10,21 @@ import '../widgets/error_toast.dart';
 import '../widgets/game_container.dart';
 import '../widgets/home_chrome.dart';
 import '../widgets/info_toast.dart';
+import '../widgets/odds_sheet.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/powerup_icon.dart';
 import '../widgets/spinning_crate.dart';
-
-/// Display names for reveal cards — a superset covering box-earned + shop
-/// powerups and the COINS pseudo-reward the batch may return.
-const _multiPowerupNames = {
-  'LEG_CRAMP': 'Leg Cramp',
-  'RED_CARD': 'Red Card',
-  'SHORTCUT': 'Shortcut',
-  'COMPRESSION_SOCKS': 'Compression Socks',
-  'PROTEIN_SHAKE': 'Protein Shake',
-  'RUNNERS_HIGH': "Runner's High",
-  'SECOND_WIND': 'Second Wind',
-  'STEALTH_MODE': 'Stealth Mode',
-  'WRONG_TURN': 'Wrong Turn',
-  'FANNY_PACK': 'Fanny Pack',
-  'TRAIL_MIX': 'Trail Mix',
-  'DETOUR_SIGN': 'Detour Sign',
-  'LUCKY_HORSESHOE': 'Lucky Horseshoe',
-  'CAMPFIRE_REST': 'Campfire Rest',
-  'TRAIL_MAGNET': 'Trail Magnet',
-  'POCKET_WATCH': 'Pocket Watch',
-  'TRAIL_MINE': 'Trail Mine',
-  'PINECONE_TOSS': 'Pinecone Toss',
-  'SNEAKY_SWAP': 'Sneaky Swap',
-  'MIRROR': 'Mirror',
-  'CLEANSE': 'Cleanse',
-  'IMPOSTER': 'Imposter',
-  'RAINSTORM': 'Rainstorm',
-  'SIGNAL_JAMMER': 'Signal Jammer',
-  'LEECH': 'Leech',
-  'DEFENSE_SCAN': 'X-Ray',
-  'COINS': 'Coins',
-};
+import '../constants/powerup_copy.dart';
 
 /// A tiny [ChangeNotifier] whose only job is to fan a single "spin now" pulse
-/// out to every reel listening on it, so one tap spins the whole grid.
+/// out to every reel listening on it, so one tap spins the whole reel bank.
 class _SpinTrigger extends ChangeNotifier {
   void fire() => notifyListeners();
 }
 
 /// Full-screen "Open All" experience (item #1): opens every openable mystery
 /// box (slot boxes + queued overflow) in one action and spins them together in
-/// a responsive grid, then shows an aggregate summary.
+/// a vertical bank of full-width reels, then shows an aggregate summary.
 ///
 /// [openAll] performs the actual open (batch endpoint, or a feature-detected
 /// fallback to N single opens) and resolves the per-box results. It fires
@@ -70,12 +40,21 @@ class MultiCaseOpeningScreen extends StatefulWidget {
   /// reconcile its inventory projection before the follow-up refresh.
   final void Function(List<Map<String, dynamic>> results)? onResults;
 
+  /// Server-authoritative `rarityByType` for the decoy tiles; the reel's
+  /// bundled table is the fallback. Null on an older backend.
+  final Map<String, String>? rarityByType;
+
+  /// Raw `powerupData.dropOdds`; hidden entirely when absent or malformed.
+  final Map<String, dynamic>? dropOdds;
+
   const MultiCaseOpeningScreen({
     super.key,
     required this.boxCount,
     required this.openAll,
     this.includesQueued = false,
     this.onResults,
+    this.rarityByType,
+    this.dropOdds,
   });
 
   @override
@@ -141,7 +120,7 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
   }
 
   // Dismissal is allowed only before the boxes are opened or after the whole
-  // grid has landed — never while the reels are loading/spinning (spec §6).
+  // reel bank has landed — never while the reels are loading/spinning (spec §6).
   bool get _canDismiss => _phase == _Phase.idle || _phase == _Phase.done;
 
   void _close() {
@@ -152,48 +131,50 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      // Block Android back + iOS swipe-back while the grid is loading/spinning.
+      // Block Android back + iOS swipe-back while the reels load/spin.
       canPop: _canDismiss,
       child: Material(
         color: Colors.transparent,
         child: Stack(
-        children: [
-          Positioned.fill(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 2.5),
-              child: ColoredBox(
-                color: AppColors.roofDark.withValues(alpha: 0.78),
-                child: const CustomPaint(
-                  painter: ArcadeCheckerPainter(
-                    tileColor: Color(0x0AFFFFFF),
-                    stripeColor: Color(0x14000000),
-                    drawBottomStripe: false,
+          children: [
+            Positioned.fill(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 2.5),
+                child: ColoredBox(
+                  color: AppColors.roofDark.withValues(alpha: 0.78),
+                  child: const CustomPaint(
+                    painter: ArcadeCheckerPainter(
+                      tileColor: Color(0x0AFFFFFF),
+                      stripeColor: Color(0x14000000),
+                      drawBottomStripe: false,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          SafeArea(
-            child: Column(
-              children: [
-                Expanded(
-                  child: Center(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(14, 18, 14, 24),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 560),
-                        child: _phase == _Phase.done
-                            ? _buildSummary()
-                            : _buildOpening(),
+            SafeArea(
+              child: Column(
+                children: [
+                  Expanded(
+                    child: Center(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(14, 18, 14, 24),
+                        child: ConstrainedBox(
+                          // Match the single-box cabinet exactly. Open All adds
+                          // reels vertically; it never makes them narrower.
+                          constraints: const BoxConstraints(maxWidth: 460),
+                          child: _phase == _Phase.done
+                              ? _buildSummary()
+                              : _buildOpening(),
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const AdBannerSlot(),
-              ],
+                  const AdBannerSlot(),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
         ),
       ),
     );
@@ -217,6 +198,12 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
                   style: HomeText.display(size: 28, color: HomeColors.ink),
                 ),
               ),
+              OddsAffordance(
+                odds: OddsBreakdown.parseDropOdds(widget.dropOdds),
+                title: 'DROP ODDS',
+                subtitle: 'Exactly what these boxes can roll for you.',
+              ),
+              const SizedBox(width: 8),
               _CloseButton(onTap: _close),
             ],
           ),
@@ -248,7 +235,7 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
             const Center(child: CircularProgressIndicator()),
             const SizedBox(height: 40),
           ] else
-            _buildReelGrid(),
+            _buildReelStack(),
         ],
       ),
     );
@@ -275,35 +262,30 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
     );
   }
 
-  Widget _buildReelGrid() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final twoWide = constraints.maxWidth > 360;
-        final columns = twoWide ? 2 : 1;
-        final spacing = 12.0;
-        final cellWidth =
-            (constraints.maxWidth - spacing * (columns - 1)) / columns;
-        return Wrap(
-          spacing: spacing,
-          runSpacing: spacing,
-          children: [
-            for (int i = 0; i < _results.length; i++)
-              SizedBox(
-                width: cellWidth,
-                child: CaseOpeningStrip(
-                  // Stable identity so each reel keeps its state across rebuilds.
-                  key: ValueKey('reel_$i'),
-                  resultType: _results[i]['type'] as String? ?? '',
-                  resultRarity: _results[i]['rarity'] as String? ?? 'COMMON',
-                  height: 100,
-                  hideSwipeHint: true,
-                  spinTrigger: _trigger,
-                  onComplete: _onReelComplete,
-                ),
-              ),
-          ],
-        );
-      },
+  Widget _buildReelStack() {
+    return Column(
+      key: const Key('open-all-reel-stack'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (int i = 0; i < _results.length; i++) ...[
+          SizedBox(
+            width: double.infinity,
+            child: CaseOpeningStrip(
+              // Stable identity so each reel keeps its state across rebuilds.
+              key: ValueKey('reel_$i'),
+              resultType: _results[i]['type'] as String? ?? '',
+              resultRarity: _results[i]['rarity'] as String? ?? 'COMMON',
+              // Same reel height as the single-box opening screen.
+              height: 116,
+              hideSwipeHint: true,
+              spinTrigger: _trigger,
+              rarityByType: widget.rarityByType,
+              onComplete: _onReelComplete,
+            ),
+          ),
+          if (i != _results.length - 1) const SizedBox(height: 10),
+        ],
+      ],
     );
   }
 
@@ -343,7 +325,8 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
             const SizedBox(height: 4),
             Text(
               [
-                for (final e in rarityCounts.entries) '${e.value} ${e.key.toLowerCase()}',
+                for (final e in rarityCounts.entries)
+                  '${e.value} ${e.key.toLowerCase()}',
               ].join(' · '),
               textAlign: TextAlign.center,
               style: PixelText.body(size: 13, color: AppColors.textMid),
@@ -353,9 +336,7 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
               alignment: WrapAlignment.center,
               spacing: 10,
               runSpacing: 10,
-              children: [
-                for (final r in _results) _summaryTile(r),
-              ],
+              children: [for (final r in _results) _summaryTile(r)],
             ),
             if (autoActivated > 0) ...[
               const SizedBox(height: 12),
@@ -390,7 +371,7 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
     final type = r['type'] as String? ?? '';
     final rarity = (r['rarity'] as String? ?? 'COMMON');
     final color = caseRarityColor(rarity);
-    final name = _multiPowerupNames[type] ?? type;
+    final name = PowerupCopy.nameFor(type);
     return SizedBox(
       width: 76,
       child: Column(
@@ -448,7 +429,11 @@ class _CloseButton extends StatelessWidget {
             ],
           ),
           child: const Center(
-            child: Icon(Icons.close_rounded, size: 20, color: AppColors.textDark),
+            child: Icon(
+              Icons.close_rounded,
+              size: 20,
+              color: AppColors.textDark,
+            ),
           ),
         ),
       ),

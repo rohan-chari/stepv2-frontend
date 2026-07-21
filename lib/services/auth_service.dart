@@ -8,6 +8,7 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import 'ad_service.dart';
 import 'backend_api_service.dart';
+import 'health_service.dart';
 
 /// The Firebase project's **Web** OAuth client id, passed to GoogleSignIn as
 /// `serverClientId` so the returned ID token's `aud` matches what the backend
@@ -68,6 +69,7 @@ class AuthService extends ChangeNotifier {
   static const _keyAutoJoinFeaturedRaces = 'auth_auto_join_featured_races';
   static const _keyBannerAdsEnabled = 'auth_banner_ads_enabled';
   static const _keyTeamRacesEnabled = 'auth_team_races_enabled';
+  static const _keyOnboardingV2Enabled = 'auth_onboarding_v2_enabled';
   static const _keyPendingShareToken = 'auth_pending_share_token';
   static const _keyPendingTournamentShareToken =
       'auth_pending_tournament_share_token';
@@ -103,6 +105,7 @@ class AuthService extends ChangeNotifier {
   bool _autoJoinFeaturedRaces = false;
   bool _bannerAdsEnabled = false;
   bool _teamRacesEnabled = true;
+  bool _onboardingV2Enabled = false;
   String? _pendingShareToken;
   String? _pendingTournamentShareToken;
   Map<String, String>? _pendingInviterRace;
@@ -136,6 +139,10 @@ class AuthService extends ChangeNotifier {
   /// from the backend hides the create-flow team toggle. Existing team races
   /// are unaffected by the switch (they render, run, and pay out normally).
   bool get teamRacesEnabled => _teamRacesEnabled;
+
+  /// Server-controlled activation flow. This deliberately defaults to false:
+  /// frozen/older backend payloads must continue through the v1 onboarding.
+  bool get onboardingV2Enabled => _onboardingV2Enabled;
 
   /// A race share token captured from a deep link that has not yet been
   /// consumed (joined). Persisted so it survives the sign-in/onboarding gap on
@@ -192,13 +199,12 @@ class AuthService extends ChangeNotifier {
         prefs.getBool(_keyFirstRaceOnboardingSeen) ?? false;
     _tutorialOnboardingSeen =
         prefs.getBool(_keyTutorialOnboardingSeen) ?? false;
-    _hiddenFromLeaderboard =
-        prefs.getBool(_keyHiddenFromLeaderboard) ?? false;
-    _autoJoinFeaturedRaces =
-        prefs.getBool(_keyAutoJoinFeaturedRaces) ?? false;
+    _hiddenFromLeaderboard = prefs.getBool(_keyHiddenFromLeaderboard) ?? false;
+    _autoJoinFeaturedRaces = prefs.getBool(_keyAutoJoinFeaturedRaces) ?? false;
     _bannerAdsEnabled = prefs.getBool(_keyBannerAdsEnabled) ?? false;
     AdService.remoteBannersEnabled = _bannerAdsEnabled;
     _teamRacesEnabled = prefs.getBool(_keyTeamRacesEnabled) ?? true;
+    _onboardingV2Enabled = prefs.getBool(_keyOnboardingV2Enabled) ?? false;
     _pendingShareToken = prefs.getString(_keyPendingShareToken);
     _pendingTournamentShareToken = prefs.getString(
       _keyPendingTournamentShareToken,
@@ -206,8 +212,9 @@ class AuthService extends ChangeNotifier {
     final rawInviterRace = prefs.getString(_keyPendingInviterRace);
     if (rawInviterRace != null) {
       try {
-        _pendingInviterRace = (jsonDecode(rawInviterRace) as Map)
-            .map((k, v) => MapEntry(k.toString(), v.toString()));
+        _pendingInviterRace = (jsonDecode(rawInviterRace) as Map).map(
+          (k, v) => MapEntry(k.toString(), v.toString()),
+        );
       } catch (_) {
         _pendingInviterRace = null;
       }
@@ -224,9 +231,7 @@ class AuthService extends ChangeNotifier {
       // Only the email scope: the backend assigns a generated display name and
       // never uses the Apple real name, so we don't request (or send) it.
       final credential = await SignInWithApple.getAppleIDCredential(
-        scopes: [
-          AppleIDAuthorizationScopes.email,
-        ],
+        scopes: [AppleIDAuthorizationScopes.email],
       );
 
       final identityToken = credential.identityToken;
@@ -518,13 +523,23 @@ class AuthService extends ChangeNotifier {
     // any absent/null flag reads as false (banners stay hidden).
     if (backendUser.containsKey('featureFlags')) {
       final flags = backendUser['featureFlags'];
-      _bannerAdsEnabled =
-          flags is Map && flags['bannerAdsEnabled'] == true;
+      _bannerAdsEnabled = flags is Map && flags['bannerAdsEnabled'] == true;
       AdService.remoteBannersEnabled = _bannerAdsEnabled;
       // TR-107 team-race creation kill switch. Opposite default from banners:
       // the feature ships ON, so only an explicit false disables it — an older
       // backend that omits the key must not hide the toggle.
       _teamRacesEnabled = !(flags is Map && flags['teamRacesEnabled'] == false);
+    }
+    // Unlike team races, v2 is opt-in: within a payload that carries the
+    // envelope, anything except the literal boolean true is the compatible v1
+    // path. But the write is guarded on the envelope being PRESENT, like every
+    // field above — an unconditional assignment let any payload lacking
+    // `featureFlags` silently flip v2 off mid-session, mid-onboarding.
+    if (backendUser.containsKey('featureFlags')) {
+      final activationFlags = backendUser['featureFlags'];
+      _onboardingV2Enabled =
+          activationFlags is Map &&
+          activationFlags['onboardingV2Enabled'] == true;
     }
     // Contract §12 names the envelope `appSettings`; accept it too so either
     // backend shape flips the switch. Only an explicit false disables.
@@ -575,6 +590,7 @@ class AuthService extends ChangeNotifier {
     _tutorialOnboardingSeen = false;
     _hiddenFromLeaderboard = false;
     _autoJoinFeaturedRaces = false;
+    _onboardingV2Enabled = false;
     _pendingShareToken = null;
     _pendingTournamentShareToken = null;
 
@@ -593,10 +609,16 @@ class AuthService extends ChangeNotifier {
     await prefs.remove(_keyHiddenFromLeaderboard);
     await prefs.remove(_keyAutoJoinFeaturedRaces);
     await prefs.remove(_keyBannerAdsEnabled);
+    await prefs.remove(_keyOnboardingV2Enabled);
     await prefs.remove(_keyPendingShareToken);
     await prefs.remove(_keyPendingTournamentShareToken);
     _pendingInviterRace = null;
     await prefs.remove(_keyPendingInviterRace);
+    // Health authorization is device-scoped, not auth-scoped, and lives under
+    // its own key outside this `auth_*` set — so it survived sign-out and
+    // account deletion, leaving a re-signup on the same device already
+    // "authorized" and skipping the onboarding health gate entirely.
+    await HealthService.clearPersistedAuthState();
     notifyListeners();
   }
 
@@ -639,7 +661,9 @@ class AuthService extends ChangeNotifier {
   Map<String, String>? get pendingInviterRace => _pendingInviterRace;
 
   Future<void> setPendingInviterRace(Map<String, String>? race) async {
-    _pendingInviterRace = (race == null || race['raceId'] == null) ? null : race;
+    _pendingInviterRace = (race == null || race['raceId'] == null)
+        ? null
+        : race;
     final prefs = await SharedPreferences.getInstance();
     if (_pendingInviterRace != null) {
       await prefs.setString(
@@ -829,5 +853,6 @@ class AuthService extends ChangeNotifier {
     await prefs.setBool(_keyHiddenFromLeaderboard, _hiddenFromLeaderboard);
     await prefs.setBool(_keyBannerAdsEnabled, _bannerAdsEnabled);
     await prefs.setBool(_keyTeamRacesEnabled, _teamRacesEnabled);
+    await prefs.setBool(_keyOnboardingV2Enabled, _onboardingV2Enabled);
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/loadable.dart';
+import '../models/race_handoff_result.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
@@ -107,10 +108,23 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
     }
   }
 
-  void _navigateToCreateRace() {
-    Navigator.of(context).push(
+  Future<void> _navigateToCreateRace() async {
+    final race = await Navigator.of(context).push<Map<String, dynamic>>(
       MaterialPageRoute(
-        builder: (context) => CreateRaceScreen(authService: widget.authService),
+        builder: (context) => CreateRaceScreen(
+          authService: widget.authService,
+          backendApiService: widget.backendApiService,
+        ),
+      ),
+    );
+    if (!mounted || race == null) return;
+    final id = race['id'] as String?;
+    if (id == null || id.isEmpty) return;
+    Navigator.of(context).pop(
+      RaceHandoffResult(
+        raceId: id,
+        status: race['status'] as String? ?? 'PENDING',
+        kind: RaceHandoffKind.created,
       ),
     );
   }
@@ -124,6 +138,10 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
       showErrorToast(context, 'Not enough gold for this buy-in');
       return;
     }
+    if (buyIn > 0) {
+      final confirmed = await _confirmRaceBuyIn(buyIn);
+      if (confirmed != true || !mounted) return;
+    }
 
     // TR-201: team races need a side before the join call fires.
     String? team;
@@ -134,14 +152,15 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
 
     setState(() => _joiningRaceId = raceId);
     try {
+      Map<String, dynamic> result;
       if (team != null) {
-        await widget.backendApiService.joinPublicRaceOnTeam(
+        result = await widget.backendApiService.joinPublicRaceOnTeam(
           identityToken: token,
           raceId: raceId,
           team: team,
         );
       } else {
-        await widget.backendApiService.joinPublicRace(
+        result = await widget.backendApiService.joinPublicRace(
           identityToken: token,
           raceId: raceId,
         );
@@ -158,7 +177,17 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
         );
       } catch (_) {}
       if (!mounted) return;
-      Navigator.of(context).pop(true);
+      final joinedRace = result['race'] as Map<String, dynamic>?;
+      Navigator.of(context).pop(
+        RaceHandoffResult(
+          raceId: raceId,
+          status:
+              joinedRace?['status'] as String? ??
+              race['status'] as String? ??
+              'PENDING',
+          kind: RaceHandoffKind.joined,
+        ),
+      );
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _joiningRaceId = null);
@@ -173,6 +202,47 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
       setState(() => _joiningRaceId = null);
       showErrorToast(context, e.toString());
     }
+  }
+
+  Future<bool?> _confirmRaceBuyIn(int buyIn) {
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: TrailSign(
+          width: 320,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '$buyIn GOLD BUY-IN',
+                style: PixelText.title(size: 18, color: AppColors.textDark),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Your $buyIn gold is held until the race starts, then moves into the live pot. It returns only if the race is cancelled.',
+                textAlign: TextAlign.center,
+                style: PixelText.body(size: 13.5, color: AppColors.textMid),
+              ),
+              const SizedBox(height: 18),
+              PillButton(
+                label: 'NEVER MIND',
+                variant: PillButtonVariant.secondary,
+                fullWidth: true,
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+              ),
+              const SizedBox(height: 10),
+              PillButton(
+                label: 'LOCK IT IN',
+                variant: PillButtonVariant.accent,
+                fullWidth: true,
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _loadTournaments(String token) async {
@@ -287,8 +357,10 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('$buyIn GOLD BUY-IN',
-                  style: PixelText.title(size: 18, color: AppColors.textDark)),
+              Text(
+                '$buyIn GOLD BUY-IN',
+                style: PixelText.title(size: 18, color: AppColors.textDark),
+              ),
               const SizedBox(height: 12),
               Text(
                 'Your $buyIn gold is held until the bracket starts. You only '
@@ -301,8 +373,10 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
                 label: 'NEVER MIND',
                 variant: PillButtonVariant.primary,
                 fullWidth: true,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
                 onPressed: () => Navigator.of(dialogContext).pop(false),
               ),
               const SizedBox(height: 10),
@@ -310,8 +384,10 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
                 label: 'LOCK IT IN',
                 variant: PillButtonVariant.accent,
                 fullWidth: true,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
                 onPressed: () => Navigator.of(dialogContext).pop(true),
               ),
             ],
@@ -361,8 +437,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
               ),
               // Pinned segmented filter — shown whenever there's content to
               // filter (hidden during loading / error / the empty state).
-              if (_hasAnyContent)
-                _buildContentFilterPills(),
+              if (_hasAnyContent) _buildContentFilterPills(),
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: _load,
@@ -624,14 +699,19 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
           children: [
             seg('ALL', _PublicFilter.all, const Key('public-filter-all')),
             const SizedBox(width: 4),
-            seg('FEATURED', _PublicFilter.featured,
-                const Key('public-filter-featured')),
+            seg(
+              'FEATURED',
+              _PublicFilter.featured,
+              const Key('public-filter-featured'),
+            ),
             const SizedBox(width: 4),
-            seg('TOURNEYS', _PublicFilter.tournaments,
-                const Key('public-filter-tournaments')),
+            seg(
+              'TOURNEYS',
+              _PublicFilter.tournaments,
+              const Key('public-filter-tournaments'),
+            ),
             const SizedBox(width: 4),
-            seg('RACES', _PublicFilter.races,
-                const Key('public-filter-races')),
+            seg('RACES', _PublicFilter.races, const Key('public-filter-races')),
           ],
         ),
       ),
@@ -659,7 +739,8 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
     final id = Tournament.id(t) ?? '';
     final joined = Tournament.amIn(t);
     final aliveElsewhere =
-        !joined && Tournament.aliveInSeed(_myTournaments, Tournament.seedKind(t));
+        !joined &&
+        Tournament.aliveInSeed(_myTournaments, Tournament.seedKind(t));
     final isJoining = _joiningTournamentId == id;
     final full = Tournament.isFull(t);
 
@@ -691,7 +772,8 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
         // plain JOIN pill on this screen's race cards (the glow is reserved for
         // the compact featured-row cards).
         name: Tournament.name(t).toUpperCase(),
-        metaLine: '${Tournament.sizeSubcopy(Tournament.bracketSize(t))} · '
+        metaLine:
+            '${Tournament.sizeSubcopy(Tournament.bracketSize(t))} · '
             '${Tournament.durationSubcopy(Tournament.matchupDurationDays(t))}',
         filledLabel:
             '${Tournament.acceptedCount(t)}/${Tournament.bracketSize(t)} IN',
@@ -733,7 +815,8 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
       padding: const EdgeInsets.only(bottom: 12),
       child: TournamentGameCard(
         name: Tournament.name(t).toUpperCase(),
-        metaLine: '${Tournament.sizeSubcopy(Tournament.bracketSize(t))} · '
+        metaLine:
+            '${Tournament.sizeSubcopy(Tournament.bracketSize(t))} · '
             '${Tournament.durationSubcopy(Tournament.matchupDurationDays(t))}',
         filledLabel:
             '${Tournament.acceptedCount(t)}/${Tournament.bracketSize(t)} IN',

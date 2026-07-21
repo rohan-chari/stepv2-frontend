@@ -5,6 +5,7 @@ import '../styles.dart';
 import 'game_container.dart';
 import 'home_chrome.dart';
 import 'powerup_icon.dart';
+import '../constants/powerup_copy.dart';
 
 /// CSGO-style reel chrome shared by every mystery-box surface (race boxes,
 /// daily reward box): swipe-to-spin scroll, deceleration, pointer markers,
@@ -477,6 +478,13 @@ class CaseOpeningStrip extends StatefulWidget {
   final Listenable? spinTrigger;
   final bool hideSwipeHint;
 
+  /// Server-authoritative powerup rarity table (balance config `rarityByType`).
+  /// The bundled [_CaseOpeningStripState._bundledRarityByType] below is a
+  /// FALLBACK ONLY: server entries win per type, types the server omits keep
+  /// their bundled rarity, and a null map (older backend) leaves the reel
+  /// behaving exactly as it did before this field existed.
+  final Map<String, String>? rarityByType;
+
   const CaseOpeningStrip({
     super.key,
     required this.resultType,
@@ -486,6 +494,7 @@ class CaseOpeningStrip extends StatefulWidget {
     this.onSpinRequested,
     this.spinTrigger,
     this.hideSwipeHint = false,
+    this.rarityByType,
   });
 
   @override
@@ -500,7 +509,10 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip> {
   // Place result near the end so there's a long scroll
   static const _resultPosition = 38;
 
-  static const _rarityByType = {
+  /// FALLBACK ONLY — the balance config is authoritative. Consulted per type
+  /// when [CaseOpeningStrip.rarityByType] is null (old backend) or omits that
+  /// type. Read through [_rarityFor], never directly.
+  static const _bundledRarityByType = {
     'PROTEIN_SHAKE': 'COMMON',
     'SHORTCUT': 'COMMON',
     'RUNNERS_HIGH': 'UNCOMMON',
@@ -564,6 +576,12 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip> {
   @override
   void didUpdateWidget(CaseOpeningStrip oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // A late-arriving server rarity table must relabel the decoys already on
+    // screen, otherwise the reel keeps advertising the stale bundled rarities.
+    if (!_sameRarityTable(widget.rarityByType, oldWidget.rarityByType)) {
+      _items = _generateStrip();
+      return;
+    }
     // Deferred-roll flow: the result arrives after the swipe. Replant only the
     // result tile so the decoys the user is already looking at don't reshuffle.
     if (widget.resultType != oldWidget.resultType ||
@@ -572,12 +590,30 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip> {
     }
   }
 
+  static bool _sameRarityTable(
+    Map<String, String>? a,
+    Map<String, String>? b,
+  ) {
+    if (identical(a, b)) return true;
+    if (a == null || b == null) return false;
+    if (a.length != b.length) return false;
+    for (final entry in a.entries) {
+      if (b[entry.key] != entry.value) return false;
+    }
+    return true;
+  }
+
+  /// Server value wins; bundled table fills the gaps; COMMON as the last
+  /// resort so an unknown type still renders a tile.
+  String _rarityFor(String type) =>
+      widget.rarityByType?[type] ?? _bundledRarityByType[type] ?? 'COMMON';
+
   _StripItem _resultOrDecoy(Random rng) {
     if (widget.resultType.isNotEmpty) {
       return _StripItem(widget.resultType, widget.resultRarity);
     }
     final type = _randomType(rng);
-    return _StripItem(type, _rarityByType[type] ?? 'COMMON');
+    return _StripItem(type, _rarityFor(type));
   }
 
   List<_StripItem> _generateStrip() {
@@ -589,7 +625,7 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip> {
         items.add(_resultOrDecoy(rng));
       } else {
         final type = _randomType(rng);
-        items.add(_StripItem(type, _rarityByType[type] ?? 'COMMON'));
+        items.add(_StripItem(type, _rarityFor(type)));
       }
     }
     return items;
@@ -644,33 +680,9 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip> {
     );
   }
 
-  static const _powerupNames = {
-    'LEG_CRAMP': 'Leg Cramp',
-    'RED_CARD': 'Red Card',
-    'SHORTCUT': 'Shortcut',
-    'COMPRESSION_SOCKS': 'Compression\nSocks',
-    'PROTEIN_SHAKE': 'Protein Shake',
-    'RUNNERS_HIGH': "Runner's High",
-    'SECOND_WIND': 'Second Wind',
-    'STEALTH_MODE': 'Stealth Mode',
-    'WRONG_TURN': 'Wrong Turn',
-    'FANNY_PACK': 'Fanny Pack',
-    'TRAIL_MIX': 'Trail Mix',
-    'DETOUR_SIGN': 'Detour Sign',
-    'LUCKY_HORSESHOE': 'Lucky\nHorseshoe',
-    'CAMPFIRE_REST': 'Campfire Rest',
-    'TRAIL_MAGNET': 'Trail Magnet',
-    'POCKET_WATCH': 'Pocket Watch',
-    'TRAIL_MINE': 'Trail Mine',
-    'PINECONE_TOSS': 'Pinecone Toss',
-    'SNEAKY_SWAP': 'Sneaky Swap',
-    'MIRROR': 'Mirror',
-    'CLEANSE': 'Cleanse',
-  };
-
-  static String _typeName(String type) {
-    return _powerupNames[type] ?? type;
-  }
+  // Reel tile label. The 86px tile wraps to 2 lines on its own, so the former
+  // hand-placed line breaks ("Compression\nSocks") are unnecessary.
+  static String _typeName(String type) => PowerupCopy.nameFor(type);
 }
 
 class _StripItem {

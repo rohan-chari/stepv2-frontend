@@ -17,12 +17,14 @@ class CreateRaceScreen extends StatefulWidget {
   final AuthService authService;
   final BackendApiService backendApiService;
   final List<String> presetInviteeIds;
+  final bool initialCustomizeExpanded;
 
   CreateRaceScreen({
     super.key,
     required this.authService,
     BackendApiService? backendApiService,
     this.presetInviteeIds = const [],
+    this.initialCustomizeExpanded = false,
   }) : backendApiService = backendApiService ?? BackendApiService();
 
   @override
@@ -32,7 +34,7 @@ class CreateRaceScreen extends StatefulWidget {
 class CreateRaceScreenState extends State<CreateRaceScreen> {
   final _nameController = TextEditingController();
   final _buyInController = TextEditingController(text: '100');
-  int _selectedDuration = 7;
+  int _selectedDuration = 3;
   bool _isCreating = false;
   bool _powerupsEnabled = false;
   int _powerupInterval = 2000;
@@ -43,10 +45,11 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
   // Participant cap. Required selection: the user must pick a preset number or
   // NO LIMIT before creating. `_noLimit == false && _maxParticipants == null`
   // means "nothing chosen yet". NO LIMIT sends maxParticipants: null (unlimited).
-  int? _maxParticipants;
+  int? _maxParticipants = 10;
   bool _noLimit = false;
   // 1.1.7: optional future auto-start. Null = instant/manual race (default).
   DateTime? _scheduledStartAt;
+  late bool _customizeExpanded;
 
   // Team races (TR-801). Plaque names come from the backend's ≥50-name pool
   // (TR-103, contract §3b); the local pool is only an offline/older-backend
@@ -72,6 +75,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
   @override
   void initState() {
     super.initState();
+    _customizeExpanded = widget.initialCustomizeExpanded;
     // Seed synchronously from the local pool so the plaques are never blank,
     // then upgrade to the real backend pool in the background.
     final pair = randomTeamNamePair();
@@ -144,8 +148,18 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
   }
 
   static const _monthAbbrev = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
 
   Widget _maxRunnersChip({
@@ -270,11 +284,6 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
       return;
     }
 
-    if (!_isTeamRace && !_isTournament && !_noLimit && _maxParticipants == null) {
-      showErrorToast(context, 'Pick a max runners option');
-      return;
-    }
-
     // Tournament name is capped tighter (1–30) so the generated matchup-race
     // names fit (spec §6.1/§6.5).
     if (_isTournament && name.length > 30) {
@@ -347,8 +356,9 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
         final tournamentId = t?['id'] as String?;
         // Keep the wallet fresh (a paid bracket holds the creator's buy-in).
         try {
-          final user =
-              await widget.backendApiService.fetchMe(identityToken: token);
+          final user = await widget.backendApiService.fetchMe(
+            identityToken: token,
+          );
           await widget.authService.updateCoins(
             user['coins'] as int? ?? widget.authService.coins,
           );
@@ -712,8 +722,10 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 16),
-        Text('BRACKET SIZE',
-            style: PixelText.body(size: 11, color: AppColors.textMid)),
+        Text(
+          'BRACKET SIZE',
+          style: PixelText.body(size: 11, color: AppColors.textMid),
+        ),
         const SizedBox(height: 8),
         Row(
           children: [
@@ -737,13 +749,15 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                           : AppColors.parchmentDark,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Text('$size',
-                        style: PixelText.title(
-                          size: 16,
-                          color: _bracketSize == size
-                              ? Colors.white
-                              : AppColors.textDark,
-                        )),
+                    child: Text(
+                      '$size',
+                      style: PixelText.title(
+                        size: 16,
+                        color: _bracketSize == size
+                            ? Colors.white
+                            : AppColors.textDark,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -751,11 +765,15 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
           ],
         ),
         const SizedBox(height: 6),
-        Text(Tournament.sizeSubcopy(_bracketSize),
-            style: PixelText.body(size: 11, color: AppColors.textMid)),
+        Text(
+          Tournament.sizeSubcopy(_bracketSize),
+          style: PixelText.body(size: 11, color: AppColors.textMid),
+        ),
         const SizedBox(height: 16),
-        Text('MATCHUP LENGTH',
-            style: PixelText.body(size: 11, color: AppColors.textMid)),
+        Text(
+          'MATCHUP LENGTH',
+          style: PixelText.body(size: 11, color: AppColors.textMid),
+        ),
         const SizedBox(height: 8),
         Row(
           children: [
@@ -774,13 +792,15 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                           : AppColors.parchmentDark,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Text('${days}d',
-                        style: PixelText.title(
-                          size: 15,
-                          color: _matchupDuration == days
-                              ? Colors.white
-                              : AppColors.textDark,
-                        )),
+                    child: Text(
+                      '${days}d',
+                      style: PixelText.title(
+                        size: 15,
+                        color: _matchupDuration == days
+                            ? Colors.white
+                            : AppColors.textDark,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -794,9 +814,11 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
           style: PixelText.body(size: 11, color: AppColors.textMid),
         ),
         const SizedBox(height: 4),
-        Text('Buy-in max $maxBuyIn · pot up to $potCap coins',
-            key: const Key('tournament-buyin-hint'),
-            style: PixelText.body(size: 11, color: AppColors.coinDark)),
+        Text(
+          'Buy-in max $maxBuyIn · pot up to $potCap coins',
+          key: const Key('tournament-buyin-hint'),
+          style: PixelText.body(size: 11, color: AppColors.coinDark),
+        ),
       ],
     );
   }
@@ -828,9 +850,8 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
             key: const Key('team-size-minus'),
             icon: Icons.remove_rounded,
             enabled: _teamSize > 1,
-            onTap: () => setState(
-              () => _teamSize = (_teamSize - 1).clamp(1, 5),
-            ),
+            onTap: () =>
+                setState(() => _teamSize = (_teamSize - 1).clamp(1, 5)),
           ),
           Expanded(
             child: Column(
@@ -851,9 +872,8 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
             key: const Key('team-size-plus'),
             icon: Icons.add_rounded,
             enabled: _teamSize < 5,
-            onTap: () => setState(
-              () => _teamSize = (_teamSize + 1).clamp(1, 5),
-            ),
+            onTap: () =>
+                setState(() => _teamSize = (_teamSize + 1).clamp(1, 5)),
           ),
         ],
       ),
@@ -917,7 +937,11 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: colorDark, width: 2.5),
         boxShadow: [
-          BoxShadow(color: colorDark, offset: const Offset(0, 3), blurRadius: 0),
+          BoxShadow(
+            color: colorDark,
+            offset: const Offset(0, 3),
+            blurRadius: 0,
+          ),
         ],
       ),
       child: Row(
@@ -995,8 +1019,11 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (selected) ...[
-                const Icon(Icons.check_circle_rounded,
-                    size: 14, color: Colors.white),
+                const Icon(
+                  Icons.check_circle_rounded,
+                  size: 14,
+                  color: Colors.white,
+                ),
                 const SizedBox(width: 5),
               ],
               Flexible(
@@ -1023,492 +1050,265 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
         behavior: HitTestBehavior.opaque,
         onTap: () => FocusScope.of(context).unfocus(),
         child: ArcadePageBackground(
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Header
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                child: Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () => Navigator.of(context).pop(),
-                      child: const Padding(
-                        padding: EdgeInsets.all(8),
-                        child: Icon(
-                          Icons.arrow_back,
-                          color: AppColors.parchmentLight,
-                          size: 24,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'NEW RACE',
-                      style: PixelText.title(
-                        size: 22,
-                        color: AppColors.parchmentLight,
-                      ).copyWith(shadows: _textShadows),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-
-              Expanded(
-                child: SingleChildScrollView(
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+          child: SafeArea(
+            child: Column(
+              children: [
+                // Header
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: Row(
                     children: [
-                      // Race name
-                      RetroCard(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'RACE NAME',
-                              style: PixelText.title(
-                                size: 13,
-                                color: AppColors.textMid,
+                      GestureDetector(
+                        onTap: () => Navigator.of(context).pop(),
+                        child: const Padding(
+                          padding: EdgeInsets.all(8),
+                          child: Icon(
+                            Icons.arrow_back,
+                            color: AppColors.parchmentLight,
+                            size: 24,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'NEW RACE',
+                        style: PixelText.title(
+                          size: 22,
+                          color: AppColors.parchmentLight,
+                        ).copyWith(shadows: _textShadows),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                Expanded(
+                  child: SingleChildScrollView(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Race name
+                        RetroCard(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'RACE NAME',
+                                style: PixelText.title(
+                                  size: 13,
+                                  color: AppColors.textMid,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 8),
-                            TextField(
-                              key: const Key('race-name-field'),
-                              controller: _nameController,
-                              maxLength: 50,
-                              style: PixelText.body(
-                                size: 16,
-                                color: AppColors.textDark,
-                              ),
-                              decoration: InputDecoration(
-                                hintText: 'e.g. Weekend Warriors',
-                                hintStyle: PixelText.body(
+                              const SizedBox(height: 8),
+                              TextField(
+                                key: const Key('race-name-field'),
+                                controller: _nameController,
+                                maxLength: 50,
+                                style: PixelText.body(
                                   size: 16,
-                                  color: AppColors.textMid.withValues(
-                                    alpha: 0.5,
-                                  ),
+                                  color: AppColors.textDark,
                                 ),
-                                counterText: '',
-                                border: InputBorder.none,
-                                isDense: true,
-                                contentPadding: EdgeInsets.zero,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Race format — wooden signpost (TR-801). Hidden
-                      // entirely when the remote kill switch is off (TR-107).
-                      if (widget.authService.teamRacesEnabled) ...[
-                        _buildFormatCard(),
-                        const SizedBox(height: 12),
-                      ],
-
-                      // Duration + scheduled-start are hidden for tournaments:
-                      // matchup length is fixed by the bracket picker and
-                      // tournaments never schedule-auto-start (spec §9).
-                      if (!_isTournament) ...[
-                      // Duration
-                      RetroCard(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'DURATION',
-                              style: PixelText.title(
-                                size: 13,
-                                color: AppColors.textMid,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Row(
-                              children: _durationOptions.map((days) {
-                                final selected = _selectedDuration == days;
-                                return Expanded(
-                                  child: GestureDetector(
-                                    onTap: () => setState(
-                                      () => _selectedDuration = days,
-                                    ),
-                                    child: Container(
-                                      margin: const EdgeInsets.symmetric(
-                                        horizontal: 3,
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 10,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: selected
-                                            ? AppColors.pillGreenDark
-                                            : AppColors.parchmentDark,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      alignment: Alignment.center,
-                                      child: Text(
-                                        '${days}d',
-                                        style: PixelText.title(
-                                          size: 15,
-                                          color: selected
-                                              ? Colors.white
-                                              : AppColors.textDark,
-                                        ),
-                                      ),
+                                decoration: InputDecoration(
+                                  hintText: 'e.g. Weekend Warriors',
+                                  hintStyle: PixelText.body(
+                                    size: 16,
+                                    color: AppColors.textMid.withValues(
+                                      alpha: 0.5,
                                     ),
                                   ),
-                                );
-                              }).toList(),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Scheduled start (optional auto-start)
-                      RetroCard(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment:
-                                  MainAxisAlignment.spaceBetween,
-                              children: [
-                                Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'SCHEDULED START',
-                                      style: PixelText.title(
-                                        size: 13,
-                                        color: AppColors.textMid,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      _scheduledStartAt == null
-                                          ? 'START MANUALLY'
-                                          : 'AUTO-START',
-                                      style: PixelText.body(
-                                        size: 11,
-                                        color: _scheduledStartAt == null
-                                            ? AppColors.textMid
-                                            : AppColors.pillGreenDark,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(
-                                  height: 28,
-                                  child: Switch.adaptive(
-                                    value: _scheduledStartAt != null,
-                                    activeTrackColor:
-                                        AppColors.pillGreenDark,
-                                    onChanged: (v) {
-                                      if (v) {
-                                        _pickScheduledStart();
-                                      } else {
-                                        setState(
-                                          () => _scheduledStartAt = null,
-                                        );
-                                      }
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (_scheduledStartAt != null) ...[
-                              const SizedBox(height: 12),
-                              GestureDetector(
-                                onTap: _pickScheduledStart,
-                                child: Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 10,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.parchmentDark,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.event_outlined,
-                                        size: 16,
-                                        color: AppColors.textMid,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          'Starts at ${_formatScheduledStart(_scheduledStartAt!)}',
-                                          style: PixelText.body(
-                                            size: 13,
-                                            color: AppColors.textDark,
-                                          ),
-                                        ),
-                                      ),
-                                      Icon(
-                                        Icons.edit_outlined,
-                                        size: 14,
-                                        color: AppColors.textMid.withValues(
-                                          alpha: 0.6,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                                  counterText: '',
+                                  border: InputBorder.none,
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.zero,
                                 ),
                               ),
                             ],
-                          ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      ],
+                        const SizedBox(height: 12),
 
-                      // Powerups
-                      RetroCard(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        // Race format — wooden signpost (TR-801). Hidden
+                        // entirely when the remote kill switch is off (TR-107).
+                        if (_customizeExpanded &&
+                            widget.authService.teamRacesEnabled) ...[
+                          _buildFormatCard(),
+                          const SizedBox(height: 12),
+                        ],
+
+                        // Duration + scheduled-start are hidden for tournaments:
+                        // matchup length is fixed by the bracket picker and
+                        // tournaments never schedule-auto-start (spec §9).
+                        if (!_isTournament) ...[
+                          // Duration
+                          RetroCard(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'POWERUPS',
+                                  'DURATION',
                                   style: PixelText.title(
                                     size: 13,
                                     color: AppColors.textMid,
                                   ),
                                 ),
-                                SizedBox(
-                                  height: 28,
-                                  child: Switch.adaptive(
-                                    value: _powerupsEnabled,
-                                    activeTrackColor: AppColors.pillGreenDark,
-                                    onChanged: (v) =>
-                                        setState(() => _powerupsEnabled = v),
-                                  ),
+                                const SizedBox(height: 10),
+                                Row(
+                                  children: _durationOptions.map((days) {
+                                    final selected = _selectedDuration == days;
+                                    return Expanded(
+                                      child: GestureDetector(
+                                        onTap: () => setState(
+                                          () => _selectedDuration = days,
+                                        ),
+                                        child: Container(
+                                          margin: const EdgeInsets.symmetric(
+                                            horizontal: 3,
+                                          ),
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 10,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: selected
+                                                ? AppColors.pillGreenDark
+                                                : AppColors.parchmentDark,
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                          ),
+                                          alignment: Alignment.center,
+                                          child: Text(
+                                            '${days}d',
+                                            style: PixelText.title(
+                                              size: 15,
+                                              color: selected
+                                                  ? Colors.white
+                                                  : AppColors.textDark,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
                                 ),
                               ],
                             ),
-                            if (_powerupsEnabled) ...[
-                              const SizedBox(height: 8),
-                              Text(
-                                'POWERUP EVERY',
-                                style: PixelText.body(
-                                  size: 11,
-                                  color: AppColors.textMid,
+                          ),
+                          const SizedBox(height: 12),
+
+                          GestureDetector(
+                            key: const Key('customize-race-toggle'),
+                            onTap: () => setState(
+                              () => _customizeExpanded = !_customizeExpanded,
+                            ),
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 14,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.roofDark,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: AppColors.parchmentBorder,
+                                  width: 2,
                                 ),
                               ),
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: _intervalPresets.map((interval) {
-                                  final selected = _powerupInterval == interval;
-                                  final label = interval >= 1000
-                                      ? '${(interval / 1000).toStringAsFixed(interval % 1000 == 0 ? 0 : 1)}k'
-                                      : '$interval';
-                                  return SizedBox(
-                                    width: 72,
-                                    child: GestureDetector(
-                                      onTap: () => setState(
-                                        () => _powerupInterval = interval,
-                                      ),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 10,
-                                          horizontal: 6,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: selected
-                                              ? AppColors.pillGreenDark
-                                              : AppColors.parchmentDark,
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                        ),
-                                        alignment: Alignment.center,
-                                        child: Text(
-                                          label,
-                                          style: PixelText.title(
-                                            size: 11,
-                                            color: selected
-                                                ? Colors.white
-                                                : AppColors.textDark,
-                                          ),
-                                        ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.tune_rounded,
+                                    color: AppColors.parchment,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      'CUSTOMIZE RACE',
+                                      style: PixelText.title(
+                                        size: 13,
+                                        color: AppColors.parchment,
                                       ),
                                     ),
-                                  );
-                                }).toList(),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Buy-in
-                      RetroCard(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                GestureDetector(
-                                  onTap: () => setState(
-                                    () => _buyInEnabled = !_buyInEnabled,
                                   ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                  Icon(
+                                    _customizeExpanded
+                                        ? Icons.expand_less_rounded
+                                        : Icons.expand_more_rounded,
+                                    color: AppColors.parchment,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Scheduled start (optional auto-start)
+                          if (_customizeExpanded)
+                            RetroCard(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Text(
-                                        'BUY-IN',
-                                        style: PixelText.title(
-                                          size: 13,
-                                          color: AppColors.textMid,
-                                        ),
+                                      Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'SCHEDULED START',
+                                            style: PixelText.title(
+                                              size: 13,
+                                              color: AppColors.textMid,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            _scheduledStartAt == null
+                                                ? 'START MANUALLY'
+                                                : 'AUTO-START',
+                                            style: PixelText.body(
+                                              size: 11,
+                                              color: _scheduledStartAt == null
+                                                  ? AppColors.textMid
+                                                  : AppColors.pillGreenDark,
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        _buyInEnabled
-                                            ? 'PAID RACE'
-                                            : 'FREE RACE',
-                                        style: PixelText.body(
-                                          size: 11,
-                                          color: _buyInEnabled
-                                              ? AppColors.coinDark
-                                              : AppColors.textMid,
+                                      SizedBox(
+                                        height: 28,
+                                        child: Switch.adaptive(
+                                          value: _scheduledStartAt != null,
+                                          activeTrackColor:
+                                              AppColors.pillGreenDark,
+                                          onChanged: (v) {
+                                            if (v) {
+                                              _pickScheduledStart();
+                                            } else {
+                                              setState(
+                                                () => _scheduledStartAt = null,
+                                              );
+                                            }
+                                          },
                                         ),
                                       ),
                                     ],
                                   ),
-                                ),
-                                SizedBox(
-                                  height: 28,
-                                  child: Switch.adaptive(
-                                    value: _buyInEnabled,
-                                    activeTrackColor: AppColors.pillGreenDark,
-                                    onChanged: (value) =>
-                                        setState(() => _buyInEnabled = value),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (_buyInEnabled) ...[
-                              const SizedBox(height: 12),
-                              Text(
-                                'BUY-IN PER RUNNER',
-                                style: PixelText.body(
-                                  size: 11,
-                                  color: AppColors.textMid,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: AppColors.parchment,
-                                  border: Border.all(
-                                    color: AppColors.parchmentBorder,
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.edit_outlined,
-                                      size: 16,
-                                      color: AppColors.textMid.withValues(
-                                        alpha: 0.6,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: TextField(
-                                        controller: _buyInController,
-                                        keyboardType: TextInputType.number,
-                                        inputFormatters: [
-                                          FilteringTextInputFormatter
-                                              .digitsOnly,
-                                        ],
-                                        onChanged: (value) {
-                                          setState(() {
-                                            _buyInAmount =
-                                                int.tryParse(value) ?? 0;
-                                          });
-                                        },
-                                        style: PixelText.number(
-                                          size: 24,
-                                          color: AppColors.coinDark,
-                                        ),
-                                        decoration: InputDecoration(
-                                          hintText: '0',
-                                          hintStyle: PixelText.number(
-                                            size: 24,
-                                            color: AppColors.coinDark
-                                                .withValues(alpha: 0.3),
-                                          ),
-                                          border: InputBorder.none,
-                                          isDense: true,
-                                          contentPadding: EdgeInsets.zero,
-                                          suffixText: 'coins',
-                                          suffixStyle: PixelText.body(
-                                            size: 12,
-                                            color: AppColors.textMid,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              // TR-102: payout presets are ignored for team
-                              // races (the team pot splits evenly) — hide the
-                              // picker in Teams mode. Tournaments are always
-                              // winner-takes-all (champion takes the pot), so
-                              // hide it there too (spec §9).
-                              if (_isTournament) ...[
-                                // Nothing to pick — WTA is implied.
-                              ] else if (!_isTeamRace) ...[
-                              const SizedBox(height: 12),
-                              Text(
-                                'PAYOUT MODE',
-                                style: PixelText.body(
-                                  size: 11,
-                                  color: AppColors.textMid,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Column(
-                                children: payoutPresetOptions.map((option) {
-                                  final selected = _payoutPreset == option.$2;
-                                  return Padding(
-                                    padding: const EdgeInsets.only(bottom: 8),
-                                    child: GestureDetector(
-                                      onTap: () => setState(
-                                        () => _payoutPreset = option.$2,
-                                      ),
+                                  if (_scheduledStartAt != null) ...[
+                                    const SizedBox(height: 12),
+                                    GestureDetector(
+                                      onTap: _pickScheduledStart,
                                       child: Container(
                                         width: double.infinity,
                                         padding: const EdgeInsets.symmetric(
@@ -1516,204 +1316,503 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                           vertical: 10,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: selected
-                                              ? AppColors.pillGreenDark
-                                              : AppColors.parchmentDark,
+                                          color: AppColors.parchmentDark,
                                           borderRadius: BorderRadius.circular(
                                             8,
                                           ),
                                         ),
-                                        child: Text(
-                                          option.$1,
-                                          style: PixelText.title(
-                                            size: 12,
-                                            color: selected
-                                                ? Colors.white
-                                                : AppColors.textDark,
-                                          ),
-                                          textAlign: TextAlign.center,
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              Icons.event_outlined,
+                                              size: 16,
+                                              color: AppColors.textMid,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                'Starts at ${_formatScheduledStart(_scheduledStartAt!)}',
+                                                style: PixelText.body(
+                                                  size: 13,
+                                                  color: AppColors.textDark,
+                                                ),
+                                              ),
+                                            ),
+                                            Icon(
+                                              Icons.edit_outlined,
+                                              size: 14,
+                                              color: AppColors.textMid
+                                                  .withValues(alpha: 0.6),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ),
-                                  );
-                                }).toList(),
+                                  ],
+                                ],
                               ),
-                              SizedBox(
-                                width: double.infinity,
-                                child: Text(
-                                  payoutHelpText(_payoutPreset),
-                                  style: PixelText.body(
-                                    size: 12,
-                                    color: AppColors.textMid,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                              ] else
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(top: 12),
-                                    child: Text(
-                                      'Winning team splits the whole pot evenly',
-                                      style: PixelText.body(
-                                        size: 12,
-                                        color: AppColors.textMid,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
+                            ),
+                          if (_customizeExpanded) const SizedBox(height: 12),
+                        ],
 
-                      // Public race
-                      RetroCard(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        // Powerups
+                        if (_customizeExpanded)
+                          RetroCard(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
                                     Text(
-                                      _isPublic ? 'PUBLIC RACE' : 'PRIVATE RACE',
+                                      'POWERUPS',
                                       style: PixelText.title(
                                         size: 13,
                                         color: AppColors.textMid,
                                       ),
                                     ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      _isPublic
-                                          ? 'ANYONE CAN JOIN'
-                                          : 'INVITE ONLY',
-                                      style: PixelText.body(
-                                        size: 11,
-                                        color: _isPublic
-                                            ? AppColors.pillGreenDark
-                                            : AppColors.textMid,
+                                    SizedBox(
+                                      height: 28,
+                                      child: Switch.adaptive(
+                                        value: _powerupsEnabled,
+                                        activeTrackColor:
+                                            AppColors.pillGreenDark,
+                                        onChanged: (v) => setState(
+                                          () => _powerupsEnabled = v,
+                                        ),
                                       ),
                                     ),
                                   ],
                                 ),
-                                SizedBox(
-                                  height: 28,
-                                  child: Switch.adaptive(
-                                    value: _isPublic,
-                                    activeTrackColor: AppColors.pillGreenDark,
-                                    onChanged: (v) =>
-                                        setState(() => _isPublic = v),
+                                if (_powerupsEnabled) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'POWERUP EVERY',
+                                    style: PixelText.body(
+                                      size: 11,
+                                      color: AppColors.textMid,
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                            // TR-101: a team race's field cap is fixed at
-                            // 2 x teamSize — no free-form runner cap.
-                            if (_isTournament) ...[
-                              const SizedBox(height: 12),
-                              Text(
-                                'FIELD SIZE',
-                                style: PixelText.body(
-                                  size: 11,
-                                  color: AppColors.textMid,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                Tournament.sizeSubcopy(_bracketSize),
-                                style: PixelText.title(
-                                  size: 13,
-                                  color: AppColors.textDark,
-                                ),
-                              ),
-                            ] else if (!_isTeamRace) ...[
-                              const SizedBox(height: 12),
-                              Text(
-                                'MAX RUNNERS',
-                                style: PixelText.body(
-                                  size: 11,
-                                  color: AppColors.textMid,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  ..._maxParticipantsPresets.map((preset) {
-                                    final selected =
-                                        !_noLimit && _maxParticipants == preset;
-                                    return _maxRunnersChip(
-                                      label: '$preset',
-                                      selected: selected,
-                                      onTap: () => setState(() {
-                                        _noLimit = false;
-                                        _maxParticipants = preset;
-                                      }),
-                                    );
-                                  }),
-                                  _maxRunnersChip(
-                                    label: 'NO LIMIT',
-                                    selected: _noLimit,
-                                    onTap: () => setState(() {
-                                      _noLimit = true;
-                                      _maxParticipants = null;
-                                    }),
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: _intervalPresets.map((interval) {
+                                      final selected =
+                                          _powerupInterval == interval;
+                                      final label = interval >= 1000
+                                          ? '${(interval / 1000).toStringAsFixed(interval % 1000 == 0 ? 0 : 1)}k'
+                                          : '$interval';
+                                      return SizedBox(
+                                        width: 72,
+                                        child: GestureDetector(
+                                          onTap: () => setState(
+                                            () => _powerupInterval = interval,
+                                          ),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 10,
+                                              horizontal: 6,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: selected
+                                                  ? AppColors.pillGreenDark
+                                                  : AppColors.parchmentDark,
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                            ),
+                                            alignment: Alignment.center,
+                                            child: Text(
+                                              label,
+                                              style: PixelText.title(
+                                                size: 11,
+                                                color: selected
+                                                    ? Colors.white
+                                                    : AppColors.textDark,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
                                   ),
                                 ],
-                              ),
-                            ] else ...[
-                              const SizedBox(height: 12),
-                              Text(
-                                'FIELD SIZE',
-                                style: PixelText.body(
-                                  size: 11,
-                                  color: AppColors.textMid,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                '${_teamSize}v$_teamSize · '
-                                '${_teamSize * 2} racers max',
-                                style: PixelText.title(
-                                  size: 13,
-                                  color: AppColors.textDark,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
+                              ],
+                            ),
+                          ),
+                        if (_customizeExpanded) const SizedBox(height: 24),
 
-                      // Create button
-                      PillButton(
-                        label: _isCreating ? 'CREATING...' : 'CREATE RACE',
-                        variant: PillButtonVariant.primary,
-                        fontSize: 15,
-                        fullWidth: true,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 14,
+                        // Buy-in
+                        if (_customizeExpanded)
+                          RetroCard(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    GestureDetector(
+                                      onTap: () => setState(
+                                        () => _buyInEnabled = !_buyInEnabled,
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'BUY-IN',
+                                            style: PixelText.title(
+                                              size: 13,
+                                              color: AppColors.textMid,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            _buyInEnabled
+                                                ? 'PAID RACE'
+                                                : 'FREE RACE',
+                                            style: PixelText.body(
+                                              size: 11,
+                                              color: _buyInEnabled
+                                                  ? AppColors.coinDark
+                                                  : AppColors.textMid,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    SizedBox(
+                                      height: 28,
+                                      child: Switch.adaptive(
+                                        value: _buyInEnabled,
+                                        activeTrackColor:
+                                            AppColors.pillGreenDark,
+                                        onChanged: (value) => setState(
+                                          () => _buyInEnabled = value,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (_buyInEnabled) ...[
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'BUY-IN PER RUNNER',
+                                    style: PixelText.body(
+                                      size: 11,
+                                      color: AppColors.textMid,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      color: AppColors.parchment,
+                                      border: Border.all(
+                                        color: AppColors.parchmentBorder,
+                                        width: 2,
+                                      ),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.edit_outlined,
+                                          size: 16,
+                                          color: AppColors.textMid.withValues(
+                                            alpha: 0.6,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: TextField(
+                                            controller: _buyInController,
+                                            keyboardType: TextInputType.number,
+                                            inputFormatters: [
+                                              FilteringTextInputFormatter
+                                                  .digitsOnly,
+                                            ],
+                                            onChanged: (value) {
+                                              setState(() {
+                                                _buyInAmount =
+                                                    int.tryParse(value) ?? 0;
+                                              });
+                                            },
+                                            style: PixelText.number(
+                                              size: 24,
+                                              color: AppColors.coinDark,
+                                            ),
+                                            decoration: InputDecoration(
+                                              hintText: '0',
+                                              hintStyle: PixelText.number(
+                                                size: 24,
+                                                color: AppColors.coinDark
+                                                    .withValues(alpha: 0.3),
+                                              ),
+                                              border: InputBorder.none,
+                                              isDense: true,
+                                              contentPadding: EdgeInsets.zero,
+                                              suffixText: 'coins',
+                                              suffixStyle: PixelText.body(
+                                                size: 12,
+                                                color: AppColors.textMid,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  // TR-102: payout presets are ignored for team
+                                  // races (the team pot splits evenly) — hide the
+                                  // picker in Teams mode. Tournaments are always
+                                  // winner-takes-all (champion takes the pot), so
+                                  // hide it there too (spec §9).
+                                  if (_isTournament) ...[
+                                    // Nothing to pick — WTA is implied.
+                                  ] else if (!_isTeamRace) ...[
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      'PAYOUT MODE',
+                                      style: PixelText.body(
+                                        size: 11,
+                                        color: AppColors.textMid,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Column(
+                                      children: payoutPresetOptions.map((
+                                        option,
+                                      ) {
+                                        final selected =
+                                            _payoutPreset == option.$2;
+                                        return Padding(
+                                          padding: const EdgeInsets.only(
+                                            bottom: 8,
+                                          ),
+                                          child: GestureDetector(
+                                            onTap: () => setState(
+                                              () => _payoutPreset = option.$2,
+                                            ),
+                                            child: Container(
+                                              width: double.infinity,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 12,
+                                                    vertical: 10,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: selected
+                                                    ? AppColors.pillGreenDark
+                                                    : AppColors.parchmentDark,
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                              child: Text(
+                                                option.$1,
+                                                style: PixelText.title(
+                                                  size: 12,
+                                                  color: selected
+                                                      ? Colors.white
+                                                      : AppColors.textDark,
+                                                ),
+                                                textAlign: TextAlign.center,
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: Text(
+                                        payoutHelpText(_payoutPreset),
+                                        style: PixelText.body(
+                                          size: 12,
+                                          color: AppColors.textMid,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                  ] else
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(top: 12),
+                                        child: Text(
+                                          'Winning team splits the whole pot evenly',
+                                          style: PixelText.body(
+                                            size: 12,
+                                            color: AppColors.textMid,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        if (_customizeExpanded) const SizedBox(height: 24),
+
+                        // Public race
+                        if (_customizeExpanded)
+                          RetroCard(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          _isPublic
+                                              ? 'PUBLIC RACE'
+                                              : 'PRIVATE RACE',
+                                          style: PixelText.title(
+                                            size: 13,
+                                            color: AppColors.textMid,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          _isPublic
+                                              ? 'ANYONE CAN JOIN'
+                                              : 'INVITE ONLY',
+                                          style: PixelText.body(
+                                            size: 11,
+                                            color: _isPublic
+                                                ? AppColors.pillGreenDark
+                                                : AppColors.textMid,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    SizedBox(
+                                      height: 28,
+                                      child: Switch.adaptive(
+                                        value: _isPublic,
+                                        activeTrackColor:
+                                            AppColors.pillGreenDark,
+                                        onChanged: (v) =>
+                                            setState(() => _isPublic = v),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                // TR-101: a team race's field cap is fixed at
+                                // 2 x teamSize — no free-form runner cap.
+                                if (_isTournament) ...[
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'FIELD SIZE',
+                                    style: PixelText.body(
+                                      size: 11,
+                                      color: AppColors.textMid,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    Tournament.sizeSubcopy(_bracketSize),
+                                    style: PixelText.title(
+                                      size: 13,
+                                      color: AppColors.textDark,
+                                    ),
+                                  ),
+                                ] else if (!_isTeamRace) ...[
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'MAX RUNNERS',
+                                    style: PixelText.body(
+                                      size: 11,
+                                      color: AppColors.textMid,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: [
+                                      ..._maxParticipantsPresets.map((preset) {
+                                        final selected =
+                                            !_noLimit &&
+                                            _maxParticipants == preset;
+                                        return _maxRunnersChip(
+                                          label: '$preset',
+                                          selected: selected,
+                                          onTap: () => setState(() {
+                                            _noLimit = false;
+                                            _maxParticipants = preset;
+                                          }),
+                                        );
+                                      }),
+                                      _maxRunnersChip(
+                                        label: 'NO LIMIT',
+                                        selected: _noLimit,
+                                        onTap: () => setState(() {
+                                          _noLimit = true;
+                                          _maxParticipants = null;
+                                        }),
+                                      ),
+                                    ],
+                                  ),
+                                ] else ...[
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'FIELD SIZE',
+                                    style: PixelText.body(
+                                      size: 11,
+                                      color: AppColors.textMid,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    '${_teamSize}v$_teamSize · '
+                                    '${_teamSize * 2} racers max',
+                                    style: PixelText.title(
+                                      size: 13,
+                                      color: AppColors.textDark,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        const SizedBox(height: 24),
+
+                        // Create button
+                        PillButton(
+                          label: _isCreating ? 'CREATING...' : 'CREATE RACE',
+                          variant: PillButtonVariant.primary,
+                          fontSize: 15,
+                          fullWidth: true,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 14,
+                          ),
+                          onPressed: _isCreating ? null : _create,
                         ),
-                        onPressed: _isCreating ? null : _create,
-                      ),
-                      const SizedBox(height: 24),
-                    ],
+                        const SizedBox(height: 24),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }

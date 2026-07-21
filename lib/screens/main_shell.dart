@@ -12,6 +12,7 @@ import '../models/loadable.dart';
 import '../models/step_data.dart';
 import '../models/step_sample_data.dart';
 import '../services/async_ttl_cache.dart';
+import '../services/activation_analytics_service.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../services/background_sync_bootstrap_service.dart';
@@ -77,6 +78,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   late final BackendApiService _backendApiService;
   late final BackgroundSyncBootstrapService _backgroundSyncBootstrapService;
   late final ReviewPromptService _reviewPromptService;
+  late final ActivationAnalyticsService _activationAnalytics;
 
   int _currentTab = 0;
   late final PageController _pageController;
@@ -196,6 +198,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         widget.backgroundSyncBootstrapService ??
         BackgroundSyncBootstrapService();
     _reviewPromptService = widget.reviewPromptService ?? ReviewPromptService();
+    _activationAnalytics = ActivationAnalyticsService(
+      backendApiService: _backendApiService,
+    );
     _pageController = PageController();
     WidgetsBinding.instance.addObserver(this);
     widget.authService.addListener(_handleAuthServiceChanged);
@@ -203,6 +208,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _onNotificationAction,
     );
     _restoreAndFetch();
+    if (widget.authService.onboardingV2Enabled &&
+        !widget.authService.firstRaceOnboardingSeen) {
+      unawaited(_activationAnalytics.record('onboarding_started'));
+    }
+    unawaited(_activationAnalytics.flush(widget.authService.authToken));
   }
 
   @override
@@ -305,10 +315,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
     // Wait until onboarding is fully complete; joining + navigating over the
     // onboarding overlay would be wrong. Mirrors build()'s isOnboarding gate.
-    final isOnboarding =
-        !_healthAuthorized ||
-        _notificationsState == null ||
-        !widget.authService.firstRaceOnboardingSeen;
+    final isOnboarding = widget.authService.onboardingV2Enabled
+        ? !_healthAuthorized || !widget.authService.firstRaceOnboardingSeen
+        : !_healthAuthorized ||
+              _notificationsState == null ||
+              !widget.authService.firstRaceOnboardingSeen;
     if (isOnboarding) return;
 
     final identityToken = widget.authService.authToken;
@@ -411,10 +422,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     final token = widget.authService.pendingTournamentShareToken;
     if (token == null || token.isEmpty) return;
 
-    final isOnboarding =
-        !_healthAuthorized ||
-        _notificationsState == null ||
-        !widget.authService.firstRaceOnboardingSeen;
+    final isOnboarding = widget.authService.onboardingV2Enabled
+        ? !_healthAuthorized || !widget.authService.firstRaceOnboardingSeen
+        : !_healthAuthorized ||
+              _notificationsState == null ||
+              !widget.authService.firstRaceOnboardingSeen;
     if (isOnboarding) return;
 
     final identityToken = widget.authService.authToken;
@@ -499,10 +511,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     // Share-token flow wins when both are somehow pending.
     if (widget.authService.pendingShareToken != null) return;
 
-    final isOnboarding =
-        !_healthAuthorized ||
-        _notificationsState == null ||
-        !widget.authService.firstRaceOnboardingSeen;
+    final isOnboarding = widget.authService.onboardingV2Enabled
+        ? !_healthAuthorized || !widget.authService.firstRaceOnboardingSeen
+        : !_healthAuthorized ||
+              _notificationsState == null ||
+              !widget.authService.firstRaceOnboardingSeen;
     if (isOnboarding) return;
 
     final identityToken = widget.authService.authToken;
@@ -563,6 +576,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && _healthAuthorized) {
+      unawaited(_activationAnalytics.flush(widget.authService.authToken));
       // Mirror initial load: refresh every home surface, then surface the
       // results modals only once all calls have settled.
       unawaited(_loadHomeAndShowResults());
@@ -656,6 +670,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   Future<void> _enableHealthData() async {
+    unawaited(_activationAnalytics.record('health_cta_tapped'));
     setState(() => _isLoading = true);
 
     try {
@@ -958,7 +973,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   void _maybeRefreshFriends() {
     final at = _friendsFetchedAt;
     final stale =
-        at == null || DateTime.now().difference(at) > const Duration(seconds: 60);
+        at == null ||
+        DateTime.now().difference(at) > const Duration(seconds: 60);
     if (_friendsSteps.isEmpty || stale) {
       unawaited(_fetchFriendsSteps());
     }
@@ -1065,9 +1081,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     // Coalesce: iOS fires a `resumed` lifecycle event right after cold start,
     // which used to double the entire home load (every endpoint hit twice).
     // While a load is in flight, all triggers share the same future.
-    return _homeLoadInFlight ??= _loadHomeAndShowResultsInner().whenComplete(() {
-      _homeLoadInFlight = null;
-    });
+    return _homeLoadInFlight ??= _loadHomeAndShowResultsInner().whenComplete(
+      () {
+        _homeLoadInFlight = null;
+      },
+    );
   }
 
   Future<void> _loadHomeAndShowResultsInner() async {
@@ -1361,7 +1379,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       final cached = _shopCatalogCache.value;
       if (cached != null) {
         _applyShopCatalog(cached);
-        if (mounted) setState(() => _shopCatalogState = Loadable.success(cached));
+        if (mounted) {
+          setState(() => _shopCatalogState = Loadable.success(cached));
+        }
         return;
       }
     }
@@ -1547,6 +1567,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
               authService: widget.authService,
               raceId: raceId,
               friends: _friendsSteps,
+              notificationService: widget.notificationService,
             ),
           ),
         )
@@ -1657,6 +1678,44 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     } catch (_) {
       return null;
     }
+  }
+
+  /// V2 requires proof that this user is already accepted in the active seeded
+  /// Daily. Returning null is the safe fallback: no enrollment/reward claims.
+  Future<Map<String, dynamic>?> _fetchVerifiedActiveDaily() async {
+    final identityToken = widget.authService.authToken;
+    if (identityToken == null || identityToken.isEmpty) return null;
+    try {
+      final featured = await _backendApiService.fetchFeaturedRaces(
+        identityToken: identityToken,
+      );
+      for (final race in featured) {
+        final isDaily = race['seedKind'] == 'DAILY_10K';
+        final isAccepted = race['myStatus'] == 'ACCEPTED';
+        final status = race['status'];
+        final isActive = status == null || status == 'ACTIVE';
+        final id = (race['raceId'] ?? race['id']) as String?;
+        if (isDaily && isAccepted && isActive && id != null && id.isNotEmpty) {
+          return race;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> _enterVerifiedDaily(String raceId) async {
+    unawaited(_activationAnalytics.record('daily_opened'));
+    await _skipFirstRaceOnboarding();
+    unawaited(_fetchRaces());
+    if (!mounted) return;
+    _openRaceFromCard(raceId);
+  }
+
+  Future<void> _finishOnboardingAndFindRace() async {
+    await _skipFirstRaceOnboarding();
+    if (!mounted) return;
+    _pageController.jumpToPage(_racesTabIndex);
+    showInfoToast(context, 'Choose a race to start walking.');
   }
 
   /// Skips the first-race onboarding step: marks it seen on the backend
@@ -2003,11 +2062,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final isOnboarding =
-        !_healthAuthorized ||
-        _notificationsState == null ||
-        !widget.authService.tutorialOnboardingSeen ||
-        !widget.authService.firstRaceOnboardingSeen;
+    final isOnboarding = widget.authService.onboardingV2Enabled
+        ? !_healthAuthorized || !widget.authService.firstRaceOnboardingSeen
+        : !_healthAuthorized ||
+              _notificationsState == null ||
+              !widget.authService.tutorialOnboardingSeen ||
+              !widget.authService.firstRaceOnboardingSeen;
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
@@ -2030,6 +2090,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                 onSkipTutorial: _skipTutorialOnboarding,
                 onEnterDaily: _enterDailyRaceOnboarding,
                 onSkipFirstRace: _skipFirstRaceOnboarding,
+                onboardingV2Enabled: widget.authService.onboardingV2Enabled,
+                displayName: _displayName ?? widget.authService.displayName,
+                onFetchActiveDaily: _fetchVerifiedActiveDaily,
+                onEnterVerifiedDaily: _enterVerifiedDaily,
+                onFindRace: _finishOnboardingAndFindRace,
                 firstRaceShareTokenPending:
                     widget.authService.pendingShareToken != null,
                 welcomeReferralCode: widget.authService.welcomeReferralCode,
@@ -2063,110 +2128,112 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     ),
                     child: PageView(
                       controller: _pageController,
-                physics: const PageScrollPhysics(),
-                onPageChanged: (index) {
-                  setState(() {
-                    _currentTab = index;
-                    // Clear the incoming-friend-request badge when the Friends
-                    // tab is revealed (mirrors _openFriendsTab's old behavior).
-                    if (index == _friendsTabIndex &&
-                        _incomingFriendRequests != 0) {
-                      _incomingFriendRequests = 0;
-                    }
-                  });
-                  if (index == _racesTabIndex) _fetchRaces();
-                  // Refresh the friends surface each time it's revealed (mirrors
-                  // the races refresh-on-reveal hook). We intentionally refresh
-                  // only the friends-steps data here, not _refreshMe, so the
-                  // badge we just cleared isn't immediately re-read from /me.
-                  if (index == _friendsTabIndex) _fetchFriendsSteps();
-                },
-                children: [
-                  HomeTab(
-                    streakChipKey: _streakChipKey,
-                    stepMilestonesKey: _stepMilestonesKey,
-                    stepData: _stepData,
-                    isLoading: _isLoading,
-                    error: _error,
-                    backendApiService: _backendApiService,
-                    healthAuthorized: _healthAuthorized,
-                    notificationsState: _notificationsState,
-                    displayName: _displayName,
-                    authService: widget.authService,
-                    onRefresh: _refreshHomeTab,
-                    onEnableHealth: _enableHealthData,
-                    onEnableNotifications: _enableNotifications,
-                    onDisplayNameChanged: _syncSettingsState,
-                    friendsSteps: _friendsSteps,
-                    friendsStepsState: _friendsStepsState,
-                    equippedAccessories: _equippedAccessories,
-                    equippedAnimal: _equippedAnimal,
-                    shopCatalogState: _shopCatalogState,
-                    onOpenRacesTab: _openRacesTab,
-                    onOpenLeaderboardTab: _openLeaderboardTab,
-                    onOpenShop: _openShop,
-                    onAddProfilePhoto: _addOrChangeProfilePhoto,
-                    onDismissProfilePhotoPrompt: _dismissProfilePhotoPrompt,
-                    raceCard: _raceCard,
-                    raceCardLoading: _raceCardLoading,
-                    onOpenRace: _openRaceFromCard,
-                    onJoinRaceFromCard: _joinRaceFromCard,
-                    onAcceptRaceInvite: _acceptRaceInviteFromCard,
-                    onDeclineRaceInvite: _declineRaceInviteFromCard,
-                    onChallengeFriendBack: _challengeFriendBack,
-                    onDailyRewardClaimed: _markDailyRewardClaimed,
-                  ),
-                  RacesTab(
-                    authService: widget.authService,
-                    racesData: _racesData,
-                    racesState: _racesState,
-                    friendsSteps: _friendsSteps,
-                    featuredRaces: _featuredRaces,
-                    featuredTournaments: _featuredTournaments,
-                    onRacesChanged: _fetchRaces,
-                    onRefresh: _refreshRacesTab,
-                    onJoinFeaturedRace: _joinFeaturedRace,
-                    onJoinFeaturedTournament: _joinFeaturedTournament,
-                    publicRacesCount: _publicRacesCount,
-                    displayName: _displayName,
-                    onOpenProfile: _openProfile,
-                  ),
-                  FriendsTab(
-                    authService: widget.authService,
-                    onFriendsChanged: () {
-                      _refreshMe();
-                      _fetchFriendsSteps();
-                    },
-                    onRefresh: _refreshFriendsTab,
-                    backendApiService: _backendApiService,
-                    stepData: _stepData,
-                    displayName: _displayName,
-                    onOpenProfile: _openProfile,
-                  ),
-                  LeaderboardTab(
-                    authService: widget.authService,
-                    backendApiService: _backendApiService,
-                    stepData: _stepData,
-                    displayName: _displayName,
-                    requestedType: _requestedLeaderboardType,
-                    requestedPeriod: _requestedLeaderboardPeriod,
-                    selectionNonce: _leaderboardSelectionNonce,
-                    onOpenProfile: _openProfile,
-                  ),
-                  ProfileTab(
-                    authService: widget.authService,
-                    backendApiService: _backendApiService,
-                    displayName: _displayName,
-                    email: _email,
-                    onSettingsChanged: _syncSettingsState,
-                    onRefresh: _refreshProfileTab,
-                    notificationService: widget.notificationService,
-                    stepData: _stepData,
-                    onAddProfilePhoto: _addOrChangeProfilePhoto,
-                    onRemoveProfilePhoto: _removeProfilePhoto,
-                    showBackButton: false,
-                  ),
-                ],
+                      physics: const PageScrollPhysics(),
+                      onPageChanged: (index) {
+                        setState(() {
+                          _currentTab = index;
+                          // Clear the incoming-friend-request badge when the Friends
+                          // tab is revealed (mirrors _openFriendsTab's old behavior).
+                          if (index == _friendsTabIndex &&
+                              _incomingFriendRequests != 0) {
+                            _incomingFriendRequests = 0;
+                          }
+                        });
+                        if (index == _racesTabIndex) _fetchRaces();
+                        // Refresh the friends surface each time it's revealed (mirrors
+                        // the races refresh-on-reveal hook). We intentionally refresh
+                        // only the friends-steps data here, not _refreshMe, so the
+                        // badge we just cleared isn't immediately re-read from /me.
+                        if (index == _friendsTabIndex) _fetchFriendsSteps();
+                      },
+                      children: [
+                        HomeTab(
+                          streakChipKey: _streakChipKey,
+                          stepMilestonesKey: _stepMilestonesKey,
+                          stepData: _stepData,
+                          isLoading: _isLoading,
+                          error: _error,
+                          backendApiService: _backendApiService,
+                          healthAuthorized: _healthAuthorized,
+                          notificationsState: _notificationsState,
+                          displayName: _displayName,
+                          authService: widget.authService,
+                          onRefresh: _refreshHomeTab,
+                          onEnableHealth: _enableHealthData,
+                          onEnableNotifications: _enableNotifications,
+                          onDisplayNameChanged: _syncSettingsState,
+                          friendsSteps: _friendsSteps,
+                          friendsStepsState: _friendsStepsState,
+                          equippedAccessories: _equippedAccessories,
+                          equippedAnimal: _equippedAnimal,
+                          shopCatalogState: _shopCatalogState,
+                          onOpenRacesTab: _openRacesTab,
+                          onOpenLeaderboardTab: _openLeaderboardTab,
+                          onOpenShop: _openShop,
+                          onAddProfilePhoto: _addOrChangeProfilePhoto,
+                          onDismissProfilePhotoPrompt:
+                              _dismissProfilePhotoPrompt,
+                          raceCard: _raceCard,
+                          raceCardLoading: _raceCardLoading,
+                          onOpenRace: _openRaceFromCard,
+                          onJoinRaceFromCard: _joinRaceFromCard,
+                          onAcceptRaceInvite: _acceptRaceInviteFromCard,
+                          onDeclineRaceInvite: _declineRaceInviteFromCard,
+                          onChallengeFriendBack: _challengeFriendBack,
+                          onDailyRewardClaimed: _markDailyRewardClaimed,
+                        ),
+                        RacesTab(
+                          authService: widget.authService,
+                          racesData: _racesData,
+                          racesState: _racesState,
+                          friendsSteps: _friendsSteps,
+                          featuredRaces: _featuredRaces,
+                          featuredTournaments: _featuredTournaments,
+                          onRacesChanged: _fetchRaces,
+                          onRefresh: _refreshRacesTab,
+                          onJoinFeaturedRace: _joinFeaturedRace,
+                          onJoinFeaturedTournament: _joinFeaturedTournament,
+                          publicRacesCount: _publicRacesCount,
+                          displayName: _displayName,
+                          notificationService: widget.notificationService,
+                          onOpenProfile: _openProfile,
+                        ),
+                        FriendsTab(
+                          authService: widget.authService,
+                          onFriendsChanged: () {
+                            _refreshMe();
+                            _fetchFriendsSteps();
+                          },
+                          onRefresh: _refreshFriendsTab,
+                          backendApiService: _backendApiService,
+                          stepData: _stepData,
+                          displayName: _displayName,
+                          onOpenProfile: _openProfile,
+                        ),
+                        LeaderboardTab(
+                          authService: widget.authService,
+                          backendApiService: _backendApiService,
+                          stepData: _stepData,
+                          displayName: _displayName,
+                          requestedType: _requestedLeaderboardType,
+                          requestedPeriod: _requestedLeaderboardPeriod,
+                          selectionNonce: _leaderboardSelectionNonce,
+                          onOpenProfile: _openProfile,
+                        ),
+                        ProfileTab(
+                          authService: widget.authService,
+                          backendApiService: _backendApiService,
+                          displayName: _displayName,
+                          email: _email,
+                          onSettingsChanged: _syncSettingsState,
+                          onRefresh: _refreshProfileTab,
+                          notificationService: widget.notificationService,
+                          stepData: _stepData,
+                          onAddProfilePhoto: _addOrChangeProfilePhoto,
+                          onRemoveProfilePhoto: _removeProfilePhoto,
+                          showBackButton: false,
+                        ),
+                      ],
                     ),
                   );
                 },

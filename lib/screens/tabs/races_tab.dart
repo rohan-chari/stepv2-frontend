@@ -2,8 +2,10 @@ import 'package:flutter/cupertino.dart' show CupertinoSwitch;
 import 'package:flutter/material.dart';
 
 import '../../models/loadable.dart';
+import '../../models/race_handoff_result.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
+import '../../services/notification_service.dart';
 import '../../styles.dart';
 import '../../utils/at_name.dart';
 import '../../utils/race_participant_display.dart';
@@ -11,7 +13,6 @@ import '../../utils/tournament.dart';
 import '../../widgets/arcade_fx.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/featured_race_card.dart';
-import '../../widgets/ad_inline_card.dart';
 import '../../widgets/info_toast.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
@@ -53,6 +54,7 @@ class RacesTab extends StatefulWidget {
   // parent keeps the last known value on a fetch error.
   final int publicRacesCount;
   final String? displayName;
+  final NotificationService? notificationService;
   final VoidCallback? onOpenProfile;
   // Optional tutorial spotlight anchors (null in the shipped app). The tutorial
   // passes keys so its overlay can measure the races header/pot explainer, the
@@ -78,6 +80,7 @@ class RacesTab extends StatefulWidget {
     this.onJoinFeaturedTournament,
     this.publicRacesCount = 0,
     this.displayName,
+    this.notificationService,
     this.onOpenProfile,
     this.tutorialPotKey,
     this.tutorialCardKey,
@@ -89,21 +92,69 @@ class RacesTab extends StatefulWidget {
   State<RacesTab> createState() => _RacesTabState();
 }
 
-/// D13: the ALL / RACES / TOURNAMENTS list filter below the featured row. The
-/// featured row itself stays visible in every mode.
+/// D13: the ALL / RACES / TOURNAMENTS filter that lives in the FEATURED
+/// section header. It scopes ONLY the featured strip — never the personal list.
 enum _ContentFilter { all, races, tournaments }
+
+/// §4.1: the personal-list state filter. Races and tournaments are merged into
+/// one list per state; unanswered invites are pinned ABOVE these pills so the
+/// most actionable item in the app can never be hidden behind a filter.
+enum _PersonalState { active, pending, completed }
+
+extension _PersonalStateLabel on _PersonalState {
+  String get label => switch (this) {
+    _PersonalState.active => 'ACTIVE',
+    _PersonalState.pending => 'PENDING',
+    _PersonalState.completed => 'COMPLETED',
+  };
+
+  /// State-specific empty copy — an empty list should say which shelf is empty,
+  /// and point at the next action rather than just reporting nothing.
+  String get emptyMessage => switch (this) {
+    _PersonalState.active => 'No races running right now.',
+    _PersonalState.pending => 'Nothing waiting to start.',
+    _PersonalState.completed => 'No finished races yet.',
+  };
+
+  TournamentListState get tournamentState => switch (this) {
+    _PersonalState.active => TournamentListState.active,
+    _PersonalState.pending => TournamentListState.pending,
+    _PersonalState.completed => TournamentListState.completed,
+  };
+}
+
+/// One row in the merged personal list: either an ordinary race or a
+/// tournament. Kept as a tagged wrapper rather than a shared shape so each row
+/// builder reads its OWN payload defensively.
+class _ListEntry {
+  const _ListEntry.race(this.data) : isTournament = false;
+  const _ListEntry.tournament(this.data) : isTournament = true;
+
+  final Map<String, dynamic> data;
+  final bool isTournament;
+}
 
 class _RacesTabState extends State<RacesTab> {
   static const _textShadows = [
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
 
-  // Completed races default to collapsed; users can expand to view history.
-  final Set<String> _collapsedSections = {'completed'};
   // Guards against double-pushing RaceDetailScreen from rapid taps.
   bool _navigatingToRace = false;
-  // D13 list filter (featured row is unaffected).
+  // D13 featured-strip filter (the personal list is unaffected).
   _ContentFilter _contentFilter = _ContentFilter.all;
+
+  /// §4.1: the selected personal-list state. Always initialised to ACTIVE for a
+  /// freshly created state — that's where the actionable races live.
+  _PersonalState _selectedState = _PersonalState.active;
+
+  /// Last-known count per state, so a badge for a bucket that hasn't resolved
+  /// yet holds its previous value instead of flickering to 0 mid-refresh.
+  final Map<_PersonalState, int> _lastCounts = {
+    _PersonalState.active: 0,
+    _PersonalState.pending: 0,
+    _PersonalState.completed: 0,
+  };
   // tournamentId being joined from a featured card (shows JOINING… state).
   String? _joiningFeaturedTournamentId;
 
@@ -133,16 +184,6 @@ class _RacesTabState extends State<RacesTab> {
     await onJoin(tournamentId);
     if (!mounted) return;
     setState(() => _joiningFeaturedTournamentId = null);
-  }
-
-  void _toggleSection(String sectionKey) {
-    setState(() {
-      if (_collapsedSections.contains(sectionKey)) {
-        _collapsedSections.remove(sectionKey);
-      } else {
-        _collapsedSections.add(sectionKey);
-      }
-    });
   }
 
   // Declined races are excluded server-side on current backends, but an older
@@ -189,14 +230,47 @@ class _RacesTabState extends State<RacesTab> {
           .toList() ??
       const [];
 
-  /// Tournaments I've been invited to but haven't answered (still PENDING).
-  List<Map<String, dynamic>> get _tournamentInvites => _tournaments
-      .where((t) => Tournament.amInvited(t) && Tournament.isPending(t))
-      .toList();
-
-  /// The rest of my brackets (ACCEPTED, or any non-invite state).
+  /// The rest of my brackets (ACCEPTED, or any non-invite state). Still used by
+  /// the featured strip's repeat-entry guard.
   List<Map<String, dynamic>> get _myTournaments =>
       _tournaments.where((t) => !Tournament.amInvited(t)).toList();
+
+  /// §4.2: tournaments classified into one personal-list state.
+  List<Map<String, dynamic>> _tournamentsIn(TournamentListState state) {
+    final userId = widget.authService.userId;
+    return _tournaments
+        .where((t) => Tournament.personalListState(t, userId: userId) == state)
+        .toList();
+  }
+
+  /// Unanswered tournament invitations — pinned above the pills (§4.1). Covers
+  /// invites to a bracket that already started, which render Decline-only.
+  List<Map<String, dynamic>> get _tournamentInvites =>
+      _tournamentsIn(TournamentListState.invite);
+
+  /// The merged personal list for one state: ordinary races first (soonest
+  /// ending first for ACTIVE), then tournaments in the same state.
+  List<_ListEntry> _entriesFor(_PersonalState state) {
+    final races = switch (state) {
+      _PersonalState.active => _sortByTimeLeft(_active),
+      _PersonalState.pending => _waiting,
+      _PersonalState.completed => _completed,
+    };
+    return [
+      for (final r in races) _ListEntry.race(r),
+      for (final t in _tournamentsIn(state.tournamentState))
+        _ListEntry.tournament(t),
+    ];
+  }
+
+  /// Badge count for a pill. Derived entirely from the already-loaded
+  /// `GET /races` payload — no extra requests, and never blocks first paint.
+  int _countFor(_PersonalState state) {
+    if (!_effectiveRacesState.hasData) return _lastCounts[state] ?? 0;
+    final count = _entriesFor(state).length;
+    _lastCounts[state] = count;
+    return count;
+  }
 
   bool _navigatingToTournament = false;
   String? _respondingTournamentId;
@@ -285,16 +359,22 @@ class _RacesTabState extends State<RacesTab> {
 
   void _navigateToPublicRaces() {
     Navigator.of(context)
-        .push<bool>(
+        .push<RaceHandoffResult>(
           MaterialPageRoute(
             builder: (context) =>
                 PublicRacesScreen(authService: widget.authService),
           ),
         )
-        .then((joined) {
-          if (joined == true && mounted) {
-            widget.onRacesChanged();
-          }
+        .then((result) async {
+          if (result == null || !mounted) return;
+          await widget.onRacesChanged();
+          if (!mounted) return;
+          setState(() {
+            _selectedState = result.isActive
+                ? _PersonalState.active
+                : _PersonalState.pending;
+          });
+          _navigateToRaceDetail(result.raceId);
         });
   }
 
@@ -310,6 +390,7 @@ class _RacesTabState extends State<RacesTab> {
               authService: widget.authService,
               raceId: raceId,
               friends: widget.friendsSteps,
+              notificationService: widget.notificationService,
             ),
           ),
         )
@@ -380,42 +461,26 @@ class _RacesTabState extends State<RacesTab> {
   /// ONE eager adapter (the featured horizontal strip needs a box context and
   /// misbehaves as a bare sibling sliver); race sections build their rows lazily.
   List<Widget> _buildContentSlivers() {
-    final active = _sortByTimeLeft(_active);
     final invites = _invites;
-    final waiting = _waiting;
-    final completed = _completed;
-    final tournaments = _myTournaments;
     final tournamentInvites = _tournamentInvites;
-
-    // D13 (revised): the pill controls the FEATURED ROW ONLY, so it sits ABOVE
-    // that row and is shown whenever the row has any featured content (races or
-    // seeded tournaments). The user's own races/brackets are never filtered.
-    final hasFeatured = widget.featuredRaces.isNotEmpty ||
-        widget.featuredTournaments.isNotEmpty;
 
     return <Widget>[
       SliverToBoxAdapter(
         child: Column(
           children: [
             _buildRacesHeader(
-              activeCount: active.length,
+              activeCount: _countFor(_PersonalState.active),
               inviteCount: invites.length + tournamentInvites.length,
-              waitingCount: waiting.length,
+              waitingCount: _countFor(_PersonalState.pending),
               potKey: widget.tutorialPotKey,
             ),
-            if (hasFeatured)
-              StaggerIn(index: 0, child: _buildContentFilterPills()),
             StaggerIn(index: 1, child: _buildFeaturedSection()),
           ],
         ),
       ),
-      ..._raceListStateSlivers(
+      ..._personalListSlivers(
         invites: invites,
-        waiting: waiting,
-        active: active,
-        completed: completed,
         tournamentInvites: tournamentInvites,
-        tournaments: tournaments,
       ),
       // Preserves the former outer group's bottom padding (was Padding bottom:8).
       const SliverToBoxAdapter(child: SizedBox(height: 8)),
@@ -432,10 +497,13 @@ class _RacesTabState extends State<RacesTab> {
         child: GestureDetector(
           key: key,
           onTap: () => setState(() => _contentFilter = value),
+          behavior: HitTestBehavior.opaque,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 160),
             curve: Curves.easeOut,
-            padding: const EdgeInsets.symmetric(vertical: 9),
+            // Tighter than the personal-state pills: this is a sub-control
+            // scoping one strip, not the page's primary navigation.
+            padding: const EdgeInsets.symmetric(vertical: 6),
             decoration: BoxDecoration(
               gradient: selected
                   ? const LinearGradient(
@@ -461,9 +529,13 @@ class _RacesTabState extends State<RacesTab> {
             alignment: Alignment.center,
             child: Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: PixelText.title(
-                size: 12,
-                color: selected ? AppColors.textDark : AppColors.parchment,
+                size: 10,
+                color: selected
+                    ? AppColors.textDark
+                    : AppColors.parchment.withValues(alpha: 0.85),
               ),
             ),
           ),
@@ -472,84 +544,31 @@ class _RacesTabState extends State<RacesTab> {
     }
 
     return Padding(
-      // Top gap (divider→pill) = 12; bottom gap = pill(4) + featured-header top(4)
-      // = 8.
-      padding: const EdgeInsets.fromLTRB(10, 12, 10, 4),
+      padding: const EdgeInsets.fromLTRB(10, 0, 10, 9),
       child: Container(
-        padding: const EdgeInsets.all(4),
+        padding: const EdgeInsets.all(3),
         decoration: BoxDecoration(
-          color: AppColors.roofDark.withValues(alpha: 0.45),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.roofDark, width: 1.5),
+          color: AppColors.roofDark.withValues(alpha: 0.38),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.roofDark, width: 1),
         ),
         child: Row(
           children: [
             seg('ALL', _ContentFilter.all, const Key('content-filter-all')),
-            const SizedBox(width: 4),
-            seg('RACES', _ContentFilter.races,
-                const Key('content-filter-races')),
-            const SizedBox(width: 4),
-            seg('TOURNAMENTS', _ContentFilter.tournaments,
-                const Key('content-filter-tournaments')),
+            const SizedBox(width: 3),
+            seg(
+              'RACES',
+              _ContentFilter.races,
+              const Key('content-filter-races'),
+            ),
+            const SizedBox(width: 3),
+            seg(
+              'TOURNAMENTS',
+              _ContentFilter.tournaments,
+              const Key('content-filter-tournaments'),
+            ),
           ],
         ),
-      ),
-    );
-  }
-
-  /// The TOURNAMENTS section — invited brackets (with inline accept/decline)
-  /// first, then my joined/active/completed brackets as summary tickets. Each
-  /// ticket taps into the bracket screen. All fields read defensively (spec §9).
-  Widget _buildTournamentsSection(
-    List<Map<String, dynamic>> invites,
-    List<Map<String, dynamic>> mine,
-  ) {
-    final collapsed = _collapsedSections.contains('tournaments');
-    return Padding(
-      padding: const EdgeInsets.only(left: 10, right: 10, bottom: 8),
-      child: Column(
-        children: [
-          // "MY BRACKETS" (not "TOURNAMENTS") so the section header reads
-          // distinctly from the D13 TOURNAMENTS filter pill above it.
-          _buildSectionHeader(
-            'MY BRACKETS',
-            invites.length + mine.length,
-            'tournaments',
-            collapsed,
-          ),
-          if (!collapsed)
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: AppColors.parchment,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: AppColors.roofDark.withValues(alpha: 0.55),
-                width: 2,
-              ),
-              boxShadow: _raceCardShadow,
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Column(
-                children: [
-                  for (var i = 0; i < invites.length; i++) ...[
-                    if (i > 0) const Divider(height: 1, thickness: 1),
-                    _buildTournamentTicket(invites[i], i, isInvite: true),
-                  ],
-                  for (var i = 0; i < mine.length; i++) ...[
-                    if (invites.isNotEmpty || i > 0)
-                      const Divider(height: 1, thickness: 1),
-                    _buildTournamentTicket(
-                      mine[i],
-                      invites.length + i,
-                      isInvite: false,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -565,8 +584,9 @@ class _RacesTabState extends State<RacesTab> {
     final winnings = Tournament.championWinnings(t);
     final elim = Tournament.myEliminatedInRound(t);
     final isChamp = Tournament.isChampion(t, widget.authService.userId);
-    final stripeColor =
-        index.isOdd ? AppColors.parchmentLight : AppColors.parchment;
+    final stripeColor = index.isOdd
+        ? AppColors.parchmentLight
+        : AppColors.parchment;
     final responding = _respondingTournamentId == id;
 
     Color badgeColor;
@@ -816,7 +836,7 @@ class _RacesTabState extends State<RacesTab> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(10, 4, 10, 9),
+          padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
           child: Row(
             children: [
               const WobbleBadge(
@@ -849,6 +869,11 @@ class _RacesTabState extends State<RacesTab> {
             ],
           ),
         ),
+        // §4.1: the ALL / RACES / TOURNAMENTS filter lives INSIDE the Featured
+        // section header now. It scopes only the strip below it — as a
+        // full-width row above the header it read as a page-level filter while
+        // actually doing something much narrower.
+        _buildContentFilterPills(),
         if (cards.isEmpty)
           _buildFeaturedEmptyNote()
         else
@@ -930,7 +955,8 @@ class _RacesTabState extends State<RacesTab> {
     final id = Tournament.id(t) ?? '';
     final joined = Tournament.amIn(t);
     final full = Tournament.isFull(t);
-    final aliveElsewhere = !joined &&
+    final aliveElsewhere =
+        !joined &&
         Tournament.aliveInSeed(_myTournaments, Tournament.seedKind(t));
     final isJoining = _joiningFeaturedTournamentId == id;
 
@@ -960,7 +986,8 @@ class _RacesTabState extends State<RacesTab> {
     return TournamentGameCard(
       width: 250,
       name: Tournament.name(t),
-      metaLine: '${Tournament.sizeSubcopy(Tournament.bracketSize(t))} · '
+      metaLine:
+          '${Tournament.sizeSubcopy(Tournament.bracketSize(t))} · '
           '${Tournament.durationSubcopy(Tournament.matchupDurationDays(t))}',
       filledLabel:
           '${Tournament.acceptedCount(t)}/${Tournament.bracketSize(t)} IN',
@@ -974,16 +1001,15 @@ class _RacesTabState extends State<RacesTab> {
     );
   }
 
-  // D13 (revised): the user's OWN races and brackets are never filtered by the
-  // featured pill — always render every section that has content. §9.5: emitted
-  // as slivers so each expanded race section's rows build lazily.
-  List<Widget> _raceListStateSlivers({
+  /// §4.1: the personal list — pinned invites strip, then the state pills, then
+  /// exactly ONE state's rows.
+  ///
+  /// Perf: only the SELECTED state's `SliverList.builder` is emitted, so
+  /// switching pills never builds the other states' rows, and rows within a
+  /// state still build lazily against the viewport.
+  List<Widget> _personalListSlivers({
     required List<Map<String, dynamic>> invites,
-    required List<Map<String, dynamic>> waiting,
-    required List<Map<String, dynamic>> active,
-    required List<Map<String, dynamic>> completed,
     required List<Map<String, dynamic>> tournamentInvites,
-    required List<Map<String, dynamic>> tournaments,
   }) {
     final state = _effectiveRacesState;
     if (state.shouldShowInitialLoading) {
@@ -1019,15 +1045,7 @@ class _RacesTabState extends State<RacesTab> {
       ];
     }
 
-    final anyRaces = invites.isNotEmpty ||
-        waiting.isNotEmpty ||
-        active.isNotEmpty ||
-        completed.isNotEmpty;
-    final anyTournaments =
-        tournamentInvites.isNotEmpty || tournaments.isNotEmpty;
-    if (!anyRaces && !anyTournaments) {
-      return [SliverToBoxAdapter(child: _buildEmptyState())];
-    }
+    final totalInvites = invites.length + tournamentInvites.length;
 
     return <Widget>[
       if (state.isRefreshing)
@@ -1041,115 +1059,77 @@ class _RacesTabState extends State<RacesTab> {
             ),
           ),
         ),
-      if (anyTournaments)
-        SliverToBoxAdapter(
-          child: StaggerIn(
-            index: 0,
-            child: _buildTournamentsSection(tournamentInvites, tournaments),
-          ),
-        ),
-      if (invites.isNotEmpty)
-        ..._raceSectionSlivers(
-          title: 'INVITES',
-          sectionKey: 'invites',
-          races: invites,
-          staggerIndex: 1,
-          isInvite: true,
-        ),
-      if (waiting.isNotEmpty)
-        ..._raceSectionSlivers(
-          title: 'PENDING',
-          sectionKey: 'waiting',
-          races: waiting,
-          staggerIndex: 2,
-        ),
-      if (active.isNotEmpty)
-        ..._raceSectionSlivers(
-          title: 'ACTIVE RACES',
-          sectionKey: 'active',
-          races: active,
-          staggerIndex: 3,
-          showCount: false,
-          firstCardKey: widget.tutorialCardKey,
-          firstBoxKey: widget.tutorialBoxKey,
-          // In-feed native ad retired in favor of the footer AdBannerSlot; the
-          // showInFeedAd/adAfterIndex/AdInlineCard plumbing is kept intact for
-          // future native-ad use.
-          showInFeedAd: false,
-        ),
-      if (completed.isNotEmpty)
-        ..._raceSectionSlivers(
-          title: 'COMPLETED',
-          sectionKey: 'completed',
-          races: completed,
-          staggerIndex: 4,
-          showCount: false,
-        ),
+      // Invites are pinned ABOVE the pills and omitted entirely at zero.
+      if (totalInvites > 0) ..._invitesStripSlivers(invites, tournamentInvites),
+      SliverToBoxAdapter(child: StaggerIn(index: 1, child: _buildStatePills())),
+      ..._selectedStateSlivers(),
     ];
   }
 
-  /// One race section as slivers: a header adapter, then — only when expanded —
-  /// the rounded parchment card wrapping a `SliverList.builder` of rows. A
-  /// collapsed section emits ONLY the header sliver (no child race cards are
-  /// instantiated). The card fill/border/shadow are painted by [DecoratedSliver]
-  /// so the visual matches the former `DecoratedBox` while rows build lazily.
-  List<Widget> _raceSectionSlivers({
-    required String title,
-    required String sectionKey,
-    required List<Map<String, dynamic>> races,
-    required int staggerIndex,
-    bool isInvite = false,
-    bool showCount = true,
-    GlobalKey? firstCardKey,
-    GlobalKey? firstBoxKey,
-    bool showInFeedAd = false,
-  }) {
-    final collapsed = _collapsedSections.contains(sectionKey);
+  /// The pinned invites strip: unanswered race and tournament invitations, with
+  /// tournament invites keeping their inline Accept/Decline.
+  List<Widget> _invitesStripSlivers(
+    List<Map<String, dynamic>> raceInvites,
+    List<Map<String, dynamic>> tournamentInvites,
+  ) {
     final header = SliverToBoxAdapter(
+      // Keyed so callers/tests can distinguish the strip's own header from the
+      // "INVITES" metric in the page header above it.
+      key: const Key('invites-strip-header'),
       child: StaggerIn(
-        index: staggerIndex,
+        index: 0,
         child: Padding(
           padding: const EdgeInsets.only(left: 10, right: 10),
-          child: _buildSectionHeader(
-            title,
-            races.length,
-            sectionKey,
-            collapsed,
-            showCount: showCount,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(2, 12, 2, 8),
+            child: Row(
+              children: [
+                Container(
+                  width: 6,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    color: AppColors.pillGold,
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(color: AppColors.pillGoldDark),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'INVITES',
+                  style: PixelText.title(
+                    size: 20,
+                    color: AppColors.parchment,
+                  ).copyWith(shadows: _textShadows),
+                ),
+                const SizedBox(width: 6),
+                _CountBadge(
+                  count: raceInvites.length + tournamentInvites.length,
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
 
-    if (collapsed) {
-      // Header only — no rows are instantiated for a collapsed section. The
-      // 8px gap matches the former section's bottom padding.
-      return [header, const SliverToBoxAdapter(child: SizedBox(height: 8))];
-    }
-
-    // Single in-feed ad for the section: after the 4th row on longer lists so it
-    // reads as part of the feed, else after the last row. The card collapses to
-    // zero size unless banners are enabled AND an ad loads, so rows and dividers
-    // are untouched in the adless case.
-    final adAfterIndex =
-        showInFeedAd ? (races.length > 4 ? 3 : races.length - 1) : -1;
-
+    // Tournament invites lead: they expire against a bracket that fills up.
     final rows = SliverList.builder(
-      itemCount: races.length,
+      itemCount: tournamentInvites.length + raceInvites.length,
       itemBuilder: (context, i) {
+        final isTournament = i < tournamentInvites.length;
+        final child = isTournament
+            ? _buildTournamentTicket(tournamentInvites[i], i, isInvite: true)
+            : _buildRaceRow(
+                raceInvites[i - tournamentInvites.length],
+                i,
+                isInvite: true,
+              );
+        final isLast = i == tournamentInvites.length + raceInvites.length - 1;
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildRaceRow(
-              races[i],
-              i,
-              isInvite: isInvite,
-              cardKey: i == 0 ? firstCardKey : null,
-              boxKey: i == 0 ? firstBoxKey : null,
-            ),
-            if (i == adAfterIndex)
-              const AdInlineCard(key: Key('active-section-ad')),
-            if (i != races.length - 1)
+            child,
+            if (!isLast)
               Container(
                 height: 1,
                 color: AppColors.parchmentBorder.withValues(alpha: 0.9),
@@ -1159,23 +1139,207 @@ class _RacesTabState extends State<RacesTab> {
       },
     );
 
-    final card = SliverPadding(
-      padding: const EdgeInsets.only(left: 10, right: 10, bottom: 8),
-      sliver: DecoratedSliver(
-        decoration: BoxDecoration(
-          color: AppColors.parchment,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: AppColors.roofDark.withValues(alpha: 0.55),
-            width: 2,
+    return [
+      header,
+      SliverPadding(
+        padding: const EdgeInsets.only(left: 10, right: 10, bottom: 8),
+        sliver: DecoratedSliver(
+          decoration: BoxDecoration(
+            color: AppColors.parchment,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: AppColors.roofDark.withValues(alpha: 0.55),
+              width: 2,
+            ),
+            boxShadow: _raceCardShadow,
           ),
-          boxShadow: _raceCardShadow,
+          sliver: rows,
         ),
-        sliver: rows,
+      ),
+    ];
+  }
+
+  /// ACTIVE / PENDING / COMPLETED. Always all three, always with a count badge
+  /// (including 0) so the shape of the list is legible before tapping.
+  Widget _buildStatePills() {
+    Widget seg(_PersonalState state) {
+      final selected = _selectedState == state;
+      final count = _countFor(state);
+      return Expanded(
+        child: GestureDetector(
+          key: Key('personal-state-${state.name}'),
+          onTap: () => setState(() => _selectedState = state),
+          behavior: HitTestBehavior.opaque,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            curve: Curves.easeOut,
+            padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 4),
+            decoration: BoxDecoration(
+              gradient: selected
+                  ? const LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [AppColors.pillGold, AppColors.pillGoldDark],
+                    )
+                  : null,
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(
+                color: selected ? AppColors.pillGoldShadow : Colors.transparent,
+                width: 2,
+              ),
+              boxShadow: selected
+                  ? const [
+                      BoxShadow(
+                        color: AppColors.pillGoldShadow,
+                        offset: Offset(0, 2),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: Text(
+                    state.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: PixelText.title(
+                      size: 12,
+                      color: selected
+                          ? AppColors.textDark
+                          : AppColors.parchment,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  '$count',
+                  key: Key('personal-state-count-${state.name}'),
+                  style: PixelText.title(
+                    size: 12,
+                    color: selected
+                        ? AppColors.textDark
+                        : AppColors.parchment.withValues(alpha: 0.75),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 4, 10, 6),
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: AppColors.roofDark.withValues(alpha: 0.45),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.roofDark, width: 1.5),
+        ),
+        child: Row(
+          children: [
+            seg(_PersonalState.active),
+            const SizedBox(width: 4),
+            seg(_PersonalState.pending),
+            const SizedBox(width: 4),
+            seg(_PersonalState.completed),
+          ],
+        ),
       ),
     );
+  }
 
-    return [header, card];
+  /// Rows for the SELECTED state only — the other states are never built.
+  List<Widget> _selectedStateSlivers() {
+    final entries = _entriesFor(_selectedState);
+
+    if (entries.isEmpty) {
+      // A user with nothing anywhere gets the fuller onboarding nudge; someone
+      // whose ACTIVE shelf just happens to be empty gets the terse line.
+      final hasNothingAtAll =
+          _invites.isEmpty &&
+          _tournamentInvites.isEmpty &&
+          _PersonalState.values.every((st) => _entriesFor(st).isEmpty);
+
+      return [
+        SliverToBoxAdapter(
+          key: Key('personal-state-empty-${_selectedState.name}'),
+          child: hasNothingAtAll
+              ? _buildEmptyState()
+              : Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 28,
+                      horizontal: 18,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.parchment,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: AppColors.roofDark.withValues(alpha: 0.55),
+                        width: 2,
+                      ),
+                      boxShadow: _raceCardShadow,
+                    ),
+                    child: Text(
+                      _selectedState.emptyMessage,
+                      textAlign: TextAlign.center,
+                      style: PixelText.body(size: 14, color: AppColors.textMid),
+                    ),
+                  ),
+                ),
+        ),
+      ];
+    }
+
+    final rows = SliverList.builder(
+      itemCount: entries.length,
+      itemBuilder: (context, i) {
+        final entry = entries[i];
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (entry.isTournament)
+              _buildTournamentRow(entry.data, i)
+            else
+              _buildRaceRow(
+                entry.data,
+                i,
+                cardKey: i == 0 ? widget.tutorialCardKey : null,
+                boxKey: i == 0 ? widget.tutorialBoxKey : null,
+              ),
+            if (i != entries.length - 1)
+              Container(
+                height: 1,
+                color: AppColors.parchmentBorder.withValues(alpha: 0.9),
+              ),
+          ],
+        );
+      },
+    );
+
+    return [
+      SliverPadding(
+        padding: const EdgeInsets.only(left: 10, right: 10, bottom: 8),
+        sliver: DecoratedSliver(
+          decoration: BoxDecoration(
+            color: AppColors.parchment,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: AppColors.roofDark.withValues(alpha: 0.55),
+              width: 2,
+            ),
+            boxShadow: _raceCardShadow,
+          ),
+          sliver: rows,
+        ),
+      ),
+    ];
   }
 
   Widget _buildEmptyState() {
@@ -1219,64 +1383,220 @@ class _RacesTabState extends State<RacesTab> {
     );
   }
 
-  Widget _buildSectionHeader(
-    String title,
-    int count,
-    String sectionKey,
-    bool collapsed, {
-    bool showCount = true,
-  }) {
-    return GestureDetector(
-      onTap: () => _toggleSection(sectionKey),
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(2, 12, 2, 8),
-        child: Row(
-          children: [
-            Container(
-              width: 6,
-              height: 18,
-              decoration: BoxDecoration(
-                color: AppColors.pillGold,
-                borderRadius: BorderRadius.circular(3),
-                border: Border.all(color: AppColors.pillGoldDark),
+  /// §4.3 — a tournament as a row in the merged personal list.
+  ///
+  /// An ACTIVE row reuses the active-race row's inventory language, reading the
+  /// additive `myCurrentMatch` object. Every field is optional: an older
+  /// backend (or a partial object) renders empty slots and no countdown rather
+  /// than throwing.
+  Widget _buildTournamentRow(Map<String, dynamic> t, int index) {
+    final id = Tournament.id(t) ?? '';
+    final name = Tournament.name(t);
+    final match = Tournament.myCurrentMatch(t);
+    final liveRaceId = Tournament.liveMatchRaceId(t);
+    final isLive = liveRaceId != null || match != null;
+
+    final round = Tournament.currentRound(t);
+    final total = Tournament.totalRounds(t);
+    final roundLabel = (round > 0 && total > 0)
+        ? Tournament.roundLabelFor(Tournament.bracketSize(t), round)
+        : 'BRACKET';
+
+    final placement = Tournament.matchPlacement(match);
+    final placementHidden = Tournament.matchPlacementHidden(match);
+    final endsAt = Tournament.matchEndsAt(match);
+
+    final stripeColor = index.isOdd
+        ? AppColors.parchmentLight
+        : AppColors.parchment;
+
+    // Badge language matches the old bracket ticket so the states stay
+    // recognisable after the merge.
+    final elim = Tournament.myEliminatedInRound(t);
+    final isChamp = Tournament.isChampion(t, widget.authService.userId);
+    String badgeLabel;
+    Color badgeColor;
+    if (isChamp) {
+      badgeLabel = 'CHAMPION';
+      badgeColor = AppColors.pillGold;
+    } else if (elim != null) {
+      badgeLabel = 'OUT';
+      badgeColor = AppColors.textMid;
+    } else if (isLive) {
+      badgeLabel = 'ALIVE';
+      badgeColor = AppColors.pillGreenDark;
+    } else if (Tournament.isPending(t)) {
+      badgeLabel = 'LOBBY';
+      badgeColor = AppColors.pillGoldDark;
+    } else if (Tournament.isActive(t)) {
+      badgeLabel = 'ALIVE';
+      badgeColor = AppColors.pillGreenDark;
+    } else {
+      badgeLabel = '';
+      badgeColor = AppColors.textMid;
+    }
+
+    String timeLabel;
+    Color timeColor = AppColors.textMid;
+    if (isLive && endsAt != null) {
+      final remaining = endsAt.difference(DateTime.now());
+      if (remaining.isNegative) {
+        timeLabel = 'ending soon';
+        timeColor = AppColors.error;
+      } else if (remaining.inDays > 0) {
+        timeLabel =
+            '${remaining.inDays}d ${remaining.inHours.remainder(24)}h left';
+        timeColor = remaining.inDays >= 2
+            ? AppColors.pillGreenDark
+            : AppColors.pillGoldShadow;
+      } else if (remaining.inHours > 0) {
+        timeLabel =
+            '${remaining.inHours}h ${remaining.inMinutes.remainder(60)}m left';
+        timeColor = AppColors.error;
+      } else {
+        timeLabel = '${remaining.inMinutes}m left';
+        timeColor = AppColors.error;
+      }
+    } else {
+      // No matchup countdown available: fall back to the bracket status line.
+      timeLabel = Tournament.ticketStatusLine(t);
+    }
+
+    return Material(
+      color: stripeColor,
+      child: InkWell(
+        key: Key('tournament-row-$id'),
+        // A live matchup opens the RACE; everything else opens the bracket.
+        onTap: id.isEmpty && liveRaceId == null
+            ? null
+            : () {
+                if (liveRaceId != null && liveRaceId.isNotEmpty) {
+                  _navigateToRaceDetail(liveRaceId);
+                } else {
+                  _navigateToTournamentDetail(id);
+                }
+              },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            name,
+                            style: PixelText.title(
+                              size: 18,
+                              color: AppColors.textDark,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        // Bracket marker distinguishes a tournament row from an
+                        // ordinary race at a glance.
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: TournamentColors.gold.withValues(
+                              alpha: 0.30,
+                            ),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: TournamentColors.goldDark,
+                            ),
+                          ),
+                          child: Text(
+                            roundLabel,
+                            style: PixelText.title(
+                              size: 9,
+                              color: AppColors.textDark,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      timeLabel,
+                      style: PixelText.body(size: 13, color: timeColor),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                    // Live matchup: same 4-slot inventory strip as an active
+                    // race. Absent/partial data simply renders empty slots.
+                    if (isLive) ...[
+                      const SizedBox(height: 4),
+                      _buildInventoryRow(
+                        Tournament.matchSlotItems(match),
+                        Tournament.matchMysteryBoxCount(match),
+                        Tournament.matchQueuedBoxCount(match),
+                      ),
+                    ],
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              title,
-              style: PixelText.title(
-                size: 20,
-                color: AppColors.parchment,
-              ).copyWith(shadows: _textShadows),
-            ),
-            if (showCount) ...[
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.07),
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.30),
-                  ),
-                ),
-                child: Text(
-                  '$count',
-                  style: PixelText.title(
-                    size: 13,
-                    color: AppColors.parchment.withValues(alpha: 0.92),
-                  ),
-                ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (placement != null)
+                    _buildMetaChip(
+                      '${formatOrdinal(placement)} PLACE',
+                      backgroundColor: AppColors.pillGreenDark.withValues(
+                        alpha: 0.16,
+                      ),
+                      textColor: AppColors.pillGreenDark,
+                    )
+                  else if (placementHidden)
+                    _buildMetaChip(
+                      '??? PLACE',
+                      backgroundColor: AppColors.textMid.withValues(
+                        alpha: 0.16,
+                      ),
+                      textColor: AppColors.textMid,
+                    ),
+                  if (badgeLabel.isNotEmpty) ...[
+                    if (placement != null || placementHidden)
+                      const SizedBox(height: 4),
+                    Text(
+                      badgeLabel,
+                      style: PixelText.title(size: 12, color: badgeColor),
+                      textAlign: TextAlign.right,
+                    ),
+                  ],
+                  // What the bracket pays out — the reason to care about a
+                  // finished row at all.
+                  if (Tournament.championWinnings(t) > 0) ...[
+                    const SizedBox(height: 3),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '${Tournament.championWinnings(t)}',
+                          style: PixelText.body(
+                            size: 12,
+                            color: AppColors.coinDark,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const SpinningCoin(size: 13),
+                      ],
+                    ),
+                  ],
+                ],
               ),
             ],
-            const Spacer(),
-            _SectionToggleButton(
-              key: Key('race-section-toggle-$sectionKey'),
-              collapsed: collapsed,
-              onTap: () => _toggleSection(sectionKey),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -1427,10 +1747,8 @@ class _RacesTabState extends State<RacesTab> {
                         if (teamTotals != null) ...[
                           const SizedBox(height: 4),
                           TeamScoreline(
-                            teamAName:
-                                TeamRace.teamName(race, RaceTeam.teamA),
-                            teamBName:
-                                TeamRace.teamName(race, RaceTeam.teamB),
+                            teamAName: TeamRace.teamName(race, RaceTeam.teamA),
+                            teamBName: TeamRace.teamName(race, RaceTeam.teamB),
                             teamATotal: teamTotals.$1,
                             teamBTotal: teamTotals.$2,
                             showRope: false,
@@ -1804,30 +2122,26 @@ class _MetricDivider extends StatelessWidget {
   }
 }
 
-class _SectionToggleButton extends StatelessWidget {
-  const _SectionToggleButton({
-    super.key,
-    required this.collapsed,
-    required this.onTap,
-  });
+/// Small translucent count pill used beside a section title.
+class _CountBadge extends StatelessWidget {
+  const _CountBadge({required this.count});
 
-  final bool collapsed;
-  final VoidCallback onTap;
+  final int count;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: SizedBox(
-        width: 30,
-        height: 30,
-        child: Center(
-          child: Icon(
-            collapsed ? Icons.add_rounded : Icons.remove_rounded,
-            size: 20,
-            color: AppColors.parchment.withValues(alpha: 0.85),
-          ),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.30)),
+      ),
+      child: Text(
+        '$count',
+        style: PixelText.title(
+          size: 13,
+          color: AppColors.parchment.withValues(alpha: 0.92),
         ),
       ),
     );

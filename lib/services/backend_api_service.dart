@@ -9,6 +9,9 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../config/backend_config.dart';
+import '../constants/powerup_copy.dart';
+import '../models/balance_config.dart';
+import '../models/powerup_shop_admin_item.dart';
 import '../models/race_discovery_summary.dart';
 import '../models/race_resolution_status.dart';
 import '../models/step_data.dart';
@@ -104,9 +107,17 @@ class BackendApiService {
   // powerups (Leech, X-Ray/DEFENSE_SCAN): their icons, the Leech victim badge,
   // and the X-Ray recon sheet. Old binaries omit it, so the gated catalog never
   // offers them and the app can't crash on the unknown enum values.
+  // `powerups3` tells the backend this build can render the THIRD-wave shop
+  // powerups (Hitchhike, Quick Rinse) and the backend-served copy catalog. It
+  // also selects the 60-minute Leech window: a request without this token keeps
+  // the legacy 30-minute behavior, so a frozen old binary still creates exactly
+  // the effect its bundled copy describes (§7.5).
+  //
+  // NOTE: the token must appear in BOTH branches of the ternary. Editing only
+  // the ads branch silently disables the whole feature on ad-less builds.
   static final String clientFeaturesHeader = _adsSupported
-      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,powerups2'
-      : 'characters,jammer,spinpowerups,team_races,tournaments,powerups2';
+      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3'
+      : 'characters,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3';
   final HttpClient _httpClient;
   String? _cachedTimeZone;
   String? _cachedReleaseChannel;
@@ -175,11 +186,12 @@ class BackendApiService {
     required StepData stepData,
     required List<StepSampleData> samples,
   }) {
-    final sorted = [...samples]..sort((a, b) {
-      final byStart = a.periodStart.toUtc().compareTo(b.periodStart.toUtc());
-      if (byStart != 0) return byStart;
-      return a.periodEnd.toUtc().compareTo(b.periodEnd.toUtc());
-    });
+    final sorted = [...samples]
+      ..sort((a, b) {
+        final byStart = a.periodStart.toUtc().compareTo(b.periodStart.toUtc());
+        if (byStart != 0) return byStart;
+        return a.periodEnd.toUtc().compareTo(b.periodEnd.toUtc());
+      });
     final month = stepData.date.month.toString().padLeft(2, '0');
     final day = stepData.date.day.toString().padLeft(2, '0');
     return <String, dynamic>{
@@ -331,6 +343,25 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  /// §9.5.3 — the backend-served powerup copy catalog.
+  ///
+  /// Unauthenticated and client-feature-independent: copy is not a capability,
+  /// so this returns every user-renderable type regardless of what this build
+  /// can actually acquire.
+  ///
+  /// Throws [PowerupCopyUnavailable] for a 404 (older backend) or a 5xx so the
+  /// caller can treat it as TRANSIENT. This endpoint deliberately does NOT get
+  /// an [EndpointSupport] cache: the backend deploys independently of an
+  /// installed app, so marking it unsupported for the session would strand the
+  /// client on stale copy until the next cold start for no reason.
+  Future<Map<String, dynamic>> fetchPowerupCatalog() async {
+    final response = await _sendGetRequest(path: '/powerups/catalog');
+    if (response.statusCode == 404 || response.statusCode >= 500) {
+      throw PowerupCopyUnavailable(response.statusCode);
+    }
+    return _decodeJsonResponse(response);
+  }
+
   Future<void> recordSteps({
     required String identityToken,
     required StepData stepData,
@@ -383,7 +414,11 @@ class BackendApiService {
       return const StepSyncV2Result(kind: StepSyncV2Kind.unsupported);
     }
 
-    var result = await _attemptStepSyncV2(identityToken, idempotencyKey, payload);
+    var result = await _attemptStepSyncV2(
+      identityToken,
+      idempotencyKey,
+      payload,
+    );
     if (result.kind == StepSyncV2Kind.ambiguousFailure) {
       // The single permitted retry — SAME key, SAME immutable payload. The
       // server may have committed the first attempt, so we never fall back to a
@@ -457,8 +492,9 @@ class BackendApiService {
 
   StepSyncV2Result _parseStepSyncV2Success(Map<String, dynamic> json) {
     final recon = json['uploaderReconciliation'];
-    final reconMap =
-        recon is Map<String, dynamic> ? recon : const <String, dynamic>{};
+    final reconMap = recon is Map<String, dynamic>
+        ? recon
+        : const <String, dynamic>{};
     // Absent/unknown state degrades to DEFERRED so a stale own card can never
     // replace good UI.
     final isCurrent = reconMap['state'] == 'CURRENT';
@@ -466,7 +502,9 @@ class BackendApiService {
     final boxCurrent = reconMap['boxStateCurrent'];
 
     final job = json['raceResolution'];
-    final jobMap = job is Map<String, dynamic> ? job : const <String, dynamic>{};
+    final jobMap = job is Map<String, dynamic>
+        ? job
+        : const <String, dynamic>{};
     final rawJobId = jobMap['jobId'];
     final rawGeneration = jobMap['generation'];
 
@@ -474,8 +512,9 @@ class BackendApiService {
       kind: isCurrent ? StepSyncV2Kind.current : StepSyncV2Kind.deferred,
       jobId: rawJobId is String && rawJobId.isNotEmpty ? rawJobId : null,
       generation: rawGeneration is int ? rawGeneration : null,
-      resolvedRaceCount:
-          rawResolved is int && rawResolved >= 0 ? rawResolved : 0,
+      resolvedRaceCount: rawResolved is int && rawResolved >= 0
+          ? rawResolved
+          : 0,
       boxStateCurrent: isCurrent && boxCurrent == true,
     );
   }
@@ -1010,7 +1049,8 @@ class BackendApiService {
     final localDate = '${now.year}-${two(now.month)}-${two(now.day)}';
     final persistedParam = usePersistedTotals ? '&homePersistedTotals=1' : '';
     final response = await _sendGetRequest(
-      path: '/home/race-card?homeActiveRaces=1&localDate=$localDate'
+      path:
+          '/home/race-card?homeActiveRaces=1&localDate=$localDate'
           '$persistedParam',
       identityToken: identityToken,
     );
@@ -1134,6 +1174,199 @@ class BackendApiService {
     );
 
     return _decodeJsonResponse(response);
+  }
+
+  // -- Admin: powerup shop catalog (spec §5.1) --
+
+  /// `GET /admin/powerup-shop/items`. Null when the backend does not implement
+  /// the endpoint (404), which the editor shows as unsupported rather than as
+  /// an empty catalog an admin might try to save into.
+  Future<List<PowerupShopAdminItem>?> fetchAdminPowerupShopItems({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/admin/powerup-shop/items',
+      identityToken: identityToken,
+    );
+    final raw = await _readRawResponse(response);
+    if (raw.statusCode == 404) return null;
+    if (raw.statusCode < 200 || raw.statusCode >= 300) {
+      throw ApiException(
+        _errorMessage(raw) ?? 'Failed to load powerup shop items.',
+        statusCode: raw.statusCode,
+        code: raw.code,
+      );
+    }
+    final items = raw.json?['items'];
+    if (items is! List) return const [];
+    return items
+        .map(PowerupShopAdminItem.tryParse)
+        .whereType<PowerupShopAdminItem>()
+        .toList();
+  }
+
+  /// `PATCH /admin/powerup-shop/items/:itemId`. Every field is optional but the
+  /// contract requires at least one, so an all-null call is refused here rather
+  /// than sent for the backend to reject with a 400.
+  ///
+  /// `name`/`description` are absent by design — `PowerupCopy` owns copy.
+  Future<PowerupShopAdminItem?> updateAdminPowerupShopItem({
+    required String identityToken,
+    required String itemId,
+    int? priceCoins,
+    bool? active,
+    bool? testOnly,
+    int? sortOrder,
+  }) async {
+    final body = <String, dynamic>{
+      'priceCoins': ?priceCoins,
+      'active': ?active,
+      'testOnly': ?testOnly,
+      'sortOrder': ?sortOrder,
+    };
+    if (body.isEmpty) {
+      throw const ApiException('Nothing to update.', statusCode: 400);
+    }
+    final response = await _sendJsonRequest(
+      method: 'PATCH',
+      path: '/admin/powerup-shop/items/$itemId',
+      body: body,
+      identityToken: identityToken,
+    );
+    final payload = await _decodeJsonResponse(response);
+    return PowerupShopAdminItem.tryParse(payload['item']);
+  }
+
+  // -- Admin: balance config (spec §5.2) --
+  //
+  // These four endpoints are ADDITIVE and may not exist on the backend serving
+  // this build. A definite 404 means "old backend": the editor shows an
+  // unsupported notice rather than an empty form that would PUT garbage.
+
+  /// `GET /admin/balance-config`. Returns null when the backend does not
+  /// implement the endpoint (404) or sends a body this build can't read.
+  Future<AdminBalanceConfig?> fetchAdminBalanceConfig({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/admin/balance-config',
+      identityToken: identityToken,
+    );
+    final raw = await _readRawResponse(response);
+    if (raw.statusCode == 404) return null;
+    if (raw.statusCode < 200 || raw.statusCode >= 300) {
+      throw ApiException(
+        _errorMessage(raw) ?? 'Failed to load balance config.',
+        statusCode: raw.statusCode,
+        code: raw.code,
+      );
+    }
+    return AdminBalanceConfig.tryParse(raw.json);
+  }
+
+  /// `GET /admin/balance-config/versions`. An unreadable or absent list is an
+  /// empty history, never a crash — history is informational.
+  Future<List<BalanceConfigVersion>> fetchAdminBalanceConfigVersions({
+    required String identityToken,
+    int limit = 50,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/admin/balance-config/versions?limit=$limit',
+      identityToken: identityToken,
+    );
+    final raw = await _readRawResponse(response);
+    if (raw.statusCode < 200 || raw.statusCode >= 300) return const [];
+    final versions = raw.json?['versions'];
+    if (versions is! List) return const [];
+    return versions
+        .map(BalanceConfigVersion.tryParse)
+        .whereType<BalanceConfigVersion>()
+        .toList();
+  }
+
+  /// `PUT /admin/balance-config`. 409 and 422 are returned as data (not thrown)
+  /// so the editor can re-diff / acknowledge without string-matching an error.
+  Future<BalanceConfigSaveResult> saveAdminBalanceConfig({
+    required String identityToken,
+    required int expectedVersion,
+    required Map<String, dynamic> config,
+    String? note,
+    bool acknowledgeBoundWarnings = false,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'PUT',
+      path: '/admin/balance-config',
+      body: {
+        'expectedVersion': expectedVersion,
+        'config': config,
+        if (note != null && note.isNotEmpty) 'note': note,
+        'acknowledgeBoundWarnings': acknowledgeBoundWarnings,
+      },
+      identityToken: identityToken,
+    );
+    return _readBalanceSaveResult(await _readRawResponse(response));
+  }
+
+  /// `POST /admin/balance-config/rollback`. Same 409 semantics as the PUT.
+  Future<BalanceConfigSaveResult> rollbackAdminBalanceConfig({
+    required String identityToken,
+    required int version,
+    required int expectedVersion,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/admin/balance-config/rollback',
+      body: {'version': version, 'expectedVersion': expectedVersion},
+      identityToken: identityToken,
+    );
+    return _readBalanceSaveResult(await _readRawResponse(response));
+  }
+
+  BalanceConfigSaveResult _readBalanceSaveResult(_RawResponse raw) {
+    final body = raw.json;
+
+    if (raw.statusCode == 409) {
+      final current = body?['currentVersion'];
+      final config = body?['config'];
+      return BalanceConfigSaveResult.conflict(
+        currentVersion: current is num ? current.toInt() : -1,
+        config: config is Map ? Map<String, dynamic>.from(config) : null,
+      );
+    }
+
+    if (raw.statusCode == 422) {
+      final rawWarnings = body?['warnings'];
+      final warnings = rawWarnings is List
+          ? rawWarnings
+                .map(BalanceBoundWarning.tryParse)
+                .whereType<BalanceBoundWarning>()
+                .toList()
+          : <BalanceBoundWarning>[];
+      // A 422 with no readable warning list would otherwise present an
+      // acknowledge-toggle with nothing to acknowledge.
+      if (warnings.isEmpty) {
+        return BalanceConfigSaveResult.failed(
+          _errorMessage(raw) ?? 'The backend rejected these values.',
+        );
+      }
+      return BalanceConfigSaveResult.boundWarnings(warnings);
+    }
+
+    if (raw.statusCode >= 200 && raw.statusCode < 300) {
+      final version = body?['version'];
+      return BalanceConfigSaveResult.saved(
+        version: version is num ? version.toInt() : -1,
+      );
+    }
+
+    return BalanceConfigSaveResult.failed(
+      _errorMessage(raw) ?? 'Save failed (${raw.statusCode}).',
+    );
+  }
+
+  String? _errorMessage(_RawResponse raw) {
+    final error = raw.json?['error'];
+    return error is String && error.isNotEmpty ? error : null;
   }
 
   Future<void> registerDeviceToken({
@@ -1374,10 +1607,7 @@ class BackendApiService {
     final response = await _sendJsonRequest(
       method: 'POST',
       path: '/races/$raceId/join',
-      body: {
-        if (onboarding) 'onboarding': true,
-        'team': team,
-      },
+      body: {if (onboarding) 'onboarding': true, 'team': team},
       identityToken: identityToken,
     );
     return _decodeJsonResponse(response);
@@ -1402,7 +1632,10 @@ class BackendApiService {
       final payload = await _decodeJsonResponse(response);
       final a = payload['teamAName'];
       final b = payload['teamBName'];
-      if (a is String && b is String && a.trim().isNotEmpty && b.trim().isNotEmpty) {
+      if (a is String &&
+          b is String &&
+          a.trim().isNotEmpty &&
+          b.trim().isNotEmpty) {
         return (a.trim(), b.trim());
       }
       return null;
@@ -1838,13 +2071,52 @@ class BackendApiService {
     final response = await _sendJsonRequest(
       method: 'POST',
       path: '/races/share/$token/join',
-      body: {
-        if (onboarding) 'onboarding': true,
-        'team': team,
-      },
+      body: {if (onboarding) 'onboarding': true, 'team': team},
       identityToken: identityToken,
     );
     return _decodeJsonResponse(response);
+  }
+
+  /// Additive v2 activation contract. Callers must treat a 404 as an older
+  /// backend and hide the reward surface without blocking the race.
+  Future<Map<String, dynamic>> fetchStarterReward({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/onboarding/starter-reward',
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  /// Claims the shared tutorial_complete ledger grant. The backend is the
+  /// authority for eligibility, membership and deduplication.
+  Future<Map<String, dynamic>> claimStarterReward({
+    required String identityToken,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/onboarding/starter-reward/claim',
+      body: const {},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  /// Best-effort activation telemetry. The queueing service allowlists all
+  /// names/context before this reaches the wire; navigation never awaits it.
+  Future<void> sendActivationEvents({
+    required String identityToken,
+    required List<Map<String, dynamic>> events,
+  }) async {
+    if (events.isEmpty) return;
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/analytics/activation-events',
+      body: {'events': events},
+      identityToken: identityToken,
+    );
+    await _decodeJsonResponse(response);
   }
 
   /// Marks the first-race onboarding step as seen for the current user.
@@ -2043,6 +2315,7 @@ class BackendApiService {
     required String powerupId,
     String? targetUserId,
     String? targetDirection,
+    String? targetEffectId,
     int upgradeLevel = 0,
   }) async {
     // Sneaky Swap's retired swapOfferedPowerupId/swapRequestedPowerupId are
@@ -2051,6 +2324,10 @@ class BackendApiService {
     final body = <String, dynamic>{};
     if (targetUserId != null) body['targetUserId'] = targetUserId;
     if (targetDirection != null) body['targetDirection'] = targetDirection;
+    // §6.3: OMITTED entirely for the legacy self-buff path, so a request from
+    // this build is byte-identical to an older binary's unless the user
+    // explicitly picked a rival debuff to extend.
+    if (targetEffectId != null) body['targetEffectId'] = targetEffectId;
     if (upgradeLevel > 0) body['upgradeLevel'] = upgradeLevel;
 
     final response = await _sendJsonRequest(

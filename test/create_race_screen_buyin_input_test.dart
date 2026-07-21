@@ -63,35 +63,36 @@ Future<AuthService> _createAuthService({int coins = 420}) async {
 
 Finder _buyInTextFieldFinder() {
   // Buy-in field is the third TextField on screen (name, steps, buy-in).
-  return find.byType(TextField).at(2);
+  return find.byType(TextField).at(1);
 }
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets(
-    'Buy-in input is hidden when disabled and shown when enabled',
-    (WidgetTester tester) async {
-      final authService = await _createAuthService();
-      await tester.pumpWidget(
-        MaterialApp(
-          home: CreateRaceScreen(
-            authService: authService,
-            backendApiService: _FakeBackendApiService(),
-          ),
+  testWidgets('Buy-in input is hidden when disabled and shown when enabled', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _createAuthService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CreateRaceScreen(
+          authService: authService,
+          backendApiService: _FakeBackendApiService(),
+          initialCustomizeExpanded: true,
         ),
-      );
+      ),
+    );
 
-      // Only 2 TextFields when buy-in disabled (name + steps).
-      expect(find.byType(TextField), findsNWidgets(2));
+    // Only the race-name TextField is visible when buy-in is disabled.
+    expect(find.byType(TextField), findsOneWidget);
 
-      await tester.tap(find.text('BUY-IN'));
-      await tester.pump();
+    await tester.ensureVisible(find.text('BUY-IN'));
+    await tester.tap(find.text('BUY-IN'));
+    await tester.pump();
 
-      // Now buy-in TextField is rendered as third field.
-      expect(find.byType(TextField), findsNWidgets(3));
-    },
-  );
+    // Now buy-in is rendered after race name.
+    expect(find.byType(TextField), findsNWidgets(2));
+  });
 
   testWidgets(
     'Buy-in field accepts arbitrary numeric input (150) and is sent on submit',
@@ -104,13 +105,13 @@ void main() {
           home: CreateRaceScreen(
             authService: authService,
             backendApiService: backend,
+            initialCustomizeExpanded: true,
           ),
         ),
       );
 
       await tester.enterText(find.byType(TextField).at(0), 'Gold Rush');
-      await tester.enterText(find.byType(TextField).at(1), '100000');
-
+      await tester.ensureVisible(find.text('BUY-IN'));
       await tester.tap(find.text('BUY-IN'));
       await tester.pump();
 
@@ -119,6 +120,8 @@ void main() {
       await tester.enterText(buyIn, '150');
       await tester.pump();
 
+      tester.testTextInput.hide();
+      await tester.pump();
       await tester.ensureVisible(find.text('CREATE RACE'));
       await tester.tap(find.text('CREATE RACE'));
       await tester.pumpAndSettle();
@@ -137,10 +140,12 @@ void main() {
           home: CreateRaceScreen(
             authService: authService,
             backendApiService: _FakeBackendApiService(),
+            initialCustomizeExpanded: true,
           ),
         ),
       );
 
+      await tester.ensureVisible(find.text('BUY-IN'));
       await tester.tap(find.text('BUY-IN'));
       await tester.pump();
 
@@ -157,37 +162,38 @@ void main() {
     },
   );
 
-  testWidgets(
-    'Submission blocked when buy-in exceeds user coin balance',
-    (WidgetTester tester) async {
-      final authService = await _createAuthService(coins: 100);
-      final backend = _FakeBackendApiService();
+  testWidgets('Submission blocked when buy-in exceeds user coin balance', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _createAuthService(coins: 100);
+    final backend = _FakeBackendApiService();
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: CreateRaceScreen(
-            authService: authService,
-            backendApiService: backend,
-          ),
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CreateRaceScreen(
+          authService: authService,
+          backendApiService: backend,
+          initialCustomizeExpanded: true,
         ),
-      );
+      ),
+    );
 
-      await tester.enterText(find.byType(TextField).at(0), 'Gold Rush');
-      await tester.enterText(find.byType(TextField).at(1), '100000');
+    await tester.enterText(find.byType(TextField).at(0), 'Gold Rush');
+    await tester.ensureVisible(find.text('BUY-IN'));
+    await tester.tap(find.text('BUY-IN'));
+    await tester.pump();
 
-      await tester.tap(find.text('BUY-IN'));
-      await tester.pump();
+    final buyIn = _buyInTextFieldFinder();
+    await tester.ensureVisible(buyIn);
+    await tester.enterText(buyIn, '9999');
+    await tester.pump();
 
-      final buyIn = _buyInTextFieldFinder();
-      await tester.ensureVisible(buyIn);
-      await tester.enterText(buyIn, '9999');
-      await tester.pump();
+    tester.testTextInput.hide();
+    await tester.pump();
+    await tester.ensureVisible(find.text('CREATE RACE'));
+    await tester.tap(find.text('CREATE RACE'));
+    await tester.pump();
 
-      await tester.ensureVisible(find.text('CREATE RACE'));
-      await tester.tap(find.text('CREATE RACE'));
-      await tester.pump();
-
-      expect(backend.lastCreateRaceCall, isNull);
-    },
-  );
+    expect(backend.lastCreateRaceCall, isNull);
+  });
 }
