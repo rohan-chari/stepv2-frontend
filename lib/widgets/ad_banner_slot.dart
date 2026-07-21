@@ -65,15 +65,12 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
     if (!AdService.bannersEnabled) return;
     await AdService.ensureInitialized();
     if (!mounted) return;
-    // Anchored adaptive banner at near-full width — a small inset keeps the
-    // tappable creative off the screen edges and leaves room for the 2px
-    // poster frame.
+    // Meta Audience Network doesn't support anchored-adaptive banners. Keep
+    // the near-full-width treatment, but use Meta's supported flexible-width,
+    // fixed-height banner format. The small inset keeps the tappable creative
+    // off the screen edges and leaves room for the 2px poster frame.
     final width = (MediaQuery.of(context).size.width - 16).truncate();
-    // ignore: deprecated_member_use
-    final size = await AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(
-      width,
-    );
-    if (!mounted || size == null) return;
+    final size = AdSize(width: width, height: 50);
     final ad = BannerAd(
       adUnitId: AdService.bannerAdUnitId,
       size: size,
@@ -114,9 +111,7 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
   /// creative). No drop shadow: it would add dead height under the ad.
   Widget _poster(BannerAd ad, {required Color frame}) {
     return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border.all(color: frame, width: 2),
-      ),
+      decoration: BoxDecoration(border: Border.all(color: frame, width: 2)),
       child: SizedBox(
         width: ad.size.width.toDouble(),
         height: ad.size.height.toDouble(),

@@ -115,9 +115,10 @@ Replay/abuse coverage:
 Status: implemented 2026-07-07 (frontend only; needs a real AdMob banner unit +
 prod `--dart-define=ADMOB_BANNER_AD_UNIT_ID` before release).
 
-Two **display-only** anchored-adaptive banners — **no SSV, no reward, no
-backend, no economy tie-in** — so this is a pure client change with no
-old-client compatibility surface:
+Two **display-only** flexible-width, fixed-height (50pt) banners — **no SSV, no
+reward, no backend, no economy tie-in** — so this is a pure client change with
+no old-client compatibility surface. The fixed height is compatible with Meta
+Audience Network bidding while retaining the near-full-width layout:
 
 - **Shop/inventory** (`shop_tab.dart`): banner pinned just above the shell tab
   bar (a `Positioned` layer in the existing `Stack`).
