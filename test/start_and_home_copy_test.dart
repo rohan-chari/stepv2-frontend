@@ -24,11 +24,12 @@ void main() {
 
     expect(find.text('Bara'), findsOneWidget);
     expect(
-      find.text(
-        'Track your steps, challenge friends,\nand put a stake on the week.',
-      ),
+      find.text('Race your friends, earn powerups, and climb the leaderboard.'),
       findsOneWidget,
     );
+    expect(find.byKey(const Key('start-cape-capybara')), findsOneWidget);
+    expect(find.byKey(const Key('start-sign-in-dock')), findsOneWidget);
+    expect(find.text('STEP RACES'), findsNothing);
     expect(find.text('Sign in with Apple'), findsOneWidget);
     expect(find.text('GET STARTED'), findsNothing);
   });

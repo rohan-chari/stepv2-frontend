@@ -215,47 +215,229 @@ class HealthService {
   /// not revert to unbounded.
   static const int _hourlyConcurrency = 4;
 
+  /// Hourly step read (the legacy granularity). Buckets `[startTime, endTime)`
+  /// per hour, reads the accurate total in each via [_stepsInInterval], and
+  /// emits one UTC [StepSampleData] per non-zero hour — byte-for-byte identical
+  /// to the pre-`getStepSamples` behavior.
+  ///
+  /// This is the real hourly implementation (not a wrapper) on purpose:
+  /// [getStepSamples] delegates its 60-minute path here, so a subclass fake that
+  /// overrides `getHourlySteps` still intercepts the hourly path taken when the
+  /// backend flag is absent/60. Existing callers and tests keep working.
   Future<List<StepSampleData>> getHourlySteps({
     required DateTime startTime,
     required DateTime endTime,
   }) async {
-    // Bucket per hour and ask the platform for the accurate total in each bucket
-    // via [_stepsInInterval]: iOS uses HealthKit's deduped, manual-excluded
-    // cumulativeSum; Android uses Health Connect's de-duplicated aggregate minus
-    // manually-entered steps. See [_stepsInInterval] / ANDROID.md §C-5.
-    //
-    // Windows are built in chronological order, evaluated with bounded
-    // concurrency, then re-assembled BY INDEX so the emitted samples are byte-
-    // for-byte identical (order + values) to the old sequential loop.
-    final windows = <_HourWindow>[];
-    var bucketStart = DateTime(
-      startTime.year,
-      startTime.month,
-      startTime.day,
-      startTime.hour,
+    final hourWindows = buildBucketWindows(startTime, endTime, 60);
+    final hourTotals = await _mapWithConcurrency<_Window, int?>(
+      hourWindows,
+      _hourlyConcurrency,
+      (w) => _stepsInInterval(w.start, w.end),
     );
-    if (bucketStart.isBefore(startTime)) {
-      bucketStart = startTime;
+    return _emitSamples(hourWindows, hourTotals);
+  }
+
+  /// Reads step totals bucketed at [bucketMinutes] granularity over
+  /// `[startTime, endTime)`. Emits one [StepSampleData] per non-zero bucket, in
+  /// chronological order, in UTC. Payload shape is identical at every
+  /// granularity — finer buckets just mean more, shorter samples.
+  ///
+  /// Two-pass read to bound platform calls (§5.1):
+  ///   * Pass 1 reads the hourly windows (≤24 aggregate calls).
+  ///   * Pass 2 subdivides ONLY hours with steps > 0 into [bucketMinutes]
+  ///     windows and re-reads those. Zero/null hours are never subdivided and
+  ///     contribute nothing. Only pass-2 (fine) buckets are emitted for active
+  ///     hours — never both granularities for the same hour.
+  ///
+  /// At [bucketMinutes] == 60 there is no second pass and the result is
+  /// byte-for-byte identical to the legacy hourly read (the degradation path
+  /// when the backend flag is absent/invalid).
+  ///
+  /// Accurate totals per bucket come from [_stepsInInterval] (iOS: HealthKit's
+  /// deduped, manual-excluded cumulativeSum; Android: deduped aggregate minus
+  /// manually-entered steps) — EXCEPT that on Android the fine (pass-2) buckets
+  /// read manual-tagged records ONCE for the whole range and subtract per bucket
+  /// (see [_fineTotals]) rather than issuing a manual read per bucket.
+  Future<List<StepSampleData>> getStepSamples({
+    required DateTime startTime,
+    required DateTime endTime,
+    int bucketMinutes = 60,
+  }) async {
+    // Hourly granularity (or coarser): delegate to [getHourlySteps] so this is
+    // bit-identical to the legacy path AND a subclass fake overriding
+    // getHourlySteps still intercepts it.
+    if (bucketMinutes >= 60) {
+      return getHourlySteps(startTime: startTime, endTime: endTime);
     }
 
-    while (bucketStart.isBefore(endTime)) {
-      final nextHour = DateTime(
-        bucketStart.year,
-        bucketStart.month,
-        bucketStart.day,
-        bucketStart.hour,
-      ).add(const Duration(hours: 1));
-      final bucketEnd = nextHour.isBefore(endTime) ? nextHour : endTime;
-      windows.add(_HourWindow(bucketStart, bucketEnd));
-      bucketStart = bucketEnd;
-    }
-
-    final totals = await _mapWithConcurrency<_HourWindow, int?>(
-      windows,
+    // Pass 1: hourly windows. Built chronologically, evaluated with bounded
+    // concurrency, re-assembled BY INDEX. Read here (not via getHourlySteps)
+    // because the fine path needs the per-hour totals AND window boundaries to
+    // decide which hours to subdivide — getHourlySteps drops zero hours.
+    final hourWindows = buildBucketWindows(startTime, endTime, 60);
+    final hourTotals = await _mapWithConcurrency<_Window, int?>(
+      hourWindows,
       _hourlyConcurrency,
       (w) => _stepsInInterval(w.start, w.end),
     );
 
+    // Pass 2: subdivide only the active hours into fine buckets.
+    final fineWindows = <_Window>[];
+    for (var i = 0; i < hourWindows.length; i++) {
+      final total = hourTotals[i];
+      if (total != null && total > 0) {
+        fineWindows.addAll(
+          buildBucketWindows(
+            hourWindows[i].start,
+            hourWindows[i].end,
+            bucketMinutes,
+          ),
+        );
+      }
+    }
+    if (fineWindows.isEmpty) return <StepSampleData>[];
+
+    final fineTotals = await _fineTotals(fineWindows, startTime, endTime);
+    return _emitSamples(fineWindows, fineTotals);
+  }
+
+  /// Reads accurate step totals for the pass-2 fine [windows]. On iOS this is
+  /// one deduped, manual-excluded aggregate per window. On Android it reads the
+  /// manually-entered records ONCE across `[rangeStart, rangeEnd)`, buckets them
+  /// client-side by timestamp, and subtracts them from each window's deduped
+  /// aggregate with the per-bucket [accurateAndroidTotal] clamp — so a single
+  /// day-wide manual read serves every fine bucket instead of one read each.
+  ///
+  /// NOTE (by design): the clamp is applied PER BUCKET, so if one bucket's
+  /// manual entries exceed its deduped aggregate it floors at 0 without
+  /// "borrowing" from neighbours. The summed clamped total can therefore exceed
+  /// what the old single hourly clamp produced. This is intentional and only
+  /// affects the (rare) case of manual entries concentrated in one fine bucket.
+  Future<List<int?>> _fineTotals(
+    List<_Window> windows,
+    DateTime rangeStart,
+    DateTime rangeEnd,
+  ) async {
+    if (!Platform.isAndroid) {
+      return _mapWithConcurrency<_Window, int?>(
+        windows,
+        _hourlyConcurrency,
+        (w) => _health.getTotalStepsInInterval(
+          w.start,
+          w.end,
+          includeManualEntry: false,
+        ),
+      );
+    }
+
+    // Android: one day-wide manual read, bucketed client-side.
+    final manualByWindow = await _manualStepsPerWindow(
+      windows,
+      rangeStart,
+      rangeEnd,
+    );
+    final aggregates = await _mapWithConcurrency<_Window, int?>(
+      windows,
+      _hourlyConcurrency,
+      (w) => _health.getTotalStepsInInterval(
+        w.start,
+        w.end,
+        includeManualEntry: true,
+      ),
+    );
+    final totals = List<int?>.filled(windows.length, null);
+    for (var i = 0; i < windows.length; i++) {
+      final agg = aggregates[i];
+      if (agg == null) continue; // read error — omit this bucket
+      totals[i] = accurateAndroidTotal(agg, manualByWindow[i]);
+    }
+    return totals;
+  }
+
+  /// Android only: reads manual-tagged step records ONCE across
+  /// `[rangeStart, rangeEnd)` and buckets their step counts into [windows] by
+  /// record start timestamp, returning a per-window manual sum aligned to
+  /// [windows]. See [bucketManualStepsIntoWindows] for the pure bucketing.
+  Future<List<int>> _manualStepsPerWindow(
+    List<_Window> windows,
+    DateTime rangeStart,
+    DateTime rangeEnd,
+  ) async {
+    final points = await _health.getHealthDataFromTypes(
+      types: const [HealthDataType.STEPS],
+      startTime: rangeStart,
+      endTime: rangeEnd,
+      recordingMethodsToFilter: const [
+        RecordingMethod.automatic,
+        RecordingMethod.active,
+        RecordingMethod.unknown,
+      ],
+    );
+    final manualEntries = <MapEntry<DateTime, int>>[];
+    for (final point in points) {
+      if (point.recordingMethod != RecordingMethod.manual) continue;
+      final value = point.value;
+      if (value is NumericHealthValue) {
+        manualEntries.add(MapEntry(point.dateFrom, value.numericValue.round()));
+      }
+    }
+    return bucketManualStepsIntoWindows(windows, manualEntries);
+  }
+
+  /// Pure bucketing: sums each manual entry's steps into the [windows] bucket
+  /// whose half-open `[start, end)` contains the entry's timestamp. Entries
+  /// outside every window (or exactly on a window's exclusive end with no next
+  /// window) are dropped. Returned list is aligned to [windows].
+  @visibleForTesting
+  static List<int> bucketManualStepsIntoWindows(
+    List<({DateTime start, DateTime end})> windows,
+    List<MapEntry<DateTime, int>> manualEntries,
+  ) {
+    final manual = List<int>.filled(windows.length, 0);
+    for (final entry in manualEntries) {
+      final ts = entry.key;
+      for (var i = 0; i < windows.length; i++) {
+        if (!ts.isBefore(windows[i].start) && ts.isBefore(windows[i].end)) {
+          manual[i] += entry.value;
+          break;
+        }
+      }
+    }
+    return manual;
+  }
+
+  /// Builds contiguous, chronological buckets over `[start, end)`. The first
+  /// bucket is aligned to the top of [start]'s hour (clamped up to [start]),
+  /// then each subsequent bucket steps by an ABSOLUTE `Duration(minutes:
+  /// bucketMinutes)` — never reconstructed from wall-clock fields — so a DST
+  /// transition still yields gap-free, equal-width UTC windows. The final
+  /// bucket is left partial (`bucketStart → end`).
+  @visibleForTesting
+  static List<({DateTime start, DateTime end})> buildBucketWindows(
+    DateTime start,
+    DateTime end,
+    int bucketMinutes,
+  ) {
+    final windows = <_Window>[];
+    var bucketStart = DateTime(start.year, start.month, start.day, start.hour);
+    if (bucketStart.isBefore(start)) {
+      bucketStart = start;
+    }
+    final step = Duration(minutes: bucketMinutes);
+    while (bucketStart.isBefore(end)) {
+      var bucketEnd = bucketStart.add(step);
+      if (bucketEnd.isAfter(end)) {
+        bucketEnd = end;
+      }
+      windows.add((start: bucketStart, end: bucketEnd));
+      bucketStart = bucketEnd;
+    }
+    return windows;
+  }
+
+  /// Emits one UTC [StepSampleData] per window with a positive total, aligned
+  /// by index to [totals]. Null/zero totals are dropped.
+  List<StepSampleData> _emitSamples(List<_Window> windows, List<int?> totals) {
     final samples = <StepSampleData>[];
     for (var i = 0; i < windows.length; i++) {
       final steps = totals[i];
@@ -269,7 +451,6 @@ class HealthService {
         );
       }
     }
-
     return samples;
   }
 
@@ -303,8 +484,6 @@ class HealthService {
   }
 }
 
-class _HourWindow {
-  const _HourWindow(this.start, this.end);
-  final DateTime start;
-  final DateTime end;
-}
+/// A half-open `[start, end)` bucket. A record alias so the public
+/// [HealthService.buildBucketWindows] does not leak a private class type.
+typedef _Window = ({DateTime start, DateTime end});

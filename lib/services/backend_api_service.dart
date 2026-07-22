@@ -116,8 +116,8 @@ class BackendApiService {
   // NOTE: the token must appear in BOTH branches of the ternary. Editing only
   // the ads branch silently disables the whole feature on ad-less builds.
   static final String clientFeaturesHeader = _adsSupported
-      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3'
-      : 'characters,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3';
+      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3,powerups4,stealth_runner_duration,hitchhike_effective_steps'
+      : 'characters,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3,powerups4,stealth_runner_duration,hitchhike_effective_steps';
   final HttpClient _httpClient;
   String? _cachedTimeZone;
   String? _cachedReleaseChannel;
@@ -2337,6 +2337,24 @@ class BackendApiService {
       identityToken: identityToken,
     );
 
+    return _decodeJsonResponse(response);
+  }
+
+  /// Quicksand's dedicated multi-target request. Kept separate from the
+  /// long-shipped single-target Dart method so existing injected API fakes and
+  /// clients retain their source-compatible interface.
+  Future<Map<String, dynamic>> useQuicksand({
+    required String identityToken,
+    required String raceId,
+    required String powerupId,
+    required List<String> targetUserIds,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races/$raceId/powerups/$powerupId/use',
+      body: <String, dynamic>{'targetUserIds': targetUserIds},
+      identityToken: identityToken,
+    );
     return _decodeJsonResponse(response);
   }
 

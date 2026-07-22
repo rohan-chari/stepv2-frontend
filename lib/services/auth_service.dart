@@ -48,9 +48,23 @@ bool isAuthenticationFailure(Object error) {
   return error is ApiException && error.statusCode == 401;
 }
 
+typedef AppleCredentialProvider =
+    Future<AuthorizationCredentialAppleID> Function();
+typedef GoogleAccountProvider = Future<GoogleSignInAccount?> Function();
+
 class AuthService extends ChangeNotifier {
-  AuthService({BackendApiService? backendApiService})
-    : _backendApiService = backendApiService ?? BackendApiService();
+  AuthService({
+    BackendApiService? backendApiService,
+    AppleCredentialProvider? appleCredentialProvider,
+    GoogleAccountProvider? googleAccountProvider,
+  }) : _backendApiService = backendApiService ?? BackendApiService(),
+       _appleCredentialProvider =
+           appleCredentialProvider ??
+           (() => SignInWithApple.getAppleIDCredential(
+             scopes: [AppleIDAuthorizationScopes.email],
+           )),
+       _googleAccountProvider =
+           googleAccountProvider ?? (() => _buildGoogleSignIn().signIn());
 
   static const _keyIdentityToken = 'auth_identity_token';
   static const _keyUserIdentifier = 'auth_user_identifier';
@@ -68,8 +82,10 @@ class AuthService extends ChangeNotifier {
   static const _keyHiddenFromLeaderboard = 'auth_hidden_from_leaderboard';
   static const _keyAutoJoinFeaturedRaces = 'auth_auto_join_featured_races';
   static const _keyBannerAdsEnabled = 'auth_banner_ads_enabled';
+  static const _keyDualBoxBannersEnabled = 'auth_dual_box_banners_enabled';
   static const _keyTeamRacesEnabled = 'auth_team_races_enabled';
   static const _keyOnboardingV2Enabled = 'auth_onboarding_v2_enabled';
+  static const _keyStepSampleBucketMinutes = 'auth_step_sample_bucket_minutes';
   static const _keyPendingShareToken = 'auth_pending_share_token';
   static const _keyPendingTournamentShareToken =
       'auth_pending_tournament_share_token';
@@ -88,6 +104,8 @@ class AuthService extends ChangeNotifier {
   static const Duration _pendingReferralMaxAge = Duration(days: 30);
 
   final BackendApiService _backendApiService;
+  final AppleCredentialProvider _appleCredentialProvider;
+  final GoogleAccountProvider _googleAccountProvider;
   String? _identityToken;
   String? _userIdentifier;
   String? _backendUserId;
@@ -104,8 +122,10 @@ class AuthService extends ChangeNotifier {
   bool _hiddenFromLeaderboard = false;
   bool _autoJoinFeaturedRaces = false;
   bool _bannerAdsEnabled = false;
+  bool _dualBoxBannersEnabled = false;
   bool _teamRacesEnabled = true;
   bool _onboardingV2Enabled = false;
+  int _stepSampleBucketMinutes = 60;
   String? _pendingShareToken;
   String? _pendingTournamentShareToken;
   Map<String, String>? _pendingInviterRace;
@@ -133,6 +153,7 @@ class AuthService extends ChangeNotifier {
   /// on /auth/me, toggleable from Admin → Settings). Mirrored into
   /// [AdService.remoteBannersEnabled] wherever it changes.
   bool get bannerAdsEnabled => _bannerAdsEnabled;
+  bool get dualBoxBannersEnabled => _dualBoxBannersEnabled;
 
   /// Remote kill switch for team-race CREATION (TR-107, backend
   /// `featureFlags.teamRacesEnabled`). Defaults ON; only an explicit `false`
@@ -143,6 +164,31 @@ class AuthService extends ChangeNotifier {
   /// Server-controlled activation flow. This deliberately defaults to false:
   /// frozen/older backend payloads must continue through the v1 onboarding.
   bool get onboardingV2Enabled => _onboardingV2Enabled;
+
+  /// Remotely-configurable step-sample bucket size in minutes (backend
+  /// `featureFlags.stepSampleBucketMinutes`). One of {5, 10, 15, 30, 60};
+  /// anything else — absent, null, out-of-set, or non-integer — resolves to 60
+  /// (hourly), so a new build against an older backend behaves exactly like
+  /// today. Persisted so a cold-start sync (which can run before the me-fetch
+  /// completes) uses the last-known granularity instead of reverting to hourly.
+  int get stepSampleBucketMinutes => _stepSampleBucketMinutes;
+
+  static const Set<int> _allowedStepSampleBucketMinutes = {5, 10, 15, 30, 60};
+
+  /// Resolves a raw `featureFlags.stepSampleBucketMinutes` value to an allowed
+  /// bucket size, defaulting to 60 for any non-integer / out-of-set input.
+  static int _resolveStepSampleBucketMinutes(dynamic raw) {
+    int? value;
+    if (raw is int) {
+      value = raw;
+    } else if (raw is num && raw == raw.toInt()) {
+      value = raw.toInt();
+    }
+    if (value != null && _allowedStepSampleBucketMinutes.contains(value)) {
+      return value;
+    }
+    return 60;
+  }
 
   /// A race share token captured from a deep link that has not yet been
   /// consumed (joined). Persisted so it survives the sign-in/onboarding gap on
@@ -203,8 +249,11 @@ class AuthService extends ChangeNotifier {
     _autoJoinFeaturedRaces = prefs.getBool(_keyAutoJoinFeaturedRaces) ?? false;
     _bannerAdsEnabled = prefs.getBool(_keyBannerAdsEnabled) ?? false;
     AdService.remoteBannersEnabled = _bannerAdsEnabled;
+    _dualBoxBannersEnabled = prefs.getBool(_keyDualBoxBannersEnabled) ?? false;
+    AdService.remoteDualBoxBannersEnabled = _dualBoxBannersEnabled;
     _teamRacesEnabled = prefs.getBool(_keyTeamRacesEnabled) ?? true;
     _onboardingV2Enabled = prefs.getBool(_keyOnboardingV2Enabled) ?? false;
+    _stepSampleBucketMinutes = prefs.getInt(_keyStepSampleBucketMinutes) ?? 60;
     _pendingShareToken = prefs.getString(_keyPendingShareToken);
     _pendingTournamentShareToken = prefs.getString(
       _keyPendingTournamentShareToken,
@@ -227,12 +276,13 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<bool> signInWithApple() async {
+    // Clear a previous attempt's message so dismissing Apple's sheet never
+    // resurfaces stale error copy.
+    _lastErrorMessage = null;
     try {
       // Only the email scope: the backend assigns a generated display name and
       // never uses the Apple real name, so we don't request (or send) it.
-      final credential = await SignInWithApple.getAppleIDCredential(
-        scopes: [AppleIDAuthorizationScopes.email],
-      );
+      final credential = await _appleCredentialProvider();
 
       final identityToken = credential.identityToken;
 
@@ -277,11 +327,21 @@ class AuthService extends ChangeNotifier {
       await _persist();
       notifyListeners();
       return true;
-    } catch (e) {
+    } on SignInWithAppleAuthorizationException catch (error) {
       _identityToken = null;
       _userIdentifier = null;
       _backendUserId = null;
-      _lastErrorMessage = e.toString();
+      _lastErrorMessage = error.code == AuthorizationErrorCode.canceled
+          ? null
+          : 'Apple sign-in couldn’t be completed. Please try again.';
+      notifyListeners();
+      return false;
+    } catch (_) {
+      _identityToken = null;
+      _userIdentifier = null;
+      _backendUserId = null;
+      _lastErrorMessage =
+          'We couldn’t sign you in with Apple. Check your connection and try again.';
       notifyListeners();
       return false;
     }
@@ -292,13 +352,12 @@ class AuthService extends ChangeNotifier {
   /// SharedPreferences key, so `restoreSession` and request auth work
   /// identically afterward. The Apple path is untouched.
   Future<bool> signInWithGoogle() async {
+    _lastErrorMessage = null;
     try {
-      final googleSignIn = _buildGoogleSignIn();
-
-      final account = await googleSignIn.signIn();
+      final account = await _googleAccountProvider();
       if (account == null) {
         // User dismissed the picker — not an error worth surfacing loudly.
-        _lastErrorMessage = 'Google sign-in was cancelled.';
+        _lastErrorMessage = null;
         notifyListeners();
         return false;
       }
@@ -337,11 +396,12 @@ class AuthService extends ChangeNotifier {
       await _persist();
       notifyListeners();
       return true;
-    } catch (e) {
+    } catch (_) {
       _identityToken = null;
       _userIdentifier = null;
       _backendUserId = null;
-      _lastErrorMessage = e.toString();
+      _lastErrorMessage =
+          'We couldn’t sign you in with Google. Check your connection and try again.';
       notifyListeners();
       return false;
     }
@@ -525,10 +585,18 @@ class AuthService extends ChangeNotifier {
       final flags = backendUser['featureFlags'];
       _bannerAdsEnabled = flags is Map && flags['bannerAdsEnabled'] == true;
       AdService.remoteBannersEnabled = _bannerAdsEnabled;
+      _dualBoxBannersEnabled =
+          flags is Map && flags['dualBoxBannersEnabled'] == true;
+      AdService.remoteDualBoxBannersEnabled = _dualBoxBannersEnabled;
       // TR-107 team-race creation kill switch. Opposite default from banners:
       // the feature ships ON, so only an explicit false disables it — an older
       // backend that omits the key must not hide the toggle.
       _teamRacesEnabled = !(flags is Map && flags['teamRacesEnabled'] == false);
+      // Step-sample granularity. Absent/null/out-of-set/non-integer -> 60
+      // (hourly), so an older backend that omits the key reads as hourly.
+      _stepSampleBucketMinutes = _resolveStepSampleBucketMinutes(
+        flags is Map ? flags['stepSampleBucketMinutes'] : null,
+      );
     }
     // Unlike team races, v2 is opt-in: within a payload that carries the
     // envelope, anything except the literal boolean true is the compatible v1
@@ -590,7 +658,12 @@ class AuthService extends ChangeNotifier {
     _tutorialOnboardingSeen = false;
     _hiddenFromLeaderboard = false;
     _autoJoinFeaturedRaces = false;
+    _bannerAdsEnabled = false;
+    AdService.remoteBannersEnabled = false;
+    _dualBoxBannersEnabled = false;
+    AdService.remoteDualBoxBannersEnabled = false;
     _onboardingV2Enabled = false;
+    _stepSampleBucketMinutes = 60;
     _pendingShareToken = null;
     _pendingTournamentShareToken = null;
 
@@ -609,7 +682,9 @@ class AuthService extends ChangeNotifier {
     await prefs.remove(_keyHiddenFromLeaderboard);
     await prefs.remove(_keyAutoJoinFeaturedRaces);
     await prefs.remove(_keyBannerAdsEnabled);
+    await prefs.remove(_keyDualBoxBannersEnabled);
     await prefs.remove(_keyOnboardingV2Enabled);
+    await prefs.remove(_keyStepSampleBucketMinutes);
     await prefs.remove(_keyPendingShareToken);
     await prefs.remove(_keyPendingTournamentShareToken);
     _pendingInviterRace = null;
@@ -852,7 +927,9 @@ class AuthService extends ChangeNotifier {
     await prefs.setBool(_keyTutorialOnboardingSeen, _tutorialOnboardingSeen);
     await prefs.setBool(_keyHiddenFromLeaderboard, _hiddenFromLeaderboard);
     await prefs.setBool(_keyBannerAdsEnabled, _bannerAdsEnabled);
+    await prefs.setBool(_keyDualBoxBannersEnabled, _dualBoxBannersEnabled);
     await prefs.setBool(_keyTeamRacesEnabled, _teamRacesEnabled);
     await prefs.setBool(_keyOnboardingV2Enabled, _onboardingV2Enabled);
+    await prefs.setInt(_keyStepSampleBucketMinutes, _stepSampleBucketMinutes);
   }
 }

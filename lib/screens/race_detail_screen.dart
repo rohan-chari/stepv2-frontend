@@ -246,8 +246,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   // optimistically, flipping both backend flags together.
   bool _placementMuted = false;
   bool _togglingPlacementMute = false;
-  Map<String, dynamic>? _starterReward;
-  bool _starterRewardModalShown = false;
   bool _alertPermissionUndetermined = false;
 
   // Activity tab (system/powerup events).
@@ -310,7 +308,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     _messageFocus.addListener(_onComposerFocusChanged);
     _loadDetails();
     if (widget.authService.onboardingV2Enabled) {
-      _loadStarterReward();
       _loadAlertPermissionState();
     }
   }
@@ -320,161 +317,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     if (service == null) return;
     final state = await service.getPermissionState();
     if (mounted) setState(() => _alertPermissionUndetermined = state == null);
-  }
-
-  Future<void> _loadStarterReward() async {
-    final token = widget.authService.authToken;
-    if (token == null || token.isEmpty) return;
-    try {
-      final reward = await _api.fetchStarterReward(identityToken: token);
-      if (!mounted) return;
-      setState(() => _starterReward = reward);
-      _maybeShowStarterRewardModal();
-    } on ApiException catch (error) {
-      // A 404 is an older backend: permanently hide this optional surface for
-      // this screen. Other failures are equally nonblocking and retry on pull.
-      if (error.statusCode != 404) return;
-    } catch (_) {}
-  }
-
-  bool get _showStarterReward {
-    final reward = _starterReward;
-    if (reward == null ||
-        reward['eligible'] != true ||
-        reward['claimed'] == true) {
-      return false;
-    }
-    final rewardRaceId = reward['raceId'] as String?;
-    return rewardRaceId == null || rewardRaceId == widget.raceId;
-  }
-
-  /// Claims the starter reward. Returns true when the grant landed, so the
-  /// modal knows to swap to its celebratory state; false means "close quietly"
-  /// (already claimed, an older backend without the endpoint, or a failure
-  /// that has already surfaced its own toast).
-  Future<bool> _claimStarterReward() async {
-    final token = widget.authService.authToken;
-    if (token == null || token.isEmpty) return false;
-    try {
-      final result = await _api.claimStarterReward(identityToken: token);
-      final coins = (result['coins'] as num?)?.toInt();
-      if (coins != null) await widget.authService.updateCoins(coins);
-      if (!mounted) return false;
-      setState(() {
-        _starterReward = {
-          ...?_starterReward,
-          'claimed': true,
-          'eligible': false,
-        };
-      });
-      return result['granted'] == true;
-    } on ApiException catch (error) {
-      if (!mounted) return false;
-      if (error.statusCode == 404) {
-        setState(() => _starterReward = null);
-      } else {
-        showErrorToast(context, error.message);
-      }
-      return false;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  /// Shows the bonus once per screen visit, as soon as both the reward lookup
-  /// and the race details have landed (they resolve independently). Guarded so
-  /// the second caller to arrive is the one that opens it.
-  void _maybeShowStarterRewardModal() {
-    if (_starterRewardModalShown) return;
-    if (!_showStarterReward) return;
-    if ((_race?['status'] as String?) != 'ACTIVE') return;
-    _starterRewardModalShown = true;
-    _showStarterRewardModal();
-  }
-
-  /// One dialog that carries the bonus end to end: it opens on the offer, and
-  /// swaps in place to the claimed state rather than stacking a second modal
-  /// on top of the first. `claiming` and `claimed` are local to this closure —
-  /// the dialog owns them via StatefulBuilder, since a screen-level setState
-  /// does not rebuild a route sitting above it.
-  Future<void> _showStarterRewardModal() {
-    final amount = (_starterReward?['amount'] as num?)?.toInt() ?? 100;
-    var claiming = false;
-    var claimed = false;
-
-    return showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      barrierColor: Colors.black.withValues(alpha: 0.62),
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setModalState) => Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-          child: GameContainer(
-            padding: const EdgeInsets.all(28),
-            frameColor: AppColors.of(context).accent,
-            surfaceColor: AppColors.of(context).parchmentLight,
-            glowColor: AppColors.of(context).coinMid,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SpinningCoin(size: 54),
-                const SizedBox(height: 14),
-                Text(
-                  claimed ? '+$amount COINS' : 'FIRST RACE BONUS',
-                  textAlign: TextAlign.center,
-                  style: PixelText.title(
-                    size: claimed ? 28 : 22,
-                    color: AppColors.of(context).textDark,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  claimed
-                      ? 'Starter reward claimed.'
-                      : 'A little fuel for your Bara debut.',
-                  textAlign: TextAlign.center,
-                  style: PixelText.body(
-                    size: 14,
-                    color: AppColors.of(context).textMid,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                PillButton(
-                  key: const Key('claim-starter-reward'),
-                  label: claimed
-                      ? 'LET’S RACE'
-                      : claiming
-                      ? 'CLAIMING...'
-                      : 'CLAIM $amount COINS',
-                  fullWidth: true,
-                  onPressed: claiming
-                      ? null
-                      : claimed
-                      ? () => Navigator.of(dialogContext).pop()
-                      : () async {
-                          setModalState(() => claiming = true);
-                          final granted = await _claimStarterReward();
-                          if (!dialogContext.mounted) return;
-                          // A refused claim has already toasted (or is simply
-                          // an old backend) — close rather than stranding the
-                          // user on a button that will not resolve.
-                          if (!granted) {
-                            Navigator.of(dialogContext).pop();
-                            return;
-                          }
-                          setModalState(() {
-                            claiming = false;
-                            claimed = true;
-                          });
-                        },
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
   }
 
   @override
@@ -647,7 +489,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       });
 
       if (details['status'] == 'ACTIVE') {
-        _maybeShowStarterRewardModal();
         _loadProgress(prefetched: progressPrefetch);
         _startPolling();
         _startCountdown();
@@ -1388,6 +1229,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     if (token == null || token.isEmpty) return;
 
     String? targetUserId;
+    List<String>? targetUserIds;
     String? targetDirection;
 
     final participants =
@@ -1402,7 +1244,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       race: _race ?? const {},
     );
 
-    if (type == 'PINECONE_TOSS') {
+    if (type == 'QUICKSAND') {
+      if (targets.isEmpty) {
+        if (mounted) showErrorToast(context, 'No targets available');
+        return;
+      }
+      targetUserIds = await _showQuicksandTargetPicker(targets);
+      if (targetUserIds == null) return;
+    } else if (type == 'PINECONE_TOSS') {
       targetDirection = await _showPineconeDirectionPicker();
       if (targetDirection == null) return;
     } else if (type == 'SNEAKY_SWAP') {
@@ -1446,15 +1295,22 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       powerup['id'] as String,
     );
     try {
-      final result = await _api.usePowerup(
-        identityToken: token,
-        raceId: widget.raceId,
-        powerupId: powerup['id'] as String,
-        targetUserId: targetUserId,
-        targetDirection: targetDirection,
-        targetEffectId: targetEffectId,
-        upgradeLevel: upgradeLevel,
-      );
+      final result = type == 'QUICKSAND'
+          ? await _api.useQuicksand(
+              identityToken: token,
+              raceId: widget.raceId,
+              powerupId: powerup['id'] as String,
+              targetUserIds: targetUserIds!,
+            )
+          : await _api.usePowerup(
+              identityToken: token,
+              raceId: widget.raceId,
+              powerupId: powerup['id'] as String,
+              targetUserId: targetUserId,
+              targetDirection: targetDirection,
+              targetEffectId: targetEffectId,
+              upgradeLevel: upgradeLevel,
+            );
 
       final res = result['result'] as Map<String, dynamic>?;
       final coinsSpent = _readInt(res?['coinsSpent'], fallback: 0);
@@ -1471,7 +1327,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       // Blocked/Reflected get a reveal-style modal (matching the mystery-box
       // UNBOX reveal); a normal/APPLIED outcome keeps the success toast.
       final outcome = attackOutcomeFromResult(res);
-      if (type == 'DEFENSE_SCAN') {
+      if (type == 'QUICKSAND') {
+        await _showQuicksandResults(res, targets);
+      } else if (type == 'DEFENSE_SCAN') {
         // X-Ray is an instantaneous intel read: the reveal rides back on the
         // use response as `scan` (contract puts it top-level; also check the
         // nested result for backend variance). Degrade safely if it's absent
@@ -1853,6 +1711,199 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           ),
         );
       },
+    );
+  }
+
+  Future<List<String>?> _showQuicksandTargetPicker(
+    List<Map<String, dynamic>> targets,
+  ) async {
+    final selected = <String>[];
+    return showModalBottomSheet<List<String>>(
+      context: context,
+      backgroundColor: AppColors.of(context).parchment,
+      isScrollControlled: true,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.72,
+      ),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 16, 18, 8),
+                child: Row(
+                  children: [
+                    const PowerupIcon(type: 'QUICKSAND', size: 28),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'CHOOSE UP TO 3 RIVALS',
+                        style: PixelText.title(
+                          size: 15,
+                          color: AppColors.of(context).textDark,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '${selected.length}/3',
+                      key: const Key('quicksand-target-count'),
+                      style: PixelText.title(
+                        size: 15,
+                        color: AppColors.of(context).accent,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Flexible(
+                child: ListView.builder(
+                  key: const Key('quicksand-target-list'),
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: targets.length,
+                  itemBuilder: (_, index) {
+                    final target = targets[index];
+                    final id = target['userId'] as String?;
+                    if (id == null || id.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+                    final checked = selected.contains(id);
+                    final capped = selected.length >= 3 && !checked;
+                    return Semantics(
+                      selected: checked,
+                      button: true,
+                      label: target['displayName'] as String? ?? 'Rival',
+                      child: CheckboxListTile(
+                        value: checked,
+                        onChanged: capped
+                            ? null
+                            : (_) => setSheetState(() {
+                                checked
+                                    ? selected.remove(id)
+                                    : selected.add(id);
+                              }),
+                        title: Text(
+                          target['displayName'] as String? ?? 'Rival',
+                          style: PixelText.body(
+                            size: 14,
+                            color: AppColors.of(context).textDark,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: PillButton(
+                        label: 'CANCEL',
+                        variant: PillButtonVariant.secondary,
+                        onPressed: () => Navigator.of(ctx).pop(),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: PillButton(
+                        key: const Key('quicksand-confirm'),
+                        label: 'USE QUICKSAND',
+                        onPressed: selected.isEmpty
+                            ? null
+                            : () => Navigator.of(
+                                ctx,
+                              ).pop(List<String>.unmodifiable(selected)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showQuicksandResults(
+    Map<String, dynamic>? result,
+    List<Map<String, dynamic>> targets,
+  ) async {
+    final raw = result?['targetResults'];
+    if (raw is! List) {
+      showInfoToast(context, 'Quicksand activated!');
+      return;
+    }
+    final names = <String, String>{
+      for (final target in targets)
+        if (target['userId'] is String)
+          target['userId'] as String:
+              target['displayName'] as String? ?? 'Rival',
+    };
+    final rows = raw.whereType<Map>().toList();
+    if (rows.isEmpty) {
+      showInfoToast(context, 'Quicksand activated!');
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: TrailSign(
+          width: 340,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'QUICKSAND RESULTS',
+                style: PixelText.title(
+                  size: 17,
+                  color: AppColors.of(context).textDark,
+                ),
+              ),
+              const SizedBox(height: 12),
+              for (final row in rows)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          names[row['targetUserId']] ?? 'Rival',
+                          style: PixelText.body(
+                            size: 13,
+                            color: AppColors.of(context).textDark,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        row['outcome'] == 'BLOCKED' ? 'BLOCKED' : 'FROZEN',
+                        style: PixelText.title(
+                          size: 12,
+                          color: row['outcome'] == 'BLOCKED'
+                              ? AppColors.of(context).error
+                              : AppColors.of(context).accent,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 12),
+              PillButton(
+                label: 'DONE',
+                fullWidth: true,
+                onPressed: () => Navigator.of(ctx).pop(),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -3344,6 +3395,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final leaderSteps = _leaderSteps(participants);
     final courseDenominator = _courseDenominator(leaderSteps);
 
+    final raceTargetTextColor = AppColors.of(context).isDark
+        ? AppColors.of(context).textLight
+        : AppColors.of(context).pillGold;
+
     return Column(
       children: [
         // THE RACE — full-bleed race-day hero with HUD chips on the sky.
@@ -3441,12 +3496,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                       textAlign: TextAlign.center,
                       style: PixelText.title(
                         size: 16,
-                        color: AppColors.of(context).pillGold,
+                        color: raceTargetTextColor,
                       ).copyWith(shadows: _headerTextShadows),
                     ),
                   if (finishRewardPool > 0) ...[
                     const SizedBox(height: 2),
                     Text(
+                      key: const Key('race-finish-reward-copy'),
                       finishRewardPlaces == 1
                           ? 'Winner takes $finishRewardPool gold'
                           : finishRewardPlaces > 1
@@ -3455,7 +3511,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                       textAlign: TextAlign.center,
                       style: PixelText.body(
                         size: 13,
-                        color: AppColors.of(context).pillGold,
+                        color: raceTargetTextColor,
                       ),
                     ),
                   ],

@@ -188,17 +188,25 @@ class _AdminSettingsCardState extends State<_AdminSettingsCard> {
   }
 
   Future<void> _setBannerAds(bool enabled) async {
+    await _setSetting('bannerAdsEnabled', enabled);
+  }
+
+  Future<void> _setDualBoxBanners(bool enabled) async {
+    await _setSetting('dualBoxBannersEnabled', enabled);
+  }
+
+  Future<void> _setSetting(String key, bool enabled) async {
     final token = widget.authService.authToken;
     if (token == null || _saving) return;
     final previous = _settings;
     setState(() {
       _saving = true;
-      _settings = {...?_settings, 'bannerAdsEnabled': enabled};
+      _settings = {...?_settings, key: enabled};
     });
     try {
       final updated = await _api.updateAdminSettings(
         identityToken: token,
-        settings: {'bannerAdsEnabled': enabled},
+        settings: {key: enabled},
       );
       if (mounted) setState(() => _settings = updated);
     } catch (_) {
@@ -214,6 +222,7 @@ class _AdminSettingsCardState extends State<_AdminSettingsCard> {
   @override
   Widget build(BuildContext context) {
     final bannerAdsEnabled = _settings?['bannerAdsEnabled'] == true;
+    final dualBoxBannersEnabled = _settings?['dualBoxBannersEnabled'] == true;
     return ContentBoard(
       width: widget.width,
       child: Column(
@@ -240,7 +249,7 @@ class _AdminSettingsCardState extends State<_AdminSettingsCard> {
                 color: AppColors.of(context).textMid,
               ),
             )
-          else
+          else ...[
             Row(
               children: [
                 Expanded(
@@ -248,7 +257,7 @@ class _AdminSettingsCardState extends State<_AdminSettingsCard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Banner ads (iOS)',
+                        'Banner ads',
                         style: PixelText.title(
                           size: 13,
                           color: AppColors.of(context).textDark,
@@ -271,6 +280,37 @@ class _AdminSettingsCardState extends State<_AdminSettingsCard> {
                 ),
               ],
             ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Dual box banners',
+                        style: PixelText.title(
+                          size: 13,
+                          color: AppColors.of(context).textDark,
+                        ),
+                      ),
+                      Text(
+                        'Adds the dedicated top placement to box screens.',
+                        style: PixelText.body(
+                          size: 11,
+                          color: AppColors.of(context).textMid,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: dualBoxBannersEnabled,
+                  onChanged: _saving ? null : _setDualBoxBanners,
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -279,24 +319,31 @@ class _AdminSettingsCardState extends State<_AdminSettingsCard> {
 
 /// Product-health snapshot (GET /admin/stats): invite funnel, friends
 /// distribution, DAU-in-race, and D1/D7 retention split by has-friend.
-class _AdminStatsCard extends StatefulWidget {
-  const _AdminStatsCard({required this.width, required this.authService});
+class AdminStatsCard extends StatefulWidget {
+  const AdminStatsCard({
+    super.key,
+    required this.width,
+    required this.authService,
+    this.backendApiService,
+  });
 
   final double width;
   final AuthService authService;
+  final BackendApiService? backendApiService;
 
   @override
-  State<_AdminStatsCard> createState() => _AdminStatsCardState();
+  State<AdminStatsCard> createState() => _AdminStatsCardState();
 }
 
-class _AdminStatsCardState extends State<_AdminStatsCard> {
-  final _api = BackendApiService();
+class _AdminStatsCardState extends State<AdminStatsCard> {
+  late final BackendApiService _api;
   Map<String, dynamic>? _stats;
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
+    _api = widget.backendApiService ?? BackendApiService();
     _load();
   }
 
@@ -362,11 +409,23 @@ class _AdminStatsCardState extends State<_AdminStatsCard> {
     return '$retained/$cohort ($pct%)';
   }
 
+  String _rewardedAdLine(Map<String, dynamic>? rewarded, String key) {
+    final value = rewarded?[key];
+    if (value is! Map) return '—';
+    final count = value['uniqueDauWatchers'];
+    final pct = value['pctOfDau'];
+    if (count is! num || pct is! num) return '—';
+    return '${count.toInt()} (${pct.toInt()}%)';
+  }
+
   @override
   Widget build(BuildContext context) {
     final stats = _stats;
     final users = stats?['users'] as Map<String, dynamic>?;
     final activity = stats?['activity'] as Map<String, dynamic>?;
+    final rewardedAds = activity?['rewardedAds'] is Map<String, dynamic>
+        ? activity!['rewardedAds'] as Map<String, dynamic>
+        : null;
     final friends =
         (stats?['friends'] as Map<String, dynamic>?)?['distribution']
             as Map<String, dynamic>?;
@@ -423,6 +482,14 @@ class _AdminStatsCardState extends State<_AdminStatsCard> {
             ),
             _section('TODAY'),
             _row('DAU (stepped today)', '${activity?['dauToday'] ?? '—'}'),
+            _row(
+              'DAU watched coin ad',
+              _rewardedAdLine(rewardedAds, 'coinReward'),
+            ),
+            _row(
+              'DAU watched extra-spin ad',
+              _rewardedAdLine(rewardedAds, 'extraSpin'),
+            ),
             _row(
               'In an active race',
               '${activity?['dauInActiveRace'] ?? '—'} '
@@ -516,7 +583,7 @@ class AdminScreen extends StatelessWidget {
                   showErrorToast: showErrorToast,
                 ),
                 const SizedBox(height: 24),
-                _AdminStatsCard(width: boardWidth, authService: authService),
+                AdminStatsCard(width: boardWidth, authService: authService),
                 const SizedBox(height: 24),
                 ContentBoard(
                   width: boardWidth,

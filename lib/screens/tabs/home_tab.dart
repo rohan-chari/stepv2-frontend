@@ -576,6 +576,10 @@ class HomeTab extends StatelessWidget {
   /// Trailing card in the active-races row: tap to browse/join a public race,
   /// then refresh so a newly-joined race shows up in the row.
   Widget _buildJoinPublicRaceCard(BuildContext context) {
+    final palette = AppColors.of(context);
+    final publicAccent = palette.isDark
+        ? palette.pillTerra
+        : palette.pillGoldDark;
     return GestureDetector(
       onTap: () async {
         await Navigator.of(context).push(
@@ -589,6 +593,7 @@ class HomeTab extends StatelessWidget {
         width: 136,
         height: 222,
         child: PulseGlow(
+          color: publicAccent,
           borderRadius: 14,
           minAlpha: 0.14,
           maxAlpha: 0.38,
@@ -596,10 +601,7 @@ class HomeTab extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppColors.of(context).parchment,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: AppColors.of(context).pillGoldDark,
-                width: 2,
-              ),
+              border: Border.all(color: publicAccent, width: 2),
             ),
             child: Center(
               child: Padding(
@@ -609,9 +611,12 @@ class HomeTab extends StatelessWidget {
                   children: [
                     WobbleBadge(
                       child: Icon(
+                        key: const Key('home-public-race-add-icon'),
                         Icons.add_circle_rounded,
                         size: 42,
-                        color: AppColors.of(context).pillGoldShadow,
+                        color: palette.isDark
+                            ? publicAccent
+                            : palette.pillGoldShadow,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -1033,6 +1038,7 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
         if (showProfilePhotoPrompt)
           _HomeNoticeRow(
             icon: Icons.add_a_photo_rounded,
+            iconKey: const Key('home-profile-photo-prompt-icon'),
             title: 'Add a profile photo?',
             subtitle:
                 'Make it easier for friends to spot you in races and leaderboards.',
@@ -1041,7 +1047,9 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
                 child: PillButton(
                   label: 'ADD PHOTO',
                   icon: Icons.add_a_photo_rounded,
-                  variant: PillButtonVariant.primary,
+                  variant: AppColors.of(context).isDark
+                      ? PillButtonVariant.accent
+                      : PillButtonVariant.primary,
                   fontSize: 13,
                   fullWidth: true,
                   onPressed: _isSavingDismissal
@@ -1083,12 +1091,14 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
 class _HomeNoticeRow extends StatelessWidget {
   const _HomeNoticeRow({
     required this.icon,
+    this.iconKey,
     required this.title,
     required this.subtitle,
     required this.actions,
   });
 
   final IconData icon;
+  final Key? iconKey;
   final String title;
   final String subtitle;
   final List<Widget> actions;
@@ -1114,7 +1124,14 @@ class _HomeNoticeRow extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(icon, size: 24, color: AppColors.of(context).roofMid),
+                  Icon(
+                    icon,
+                    key: iconKey,
+                    size: 24,
+                    color: AppColors.of(context).isDark
+                        ? AppColors.of(context).accentLight
+                        : AppColors.of(context).roofMid,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(

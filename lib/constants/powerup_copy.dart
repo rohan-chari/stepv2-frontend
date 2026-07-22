@@ -46,9 +46,11 @@ const List<String> kTargetedPowerupTypes = [
   'SIGNAL_JAMMER',
   // LEECH picks a rival to drain.
   'LEECH',
-  // HITCHHIKE picks a rival whose raw steps get copied into your score. They
-  // keep theirs — nothing is taken (§7.1).
+  // HITCHHIKE picks a rival whose effective steps get copied into your score,
+  // including boosts and reversals. They keep theirs — nothing is taken.
   'HITCHHIKE',
+  // QUICKSAND selects up to three rivals in its dedicated multi-target flow.
+  'QUICKSAND',
 ];
 
 /// Thrown by a fetcher when `/powerups/catalog` answered but not usefully
@@ -376,6 +378,7 @@ abstract final class PowerupCopy {
     'DEFENSE_SCAN': 'X-Ray',
     'HITCHHIKE': 'Hitchhike',
     'QUICK_RINSE': 'Quick Rinse',
+    'QUICKSAND': 'Quicksand',
   };
 
   /// Labels that are NOT user-renderable powerup types but which former call
@@ -395,7 +398,7 @@ abstract final class PowerupCopy {
     'RUNNERS_HIGH': '2x steps for 3 hours',
     'SECOND_WIND': 'Bonus steps based on how far behind you are',
     'STEALTH_MODE':
-        'Hide your name, steps, and position on the track for 4 hours',
+        'Hide your name, steps, and track position while Stealth is active',
     'WRONG_TURN': "Reverse a rival's steps for 1 hour",
     'FANNY_PACK': 'Unlock an extra powerup slot',
     'TRAIL_MIX': '+100 steps per unique powerup type used',
@@ -425,9 +428,11 @@ abstract final class PowerupCopy {
         "Instantly reveal every opponent's active defenses (shields and mirrors)",
     // Also duration-neutral: the window is a backend-tuned value.
     'HITCHHIKE':
-        "Copy a rival's steps into your own score as they walk — they keep every one of theirs. Compression Socks block it; Mirrors can't reflect it",
+        "Copy a rival's effective steps into your score while Hitchhike is active — boosts and reversals carry over",
     'QUICK_RINSE':
         'Cut the remaining time on every opponent effect currently on you in half',
+    'QUICKSAND':
+        "Freeze up to three rivals' steps for 2 hours. Compression Socks resolve separately for each target",
   };
 
   // Short-form copy for the active-effects rail, where the countdown badge on
@@ -450,6 +455,7 @@ abstract final class PowerupCopy {
     'SIGNAL_JAMMER': 'Powerups jammed',
     'LEECH': 'Steps being stolen',
     'HITCHHIKE': 'Steps being copied',
+    'QUICKSAND': 'Steps frozen',
   };
 
   static const _bundledUpgradeTierLabels = {

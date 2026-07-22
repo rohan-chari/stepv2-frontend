@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 
@@ -87,23 +88,63 @@ void main() {
     );
   });
 
+  test('dismissing Apple sign-in is a silent cancellation', () async {
+    final authService = AuthService(
+      appleCredentialProvider: () async =>
+          throw const SignInWithAppleAuthorizationException(
+            code: AuthorizationErrorCode.canceled,
+            message: 'The operation was cancelled.',
+          ),
+    );
+
+    expect(await authService.signInWithApple(), isFalse);
+    expect(authService.lastErrorMessage, isNull);
+  });
+
+  test('a genuine Apple sign-in failure gets friendly copy', () async {
+    final authService = AuthService(
+      appleCredentialProvider: () async =>
+          throw const SignInWithAppleAuthorizationException(
+            code: AuthorizationErrorCode.failed,
+            message: 'Raw native SDK details',
+          ),
+    );
+
+    expect(await authService.signInWithApple(), isFalse);
+    expect(
+      authService.lastErrorMessage,
+      'Apple sign-in couldn’t be completed. Please try again.',
+    );
+    expect(authService.lastErrorMessage, isNot(contains('Raw native')));
+  });
+
+  test('dismissing Google sign-in is a silent cancellation', () async {
+    final authService = AuthService(googleAccountProvider: () async => null);
+
+    expect(await authService.signInWithGoogle(), isFalse);
+    expect(authService.lastErrorMessage, isNull);
+  });
+
   test('pendingShareToken defaults to null', () async {
     final authService = AuthService();
     await authService.restoreSession();
     expect(authService.pendingShareToken, isNull);
   });
 
-  test('setPendingShareToken persists across instances (survives install gap)', () async {
-    final authService = AuthService();
-    await authService.setPendingShareToken('tok-abc');
-    expect(authService.pendingShareToken, 'tok-abc');
+  test(
+    'setPendingShareToken persists across instances (survives install gap)',
+    () async {
+      final authService = AuthService();
+      await authService.setPendingShareToken('tok-abc');
+      expect(authService.pendingShareToken, 'tok-abc');
 
-    // A fresh instance (e.g. relaunch after onboarding) restores the token, so
-    // the share intent survives the sign-in/onboarding gap.
-    final restored = AuthService();
-    await restored.restoreSession();
-    expect(restored.pendingShareToken, 'tok-abc');
-  });
+      // A fresh instance (e.g. relaunch after onboarding) restores the token, so
+      // the share intent survives the sign-in/onboarding gap.
+      final restored = AuthService();
+      await restored.restoreSession();
+      expect(restored.pendingShareToken, 'tok-abc');
+    },
+  );
 
   test('setPendingShareToken(null) clears the persisted token', () async {
     final authService = AuthService();
@@ -140,15 +181,18 @@ void main() {
     expect(authService.pendingReferralCode, isNull);
   });
 
-  test('setPendingReferralCode persists across instances (survives install gap)', () async {
-    final authService = AuthService();
-    await authService.setPendingReferralCode('BARA-7F3K');
-    expect(authService.pendingReferralCode, 'BARA-7F3K');
+  test(
+    'setPendingReferralCode persists across instances (survives install gap)',
+    () async {
+      final authService = AuthService();
+      await authService.setPendingReferralCode('BARA-7F3K');
+      expect(authService.pendingReferralCode, 'BARA-7F3K');
 
-    final restored = AuthService();
-    await restored.restoreSession();
-    expect(restored.pendingReferralCode, 'BARA-7F3K');
-  });
+      final restored = AuthService();
+      await restored.restoreSession();
+      expect(restored.pendingReferralCode, 'BARA-7F3K');
+    },
+  );
 
   test('setPendingReferralCode is first-capture-wins (no overwrite)', () async {
     final authService = AuthService();
@@ -210,31 +254,34 @@ void main() {
     },
   );
 
-  test('updateLeaderboardVisibility calls the API, updates state, notifies', () async {
-    SharedPreferences.setMockInitialValues({
-      'auth_identity_token': 'apple-token',
-      'auth_user_identifier': 'apple-user-123',
-      'auth_session_token': 'session-token',
-    });
-    final api = _RecordingLeaderboardApi();
-    final authService = AuthService(backendApiService: api);
-    await authService.restoreSession();
+  test(
+    'updateLeaderboardVisibility calls the API, updates state, notifies',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'auth_identity_token': 'apple-token',
+        'auth_user_identifier': 'apple-user-123',
+        'auth_session_token': 'session-token',
+      });
+      final api = _RecordingLeaderboardApi();
+      final authService = AuthService(backendApiService: api);
+      await authService.restoreSession();
 
-    var notified = 0;
-    authService.addListener(() => notified++);
+      var notified = 0;
+      authService.addListener(() => notified++);
 
-    await authService.updateLeaderboardVisibility(true);
+      await authService.updateLeaderboardVisibility(true);
 
-    expect(api.calls, 1);
-    expect(api.lastHidden, isTrue);
-    expect(authService.hiddenFromLeaderboard, isTrue);
-    expect(notified, greaterThan(0));
+      expect(api.calls, 1);
+      expect(api.lastHidden, isTrue);
+      expect(authService.hiddenFromLeaderboard, isTrue);
+      expect(notified, greaterThan(0));
 
-    // Persisted: a fresh instance restores the toggle.
-    final restored = AuthService();
-    await restored.restoreSession();
-    expect(restored.hiddenFromLeaderboard, isTrue);
-  });
+      // Persisted: a fresh instance restores the toggle.
+      final restored = AuthService();
+      await restored.restoreSession();
+      expect(restored.hiddenFromLeaderboard, isTrue);
+    },
+  );
 
   test('welcomeReferralCode restores and clears (one-shot)', () async {
     SharedPreferences.setMockInitialValues({

@@ -6,10 +6,13 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart' as apple;
 
 import 'display_name_screen.dart';
 import 'main_shell.dart';
+import '../config/start_cape_metadata.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
 import '../styles.dart';
 import '../widgets/error_toast.dart';
+import '../widgets/home_course_track.dart';
+import '../widgets/home_hero_scene.dart';
 
 class StartScreen extends StatefulWidget {
   const StartScreen({super.key, this.notificationService});
@@ -136,169 +139,180 @@ class _StartScreenState extends State<StartScreen> {
     }
 
     if (!mounted) return;
-    showErrorToast(
-      context,
-      _authService.lastErrorMessage ??
-          (withGoogle ? 'Google sign-in failed.' : 'Apple sign-in failed.'),
-    );
+    final errorMessage = _authService.lastErrorMessage;
+    // Closing an Apple/Google account picker is a normal navigation choice,
+    // not an error. AuthService leaves the message null for that path.
+    if (errorMessage == null) return;
+    showErrorToast(context, errorMessage);
   }
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle(
-        statusBarColor: AppColors.of(context).roofLight,
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
         statusBarIconBrightness: Brightness.light,
         statusBarBrightness: Brightness.dark,
       ),
-      child: Scaffold(
-        backgroundColor: AppColors.of(context).roofLight,
-        body: Stack(
-          children: [
-            const Positioned.fill(
-              child: CustomPaint(
-                painter: ArcadeCheckerPainter(drawBottomStripe: false),
-              ),
-            ),
-            SafeArea(child: _buildContent()),
-          ],
-        ),
-      ),
+      child: Scaffold(backgroundColor: colors.parchment, body: _buildContent()),
     );
   }
 
   Widget _buildContent() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final compact = constraints.maxHeight < 680;
+        final compact = constraints.maxHeight < 720;
+        final groundHeight = compact ? 72.0 : 88.0;
 
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(25, 12, 25, 28),
-          child: Stack(
-            children: [
-              Align(
-                alignment: Alignment(0, compact ? -0.12 : -0.06),
-                child: _buildBrandHero(compact: compact),
+        return Column(
+          children: [
+            Expanded(
+              child: HomeHeroScene(
+                groundHeight: groundHeight,
+                skyAlignment: const Alignment(0.6, 1),
+                child: SafeArea(
+                  bottom: false,
+                  child: _buildBrandHero(
+                    compact: compact,
+                    groundHeight: groundHeight,
+                  ),
+                ),
               ),
-              Align(
-                alignment: Alignment(0, compact ? 0.84 : 0.88),
-                child: _buildAppleSignInPrompt(compact: compact),
-              ),
-            ],
-          ),
+            ),
+            _buildSignInDock(compact: compact),
+          ],
         );
       },
     );
   }
 
-  Widget _buildBrandHero({required bool compact}) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _onReviewerTitleTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: compact ? 260 : 322,
-              height: compact ? 92 : 112,
-              child: Stack(
-                clipBehavior: Clip.none,
-                alignment: Alignment.center,
-                children: [
-                  Positioned(
-                    left: compact ? -24 : -44,
-                    bottom: compact ? -12 : -18,
-                    child: _WalkingInPlaceCapybara(size: compact ? 92 : 112),
-                  ),
-                  Center(
-                    child: Text(
-                      'Bara',
-                      textAlign: TextAlign.center,
-                      style:
-                          PixelText.title(
-                            size: compact ? 66 : 82,
-                            color: AppColors.of(context).textLight,
-                          ).copyWith(
-                            height: 0.9,
-                            fontWeight: FontWeight.w800,
-                            shadows: _textShadows,
-                          ),
-                    ),
-                  ),
-                ],
+  Widget _buildBrandHero({
+    required bool compact,
+    required double groundHeight,
+  }) {
+    final capySize = compact ? 146.0 : 184.0;
+    return Stack(
+      children: [
+        Positioned(
+          top: compact ? 8 : 18,
+          left: 20,
+          right: 20,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _onReviewerTitleTap,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Bara',
+                  textAlign: TextAlign.center,
+                  style:
+                      PixelText.title(
+                        size: compact ? 58 : 70,
+                        color: AppColors.of(context).textLight,
+                      ).copyWith(
+                        height: 0.92,
+                        fontWeight: FontWeight.w800,
+                        shadows: _textShadows,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: groundHeight - 4 - capySize * 0.22,
+          child: Center(child: _CapeCapybara(size: capySize)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSignInDock({required bool compact}) {
+    final colors = AppColors.of(context);
+    return Container(
+      key: const Key('start-sign-in-dock'),
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: colors.parchment,
+        border: Border(top: BorderSide(color: colors.woodDark, width: 3)),
+        boxShadow: [
+          BoxShadow(
+            color: colors.woodShadow.withValues(alpha: 0.28),
+            offset: const Offset(0, -5),
+            blurRadius: 14,
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(24, compact ? 13 : 16, 24, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'READY TO RACE?',
+                style: PixelText.title(
+                  size: compact ? 16 : 18,
+                  color: colors.textDark,
+                ),
+                textAlign: TextAlign.center,
               ),
-            ),
-            const SizedBox(height: 0),
-            Text(
-              'step races',
-              style:
-                  PixelText.body(
-                    size: compact ? 13 : 15,
-                    color: AppColors.of(context).textLight,
-                  ).copyWith(
-                    letterSpacing: 5.5,
-                    fontWeight: FontWeight.w500,
-                    shadows: _textShadows,
-                  ),
-              textAlign: TextAlign.center,
-            ),
-          ],
+              const SizedBox(height: 4),
+              Text(
+                'Race your friends, earn powerups, and climb the leaderboard.',
+                style: PixelText.body(
+                  size: compact ? 12 : 13,
+                  color: colors.textMid,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: compact ? 10 : 13),
+              _buildSignInButtons(compact: compact),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildAppleSignInPrompt({required bool compact}) {
+  Widget _buildSignInButtons({required bool compact}) {
+    if (_isSigningIn) {
+      return SizedBox(
+        height: compact ? 52 : 54,
+        child: Center(
+          child: CircularProgressIndicator(color: AppColors.of(context).accent),
+        ),
+      );
+    }
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          'Race your friends, earn powerups,\nand climb the leaderboard.',
-          style: PixelText.body(
-            size: compact ? 13 : 14,
-            color: AppColors.of(context).textLight.withValues(alpha: 0.9),
-          ).copyWith(shadows: _textShadows),
-          textAlign: TextAlign.center,
-        ),
-        SizedBox(height: compact ? 12 : 16),
-        _isSigningIn
-            ? SizedBox(
-                height: 54,
-                child: Center(
-                  child: CircularProgressIndicator(
-                    color: AppColors.of(context).textLight,
-                  ),
-                ),
-              )
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Android is Google-only. iOS leads with Apple (App Store
-                  // requirement + where existing accounts live) and offers
-                  // Google underneath when this build carries an iOS Google
-                  // client id (see kGoogleIosClientId).
-                  if (!Platform.isAndroid)
-                    SizedBox(
-                      width: double.infinity,
-                      child: apple.SignInWithAppleButton(
-                        onPressed: () => _onStart(withGoogle: false),
-                        height: compact ? 52 : 54,
-                        borderRadius: BorderRadius.circular(8),
-                        iconAlignment: apple.IconAlignment.left,
-                      ),
-                    ),
-                  if (Platform.isAndroid || isGoogleSignInAvailable) ...[
-                    if (!Platform.isAndroid)
-                      SizedBox(height: compact ? 10 : 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: _buildGoogleSignInButton(compact: compact),
-                    ),
-                  ],
-                ],
-              ),
+        // Android is Google-only. iOS leads with Apple (App Store requirement
+        // + where existing accounts live) and offers Google underneath when
+        // this build carries an iOS Google client id (see kGoogleIosClientId).
+        if (!Platform.isAndroid)
+          SizedBox(
+            width: double.infinity,
+            child: apple.SignInWithAppleButton(
+              onPressed: () => _onStart(withGoogle: false),
+              height: compact ? 52 : 54,
+              borderRadius: BorderRadius.circular(8),
+              iconAlignment: apple.IconAlignment.left,
+            ),
+          ),
+        if (Platform.isAndroid || isGoogleSignInAvailable) ...[
+          if (!Platform.isAndroid) SizedBox(height: compact ? 10 : 12),
+          SizedBox(
+            width: double.infinity,
+            child: _buildGoogleSignInButton(compact: compact),
+          ),
+        ],
       ],
     );
   }
@@ -362,68 +376,49 @@ class _StartScreenState extends State<StartScreen> {
   }
 }
 
-class _WalkingInPlaceCapybara extends StatefulWidget {
-  const _WalkingInPlaceCapybara({required this.size});
+class _CapeCapybara extends StatefulWidget {
+  const _CapeCapybara({required this.size});
 
   final double size;
 
   @override
-  State<_WalkingInPlaceCapybara> createState() =>
-      _WalkingInPlaceCapybaraState();
+  State<_CapeCapybara> createState() => _CapeCapybaraState();
 }
 
-class _WalkingInPlaceCapybaraState extends State<_WalkingInPlaceCapybara>
-    with SingleTickerProviderStateMixin {
-  static const int _frameCount = 6;
-
-  late final AnimationController _controller;
+class _CapeCapybaraState extends State<_CapeCapybara> {
+  // Starts on the compiled prod-tuning snapshot, then swaps to the cached
+  // tuner item (bobble + renderMetadata, saved by the shop-catalog funnel)
+  // once loaded — so this renders exactly what the Accessory Tuner renders,
+  // without a pre-auth network dependency.
+  Map<String, dynamic> _capeItem = StartCapeMetadata.fallback;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 760),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
+    StartCapeMetadata.load().then((item) {
+      if (mounted && !identical(item, StartCapeMetadata.fallback)) {
+        setState(() => _capeItem = item);
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final size = widget.size;
-
-    return SizedBox(
-      width: size,
-      height: size,
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          final frameIndex =
-              (_controller.value * _frameCount).floor() % _frameCount;
-
-          return ClipRect(
-            child: OverflowBox(
-              maxWidth: double.infinity,
-              alignment: Alignment.centerLeft,
-              child: Transform.translate(
-                offset: Offset(-frameIndex * size, 0),
-                child: Image.asset(
-                  'assets/images/capybara_walk_right.png',
-                  width: size * _frameCount,
-                  height: size,
-                  fit: BoxFit.contain,
-                  alignment: Alignment.centerLeft,
-                  filterQuality: FilterQuality.none,
-                ),
-              ),
-            ),
-          );
-        },
+    return Semantics(
+      image: true,
+      label: 'Capybara wearing a red racing cape',
+      child: CapybaraCustomizationPreview(
+        key: const Key('start-cape-capybara'),
+        accessories: [
+          {
+            'assetKey': 'cape',
+            'slot': 'BACK',
+            'bobble': _capeItem['bobble'] == true,
+            'renderMetadata': _capeItem['renderMetadata'],
+          },
+        ],
+        size: widget.size,
+        showShadow: false,
       ),
     );
   }

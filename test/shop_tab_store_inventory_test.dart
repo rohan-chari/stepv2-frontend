@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/tabs/shop_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/styles.dart';
 
 // Store/Inventory overhaul for the shop tab.
 //
@@ -178,6 +179,33 @@ Future<void> _selectCategory(WidgetTester tester, String label) async {
 }
 
 void main() {
+  testWidgets('shop tabs stay legible in dark mode', (tester) async {
+    final auth = await _createAuthService();
+    final api = _FakeShopApi(
+      catalog: _catalog(),
+      powerupCatalog: _powerupCatalog(),
+      inventory: _inventory(),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppThemeData.night(),
+        home: ShopTab(authService: auth, backendApiService: api),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    for (final label in ['INVENTORY', 'CHARACTERS', 'ACCESSORIES']) {
+      expect(
+        tester.widget<Text>(find.text(label)).style?.color,
+        label == 'INVENTORY'
+            ? AppPalette.night.textLight
+            : AppPalette.night.textLight.withValues(alpha: 0.88),
+      );
+    }
+  });
+
   testWidgets('STORE shows Imposter (75 coins) as a purchasable powerup',
       (tester) async {
     final auth = await _createAuthService();

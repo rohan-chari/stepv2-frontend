@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/public_races_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/styles.dart';
 import 'package:step_tracker/widgets/pill_button.dart';
 
 // Spec §9/§10: the public races screen pins FEATURED cards per active seed
@@ -92,6 +93,35 @@ Map<String, dynamic> _featured({
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('unselected public-race filters stay legible in dark mode', (
+    tester,
+  ) async {
+    final auth = await _auth();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppThemeData.night(),
+        home: PublicRacesScreen(
+          authService: auth,
+          backendApiService: _FakeApi(featured: [_featured()]),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    await tester.pump(const Duration(milliseconds: 60));
+
+    for (final key in const [
+      Key('public-filter-featured'),
+      Key('public-filter-tournaments'),
+      Key('public-filter-races'),
+    ]) {
+      final label = tester.widget<Text>(
+        find.descendant(of: find.byKey(key), matching: find.byType(Text)),
+      );
+      expect(label.style?.color, AppPalette.night.textLight);
+    }
+  });
 
   testWidgets('open featured card shows JOIN and the prize', (tester) async {
     await _pump(tester, _FakeApi(featured: [_featured()]));

@@ -5,6 +5,8 @@ import 'package:step_tracker/models/step_data.dart';
 import 'package:step_tracker/screens/tabs/home_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/styles.dart';
+import 'package:step_tracker/widgets/pill_button.dart';
 
 class _FakeBackendApiService extends BackendApiService {
   @override
@@ -48,8 +50,10 @@ Widget _buildHome(
   AuthService authService, {
   Future<void> Function()? onAddProfilePhoto,
   Future<bool> Function()? onDismissProfilePhotoPrompt,
+  ThemeData? theme,
 }) {
   return MaterialApp(
+    theme: theme,
     home: Scaffold(
       body: HomeTab(
         stepData: StepData(steps: 2400, date: DateTime(2026, 4, 8)),
@@ -74,6 +78,37 @@ Widget _buildHome(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('profile-photo prompt uses legible dark-mode accents', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final authService = await _createAuthService();
+
+    await tester.pumpWidget(
+      _buildHome(authService, theme: AppThemeData.night()),
+    );
+
+    final camera = tester.widget<Icon>(
+      find.byKey(const Key('home-profile-photo-prompt-icon')),
+    );
+    expect(camera.color, AppPalette.night.accentLight);
+
+    final addPhoto = tester.widget<PillButton>(
+      find.byWidgetPredicate(
+        (widget) => widget is PillButton && widget.label == 'ADD PHOTO',
+      ),
+    );
+    expect(addPhoto.variant, PillButtonVariant.accent);
+
+    final noThanks = tester.widget<PillButton>(
+      find.byWidgetPredicate(
+        (widget) => widget is PillButton && widget.label == 'NO THANKS',
+      ),
+    );
+    expect(noThanks.variant, PillButtonVariant.secondary);
+  });
 
   testWidgets(
     'HomeTab shows the profile photo prompt when display name exists and no photo is set',

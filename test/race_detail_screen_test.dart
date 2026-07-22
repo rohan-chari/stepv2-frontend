@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/race_detail_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/styles.dart';
 import 'package:step_tracker/widgets/home_course_track.dart';
 import 'package:step_tracker/widgets/retro_card.dart';
 
@@ -241,6 +242,22 @@ class _FieldScaledPayoutRaceBackendApiService
   }
 }
 
+class _FinishRewardRaceBackendApiService
+    extends _ActivePaidRaceBackendApiService {
+  @override
+  Future<Map<String, dynamic>> fetchRaceDetails({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    final race = await super.fetchRaceDetails(
+      identityToken: identityToken,
+      raceId: raceId,
+    );
+    race['finishReward'] = const {'pool': 300, 'paidPlaces': 7};
+    return race;
+  }
+}
+
 Future<AuthService> _createAuthService() async {
   SharedPreferences.setMockInitialValues({
     'auth_identity_token': 'apple-token',
@@ -469,6 +486,34 @@ void main() {
         findsNothing,
       );
       expect(find.byType(HomeCourseTrack), findsOneWidget);
+
+      await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'RaceDetailScreen keeps active-race reward copy legible at night',
+    (WidgetTester tester) async {
+      final authService = await _createAuthService();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppThemeData.night(),
+          home: RaceDetailScreen(
+            authService: authService,
+            raceId: 'race-2',
+            backendApiService: _FinishRewardRaceBackendApiService(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      final rewardCopy = tester.widget<Text>(
+        find.byKey(const Key('race-finish-reward-copy')),
+      );
+      expect(rewardCopy.style?.color, AppPalette.night.textLight);
 
       await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
       await tester.pumpAndSettle();

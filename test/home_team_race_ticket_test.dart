@@ -5,6 +5,7 @@ import 'package:step_tracker/models/step_data.dart';
 import 'package:step_tracker/screens/tabs/home_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/styles.dart';
 import 'package:step_tracker/utils/team_race.dart';
 import 'package:step_tracker/widgets/race_ui.dart';
 import 'package:step_tracker/widgets/team_scoreline.dart';
@@ -32,53 +33,58 @@ Future<AuthService> _createAuthService() async {
 }
 
 Map<String, dynamic> _raceCard({required bool team}) => {
-      'state': 'ACTIVE_RACES',
-      'data': {
-        'races': [
+  'state': 'ACTIVE_RACES',
+  'data': {
+    'races': [
+      {
+        'raceId': 'race-1',
+        'name': team ? 'Team Clash' : 'Solo Sprint',
+        'endsAt': DateTime.now()
+            .add(const Duration(days: 2))
+            .toUtc()
+            .toIso8601String(),
+        'userPlacement': 2,
+        'participantCount': 4,
+        if (team) ...{
+          'isTeamRace': true,
+          'teamSize': 2,
+          'teamAName': 'Swift Capys',
+          'teamBName': 'Turbo Beavers',
+          'teams': {
+            'teamA': {'totalSteps': 12340, 'memberCount': 2},
+            'teamB': {'totalSteps': 11900, 'memberCount': 2},
+          },
+        },
+        'top3': [
           {
-            'raceId': 'race-1',
-            'name': team ? 'Team Clash' : 'Solo Sprint',
-            'endsAt': DateTime.now()
-                .add(const Duration(days: 2))
-                .toUtc()
-                .toIso8601String(),
-            'userPlacement': 2,
-            'participantCount': 4,
-            if (team) ...{
-              'isTeamRace': true,
-              'teamSize': 2,
-              'teamAName': 'Swift Capys',
-              'teamBName': 'Turbo Beavers',
-              'teams': {
-                'teamA': {'totalSteps': 12340, 'memberCount': 2},
-                'teamB': {'totalSteps': 11900, 'memberCount': 2},
-              },
-            },
-            'top3': [
-              {
-                'rank': 1,
-                'displayName': 'Trail Walker',
-                'totalSteps': 6200,
-                if (team) 'team': 'TEAM_A',
-              },
-              {
-                'rank': 2,
-                'displayName': 'Sneaky Pete',
-                'totalSteps': 6000,
-                if (team) 'team': 'TEAM_B',
-              },
-            ],
+            'rank': 1,
+            'displayName': 'Trail Walker',
+            'totalSteps': 6200,
+            if (team) 'team': 'TEAM_A',
+          },
+          {
+            'rank': 2,
+            'displayName': 'Sneaky Pete',
+            'totalSteps': 6000,
+            if (team) 'team': 'TEAM_B',
           },
         ],
       },
-    };
+    ],
+  },
+};
 
-Future<void> _pump(WidgetTester tester, Map<String, dynamic> raceCard) async {
+Future<void> _pump(
+  WidgetTester tester,
+  Map<String, dynamic> raceCard, {
+  ThemeData? theme,
+}) async {
   await tester.binding.setSurfaceSize(const Size(800, 1600));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   final authService = await _createAuthService();
   await tester.pumpWidget(
     MaterialApp(
+      theme: theme,
       home: Scaffold(
         body: HomeTab(
           stepData: StepData(steps: 2400, date: DateTime(2026, 6, 5)),
@@ -113,8 +119,9 @@ Future<void> _pump(WidgetTester tester, Map<String, dynamic> raceCard) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('TR-809: team race ticket shows the compact scoreline',
-      (tester) async {
+  testWidgets('TR-809: team race ticket shows the compact scoreline', (
+    tester,
+  ) async {
     await _pump(tester, _raceCard(team: true));
 
     expect(find.byType(TeamScoreline), findsOneWidget);
@@ -123,12 +130,14 @@ void main() {
     expect(find.text('2v2'), findsOneWidget);
   });
 
-  testWidgets('TR-809: ticket capys are ringed in their team color',
-      (tester) async {
+  testWidgets('TR-809: ticket capys are ringed in their team color', (
+    tester,
+  ) async {
     await _pump(tester, _raceCard(team: true));
 
-    final avatars =
-        tester.widgetList<RacerAvatar>(find.byType(RacerAvatar)).toList();
+    final avatars = tester
+        .widgetList<RacerAvatar>(find.byType(RacerAvatar))
+        .toList();
     expect(
       avatars.map((a) => a.ringColor),
       containsAll([
@@ -143,8 +152,18 @@ void main() {
 
     expect(find.byType(TeamScoreline), findsNothing);
     expect(find.text('2v2'), findsNothing);
-    final avatars =
-        tester.widgetList<RacerAvatar>(find.byType(RacerAvatar)).toList();
+    final avatars = tester
+        .widgetList<RacerAvatar>(find.byType(RacerAvatar))
+        .toList();
     expect(avatars.every((a) => a.ringColor == null), isTrue);
+  });
+
+  testWidgets('public-race action stays visible in dark mode', (tester) async {
+    await _pump(tester, _raceCard(team: false), theme: AppThemeData.night());
+
+    final addIcon = tester.widget<Icon>(
+      find.byKey(const Key('home-public-race-add-icon')),
+    );
+    expect(addIcon.color, AppPalette.night.pillTerra);
   });
 }

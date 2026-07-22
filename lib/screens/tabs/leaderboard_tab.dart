@@ -1058,6 +1058,11 @@ class _ScopeIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppColors.of(context);
+    final activeColor = palette.isDark ? palette.pillTerra : palette.accent;
+    final activeIconColor = palette.isDark
+        ? palette.textLight
+        : palette.parchment;
     return Material(
       type: MaterialType.transparency,
       child: InkWell(
@@ -1067,15 +1072,13 @@ class _ScopeIconButton extends StatelessWidget {
           duration: const Duration(milliseconds: 120),
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
           decoration: BoxDecoration(
-            color: active ? AppColors.of(context).accent : Colors.transparent,
+            color: active ? activeColor : Colors.transparent,
             borderRadius: BorderRadius.circular(999),
           ),
           child: Icon(
             icon,
             size: 16,
-            color: active
-                ? AppColors.of(context).parchment
-                : AppColors.of(context).textMid,
+            color: active ? activeIconColor : palette.textMid,
           ),
         ),
       ),

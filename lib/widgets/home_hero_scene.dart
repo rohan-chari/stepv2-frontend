@@ -16,12 +16,20 @@ import '../styles.dart';
 /// Honors `MediaQuery.disableAnimations` by freezing the drift instead of
 /// running the ambient ticker.
 class HomeHeroScene extends StatefulWidget {
-  const HomeHeroScene({super.key, required this.child, this.groundHeight = 86});
+  const HomeHeroScene({
+    super.key,
+    required this.child,
+    this.groundHeight = 86,
+    this.skyAlignment = Alignment.bottomCenter,
+  });
 
   final Widget child;
 
   /// Height of the grass + dirt strip at the bottom of the scene.
   final double groundHeight;
+
+  /// Controls how the wide sky artwork crops in unusually tall scenes.
+  final AlignmentGeometry skyAlignment;
 
   /// Source dimensions of home_hero_ground.png (the course-strip crop); used
   /// to size each tile to [groundHeight] exactly.
@@ -52,6 +60,8 @@ class _HomeHeroSceneState extends State<HomeHeroScene>
     precacheImage(AssetImage(AppThemeAssets.night.homeHeroSky), context);
     precacheImage(AssetImage(AppThemeAssets.light.homeHeroGround), context);
     precacheImage(AssetImage(AppThemeAssets.night.homeHeroGround), context);
+    precacheImage(AssetImage(AppThemeAssets.light.homeClouds), context);
+    precacheImage(AssetImage(AppThemeAssets.night.homeClouds), context);
     if (MediaQuery.of(context).disableAnimations) {
       _ambient.stop();
       _ambient.value = 0.35;
@@ -69,7 +79,6 @@ class _HomeHeroSceneState extends State<HomeHeroScene>
   @override
   Widget build(BuildContext context) {
     final assets = AppThemeAssets.of(context);
-    final palette = AppColors.of(context);
     final transitionDuration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
         : const Duration(milliseconds: 250);
@@ -88,29 +97,44 @@ class _HomeHeroSceneState extends State<HomeHeroScene>
               duration: transitionDuration,
               switchInCurve: Curves.easeOutCubic,
               switchOutCurve: Curves.easeOutCubic,
+              layoutBuilder: (currentChild, previousChildren) => Stack(
+                fit: StackFit.expand,
+                children: [...previousChildren, ?currentChild],
+              ),
               child: Image.asset(
                 assets.homeHeroSky,
                 key: ValueKey(assets.homeHeroSky),
                 fit: BoxFit.cover,
-                alignment: Alignment.bottomCenter,
+                alignment: widget.skyAlignment,
                 filterQuality: FilterQuality.none,
               ),
             ),
           ),
         ),
-        // Drifting clouds sit over the sky but under the ground/child.
+        // Generated cloud-atlas instances sit over the sky but under the
+        // ground/child. Their asset changes with theme without resetting the
+        // shared ambient controller or the five layout phases.
         Positioned(
           left: 0,
           right: 0,
           top: 0,
           bottom: widget.groundHeight,
-          child: AnimatedBuilder(
-            animation: _ambient,
-            builder: (context, _) => CustomPaint(
-              painter: _DriftCloudsPainter(
-                t: _ambient.value,
-                white: palette.cloudWhite,
-                shadow: palette.cloudShadow,
+          child: LayoutBuilder(
+            builder: (context, constraints) => AnimatedBuilder(
+              animation: _ambient,
+              builder: (context, _) => Stack(
+                clipBehavior: Clip.hardEdge,
+                children: [
+                  for (var i = 0; i < _clouds.length; i++)
+                    _CloudInstance(
+                      key: ValueKey('home-cloud-$i'),
+                      config: _clouds[i],
+                      t: _ambient.value,
+                      fieldSize: constraints.biggest,
+                      assetPath: assets.homeClouds,
+                      transitionDuration: transitionDuration,
+                    ),
+                ],
               ),
             ),
           ),
@@ -162,64 +186,73 @@ class _HomeHeroSceneState extends State<HomeHeroScene>
   }
 }
 
-/// Paints the two slow drifting clouds over the sky artwork. They live in the
-/// band between the step-count HUD and the horizon so they never cross the
-/// number. [t] is a looping 0..1 ambient clock.
-class _DriftCloudsPainter extends CustomPainter {
-  const _DriftCloudsPainter({
+typedef _CloudConfig = ({
+  double y,
+  double scale,
+  int cycles,
+  double phase,
+  int atlasIndex,
+});
+
+const List<_CloudConfig> _clouds = [
+  (y: 0.42, scale: 0.74, cycles: 1, phase: 0.12, atlasIndex: 0),
+  (y: 0.56, scale: 0.54, cycles: 2, phase: 0.38, atlasIndex: 1),
+  (y: 0.66, scale: 0.67, cycles: 1, phase: 0.62, atlasIndex: 2),
+  (y: 0.48, scale: 0.46, cycles: 3, phase: 0.80, atlasIndex: 1),
+  (y: 0.72, scale: 0.58, cycles: 2, phase: 0.96, atlasIndex: 0),
+];
+
+class _CloudInstance extends StatelessWidget {
+  const _CloudInstance({
+    super.key,
+    required this.config,
     required this.t,
-    required this.white,
-    required this.shadow,
+    required this.fieldSize,
+    required this.assetPath,
+    required this.transitionDuration,
   });
 
+  final _CloudConfig config;
   final double t;
-  final Color white;
-  final Color shadow;
-
-  // (yFrac of sky, scale, horizontal cycles per loop, phase)
-  static const _clouds = [(0.58, 0.9, 1.0, 0.15), (0.72, 0.6, 2.0, 0.62)];
+  final Size fieldSize;
+  final String assetPath;
+  final Duration transitionDuration;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    for (final (yFrac, scale, cycles, phase) in _clouds) {
-      // Wrap over a span slightly wider than the screen so clouds fully exit
-      // before re-entering. Integer cycle counts keep the loop seamless.
-      const span = 1.3;
-      final xFrac = ((phase + t * cycles) % span) - (span - 1) / 2 - 0.1;
-      _paintCloud(
-        canvas,
-        Offset(xFrac * size.width, size.height * yFrac),
-        scale,
-      );
-    }
-  }
-
-  void _paintCloud(Canvas canvas, Offset origin, double scale) {
-    final whitePaint = Paint()..color = white;
-    final shadowPaint = Paint()..color = shadow;
-    RRect blob(double dx, double dy, double w, double h) {
-      return RRect.fromRectAndRadius(
-        Rect.fromLTWH(
-          origin.dx + dx * scale,
-          origin.dy + dy * scale,
-          w * scale,
-          h * scale,
+  Widget build(BuildContext context) {
+    final cloudSize = 112.0 * config.scale;
+    const span = 1.35;
+    final wrapped = ((config.phase - t * config.cycles) % span + span) % span;
+    final x = (wrapped - 0.18) * fieldSize.width;
+    final y = fieldSize.height * config.y;
+    return Positioned(
+      left: x,
+      top: y,
+      width: cloudSize,
+      height: cloudSize,
+      child: ClipRect(
+        child: AnimatedSwitcher(
+          duration: transitionDuration,
+          child: OverflowBox(
+            key: ValueKey(assetPath),
+            alignment: Alignment.centerLeft,
+            minWidth: cloudSize * 3,
+            maxWidth: cloudSize * 3,
+            child: Transform.translate(
+              offset: Offset(-cloudSize * config.atlasIndex, 0),
+              child: Image.asset(
+                assetPath,
+                width: cloudSize * 3,
+                height: cloudSize,
+                fit: BoxFit.fill,
+                filterQuality: FilterQuality.none,
+              ),
+            ),
+          ),
         ),
-        Radius.circular(5 * scale),
-      );
-    }
-
-    canvas.drawRRect(blob(0, 14, 58, 13), shadowPaint);
-    canvas.drawRRect(blob(0, 10, 58, 13), whitePaint);
-    canvas.drawRRect(blob(9, 2, 34, 13), whitePaint);
-    canvas.drawRRect(blob(18, -5, 18, 11), whitePaint);
+      ),
+    );
   }
-
-  @override
-  bool shouldRepaint(covariant _DriftCloudsPainter oldDelegate) =>
-      oldDelegate.t != t ||
-      oldDelegate.white != white ||
-      oldDelegate.shadow != shadow;
 }
 
 /// A number that counts up to [value] (and re-animates between values on

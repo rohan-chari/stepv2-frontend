@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import '../styles.dart';
+import '../services/ad_service.dart';
 import '../widgets/ad_banner_slot.dart';
 import '../widgets/case_opening_strip.dart';
 import '../widgets/error_toast.dart';
@@ -258,6 +259,14 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
             SafeArea(
               child: Column(
                 children: [
+                  if (AdService.remoteDualBoxBannersEnabled) ...[
+                    const AdBannerSlot(
+                      placement: AdBannerPlacement.boxTop,
+                      reserveSpaceWhileLoading: true,
+                    ),
+                    if (AdService.boxTopBannerEnabled)
+                      const SizedBox(height: 12),
+                  ],
                   Expanded(
                     child: Center(
                       child: SingleChildScrollView(
@@ -279,7 +288,8 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
                   // Bottom banner, in-flow below the centered card so it reserves
                   // its own space and never covers the Continue button. Collapses
                   // to zero size unless banners are enabled AND an ad loads.
-                  const AdBannerSlot(),
+                  if (AdService.bannersEnabled) const SizedBox(height: 12),
+                  const AdBannerSlot(reserveSpaceWhileLoading: true),
                 ],
               ),
             ),

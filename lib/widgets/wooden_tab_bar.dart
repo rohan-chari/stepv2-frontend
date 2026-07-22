@@ -99,7 +99,9 @@ class _TabItemWidget extends StatelessWidget {
     // enough contrast to remain obvious navigation in both themes.
     final color = selected
         ? AppColors.of(context).textDark
-        : AppColors.of(context).textMid;
+        : AppColors.of(context).isDark
+        ? AppColors.of(context).textMid
+        : AppColors.of(context).textLight;
     final background = selected
         ? AppColors.of(context).pillGold
         : Colors.transparent;

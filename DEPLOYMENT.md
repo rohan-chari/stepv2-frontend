@@ -146,6 +146,9 @@ For most releases, you can deploy backend first because the old App Store binary
 # the shop/inventory and the race mystery-box overlay (iOS-only, display-only:
 # no reward, no backend). Both define are safe to forget — the app just ships
 # without that ad — but a prod release should carry both.
+# ADMOB_BOX_TOP_BANNER_AD_UNIT_ID is the dedicated box-screen top placement.
+# It remains dark unless both bannerAdsEnabled and dualBoxBannersEnabled are
+# true; omitting it safely preserves the footer-only layout.
 # ADMOB_NATIVE_AD_UNIT_ID bakes in the races-tab in-feed NATIVE ad (styled
 # template, same kill switch as banners). A prod build WITHOUT it falls back
 # to Google's TEST native ad in that slot — always carry the define.
@@ -157,6 +160,7 @@ flutter build ipa --release \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
   --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
+  --dart-define=ADMOB_BOX_TOP_BANNER_AD_UNIT_ID=REPLACE_WITH_IOS_TOP_BANNER_UNIT_ID \
   --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \
   --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com
 ```
@@ -236,6 +240,7 @@ flutter build appbundle --release --flavor prod \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/4587493133 \
   --dart-define=ADMOB_BANNER_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/8844513901 \
+  --dart-define=ADMOB_BOX_TOP_BANNER_AD_UNIT_ID_ANDROID=REPLACE_WITH_ANDROID_TOP_BANNER_UNIT_ID \
   --dart-define=ADMOB_NATIVE_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/4905268896 \
   --build-number=<versionCode>
 ```
@@ -258,6 +263,9 @@ Android ad units — the ids are per-platform in AdMob, so Android uses its own
   never shows.
 - `ADMOB_BANNER_AD_UNIT_ID_ANDROID` — footer display banner. Banners still
   require the backend `bannerAdsEnabled` remote switch to be on.
+- `ADMOB_BOX_TOP_BANNER_AD_UNIT_ID_ANDROID` — dedicated top placement on box
+  routes. It additionally requires `dualBoxBannersEnabled`; omit it to retain
+  the existing footer-only layout with zero reserved top space.
 - `ADMOB_NATIVE_AD_UNIT_ID_ANDROID` — races-tab in-feed native ad (gated by the
   same banner switch).
 

@@ -524,7 +524,7 @@ class _CapybaraRunnerMarker extends StatelessWidget {
             Icons.arrow_drop_down_rounded,
             size: 18,
             color: runner.isUser
-                ? AppColors.of(context).gold
+                ? AppColors.of(context).coinLight
                 : AppColors.of(context).ink,
           ),
           Container(
@@ -1324,14 +1324,15 @@ class _RunnerNameTag extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DecoratedBox(
+      key: isUser ? const Key('course-user-name-tag') : null,
       decoration: BoxDecoration(
         color: isUser
-            ? AppColors.of(context).ink
+            ? AppColors.of(context).woodDarker
             : AppColors.of(context).parchment.withValues(alpha: 0.96),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
           color: isUser
-              ? AppColors.of(context).ink
+              ? AppColors.of(context).coinLight
               : AppColors.of(context).line.withValues(alpha: 0.12),
           width: 2,
         ),

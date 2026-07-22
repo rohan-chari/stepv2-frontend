@@ -65,6 +65,12 @@ class AdService implements ExtraSpinAdController {
   static const _envBannerAdUnitIdAndroid = String.fromEnvironment(
     'ADMOB_BANNER_AD_UNIT_ID_ANDROID',
   );
+  static const _envBoxTopBannerAdUnitId = String.fromEnvironment(
+    'ADMOB_BOX_TOP_BANNER_AD_UNIT_ID',
+  );
+  static const _envBoxTopBannerAdUnitIdAndroid = String.fromEnvironment(
+    'ADMOB_BOX_TOP_BANNER_AD_UNIT_ID_ANDROID',
+  );
   static const _testBannerIos = 'ca-app-pub-3940256099942544/2934735716';
   static const _testBannerAndroid = 'ca-app-pub-3940256099942544/6300978111';
 
@@ -98,6 +104,13 @@ class AdService implements ExtraSpinAdController {
     return '';
   }
 
+  static String get _platformBoxTopBannerUnitId {
+    if (kIsWeb) return '';
+    if (Platform.isIOS) return _envBoxTopBannerAdUnitId;
+    if (Platform.isAndroid) return _envBoxTopBannerAdUnitIdAndroid;
+    return '';
+  }
+
   static String get _platformNativeUnitId {
     if (kIsWeb) return '';
     if (Platform.isIOS) return _envNativeAdUnitId;
@@ -111,6 +124,9 @@ class AdService implements ExtraSpinAdController {
   /// no flag from the backend means no banners.
   static bool remoteBannersEnabled = false;
 
+  /// Additive box-only rollout switch. Missing/null server values stay off.
+  static bool remoteDualBoxBannersEnabled = false;
+
   /// Banners render ONLY when the backend flag is on AND this build baked in a
   /// real banner unit id for the current platform — the unit id is compile-time
   /// (keep passing the dart-define in prod builds so the remote switch can turn
@@ -121,11 +137,25 @@ class AdService implements ExtraSpinAdController {
   static bool get bannersEnabled =>
       remoteBannersEnabled && !kIsWeb && _platformBannerUnitId.isNotEmpty;
 
+  static bool get boxTopBannerEnabled =>
+      remoteBannersEnabled &&
+      remoteDualBoxBannersEnabled &&
+      !kIsWeb &&
+      _platformBoxTopBannerUnitId.isNotEmpty;
+
   /// Ad unit for [AdBannerSlot]. The real unit when injected at build time,
   /// otherwise Google's public test banner for this platform (only reached in
   /// dev, since [bannersEnabled] is false without the define).
   static String get bannerAdUnitId {
     final id = _platformBannerUnitId;
+    if (id.isNotEmpty) return id;
+    return (!kIsWeb && Platform.isAndroid)
+        ? _testBannerAndroid
+        : _testBannerIos;
+  }
+
+  static String get boxTopBannerAdUnitId {
+    final id = _platformBoxTopBannerUnitId;
     if (id.isNotEmpty) return id;
     return (!kIsWeb && Platform.isAndroid)
         ? _testBannerAndroid

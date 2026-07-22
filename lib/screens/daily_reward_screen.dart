@@ -330,6 +330,16 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
           ),
           Column(
             children: [
+              if (AdService.remoteDualBoxBannersEnabled) ...[
+                const SafeArea(
+                  bottom: false,
+                  child: AdBannerSlot(
+                    placement: AdBannerPlacement.boxTop,
+                    reserveSpaceWhileLoading: true,
+                  ),
+                ),
+                if (AdService.boxTopBannerEnabled) const SizedBox(height: 12),
+              ],
               Expanded(
                 child: SafeArea(
                   child: Center(
@@ -357,7 +367,11 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
               ),
               // Screen-bottom trackside footer (same treatment as the
               // leaderboard/shop tabs); collapses to zero size when adless.
-              const AdBannerSlot(withBottomSafeArea: true),
+              if (AdService.bannersEnabled) const SizedBox(height: 12),
+              const AdBannerSlot(
+                withBottomSafeArea: true,
+                reserveSpaceWhileLoading: true,
+              ),
             ],
           ),
         ],

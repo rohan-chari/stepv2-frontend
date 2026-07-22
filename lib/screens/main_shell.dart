@@ -8,6 +8,7 @@ import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../config/animals.dart';
+import '../config/start_cape_metadata.dart';
 import '../models/loadable.dart';
 import '../models/step_data.dart';
 import '../models/step_sample_data.dart';
@@ -240,35 +241,40 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   void _onNotificationAction() {
     final action = widget.notificationService?.pendingAction.value;
     if (action == null) return;
-    widget.notificationService?.pendingAction.value = null;
 
     switch (action.route) {
       case NotificationRoute.raceDetail:
         final raceId = action.params['raceId'];
-        if (raceId != null) {
+        if (raceId is String && raceId.isNotEmpty) {
+          widget.notificationService?.pendingAction.value = null;
           // Shares the tap guard so a notification tap can't stack a second
           // detail screen over one already opening.
           _openRaceFromCard(raceId);
         }
         break;
       case NotificationRoute.races:
+        widget.notificationService?.pendingAction.value = null;
         _pageController.jumpToPage(_racesTabIndex);
         break;
       case NotificationRoute.friends:
+        widget.notificationService?.pendingAction.value = null;
         // Friends is now a primary tab (index 2); jumping there also clears the
         // incoming-request badge via onPageChanged.
         _pageController.jumpToPage(_friendsTabIndex);
         break;
       case NotificationRoute.home:
+        widget.notificationService?.pendingAction.value = null;
         _pageController.jumpToPage(_homeTabIndex);
         break;
       case NotificationRoute.tournamentDetail:
         final tournamentId = action.params['tournamentId'];
         if (tournamentId != null && tournamentId.isNotEmpty) {
+          widget.notificationService?.pendingAction.value = null;
           _openTournament(tournamentId);
         }
         break;
       case NotificationRoute.dailyReward:
+        widget.notificationService?.pendingAction.value = null;
         // Daily-reward reminder tap (spec §7): open the same blurred-overlay
         // daily-reward screen the home StreakChip / Get Coins hub push, so the
         // user lands directly on the unclaimed box.
@@ -618,6 +624,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     setState(() => _healthAuthorized = true);
     await _backgroundSyncBootstrapService.enableHealthKitBackgroundDelivery();
     await _checkNotificationState();
+    // Notification initialization can finish before this shell exists on a
+    // cold start. ValueNotifier retains that launch action but does not replay
+    // it to listeners, so drain it once the authenticated shell can navigate.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _onNotificationAction();
+    });
     _startForegroundPolling();
     // Load all home-page surfaces, then show the race/ranked results modals
     // only after every call has settled — never over still-loading sections.
@@ -789,9 +801,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     final now = DateTime.now();
     final results = await Future.wait([
       _healthService.getStepsToday(),
-      _healthService.getHourlySteps(
+      _healthService.getStepSamples(
         startTime: DateTime(now.year, now.month, now.day),
         endTime: now,
+        bucketMinutes: widget.authService.stepSampleBucketMinutes,
       ),
     ]);
     final stepData = results[0] as StepData;
@@ -1457,6 +1470,26 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         _equippedAccessories = accessories;
         _equippedAnimal = animal;
       });
+    }
+
+    // Keep the pre-auth start screen's cape in lockstep with the tuner: cache
+    // the catalog's live cape renderMetadata for StartScreen to read next
+    // launch. Best-effort — the cape is testOnly-filtered from prod-channel
+    // catalogs, in which case the compiled fallback stays authoritative.
+    final items = catalog['items'];
+    if (items is List) {
+      for (final item in items) {
+        if (item is Map<String, dynamic> && item['assetKey'] == 'cape') {
+          final metadata = item['renderMetadata'];
+          if (metadata is Map<String, dynamic> && metadata.isNotEmpty) {
+            unawaited(StartCapeMetadata.save(
+              bobble: item['bobble'] == true,
+              renderMetadata: metadata,
+            ));
+          }
+          break;
+        }
+      }
     }
   }
 

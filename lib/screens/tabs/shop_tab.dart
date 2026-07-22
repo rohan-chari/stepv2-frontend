@@ -418,7 +418,7 @@ class _ShopTabState extends State<ShopTab> {
                 size: 13,
                 color: selected
                     ? AppColors.of(context).textDark
-                    : AppColors.of(context).parchment,
+                    : AppColors.of(context).textLight,
               ),
             ),
           ),
@@ -501,7 +501,7 @@ class _ShopTabState extends State<ShopTab> {
             size: 11,
             color: selected
                 ? AppColors.of(context).textDark
-                : AppColors.of(context).parchment.withValues(alpha: 0.75),
+                : AppColors.of(context).textLight.withValues(alpha: 0.88),
           ),
         ),
       ),

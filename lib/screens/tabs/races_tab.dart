@@ -1000,7 +1000,9 @@ class _RacesTabState extends State<RacesTab> {
       onPressed = null;
     } else {
       label = isJoining ? 'JOINING…' : 'JOIN';
-      variant = PillButtonVariant.primary;
+      variant = AppColors.of(context).isDark
+          ? PillButtonVariant.accent
+          : PillButtonVariant.primary;
       glow = !isJoining;
       onPressed = isJoining ? null : () => _joinFeaturedTournament(id);
     }

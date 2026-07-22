@@ -49,6 +49,7 @@ class PowerupIcon extends StatelessWidget {
     // leech/defense_scan gap.
     'HITCHHIKE': 'hitchhike',
     'QUICK_RINSE': 'quick_rinse',
+    'QUICKSAND': 'quicksand',
   };
 
   static int get knownTypeCount => _assetNames.length;

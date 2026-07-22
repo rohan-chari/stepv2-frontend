@@ -2,10 +2,43 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:step_tracker/styles.dart';
 import 'package:step_tracker/widgets/goal_track.dart';
 import 'package:step_tracker/widgets/home_course_track.dart';
 
 void main() {
+  testWidgets('keeps the user name tag distinct in dark mode', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppThemeData.night(),
+        home: const Scaffold(
+          body: HomeCourseTrack(
+            runners: [
+              GoalTrackRunner(name: 'Alice', progress: 0.5, isUser: true),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final tag = tester.widget<DecoratedBox>(
+      find.byKey(const Key('course-user-name-tag')),
+    );
+    final decoration = tag.decoration as BoxDecoration;
+    expect(decoration.color, AppPalette.night.woodDarker);
+    expect(decoration.border?.top.color, AppPalette.night.coinLight);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('course-user-name-tag')),
+        matching: find.text('You'),
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('renders the horizontal course track with user and friends', (
     WidgetTester tester,
   ) async {

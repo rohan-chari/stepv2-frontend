@@ -165,7 +165,7 @@ flutter run -d <device-id> --dart-define=BACKEND_BASE_URL=http://<your-mac-lan-i
 ### Run on simulator
 ```bash
 flutter run -d 19CCB48E-62CA-4AA1-8E55-B3F287E9BB0D \
-    --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
+    --dart-define=BACKEND_BASE_URL=https://staging.steptracker-api.org \
     --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
     --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
     --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \

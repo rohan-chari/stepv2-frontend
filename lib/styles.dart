@@ -383,9 +383,11 @@ class AppPalette extends ThemeExtension<AppPalette> {
     _AppColorToken.pillGreen: const Color(0xFF3F735B),
     _AppColorToken.pillGreenDark: const Color(0xFF2C5B47),
     _AppColorToken.pillGreenShadow: const Color(0xFF0C1C19),
-    _AppColorToken.pillGold: const Color(0xFF8A6442),
-    _AppColorToken.pillGoldDark: const Color(0xFF65462F),
-    _AppColorToken.pillGoldShadow: const Color(0xFF34251F),
+    // Twilight violet keeps secondary actions distinct from the slate-blue
+    // accent without bringing the daytime ochre into the night palette.
+    _AppColorToken.pillGold: const Color(0xFF6C5A8F),
+    _AppColorToken.pillGoldDark: const Color(0xFF4B3D6B),
+    _AppColorToken.pillGoldShadow: const Color(0xFF241D38),
     _AppColorToken.pillTerra: const Color(0xFF527486),
     _AppColorToken.pillTerraDark: const Color(0xFF385665),
     _AppColorToken.pillTerraShadow: const Color(0xFF1B303A),
@@ -515,6 +517,7 @@ class AppThemeAssets extends ThemeExtension<AppThemeAssets> {
   const AppThemeAssets({
     required this.homeHeroSky,
     required this.homeHeroGround,
+    required this.homeClouds,
     required this.homeCourse,
     required this.raceDayCourse,
   });
@@ -522,18 +525,21 @@ class AppThemeAssets extends ThemeExtension<AppThemeAssets> {
   static const light = AppThemeAssets(
     homeHeroSky: 'assets/images/home_hero_sky.png',
     homeHeroGround: 'assets/images/home_hero_ground.png',
+    homeClouds: 'assets/images/home_clouds_day.png',
     homeCourse: 'assets/images/home_race_course_platformer.png',
     raceDayCourse: 'assets/images/race_day_course.png',
   );
   static const night = AppThemeAssets(
     homeHeroSky: 'assets/images/home_hero_sky_night.png',
     homeHeroGround: 'assets/images/home_hero_ground_night.png',
+    homeClouds: 'assets/images/home_clouds_night.png',
     homeCourse: 'assets/images/home_race_course_platformer_night.png',
     raceDayCourse: 'assets/images/race_day_course_night.png',
   );
 
   final String homeHeroSky;
   final String homeHeroGround;
+  final String homeClouds;
   final String homeCourse;
   final String raceDayCourse;
 
@@ -550,11 +556,13 @@ class AppThemeAssets extends ThemeExtension<AppThemeAssets> {
   AppThemeAssets copyWith({
     String? homeHeroSky,
     String? homeHeroGround,
+    String? homeClouds,
     String? homeCourse,
     String? raceDayCourse,
   }) => AppThemeAssets(
     homeHeroSky: homeHeroSky ?? this.homeHeroSky,
     homeHeroGround: homeHeroGround ?? this.homeHeroGround,
+    homeClouds: homeClouds ?? this.homeClouds,
     homeCourse: homeCourse ?? this.homeCourse,
     raceDayCourse: raceDayCourse ?? this.raceDayCourse,
   );

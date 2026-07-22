@@ -195,7 +195,7 @@ class FeaturedRaceCard extends StatelessWidget {
             ),
             Padding(
               padding: const EdgeInsets.only(top: 12),
-              child: _buildCta(),
+              child: _buildCta(context),
             ),
           ],
         ),
@@ -203,7 +203,7 @@ class FeaturedRaceCard extends StatelessWidget {
     );
   }
 
-  Widget _buildCta() {
+  Widget _buildCta(BuildContext context) {
     const padding = EdgeInsets.symmetric(horizontal: 16, vertical: 11);
     if (isJoined) {
       // Upcoming: "YOU'RE IN" (you opted into the next race); live: "VIEW".
@@ -234,7 +234,9 @@ class FeaturedRaceCard extends StatelessWidget {
     return PulseGlow(
       child: PillButton(
         label: joinLabel,
-        variant: PillButtonVariant.primary,
+        variant: AppColors.of(context).isDark
+            ? PillButtonVariant.accent
+            : PillButtonVariant.primary,
         fontSize: 13,
         fullWidth: true,
         padding: padding,

@@ -18,6 +18,8 @@ enum AdBannerStyle {
   inCard,
 }
 
+enum AdBannerPlacement { standard, boxTop }
+
 /// Compact banner ad for the bottom of low-stakes screens. Renders NOTHING —
 /// zero size — unless this build has banners enabled (iOS with the
 /// ADMOB_BANNER_AD_UNIT_ID dart-define) AND the ad actually loads, so screens
@@ -29,6 +31,8 @@ class AdBannerSlot extends StatefulWidget {
     this.withBottomSafeArea = false,
     this.hideWhenKeyboardOpen = false,
     this.style = AdBannerStyle.trackside,
+    this.placement = AdBannerPlacement.standard,
+    this.reserveSpaceWhileLoading = false,
   });
 
   /// For hosts whose SafeArea excludes the bottom (race detail): pad the
@@ -43,6 +47,8 @@ class AdBannerSlot extends StatefulWidget {
   final bool hideWhenKeyboardOpen;
 
   final AdBannerStyle style;
+  final AdBannerPlacement placement;
+  final bool reserveSpaceWhileLoading;
 
   @override
   State<AdBannerSlot> createState() => _AdBannerSlotState();
@@ -69,7 +75,10 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
   Future<void> _load() async {
     _retryTimer?.cancel();
     _retryTimer = null;
-    if (!AdService.bannersEnabled) return;
+    final enabled = widget.placement == AdBannerPlacement.boxTop
+        ? AdService.boxTopBannerEnabled
+        : AdService.bannersEnabled;
+    if (!enabled) return;
     await AdService.ensureInitialized();
     if (!mounted) return;
     // Use the standard 320x50 banner format shared by Google demand and our
@@ -79,7 +88,9 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
     // single request eligible across Google, Meta, and AppLovin.
     const size = AdSize.banner;
     final ad = BannerAd(
-      adUnitId: AdService.bannerAdUnitId,
+      adUnitId: widget.placement == AdBannerPlacement.boxTop
+          ? AdService.boxTopBannerAdUnitId
+          : AdService.bannerAdUnitId,
       size: size,
       request: const AdRequest(),
       listener: BannerAdListener(
@@ -134,7 +145,14 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
   @override
   Widget build(BuildContext context) {
     final ad = _ad;
-    if (!_loaded || ad == null) return const SizedBox.shrink();
+    if (!_loaded || ad == null) {
+      if (!widget.reserveSpaceWhileLoading) return const SizedBox.shrink();
+      final enabled = widget.placement == AdBannerPlacement.boxTop
+          ? AdService.boxTopBannerEnabled
+          : AdService.bannersEnabled;
+      if (!enabled) return const SizedBox.shrink();
+      return const SizedBox(height: 58, width: double.infinity);
+    }
     if (widget.hideWhenKeyboardOpen &&
         MediaQuery.of(context).viewInsets.bottom > 0) {
       return const SizedBox.shrink();

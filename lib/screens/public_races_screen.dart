@@ -698,7 +698,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
                   size: 12,
                   color: selected
                       ? AppColors.of(context).textDark
-                      : AppColors.of(context).parchment,
+                      : AppColors.of(context).textLight,
                 ),
               ),
             ),
