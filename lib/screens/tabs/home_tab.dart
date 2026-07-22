@@ -1356,16 +1356,17 @@ class _HomeActiveRaceTicket extends StatelessWidget {
 
   /// Header band tint keyed to the user's placement — gold/silver/bronze for
   /// podium spots, course green otherwise.
-  Color _bandColor() {
+  Color _bandColor(BuildContext context) {
+    final colors = AppColors.of(context);
     switch (placement) {
       case 1:
-        return AppColors.medalGold.withValues(alpha: 0.34);
+        return colors.medalGold.withValues(alpha: 0.34);
       case 2:
-        return AppColors.medalSilver.withValues(alpha: 0.40);
+        return colors.medalSilver.withValues(alpha: 0.40);
       case 3:
-        return AppColors.medalBronze.withValues(alpha: 0.34);
+        return colors.medalBronze.withValues(alpha: 0.34);
       default:
-        return AppColors.roofLight.withValues(alpha: 0.22);
+        return colors.roofLight.withValues(alpha: 0.22);
     }
   }
 
@@ -1408,7 +1409,7 @@ class _HomeActiveRaceTicket extends StatelessWidget {
                     Container(
                       height: 38,
                       decoration: BoxDecoration(
-                        color: _bandColor(),
+                        color: _bandColor(context),
                         border: Border(
                           bottom: BorderSide(
                             color: AppColors.of(

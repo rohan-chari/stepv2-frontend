@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../widgets/app_avatar.dart';
-import '../widgets/home_chrome.dart';
 import '../widgets/onboarding_permission_gate.dart';
+import '../widgets/onboarding_scene.dart';
 import '../widgets/pill_button.dart';
 import '../styles.dart';
 import '../utils/at_name.dart';
@@ -252,16 +252,10 @@ class _OnboardingDailyIntroStepState extends State<OnboardingDailyIntroStep> {
   @override
   Widget build(BuildContext context) {
     if (widget.skipForPendingShare || _loading) {
-      return ColoredBox(
-        color: AppColors.of(context).roofLight,
-        child: Center(
-          child: CircularProgressIndicator(
-            color: AppColors.of(context).textLight,
-          ),
-        ),
-      );
+      return const OnboardingSceneLoading();
     }
 
+    final colors = AppColors.of(context);
     final daily = _daily;
     final verified = daily != null;
     final racerName = widget.displayName?.trim();
@@ -272,111 +266,75 @@ class _OnboardingDailyIntroStepState extends State<OnboardingDailyIntroStep> {
         ? (daily['name'] as String? ?? 'Daily Race')
         : 'Your first race is waiting';
 
-    return ColoredBox(
-      color: AppColors.of(context).roofLight,
-      child: Stack(
-        children: [
-          const Positioned.fill(
-            child: CustomPaint(
-              painter: ArcadeCheckerPainter(drawBottomStripe: false),
-            ),
+    return OnboardingScene(
+      headline: title,
+      emblem: Container(
+        width: 104,
+        height: 104,
+        decoration: BoxDecoration(
+          color: colors.textLight.withValues(alpha: 0.12),
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: colors.textLight.withValues(alpha: 0.30),
+            width: 3,
           ),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 36, 24, 44),
+        ),
+        alignment: Alignment.center,
+        child: Icon(
+          Icons.emoji_events_rounded,
+          size: 54,
+          color: colors.pillGold,
+        ),
+      ),
+      dockLabel: verified ? 'TODAY’S RACE' : 'READY TO RACE',
+      dockBody: verified
+          ? '$_timeRemaining · Move at your own pace. Most steps at the finish wins.'
+          : 'We couldn’t confirm a Daily spot right now. You can still enter Bara and find a race.',
+      dockExtra: verified
+          ? Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: colors.parchmentLight,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: colors.woodDark, width: 2),
+              ),
               child: Column(
                 children: [
-                  Icon(
-                    Icons.emoji_events_rounded,
-                    size: 74,
-                    color: AppColors.of(context).pillGold,
-                  ),
-                  const SizedBox(height: 18),
                   Text(
-                    verified ? 'TODAY’S RACE' : 'READY TO RACE',
-                    style: HomeText.label(
-                      size: 13,
-                      color: AppColors.of(context).textLight,
-                    ),
+                    handle,
+                    style: PixelText.title(size: 20, color: colors.textDark),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 6),
                   Text(
-                    title,
+                    'This is your racer tag—the name other players see. It won’t change how you sign in, and you can update it anytime in Profile.',
                     textAlign: TextAlign.center,
-                    style: HomeText.title(
-                      size: 31,
-                      color: AppColors.of(context).textLight,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    verified
-                        ? '$_timeRemaining · Move at your own pace. Most steps at the finish wins.'
-                        : 'We couldn’t confirm a Daily spot right now. You can still enter Bara and find a race.',
-                    textAlign: TextAlign.center,
-                    style: HomeText.body(
-                      size: 15,
-                      height: 1.4,
-                      color: AppColors.of(context).textLight,
-                    ),
-                  ),
-                  if (verified) ...[
-                    const SizedBox(height: 28),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(18),
-                      decoration: BoxDecoration(
-                        color: AppColors.of(context).parchment,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: AppColors.of(context).roofDark,
-                          width: 2,
-                        ),
-                      ),
-                      child: Column(
-                        children: [
-                          Text(
-                            handle,
-                            style: HomeText.title(
-                              size: 24,
-                              color: AppColors.of(context).textDark,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'This is your racer tag—the name other players see. It won’t change how you sign in, and you can update it anytime in Profile.',
-                            textAlign: TextAlign.center,
-                            style: HomeText.body(
-                              size: 13,
-                              height: 1.35,
-                              color: AppColors.of(context).textMid,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  const Spacer(),
-                  PillButton(
-                    key: const Key('onboarding-v2-primary'),
-                    label: verified
-                        ? (_entering ? 'OPENING...' : 'SEE MY RACE')
-                        : 'FIND A RACE',
-                    variant: PillButtonVariant.secondary,
-                    fullWidth: true,
-                    padding: const EdgeInsets.symmetric(vertical: 15),
-                    onPressed: _entering
-                        ? null
-                        : verified
-                        ? _enter
-                        : widget.onFindRace,
+                    style: PixelText.body(size: 12, color: colors.textMid),
                   ),
                 ],
               ),
-            ),
+            )
+          : null,
+      actions: [
+        SizedBox(
+          width: double.infinity,
+          height: 54,
+          child: PillButton(
+            key: const Key('onboarding-v2-primary'),
+            label: verified
+                ? (_entering ? 'OPENING...' : 'SEE MY RACE')
+                : 'FIND A RACE',
+            variant: PillButtonVariant.secondary,
+            fullWidth: true,
+            padding: EdgeInsets.zero,
+            onPressed: _entering
+                ? null
+                : verified
+                ? _enter
+                : widget.onFindRace,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -447,100 +405,35 @@ class _OnboardingReferralWelcomeStepState
               '$reward to get you started.'
         : 'Finish your first race and you’ll both earn coins.';
 
-    return ColoredBox(
-      color: AppColors.of(context).roofLight,
-      child: Stack(
-        children: [
-          const Positioned.fill(
-            child: CustomPaint(
-              painter: ArcadeCheckerPainter(drawBottomStripe: false),
-            ),
-          ),
-          SafeArea(
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: SingleChildScrollView(
-                    physics: const ClampingScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(24, 48, 24, 128),
-                    child: Column(
-                      children: [
-                        if (_loading)
-                          Padding(
-                            padding: EdgeInsets.only(top: 48),
-                            child: CircularProgressIndicator(
-                              color: AppColors.of(context).textLight,
-                              strokeWidth: 3,
-                            ),
-                          )
-                        else ...[
-                          AppAvatar(
-                            name: inviter ?? 'Friend',
-                            imageUrl: _inviterAvatar,
-                            size: 96,
-                            borderColor: AppColors.of(context).textLight,
-                            borderWidth: 3,
-                          ),
-                          const SizedBox(height: 18),
-                          Text(
-                            'YOU’RE INVITED',
-                            style: HomeText.label(
-                              size: 13,
-                              color: AppColors.of(
-                                context,
-                              ).textLight.withValues(alpha: 0.86),
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            headline,
-                            style: HomeText.title(
-                              size: 30,
-                              color: AppColors.of(context).textLight,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            body,
-                            style: HomeText.body(
-                              size: 15,
-                              color: AppColors.of(
-                                context,
-                              ).textLight.withValues(alpha: 0.92),
-                              height: 1.38,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-                Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 52),
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: 54,
-                      child: PillButton(
-                        label: "LET'S GO",
-                        variant: PillButtonVariant.secondary,
-                        fullWidth: true,
-                        padding: EdgeInsets.zero,
-                        icon: Icons.arrow_forward_rounded,
-                        onPressed: _loading ? null : widget.onContinue,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+    if (_loading) {
+      return const OnboardingSceneLoading();
+    }
+
+    return OnboardingScene(
+      headline: headline,
+      emblem: AppAvatar(
+        name: inviter ?? 'Friend',
+        imageUrl: _inviterAvatar,
+        size: 96,
+        borderColor: AppColors.of(context).textLight,
+        borderWidth: 3,
       ),
+      dockLabel: 'YOU’RE INVITED',
+      dockBody: body,
+      actions: [
+        SizedBox(
+          width: double.infinity,
+          height: 54,
+          child: PillButton(
+            label: "LET'S GO",
+            variant: PillButtonVariant.secondary,
+            fullWidth: true,
+            padding: EdgeInsets.zero,
+            icon: Icons.arrow_forward_rounded,
+            onPressed: widget.onContinue,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -562,138 +455,56 @@ class OnboardingTutorialStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: AppColors.of(context).roofLight,
-      child: Stack(
-        children: [
-          const Positioned.fill(
-            child: CustomPaint(
-              painter: ArcadeCheckerPainter(drawBottomStripe: false),
-            ),
+    final colors = AppColors.of(context);
+    return OnboardingScene(
+      headline: 'Earn your first 100 coins',
+      emblem: Container(
+        width: 112,
+        height: 112,
+        decoration: BoxDecoration(
+          color: colors.textLight.withValues(alpha: 0.12),
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: colors.textLight.withValues(alpha: 0.30),
+            width: 3,
           ),
-          SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final compact = constraints.maxHeight < 680;
-                return Stack(
-                  children: [
-                    Positioned.fill(
-                      child: SingleChildScrollView(
-                        physics: const ClampingScrollPhysics(),
-                        padding: EdgeInsets.fromLTRB(
-                          24,
-                          compact ? 24 : 58,
-                          24,
-                          128,
-                        ),
-                        child: Column(
-                          children: [
-                            Container(
-                              width: compact ? 132 : 160,
-                              height: compact ? 132 : 160,
-                              decoration: BoxDecoration(
-                                color: AppColors.of(
-                                  context,
-                                ).textLight.withValues(alpha: 0.12),
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: AppColors.of(
-                                    context,
-                                  ).textLight.withValues(alpha: 0.30),
-                                  width: 3,
-                                ),
-                              ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                '100',
-                                style: HomeText.title(
-                                  size: compact ? 44 : 54,
-                                  color: AppColors.of(context).textLight,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-                            Text(
-                              'FIRST 100 COINS',
-                              style: HomeText.label(
-                                size: 13,
-                                color: AppColors.of(
-                                  context,
-                                ).textLight.withValues(alpha: 0.86),
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              'Earn your first 100 coins',
-                              style: HomeText.title(
-                                size: 32,
-                                color: AppColors.of(context).textLight,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'Take the quick tour to learn how Bara works — '
-                              'finish it and we’ll drop 100 coins in your '
-                              'balance to get you started.',
-                              style: HomeText.body(
-                                size: 15,
-                                color: AppColors.of(
-                                  context,
-                                ).textLight.withValues(alpha: 0.92),
-                                height: 1.38,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Align(
-                      alignment: Alignment.bottomCenter,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 52),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            SizedBox(
-                              width: double.infinity,
-                              height: 54,
-                              child: PillButton(
-                                label: 'START TUTORIAL',
-                                variant: PillButtonVariant.secondary,
-                                fullWidth: true,
-                                padding: EdgeInsets.zero,
-                                icon: Icons.play_arrow_rounded,
-                                onPressed: onStart,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            TextButton(
-                              onPressed: onSkip,
-                              child: Text(
-                                'Skip for now',
-                                style: HomeText.body(
-                                  size: 15,
-                                  color: AppColors.of(
-                                    context,
-                                  ).textLight.withValues(alpha: 0.92),
-                                  weight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-        ],
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          '100',
+          style: PixelText.title(size: 38, color: colors.textLight),
+        ),
       ),
+      dockLabel: 'FIRST 100 COINS',
+      dockBody:
+          'Take the quick tour to learn how Bara works — '
+          'finish it and we’ll drop 100 coins in your '
+          'balance to get you started.',
+      actions: [
+        SizedBox(
+          width: double.infinity,
+          height: 54,
+          child: PillButton(
+            label: 'START TUTORIAL',
+            variant: PillButtonVariant.secondary,
+            fullWidth: true,
+            padding: EdgeInsets.zero,
+            icon: Icons.play_arrow_rounded,
+            onPressed: onStart,
+          ),
+        ),
+        const SizedBox(height: 2),
+        TextButton(
+          onPressed: onSkip,
+          child: Text(
+            'Skip for now',
+            style: PixelText.body(
+              size: 14,
+              color: colors.textMid,
+            ).copyWith(fontWeight: FontWeight.w800),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -775,132 +586,41 @@ class _OnboardingAutoEnrolledStepState extends State<OnboardingAutoEnrolledStep>
     // While a share link is pending we're auto-skipping — render a neutral
     // holding view (no CTA) so the celebration never flashes before the handoff.
     if (widget.skipForPendingShare) {
-      return ColoredBox(
-        color: AppColors.of(context).roofLight,
-        child: Center(
-          child: CircularProgressIndicator(
-            color: AppColors.of(context).textLight,
-            strokeWidth: 3,
-          ),
-        ),
-      );
+      return const OnboardingSceneLoading();
     }
 
-    return ColoredBox(
-      color: AppColors.of(context).roofLight,
-      child: Stack(
+    return OnboardingScene(
+      headline: 'Entered in the Daily & Weekly challenge',
+      emblem: _EnrolledEmblem(animation: _intro, size: 108),
+      sceneExtra: const Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 10,
+        runSpacing: 10,
         children: [
-          const Positioned.fill(
-            child: CustomPaint(
-              painter: ArcadeCheckerPainter(drawBottomStripe: false),
-            ),
-          ),
-          SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final compact = constraints.maxHeight < 680;
-                return Stack(
-                  children: [
-                    Positioned.fill(
-                      child: SingleChildScrollView(
-                        physics: const ClampingScrollPhysics(),
-                        padding: EdgeInsets.fromLTRB(
-                          24,
-                          compact ? 24 : 52,
-                          24,
-                          132,
-                        ),
-                        child: Column(
-                          children: [
-                            _EnrolledEmblem(
-                              animation: _intro,
-                              size: compact ? 132 : 158,
-                            ),
-                            SizedBox(height: compact ? 18 : 24),
-                            Text(
-                              "YOU'RE IN",
-                              style: HomeText.label(
-                                size: 13,
-                                color: AppColors.of(
-                                  context,
-                                ).textLight.withValues(alpha: 0.86),
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              'Entered in the Daily & Weekly challenge',
-                              style: HomeText.title(
-                                size: compact ? 28 : 32,
-                                color: AppColors.of(context).textLight,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'We saved you a spot in both races and dropped '
-                              '3 mystery boxes in your bag. You can turn '
-                              'auto-join off anytime on the Races page.',
-                              style: HomeText.body(
-                                size: 15,
-                                color: AppColors.of(
-                                  context,
-                                ).textLight.withValues(alpha: 0.92),
-                                height: 1.4,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            SizedBox(height: compact ? 18 : 24),
-                            const Wrap(
-                              alignment: WrapAlignment.center,
-                              spacing: 10,
-                              runSpacing: 10,
-                              children: [
-                                _EnrolledChip(
-                                  icon: Icons.bolt_rounded,
-                                  label: 'DAILY 10K',
-                                ),
-                                _EnrolledChip(
-                                  icon: Icons.calendar_month_rounded,
-                                  label: 'WEEKLY',
-                                ),
-                                _EnrolledChip(
-                                  icon: Icons.card_giftcard_rounded,
-                                  label: '3 BOXES',
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Align(
-                      alignment: Alignment.bottomCenter,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 52),
-                        child: SizedBox(
-                          width: double.infinity,
-                          height: 54,
-                          child: PillButton(
-                            label: _entering
-                                ? 'STARTING...'
-                                : 'START THE DAILY CHALLENGE',
-                            variant: PillButtonVariant.secondary,
-                            fullWidth: true,
-                            padding: EdgeInsets.zero,
-                            icon: Icons.play_arrow_rounded,
-                            onPressed: _entering ? null : _enter,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
+          _EnrolledChip(icon: Icons.bolt_rounded, label: 'DAILY 10K'),
+          _EnrolledChip(icon: Icons.calendar_month_rounded, label: 'WEEKLY'),
+          _EnrolledChip(icon: Icons.card_giftcard_rounded, label: '3 BOXES'),
         ],
       ),
+      dockLabel: "YOU'RE IN",
+      dockBody:
+          'We saved you a spot in both races and dropped '
+          '3 mystery boxes in your bag. You can turn '
+          'auto-join off anytime on the Races page.',
+      actions: [
+        SizedBox(
+          width: double.infinity,
+          height: 54,
+          child: PillButton(
+            label: _entering ? 'STARTING...' : 'START THE DAILY CHALLENGE',
+            variant: PillButtonVariant.secondary,
+            fullWidth: true,
+            padding: EdgeInsets.zero,
+            icon: Icons.play_arrow_rounded,
+            onPressed: _entering ? null : _enter,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -974,10 +694,10 @@ class _EnrolledChip extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             label,
-            style: HomeText.label(
+            style: PixelText.body(
               size: 11,
               color: AppColors.of(context).textLight,
-            ),
+            ).copyWith(fontWeight: FontWeight.w800, letterSpacing: 0.6),
           ),
         ],
       ),

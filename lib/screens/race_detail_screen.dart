@@ -247,6 +247,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   bool _placementMuted = false;
   bool _togglingPlacementMute = false;
   bool _alertPermissionUndetermined = false;
+  Map<String, dynamic>? _starterReward;
+  bool _starterRewardModalShown = false;
 
   // Activity tab (system/powerup events).
   RaceFeedService? _feed;
@@ -308,6 +310,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     _messageFocus.addListener(_onComposerFocusChanged);
     _loadDetails();
     if (widget.authService.onboardingV2Enabled) {
+      _loadStarterReward();
       _loadAlertPermissionState();
     }
   }
@@ -317,6 +320,148 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     if (service == null) return;
     final state = await service.getPermissionState();
     if (mounted) setState(() => _alertPermissionUndetermined = state == null);
+  }
+
+  Future<void> _loadStarterReward() async {
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) return;
+    try {
+      final reward = await _api.fetchStarterReward(identityToken: token);
+      if (!mounted) return;
+      setState(() => _starterReward = reward);
+      _maybeShowStarterRewardModal();
+    } on ApiException catch (error) {
+      // A 404 is an older backend: permanently hide this optional surface for
+      // this screen. Other failures are equally nonblocking and retry on pull.
+      if (error.statusCode != 404) return;
+    } catch (_) {}
+  }
+
+  bool get _showStarterReward {
+    final reward = _starterReward;
+    if (reward == null ||
+        reward['eligible'] != true ||
+        reward['claimed'] == true) {
+      return false;
+    }
+    final rewardRaceId = reward['raceId'] as String?;
+    return rewardRaceId == null || rewardRaceId == widget.raceId;
+  }
+
+  /// Claims the starter reward. Returns true when the grant landed, so the
+  /// modal knows to swap to its celebratory state; false means "close quietly"
+  /// (already claimed, an older backend without the endpoint, or a failure
+  /// that has already surfaced its own toast).
+  Future<bool> _claimStarterReward() async {
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) return false;
+    try {
+      final result = await _api.claimStarterReward(identityToken: token);
+      final coins = (result['coins'] as num?)?.toInt();
+      if (coins != null) await widget.authService.updateCoins(coins);
+      if (!mounted) return false;
+      setState(() {
+        _starterReward = {
+          ...?_starterReward,
+          'claimed': true,
+          'eligible': false,
+        };
+      });
+      return result['granted'] == true;
+    } on ApiException catch (error) {
+      if (!mounted) return false;
+      if (error.statusCode == 404) {
+        setState(() => _starterReward = null);
+      } else {
+        showErrorToast(context, error.message);
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Shows the bonus once per screen visit, as soon as both the reward lookup
+  /// and the race details have landed (they resolve independently). Guarded so
+  /// the second caller to arrive is the one that opens it.
+  void _maybeShowStarterRewardModal() {
+    if (_starterRewardModalShown) return;
+    if (!_showStarterReward) return;
+    if ((_race?['status'] as String?) != 'ACTIVE') return;
+    _starterRewardModalShown = true;
+    _showStarterRewardModal();
+  }
+
+  /// One dialog, one appearance: claiming closes it (owner decision — no
+  /// swapped-in "claimed" face, which read as a second 100-coin offer). A
+  /// toast confirms the grant after the pop. `claiming` is local to this
+  /// closure — the dialog owns it via StatefulBuilder, since a screen-level
+  /// setState does not rebuild a route sitting above it.
+  Future<void> _showStarterRewardModal() {
+    final amount = (_starterReward?['amount'] as num?)?.toInt() ?? 100;
+    var claiming = false;
+
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.62),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setModalState) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          child: GameContainer(
+            padding: const EdgeInsets.all(28),
+            frameColor: AppColors.of(context).accent,
+            surfaceColor: AppColors.of(context).parchmentLight,
+            glowColor: AppColors.of(context).coinMid,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SpinningCoin(size: 54),
+                const SizedBox(height: 14),
+                Text(
+                  'FIRST RACE BONUS',
+                  textAlign: TextAlign.center,
+                  style: PixelText.title(
+                    size: 22,
+                    color: AppColors.of(context).textDark,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'A little fuel for your Bara debut.',
+                  textAlign: TextAlign.center,
+                  style: PixelText.body(
+                    size: 14,
+                    color: AppColors.of(context).textMid,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                PillButton(
+                  key: const Key('claim-starter-reward'),
+                  label: claiming ? 'CLAIMING...' : 'CLAIM $amount COINS',
+                  fullWidth: true,
+                  onPressed: claiming
+                      ? null
+                      : () async {
+                          setModalState(() => claiming = true);
+                          final granted = await _claimStarterReward();
+                          if (!dialogContext.mounted) return;
+                          // Close either way: a refused claim has already
+                          // toasted (or is simply an old backend); a granted
+                          // one confirms via the toast below.
+                          Navigator.of(dialogContext).pop();
+                          if (granted && mounted) {
+                            showInfoToast(context, '+$amount coins added.');
+                          }
+                        },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -489,6 +634,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       });
 
       if (details['status'] == 'ACTIVE') {
+        _maybeShowStarterRewardModal();
         _loadProgress(prefetched: progressPrefetch);
         _startPolling();
         _startCountdown();
@@ -5153,7 +5299,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               style: PixelText.body(
                 size: 18,
                 color: isMe
-                    ? AppColors.of(context).accent
+                    ? AppColors.of(context).textAccent
                     : AppColors.of(context).textDark,
               ),
             ),

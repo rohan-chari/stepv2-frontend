@@ -146,6 +146,42 @@ void main() {
     expect(lowestShoe - highestShoe, greaterThan(5));
   });
 
+  testWidgets('renders a perFoot:false FEET accessory once, not per paw', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Center(
+          child: CapybaraSpriteWithAccessories(
+            capybaraSize: 96,
+            frameIndex: 2,
+            accessories: [
+              {
+                'slot': 'FEET',
+                'assetKey': 'skateboard',
+                'renderMetadata': {
+                  'offsetX': 0,
+                  'offsetY': 0.05,
+                  'rotation': 0,
+                  'scale': 1.3,
+                  'perFoot': false,
+                },
+              },
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final boards = find.byWidgetPredicate(
+      (widget) =>
+          widget is Image &&
+          widget.image is AssetImage &&
+          (widget.image as AssetImage).assetName.contains('skateboard.png'),
+    );
+    expect(boards, findsOneWidget);
+  });
+
   testWidgets('renders beaver tail as a frame-synced behind-body sheet', (
     WidgetTester tester,
   ) async {

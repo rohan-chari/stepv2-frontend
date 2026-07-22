@@ -828,7 +828,10 @@ class _AccessoryOverlay extends StatelessWidget {
     final scale = _metadataDouble(metadata, 'scale') ?? 1.0;
     final animationFrames = _metadataInt(metadata, 'animationFrames') ?? 1;
 
-    if (slot == 'FEET') {
+    // FEET items are stamped once per paw (shoes, skates). Single-object items
+    // like the skateboard opt out with renderMetadata.perFoot: false and render
+    // through the regular one-rect path below.
+    if (slot == 'FEET' && metadata['perFoot'] != false) {
       return _FeetAccessoryOverlay(
         assetKey: assetKey,
         capybaraSize: capybaraSize,

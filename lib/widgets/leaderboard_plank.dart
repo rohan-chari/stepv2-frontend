@@ -45,14 +45,14 @@ class LeaderboardPlank extends StatelessWidget {
     this.verticalPadding = 8,
   });
 
-  Color? get _medalColor {
+  Color? _medalColor(BuildContext context) {
     switch (rank) {
       case 0:
-        return AppColors.medalGold;
+        return AppColors.of(context).medalGold;
       case 1:
-        return AppColors.medalSilver;
+        return AppColors.of(context).medalSilver;
       case 2:
-        return AppColors.medalBronze;
+        return AppColors.of(context).medalBronze;
       default:
         return null;
     }
@@ -60,6 +60,7 @@ class LeaderboardPlank extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final medalColor = _medalColor(context);
     final displayName = isStealthed ? '???' : (isUser ? '$name (you)' : name);
     final finishLabel = finishPlace == null
         ? 'FINISH'
@@ -75,13 +76,13 @@ class LeaderboardPlank extends StatelessWidget {
         decoration: BoxDecoration(
           color: isFinished
               ? AppColors.of(context).coinLight.withValues(alpha: 0.14)
-              : _medalColor?.withValues(alpha: 0.08) ??
+              : medalColor?.withValues(alpha: 0.08) ??
                     AppColors.of(context).parchmentDark.withValues(alpha: 0.4),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isFinished
                 ? AppColors.of(context).coinDark.withValues(alpha: 0.45)
-                : _medalColor?.withValues(alpha: 0.3) ??
+                : medalColor?.withValues(alpha: 0.3) ??
                       AppColors.of(
                         context,
                       ).parchmentBorder.withValues(alpha: 0.3),
@@ -108,13 +109,15 @@ class LeaderboardPlank extends StatelessWidget {
               child: CustomPaint(
                 painter: _MedalPainter(
                   rank: rank,
-                  color: _medalColor ?? AppColors.of(context).woodMid,
+                  color: medalColor ?? AppColors.of(context).woodMid,
                 ),
               ),
             ),
             const SizedBox(width: 8),
             AppAvatar(
-              name: displayName,
+              // The raw name, not displayName: the " (you)" suffix would turn
+              // the fallback initials into "M(".
+              name: isStealthed ? '???' : name,
               imageUrl: isStealthed ? null : profilePhotoUrl,
               size: avatarSize,
               isUser: isUser,
@@ -136,7 +139,7 @@ class LeaderboardPlank extends StatelessWidget {
                                 context,
                               ).textMid.withValues(alpha: 0.5)
                             : isUser
-                            ? AppColors.of(context).accent
+                            ? AppColors.of(context).textAccent
                             : AppColors.of(context).textDark,
                       ),
                       overflow: TextOverflow.ellipsis,

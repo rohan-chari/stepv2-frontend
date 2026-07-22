@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../styles.dart';
-import 'home_chrome.dart';
+import 'onboarding_scene.dart';
 import 'pill_button.dart';
 
 /// Full-screen onboarding step that asks the user to grant a permission
 /// (health, notifications). Shared by the onboarding flow's steps.
+/// Rendered in the title screen's language via [OnboardingScene]: headline in
+/// the night sky, permission icon hovering as the emblem, capybara on the
+/// ground, and the copy + CONTINUE in the parchment dock.
 class OnboardingPermissionGate extends StatelessWidget {
   const OnboardingPermissionGate({
     super.key,
@@ -34,188 +37,67 @@ class OnboardingPermissionGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: AppColors.of(context).roofLight,
-      child: Stack(
-        children: [
-          const Positioned.fill(
-            child: CustomPaint(
-              painter: ArcadeCheckerPainter(drawBottomStripe: false),
+    final colors = AppColors.of(context);
+    return OnboardingScene(
+      headline: headline,
+      emblem: _PermissionEmblem(icon: icon),
+      dockLabel: label,
+      dockBody: body,
+      error: error,
+      actions: [
+        if (isLoading)
+          SizedBox(
+            height: 52,
+            child: Center(
+              child: CircularProgressIndicator(
+                color: colors.accent,
+                strokeWidth: 3,
+              ),
+            ),
+          )
+        else
+          SizedBox(
+            width: double.infinity,
+            height: 54,
+            child: PillButton(
+              label: (error != null && retryLabel != null)
+                  ? retryLabel!
+                  : 'CONTINUE',
+              variant: PillButtonVariant.secondary,
+              fullWidth: true,
+              padding: EdgeInsets.zero,
+              icon: icon,
+              onPressed: onContinue,
             ),
           ),
-          SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final compact = constraints.maxHeight < 680;
-                return Stack(
-                  children: [
-                    Positioned.fill(
-                      child: SingleChildScrollView(
-                        physics: const ClampingScrollPhysics(),
-                        padding: EdgeInsets.fromLTRB(
-                          24,
-                          compact ? 24 : 58,
-                          24,
-                          128,
-                        ),
-                        child: Column(
-                          children: [
-                            _OnboardingPermissionCapybara(
-                              size: compact ? 196 : 246,
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              label,
-                              style: HomeText.label(
-                                size: 13,
-                                color: AppColors.of(
-                                  context,
-                                ).textLight.withValues(alpha: 0.86),
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              headline,
-                              style: HomeText.title(
-                                size: 32,
-                                color: AppColors.of(context).textLight,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              body,
-                              style: HomeText.body(
-                                size: 15,
-                                color: AppColors.of(
-                                  context,
-                                ).textLight.withValues(alpha: 0.92),
-                                height: 1.38,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            if (error != null) ...[
-                              const SizedBox(height: 18),
-                              Text(
-                                error!,
-                                style: HomeText.body(
-                                  size: 14,
-                                  color: AppColors.of(context).textLight,
-                                  weight: FontWeight.w800,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                    Align(
-                      alignment: Alignment.bottomCenter,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 60),
-                        child: isLoading
-                            ? SizedBox(
-                                height: 52,
-                                child: Center(
-                                  child: CircularProgressIndicator(
-                                    color: AppColors.of(context).textLight,
-                                    strokeWidth: 3,
-                                  ),
-                                ),
-                              )
-                            : SizedBox(
-                                width: double.infinity,
-                                height: 54,
-                                child: PillButton(
-                                  label: (error != null && retryLabel != null)
-                                      ? retryLabel!
-                                      : 'CONTINUE',
-                                  variant: PillButtonVariant.secondary,
-                                  fullWidth: true,
-                                  padding: EdgeInsets.zero,
-                                  icon: icon,
-                                  onPressed: onContinue,
-                                ),
-                              ),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-        ],
-      ),
+      ],
     );
   }
 }
 
-class _OnboardingPermissionCapybara extends StatefulWidget {
-  const _OnboardingPermissionCapybara({required this.size});
+/// The permission icon floating in the night sky — a soft moonlit ring, sized
+/// to read as scenery rather than chrome.
+class _PermissionEmblem extends StatelessWidget {
+  const _PermissionEmblem({required this.icon});
 
-  final double size;
-
-  @override
-  State<_OnboardingPermissionCapybara> createState() =>
-      _OnboardingPermissionCapybaraState();
-}
-
-class _OnboardingPermissionCapybaraState
-    extends State<_OnboardingPermissionCapybara>
-    with SingleTickerProviderStateMixin {
-  static const int _frameCount = 6;
-
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 760),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
-    final size = widget.size;
-
-    return SizedBox(
-      width: size,
-      height: size,
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          final frameIndex =
-              (_controller.value * _frameCount).floor() % _frameCount;
-
-          return ClipRect(
-            child: OverflowBox(
-              maxWidth: double.infinity,
-              alignment: Alignment.centerLeft,
-              child: Transform.translate(
-                offset: Offset(-frameIndex * size, 0),
-                child: Image.asset(
-                  'assets/images/capybara_walk_right.png',
-                  width: size * _frameCount,
-                  height: size,
-                  fit: BoxFit.contain,
-                  alignment: Alignment.centerLeft,
-                  filterQuality: FilterQuality.none,
-                ),
-              ),
-            ),
-          );
-        },
+    final colors = AppColors.of(context);
+    return Container(
+      width: 108,
+      height: 108,
+      decoration: BoxDecoration(
+        color: colors.textLight.withValues(alpha: 0.12),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: colors.textLight.withValues(alpha: 0.30),
+          width: 3,
+        ),
       ),
+      alignment: Alignment.center,
+      child: Icon(icon, size: 52, color: colors.textLight),
     );
   }
 }

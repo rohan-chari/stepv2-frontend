@@ -376,9 +376,12 @@ class AppPalette extends ThemeExtension<AppPalette> {
     _AppColorToken.feedShield: const Color(0xFF78AEE8),
     _AppColorToken.feedGold: const Color(0xFFD6AD55),
     _AppColorToken.feedBoost: const Color(0xFF8FC5A5),
-    _AppColorToken.medalGold: const Color(0xFF80643C),
-    _AppColorToken.medalSilver: const Color(0xFF616A6F),
-    _AppColorToken.medalBronze: const Color(0xFF76523D),
+    // Night medals follow the twilight violet / slate-blue migration (see the
+    // pillGold note below) instead of the muddy daytime golds and bronzes,
+    // which read as illegible browns on the dark parchment.
+    _AppColorToken.medalGold: const Color(0xFF6F58AE),
+    _AppColorToken.medalSilver: const Color(0xFF5E6C7A),
+    _AppColorToken.medalBronze: const Color(0xFF4C6C7E),
     _AppColorToken.felt: const Color(0xFF091713),
     _AppColorToken.pillGreen: const Color(0xFF3F735B),
     _AppColorToken.pillGreenDark: const Color(0xFF2C5B47),
@@ -391,8 +394,10 @@ class AppPalette extends ThemeExtension<AppPalette> {
     _AppColorToken.pillTerra: const Color(0xFF527486),
     _AppColorToken.pillTerraDark: const Color(0xFF385665),
     _AppColorToken.pillTerraShadow: const Color(0xFF1B303A),
-    _AppColorToken.emptySlotFace: const Color(0xFF5A4034),
-    _AppColorToken.emptySlotBorder: const Color(0xFF2E211E),
+    // Empty powerup slots follow the twilight violet migration too — the old
+    // brown crate face was near-invisible against the dark race board.
+    _AppColorToken.emptySlotFace: const Color(0xFF3A3158),
+    _AppColorToken.emptySlotBorder: const Color(0xFF241D38),
     _AppColorToken.emptySlotMark: const Color(0xFFD6AD55),
     _AppColorToken.emptySlotLabel: const Color(0xFFD8CBC1),
     _AppColorToken.sceneSkyTop: const Color(0xFF061437),
