@@ -116,7 +116,7 @@ class FeaturedRaceCard extends StatelessWidget {
     return SizedBox(
       width: width,
       child: Container(
-        decoration: raceCardDecoration(),
+        decoration: raceCardDecoration(context),
         padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -128,14 +128,17 @@ class FeaturedRaceCard extends StatelessWidget {
               children: [
                 Pill(
                   label: _cadenceLabel,
-                  background: AppColors.pillGold,
+                  background: AppColors.of(context).pillGold,
                   fontSize: 11,
                 ),
                 const SizedBox(height: 8),
                 Text(
                   raceDisplayName(seedKind, name),
                   textAlign: TextAlign.center,
-                  style: PixelText.title(size: 17, color: AppColors.textDark),
+                  style: PixelText.title(
+                    size: 17,
+                    color: AppColors.of(context).textDark,
+                  ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -144,10 +147,10 @@ class FeaturedRaceCard extends StatelessWidget {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.monetization_on_rounded,
                         size: 16,
-                        color: AppColors.coinDark,
+                        color: AppColors.of(context).coinDark,
                       ),
                       const SizedBox(width: 5),
                       Flexible(
@@ -156,7 +159,7 @@ class FeaturedRaceCard extends StatelessWidget {
                           textAlign: TextAlign.center,
                           style: PixelText.title(
                             size: 13,
-                            color: AppColors.coinDark,
+                            color: AppColors.of(context).coinDark,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -168,7 +171,10 @@ class FeaturedRaceCard extends StatelessWidget {
                 Text(
                   _countdownLabel(),
                   textAlign: TextAlign.center,
-                  style: PixelText.body(size: 12, color: AppColors.textMid),
+                  style: PixelText.body(
+                    size: 12,
+                    color: AppColors.of(context).textMid,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -178,7 +184,10 @@ class FeaturedRaceCard extends StatelessWidget {
                       ? '$participantCount joined'
                       : '$participantCount racing',
                   textAlign: TextAlign.center,
-                  style: PixelText.body(size: 12, color: AppColors.textMid),
+                  style: PixelText.body(
+                    size: 12,
+                    color: AppColors.of(context).textMid,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),

@@ -142,7 +142,10 @@ class StepCalendarState extends State<StepCalendar> {
             ),
             Text(
               _monthLabel(),
-              style: PixelText.title(size: 16, color: AppColors.textDark),
+              style: PixelText.title(
+                size: 16,
+                color: AppColors.of(context).textDark,
+              ),
             ),
             PillIconButton(
               icon: Icons.chevron_right,
@@ -163,7 +166,7 @@ class StepCalendarState extends State<StepCalendar> {
                       d,
                       style: PixelText.title(
                         size: 12,
-                        color: AppColors.textMid,
+                        color: AppColors.of(context).textMid,
                       ),
                     ),
                   ),
@@ -194,11 +197,11 @@ class StepCalendarState extends State<StepCalendar> {
           Column(
             children: [
               if (_daysState.isRefreshing)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.only(bottom: 8),
                   child: LinearProgressIndicator(
                     minHeight: 2,
-                    color: AppColors.accent,
+                    color: AppColors.of(context).accent,
                     backgroundColor: Colors.transparent,
                   ),
                 ),
@@ -247,22 +250,24 @@ class StepCalendarState extends State<StepCalendar> {
 
         Color borderColor;
         if (isToday) {
-          borderColor = AppColors.pillGold;
+          borderColor = AppColors.of(context).pillGold;
         } else if (isInactive) {
-          borderColor = AppColors.parchmentBorder.withValues(alpha: 0.3);
+          borderColor = AppColors.of(
+            context,
+          ).parchmentBorder.withValues(alpha: 0.3);
         } else if (goalMet) {
-          borderColor = AppColors.grassMid;
+          borderColor = AppColors.of(context).grassMid;
         } else {
-          borderColor = AppColors.error;
+          borderColor = AppColors.of(context).error;
         }
 
         final bgColor = isInactive
-            ? AppColors.parchmentDark.withValues(alpha: 0.2)
-            : AppColors.parchmentDark.withValues(alpha: 0.5);
+            ? AppColors.of(context).parchmentDark.withValues(alpha: 0.2)
+            : AppColors.of(context).parchmentDark.withValues(alpha: 0.5);
 
         final textColor = isInactive
-            ? AppColors.textMid.withValues(alpha: 0.3)
-            : AppColors.textDark;
+            ? AppColors.of(context).textMid.withValues(alpha: 0.3)
+            : AppColors.of(context).textDark;
 
         cells.add(
           Expanded(
@@ -289,7 +294,9 @@ class StepCalendarState extends State<StepCalendar> {
                       _formatSteps(steps),
                       style: PixelText.body(
                         size: 10,
-                        color: goalMet ? AppColors.grassMid : AppColors.textMid,
+                        color: goalMet
+                            ? AppColors.of(context).grassMid
+                            : AppColors.of(context).textMid,
                       ),
                     )
                   else
@@ -297,7 +304,9 @@ class StepCalendarState extends State<StepCalendar> {
                       '-',
                       style: PixelText.body(
                         size: 10,
-                        color: AppColors.textMid.withValues(alpha: 0.3),
+                        color: AppColors.of(
+                          context,
+                        ).textMid.withValues(alpha: 0.3),
                       ),
                     ),
                 ],

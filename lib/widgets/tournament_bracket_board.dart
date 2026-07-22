@@ -83,13 +83,15 @@ class _TournamentBracketBoardState extends State<TournamentBracketBoard> {
 
     for (var r = 1; r <= rounds; r++) {
       final count = BracketModel.matchupsInRound(size, r);
-      final x = TournamentBracketBoard.sidePad +
+      final x =
+          TournamentBracketBoard.sidePad +
           (r - 1) * TournamentBracketBoard.colW +
           TournamentBracketBoard.cardW / 2;
       for (var i = 0; i < count; i++) {
         double cy;
         if (r == 1) {
-          cy = TournamentBracketBoard.topPad +
+          cy =
+              TournamentBracketBoard.topPad +
               TournamentBracketBoard.boxH / 2 +
               i * TournamentBracketBoard.leafPitch;
         } else {
@@ -167,9 +169,9 @@ class _TournamentBracketBoardState extends State<TournamentBracketBoard> {
             children: [
               // The checkered green arcade grid fills the whole viewport as a
               // base so edges never show bare while dragging.
-              const Positioned.fill(
+              Positioned.fill(
                 child: ColoredBox(
-                  color: AppColors.roofLight,
+                  color: AppColors.of(context).roofLight,
                   child: CustomPaint(
                     painter: ArcadeCheckerPainter(drawBottomStripe: false),
                   ),
@@ -223,6 +225,7 @@ class _TournamentBracketBoardState extends State<TournamentBracketBoard> {
             centers: _centers,
             championCenter: _championCenter,
             model: model,
+            lineColor: AppColors.of(context).roofEdge.withValues(alpha: 0.85),
           ),
         ),
       ),
@@ -230,7 +233,8 @@ class _TournamentBracketBoardState extends State<TournamentBracketBoard> {
 
     // Round labels.
     for (var r = 1; r <= model.totalRounds; r++) {
-      final x = TournamentBracketBoard.sidePad +
+      final x =
+          TournamentBracketBoard.sidePad +
           (r - 1) * TournamentBracketBoard.colW;
       children.add(
         Positioned(
@@ -243,7 +247,8 @@ class _TournamentBracketBoardState extends State<TournamentBracketBoard> {
     }
     children.add(
       Positioned(
-        left: TournamentBracketBoard.sidePad +
+        left:
+            TournamentBracketBoard.sidePad +
             model.totalRounds * TournamentBracketBoard.colW,
         top: 18,
         width: TournamentBracketBoard.champW,
@@ -293,15 +298,18 @@ class _TournamentBracketBoardState extends State<TournamentBracketBoard> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: AppColors.roofDark.withValues(alpha: 0.62),
+          color: AppColors.of(context).roofDark.withValues(alpha: 0.62),
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: AppColors.roofEdge, width: 1.5),
+          border: Border.all(color: AppColors.of(context).roofEdge, width: 1.5),
         ),
         child: Text(
           text,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: PixelText.title(size: 11, color: AppColors.parchment),
+          style: PixelText.title(
+            size: 11,
+            color: AppColors.of(context).textLight,
+          ),
         ),
       ),
     );
@@ -312,17 +320,19 @@ class _TournamentBracketBoardState extends State<TournamentBracketBoard> {
   Widget _matchupBox(BracketMatchup m) {
     final mine = m.isMine;
     final live = m.liveForMe;
-    final borderColor = mine ? AppColors.pillGoldDark : AppColors.parchmentBorder;
+    final borderColor = mine
+        ? AppColors.of(context).pillGoldDark
+        : AppColors.of(context).parchmentBorder;
 
     final box = Container(
       decoration: BoxDecoration(
-        color: AppColors.parchment,
+        color: AppColors.of(context).parchment,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: borderColor, width: mine ? 2.5 : 1.5),
         boxShadow: [
           BoxShadow(
             color: mine
-                ? AppColors.pillGoldShadow.withValues(alpha: 0.55)
+                ? AppColors.of(context).pillGoldShadow.withValues(alpha: 0.55)
                 : const Color(0x55000000),
             offset: const Offset(0, 3),
             blurRadius: mine ? 6 : 0,
@@ -333,7 +343,7 @@ class _TournamentBracketBoardState extends State<TournamentBracketBoard> {
         mainAxisSize: MainAxisSize.min,
         children: [
           _slotRow(m.top, top: true),
-          Container(height: 1.5, color: AppColors.parchmentBorder),
+          Container(height: 1.5, color: AppColors.of(context).parchmentBorder),
           _slotRow(m.bottom, top: false),
         ],
       ),
@@ -354,9 +364,7 @@ class _TournamentBracketBoardState extends State<TournamentBracketBoard> {
     // subtle "WATCH" ribbon; a completed matchup stays tappable (to review the
     // result) without the ribbon — its winner check already reads.
     if (hasRace) {
-      final child = m.completed
-          ? box
-          : _ribboned(box, _watchRibbon());
+      final child = m.completed ? box : _ribboned(box, _watchRibbon());
       return GestureDetector(
         onTap: () => widget.onTapMatchup?.call(raceId),
         child: child,
@@ -380,20 +388,34 @@ class _TournamentBracketBoardState extends State<TournamentBracketBoard> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.pillGold, AppColors.pillGoldDark],
+        gradient: LinearGradient(
+          colors: [
+            AppColors.of(context).pillGold,
+            AppColors.of(context).pillGoldDark,
+          ],
         ),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.pillGoldShadow, width: 1.5),
+        border: Border.all(
+          color: AppColors.of(context).pillGoldShadow,
+          width: 1.5,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.sports_esports_rounded,
-              size: 12, color: AppColors.textDark),
+          Icon(
+            Icons.sports_esports_rounded,
+            size: 12,
+            color: AppColors.of(context).textDark,
+          ),
           const SizedBox(width: 4),
-          Text('TAP TO RACE',
-              style: PixelText.title(size: 10, color: AppColors.textDark)),
+          Text(
+            'TAP TO RACE',
+            style: PixelText.title(
+              size: 10,
+              color: AppColors.of(context).textDark,
+            ),
+          ),
         ],
       ),
     );
@@ -403,19 +425,26 @@ class _TournamentBracketBoardState extends State<TournamentBracketBoard> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2.5),
       decoration: BoxDecoration(
-        color: AppColors.roofDark.withValues(alpha: 0.9),
+        color: AppColors.of(context).roofDark.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.roofEdge, width: 1),
+        border: Border.all(color: AppColors.of(context).roofEdge, width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.visibility_rounded,
-              size: 11, color: Colors.white.withValues(alpha: 0.85)),
+          Icon(
+            Icons.visibility_rounded,
+            size: 11,
+            color: Colors.white.withValues(alpha: 0.85),
+          ),
           const SizedBox(width: 4),
-          Text('WATCH',
-              style: PixelText.title(
-                  size: 9, color: Colors.white.withValues(alpha: 0.9))),
+          Text(
+            'WATCH',
+            style: PixelText.title(
+              size: 9,
+              color: Colors.white.withValues(alpha: 0.9),
+            ),
+          ),
         ],
       ),
     );
@@ -444,8 +473,8 @@ class _TournamentBracketBoardState extends State<TournamentBracketBoard> {
           style: PixelText.title(
             size: 11,
             color: faded
-                ? AppColors.textMid.withValues(alpha: 0.5)
-                : AppColors.textMid,
+                ? AppColors.of(context).textMid.withValues(alpha: 0.5)
+                : AppColors.of(context).textMid,
           ),
         ),
       ),
@@ -459,13 +488,16 @@ class _TournamentBracketBoardState extends State<TournamentBracketBoard> {
     final p = slot.participant;
     final avatarUrl = p?['avatar'] as String?;
 
-    final nameStyle = PixelText.body(
-      size: 12.5,
-      color: out ? AppColors.textMid : AppColors.textDark,
-    ).copyWith(
-      decoration: out ? TextDecoration.lineThrough : null,
-      fontWeight: (won || slot.isMe) ? FontWeight.w800 : FontWeight.w600,
-    );
+    final nameStyle =
+        PixelText.body(
+          size: 12.5,
+          color: out
+              ? AppColors.of(context).textMid
+              : AppColors.of(context).textDark,
+        ).copyWith(
+          decoration: out ? TextDecoration.lineThrough : null,
+          fontWeight: (won || slot.isMe) ? FontWeight.w800 : FontWeight.w600,
+        );
 
     return Opacity(
       opacity: out ? 0.62 : 1,
@@ -473,7 +505,9 @@ class _TournamentBracketBoardState extends State<TournamentBracketBoard> {
         height: TournamentBracketBoard.slotH,
         padding: const EdgeInsets.symmetric(horizontal: 6),
         decoration: won
-            ? BoxDecoration(color: AppColors.pillGold.withValues(alpha: 0.22))
+            ? BoxDecoration(
+                color: AppColors.of(context).pillGold.withValues(alpha: 0.22),
+              )
             : null,
         child: Row(
           children: [
@@ -497,22 +531,35 @@ class _TournamentBracketBoardState extends State<TournamentBracketBoard> {
               ),
             ),
             if (slot.forfeited)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.only(left: 3),
-                child: Icon(Icons.flag_rounded, size: 12, color: AppColors.error),
+                child: Icon(
+                  Icons.flag_rounded,
+                  size: 12,
+                  color: AppColors.of(context).error,
+                ),
               )
             else if (won)
-              const Icon(Icons.check_circle_rounded,
-                  size: 14, color: AppColors.roofLight)
+              Icon(
+                Icons.check_circle_rounded,
+                size: 14,
+                color: AppColors.of(context).roofLight,
+              )
             else if (slot.stealthed)
               Text(
                 '???',
-                style: PixelText.body(size: 10.5, color: AppColors.textMid),
+                style: PixelText.body(
+                  size: 10.5,
+                  color: AppColors.of(context).textMid,
+                ),
               )
             else if (slot.steps > 0)
               Text(
                 _fmt(slot.steps),
-                style: PixelText.body(size: 10.5, color: AppColors.textMid),
+                style: PixelText.body(
+                  size: 10.5,
+                  color: AppColors.of(context).textMid,
+                ),
               ),
           ],
         ),
@@ -530,21 +577,31 @@ class _TournamentBracketBoardState extends State<TournamentBracketBoard> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         gradient: crowned
-            ? const LinearGradient(
+            ? LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [AppColors.pillGold, AppColors.pillGoldDark],
+                colors: [
+                  AppColors.of(context).pillGold,
+                  AppColors.of(context).pillGoldDark,
+                ],
               )
             : null,
-        color: crowned ? null : AppColors.parchmentDark.withValues(alpha: 0.55),
+        color: crowned
+            ? null
+            : AppColors.of(context).parchmentDark.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: crowned ? AppColors.pillGoldShadow : AppColors.parchmentBorder,
+          color: crowned
+              ? AppColors.of(context).pillGoldShadow
+              : AppColors.of(context).parchmentBorder,
           width: crowned ? 2.5 : 1.5,
         ),
         boxShadow: crowned
-            ? const [
-                BoxShadow(color: AppColors.pillGoldShadow, offset: Offset(0, 4)),
+            ? [
+                BoxShadow(
+                  color: AppColors.of(context).pillGoldShadow,
+                  offset: Offset(0, 4),
+                ),
               ]
             : null,
       ),
@@ -558,8 +615,8 @@ class _TournamentBracketBoardState extends State<TournamentBracketBoard> {
             style: PixelText.title(
               size: crowned ? 10 : 13,
               color: crowned
-                  ? AppColors.textDark.withValues(alpha: 0.75)
-                  : AppColors.textMid,
+                  ? AppColors.of(context).textDark.withValues(alpha: 0.75)
+                  : AppColors.of(context).textMid,
             ),
           ),
           if (crowned && name != null) ...[
@@ -568,7 +625,10 @@ class _TournamentBracketBoardState extends State<TournamentBracketBoard> {
               atName(name),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: PixelText.title(size: 15, color: AppColors.textDark),
+              style: PixelText.title(
+                size: 15,
+                color: AppColors.of(context).textDark,
+              ),
             ),
           ],
         ],
@@ -580,17 +640,26 @@ class _TournamentBracketBoardState extends State<TournamentBracketBoard> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.roofDark.withValues(alpha: 0.82),
+        color: AppColors.of(context).roofDark.withValues(alpha: 0.82),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.roofEdge, width: 1.5),
+        border: Border.all(color: AppColors.of(context).roofEdge, width: 1.5),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.pan_tool_rounded, size: 13, color: AppColors.parchment),
+          Icon(
+            Icons.pan_tool_rounded,
+            size: 13,
+            color: AppColors.of(context).textLight,
+          ),
           const SizedBox(width: 6),
-          Text('Drag to explore the bracket',
-              style: PixelText.body(size: 12, color: AppColors.parchment)),
+          Text(
+            'Drag to explore the bracket',
+            style: PixelText.body(
+              size: 12,
+              color: AppColors.of(context).textLight,
+            ),
+          ),
         ],
       ),
     );
@@ -613,16 +682,18 @@ class _ConnectorPainter extends CustomPainter {
     required this.centers,
     required this.championCenter,
     required this.model,
+    required this.lineColor,
   });
 
   final Map<(int, int), Offset> centers;
   final Offset championCenter;
   final BracketModel model;
+  final Color lineColor;
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = AppColors.roofEdge.withValues(alpha: 0.85)
+      ..color = lineColor
       ..strokeWidth = 3
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
@@ -673,5 +744,7 @@ class _ConnectorPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _ConnectorPainter old) =>
-      old.centers != centers || old.championCenter != championCenter;
+      old.centers != centers ||
+      old.championCenter != championCenter ||
+      old.lineColor != lineColor;
 }

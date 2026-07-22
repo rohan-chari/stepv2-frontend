@@ -117,7 +117,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
     final code = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.parchment,
+      backgroundColor: AppColors.of(context).parchment,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -171,12 +171,12 @@ class _ReferralScreenState extends State<ReferralScreen> {
     final topInset = MediaQuery.of(context).padding.top;
 
     return Scaffold(
-      backgroundColor: AppColors.roofLight,
+      backgroundColor: AppColors.of(context).roofLight,
       body: Stack(
         children: [
-          const Positioned.fill(
+          Positioned.fill(
             child: ColoredBox(
-              color: AppColors.roofLight,
+              color: AppColors.of(context).roofLight,
               child: CustomPaint(
                 painter: ArcadeCheckerPainter(drawBottomStripe: false),
               ),
@@ -191,8 +191,8 @@ class _ReferralScreenState extends State<ReferralScreen> {
                 Expanded(
                   child: RefreshIndicator(
                     onRefresh: _load,
-                    color: AppColors.accent,
-                    backgroundColor: AppColors.parchment,
+                    color: AppColors.of(context).accent,
+                    backgroundColor: AppColors.of(context).parchment,
                     child: ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
@@ -210,9 +210,11 @@ class _ReferralScreenState extends State<ReferralScreen> {
 
   Widget _buildHeader() {
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: AppColors.roofLight,
-        border: Border(bottom: BorderSide(color: AppColors.roofDark, width: 1)),
+      decoration: BoxDecoration(
+        color: AppColors.of(context).roofLight,
+        border: Border(
+          bottom: BorderSide(color: AppColors.of(context).roofDark, width: 1),
+        ),
       ),
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
@@ -226,9 +228,9 @@ class _ReferralScreenState extends State<ReferralScreen> {
                 child: IconButton(
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.arrow_back,
-                    color: AppColors.parchment,
+                    color: AppColors.of(context).textLight,
                   ),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
@@ -238,7 +240,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
                 'INVITE FRIENDS',
                 style: PixelText.title(
                   size: 28,
-                  color: AppColors.parchment,
+                  color: AppColors.of(context).textLight,
                 ).copyWith(shadows: _textShadows),
               ),
               const SizedBox(height: 5),
@@ -247,7 +249,9 @@ class _ReferralScreenState extends State<ReferralScreen> {
                 'you BOTH earn coins.',
                 style: PixelText.body(
                   size: 14,
-                  color: AppColors.parchment.withValues(alpha: 0.92),
+                  color: AppColors.of(
+                    context,
+                  ).textLight.withValues(alpha: 0.92),
                 ),
               ),
             ],
@@ -275,7 +279,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
           textAlign: TextAlign.center,
           style: PixelText.title(
             size: 18,
-            color: AppColors.parchment,
+            color: AppColors.of(context).textLight,
           ).copyWith(shadows: _textShadows),
         ),
         const SizedBox(height: 8),
@@ -284,7 +288,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
           textAlign: TextAlign.center,
           style: PixelText.body(
             size: 14,
-            color: AppColors.parchment.withValues(alpha: 0.88),
+            color: AppColors.of(context).textLight.withValues(alpha: 0.88),
           ),
         ),
         const SizedBox(height: 16),
@@ -321,7 +325,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
             'Your code: $_code',
             style: PixelText.body(
               size: 14,
-              color: AppColors.parchment.withValues(alpha: 0.92),
+              color: AppColors.of(context).textLight.withValues(alpha: 0.92),
             ).copyWith(shadows: _textShadows),
           ),
         ),
@@ -345,7 +349,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
                         textAlign: TextAlign.center,
                         style: PixelText.body(
                           size: 14,
-                          color: AppColors.textMid,
+                          color: AppColors.of(context).textMid,
                         ),
                       ),
                     )
@@ -362,7 +366,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
             'Have an invite code?',
             style: PixelText.body(
               size: 14,
-              color: AppColors.parchment.withValues(alpha: 0.92),
+              color: AppColors.of(context).textLight.withValues(alpha: 0.92),
             ).copyWith(decoration: TextDecoration.underline),
           ),
         ),
@@ -378,7 +382,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
             'Program rules',
             style: PixelText.body(
               size: 13,
-              color: AppColors.parchment.withValues(alpha: 0.75),
+              color: AppColors.of(context).textLight.withValues(alpha: 0.75),
             ).copyWith(decoration: TextDecoration.underline),
           ),
         ),
@@ -389,10 +393,10 @@ class _ReferralScreenState extends State<ReferralScreen> {
   /// Parchment game-piece card — same language as the redesigned tabs.
   BoxDecoration _referralCardDecoration() {
     return BoxDecoration(
-      color: AppColors.parchment,
+      color: AppColors.of(context).parchment,
       borderRadius: BorderRadius.circular(14),
       border: Border.all(
-        color: AppColors.roofDark.withValues(alpha: 0.55),
+        color: AppColors.of(context).roofDark.withValues(alpha: 0.55),
         width: 2,
       ),
       boxShadow: const [
@@ -424,7 +428,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
   Widget _divider() => Container(
     width: 1,
     height: 36,
-    color: AppColors.parchmentBorder.withValues(alpha: 0.6),
+    color: AppColors.of(context).parchmentBorder.withValues(alpha: 0.6),
   );
 
   Widget _buildStat(String value, String label) {
@@ -432,10 +436,16 @@ class _ReferralScreenState extends State<ReferralScreen> {
       children: [
         Text(
           value,
-          style: PixelText.title(size: 22, color: AppColors.textDark),
+          style: PixelText.title(
+            size: 22,
+            color: AppColors.of(context).textDark,
+          ),
         ),
         const SizedBox(height: 4),
-        Text(label, style: PixelText.body(size: 12, color: AppColors.textMid)),
+        Text(
+          label,
+          style: PixelText.body(size: 12, color: AppColors.of(context).textMid),
+        ),
       ],
     );
   }
@@ -450,14 +460,17 @@ class _ReferralScreenState extends State<ReferralScreen> {
             const SizedBox(width: 4),
             Text(
               '$_coinsEarned',
-              style: PixelText.title(size: 22, color: AppColors.textDark),
+              style: PixelText.title(
+                size: 22,
+                color: AppColors.of(context).textDark,
+              ),
             ),
           ],
         ),
         const SizedBox(height: 4),
         Text(
           'Earned',
-          style: PixelText.body(size: 12, color: AppColors.textMid),
+          style: PixelText.body(size: 12, color: AppColors.of(context).textMid),
         ),
       ],
     );
@@ -470,9 +483,9 @@ class _ReferralScreenState extends State<ReferralScreen> {
           width: 6,
           height: 16,
           decoration: BoxDecoration(
-            color: AppColors.pillGold,
+            color: AppColors.of(context).pillGold,
             borderRadius: BorderRadius.circular(3),
-            border: Border.all(color: AppColors.pillGoldDark),
+            border: Border.all(color: AppColors.of(context).pillGoldDark),
           ),
         ),
         const SizedBox(width: 8),
@@ -480,7 +493,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
           title,
           style: PixelText.title(
             size: 16,
-            color: AppColors.parchment,
+            color: AppColors.of(context).textLight,
           ).copyWith(shadows: _textShadows),
         ),
       ],
@@ -501,7 +514,10 @@ class _ReferralScreenState extends State<ReferralScreen> {
           Expanded(
             child: Text(
               name != null ? atName(name) : 'A friend',
-              style: PixelText.body(size: 15, color: AppColors.textDark),
+              style: PixelText.body(
+                size: 15,
+                color: AppColors.of(context).textDark,
+              ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -562,12 +578,17 @@ class _StageBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label = completed ? 'COMPLETED' : 'JOINED';
-    final color = completed ? AppColors.pillGreenDark : AppColors.textMid;
+    final color = completed
+        ? AppColors.of(context).pillGreenDark
+        : AppColors.of(context).textMid;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: (completed ? AppColors.pillGreen : AppColors.parchmentDark)
-            .withValues(alpha: completed ? 0.25 : 0.5),
+        color:
+            (completed
+                    ? AppColors.of(context).pillGreen
+                    : AppColors.of(context).parchmentDark)
+                .withValues(alpha: completed ? 0.25 : 0.5),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
@@ -602,7 +623,10 @@ class _EnterCodeSheetState extends State<_EnterCodeSheet> {
         children: [
           Text(
             'ENTER INVITE CODE',
-            style: PixelText.title(size: 16, color: AppColors.textDark),
+            style: PixelText.title(
+              size: 16,
+              color: AppColors.of(context).textDark,
+            ),
           ),
           const SizedBox(height: 14),
           TextField(
@@ -612,13 +636,18 @@ class _EnterCodeSheetState extends State<_EnterCodeSheet> {
             decoration: InputDecoration(
               hintText: 'BARA-XXXX',
               filled: true,
-              fillColor: AppColors.parchmentLight,
+              fillColor: AppColors.of(context).parchmentLight,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: AppColors.parchmentBorder),
+                borderSide: BorderSide(
+                  color: AppColors.of(context).parchmentBorder,
+                ),
               ),
             ),
-            style: PixelText.body(size: 16, color: AppColors.textDark),
+            style: PixelText.body(
+              size: 16,
+              color: AppColors.of(context).textDark,
+            ),
             onSubmitted: (v) => Navigator.of(context).pop(v.trim()),
           ),
           const SizedBox(height: 16),

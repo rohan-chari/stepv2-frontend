@@ -143,14 +143,17 @@ class HomeTab extends StatelessWidget {
         // A hard-stop gradient (not a Column of Expandeds — that variant
         // reproducibly fails to paint here, see golden A/B test 2026-07-12)
         // splits the fill at mid-screen in a single paint op.
-        const Positioned.fill(
+        Positioned.fill(
           child: DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 stops: [0.5, 0.5],
-                colors: [HomeHeroScene.skyTopColor, AppColors.roofLight],
+                colors: [
+                  AppColors.of(context).sceneSkyTop,
+                  AppColors.of(context).roofLight,
+                ],
               ),
             ),
           ),
@@ -164,15 +167,15 @@ class HomeTab extends StatelessWidget {
           child: RefreshIndicator(
             onRefresh: onRefresh,
             edgeOffset: topInset,
-            color: AppColors.accent,
-            backgroundColor: AppColors.parchment,
+            color: AppColors.of(context).accent,
+            backgroundColor: AppColors.of(context).parchment,
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
                 SliverToBoxAdapter(child: _buildHeroSection(context)),
                 SliverToBoxAdapter(
                   child: ColoredBox(
-                    color: AppColors.roofLight,
+                    color: AppColors.of(context).roofLight,
                     child: CustomPaint(
                       painter: const ArcadeCheckerPainter(
                         drawBottomStripe: false,
@@ -191,8 +194,12 @@ class HomeTab extends StatelessWidget {
                                   begin: Alignment.topCenter,
                                   end: Alignment.bottomCenter,
                                   colors: [
-                                    AppColors.dirtDark.withValues(alpha: 0.38),
-                                    AppColors.dirtDark.withValues(alpha: 0.0),
+                                    AppColors.of(
+                                      context,
+                                    ).dirtDark.withValues(alpha: 0.38),
+                                    AppColors.of(
+                                      context,
+                                    ).dirtDark.withValues(alpha: 0.0),
                                   ],
                                 ),
                               ),
@@ -587,9 +594,12 @@ class HomeTab extends StatelessWidget {
           maxAlpha: 0.38,
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: AppColors.parchment,
+              color: AppColors.of(context).parchment,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.pillGoldDark, width: 2),
+              border: Border.all(
+                color: AppColors.of(context).pillGoldDark,
+                width: 2,
+              ),
             ),
             child: Center(
               child: Padding(
@@ -601,7 +611,7 @@ class HomeTab extends StatelessWidget {
                       child: Icon(
                         Icons.add_circle_rounded,
                         size: 42,
-                        color: AppColors.pillGoldShadow,
+                        color: AppColors.of(context).pillGoldShadow,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -610,14 +620,17 @@ class HomeTab extends StatelessWidget {
                       textAlign: TextAlign.center,
                       style: PixelText.title(
                         size: 17,
-                        color: AppColors.textDark,
+                        color: AppColors.of(context).textDark,
                       ),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       'Find a race',
                       textAlign: TextAlign.center,
-                      style: PixelText.body(size: 12, color: AppColors.textMid),
+                      style: PixelText.body(
+                        size: 12,
+                        color: AppColors.of(context).textMid,
+                      ),
                     ),
                   ],
                 ),
@@ -657,7 +670,7 @@ class HomeTab extends StatelessWidget {
             width: compact ? 168 : 196,
             height: compact ? 52 : 60,
             decoration: BoxDecoration(
-              color: AppColors.parchment.withValues(alpha: 0.30),
+              color: AppColors.of(context).textLight.withValues(alpha: 0.30),
               borderRadius: BorderRadius.circular(14),
             ),
           ),
@@ -666,7 +679,7 @@ class HomeTab extends StatelessWidget {
             width: 120,
             height: 13,
             decoration: BoxDecoration(
-              color: AppColors.parchment.withValues(alpha: 0.26),
+              color: AppColors.of(context).textLight.withValues(alpha: 0.26),
               borderRadius: BorderRadius.circular(999),
             ),
           ),
@@ -681,7 +694,7 @@ class HomeTab extends StatelessWidget {
             textAlign: TextAlign.center,
             style: PixelText.title(
               size: 22,
-              color: AppColors.parchment,
+              color: AppColors.of(context).textLight,
             ).copyWith(shadows: _heroShadows),
           ),
           const SizedBox(height: 8),
@@ -692,7 +705,7 @@ class HomeTab extends StatelessWidget {
             textAlign: TextAlign.center,
             style: PixelText.body(
               size: 14,
-              color: AppColors.parchment.withValues(alpha: 0.88),
+              color: AppColors.of(context).textLight.withValues(alpha: 0.88),
             ).copyWith(shadows: _heroShadows),
           ),
         ],
@@ -711,7 +724,7 @@ class HomeTab extends StatelessWidget {
                 format: _formatNumber,
                 style: PixelText.title(
                   size: compact ? 56 : 64,
-                  color: AppColors.parchment,
+                  color: AppColors.of(context).textLight,
                 ).copyWith(shadows: _heroHudShadows),
               ),
             ),
@@ -724,7 +737,7 @@ class HomeTab extends StatelessWidget {
             textAlign: TextAlign.center,
             style: PixelText.title(
               size: 13,
-              color: AppColors.parchment.withValues(alpha: 0.85),
+              color: AppColors.of(context).textLight.withValues(alpha: 0.85),
             ).copyWith(shadows: _heroShadows, letterSpacing: 3),
           ),
         ],
@@ -750,7 +763,7 @@ class HomeTab extends StatelessWidget {
                       atName(displayName ?? 'You'),
                       style: PixelText.title(
                         size: 24,
-                        color: AppColors.parchment,
+                        color: AppColors.of(context).textLight,
                       ).copyWith(shadows: _heroShadows),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -793,7 +806,7 @@ class HomeTab extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: PixelText.body(
                     size: 13,
-                    color: AppColors.parchment,
+                    color: AppColors.of(context).textLight,
                   ).copyWith(shadows: _heroShadows),
                 ),
               ),
@@ -1057,7 +1070,7 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
               'You can add one anytime in Profile.',
               style: PixelText.body(
                 size: 13,
-                color: AppColors.parchment.withValues(alpha: 0.8),
+                color: AppColors.of(context).textLight.withValues(alpha: 0.8),
               ),
               textAlign: TextAlign.center,
             ),
@@ -1086,10 +1099,10 @@ class _HomeNoticeRow extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: AppColors.parchment,
+          color: AppColors.of(context).parchment,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: AppColors.roofDark.withValues(alpha: 0.4),
+            color: AppColors.of(context).roofDark.withValues(alpha: 0.4),
             width: 2,
           ),
           boxShadow: _homeCardShadow,
@@ -1101,7 +1114,7 @@ class _HomeNoticeRow extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(icon, size: 24, color: AppColors.roofMid),
+                  Icon(icon, size: 24, color: AppColors.of(context).roofMid),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -1111,7 +1124,7 @@ class _HomeNoticeRow extends StatelessWidget {
                           title,
                           style: PixelText.title(
                             size: 20,
-                            color: AppColors.textDark,
+                            color: AppColors.of(context).textDark,
                           ),
                         ),
                         const SizedBox(height: 3),
@@ -1119,7 +1132,7 @@ class _HomeNoticeRow extends StatelessWidget {
                           subtitle,
                           style: PixelText.body(
                             size: 13,
-                            color: AppColors.textMid,
+                            color: AppColors.of(context).textMid,
                           ),
                         ),
                       ],
@@ -1149,7 +1162,7 @@ class _SkeletonBar extends StatelessWidget {
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: AppColors.parchmentBorder.withValues(alpha: 0.46),
+        color: AppColors.of(context).parchmentBorder.withValues(alpha: 0.46),
         borderRadius: BorderRadius.circular(999),
       ),
     );
@@ -1167,7 +1180,7 @@ class _SkeletonCircle extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: AppColors.parchmentBorder.withValues(alpha: 0.46),
+        color: AppColors.of(context).parchmentBorder.withValues(alpha: 0.46),
         borderRadius: BorderRadius.circular(999),
       ),
     );
@@ -1185,7 +1198,7 @@ class _HomeRaceHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const dividerColor = AppColors.feltLine;
+    final dividerColor = AppColors.of(context).feltLine;
     return Padding(
       padding: EdgeInsets.zero,
       child: Container(
@@ -1202,7 +1215,7 @@ class _HomeRaceHeader extends StatelessWidget {
               'RACES',
               style: PixelText.title(
                 size: 20,
-                color: AppColors.parchment,
+                color: AppColors.of(context).textLight,
               ).copyWith(shadows: _textShadows),
             ),
             const Spacer(),
@@ -1226,7 +1239,9 @@ class _HomeRaceHeader extends StatelessWidget {
                     'VIEW ALL',
                     style: PixelText.title(
                       size: 11,
-                      color: AppColors.parchment.withValues(alpha: 0.9),
+                      color: AppColors.of(
+                        context,
+                      ).textLight.withValues(alpha: 0.9),
                     ),
                   ),
                 ),
@@ -1248,10 +1263,10 @@ class _HomeRaceSkeletonTicket extends StatelessWidget {
       height: 222,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: AppColors.parchment.withValues(alpha: 0.96),
+          color: AppColors.of(context).parchment.withValues(alpha: 0.96),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: AppColors.roofDark.withValues(alpha: 0.18),
+            color: AppColors.of(context).roofDark.withValues(alpha: 0.18),
             width: 2,
           ),
         ),
@@ -1358,10 +1373,10 @@ class _HomeActiveRaceTicket extends StatelessWidget {
           onTap: onTap,
           child: Ink(
             decoration: BoxDecoration(
-              color: AppColors.parchment,
+              color: AppColors.of(context).parchment,
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: AppColors.roofDark.withValues(alpha: 0.55),
+                color: AppColors.of(context).roofDark.withValues(alpha: 0.55),
                 width: 2,
               ),
               boxShadow: _homeCardShadow,
@@ -1379,7 +1394,9 @@ class _HomeActiveRaceTicket extends StatelessWidget {
                         color: _bandColor(),
                         border: Border(
                           bottom: BorderSide(
-                            color: AppColors.roofDark.withValues(alpha: 0.16),
+                            color: AppColors.of(
+                              context,
+                            ).roofDark.withValues(alpha: 0.16),
                             width: 2,
                           ),
                         ),
@@ -1408,7 +1425,7 @@ class _HomeActiveRaceTicket extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                               style: PixelText.title(
                                 size: 17,
-                                color: AppColors.textDark,
+                                color: AppColors.of(context).textDark,
                               ),
                             ),
                             const Spacer(),
@@ -1437,7 +1454,7 @@ class _HomeActiveRaceTicket extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: PixelText.body(
                                   size: 12,
-                                  color: AppColors.textMid,
+                                  color: AppColors.of(context).textMid,
                                 ),
                               ),
                             const SizedBox(height: 10),
@@ -1447,10 +1464,10 @@ class _HomeActiveRaceTicket extends StatelessWidget {
                                 height: 32,
                                 alignment: Alignment.center,
                                 decoration: BoxDecoration(
-                                  color: AppColors.pillGold,
+                                  color: AppColors.of(context).pillGold,
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
-                                    color: AppColors.pillGoldDark,
+                                    color: AppColors.of(context).pillGoldDark,
                                     width: 1.5,
                                   ),
                                 ),
@@ -1458,7 +1475,7 @@ class _HomeActiveRaceTicket extends StatelessWidget {
                                   'VIEW RACE',
                                   style: PixelText.title(
                                     size: 12,
-                                    color: AppColors.textDark,
+                                    color: AppColors.of(context).textDark,
                                   ),
                                 ),
                               ),
@@ -1503,10 +1520,10 @@ class _HomeRaceActionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: AppColors.parchment,
+        color: AppColors.of(context).parchment,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: AppColors.roofDark.withValues(alpha: 0.4),
+          color: AppColors.of(context).roofDark.withValues(alpha: 0.4),
           width: 2,
         ),
         boxShadow: _homeCardShadow,
@@ -1521,21 +1538,30 @@ class _HomeRaceActionRow extends StatelessWidget {
                 children: [
                   Text(
                     label,
-                    style: PixelText.title(size: 10, color: AppColors.roofMid),
+                    style: PixelText.title(
+                      size: 10,
+                      color: AppColors.of(context).roofMid,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: PixelText.title(size: 17, color: AppColors.textDark),
+                    style: PixelText.title(
+                      size: 17,
+                      color: AppColors.of(context).textDark,
+                    ),
                   ),
                   const SizedBox(height: 3),
                   Text(
                     subtitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: PixelText.body(size: 12, color: AppColors.textMid),
+                    style: PixelText.body(
+                      size: 12,
+                      color: AppColors.of(context).textMid,
+                    ),
                   ),
                 ],
               ),
@@ -1594,10 +1620,14 @@ class _SmallRaceButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 7),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: muted ? AppColors.parchmentLight : AppColors.pillGold,
+            color: muted
+                ? AppColors.of(context).parchmentLight
+                : AppColors.of(context).pillGold,
             borderRadius: BorderRadius.circular(7),
             border: Border.all(
-              color: muted ? AppColors.parchmentBorder : AppColors.pillGoldDark,
+              color: muted
+                  ? AppColors.of(context).parchmentBorder
+                  : AppColors.of(context).pillGoldDark,
               width: 1.5,
             ),
           ),
@@ -1607,7 +1637,9 @@ class _SmallRaceButton extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: PixelText.title(
               size: 10,
-              color: muted ? AppColors.textMid : AppColors.textDark,
+              color: muted
+                  ? AppColors.of(context).textMid
+                  : AppColors.of(context).textDark,
             ),
           ),
         ),
@@ -1630,8 +1662,8 @@ class _HomeSectionHeader extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 9),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: AppColors.feltLine)),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: AppColors.of(context).feltLine)),
       ),
       child: Row(
         children: [
@@ -1641,7 +1673,7 @@ class _HomeSectionHeader extends StatelessWidget {
             title,
             style: PixelText.title(
               size: 20,
-              color: AppColors.parchment,
+              color: AppColors.of(context).textLight,
             ).copyWith(shadows: _textShadows),
           ),
         ],
@@ -1661,11 +1693,10 @@ class _SectionTick extends StatelessWidget {
       width: 6,
       height: 18,
       decoration: BoxDecoration(
-        color: AppColors.pillGold,
+        color: AppColors.of(context).pillGold,
         borderRadius: BorderRadius.circular(3),
-        border: Border.all(color: AppColors.pillGoldDark),
+        border: Border.all(color: AppColors.of(context).pillGoldDark),
       ),
     );
   }
 }
-

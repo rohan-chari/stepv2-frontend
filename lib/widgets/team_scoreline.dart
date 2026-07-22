@@ -41,8 +41,13 @@ class TeamScoreline extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final aColor = TeamRace.colorDark(RaceTeam.teamA);
-    final bColor = TeamRace.colorDark(RaceTeam.teamB);
+    final colors = AppColors.of(context);
+    final aColor = colors.isDark
+        ? colors.feedGold
+        : TeamRace.colorDark(RaceTeam.teamA);
+    final bColor = colors.isDark
+        ? colors.successText
+        : TeamRace.colorDark(RaceTeam.teamB);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -62,7 +67,10 @@ class TeamScoreline extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 5),
               child: Text(
                 '—',
-                style: PixelText.body(size: 12, color: AppColors.textMid),
+                style: PixelText.body(
+                  size: 12,
+                  color: AppColors.of(context).textMid,
+                ),
               ),
             ),
             Flexible(
@@ -112,7 +120,7 @@ class TeamFormatChip extends StatelessWidget {
           end: Alignment.centerRight,
         ),
         borderRadius: BorderRadius.circular(7),
-        border: Border.all(color: AppColors.woodDark, width: 1.5),
+        border: Border.all(color: AppColors.of(context).woodDark, width: 1.5),
       ),
       child: Text(
         TeamRace.formatLabel(teamSize),

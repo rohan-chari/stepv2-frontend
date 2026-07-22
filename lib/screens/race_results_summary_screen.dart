@@ -41,7 +41,7 @@ class RaceResultsSummaryScreen extends StatelessWidget {
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 2.5),
               child: ColoredBox(
-                color: AppColors.roofDark.withValues(alpha: 0.54),
+                color: AppColors.of(context).roofDark.withValues(alpha: 0.54),
               ),
             ),
           ),
@@ -56,9 +56,9 @@ class RaceResultsSummaryScreen extends StatelessWidget {
                         constraints: const BoxConstraints(maxWidth: 460),
                         child: GameContainer(
                           padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
-                          frameColor: AppColors.accent,
-                          surfaceColor: AppColors.parchmentLight,
-                          glowColor: AppColors.coinMid,
+                          frameColor: AppColors.of(context).accent,
+                          surfaceColor: AppColors.of(context).parchmentLight,
+                          glowColor: AppColors.of(context).coinMid,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             mainAxisSize: MainAxisSize.min,
@@ -68,7 +68,7 @@ class RaceResultsSummaryScreen extends StatelessWidget {
                                 textAlign: TextAlign.center,
                                 style: HomeText.display(
                                   size: 28,
-                                  color: HomeColors.ink,
+                                  color: AppColors.of(context).ink,
                                 ),
                               ),
                               const SizedBox(height: 4),
@@ -79,7 +79,7 @@ class RaceResultsSummaryScreen extends StatelessWidget {
                                 textAlign: TextAlign.center,
                                 style: HomeText.body(
                                   size: 13,
-                                  color: HomeColors.muted,
+                                  color: AppColors.of(context).muted,
                                   weight: FontWeight.w700,
                                 ),
                               ),
@@ -136,7 +136,11 @@ class _ResultCard extends StatelessWidget {
     // TR-807: team-framed result. Tie = winnerTeam null on a completed team
     // race (TR-404). All reads defensive — old payloads have none of this.
     if (TeamRace.isTeamRace(race)) {
-      return _buildTeamResult(payoutCoins: payoutCoins, raceName: name);
+      return _buildTeamResult(
+        context: context,
+        payoutCoins: payoutCoins,
+        raceName: name,
+      );
     }
 
     final placeText = myPlacement == null
@@ -148,8 +152,8 @@ class _ResultCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.parchmentDark,
-        border: Border.all(color: AppColors.coinDark, width: 2),
+        color: AppColors.of(context).parchmentDark,
+        border: Border.all(color: AppColors.of(context).coinDark, width: 2),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -157,7 +161,10 @@ class _ResultCard extends StatelessWidget {
         children: [
           Text(
             name,
-            style: PixelText.title(size: 15, color: AppColors.textDark),
+            style: PixelText.title(
+              size: 15,
+              color: AppColors.of(context).textDark,
+            ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
@@ -170,18 +177,24 @@ class _ResultCard extends StatelessWidget {
                     : Icons.flag_rounded,
                 size: 18,
                 color: myPlacement == 1
-                    ? AppColors.coinDark
-                    : AppColors.textMid,
+                    ? AppColors.of(context).coinDark
+                    : AppColors.of(context).textMid,
               ),
               const SizedBox(width: 6),
               Text(
                 'YOU PLACED',
-                style: PixelText.body(size: 11, color: AppColors.textMid),
+                style: PixelText.body(
+                  size: 11,
+                  color: AppColors.of(context).textMid,
+                ),
               ),
               const Spacer(),
               Text(
                 placeText.toUpperCase(),
-                style: PixelText.number(size: 14, color: AppColors.textDark),
+                style: PixelText.number(
+                  size: 14,
+                  color: AppColors.of(context).textDark,
+                ),
               ),
             ],
           ),
@@ -189,22 +202,28 @@ class _ResultCard extends StatelessWidget {
             const SizedBox(height: 6),
             Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.military_tech_rounded,
                   size: 18,
-                  color: AppColors.textMid,
+                  color: AppColors.of(context).textMid,
                 ),
                 const SizedBox(width: 6),
                 Text(
                   'WINNER',
-                  style: PixelText.body(size: 11, color: AppColors.textMid),
+                  style: PixelText.body(
+                    size: 11,
+                    color: AppColors.of(context).textMid,
+                  ),
                 ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     atName(winnerName),
                     textAlign: TextAlign.right,
-                    style: PixelText.title(size: 13, color: AppColors.textDark),
+                    style: PixelText.title(
+                      size: 13,
+                      color: AppColors.of(context).textDark,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -220,12 +239,18 @@ class _ResultCard extends StatelessWidget {
                 const SizedBox(width: 6),
                 Text(
                   'PAYOUT',
-                  style: PixelText.body(size: 11, color: AppColors.textMid),
+                  style: PixelText.body(
+                    size: 11,
+                    color: AppColors.of(context).textMid,
+                  ),
                 ),
                 const Spacer(),
                 Text(
                   '+$payoutCoins',
-                  style: PixelText.number(size: 14, color: AppColors.coinDark),
+                  style: PixelText.number(
+                    size: 14,
+                    color: AppColors.of(context).coinDark,
+                  ),
                 ),
               ],
             ),
@@ -237,7 +262,11 @@ class _ResultCard extends StatelessWidget {
 
   /// TR-807: team-framed variant — outcome banner (VICTORY / DEFEAT / tie
   /// refund copy), winning team plaque + members, and the user's payout.
-  Widget _buildTeamResult({required int payoutCoins, required String raceName}) {
+  Widget _buildTeamResult({
+    required BuildContext context,
+    required int payoutCoins,
+    required String raceName,
+  }) {
     final winnerTeam = TeamRace.winnerTeam(race);
     final myTeam = parseRaceTeam(race['myTeam']);
     final isTie = winnerTeam == null;
@@ -245,22 +274,22 @@ class _ResultCard extends StatelessWidget {
 
     final participants =
         (race['participants'] as List?)?.cast<Map<String, dynamic>>() ??
-            const <Map<String, dynamic>>[];
+        const <Map<String, dynamic>>[];
     final winnerMembers = winnerTeam == null
         ? const <Map<String, dynamic>>[]
         : TeamRace.membersOf(participants, winnerTeam);
 
     final outcomeColor = isTie
-        ? AppColors.textMid
+        ? AppColors.of(context).textMid
         : won
-        ? AppColors.pillGreenDark
-        : AppColors.error;
+        ? AppColors.of(context).successText
+        : AppColors.of(context).error;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.parchmentDark,
-        border: Border.all(color: AppColors.coinDark, width: 2),
+        color: AppColors.of(context).parchmentDark,
+        border: Border.all(color: AppColors.of(context).coinDark, width: 2),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -268,7 +297,10 @@ class _ResultCard extends StatelessWidget {
         children: [
           Text(
             raceName,
-            style: PixelText.title(size: 15, color: AppColors.textDark),
+            style: PixelText.title(
+              size: 15,
+              color: AppColors.of(context).textDark,
+            ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
@@ -282,13 +314,16 @@ class _ResultCard extends StatelessWidget {
                     ? Icons.emoji_events_rounded
                     : Icons.flag_rounded,
                 size: 18,
-                color: isTie ? AppColors.textMid : outcomeColor,
+                color: isTie ? AppColors.of(context).textMid : outcomeColor,
               ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   isTie ? 'It’s a tie — buy-ins refunded' : 'YOUR TEAM',
-                  style: PixelText.body(size: 11, color: AppColors.textMid),
+                  style: PixelText.body(
+                    size: 11,
+                    color: AppColors.of(context).textMid,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -313,7 +348,10 @@ class _ResultCard extends StatelessWidget {
                 const SizedBox(width: 6),
                 Text(
                   'WINNERS',
-                  style: PixelText.body(size: 11, color: AppColors.textMid),
+                  style: PixelText.body(
+                    size: 11,
+                    color: AppColors.of(context).textMid,
+                  ),
                 ),
                 const SizedBox(width: 6),
                 Expanded(
@@ -323,9 +361,8 @@ class _ResultCard extends StatelessWidget {
                       if (winnerMembers.isNotEmpty)
                         winnerMembers
                             .map(
-                              (m) => atName(
-                                m['displayName'] as String? ?? '???',
-                              ),
+                              (m) =>
+                                  atName(m['displayName'] as String? ?? '???'),
                             )
                             .join(', '),
                     ].join(' — '),
@@ -349,12 +386,18 @@ class _ResultCard extends StatelessWidget {
                 const SizedBox(width: 6),
                 Text(
                   'PAYOUT',
-                  style: PixelText.body(size: 11, color: AppColors.textMid),
+                  style: PixelText.body(
+                    size: 11,
+                    color: AppColors.of(context).textMid,
+                  ),
                 ),
                 const Spacer(),
                 Text(
                   '+$payoutCoins',
-                  style: PixelText.number(size: 14, color: AppColors.coinDark),
+                  style: PixelText.number(
+                    size: 14,
+                    color: AppColors.of(context).coinDark,
+                  ),
                 ),
               ],
             ),

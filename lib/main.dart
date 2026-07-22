@@ -1,6 +1,7 @@
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -17,6 +18,7 @@ import 'services/deep_link_service.dart';
 import 'services/install_attribution_service.dart';
 import 'services/notification_service.dart';
 import 'styles.dart';
+import 'theme_controller.dart';
 import 'utils/app_version_gate.dart';
 
 Future<void> main() async {
@@ -49,11 +51,15 @@ Future<void> main() async {
     authService: authService,
   ).resolveOnFirstLaunch();
 
+  final themePreference = await AppThemeController.loadPreference();
+  final themeController = AppThemeController(preference: themePreference);
+
   runApp(
     StepTrackerApp(
       notificationService: notificationService,
       authService: authService,
       deepLinkService: deepLinkService,
+      themeController: themeController,
     ),
   );
 }
@@ -64,6 +70,7 @@ class StepTrackerApp extends StatelessWidget {
     required this.notificationService,
     required this.authService,
     required this.deepLinkService,
+    required this.themeController,
   });
 
   final NotificationService notificationService;
@@ -72,22 +79,53 @@ class StepTrackerApp extends StatelessWidget {
   // Held for its lifetime so the deep-link stream subscription stays alive for
   // the life of the app (links tapped while running).
   final DeepLinkService deepLinkService;
+  final AppThemeController themeController;
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Bara',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: AppColors.accent),
-        useMaterial3: true,
-      ),
-      builder: (context, child) => _EnvironmentBanner(child: child),
-      home: _VersionGate(
-        child: _SessionGate(
-          authService: authService,
-          notificationService: notificationService,
-        ),
+    return AppThemeScope(
+      controller: themeController,
+      child: AnimatedBuilder(
+        animation: themeController,
+        builder: (context, _) {
+          final reduceMotion = WidgetsBinding
+              .instance
+              .platformDispatcher
+              .accessibilityFeatures
+              .disableAnimations;
+          final dark = themeController.resolvedMode == ThemeMode.dark;
+          return MaterialApp(
+            title: 'Bara',
+            debugShowCheckedModeBanner: false,
+            theme: AppThemeData.light(),
+            darkTheme: AppThemeData.night(),
+            themeMode: themeController.resolvedMode,
+            themeAnimationDuration: reduceMotion
+                ? Duration.zero
+                : const Duration(milliseconds: 250),
+            themeAnimationCurve: Curves.easeOutCubic,
+            builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+              value: SystemUiOverlayStyle(
+                statusBarColor: Colors.transparent,
+                statusBarIconBrightness: dark
+                    ? Brightness.light
+                    : Brightness.dark,
+                statusBarBrightness: dark ? Brightness.dark : Brightness.light,
+                systemNavigationBarColor: AppColors.of(context).parchmentLight,
+                systemNavigationBarIconBrightness: dark
+                    ? Brightness.light
+                    : Brightness.dark,
+              ),
+              child: _EnvironmentBanner(child: child),
+            ),
+            home: _VersionGate(
+              child: _SessionGate(
+                authService: authService,
+                notificationService: notificationService,
+              ),
+            ),
+          );
+        },
       ),
     );
   }

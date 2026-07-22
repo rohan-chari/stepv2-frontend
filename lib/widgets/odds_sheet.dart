@@ -200,22 +200,28 @@ class OddsAffordance extends StatelessWidget {
             height: 36,
             padding: const EdgeInsets.symmetric(horizontal: 10),
             decoration: BoxDecoration(
-              color: AppColors.parchmentDark,
+              color: AppColors.of(context).parchmentDark,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.coinDark, width: 2),
+              border: Border.all(
+                color: AppColors.of(context).coinDark,
+                width: 2,
+              ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
+                Icon(
                   Icons.percent_rounded,
                   size: 15,
-                  color: AppColors.coinDark,
+                  color: AppColors.of(context).coinDark,
                 ),
                 const SizedBox(width: 5),
                 Text(
                   'ODDS',
-                  style: PixelText.pill(size: 11, color: AppColors.coinDark),
+                  style: PixelText.pill(
+                    size: 11,
+                    color: AppColors.of(context).coinDark,
+                  ),
                 ),
               ],
             ),
@@ -236,11 +242,8 @@ void showOddsSheet(
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
-    builder: (sheetContext) => _OddsSheet(
-      odds: odds,
-      title: title,
-      subtitle: subtitle,
-    ),
+    builder: (sheetContext) =>
+        _OddsSheet(odds: odds, title: title, subtitle: subtitle),
   );
 }
 
@@ -261,9 +264,9 @@ class _OddsSheet extends StatelessWidget {
       expand: false,
       builder: (_, scrollController) => GameContainer(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-        frameColor: AppColors.coinDark,
-        surfaceColor: AppColors.parchmentLight,
-        glowColor: AppColors.coinMid,
+        frameColor: AppColors.of(context).coinDark,
+        surfaceColor: AppColors.of(context).parchmentLight,
+        glowColor: AppColors.of(context).coinMid,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -273,7 +276,7 @@ class _OddsSheet extends StatelessWidget {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: AppColors.woodMid,
+                  color: AppColors.of(context).woodMid,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -282,7 +285,10 @@ class _OddsSheet extends StatelessWidget {
             Text(
               title,
               textAlign: TextAlign.center,
-              style: HomeText.display(size: 22, color: HomeColors.ink),
+              style: HomeText.display(
+                size: 22,
+                color: AppColors.of(context).ink,
+              ),
             ),
             if (subtitle != null) ...[
               const SizedBox(height: 4),
@@ -291,7 +297,7 @@ class _OddsSheet extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: HomeText.body(
                   size: 12,
-                  color: HomeColors.muted,
+                  color: AppColors.of(context).muted,
                   weight: FontWeight.w700,
                 ),
               ),
@@ -316,20 +322,28 @@ class _OddsSheet extends StatelessWidget {
                       _OddsBar(
                         label: slice.label,
                         pct: slice.p,
-                        color: AppColors.coinDark,
+                        color: AppColors.of(context).coinDark,
                       ),
                   ],
                   if (odds.byType != null) ...[
                     const SizedBox(height: 14),
                     _SectionLabel('BY POWERUP'),
                     for (final slice in _sorted(odds.byType!))
-                      _OddsRowWithIcon(type: slice.key, label: slice.label, p: slice.p),
+                      _OddsRowWithIcon(
+                        type: slice.key,
+                        label: slice.label,
+                        p: slice.p,
+                      ),
                   ],
                   if (odds.powerups != null) ...[
                     const SizedBox(height: 14),
                     _SectionLabel('POWERUP PRIZES'),
                     for (final slice in odds.powerups!)
-                      _OddsRowWithIcon(type: slice.key, label: slice.label, p: slice.p),
+                      _OddsRowWithIcon(
+                        type: slice.key,
+                        label: slice.label,
+                        p: slice.p,
+                      ),
                   ],
                   if (odds.accessories != null) ...[
                     const SizedBox(height: 14),
@@ -338,14 +352,17 @@ class _OddsSheet extends StatelessWidget {
                       _OddsBar(
                         label: slice.label,
                         pct: slice.p,
-                        color: AppColors.roofLight,
+                        color: AppColors.of(context).roofLight,
                       ),
                   ],
                   const SizedBox(height: 14),
                   Text(
                     _provenance(odds),
                     textAlign: TextAlign.center,
-                    style: PixelText.body(size: 10, color: AppColors.textMid),
+                    style: PixelText.body(
+                      size: 10,
+                      color: AppColors.of(context).textMid,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextButton(
@@ -354,7 +371,7 @@ class _OddsSheet extends StatelessWidget {
                       'CLOSE',
                       style: PixelText.pill(
                         size: 12,
-                        color: AppColors.textDark,
+                        color: AppColors.of(context).textDark,
                       ),
                     ),
                   ),
@@ -390,7 +407,7 @@ class _SectionLabel extends StatelessWidget {
     padding: const EdgeInsets.only(bottom: 8),
     child: Text(
       text,
-      style: PixelText.pill(size: 11, color: AppColors.textMid),
+      style: PixelText.pill(size: 11, color: AppColors.of(context).textMid),
     ),
   );
 }
@@ -411,7 +428,7 @@ class _OddsBar extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
-          color: AppColors.parchmentDark,
+          color: AppColors.of(context).parchmentDark,
           border: Border.all(color: color, width: 2),
           borderRadius: BorderRadius.circular(8),
         ),
@@ -441,7 +458,7 @@ class _OddsBar extends StatelessWidget {
               child: LinearProgressIndicator(
                 value: pct.clamp(0.0, 1.0),
                 minHeight: 6,
-                backgroundColor: AppColors.parchmentBorder,
+                backgroundColor: AppColors.of(context).parchmentBorder,
                 valueColor: AlwaysStoppedAnimation<Color>(color),
               ),
             ),
@@ -474,14 +491,20 @@ class _OddsRowWithIcon extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: PixelText.body(size: 12, color: AppColors.textDark),
+              style: PixelText.body(
+                size: 12,
+                color: AppColors.of(context).textDark,
+              ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
           ),
           Text(
             formatOddsPercent(p),
-            style: PixelText.number(size: 12, color: AppColors.textMid),
+            style: PixelText.number(
+              size: 12,
+              color: AppColors.of(context).textMid,
+            ),
           ),
         ],
       ),

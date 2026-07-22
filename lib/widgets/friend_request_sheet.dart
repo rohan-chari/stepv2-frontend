@@ -22,7 +22,7 @@ Future<void> showFriendRequestSheet({
 }) {
   return showModalBottomSheet(
     context: context,
-    backgroundColor: AppColors.parchment,
+    backgroundColor: AppColors.of(context).parchment,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
@@ -194,10 +194,7 @@ class _FriendRequestSheetState extends State<_FriendRequestSheet> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _busy = false);
-      showErrorToast(
-        context,
-        'Couldn’t accept request. Please try again.',
-      );
+      showErrorToast(context, 'Couldn’t accept request. Please try again.');
     }
   }
 
@@ -215,7 +212,7 @@ class _FriendRequestSheetState extends State<_FriendRequestSheet> {
       case _FriendStatus.self:
         return Text(
           "That's you!",
-          style: PixelText.body(size: 13, color: AppColors.textMid),
+          style: PixelText.body(size: 13, color: AppColors.of(context).textMid),
         );
       case _FriendStatus.friends:
         return const PillButton(
@@ -257,7 +254,7 @@ class _FriendRequestSheetState extends State<_FriendRequestSheet> {
       case _FriendStatus.error:
         return Text(
           'Couldn’t load friendship status.',
-          style: PixelText.body(size: 12, color: AppColors.textMid),
+          style: PixelText.body(size: 12, color: AppColors.of(context).textMid),
           textAlign: TextAlign.center,
         );
     }
@@ -280,7 +277,10 @@ class _FriendRequestSheetState extends State<_FriendRequestSheet> {
             const SizedBox(height: 12),
             Text(
               atName(widget.displayName),
-              style: PixelText.title(size: 18, color: AppColors.textDark),
+              style: PixelText.title(
+                size: 18,
+                color: AppColors.of(context).textDark,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),

@@ -8,6 +8,7 @@ import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../services/notification_service.dart';
 import '../../styles.dart';
+import '../../theme_controller.dart';
 import '../../widgets/arcade_fx.dart';
 import '../../tutorial/tutorial_screen.dart';
 import '../../utils/at_name.dart';
@@ -123,7 +124,7 @@ class _ProfileTabState extends State<ProfileTab> {
   Future<void> _openSettings() async {
     await showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.parchment,
+      backgroundColor: AppColors.of(context).parchment,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -143,7 +144,7 @@ class _ProfileTabState extends State<ProfileTab> {
     final hasPhoto = widget.authService.profilePhotoUrl != null;
     final action = await showModalBottomSheet<String>(
       context: context,
-      backgroundColor: AppColors.parchment,
+      backgroundColor: AppColors.of(context).parchment,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -155,7 +156,10 @@ class _ProfileTabState extends State<ProfileTab> {
             children: [
               Text(
                 'PROFILE PHOTO',
-                style: PixelText.title(size: 16, color: AppColors.textDark),
+                style: PixelText.title(
+                  size: 16,
+                  color: AppColors.of(context).textDark,
+                ),
               ),
               const SizedBox(height: 14),
               PillButton(
@@ -220,9 +224,9 @@ class _ProfileTabState extends State<ProfileTab> {
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          const Positioned.fill(
+          Positioned.fill(
             child: ColoredBox(
-              color: AppColors.roofLight,
+              color: AppColors.of(context).roofLight,
               child: CustomPaint(
                 painter: ArcadeCheckerPainter(drawBottomStripe: false),
               ),
@@ -232,15 +236,13 @@ class _ProfileTabState extends State<ProfileTab> {
             padding: EdgeInsets.only(top: topInset, bottom: bottomPadding),
             child: RefreshIndicator(
               onRefresh: _handleRefresh,
-              color: AppColors.accent,
-              backgroundColor: AppColors.parchment,
+              color: AppColors.of(context).accent,
+              backgroundColor: AppColors.of(context).parchment,
               child: CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
                   SliverToBoxAdapter(
-                    child: _buildProfileHeader(
-                      showBackButton: showBackButton,
-                    ),
+                    child: _buildProfileHeader(showBackButton: showBackButton),
                   ),
                   SliverToBoxAdapter(child: _buildBody()),
                 ],
@@ -260,9 +262,11 @@ class _ProfileTabState extends State<ProfileTab> {
     final hasPhoto = widget.authService.profilePhotoUrl != null;
 
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: AppColors.roofLight,
-        border: Border(bottom: BorderSide(color: AppColors.roofDark, width: 1)),
+      decoration: BoxDecoration(
+        color: AppColors.of(context).roofLight,
+        border: Border(
+          bottom: BorderSide(color: AppColors.of(context).roofDark, width: 1),
+        ),
       ),
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
@@ -279,9 +283,9 @@ class _ProfileTabState extends State<ProfileTab> {
                     child: IconButton(
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.arrow_back,
-                        color: AppColors.parchment,
+                        color: AppColors.of(context).textLight,
                       ),
                       onPressed:
                           widget.onBack ??
@@ -295,7 +299,7 @@ class _ProfileTabState extends State<ProfileTab> {
                 'PROFILE',
                 style: PixelText.title(
                   size: 30,
-                  color: AppColors.parchment,
+                  color: AppColors.of(context).textLight,
                 ).copyWith(shadows: _textShadows),
               ),
               const SizedBox(height: 5),
@@ -303,7 +307,9 @@ class _ProfileTabState extends State<ProfileTab> {
                 'Your streak, your stats, and a quick way to manage the basics.',
                 style: PixelText.body(
                   size: 15,
-                  color: AppColors.parchment.withValues(alpha: 0.92),
+                  color: AppColors.of(
+                    context,
+                  ).textLight.withValues(alpha: 0.92),
                 ),
               ),
               const SizedBox(height: 16),
@@ -322,7 +328,7 @@ class _ProfileTabState extends State<ProfileTab> {
                           imageUrl: widget.authService.profilePhotoUrl,
                           size: 72,
                           isUser: true,
-                          borderColor: AppColors.parchment,
+                          borderColor: AppColors.of(context).parchment,
                           borderWidth: 2.5,
                         ),
                         if (widget.onAddProfilePhoto != null)
@@ -332,10 +338,10 @@ class _ProfileTabState extends State<ProfileTab> {
                             child: Container(
                               padding: const EdgeInsets.all(5),
                               decoration: BoxDecoration(
-                                color: AppColors.parchment,
+                                color: AppColors.of(context).parchment,
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: AppColors.roofDark,
+                                  color: AppColors.of(context).roofDark,
                                   width: 1.5,
                                 ),
                               ),
@@ -344,7 +350,7 @@ class _ProfileTabState extends State<ProfileTab> {
                                     ? Icons.edit_rounded
                                     : Icons.add_a_photo_rounded,
                                 size: 14,
-                                color: AppColors.textDark,
+                                color: AppColors.of(context).textDark,
                               ),
                             ),
                           ),
@@ -362,7 +368,7 @@ class _ProfileTabState extends State<ProfileTab> {
                             atName(displayName),
                             style: PixelText.title(
                               size: 20,
-                              color: AppColors.parchment,
+                              color: AppColors.of(context).textLight,
                             ).copyWith(shadows: _textShadows),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -373,9 +379,9 @@ class _ProfileTabState extends State<ProfileTab> {
                             email,
                             style: PixelText.body(
                               size: 13,
-                              color: AppColors.parchment.withValues(
-                                alpha: 0.85,
-                              ),
+                              color: AppColors.of(
+                                context,
+                              ).textLight.withValues(alpha: 0.85),
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -505,10 +511,10 @@ class _ProfileTabState extends State<ProfileTab> {
   /// Parchment game-piece card — same language as the home/races tabs.
   BoxDecoration _profileCardDecoration() {
     return BoxDecoration(
-      color: AppColors.parchment,
+      color: AppColors.of(context).parchment,
       borderRadius: BorderRadius.circular(14),
       border: Border.all(
-        color: AppColors.roofDark.withValues(alpha: 0.55),
+        color: AppColors.of(context).roofDark.withValues(alpha: 0.55),
         width: 2,
       ),
       boxShadow: const [
@@ -531,9 +537,9 @@ class _ProfileTabState extends State<ProfileTab> {
             width: 6,
             height: 16,
             decoration: BoxDecoration(
-              color: AppColors.pillGold,
+              color: AppColors.of(context).pillGold,
               borderRadius: BorderRadius.circular(3),
-              border: Border.all(color: AppColors.pillGoldDark),
+              border: Border.all(color: AppColors.of(context).pillGoldDark),
             ),
           ),
           const SizedBox(width: 8),
@@ -541,7 +547,7 @@ class _ProfileTabState extends State<ProfileTab> {
             title,
             style: PixelText.title(
               size: 16,
-              color: AppColors.parchment,
+              color: AppColors.of(context).textLight,
             ).copyWith(shadows: _textShadows),
           ),
         ],
@@ -670,11 +676,11 @@ class _StatsSectionState extends State<_StatsSection> {
     return Column(
       children: [
         if (state.isRefreshing)
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(bottom: 8),
             child: LinearProgressIndicator(
               minHeight: 2,
-              color: AppColors.accent,
+              color: AppColors.of(context).accent,
               backgroundColor: Colors.transparent,
             ),
           ),
@@ -708,7 +714,7 @@ class _StatsSectionState extends State<_StatsSection> {
       padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 14),
       decoration: BoxDecoration(
         color: index.isOdd
-            ? AppColors.parchmentDark.withValues(alpha: 0.45)
+            ? AppColors.of(context).parchmentDark.withValues(alpha: 0.45)
             : Colors.transparent,
       ),
       child: Row(
@@ -716,12 +722,18 @@ class _StatsSectionState extends State<_StatsSection> {
           Expanded(
             child: Text(
               label,
-              style: PixelText.body(size: 16, color: AppColors.textMid),
+              style: PixelText.body(
+                size: 16,
+                color: AppColors.of(context).textMid,
+              ),
             ),
           ),
           Text(
             value,
-            style: PixelText.title(size: 18, color: AppColors.textDark),
+            style: PixelText.title(
+              size: 18,
+              color: AppColors.of(context).textDark,
+            ),
           ),
         ],
       ),
@@ -738,12 +750,12 @@ class _StatsLoadingSkeleton extends StatelessWidget {
   static const _labelWidths = <double>[132, 138, 128, 84, 96];
   static const _valueWidths = <double>[64, 66, 60, 52, 58];
 
-  Widget _row(int index) {
+  Widget _row(BuildContext context, int index) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 14),
       decoration: BoxDecoration(
         color: index.isOdd
-            ? AppColors.parchmentDark.withValues(alpha: 0.45)
+            ? AppColors.of(context).parchmentDark.withValues(alpha: 0.45)
             : Colors.transparent,
       ),
       child: Row(
@@ -764,7 +776,9 @@ class _StatsLoadingSkeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     return LoadingSkeleton(
       child: Column(
-        children: [for (var i = 0; i < _labelWidths.length; i++) _row(i)],
+        children: [
+          for (var i = 0; i < _labelWidths.length; i++) _row(context, i),
+        ],
       ),
     );
   }
@@ -805,21 +819,30 @@ class _SettingsSheetState extends State<_SettingsSheet> {
             children: [
               Text(
                 'DELETE ACCOUNT?',
-                style: PixelText.title(size: 18, color: AppColors.textDark),
+                style: PixelText.title(
+                  size: 18,
+                  color: AppColors.of(context).textDark,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 10),
               Text(
                 'This permanently deletes your account, step history, '
                 'friends, and coins.',
-                style: PixelText.body(size: 14, color: AppColors.textMid),
+                style: PixelText.body(
+                  size: 14,
+                  color: AppColors.of(context).textMid,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 6),
               Text(
                 'Coins held in active races are forfeited to the race pot. '
                 'This cannot be undone.',
-                style: PixelText.body(size: 13, color: AppColors.textMid),
+                style: PixelText.body(
+                  size: 13,
+                  color: AppColors.of(context).textMid,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
@@ -889,7 +912,10 @@ class _SettingsSheetState extends State<_SettingsSheet> {
         children: [
           Text(
             'SETTINGS',
-            style: PixelText.title(size: 18, color: AppColors.textDark),
+            style: PixelText.title(
+              size: 18,
+              color: AppColors.of(context).textDark,
+            ),
           ),
           const SizedBox(height: 16),
           PillButton(
@@ -910,6 +936,10 @@ class _SettingsSheetState extends State<_SettingsSheet> {
             },
           ),
           const SizedBox(height: 10),
+          if (AppThemeScope.maybeOf(context) case final controller?) ...[
+            _AppearancePreferenceControl(controller: controller),
+            const SizedBox(height: 10),
+          ],
           if (widget.notificationService != null) ...[
             _NotificationToggle(
               notificationService: widget.notificationService!,
@@ -1006,6 +1036,120 @@ class _SettingsSheetState extends State<_SettingsSheet> {
   }
 }
 
+class _AppearancePreferenceControl extends StatelessWidget {
+  const _AppearancePreferenceControl({required this.controller});
+
+  final AppThemeController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Container(
+      key: const Key('appearance-preference-control'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colors.parchmentLight,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.parchmentBorder, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'APPEARANCE',
+            style: PixelText.title(size: 13, color: colors.textDark),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              for (final preference in AppThemePreference.values) ...[
+                if (preference != AppThemePreference.automatic)
+                  const SizedBox(width: 6),
+                Expanded(
+                  child: _AppearanceChoice(
+                    preference: preference,
+                    selected: controller.preference == preference,
+                    onTap: () => controller.setPreference(preference),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 7),
+          Text(
+            'Automatic uses dark mode from 7 PM to 7 AM.',
+            style: PixelText.body(size: 11, color: colors.textMid),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AppearanceChoice extends StatelessWidget {
+  const _AppearanceChoice({
+    required this.preference,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final AppThemePreference preference;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final label = switch (preference) {
+      AppThemePreference.automatic => 'AUTO',
+      AppThemePreference.light => 'LIGHT',
+      AppThemePreference.dark => 'DARK',
+    };
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '$label appearance',
+      child: InkWell(
+        key: Key('appearance-${preference.name}'),
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 4),
+          decoration: BoxDecoration(
+            color: selected ? colors.accent : colors.parchmentDark,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: selected ? colors.roofEdge : colors.parchmentBorder,
+              width: 1.5,
+            ),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: colors.buttonShadow,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Text(
+            label,
+            style: PixelText.title(
+              size: 11,
+              color: selected ? colors.buttonText : colors.textMid,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _NotificationToggle extends StatefulWidget {
   final NotificationService notificationService;
   final String? authToken;
@@ -1097,16 +1241,22 @@ class _LeaderboardVisibilityToggleState
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
       decoration: BoxDecoration(
-        color: AppColors.parchmentLight,
+        color: AppColors.of(context).parchmentLight,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.parchmentBorder, width: 1.5),
+        border: Border.all(
+          color: AppColors.of(context).parchmentBorder,
+          width: 1.5,
+        ),
       ),
       child: Row(
         children: [
           Expanded(
             child: Text(
               'Hide me from the global leaderboard',
-              style: PixelText.body(size: 13, color: AppColors.textDark),
+              style: PixelText.body(
+                size: 13,
+                color: AppColors.of(context).textDark,
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -1208,9 +1358,12 @@ class _DailyRewardReminderToggleState
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
       decoration: BoxDecoration(
-        color: AppColors.parchmentLight,
+        color: AppColors.of(context).parchmentLight,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.parchmentBorder, width: 1.5),
+        border: Border.all(
+          color: AppColors.of(context).parchmentBorder,
+          width: 1.5,
+        ),
       ),
       child: Row(
         children: [
@@ -1221,13 +1374,19 @@ class _DailyRewardReminderToggleState
               children: [
                 Text(
                   'Remind me to open my daily box',
-                  style: PixelText.body(size: 13, color: AppColors.textDark),
+                  style: PixelText.body(
+                    size: 13,
+                    color: AppColors.of(context).textDark,
+                  ),
                 ),
                 if (!granted) ...[
                   const SizedBox(height: 2),
                   Text(
                     'Turn on notifications to get reminders',
-                    style: PixelText.body(size: 11, color: AppColors.textMid),
+                    style: PixelText.body(
+                      size: 11,
+                      color: AppColors.of(context).textMid,
+                    ),
                   ),
                 ],
               ],

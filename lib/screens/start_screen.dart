@@ -146,13 +146,13 @@ class _StartScreenState extends State<StartScreen> {
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
-        statusBarColor: AppColors.roofLight,
+      value: SystemUiOverlayStyle(
+        statusBarColor: AppColors.of(context).roofLight,
         statusBarIconBrightness: Brightness.light,
         statusBarBrightness: Brightness.dark,
       ),
       child: Scaffold(
-        backgroundColor: AppColors.roofLight,
+        backgroundColor: AppColors.of(context).roofLight,
         body: Stack(
           children: [
             const Positioned.fill(
@@ -219,7 +219,7 @@ class _StartScreenState extends State<StartScreen> {
                       style:
                           PixelText.title(
                             size: compact ? 66 : 82,
-                            color: AppColors.parchment,
+                            color: AppColors.of(context).textLight,
                           ).copyWith(
                             height: 0.9,
                             fontWeight: FontWeight.w800,
@@ -236,7 +236,7 @@ class _StartScreenState extends State<StartScreen> {
               style:
                   PixelText.body(
                     size: compact ? 13 : 15,
-                    color: AppColors.parchment,
+                    color: AppColors.of(context).textLight,
                   ).copyWith(
                     letterSpacing: 5.5,
                     fontWeight: FontWeight.w500,
@@ -258,16 +258,18 @@ class _StartScreenState extends State<StartScreen> {
           'Race your friends, earn powerups,\nand climb the leaderboard.',
           style: PixelText.body(
             size: compact ? 13 : 14,
-            color: AppColors.parchmentLight.withValues(alpha: 0.9),
+            color: AppColors.of(context).textLight.withValues(alpha: 0.9),
           ).copyWith(shadows: _textShadows),
           textAlign: TextAlign.center,
         ),
         SizedBox(height: compact ? 12 : 16),
         _isSigningIn
-            ? const SizedBox(
+            ? SizedBox(
                 height: 54,
                 child: Center(
-                  child: CircularProgressIndicator(color: AppColors.parchment),
+                  child: CircularProgressIndicator(
+                    color: AppColors.of(context).textLight,
+                  ),
                 ),
               )
             : Column(
@@ -461,10 +463,10 @@ class _ReviewerSignInDialogState extends State<_ReviewerSignInDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: AppColors.parchment,
+      backgroundColor: AppColors.of(context).parchment,
       title: Text(
         'App Reviewer Sign In',
-        style: PixelText.title(size: 16, color: AppColors.textDark),
+        style: PixelText.title(size: 16, color: AppColors.of(context).textDark),
       ),
       content: Column(
         mainAxisSize: MainAxisSize.min,

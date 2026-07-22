@@ -40,8 +40,9 @@ class DeepLinkService {
   /// The most recently captured-but-undrained TOURNAMENT share token (`/t/…`).
   /// Kept on a separate notifier + AuthService slot so a race link and a
   /// tournament link never clobber each other.
-  final ValueNotifier<String?> pendingTournamentToken =
-      ValueNotifier<String?>(null);
+  final ValueNotifier<String?> pendingTournamentToken = ValueNotifier<String?>(
+    null,
+  );
 
   /// Shared extraction of the `<token>` from a `/r/<token>` (https) or
   /// `bara://join|race/<token>` / `bara:///r/<token>` (custom scheme) link.

@@ -11,11 +11,11 @@ import 'home_course_track.dart' show CapybaraSpriteWithAccessories;
 
 /// Canonical card decoration: parchment fill, 14px radius, 2px roofDark
 /// border, and the hard-offset "game piece" shadow shared with the home tab.
-BoxDecoration raceCardDecoration() => BoxDecoration(
-  color: AppColors.parchment,
+BoxDecoration raceCardDecoration(BuildContext context) => BoxDecoration(
+  color: AppColors.of(context).parchment,
   borderRadius: BorderRadius.circular(14),
   border: Border.all(
-    color: AppColors.roofDark.withValues(alpha: 0.55),
+    color: AppColors.of(context).roofDark.withValues(alpha: 0.55),
     width: 2,
   ),
   boxShadow: const [
@@ -84,11 +84,31 @@ class PlacementPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = placement;
     final (Color bg, Color fg, String label) = switch (p) {
-      1 => (AppColors.medalGold, AppColors.textDark, ordinal(1)),
-      2 => (AppColors.medalSilver, AppColors.textDark, ordinal(2)),
-      3 => (AppColors.medalBronze, AppColors.textDark, ordinal(3)),
-      null => (AppColors.parchmentDark, AppColors.textMid, fallbackLabel),
-      _ => (AppColors.parchmentDark, AppColors.textMid, ordinal(p)),
+      1 => (
+        AppColors.of(context).medalGold,
+        AppColors.of(context).textDark,
+        ordinal(1),
+      ),
+      2 => (
+        AppColors.of(context).medalSilver,
+        AppColors.of(context).textDark,
+        ordinal(2),
+      ),
+      3 => (
+        AppColors.of(context).medalBronze,
+        AppColors.of(context).textDark,
+        ordinal(3),
+      ),
+      null => (
+        AppColors.of(context).parchmentDark,
+        AppColors.of(context).textMid,
+        fallbackLabel,
+      ),
+      _ => (
+        AppColors.of(context).parchmentDark,
+        AppColors.of(context).textMid,
+        ordinal(p),
+      ),
     };
     return Pill(label: label, background: bg, foreground: fg, fontSize: 13);
   }
@@ -115,13 +135,16 @@ class StatColumn extends StatelessWidget {
       crossAxisAlignment: alignment,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label, style: PixelText.body(size: 10, color: AppColors.textMid)),
+        Text(
+          label,
+          style: PixelText.body(size: 10, color: AppColors.of(context).textMid),
+        ),
         const SizedBox(height: 2),
         Text(
           value,
           style: PixelText.title(
             size: 14,
-            color: valueColor ?? AppColors.textDark,
+            color: valueColor ?? AppColors.of(context).textDark,
           ),
         ),
       ],
@@ -161,14 +184,14 @@ class RacerAvatar extends StatelessWidget {
       width: size,
       height: size,
       padding: const EdgeInsets.all(2),
-      decoration: const BoxDecoration(
-        color: AppColors.parchment,
+      decoration: BoxDecoration(
+        color: AppColors.of(context).parchment,
         shape: BoxShape.circle,
       ),
       child: Container(
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: Color.lerp(color, AppColors.parchment, 0.62),
+          color: Color.lerp(color, AppColors.of(context).parchment, 0.62),
           shape: BoxShape.circle,
           border: Border.all(color: color, width: 2),
         ),

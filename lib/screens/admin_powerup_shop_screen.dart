@@ -84,9 +84,7 @@ class _AdminPowerupShopScreenState extends State<AdminPowerupShopScreen> {
     }
     setState(() => _state = _LoadState.loading);
     try {
-      final items = await _api.fetchAdminPowerupShopItems(
-        identityToken: token,
-      );
+      final items = await _api.fetchAdminPowerupShopItems(identityToken: token);
       if (!mounted) return;
       if (items == null) {
         setState(() => _state = _LoadState.unsupported);
@@ -163,7 +161,7 @@ class _AdminPowerupShopScreenState extends State<AdminPowerupShopScreen> {
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.textDark),
+          icon: Icon(Icons.arrow_back, color: AppColors.of(context).textDark),
           onPressed: () => Navigator.of(context).pop(),
         ),
         backgroundColor: Colors.transparent,
@@ -184,7 +182,7 @@ class _AdminPowerupShopScreenState extends State<AdminPowerupShopScreen> {
                       'POWERUP SHOP',
                       style: PixelText.title(
                         size: 18,
-                        color: AppColors.textDark,
+                        color: AppColors.of(context).textDark,
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -203,9 +201,13 @@ class _AdminPowerupShopScreenState extends State<AdminPowerupShopScreen> {
   List<Widget> _buildBody(double boardWidth) {
     switch (_state) {
       case _LoadState.loading:
-        return const [
+        return [
           SizedBox(height: 40),
-          Center(child: CircularProgressIndicator(color: AppColors.accent)),
+          Center(
+            child: CircularProgressIndicator(
+              color: AppColors.of(context).accent,
+            ),
+          ),
         ];
 
       case _LoadState.unsupported:
@@ -246,7 +248,10 @@ class _AdminPowerupShopScreenState extends State<AdminPowerupShopScreen> {
             child: Text(
               'Prices and flags are live. Names come from PowerupCopy and are '
               'not editable here.',
-              style: PixelText.body(size: 10, color: AppColors.textMid),
+              style: PixelText.body(
+                size: 10,
+                color: AppColors.of(context).textMid,
+              ),
               textAlign: TextAlign.center,
             ),
           ),
@@ -266,9 +271,21 @@ class _AdminPowerupShopScreenState extends State<AdminPowerupShopScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: PixelText.title(size: 14, color: AppColors.error)),
+          Text(
+            title,
+            style: PixelText.title(
+              size: 14,
+              color: AppColors.of(context).error,
+            ),
+          ),
           const SizedBox(height: 8),
-          Text(body, style: PixelText.body(size: 12, color: AppColors.textMid)),
+          Text(
+            body,
+            style: PixelText.body(
+              size: 12,
+              color: AppColors.of(context).textMid,
+            ),
+          ),
           if (onRetry != null) ...[
             const SizedBox(height: 12),
             PillButton(
@@ -310,14 +327,14 @@ class _AdminPowerupShopScreenState extends State<AdminPowerupShopScreen> {
                         item.name,
                         style: PixelText.title(
                           size: 14,
-                          color: AppColors.textDark,
+                          color: AppColors.of(context).textDark,
                         ),
                       ),
                       Text(
                         item.sku,
                         style: PixelText.body(
                           size: 10,
-                          color: AppColors.textMid,
+                          color: AppColors.of(context).textMid,
                         ),
                       ),
                     ],
@@ -326,7 +343,10 @@ class _AdminPowerupShopScreenState extends State<AdminPowerupShopScreen> {
                 if (changes.isNotEmpty)
                   Text(
                     'UNSAVED',
-                    style: PixelText.pill(size: 9, color: AppColors.error),
+                    style: PixelText.pill(
+                      size: 9,
+                      color: AppColors.of(context).error,
+                    ),
                   ),
               ],
             ),
@@ -381,7 +401,9 @@ class _AdminPowerupShopScreenState extends State<AdminPowerupShopScreen> {
                   saving ? 'SAVING...' : 'SAVE',
                   style: PixelText.pill(
                     size: 11,
-                    color: canSave ? AppColors.roofMid : AppColors.textMid,
+                    color: canSave
+                        ? AppColors.of(context).roofMid
+                        : AppColors.of(context).textMid,
                   ),
                 ),
               ),
@@ -406,12 +428,20 @@ class _AdminPowerupShopScreenState extends State<AdminPowerupShopScreen> {
           key: key,
           controller: controller,
           keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9-]'))],
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[0-9-]')),
+          ],
           onChanged: onChanged,
-          style: PixelText.number(size: 14, color: AppColors.textDark),
+          style: PixelText.number(
+            size: 14,
+            color: AppColors.of(context).textDark,
+          ),
           decoration: InputDecoration(
             labelText: label,
-            labelStyle: PixelText.body(size: 10, color: AppColors.textMid),
+            labelStyle: PixelText.body(
+              size: 10,
+              color: AppColors.of(context).textMid,
+            ),
             isDense: true,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 8,
@@ -421,8 +451,8 @@ class _AdminPowerupShopScreenState extends State<AdminPowerupShopScreen> {
             enabledBorder: OutlineInputBorder(
               borderSide: BorderSide(
                 color: error != null
-                    ? AppColors.error
-                    : AppColors.parchmentBorder,
+                    ? AppColors.of(context).error
+                    : AppColors.of(context).parchmentBorder,
                 width: 2,
               ),
             ),
@@ -433,7 +463,10 @@ class _AdminPowerupShopScreenState extends State<AdminPowerupShopScreen> {
             padding: const EdgeInsets.only(top: 3),
             child: Text(
               error,
-              style: PixelText.body(size: 9, color: AppColors.error),
+              style: PixelText.body(
+                size: 9,
+                color: AppColors.of(context).error,
+              ),
             ),
           ),
       ],
@@ -455,11 +488,17 @@ class _AdminPowerupShopScreenState extends State<AdminPowerupShopScreen> {
             children: [
               Text(
                 label,
-                style: PixelText.title(size: 11, color: AppColors.textDark),
+                style: PixelText.title(
+                  size: 11,
+                  color: AppColors.of(context).textDark,
+                ),
               ),
               Text(
                 hint,
-                style: PixelText.body(size: 9, color: AppColors.textMid),
+                style: PixelText.body(
+                  size: 9,
+                  color: AppColors.of(context).textMid,
+                ),
               ),
             ],
           ),

@@ -43,6 +43,7 @@ class TeamH2HBanner extends StatelessWidget {
       children: [
         Expanded(
           child: _endPost(
+            context: context,
             team: RaceTeam.teamA,
             name: teamAName,
             total: teamATotal,
@@ -51,6 +52,7 @@ class TeamH2HBanner extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: _endPost(
+            context: context,
             team: RaceTeam.teamB,
             name: teamBName,
             total: teamBTotal,
@@ -61,6 +63,7 @@ class TeamH2HBanner extends StatelessWidget {
   }
 
   Widget _endPost({
+    required BuildContext context,
     required RaceTeam team,
     required String name,
     required int total,
@@ -119,12 +122,11 @@ class TeamH2HBanner extends StatelessWidget {
         ),
         Text(
           'STEPS',
-          style: PixelText.body(size: 11, color: AppColors.textMid),
+          style: PixelText.body(size: 11, color: AppColors.of(context).textMid),
         ),
       ],
     );
   }
-
 }
 
 /// The tug-of-war rope: a sagging line with a wrapped knot that slides to
@@ -150,6 +152,9 @@ class TeamTugRope extends StatelessWidget {
               share: animatedShare,
               teamAColor: TeamRace.color(RaceTeam.teamA),
               teamBColor: TeamRace.color(RaceTeam.teamB),
+              markerColor: AppColors.of(context).textMid,
+              ropeDark: AppColors.of(context).dirtDark,
+              ropeMid: AppColors.of(context).dirtMid,
             ),
           ),
         );
@@ -163,11 +168,17 @@ class _TugRopePainter extends CustomPainter {
     required this.share,
     required this.teamAColor,
     required this.teamBColor,
+    required this.markerColor,
+    required this.ropeDark,
+    required this.ropeMid,
   });
 
   final double share;
   final Color teamAColor;
   final Color teamBColor;
+  final Color markerColor;
+  final Color ropeDark;
+  final Color ropeMid;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -200,7 +211,7 @@ class _TugRopePainter extends CustomPainter {
     canvas.drawPath(pathB, ropeB);
 
     final stake = Paint()
-      ..color = AppColors.textMid.withValues(alpha: 0.5)
+      ..color = markerColor.withValues(alpha: 0.5)
       ..strokeWidth = 2;
     canvas.drawLine(
       Offset(size.width / 2, midY - 9),
@@ -209,10 +220,10 @@ class _TugRopePainter extends CustomPainter {
     );
 
     final knotCenter = Offset(knotX, midY);
-    canvas.drawCircle(knotCenter, 8, Paint()..color = AppColors.dirtDark);
-    canvas.drawCircle(knotCenter, 6.2, Paint()..color = AppColors.dirtMid);
+    canvas.drawCircle(knotCenter, 8, Paint()..color = ropeDark);
+    canvas.drawCircle(knotCenter, 6.2, Paint()..color = ropeMid);
     final wrap = Paint()
-      ..color = AppColors.dirtDark
+      ..color = ropeDark
       ..strokeWidth = 1.4
       ..style = PaintingStyle.stroke;
     for (final angle in [-0.5, 0.0, 0.5]) {
@@ -228,5 +239,8 @@ class _TugRopePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _TugRopePainter oldDelegate) =>
-      oldDelegate.share != share;
+      oldDelegate.share != share ||
+      oldDelegate.markerColor != markerColor ||
+      oldDelegate.ropeDark != ropeDark ||
+      oldDelegate.ropeMid != ropeMid;
 }

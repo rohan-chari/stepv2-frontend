@@ -285,7 +285,8 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     if (t == null) return;
     final ok = await _confirm(
       title: 'FORFEIT YOUR MATCHUP?',
-      body: 'Your opponent advances. No refunds. You stay in the bracket as a '
+      body:
+          'Your opponent advances. No refunds. You stay in the bracket as a '
           'spectator.',
       confirmLabel: 'FORFEIT',
       danger: true,
@@ -365,7 +366,8 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     if (buyIn <= 0) return true;
     final ok = await _confirm(
       title: '$buyIn GOLD BUY-IN',
-      body: 'Your $buyIn gold is held until the bracket starts. You only get '
+      body:
+          'Your $buyIn gold is held until the bracket starts. You only get '
           'it back if the tournament is cancelled.',
       confirmLabel: 'LOCK IT IN',
     );
@@ -389,13 +391,19 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
             children: [
               Text(
                 title,
-                style: PixelText.title(size: 18, color: AppColors.textDark),
+                style: PixelText.title(
+                  size: 18,
+                  color: AppColors.of(context).textDark,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
               Text(
                 body,
-                style: PixelText.body(size: 13.5, color: AppColors.textMid),
+                style: PixelText.body(
+                  size: 13.5,
+                  color: AppColors.of(context).textMid,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 18),
@@ -403,8 +411,10 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
                 label: danger ? 'KEEP GOING' : 'NEVER MIND',
                 variant: PillButtonVariant.primary,
                 fullWidth: true,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
                 onPressed: () => Navigator.of(dialogContext).pop(false),
               ),
               const SizedBox(height: 10),
@@ -412,8 +422,10 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
                 label: confirmLabel,
                 variant: PillButtonVariant.accent,
                 fullWidth: true,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
                 onPressed: () => Navigator.of(dialogContext).pop(true),
               ),
             ],
@@ -447,7 +459,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     final isChampionViewer = t != null && Tournament.isChampion(t, _myUserId);
 
     return Scaffold(
-      backgroundColor: AppColors.parchmentLight,
+      backgroundColor: AppColors.of(context).parchmentLight,
       body: Stack(
         children: [
           Column(
@@ -462,7 +474,9 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
           // Confetti ONLY for the champion viewing their completed bracket
           // (the confetti-on-finish rule).
           if (t != null && Tournament.isCompleted(t) && isChampionViewer)
-            const Positioned.fill(child: IgnorePointer(child: CelebrationConfetti())),
+            const Positioned.fill(
+              child: IgnorePointer(child: CelebrationConfetti()),
+            ),
         ],
       ),
     );
@@ -470,21 +484,24 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
 
   Widget _header(Map<String, dynamic>? t) {
     final name = t == null ? 'TOURNAMENT' : Tournament.name(t).toUpperCase();
-    final canShare = t != null &&
-        (Tournament.isPending(t) || Tournament.isActive(t));
+    final canShare =
+        t != null && (Tournament.isPending(t) || Tournament.isActive(t));
     final topInset = MediaQuery.of(context).padding.top;
     return Container(
-      color: AppColors.roofLight,
+      color: AppColors.of(context).roofLight,
       padding: EdgeInsets.fromLTRB(6, topInset + 6, 8, 10),
       child: Row(
         children: [
           GestureDetector(
             onTap: () => Navigator.of(context).pop(),
             behavior: HitTestBehavior.opaque,
-            child: const Padding(
+            child: Padding(
               padding: EdgeInsets.all(8),
-              child: Icon(Icons.arrow_back_rounded,
-                  color: AppColors.parchment, size: 24),
+              child: Icon(
+                Icons.arrow_back_rounded,
+                color: AppColors.of(context).textLight,
+                size: 24,
+              ),
             ),
           ),
           Expanded(
@@ -492,17 +509,23 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
               name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: PixelText.title(size: 19, color: AppColors.parchment),
+              style: PixelText.title(
+                size: 19,
+                color: AppColors.of(context).textLight,
+              ),
             ),
           ),
           if (canShare)
             GestureDetector(
               onTap: _sharing ? null : _share,
               behavior: HitTestBehavior.opaque,
-              child: const Padding(
+              child: Padding(
                 padding: EdgeInsets.all(8),
-                child: Icon(Icons.ios_share_rounded,
-                    color: AppColors.parchment, size: 22),
+                child: Icon(
+                  Icons.ios_share_rounded,
+                  color: AppColors.of(context).textLight,
+                  size: 22,
+                ),
               ),
             ),
         ],
@@ -592,15 +615,16 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
   /// screen reads with the same game-y HUD feel as the race header.
   Widget _infoStrip(Map<String, dynamic> t) {
     final status = Tournament.status(t);
-    final countdownEnds =
-        status == TournamentStatus.active ? _currentRoundEndsAt(t) : null;
+    final countdownEnds = status == TournamentStatus.active
+        ? _currentRoundEndsAt(t)
+        : null;
 
     return Container(
       width: double.infinity,
-      decoration: const BoxDecoration(
-        color: AppColors.roofLight,
+      decoration: BoxDecoration(
+        color: AppColors.of(context).roofLight,
         border: Border(
-          bottom: BorderSide(color: AppColors.roofEdge, width: 2),
+          bottom: BorderSide(color: AppColors.of(context).roofEdge, width: 2),
         ),
       ),
       child: CustomPaint(
@@ -643,14 +667,19 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
-          color: HomeColors.ink.withValues(alpha: 0.9),
+          color: AppColors.of(context).ink.withValues(alpha: 0.9),
           borderRadius: BorderRadius.circular(12),
-          border:
-              Border.all(color: Colors.white.withValues(alpha: 0.18), width: 2),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.18),
+            width: 2,
+          ),
         ),
         child: Center(
-          child: Icon(Icons.refresh_rounded,
-              size: 22, color: Colors.white.withValues(alpha: 0.85)),
+          child: Icon(
+            Icons.refresh_rounded,
+            size: 22,
+            color: Colors.white.withValues(alpha: 0.85),
+          ),
         ),
       ),
     );
@@ -662,20 +691,33 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: HomeColors.ink.withValues(alpha: 0.9),
+        color: AppColors.of(context).ink.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.18), width: 2),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.18),
+          width: 2,
+        ),
       ),
       child: Row(
         children: [
-          const Icon(Icons.timer_rounded, size: 22, color: AppColors.pillGold),
+          Icon(
+            Icons.timer_rounded,
+            size: 22,
+            color: AppColors.of(context).pillGold,
+          ),
           const SizedBox(width: 9),
-          Text('ROUND ENDS IN',
-              style: HomeText.label(
-                  size: 11, color: Colors.white.withValues(alpha: 0.7))),
+          Text(
+            'ROUND ENDS IN',
+            style: HomeText.label(
+              size: 11,
+              color: Colors.white.withValues(alpha: 0.7),
+            ),
+          ),
           const Spacer(),
-          Text(_countdownShort(ends),
-              style: PixelText.title(size: 20, color: Colors.white)),
+          Text(
+            _countdownShort(ends),
+            style: PixelText.title(size: 20, color: Colors.white),
+          ),
         ],
       ),
     );
@@ -693,17 +735,17 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: HomeColors.ink.withValues(alpha: 0.9),
+        color: AppColors.of(context).ink.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.18), width: 2),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.18),
+          width: 2,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (leading != null) ...[
-            leading,
-            const SizedBox(width: 9),
-          ],
+          if (leading != null) ...[leading, const SizedBox(width: 9)],
           // Flexible so the tile behaves inside an Expanded slot and long values
           // (e.g. a champion's name) ellipsize instead of overflowing.
           Flexible(
@@ -711,16 +753,22 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: HomeText.label(
-                        size: 10, color: Colors.white.withValues(alpha: 0.7))),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: HomeText.label(
+                    size: 10,
+                    color: Colors.white.withValues(alpha: 0.7),
+                  ),
+                ),
                 const SizedBox(height: 3),
-                Text(value,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: PixelText.title(size: 24, color: valueColor)),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: PixelText.title(size: 24, color: valueColor),
+                ),
               ],
             ),
           ),
@@ -735,7 +783,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
         leading: const SpinningCoin(size: 28),
         label: 'CHAMPION WINS',
         value: '${Tournament.championWinnings(t)}',
-        valueColor: AppColors.pillGold,
+        valueColor: AppColors.of(context).pillGold,
       );
     }
     // Free bracket — no coin prize; the gold value conveys the stakes (no
@@ -743,7 +791,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     return _heroTile(
       label: 'PLAYING FOR',
       value: 'THE CROWN',
-      valueColor: AppColors.pillGold,
+      valueColor: AppColors.of(context).pillGold,
     );
   }
 
@@ -751,8 +799,11 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     switch (status) {
       case TournamentStatus.active:
         return _heroTile(
-          leading: const Icon(Icons.account_tree_rounded,
-              size: 26, color: AppColors.pillGold),
+          leading: Icon(
+            Icons.account_tree_rounded,
+            size: 26,
+            color: AppColors.of(context).pillGold,
+          ),
           label: 'ROUND',
           value: '${Tournament.currentRound(t)}/${Tournament.totalRounds(t)}',
           valueColor: Colors.white,
@@ -765,14 +816,17 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
           value: Tournament.isChampion(t, _myUserId)
               ? 'YOU!'
               : (champ != null ? Tournament.displayName(t, champ) : 'CROWNED'),
-          valueColor: AppColors.pillGold,
+          valueColor: AppColors.of(context).pillGold,
         );
       case TournamentStatus.pending:
       case TournamentStatus.cancelled:
       case null:
         return _heroTile(
-          leading: const Icon(Icons.groups_2_rounded,
-              size: 26, color: AppColors.pillGold),
+          leading: Icon(
+            Icons.groups_2_rounded,
+            size: 26,
+            color: AppColors.of(context).pillGold,
+          ),
           label: 'FILLED',
           value: '${Tournament.acceptedCount(t)}/${Tournament.bracketSize(t)}',
           valueColor: Colors.white,
@@ -830,10 +884,13 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
 
     return Container(
       width: double.infinity,
-      decoration: const BoxDecoration(
-        color: AppColors.parchmentLight,
+      decoration: BoxDecoration(
+        color: AppColors.of(context).parchmentLight,
         border: Border(
-          top: BorderSide(color: AppColors.parchmentBorder, width: 1.5),
+          top: BorderSide(
+            color: AppColors.of(context).parchmentBorder,
+            width: 1.5,
+          ),
         ),
       ),
       child: SafeArea(
@@ -881,13 +938,19 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
       return Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.visibility_rounded,
-              size: 16, color: AppColors.textMid),
+          Icon(
+            Icons.visibility_rounded,
+            size: 16,
+            color: AppColors.of(context).textMid,
+          ),
           const SizedBox(width: 8),
           Flexible(
             child: Text(
               "You're out — follow the bracket to the crown.",
-              style: PixelText.body(size: 13, color: AppColors.textMid),
+              style: PixelText.body(
+                size: 13,
+                color: AppColors.of(context).textMid,
+              ),
             ),
           ),
         ],
@@ -925,8 +988,10 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
                 variant: PillButtonVariant.secondary,
                 fontSize: 13,
                 fullWidth: true,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 11,
+                ),
                 onPressed: _isActing ? null : _invite,
               ),
             ),
@@ -937,8 +1002,10 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
                 variant: PillButtonVariant.secondary,
                 fontSize: 13,
                 fullWidth: true,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 11,
+                ),
                 onPressed: _sharing ? null : _share,
               ),
             ),
@@ -949,8 +1016,10 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
                 variant: PillButtonVariant.accent,
                 fontSize: 13,
                 fullWidth: true,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 11,
+                ),
                 onPressed: _isActing ? null : _cancel,
               ),
             ),
@@ -967,8 +1036,10 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
                 variant: PillButtonVariant.accent,
                 fontSize: 13,
                 fullWidth: true,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
                 onPressed: _isActing ? null : () => _respond(false),
               ),
             ),
@@ -980,8 +1051,10 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
                 variant: PillButtonVariant.primary,
                 fontSize: 13,
                 fullWidth: true,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
                 onPressed: _isActing ? null : () => _respond(true),
               ),
             ),
@@ -999,8 +1072,10 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
                 variant: PillButtonVariant.secondary,
                 fontSize: 13,
                 fullWidth: true,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
                 onPressed: _sharing ? null : _share,
               ),
             ),
@@ -1011,8 +1086,10 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
                 variant: PillButtonVariant.accent,
                 fontSize: 13,
                 fullWidth: true,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
                 onPressed: _isActing ? null : _leave,
               ),
             ),
@@ -1034,22 +1111,33 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     return Column(mainAxisSize: MainAxisSize.min, children: buttons);
   }
 
-
   Widget _cancelledBoard(Map<String, dynamic> t) {
     return RetroCard(
       child: Column(
         children: [
-          const Icon(Icons.cancel_rounded, size: 40, color: AppColors.textMid),
+          Icon(
+            Icons.cancel_rounded,
+            size: 40,
+            color: AppColors.of(context).textMid,
+          ),
           const SizedBox(height: 8),
-          Text('TOURNAMENT CANCELLED',
-              style: PixelText.title(size: 16, color: AppColors.textDark)),
+          Text(
+            'TOURNAMENT CANCELLED',
+            style: PixelText.title(
+              size: 16,
+              color: AppColors.of(context).textDark,
+            ),
+          ),
           const SizedBox(height: 6),
           Text(
             Tournament.buyInAmount(t) > 0
                 ? 'Every buy-in has been refunded.'
                 : 'This bracket was called off.',
             textAlign: TextAlign.center,
-            style: PixelText.body(size: 13.5, color: AppColors.textMid),
+            style: PixelText.body(
+              size: 13.5,
+              color: AppColors.of(context).textMid,
+            ),
           ),
         ],
       ),
@@ -1074,16 +1162,23 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(Tournament.name(t),
-              style: PixelText.title(size: 20, color: AppColors.textDark)),
+          Text(
+            Tournament.name(t),
+            style: PixelText.title(
+              size: 20,
+              color: AppColors.of(context).textDark,
+            ),
+          ),
           const SizedBox(height: 10),
           Wrap(spacing: 6, runSpacing: 6, children: chips),
           const SizedBox(height: 12),
           _plaque(
             // A coin vector only when there's a coin prize — never a trophy.
-            leading: Tournament.hasPrize(t) ? const SpinningCoin(size: 16) : null,
+            leading: Tournament.hasPrize(t)
+                ? const SpinningCoin(size: 16)
+                : null,
             text: Tournament.prizePlaque(t),
-            color: AppColors.pillGold,
+            color: AppColors.of(context).pillGold,
           ),
         ],
       ),
@@ -1106,14 +1201,16 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          if (leading != null) ...[
-            leading,
-            const SizedBox(width: 8),
-          ],
+          if (leading != null) ...[leading, const SizedBox(width: 8)],
           Flexible(
-            child: Text(text,
-                textAlign: TextAlign.center,
-                style: PixelText.title(size: 13, color: AppColors.textDark)),
+            child: Text(
+              text,
+              textAlign: TextAlign.center,
+              style: PixelText.title(
+                size: 13,
+                color: AppColors.of(context).textDark,
+              ),
+            ),
           ),
         ],
       ),
@@ -1124,12 +1221,14 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
-        color: AppColors.parchmentDark,
+        color: AppColors.of(context).parchmentDark,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.parchmentBorder),
+        border: Border.all(color: AppColors.of(context).parchmentBorder),
       ),
-      child: Text(label,
-          style: PixelText.body(size: 11, color: AppColors.textMid)),
+      child: Text(
+        label,
+        style: PixelText.body(size: 11, color: AppColors.of(context).textMid),
+      ),
     );
   }
 

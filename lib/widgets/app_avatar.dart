@@ -64,29 +64,28 @@ class AppAvatar extends StatelessWidget {
     this.fontSize,
   });
 
-  Color get _fallbackColor => avatarColorForName(
-    name,
-    isUser: isUser,
-    isStealthed: isStealthed,
-  );
+  Color _fallbackColor(BuildContext context) => isUser && !isStealthed
+      ? AppColors.of(context).pillGreen
+      : avatarColorForName(name, isUser: isUser, isStealthed: isStealthed);
 
   bool get _hasImage =>
       !isStealthed && imageUrl != null && imageUrl!.trim().isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
-    final effectiveBorderColor = borderColor ?? Colors.white;
+    final fallbackColor = _fallbackColor(context);
+    final effectiveBorderColor = borderColor ?? AppColors.of(context).textLight;
 
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: _fallbackColor,
+        color: fallbackColor,
         border: Border.all(color: effectiveBorderColor, width: borderWidth),
         boxShadow: [
           BoxShadow(
-            color: _fallbackColor.withValues(alpha: 0.3),
+            color: fallbackColor.withValues(alpha: 0.3),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -101,20 +100,20 @@ class AppAvatar extends StatelessWidget {
                 height: size,
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) =>
-                    _buildFallback(),
+                    _buildFallback(context),
               ),
             )
-          : _buildFallback(),
+          : _buildFallback(context),
     );
   }
 
-  Widget _buildFallback() {
+  Widget _buildFallback(BuildContext context) {
     return Center(
       child: Text(
         isStealthed ? '??' : avatarInitials(name),
         style: PixelText.title(
           size: fontSize ?? size * 0.32,
-          color: Colors.white,
+          color: AppColors.of(context).textLight,
         ),
       ),
     );
@@ -149,7 +148,7 @@ class ProfileAvatarButton extends StatelessWidget {
             imageUrl: imageUrl,
             size: size,
             isUser: true,
-            borderColor: AppColors.parchment,
+            borderColor: AppColors.of(context).parchment,
             borderWidth: 2.25,
           ),
           if (badgeCount > 0)
@@ -174,9 +173,9 @@ class _AvatarBadge extends StatelessWidget {
     final label = count > 99 ? '99+' : '$count';
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: HomeColors.clay,
+        color: AppColors.of(context).clay,
         shape: BoxShape.circle,
-        border: Border.all(color: HomeColors.surface, width: 1.5),
+        border: Border.all(color: AppColors.of(context).surface, width: 1.5),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),

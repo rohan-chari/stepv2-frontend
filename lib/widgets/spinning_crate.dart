@@ -91,14 +91,17 @@ class CrateIcon extends StatelessWidget {
                 width: size * 0.5,
                 height: size * 0.5,
                 decoration: BoxDecoration(
-                  color: AppColors.pillGold,
+                  color: AppColors.of(context).pillGold,
                   shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.dirtDark, width: 1),
+                  border: Border.all(
+                    color: AppColors.of(context).dirtDark,
+                    width: 1,
+                  ),
                 ),
                 child: Icon(
                   Icons.schedule,
                   size: size * 0.34,
-                  color: AppColors.textDark,
+                  color: AppColors.of(context).textDark,
                 ),
               ),
             ),
@@ -128,11 +131,11 @@ class _CrateFace extends StatelessWidget {
             style:
                 PixelText.title(
                   size: size * 0.42,
-                  color: AppColors.coinLight,
+                  color: AppColors.of(context).coinLight,
                 ).copyWith(
                   shadows: [
                     Shadow(
-                      color: AppColors.dirtDark,
+                      color: AppColors.of(context).dirtDark,
                       offset: Offset(size * 0.035, size * 0.035),
                       blurRadius: 0,
                     ),

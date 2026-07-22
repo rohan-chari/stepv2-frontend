@@ -12,7 +12,6 @@ import '../widgets/pill_button.dart';
 import '../widgets/powerup_icon.dart';
 import '../constants/powerup_copy.dart';
 
-
 const _powerupEntries = [
   (
     type: 'LEG_CRAMP',
@@ -240,51 +239,51 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
       child: Material(
         color: Colors.transparent,
         child: Stack(
-        children: [
-          Positioned.fill(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 2.5),
-              child: ColoredBox(
-                color: AppColors.roofDark.withValues(alpha: 0.78),
-                child: const CustomPaint(
-                  painter: ArcadeCheckerPainter(
-                    tileColor: Color(0x0AFFFFFF),
-                    stripeColor: Color(0x14000000),
-                    drawBottomStripe: false,
+          children: [
+            Positioned.fill(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 2.5),
+                child: ColoredBox(
+                  color: AppColors.of(context).roofDark.withValues(alpha: 0.78),
+                  child: const CustomPaint(
+                    painter: ArcadeCheckerPainter(
+                      tileColor: Color(0x0AFFFFFF),
+                      stripeColor: Color(0x14000000),
+                      drawBottomStripe: false,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          SafeArea(
-            child: Column(
-              children: [
-                Expanded(
-                  child: Center(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(14, 18, 14, 24),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 460),
-                        child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 280),
-                          switchInCurve: Curves.easeOutCubic,
-                          switchOutCurve: Curves.easeInCubic,
-                          child: _revealed
-                              ? _buildRevealCard()
-                              : _buildOpeningContent(),
+            SafeArea(
+              child: Column(
+                children: [
+                  Expanded(
+                    child: Center(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(14, 18, 14, 24),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 460),
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 280),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeInCubic,
+                            child: _revealed
+                                ? _buildRevealCard()
+                                : _buildOpeningContent(),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                // Bottom banner, in-flow below the centered card so it reserves
-                // its own space and never covers the Continue button. Collapses
-                // to zero size unless banners are enabled AND an ad loads.
-                const AdBannerSlot(),
-              ],
+                  // Bottom banner, in-flow below the centered card so it reserves
+                  // its own space and never covers the Continue button. Collapses
+                  // to zero size unless banners are enabled AND an ad loads.
+                  const AdBannerSlot(),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
         ),
       ),
     );
@@ -294,9 +293,9 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
     return GameContainer(
       key: const ValueKey('opening'),
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
-      frameColor: AppColors.accent,
-      surfaceColor: AppColors.parchmentLight,
-      glowColor: AppColors.coinMid,
+      frameColor: AppColors.of(context).accent,
+      surfaceColor: AppColors.of(context).parchmentLight,
+      glowColor: AppColors.of(context).coinMid,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
@@ -306,7 +305,10 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
               Expanded(
                 child: Text(
                   'MYSTERY BOX',
-                  style: HomeText.display(size: 28, color: HomeColors.ink),
+                  style: HomeText.display(
+                    size: 28,
+                    color: AppColors.of(context).ink,
+                  ),
                 ),
               ),
               // Renders nothing unless the server sent well-formed dropOdds.
@@ -326,7 +328,7 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
             'Swipe the reel to crack it open',
             style: HomeText.body(
               size: 14,
-              color: HomeColors.muted,
+              color: AppColors.of(context).muted,
               weight: FontWeight.w800,
             ),
           ),
@@ -371,7 +373,7 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
         key: const ValueKey('reveal'),
         padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
         frameColor: rarityColor,
-        surfaceColor: AppColors.parchmentLight,
+        surfaceColor: AppColors.of(context).parchmentLight,
         glowColor: rarityColor,
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -380,7 +382,10 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
             Text(
               'UNBOXED',
               textAlign: TextAlign.center,
-              style: HomeText.display(size: 32, color: HomeColors.ink),
+              style: HomeText.display(
+                size: 32,
+                color: AppColors.of(context).ink,
+              ),
             ),
             const SizedBox(height: 14),
             Center(
@@ -405,7 +410,7 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
                 width: 112,
                 height: 112,
                 decoration: BoxDecoration(
-                  color: AppColors.parchmentDark,
+                  color: AppColors.of(context).parchmentDark,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: rarityColor, width: 2),
                 ),
@@ -416,14 +421,20 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
             const SizedBox(height: 16),
             Text(
               name,
-              style: PixelText.title(size: 24, color: AppColors.textDark),
+              style: PixelText.title(
+                size: 24,
+                color: AppColors.of(context).textDark,
+              ),
               textAlign: TextAlign.center,
             ),
             if (description != null) ...[
               const SizedBox(height: 6),
               Text(
                 description,
-                style: PixelText.body(size: 13, color: AppColors.textMid),
+                style: PixelText.body(
+                  size: 13,
+                  color: AppColors.of(context).textMid,
+                ),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -431,7 +442,10 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
               const SizedBox(height: 8),
               Text(
                 'Auto-activated. Extra slot unlocked.',
-                style: PixelText.body(size: 14, color: AppColors.pillGreen),
+                style: PixelText.body(
+                  size: 14,
+                  color: AppColors.of(context).pillGreen,
+                ),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -451,7 +465,7 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
   void _showPowerupGuide(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.parchmentLight,
+      backgroundColor: AppColors.of(context).parchmentLight,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -472,14 +486,17 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
                     width: 40,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: AppColors.woodMid,
+                      color: AppColors.of(context).woodMid,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
                   const SizedBox(height: 16),
                   Text(
                     'POWERUP GUIDE',
-                    style: PixelText.title(size: 20, color: AppColors.textDark),
+                    style: PixelText.title(
+                      size: 20,
+                      color: AppColors.of(context).textDark,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Expanded(
@@ -491,7 +508,7 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
                         final entry = _powerupEntries[index];
                         return GameContainer(
                           padding: const EdgeInsets.all(10),
-                          frameColor: AppColors.parchmentBorder,
+                          frameColor: AppColors.of(context).parchmentBorder,
                           child: Row(
                             children: [
                               PowerupIcon(
@@ -508,14 +525,14 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
                                       entry.name,
                                       style: PixelText.title(
                                         size: 14,
-                                        color: AppColors.textDark,
+                                        color: AppColors.of(context).textDark,
                                       ),
                                     ),
                                     Text(
                                       entry.description,
                                       style: PixelText.body(
                                         size: 12,
-                                        color: AppColors.textMid,
+                                        color: AppColors.of(context).textMid,
                                       ),
                                     ),
                                   ],
@@ -535,7 +552,6 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
       },
     );
   }
-
 }
 
 class _GuideButton extends StatelessWidget {
@@ -554,12 +570,15 @@ class _GuideButton extends StatelessWidget {
           width: 38,
           height: 38,
           decoration: BoxDecoration(
-            color: AppColors.pillGold,
+            color: AppColors.of(context).pillGold,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.pillGoldDark, width: 2),
-            boxShadow: const [
+            border: Border.all(
+              color: AppColors.of(context).pillGoldDark,
+              width: 2,
+            ),
+            boxShadow: [
               BoxShadow(
-                color: AppColors.pillGoldShadow,
+                color: AppColors.of(context).pillGoldShadow,
                 offset: Offset(3, 3),
                 blurRadius: 0,
               ),
@@ -568,7 +587,10 @@ class _GuideButton extends StatelessWidget {
           child: Center(
             child: Text(
               '?',
-              style: PixelText.pill(size: 18, color: AppColors.textDark),
+              style: PixelText.pill(
+                size: 18,
+                color: AppColors.of(context).textDark,
+              ),
             ),
           ),
         ),
@@ -593,22 +615,22 @@ class _CloseButton extends StatelessWidget {
           width: 38,
           height: 38,
           decoration: BoxDecoration(
-            color: AppColors.errorLight,
+            color: AppColors.of(context).errorLight,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.error, width: 2),
-            boxShadow: const [
+            border: Border.all(color: AppColors.of(context).error, width: 2),
+            boxShadow: [
               BoxShadow(
-                color: AppColors.error,
+                color: AppColors.of(context).error,
                 offset: Offset(3, 3),
                 blurRadius: 0,
               ),
             ],
           ),
-          child: const Center(
+          child: Center(
             child: Icon(
               Icons.close_rounded,
               size: 20,
-              color: AppColors.textDark,
+              color: AppColors.of(context).textDark,
             ),
           ),
         ),

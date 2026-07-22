@@ -35,7 +35,7 @@ class OnboardingPermissionGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: AppColors.roofLight,
+      color: AppColors.of(context).roofLight,
       child: Stack(
         children: [
           const Positioned.fill(
@@ -68,9 +68,9 @@ class OnboardingPermissionGate extends StatelessWidget {
                               label,
                               style: HomeText.label(
                                 size: 13,
-                                color: AppColors.parchmentLight.withValues(
-                                  alpha: 0.86,
-                                ),
+                                color: AppColors.of(
+                                  context,
+                                ).textLight.withValues(alpha: 0.86),
                               ),
                               textAlign: TextAlign.center,
                             ),
@@ -79,7 +79,7 @@ class OnboardingPermissionGate extends StatelessWidget {
                               headline,
                               style: HomeText.title(
                                 size: 32,
-                                color: AppColors.parchment,
+                                color: AppColors.of(context).textLight,
                               ),
                               textAlign: TextAlign.center,
                             ),
@@ -88,9 +88,9 @@ class OnboardingPermissionGate extends StatelessWidget {
                               body,
                               style: HomeText.body(
                                 size: 15,
-                                color: AppColors.parchmentLight.withValues(
-                                  alpha: 0.92,
-                                ),
+                                color: AppColors.of(
+                                  context,
+                                ).textLight.withValues(alpha: 0.92),
                                 height: 1.38,
                               ),
                               textAlign: TextAlign.center,
@@ -101,7 +101,7 @@ class OnboardingPermissionGate extends StatelessWidget {
                                 error!,
                                 style: HomeText.body(
                                   size: 14,
-                                  color: AppColors.parchment,
+                                  color: AppColors.of(context).textLight,
                                   weight: FontWeight.w800,
                                 ),
                                 textAlign: TextAlign.center,
@@ -116,11 +116,11 @@ class OnboardingPermissionGate extends StatelessWidget {
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(24, 0, 24, 60),
                         child: isLoading
-                            ? const SizedBox(
+                            ? SizedBox(
                                 height: 52,
                                 child: Center(
                                   child: CircularProgressIndicator(
-                                    color: AppColors.parchment,
+                                    color: AppColors.of(context).textLight,
                                     strokeWidth: 3,
                                   ),
                                 ),

@@ -21,14 +21,20 @@ class ContentBoard extends StatelessWidget {
       width: expand ? null : width,
       height: expand ? double.infinity : null,
       decoration: BoxDecoration(
-        color: AppColors.parchment,
-        border: Border.all(color: AppColors.textDark, width: 2),
+        color: AppColors.of(context).parchment,
+        border: Border.all(color: AppColors.of(context).textDark, width: 2),
       ),
       child: ClipRect(
         child: Stack(
           children: [
-            const Positioned.fill(
-              child: CustomPaint(painter: PixelSurfacePainter()),
+            Positioned.fill(
+              child: CustomPaint(
+                painter: PixelSurfacePainter(
+                  dotColor: AppColors.of(
+                    context,
+                  ).parchmentDark.withValues(alpha: 0.32),
+                ),
+              ),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -42,12 +48,13 @@ class ContentBoard extends StatelessWidget {
 }
 
 class PixelSurfacePainter extends CustomPainter {
-  const PixelSurfacePainter();
+  const PixelSurfacePainter({required this.dotColor});
+
+  final Color dotColor;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = AppColors.parchmentDark.withValues(alpha: 0.32);
+    final paint = Paint()..color = dotColor;
     const step = 18.0;
 
     for (double y = 0; y < size.height; y += step) {
@@ -59,5 +66,6 @@ class PixelSurfacePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant PixelSurfacePainter oldDelegate) =>
+      oldDelegate.dotColor != dotColor;
 }

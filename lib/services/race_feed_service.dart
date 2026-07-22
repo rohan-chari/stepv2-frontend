@@ -31,7 +31,8 @@ class RaceFeedEvent {
       id: json['id'] as String,
       eventType: (json['eventType'] as String?) ?? '',
       powerupType: json['powerupType'] as String?,
-      description: (json['body'] as String?) ?? (json['description'] as String?) ?? '',
+      description:
+          (json['body'] as String?) ?? (json['description'] as String?) ?? '',
       actorUserId: json['actorUserId'] as String?,
       targetUserId: json['targetUserId'] as String?,
       createdAt: createdRaw != null
@@ -148,8 +149,9 @@ class RaceFeedService extends ChangeNotifier {
           (result['messages'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       final fresh = list.map(RaceFeedEvent.fromJson).toList();
       final existingIds = _events.map((e) => e.id).toSet();
-      final newEvents =
-          fresh.where((e) => !existingIds.contains(e.id)).toList();
+      final newEvents = fresh
+          .where((e) => !existingIds.contains(e.id))
+          .toList();
       if (newEvents.isEmpty) return;
       _events.insertAll(0, newEvents);
       _events.sort((a, b) => b.createdAt.compareTo(a.createdAt));

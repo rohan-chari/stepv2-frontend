@@ -299,9 +299,9 @@ class _TutorialScreenState extends State<TutorialScreen> {
           insetPadding: const EdgeInsets.symmetric(horizontal: 40),
           child: GameContainer(
             padding: const EdgeInsets.fromLTRB(28, 32, 28, 24),
-            frameColor: AppColors.accent,
-            surfaceColor: AppColors.parchmentLight,
-            glowColor: AppColors.coinMid,
+            frameColor: AppColors.of(context).accent,
+            surfaceColor: AppColors.of(context).parchmentLight,
+            glowColor: AppColors.of(context).coinMid,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -309,19 +309,28 @@ class _TutorialScreenState extends State<TutorialScreen> {
                 const SizedBox(height: 12),
                 Text(
                   'TUTORIAL COMPLETE',
-                  style: PixelText.title(size: 13, color: AppColors.textMid),
+                  style: PixelText.title(
+                    size: 13,
+                    color: AppColors.of(context).textMid,
+                  ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
                 Text(
                   '+$kTutorialRewardCoins coins',
-                  style: PixelText.title(size: 30, color: AppColors.textDark),
+                  style: PixelText.title(
+                    size: 30,
+                    color: AppColors.of(context).textDark,
+                  ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
                 Text(
                   'Nice work — your reward is in the bag. Now go earn some more!',
-                  style: PixelText.body(size: 15, color: AppColors.textMid),
+                  style: PixelText.body(
+                    size: 15,
+                    color: AppColors.of(context).textMid,
+                  ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 22),
@@ -343,7 +352,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
     final step = _steps[_index];
 
     return Scaffold(
-      backgroundColor: AppColors.parchment,
+      backgroundColor: AppColors.of(context).parchment,
       body: SafeArea(
         child: Stack(
           key: _stageKey,

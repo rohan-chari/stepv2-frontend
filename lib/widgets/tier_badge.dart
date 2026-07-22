@@ -93,7 +93,7 @@ class TierBadge extends StatelessWidget {
             large ? text.toUpperCase() : text,
             style: PixelText.title(
               size: large ? 18 : 10,
-              color: AppColors.textDark,
+              color: AppColors.of(context).textDark,
             ),
           ),
         ],

@@ -252,10 +252,12 @@ class _OnboardingDailyIntroStepState extends State<OnboardingDailyIntroStep> {
   @override
   Widget build(BuildContext context) {
     if (widget.skipForPendingShare || _loading) {
-      return const ColoredBox(
-        color: AppColors.roofLight,
+      return ColoredBox(
+        color: AppColors.of(context).roofLight,
         child: Center(
-          child: CircularProgressIndicator(color: AppColors.parchment),
+          child: CircularProgressIndicator(
+            color: AppColors.of(context).textLight,
+          ),
         ),
       );
     }
@@ -271,7 +273,7 @@ class _OnboardingDailyIntroStepState extends State<OnboardingDailyIntroStep> {
         : 'Your first race is waiting';
 
     return ColoredBox(
-      color: AppColors.roofLight,
+      color: AppColors.of(context).roofLight,
       child: Stack(
         children: [
           const Positioned.fill(
@@ -284,24 +286,27 @@ class _OnboardingDailyIntroStepState extends State<OnboardingDailyIntroStep> {
               padding: const EdgeInsets.fromLTRB(24, 36, 24, 44),
               child: Column(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.emoji_events_rounded,
                     size: 74,
-                    color: AppColors.pillGold,
+                    color: AppColors.of(context).pillGold,
                   ),
                   const SizedBox(height: 18),
                   Text(
                     verified ? 'TODAY’S RACE' : 'READY TO RACE',
                     style: HomeText.label(
                       size: 13,
-                      color: AppColors.parchmentLight,
+                      color: AppColors.of(context).textLight,
                     ),
                   ),
                   const SizedBox(height: 10),
                   Text(
                     title,
                     textAlign: TextAlign.center,
-                    style: HomeText.title(size: 31, color: AppColors.parchment),
+                    style: HomeText.title(
+                      size: 31,
+                      color: AppColors.of(context).textLight,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   Text(
@@ -312,7 +317,7 @@ class _OnboardingDailyIntroStepState extends State<OnboardingDailyIntroStep> {
                     style: HomeText.body(
                       size: 15,
                       height: 1.4,
-                      color: AppColors.parchmentLight,
+                      color: AppColors.of(context).textLight,
                     ),
                   ),
                   if (verified) ...[
@@ -321,9 +326,12 @@ class _OnboardingDailyIntroStepState extends State<OnboardingDailyIntroStep> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(18),
                       decoration: BoxDecoration(
-                        color: AppColors.parchment,
+                        color: AppColors.of(context).parchment,
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: AppColors.roofDark, width: 2),
+                        border: Border.all(
+                          color: AppColors.of(context).roofDark,
+                          width: 2,
+                        ),
                       ),
                       child: Column(
                         children: [
@@ -331,7 +339,7 @@ class _OnboardingDailyIntroStepState extends State<OnboardingDailyIntroStep> {
                             handle,
                             style: HomeText.title(
                               size: 24,
-                              color: AppColors.textDark,
+                              color: AppColors.of(context).textDark,
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -341,7 +349,7 @@ class _OnboardingDailyIntroStepState extends State<OnboardingDailyIntroStep> {
                             style: HomeText.body(
                               size: 13,
                               height: 1.35,
-                              color: AppColors.textMid,
+                              color: AppColors.of(context).textMid,
                             ),
                           ),
                         ],
@@ -440,7 +448,7 @@ class _OnboardingReferralWelcomeStepState
         : 'Finish your first race and you’ll both earn coins.';
 
     return ColoredBox(
-      color: AppColors.roofLight,
+      color: AppColors.of(context).roofLight,
       child: Stack(
         children: [
           const Positioned.fill(
@@ -458,10 +466,10 @@ class _OnboardingReferralWelcomeStepState
                     child: Column(
                       children: [
                         if (_loading)
-                          const Padding(
+                          Padding(
                             padding: EdgeInsets.only(top: 48),
                             child: CircularProgressIndicator(
-                              color: AppColors.parchment,
+                              color: AppColors.of(context).textLight,
                               strokeWidth: 3,
                             ),
                           )
@@ -470,7 +478,7 @@ class _OnboardingReferralWelcomeStepState
                             name: inviter ?? 'Friend',
                             imageUrl: _inviterAvatar,
                             size: 96,
-                            borderColor: AppColors.parchment,
+                            borderColor: AppColors.of(context).textLight,
                             borderWidth: 3,
                           ),
                           const SizedBox(height: 18),
@@ -478,9 +486,9 @@ class _OnboardingReferralWelcomeStepState
                             'YOU’RE INVITED',
                             style: HomeText.label(
                               size: 13,
-                              color: AppColors.parchmentLight.withValues(
-                                alpha: 0.86,
-                              ),
+                              color: AppColors.of(
+                                context,
+                              ).textLight.withValues(alpha: 0.86),
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -489,7 +497,7 @@ class _OnboardingReferralWelcomeStepState
                             headline,
                             style: HomeText.title(
                               size: 30,
-                              color: AppColors.parchment,
+                              color: AppColors.of(context).textLight,
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -498,9 +506,9 @@ class _OnboardingReferralWelcomeStepState
                             body,
                             style: HomeText.body(
                               size: 15,
-                              color: AppColors.parchmentLight.withValues(
-                                alpha: 0.92,
-                              ),
+                              color: AppColors.of(
+                                context,
+                              ).textLight.withValues(alpha: 0.92),
                               height: 1.38,
                             ),
                             textAlign: TextAlign.center,
@@ -555,7 +563,7 @@ class OnboardingTutorialStep extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: AppColors.roofLight,
+      color: AppColors.of(context).roofLight,
       child: Stack(
         children: [
           const Positioned.fill(
@@ -584,14 +592,14 @@ class OnboardingTutorialStep extends StatelessWidget {
                               width: compact ? 132 : 160,
                               height: compact ? 132 : 160,
                               decoration: BoxDecoration(
-                                color: AppColors.parchment.withValues(
-                                  alpha: 0.12,
-                                ),
+                                color: AppColors.of(
+                                  context,
+                                ).textLight.withValues(alpha: 0.12),
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: AppColors.parchmentLight.withValues(
-                                    alpha: 0.30,
-                                  ),
+                                  color: AppColors.of(
+                                    context,
+                                  ).textLight.withValues(alpha: 0.30),
                                   width: 3,
                                 ),
                               ),
@@ -600,7 +608,7 @@ class OnboardingTutorialStep extends StatelessWidget {
                                 '100',
                                 style: HomeText.title(
                                   size: compact ? 44 : 54,
-                                  color: AppColors.parchment,
+                                  color: AppColors.of(context).textLight,
                                 ),
                               ),
                             ),
@@ -609,9 +617,9 @@ class OnboardingTutorialStep extends StatelessWidget {
                               'FIRST 100 COINS',
                               style: HomeText.label(
                                 size: 13,
-                                color: AppColors.parchmentLight.withValues(
-                                  alpha: 0.86,
-                                ),
+                                color: AppColors.of(
+                                  context,
+                                ).textLight.withValues(alpha: 0.86),
                               ),
                               textAlign: TextAlign.center,
                             ),
@@ -620,7 +628,7 @@ class OnboardingTutorialStep extends StatelessWidget {
                               'Earn your first 100 coins',
                               style: HomeText.title(
                                 size: 32,
-                                color: AppColors.parchment,
+                                color: AppColors.of(context).textLight,
                               ),
                               textAlign: TextAlign.center,
                             ),
@@ -631,9 +639,9 @@ class OnboardingTutorialStep extends StatelessWidget {
                               'balance to get you started.',
                               style: HomeText.body(
                                 size: 15,
-                                color: AppColors.parchmentLight.withValues(
-                                  alpha: 0.92,
-                                ),
+                                color: AppColors.of(
+                                  context,
+                                ).textLight.withValues(alpha: 0.92),
                                 height: 1.38,
                               ),
                               textAlign: TextAlign.center,
@@ -668,9 +676,9 @@ class OnboardingTutorialStep extends StatelessWidget {
                                 'Skip for now',
                                 style: HomeText.body(
                                   size: 15,
-                                  color: AppColors.parchmentLight.withValues(
-                                    alpha: 0.92,
-                                  ),
+                                  color: AppColors.of(
+                                    context,
+                                  ).textLight.withValues(alpha: 0.92),
                                   weight: FontWeight.w800,
                                 ),
                               ),
@@ -767,11 +775,11 @@ class _OnboardingAutoEnrolledStepState extends State<OnboardingAutoEnrolledStep>
     // While a share link is pending we're auto-skipping — render a neutral
     // holding view (no CTA) so the celebration never flashes before the handoff.
     if (widget.skipForPendingShare) {
-      return const ColoredBox(
-        color: AppColors.roofLight,
+      return ColoredBox(
+        color: AppColors.of(context).roofLight,
         child: Center(
           child: CircularProgressIndicator(
-            color: AppColors.parchment,
+            color: AppColors.of(context).textLight,
             strokeWidth: 3,
           ),
         ),
@@ -779,7 +787,7 @@ class _OnboardingAutoEnrolledStepState extends State<OnboardingAutoEnrolledStep>
     }
 
     return ColoredBox(
-      color: AppColors.roofLight,
+      color: AppColors.of(context).roofLight,
       child: Stack(
         children: [
           const Positioned.fill(
@@ -813,9 +821,9 @@ class _OnboardingAutoEnrolledStepState extends State<OnboardingAutoEnrolledStep>
                               "YOU'RE IN",
                               style: HomeText.label(
                                 size: 13,
-                                color: AppColors.parchmentLight.withValues(
-                                  alpha: 0.86,
-                                ),
+                                color: AppColors.of(
+                                  context,
+                                ).textLight.withValues(alpha: 0.86),
                               ),
                               textAlign: TextAlign.center,
                             ),
@@ -824,7 +832,7 @@ class _OnboardingAutoEnrolledStepState extends State<OnboardingAutoEnrolledStep>
                               'Entered in the Daily & Weekly challenge',
                               style: HomeText.title(
                                 size: compact ? 28 : 32,
-                                color: AppColors.parchment,
+                                color: AppColors.of(context).textLight,
                               ),
                               textAlign: TextAlign.center,
                             ),
@@ -835,9 +843,9 @@ class _OnboardingAutoEnrolledStepState extends State<OnboardingAutoEnrolledStep>
                               'auto-join off anytime on the Races page.',
                               style: HomeText.body(
                                 size: 15,
-                                color: AppColors.parchmentLight.withValues(
-                                  alpha: 0.92,
-                                ),
+                                color: AppColors.of(
+                                  context,
+                                ).textLight.withValues(alpha: 0.92),
                                 height: 1.4,
                               ),
                               textAlign: TextAlign.center,
@@ -921,10 +929,10 @@ class _EnrolledEmblem extends StatelessWidget {
           width: size,
           height: size,
           decoration: BoxDecoration(
-            color: AppColors.parchment.withValues(alpha: 0.12),
+            color: AppColors.of(context).textLight.withValues(alpha: 0.12),
             shape: BoxShape.circle,
             border: Border.all(
-              color: AppColors.parchmentLight.withValues(alpha: 0.30),
+              color: AppColors.of(context).textLight.withValues(alpha: 0.30),
               width: 3,
             ),
           ),
@@ -932,7 +940,7 @@ class _EnrolledEmblem extends StatelessWidget {
           child: Icon(
             Icons.check_rounded,
             size: size * 0.5,
-            color: AppColors.parchment,
+            color: AppColors.of(context).textLight,
           ),
         ),
       ),
@@ -952,21 +960,24 @@ class _EnrolledChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
       decoration: BoxDecoration(
-        color: AppColors.parchment.withValues(alpha: 0.12),
+        color: AppColors.of(context).textLight.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
         border: Border.all(
-          color: AppColors.parchmentLight.withValues(alpha: 0.28),
+          color: AppColors.of(context).textLight.withValues(alpha: 0.28),
           width: 1.5,
         ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 15, color: AppColors.parchment),
+          Icon(icon, size: 15, color: AppColors.of(context).textLight),
           const SizedBox(width: 6),
           Text(
             label,
-            style: HomeText.label(size: 11, color: AppColors.parchment),
+            style: HomeText.label(
+              size: 11,
+              color: AppColors.of(context).textLight,
+            ),
           ),
         ],
       ),

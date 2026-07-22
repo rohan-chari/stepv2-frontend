@@ -175,10 +175,7 @@ class BalanceConfigSaveResult {
 
   const BalanceConfigSaveResult.boundWarnings(
     List<BalanceBoundWarning> warnings,
-  ) : this(
-        status: BalanceConfigSaveStatus.boundWarnings,
-        warnings: warnings,
-      );
+  ) : this(status: BalanceConfigSaveStatus.boundWarnings, warnings: warnings);
 
   const BalanceConfigSaveResult.failed(String message)
     : this(status: BalanceConfigSaveStatus.error, message: message);

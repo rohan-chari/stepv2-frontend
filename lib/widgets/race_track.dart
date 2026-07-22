@@ -80,9 +80,20 @@ class _RaceTrackState extends State<RaceTrack>
 
               return Stack(
                 children: [
-                  const Positioned.fill(
+                  Positioned.fill(
                     child: CustomPaint(
-                      painter: _RaceTrackPainter(),
+                      painter: _RaceTrackPainter(
+                        grassColors: [
+                          AppColors.of(context).grassBright,
+                          AppColors.of(context).grassMid,
+                          AppColors.of(context).grassDark,
+                        ],
+                        treeColor: AppColors.of(context).grassDark,
+                        curbColor: AppColors.of(context).accent,
+                        lightColor: AppColors.of(context).textLight,
+                        darkColor: AppColors.of(context).woodDarker,
+                        roadColor: AppColors.of(context).pinMetal,
+                      ),
                     ),
                   ),
                   Positioned(
@@ -145,7 +156,21 @@ class _RaceTrackPainter extends CustomPainter {
   static const double avatarRadius = 18.0;
   static const double avatarBorder = 2.5;
 
-  const _RaceTrackPainter();
+  const _RaceTrackPainter({
+    required this.grassColors,
+    required this.treeColor,
+    required this.curbColor,
+    required this.lightColor,
+    required this.darkColor,
+    required this.roadColor,
+  });
+
+  final List<Color> grassColors;
+  final Color treeColor;
+  final Color curbColor;
+  final Color lightColor;
+  final Color darkColor;
+  final Color roadColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -166,17 +191,17 @@ class _RaceTrackPainter extends CustomPainter {
         const Radius.circular(12),
       ),
       Paint()
-        ..shader = const LinearGradient(
+        ..shader = LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFF8BC34A), Color(0xFF7CB342), Color(0xFF689F38)],
+          colors: grassColors,
         ).createShader(Offset.zero & size),
     );
   }
 
   void _drawTrees(Canvas canvas, Size size) {
     final rng = math.Random(42);
-    final paint = Paint()..color = AppColors.grassDark.withValues(alpha: 0.5);
+    final paint = Paint()..color = treeColor.withValues(alpha: 0.5);
     for (int i = 0; i < 8; i++) {
       final x = rng.nextDouble() * size.width;
       final y = rng.nextDouble() * size.height;
@@ -192,12 +217,12 @@ class _RaceTrackPainter extends CustomPainter {
     final totalLength = metrics.length;
     const stripeLen = 12.0;
     final redPaint = Paint()
-      ..color = AppColors.accent
+      ..color = curbColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = trackWidth + 10
       ..strokeCap = StrokeCap.round;
     final whitePaint = Paint()
-      ..color = Colors.white
+      ..color = lightColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = trackWidth + 10
       ..strokeCap = StrokeCap.round;
@@ -217,7 +242,7 @@ class _RaceTrackPainter extends CustomPainter {
     canvas.drawPath(
       trackPath,
       Paint()
-        ..color = const Color(0xFF9E9E9E)
+        ..color = roadColor
         ..style = PaintingStyle.stroke
         ..strokeWidth = trackWidth
         ..strokeCap = StrokeCap.round
@@ -229,7 +254,7 @@ class _RaceTrackPainter extends CustomPainter {
     final metrics = trackPath.computeMetrics().first;
     final totalLength = metrics.length;
     final paint = Paint()
-      ..color = Colors.white
+      ..color = lightColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.5
       ..strokeCap = StrokeCap.round;
@@ -260,7 +285,7 @@ class _RaceTrackPainter extends CustomPainter {
       for (int c = 0; c < cols; c++) {
         canvas.drawRect(
           Rect.fromLTWH(sx + r * cs, sy + c * cs, cs, cs),
-          Paint()..color = (r + c) % 2 == 0 ? Colors.black : Colors.white,
+          Paint()..color = (r + c) % 2 == 0 ? darkColor : lightColor,
         );
       }
     }
@@ -268,7 +293,15 @@ class _RaceTrackPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _RaceTrackPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _RaceTrackPainter oldDelegate) =>
+      oldDelegate.grassColors[0] != grassColors[0] ||
+      oldDelegate.grassColors[1] != grassColors[1] ||
+      oldDelegate.grassColors[2] != grassColors[2] ||
+      oldDelegate.treeColor != treeColor ||
+      oldDelegate.curbColor != curbColor ||
+      oldDelegate.lightColor != lightColor ||
+      oldDelegate.darkColor != darkColor ||
+      oldDelegate.roadColor != roadColor;
 }
 
 Path _buildRaceTrackPath(Size size) {

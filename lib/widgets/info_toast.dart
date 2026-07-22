@@ -16,13 +16,13 @@ void showInfoToast(
     duration: duration,
     shellKey: const Key('info-toast-shell'),
     badgeKey: const Key('info-toast-badge'),
-    palette: const GameToastPalette(
+    palette: GameToastPalette(
       label: 'NOTICE',
       icon: Icons.notifications_rounded,
-      face: AppColors.pillGreen,
-      dark: AppColors.pillGreenDark,
-      shadow: AppColors.pillGreenShadow,
-      messageColor: AppColors.textDark,
+      face: AppColors.of(context).pillGreen,
+      dark: AppColors.of(context).pillGreenDark,
+      shadow: AppColors.of(context).pillGreenShadow,
+      messageColor: AppColors.of(context).textDark,
     ),
   );
 }

@@ -291,7 +291,7 @@ class _FriendsTabState extends State<FriendsTab> {
   void _showFriendMenu(String friendshipId, String displayName) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.parchment,
+      backgroundColor: AppColors.of(context).parchment,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -302,7 +302,10 @@ class _FriendsTabState extends State<FriendsTab> {
           children: [
             Text(
               atName(displayName),
-              style: PixelText.title(size: 18, color: AppColors.textDark),
+              style: PixelText.title(
+                size: 18,
+                color: AppColors.of(context).textDark,
+              ),
             ),
             const SizedBox(height: 16),
             PillButton(
@@ -335,9 +338,9 @@ class _FriendsTabState extends State<FriendsTab> {
     return Scaffold(
       body: Stack(
         children: [
-          const Positioned.fill(
+          Positioned.fill(
             child: ColoredBox(
-              color: AppColors.roofLight,
+              color: AppColors.of(context).roofLight,
               child: CustomPaint(
                 painter: ArcadeCheckerPainter(drawBottomStripe: false),
               ),
@@ -350,8 +353,8 @@ class _FriendsTabState extends State<FriendsTab> {
               behavior: HitTestBehavior.opaque,
               child: RefreshIndicator(
                 onRefresh: _handleRefresh,
-                color: AppColors.accent,
-                backgroundColor: AppColors.parchment,
+                color: AppColors.of(context).accent,
+                backgroundColor: AppColors.of(context).parchment,
                 child: CustomScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   slivers: [
@@ -375,9 +378,11 @@ class _FriendsTabState extends State<FriendsTab> {
         : BorderRadius.circular(8);
 
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: AppColors.roofLight,
-        border: Border(bottom: BorderSide(color: AppColors.roofDark, width: 1)),
+      decoration: BoxDecoration(
+        color: AppColors.of(context).roofLight,
+        border: Border(
+          bottom: BorderSide(color: AppColors.of(context).roofDark, width: 1),
+        ),
       ),
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
@@ -395,9 +400,9 @@ class _FriendsTabState extends State<FriendsTab> {
                         width: 40,
                         height: 40,
                       ),
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.arrow_back,
-                        color: AppColors.parchment,
+                        color: AppColors.of(context).textLight,
                       ),
                       onPressed: () => Navigator.of(context).pop(),
                     ),
@@ -408,7 +413,7 @@ class _FriendsTabState extends State<FriendsTab> {
                       'FRIENDS',
                       style: PixelText.title(
                         size: 30,
-                        color: AppColors.parchment,
+                        color: AppColors.of(context).textLight,
                       ).copyWith(shadows: _textShadows),
                     ),
                   ),
@@ -419,7 +424,9 @@ class _FriendsTabState extends State<FriendsTab> {
                 'Find your crew and watch them climb the leaderboard.',
                 style: PixelText.body(
                   size: 15,
-                  color: AppColors.parchment.withValues(alpha: 0.92),
+                  color: AppColors.of(
+                    context,
+                  ).textLight.withValues(alpha: 0.92),
                 ),
               ),
               const SizedBox(height: 14),
@@ -435,30 +442,37 @@ class _FriendsTabState extends State<FriendsTab> {
                 child: TextField(
                   controller: _searchController,
                   onChanged: _onSearchChanged,
-                  style: PixelText.body(size: 16, color: AppColors.textDark),
+                  style: PixelText.body(
+                    size: 16,
+                    color: AppColors.of(context).textDark,
+                  ),
                   decoration: InputDecoration(
                     filled: true,
-                    fillColor: AppColors.parchmentLight,
+                    fillColor: AppColors.of(context).parchmentLight,
                     hintText: 'Search by display name',
                     hintStyle: PixelText.body(
                       size: 16,
-                      color: AppColors.parchmentBorder,
+                      color: AppColors.of(context).parchmentBorder,
                     ),
-                    prefixIcon: const Icon(
+                    prefixIcon: Icon(
                       Icons.search_rounded,
-                      color: AppColors.textMid,
+                      color: AppColors.of(context).textMid,
                     ),
                     border: OutlineInputBorder(
-                      borderSide: BorderSide(color: AppColors.parchmentBorder),
+                      borderSide: BorderSide(
+                        color: AppColors.of(context).parchmentBorder,
+                      ),
                       borderRadius: searchBorderRadius,
                     ),
                     enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: AppColors.parchmentBorder),
+                      borderSide: BorderSide(
+                        color: AppColors.of(context).parchmentBorder,
+                      ),
                       borderRadius: searchBorderRadius,
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderSide: const BorderSide(
-                        color: AppColors.accent,
+                      borderSide: BorderSide(
+                        color: AppColors.of(context).accent,
                         width: 2,
                       ),
                       borderRadius: searchBorderRadius,
@@ -507,11 +521,11 @@ class _FriendsTabState extends State<FriendsTab> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (state.isRefreshing)
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(vertical: 4),
               child: LinearProgressIndicator(
                 minHeight: 2,
-                color: AppColors.accent,
+                color: AppColors.of(context).accent,
                 backgroundColor: Colors.transparent,
               ),
             ),
@@ -558,10 +572,10 @@ class _FriendsTabState extends State<FriendsTab> {
   /// Parchment game-piece card — same language as the home/races tabs.
   BoxDecoration _friendsCardDecoration() {
     return BoxDecoration(
-      color: AppColors.parchment,
+      color: AppColors.of(context).parchment,
       borderRadius: BorderRadius.circular(14),
       border: Border.all(
-        color: AppColors.roofDark.withValues(alpha: 0.55),
+        color: AppColors.of(context).roofDark.withValues(alpha: 0.55),
         width: 2,
       ),
       boxShadow: const [
@@ -592,12 +606,15 @@ class _FriendsTabState extends State<FriendsTab> {
           Icon(
             Icons.group_add,
             size: 32,
-            color: AppColors.textMid.withValues(alpha: 0.7),
+            color: AppColors.of(context).textMid.withValues(alpha: 0.7),
           ),
           const SizedBox(height: 8),
           Text(
             'No friends yet \u2014 search above to invite some.',
-            style: PixelText.body(size: 14, color: AppColors.textMid),
+            style: PixelText.body(
+              size: 14,
+              color: AppColors.of(context).textMid,
+            ),
             textAlign: TextAlign.center,
           ),
         ],
@@ -642,9 +659,9 @@ class _FriendsTabState extends State<FriendsTab> {
             width: 6,
             height: 16,
             decoration: BoxDecoration(
-              color: AppColors.pillGold,
+              color: AppColors.of(context).pillGold,
               borderRadius: BorderRadius.circular(3),
-              border: Border.all(color: AppColors.pillGoldDark),
+              border: Border.all(color: AppColors.of(context).pillGoldDark),
             ),
           ),
           const SizedBox(width: 8),
@@ -652,7 +669,7 @@ class _FriendsTabState extends State<FriendsTab> {
             title,
             style: PixelText.title(
               size: 16,
-              color: AppColors.parchment,
+              color: AppColors.of(context).textLight,
             ).copyWith(shadows: _textShadows),
           ),
         ],
@@ -664,14 +681,14 @@ class _FriendsTabState extends State<FriendsTab> {
     final List<Widget> items;
     if (_isSearching) {
       items = [
-        const Padding(
+        Padding(
           padding: EdgeInsets.symmetric(vertical: 12),
           child: Center(
             child: SizedBox(
               width: 18,
               height: 18,
               child: CircularProgressIndicator(
-                color: AppColors.accent,
+                color: AppColors.of(context).accent,
                 strokeWidth: 2,
               ),
             ),
@@ -684,7 +701,10 @@ class _FriendsTabState extends State<FriendsTab> {
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
           child: Text(
             'No users found',
-            style: PixelText.body(size: 14, color: AppColors.textMid),
+            style: PixelText.body(
+              size: 14,
+              color: AppColors.of(context).textMid,
+            ),
             textAlign: TextAlign.center,
           ),
         ),
@@ -699,7 +719,9 @@ class _FriendsTabState extends State<FriendsTab> {
                 ? BoxDecoration(
                     border: Border(
                       bottom: BorderSide(
-                        color: AppColors.parchmentBorder.withValues(alpha: 0.4),
+                        color: AppColors.of(
+                          context,
+                        ).parchmentBorder.withValues(alpha: 0.4),
                       ),
                     ),
                   )
@@ -715,7 +737,10 @@ class _FriendsTabState extends State<FriendsTab> {
                 Expanded(
                   child: Text(
                     atName(_searchResults[i]['displayName'] as String? ?? ''),
-                    style: PixelText.body(size: 15, color: AppColors.textDark),
+                    style: PixelText.body(
+                      size: 15,
+                      color: AppColors.of(context).textDark,
+                    ),
                   ),
                 ),
                 _buildSearchResultAction(_searchResults[i]),
@@ -727,9 +752,9 @@ class _FriendsTabState extends State<FriendsTab> {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.parchmentLight,
+        color: AppColors.of(context).parchmentLight,
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(8)),
-        border: Border.all(color: AppColors.parchmentBorder),
+        border: Border.all(color: AppColors.of(context).parchmentBorder),
       ),
       child: Column(mainAxisSize: MainAxisSize.min, children: items),
     );
@@ -848,7 +873,7 @@ class _FriendsTabState extends State<FriendsTab> {
 
     return Material(
       color: index.isOdd
-          ? AppColors.parchmentDark.withValues(alpha: 0.45)
+          ? AppColors.of(context).parchmentDark.withValues(alpha: 0.45)
           : Colors.transparent,
       child: InkWell(
         onTap: () => _showFriendMenu(friendshipId, displayName),
@@ -861,11 +886,18 @@ class _FriendsTabState extends State<FriendsTab> {
               Expanded(
                 child: Text(
                   atName(displayName),
-                  style: PixelText.body(size: 16, color: AppColors.textDark),
+                  style: PixelText.body(
+                    size: 16,
+                    color: AppColors.of(context).textDark,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const Icon(Icons.more_horiz, size: 22, color: AppColors.textMid),
+              Icon(
+                Icons.more_horiz,
+                size: 22,
+                color: AppColors.of(context).textMid,
+              ),
             ],
           ),
         ),
@@ -881,7 +913,7 @@ class _FriendsTabState extends State<FriendsTab> {
 
     return Container(
       color: index.isOdd
-          ? AppColors.parchmentDark.withValues(alpha: 0.45)
+          ? AppColors.of(context).parchmentDark.withValues(alpha: 0.45)
           : Colors.transparent,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Row(
@@ -891,7 +923,10 @@ class _FriendsTabState extends State<FriendsTab> {
           Expanded(
             child: Text(
               atName(displayName),
-              style: PixelText.body(size: 16, color: AppColors.textDark),
+              style: PixelText.body(
+                size: 16,
+                color: AppColors.of(context).textDark,
+              ),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -925,7 +960,7 @@ class _FriendsTabState extends State<FriendsTab> {
 
     return Container(
       color: index.isOdd
-          ? AppColors.parchmentDark.withValues(alpha: 0.45)
+          ? AppColors.of(context).parchmentDark.withValues(alpha: 0.45)
           : Colors.transparent,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Row(
@@ -935,7 +970,10 @@ class _FriendsTabState extends State<FriendsTab> {
           Expanded(
             child: Text(
               atName(displayName),
-              style: PixelText.body(size: 16, color: AppColors.textDark),
+              style: PixelText.body(
+                size: 16,
+                color: AppColors.of(context).textDark,
+              ),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -943,7 +981,10 @@ class _FriendsTabState extends State<FriendsTab> {
             padding: const EdgeInsets.only(right: 8),
             child: Text(
               'PENDING',
-              style: PixelText.title(size: 11, color: AppColors.textMid),
+              style: PixelText.title(
+                size: 11,
+                color: AppColors.of(context).textMid,
+              ),
             ),
           ),
           PillButton(
@@ -961,7 +1002,7 @@ class _FriendsTabState extends State<FriendsTab> {
   void _showCancelOutgoingMenu(String friendshipId, String displayName) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.parchment,
+      backgroundColor: AppColors.of(context).parchment,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -973,7 +1014,10 @@ class _FriendsTabState extends State<FriendsTab> {
             Text(
               'Cancel request to ${atName(displayName)}?',
               textAlign: TextAlign.center,
-              style: PixelText.title(size: 16, color: AppColors.textDark),
+              style: PixelText.title(
+                size: 16,
+                color: AppColors.of(context).textDark,
+              ),
             ),
             const SizedBox(height: 16),
             PillButton(
@@ -1030,8 +1074,12 @@ class _FriendsHeaderMetrics extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
         border: Border(
-          top: BorderSide(color: AppColors.parchment.withValues(alpha: 0.2)),
-          bottom: BorderSide(color: AppColors.parchment.withValues(alpha: 0.2)),
+          top: BorderSide(
+            color: AppColors.of(context).textLight.withValues(alpha: 0.2),
+          ),
+          bottom: BorderSide(
+            color: AppColors.of(context).textLight.withValues(alpha: 0.2),
+          ),
         ),
       ),
       child: Row(
@@ -1061,7 +1109,10 @@ class _FriendMetricText extends StatelessWidget {
         children: [
           Text(
             '$count',
-            style: PixelText.title(size: 18, color: AppColors.parchment),
+            style: PixelText.title(
+              size: 18,
+              color: AppColors.of(context).textLight,
+            ),
           ),
           const SizedBox(width: 5),
           Flexible(
@@ -1071,7 +1122,7 @@ class _FriendMetricText extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: PixelText.title(
                 size: 10,
-                color: AppColors.parchment.withValues(alpha: 0.82),
+                color: AppColors.of(context).textLight.withValues(alpha: 0.82),
               ),
             ),
           ),
@@ -1087,7 +1138,7 @@ class _FriendMetricDivider extends StatelessWidget {
     return Container(
       width: 1,
       height: 18,
-      color: AppColors.parchment.withValues(alpha: 0.22),
+      color: AppColors.of(context).textLight.withValues(alpha: 0.22),
     );
   }
 }

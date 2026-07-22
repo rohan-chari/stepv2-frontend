@@ -172,14 +172,16 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? AppColors.pillGreenDark : AppColors.parchmentDark,
+          color: selected
+              ? AppColors.of(context).pillGreenDark
+              : AppColors.of(context).parchmentDark,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
           label,
           style: PixelText.title(
             size: 13,
-            color: selected ? Colors.white : AppColors.textDark,
+            color: selected ? Colors.white : AppColors.of(context).textDark,
           ),
         ),
       ),
@@ -202,39 +204,45 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
     return Theme(
       data: base.copyWith(
         colorScheme: base.colorScheme.copyWith(
-          primary: AppColors.accent,
-          onPrimary: AppColors.parchment,
-          secondary: AppColors.accentLight,
-          surface: AppColors.parchment,
-          onSurface: AppColors.textDark,
-          onSurfaceVariant: AppColors.textMid,
+          primary: AppColors.of(context).accent,
+          onPrimary: AppColors.of(context).parchment,
+          secondary: AppColors.of(context).accentLight,
+          surface: AppColors.of(context).parchment,
+          onSurface: AppColors.of(context).textDark,
+          onSurfaceVariant: AppColors.of(context).textMid,
         ),
         datePickerTheme: DatePickerThemeData(
-          backgroundColor: AppColors.parchment,
-          headerBackgroundColor: AppColors.accent,
-          headerForegroundColor: AppColors.parchment,
-          weekdayStyle: PixelText.body(size: 13, color: AppColors.textMid),
+          backgroundColor: AppColors.of(context).parchment,
+          headerBackgroundColor: AppColors.of(context).accent,
+          headerForegroundColor: AppColors.of(context).parchment,
+          weekdayStyle: PixelText.body(
+            size: 13,
+            color: AppColors.of(context).textMid,
+          ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: const BorderSide(color: AppColors.accent, width: 2),
+            side: BorderSide(color: AppColors.of(context).accent, width: 2),
           ),
         ),
         timePickerTheme: TimePickerThemeData(
-          backgroundColor: AppColors.parchment,
-          dialBackgroundColor: AppColors.parchmentDark,
-          dialHandColor: AppColors.accent,
-          hourMinuteColor: AppColors.parchmentDark,
-          hourMinuteTextColor: AppColors.textDark,
-          dayPeriodTextColor: AppColors.textDark,
+          backgroundColor: AppColors.of(context).parchment,
+          dialBackgroundColor: AppColors.of(context).parchmentDark,
+          dialHandColor: AppColors.of(context).accent,
+          hourMinuteColor: AppColors.of(context).parchmentDark,
+          hourMinuteTextColor: AppColors.of(context).textDark,
+          dayPeriodTextColor: AppColors.of(context).textDark,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: const BorderSide(color: AppColors.accent, width: 2),
+            side: BorderSide(color: AppColors.of(context).accent, width: 2),
           ),
         ),
         textButtonTheme: TextButtonThemeData(
           style: TextButton.styleFrom(
-            foregroundColor: AppColors.accent,
-            textStyle: PixelText.button(size: 14),
+            foregroundColor: AppColors.of(context).accent,
+            textStyle: PixelText.button(
+              size: 14,
+              color: AppColors.of(context).buttonText,
+            ),
           ),
         ),
       ),
@@ -467,16 +475,22 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
         children: [
           Text(
             'RACE FORMAT',
-            style: PixelText.title(size: 13, color: AppColors.textMid),
+            style: PixelText.title(
+              size: 13,
+              color: AppColors.of(context).textMid,
+            ),
           ),
           const SizedBox(height: 10),
           // The signpost: two carved segments sharing one wooden bar.
           Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
-              color: AppColors.parchmentDark,
+              color: AppColors.of(context).parchmentDark,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.parchmentBorder, width: 2),
+              border: Border.all(
+                color: AppColors.of(context).parchmentBorder,
+                width: 2,
+              ),
             ),
             child: Row(
               children: [
@@ -556,7 +570,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                             'TEAM NAMES',
                             style: PixelText.body(
                               size: 11,
-                              color: AppColors.textMid,
+                              color: AppColors.of(context).textMid,
                             ),
                           ),
                           GestureDetector(
@@ -568,15 +582,15 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                 vertical: 6,
                               ),
                               decoration: BoxDecoration(
-                                color: AppColors.pillGold,
+                                color: AppColors.of(context).pillGold,
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
-                                  color: AppColors.pillGoldShadow,
+                                  color: AppColors.of(context).pillGoldShadow,
                                   width: 2,
                                 ),
-                                boxShadow: const [
+                                boxShadow: [
                                   BoxShadow(
-                                    color: AppColors.pillGoldShadow,
+                                    color: AppColors.of(context).pillGoldShadow,
                                     offset: Offset(0, 2),
                                     blurRadius: 0,
                                   ),
@@ -585,17 +599,17 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(
+                                  Icon(
                                     Icons.casino_rounded,
                                     size: 14,
-                                    color: AppColors.textDark,
+                                    color: AppColors.of(context).textDark,
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
                                     'REROLL',
                                     style: PixelText.title(
                                       size: 10,
-                                      color: AppColors.textDark,
+                                      color: AppColors.of(context).textDark,
                                     ),
                                   ),
                                 ],
@@ -621,7 +635,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                         'YOUR SIDE',
                         style: PixelText.body(
                           size: 11,
-                          color: AppColors.textMid,
+                          color: AppColors.of(context).textMid,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -664,20 +678,23 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
             gradient: selected
-                ? const LinearGradient(
+                ? LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [AppColors.roofLight, AppColors.roofMid],
+                    colors: [
+                      AppColors.of(context).roofLight,
+                      AppColors.of(context).roofMid,
+                    ],
                   )
                 : null,
             borderRadius: BorderRadius.circular(9),
             border: selected
-                ? Border.all(color: AppColors.roofDark, width: 2)
+                ? Border.all(color: AppColors.of(context).roofDark, width: 2)
                 : Border.all(color: Colors.transparent, width: 2),
             boxShadow: selected
-                ? const [
+                ? [
                     BoxShadow(
-                      color: AppColors.roofDark,
+                      color: AppColors.of(context).roofDark,
                       offset: Offset(0, 2),
                       blurRadius: 0,
                     ),
@@ -690,7 +707,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
               Icon(
                 icon,
                 size: 15,
-                color: selected ? Colors.white : AppColors.textMid,
+                color: selected ? Colors.white : AppColors.of(context).textMid,
               ),
               const SizedBox(width: 5),
               Flexible(
@@ -701,7 +718,9 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                   overflow: TextOverflow.fade,
                   style: PixelText.title(
                     size: 11.5,
-                    color: selected ? Colors.white : AppColors.textMid,
+                    color: selected
+                        ? Colors.white
+                        : AppColors.of(context).textMid,
                   ),
                 ),
               ),
@@ -724,7 +743,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
         const SizedBox(height: 16),
         Text(
           'BRACKET SIZE',
-          style: PixelText.body(size: 11, color: AppColors.textMid),
+          style: PixelText.body(size: 11, color: AppColors.of(context).textMid),
         ),
         const SizedBox(height: 8),
         Row(
@@ -745,8 +764,8 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: _bracketSize == size
-                          ? AppColors.pillGreenDark
-                          : AppColors.parchmentDark,
+                          ? AppColors.of(context).pillGreenDark
+                          : AppColors.of(context).parchmentDark,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
@@ -755,7 +774,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                         size: 16,
                         color: _bracketSize == size
                             ? Colors.white
-                            : AppColors.textDark,
+                            : AppColors.of(context).textDark,
                       ),
                     ),
                   ),
@@ -767,12 +786,12 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
         const SizedBox(height: 6),
         Text(
           Tournament.sizeSubcopy(_bracketSize),
-          style: PixelText.body(size: 11, color: AppColors.textMid),
+          style: PixelText.body(size: 11, color: AppColors.of(context).textMid),
         ),
         const SizedBox(height: 16),
         Text(
           'MATCHUP LENGTH',
-          style: PixelText.body(size: 11, color: AppColors.textMid),
+          style: PixelText.body(size: 11, color: AppColors.of(context).textMid),
         ),
         const SizedBox(height: 8),
         Row(
@@ -788,8 +807,8 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: _matchupDuration == days
-                          ? AppColors.pillGreenDark
-                          : AppColors.parchmentDark,
+                          ? AppColors.of(context).pillGreenDark
+                          : AppColors.of(context).parchmentDark,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
@@ -798,7 +817,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                         size: 15,
                         color: _matchupDuration == days
                             ? Colors.white
-                            : AppColors.textDark,
+                            : AppColors.of(context).textDark,
                       ),
                     ),
                   ),
@@ -811,13 +830,16 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
         Text(
           'Every round is a $_matchupDuration-day 1v1. '
           'Winner takes the whole pot.',
-          style: PixelText.body(size: 11, color: AppColors.textMid),
+          style: PixelText.body(size: 11, color: AppColors.of(context).textMid),
         ),
         const SizedBox(height: 4),
         Text(
           'Buy-in max $maxBuyIn · pot up to $potCap coins',
           key: const Key('tournament-buyin-hint'),
-          style: PixelText.body(size: 11, color: AppColors.coinDark),
+          style: PixelText.body(
+            size: 11,
+            color: AppColors.of(context).coinDark,
+          ),
         ),
       ],
     );
@@ -840,9 +862,12 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
       decoration: BoxDecoration(
-        color: AppColors.parchmentDark,
+        color: AppColors.of(context).parchmentDark,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.parchmentBorder, width: 2),
+        border: Border.all(
+          color: AppColors.of(context).parchmentBorder,
+          width: 2,
+        ),
       ),
       child: Row(
         children: [
@@ -858,12 +883,18 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
               children: [
                 Text(
                   '${_teamSize}v$_teamSize',
-                  style: PixelText.number(size: 30, color: AppColors.textDark),
+                  style: PixelText.number(
+                    size: 30,
+                    color: AppColors.of(context).textDark,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   '${_teamSize * 2} RACERS TOTAL',
-                  style: PixelText.body(size: 10, color: AppColors.textMid),
+                  style: PixelText.body(
+                    size: 10,
+                    color: AppColors.of(context).textMid,
+                  ),
                 ),
               ],
             ),
@@ -896,16 +927,22 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [AppColors.buttonLight, AppColors.buttonFace],
+              colors: [
+                AppColors.of(context).buttonLight,
+                AppColors.of(context).buttonFace,
+              ],
             ),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.buttonDark, width: 2.5),
-            boxShadow: const [
+            border: Border.all(
+              color: AppColors.of(context).buttonDark,
+              width: 2.5,
+            ),
+            boxShadow: [
               BoxShadow(
-                color: AppColors.buttonShadow,
+                color: AppColors.of(context).buttonShadow,
                 offset: Offset(0, 3),
                 blurRadius: 0,
               ),
@@ -999,10 +1036,12 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
           duration: const Duration(milliseconds: 160),
           padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 8),
           decoration: BoxDecoration(
-            color: selected ? color : AppColors.parchmentDark,
+            color: selected ? color : AppColors.of(context).parchmentDark,
             borderRadius: BorderRadius.circular(9),
             border: Border.all(
-              color: selected ? colorDark : AppColors.parchmentBorder,
+              color: selected
+                  ? colorDark
+                  : AppColors.of(context).parchmentBorder,
               width: 2,
             ),
             boxShadow: selected
@@ -1032,7 +1071,9 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                   overflow: TextOverflow.ellipsis,
                   style: PixelText.title(
                     size: 11,
-                    color: selected ? Colors.white : AppColors.textMid,
+                    color: selected
+                        ? Colors.white
+                        : AppColors.of(context).textMid,
                   ),
                 ),
               ),
@@ -1063,11 +1104,11 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                     children: [
                       GestureDetector(
                         onTap: () => Navigator.of(context).pop(),
-                        child: const Padding(
+                        child: Padding(
                           padding: EdgeInsets.all(8),
                           child: Icon(
                             Icons.arrow_back,
-                            color: AppColors.parchmentLight,
+                            color: AppColors.of(context).textLight,
                             size: 24,
                           ),
                         ),
@@ -1077,7 +1118,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                         'NEW RACE',
                         style: PixelText.title(
                           size: 22,
-                          color: AppColors.parchmentLight,
+                          color: AppColors.of(context).textLight,
                         ).copyWith(shadows: _textShadows),
                       ),
                     ],
@@ -1103,7 +1144,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                 'RACE NAME',
                                 style: PixelText.title(
                                   size: 13,
-                                  color: AppColors.textMid,
+                                  color: AppColors.of(context).textMid,
                                 ),
                               ),
                               const SizedBox(height: 8),
@@ -1113,15 +1154,15 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                 maxLength: 50,
                                 style: PixelText.body(
                                   size: 16,
-                                  color: AppColors.textDark,
+                                  color: AppColors.of(context).textDark,
                                 ),
                                 decoration: InputDecoration(
                                   hintText: 'e.g. Weekend Warriors',
                                   hintStyle: PixelText.body(
                                     size: 16,
-                                    color: AppColors.textMid.withValues(
-                                      alpha: 0.5,
-                                    ),
+                                    color: AppColors.of(
+                                      context,
+                                    ).textMid.withValues(alpha: 0.5),
                                   ),
                                   counterText: '',
                                   border: InputBorder.none,
@@ -1156,7 +1197,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                   'DURATION',
                                   style: PixelText.title(
                                     size: 13,
-                                    color: AppColors.textMid,
+                                    color: AppColors.of(context).textMid,
                                   ),
                                 ),
                                 const SizedBox(height: 10),
@@ -1177,8 +1218,12 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                           ),
                                           decoration: BoxDecoration(
                                             color: selected
-                                                ? AppColors.pillGreenDark
-                                                : AppColors.parchmentDark,
+                                                ? AppColors.of(
+                                                    context,
+                                                  ).pillGreenDark
+                                                : AppColors.of(
+                                                    context,
+                                                  ).parchmentDark,
                                             borderRadius: BorderRadius.circular(
                                               8,
                                             ),
@@ -1190,7 +1235,9 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                               size: 15,
                                               color: selected
                                                   ? Colors.white
-                                                  : AppColors.textDark,
+                                                  : AppColors.of(
+                                                      context,
+                                                    ).textDark,
                                             ),
                                           ),
                                         ),
@@ -1215,18 +1262,18 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                 vertical: 14,
                               ),
                               decoration: BoxDecoration(
-                                color: AppColors.roofDark,
+                                color: AppColors.of(context).roofDark,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: AppColors.parchmentBorder,
+                                  color: AppColors.of(context).parchmentBorder,
                                   width: 2,
                                 ),
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(
+                                  Icon(
                                     Icons.tune_rounded,
-                                    color: AppColors.parchment,
+                                    color: AppColors.of(context).textLight,
                                   ),
                                   const SizedBox(width: 10),
                                   Expanded(
@@ -1234,7 +1281,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                       'CUSTOMIZE RACE',
                                       style: PixelText.title(
                                         size: 13,
-                                        color: AppColors.parchment,
+                                        color: AppColors.of(context).textLight,
                                       ),
                                     ),
                                   ),
@@ -1242,7 +1289,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                     _customizeExpanded
                                         ? Icons.expand_less_rounded
                                         : Icons.expand_more_rounded,
-                                    color: AppColors.parchment,
+                                    color: AppColors.of(context).textLight,
                                   ),
                                 ],
                               ),
@@ -1269,7 +1316,9 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                             'SCHEDULED START',
                                             style: PixelText.title(
                                               size: 13,
-                                              color: AppColors.textMid,
+                                              color: AppColors.of(
+                                                context,
+                                              ).textMid,
                                             ),
                                           ),
                                           const SizedBox(height: 2),
@@ -1280,8 +1329,12 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                             style: PixelText.body(
                                               size: 11,
                                               color: _scheduledStartAt == null
-                                                  ? AppColors.textMid
-                                                  : AppColors.pillGreenDark,
+                                                  ? AppColors.of(
+                                                      context,
+                                                    ).textMid
+                                                  : AppColors.of(
+                                                      context,
+                                                    ).pillGreenDark,
                                             ),
                                           ),
                                         ],
@@ -1290,8 +1343,9 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                         height: 28,
                                         child: Switch.adaptive(
                                           value: _scheduledStartAt != null,
-                                          activeTrackColor:
-                                              AppColors.pillGreenDark,
+                                          activeTrackColor: AppColors.of(
+                                            context,
+                                          ).pillGreenDark,
                                           onChanged: (v) {
                                             if (v) {
                                               _pickScheduledStart();
@@ -1316,7 +1370,9 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                           vertical: 10,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: AppColors.parchmentDark,
+                                          color: AppColors.of(
+                                            context,
+                                          ).parchmentDark,
                                           borderRadius: BorderRadius.circular(
                                             8,
                                           ),
@@ -1326,7 +1382,9 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                             Icon(
                                               Icons.event_outlined,
                                               size: 16,
-                                              color: AppColors.textMid,
+                                              color: AppColors.of(
+                                                context,
+                                              ).textMid,
                                             ),
                                             const SizedBox(width: 8),
                                             Expanded(
@@ -1334,15 +1392,18 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                                 'Starts at ${_formatScheduledStart(_scheduledStartAt!)}',
                                                 style: PixelText.body(
                                                   size: 13,
-                                                  color: AppColors.textDark,
+                                                  color: AppColors.of(
+                                                    context,
+                                                  ).textDark,
                                                 ),
                                               ),
                                             ),
                                             Icon(
                                               Icons.edit_outlined,
                                               size: 14,
-                                              color: AppColors.textMid
-                                                  .withValues(alpha: 0.6),
+                                              color: AppColors.of(
+                                                context,
+                                              ).textMid.withValues(alpha: 0.6),
                                             ),
                                           ],
                                         ),
@@ -1370,15 +1431,16 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                       'POWERUPS',
                                       style: PixelText.title(
                                         size: 13,
-                                        color: AppColors.textMid,
+                                        color: AppColors.of(context).textMid,
                                       ),
                                     ),
                                     SizedBox(
                                       height: 28,
                                       child: Switch.adaptive(
                                         value: _powerupsEnabled,
-                                        activeTrackColor:
-                                            AppColors.pillGreenDark,
+                                        activeTrackColor: AppColors.of(
+                                          context,
+                                        ).pillGreenDark,
                                         onChanged: (v) => setState(
                                           () => _powerupsEnabled = v,
                                         ),
@@ -1392,7 +1454,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                     'POWERUP EVERY',
                                     style: PixelText.body(
                                       size: 11,
-                                      color: AppColors.textMid,
+                                      color: AppColors.of(context).textMid,
                                     ),
                                   ),
                                   const SizedBox(height: 8),
@@ -1418,8 +1480,12 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                             ),
                                             decoration: BoxDecoration(
                                               color: selected
-                                                  ? AppColors.pillGreenDark
-                                                  : AppColors.parchmentDark,
+                                                  ? AppColors.of(
+                                                      context,
+                                                    ).pillGreenDark
+                                                  : AppColors.of(
+                                                      context,
+                                                    ).parchmentDark,
                                               borderRadius:
                                                   BorderRadius.circular(8),
                                             ),
@@ -1430,7 +1496,9 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                                 size: 11,
                                                 color: selected
                                                     ? Colors.white
-                                                    : AppColors.textDark,
+                                                    : AppColors.of(
+                                                        context,
+                                                      ).textDark,
                                               ),
                                             ),
                                           ),
@@ -1467,7 +1535,9 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                             'BUY-IN',
                                             style: PixelText.title(
                                               size: 13,
-                                              color: AppColors.textMid,
+                                              color: AppColors.of(
+                                                context,
+                                              ).textMid,
                                             ),
                                           ),
                                           const SizedBox(height: 2),
@@ -1478,8 +1548,12 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                             style: PixelText.body(
                                               size: 11,
                                               color: _buyInEnabled
-                                                  ? AppColors.coinDark
-                                                  : AppColors.textMid,
+                                                  ? AppColors.of(
+                                                      context,
+                                                    ).coinDark
+                                                  : AppColors.of(
+                                                      context,
+                                                    ).textMid,
                                             ),
                                           ),
                                         ],
@@ -1489,8 +1563,9 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                       height: 28,
                                       child: Switch.adaptive(
                                         value: _buyInEnabled,
-                                        activeTrackColor:
-                                            AppColors.pillGreenDark,
+                                        activeTrackColor: AppColors.of(
+                                          context,
+                                        ).pillGreenDark,
                                         onChanged: (value) => setState(
                                           () => _buyInEnabled = value,
                                         ),
@@ -1504,15 +1579,17 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                     'BUY-IN PER RUNNER',
                                     style: PixelText.body(
                                       size: 11,
-                                      color: AppColors.textMid,
+                                      color: AppColors.of(context).textMid,
                                     ),
                                   ),
                                   const SizedBox(height: 8),
                                   Container(
                                     decoration: BoxDecoration(
-                                      color: AppColors.parchment,
+                                      color: AppColors.of(context).parchment,
                                       border: Border.all(
-                                        color: AppColors.parchmentBorder,
+                                        color: AppColors.of(
+                                          context,
+                                        ).parchmentBorder,
                                         width: 2,
                                       ),
                                       borderRadius: BorderRadius.circular(6),
@@ -1526,9 +1603,9 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                         Icon(
                                           Icons.edit_outlined,
                                           size: 16,
-                                          color: AppColors.textMid.withValues(
-                                            alpha: 0.6,
-                                          ),
+                                          color: AppColors.of(
+                                            context,
+                                          ).textMid.withValues(alpha: 0.6),
                                         ),
                                         const SizedBox(width: 8),
                                         Expanded(
@@ -1547,13 +1624,16 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                             },
                                             style: PixelText.number(
                                               size: 24,
-                                              color: AppColors.coinDark,
+                                              color: AppColors.of(
+                                                context,
+                                              ).coinDark,
                                             ),
                                             decoration: InputDecoration(
                                               hintText: '0',
                                               hintStyle: PixelText.number(
                                                 size: 24,
-                                                color: AppColors.coinDark
+                                                color: AppColors.of(context)
+                                                    .coinDark
                                                     .withValues(alpha: 0.3),
                                               ),
                                               border: InputBorder.none,
@@ -1562,7 +1642,9 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                               suffixText: 'coins',
                                               suffixStyle: PixelText.body(
                                                 size: 12,
-                                                color: AppColors.textMid,
+                                                color: AppColors.of(
+                                                  context,
+                                                ).textMid,
                                               ),
                                             ),
                                           ),
@@ -1583,7 +1665,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                       'PAYOUT MODE',
                                       style: PixelText.body(
                                         size: 11,
-                                        color: AppColors.textMid,
+                                        color: AppColors.of(context).textMid,
                                       ),
                                     ),
                                     const SizedBox(height: 8),
@@ -1610,8 +1692,12 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                                   ),
                                               decoration: BoxDecoration(
                                                 color: selected
-                                                    ? AppColors.pillGreenDark
-                                                    : AppColors.parchmentDark,
+                                                    ? AppColors.of(
+                                                        context,
+                                                      ).pillGreenDark
+                                                    : AppColors.of(
+                                                        context,
+                                                      ).parchmentDark,
                                                 borderRadius:
                                                     BorderRadius.circular(8),
                                               ),
@@ -1621,7 +1707,9 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                                   size: 12,
                                                   color: selected
                                                       ? Colors.white
-                                                      : AppColors.textDark,
+                                                      : AppColors.of(
+                                                          context,
+                                                        ).textDark,
                                                 ),
                                                 textAlign: TextAlign.center,
                                               ),
@@ -1636,7 +1724,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                         payoutHelpText(_payoutPreset),
                                         style: PixelText.body(
                                           size: 12,
-                                          color: AppColors.textMid,
+                                          color: AppColors.of(context).textMid,
                                         ),
                                         textAlign: TextAlign.center,
                                       ),
@@ -1650,7 +1738,9 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                           'Winning team splits the whole pot evenly',
                                           style: PixelText.body(
                                             size: 12,
-                                            color: AppColors.textMid,
+                                            color: AppColors.of(
+                                              context,
+                                            ).textMid,
                                           ),
                                           textAlign: TextAlign.center,
                                         ),
@@ -1683,7 +1773,9 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                               : 'PRIVATE RACE',
                                           style: PixelText.title(
                                             size: 13,
-                                            color: AppColors.textMid,
+                                            color: AppColors.of(
+                                              context,
+                                            ).textMid,
                                           ),
                                         ),
                                         const SizedBox(height: 2),
@@ -1694,8 +1786,10 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                           style: PixelText.body(
                                             size: 11,
                                             color: _isPublic
-                                                ? AppColors.pillGreenDark
-                                                : AppColors.textMid,
+                                                ? AppColors.of(
+                                                    context,
+                                                  ).pillGreenDark
+                                                : AppColors.of(context).textMid,
                                           ),
                                         ),
                                       ],
@@ -1704,8 +1798,9 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                       height: 28,
                                       child: Switch.adaptive(
                                         value: _isPublic,
-                                        activeTrackColor:
-                                            AppColors.pillGreenDark,
+                                        activeTrackColor: AppColors.of(
+                                          context,
+                                        ).pillGreenDark,
                                         onChanged: (v) =>
                                             setState(() => _isPublic = v),
                                       ),
@@ -1720,7 +1815,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                     'FIELD SIZE',
                                     style: PixelText.body(
                                       size: 11,
-                                      color: AppColors.textMid,
+                                      color: AppColors.of(context).textMid,
                                     ),
                                   ),
                                   const SizedBox(height: 6),
@@ -1728,7 +1823,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                     Tournament.sizeSubcopy(_bracketSize),
                                     style: PixelText.title(
                                       size: 13,
-                                      color: AppColors.textDark,
+                                      color: AppColors.of(context).textDark,
                                     ),
                                   ),
                                 ] else if (!_isTeamRace) ...[
@@ -1737,7 +1832,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                     'MAX RUNNERS',
                                     style: PixelText.body(
                                       size: 11,
-                                      color: AppColors.textMid,
+                                      color: AppColors.of(context).textMid,
                                     ),
                                   ),
                                   const SizedBox(height: 8),
@@ -1774,7 +1869,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                     'FIELD SIZE',
                                     style: PixelText.body(
                                       size: 11,
-                                      color: AppColors.textMid,
+                                      color: AppColors.of(context).textMid,
                                     ),
                                   ),
                                   const SizedBox(height: 6),
@@ -1783,7 +1878,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                     '${_teamSize * 2} racers max',
                                     style: PixelText.title(
                                       size: 13,
-                                      color: AppColors.textDark,
+                                      color: AppColors.of(context).textDark,
                                     ),
                                   ),
                                 ],

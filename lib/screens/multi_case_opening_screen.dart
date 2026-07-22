@@ -141,7 +141,7 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 2.5),
                 child: ColoredBox(
-                  color: AppColors.roofDark.withValues(alpha: 0.78),
+                  color: AppColors.of(context).roofDark.withValues(alpha: 0.78),
                   child: const CustomPaint(
                     painter: ArcadeCheckerPainter(
                       tileColor: Color(0x0AFFFFFF),
@@ -183,9 +183,9 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
   Widget _buildOpening() {
     return GameContainer(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
-      frameColor: AppColors.accent,
-      surfaceColor: AppColors.parchmentLight,
-      glowColor: AppColors.coinMid,
+      frameColor: AppColors.of(context).accent,
+      surfaceColor: AppColors.of(context).parchmentLight,
+      glowColor: AppColors.of(context).coinMid,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
@@ -195,7 +195,10 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
               Expanded(
                 child: Text(
                   'OPEN ALL',
-                  style: HomeText.display(size: 28, color: HomeColors.ink),
+                  style: HomeText.display(
+                    size: 28,
+                    color: AppColors.of(context).ink,
+                  ),
                 ),
               ),
               OddsAffordance(
@@ -216,7 +219,7 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
                       '${_results.length == 1 ? 'box' : 'boxes'}...',
             style: HomeText.body(
               size: 14,
-              color: HomeColors.muted,
+              color: AppColors.of(context).muted,
               weight: FontWeight.w800,
             ),
           ),
@@ -252,9 +255,12 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
           width: 54,
           height: 54,
           decoration: BoxDecoration(
-            color: AppColors.parchmentDark,
+            color: AppColors.of(context).parchmentDark,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.pillGoldShadow, width: 2),
+            border: Border.all(
+              color: AppColors.of(context).pillGoldShadow,
+              width: 2,
+            ),
           ),
           child: const Center(child: SpinningCrate(size: 34)),
         ),
@@ -310,9 +316,9 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
       ),
       child: GameContainer(
         padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
-        frameColor: AppColors.pillGold,
-        surfaceColor: AppColors.parchmentLight,
-        glowColor: AppColors.pillGold,
+        frameColor: AppColors.of(context).pillGold,
+        surfaceColor: AppColors.of(context).parchmentLight,
+        glowColor: AppColors.of(context).pillGold,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -320,7 +326,10 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
             Text(
               'YOU OPENED ${_results.length}',
               textAlign: TextAlign.center,
-              style: HomeText.display(size: 30, color: HomeColors.ink),
+              style: HomeText.display(
+                size: 30,
+                color: AppColors.of(context).ink,
+              ),
             ),
             const SizedBox(height: 4),
             Text(
@@ -329,7 +338,10 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
                   '${e.value} ${e.key.toLowerCase()}',
               ].join(' · '),
               textAlign: TextAlign.center,
-              style: PixelText.body(size: 13, color: AppColors.textMid),
+              style: PixelText.body(
+                size: 13,
+                color: AppColors.of(context).textMid,
+              ),
             ),
             const SizedBox(height: 16),
             Wrap(
@@ -343,7 +355,10 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
               Text(
                 '$autoActivated auto-activated',
                 textAlign: TextAlign.center,
-                style: PixelText.body(size: 13, color: AppColors.pillGreen),
+                style: PixelText.body(
+                  size: 13,
+                  color: AppColors.of(context).pillGreen,
+                ),
               ),
             ],
             if (queued > 0) ...[
@@ -351,7 +366,10 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
               Text(
                 'Included $queued queued ${queued == 1 ? 'box' : 'boxes'}',
                 textAlign: TextAlign.center,
-                style: PixelText.body(size: 12, color: AppColors.textMid),
+                style: PixelText.body(
+                  size: 12,
+                  color: AppColors.of(context).textMid,
+                ),
               ),
             ],
             const SizedBox(height: 20),
@@ -380,7 +398,7 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
             width: 60,
             height: 60,
             decoration: BoxDecoration(
-              color: AppColors.parchmentDark,
+              color: AppColors.of(context).parchmentDark,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: color, width: 2),
             ),
@@ -393,7 +411,10 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: PixelText.body(size: 10, color: AppColors.textDark),
+            style: PixelText.body(
+              size: 10,
+              color: AppColors.of(context).textDark,
+            ),
           ),
         ],
       ),
@@ -417,22 +438,22 @@ class _CloseButton extends StatelessWidget {
           width: 38,
           height: 38,
           decoration: BoxDecoration(
-            color: AppColors.errorLight,
+            color: AppColors.of(context).errorLight,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.error, width: 2),
-            boxShadow: const [
+            border: Border.all(color: AppColors.of(context).error, width: 2),
+            boxShadow: [
               BoxShadow(
-                color: AppColors.error,
+                color: AppColors.of(context).error,
                 offset: Offset(3, 3),
                 blurRadius: 0,
               ),
             ],
           ),
-          child: const Center(
+          child: Center(
             child: Icon(
               Icons.close_rounded,
               size: 20,
-              color: AppColors.textDark,
+              color: AppColors.of(context).textDark,
             ),
           ),
         ),

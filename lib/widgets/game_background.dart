@@ -17,11 +17,17 @@ class GameBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: AppColors.parchmentLight,
+      color: AppColors.of(context).parchmentLight,
       child: Stack(
         children: [
-          const Positioned.fill(
-            child: CustomPaint(painter: PixelSurfacePainter()),
+          Positioned.fill(
+            child: CustomPaint(
+              painter: PixelSurfacePainter(
+                dotColor: AppColors.of(
+                  context,
+                ).parchmentDark.withValues(alpha: 0.32),
+              ),
+            ),
           ),
           Positioned.fill(child: child),
         ],

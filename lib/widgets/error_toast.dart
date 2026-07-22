@@ -16,13 +16,13 @@ void showErrorToast(
     duration: duration,
     shellKey: const Key('error-toast-shell'),
     badgeKey: const Key('error-toast-badge'),
-    palette: const GameToastPalette(
+    palette: GameToastPalette(
       label: 'ERROR',
       icon: Icons.priority_high_rounded,
-      face: AppColors.pillTerra,
-      dark: AppColors.pillTerraDark,
-      shadow: AppColors.pillTerraShadow,
-      messageColor: AppColors.textDark,
+      face: AppColors.of(context).error,
+      dark: AppColors.of(context).errorLight,
+      shadow: AppColors.of(context).woodDarker,
+      messageColor: AppColors.of(context).textDark,
     ),
   );
 }

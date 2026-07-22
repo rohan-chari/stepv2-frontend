@@ -97,8 +97,10 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
     _initialName = (race['name'] as String?) ?? '';
     _initialMaxDurationDays = _readInt(race['maxDurationDays'], 7);
     _initialPowerupsEnabled = race['powerupsEnabled'] == true;
-    _initialPowerupInterval =
-        _readInt(race['powerupStepInterval'], 5000).clamp(2000, 50000);
+    _initialPowerupInterval = _readInt(
+      race['powerupStepInterval'],
+      5000,
+    ).clamp(2000, 50000);
     _initialBuyInAmount = _readInt(race['buyInAmount'], 0);
     _initialBuyInEnabled = _initialBuyInAmount > 0;
     _initialPayoutPreset =
@@ -161,14 +163,16 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
-            color: selected ? AppColors.pillGreenDark : AppColors.parchmentDark,
+            color: selected
+                ? AppColors.of(context).pillGreenDark
+                : AppColors.of(context).parchmentDark,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
             label,
             style: PixelText.title(
               size: 13,
-              color: selected ? Colors.white : AppColors.textDark,
+              color: selected ? Colors.white : AppColors.of(context).textDark,
             ),
           ),
         ),
@@ -186,14 +190,20 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
         children: [
           Text(
             'TEAMS',
-            style: PixelText.title(size: 13, color: AppColors.textMid),
+            style: PixelText.title(
+              size: 13,
+              color: AppColors.of(context).textMid,
+            ),
           ),
           const SizedBox(height: 10),
           _buildTeamSizeStepper(),
           const SizedBox(height: 14),
           Text(
             'TEAM NAMES',
-            style: PixelText.body(size: 11, color: AppColors.textMid),
+            style: PixelText.body(
+              size: 11,
+              color: AppColors.of(context).textMid,
+            ),
           ),
           const SizedBox(height: 8),
           _teamNamePlaque(
@@ -212,7 +222,10 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
             Text(
               '$_teamACount on ${_teamANameController.text.trim()}, '
               '$_teamBCount on ${_teamBNameController.text.trim()} already.',
-              style: PixelText.body(size: 11, color: AppColors.textMid),
+              style: PixelText.body(
+                size: 11,
+                color: AppColors.of(context).textMid,
+              ),
             ),
           ],
         ],
@@ -228,9 +241,12 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
       decoration: BoxDecoration(
-        color: AppColors.parchmentDark,
+        color: AppColors.of(context).parchmentDark,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.parchmentBorder, width: 2),
+        border: Border.all(
+          color: AppColors.of(context).parchmentBorder,
+          width: 2,
+        ),
       ),
       child: Row(
         children: [
@@ -238,14 +254,18 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
             key: const Key('edit-team-size-minus'),
             icon: Icons.remove_rounded,
             enabled: _teamSize > 1,
-            onTap: () => setState(() => _teamSize = (_teamSize - 1).clamp(1, 5)),
+            onTap: () =>
+                setState(() => _teamSize = (_teamSize - 1).clamp(1, 5)),
           ),
           Expanded(
             child: Column(
               children: [
                 Text(
                   '${_teamSize}v$_teamSize',
-                  style: PixelText.number(size: 30, color: AppColors.textDark),
+                  style: PixelText.number(
+                    size: 30,
+                    color: AppColors.of(context).textDark,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -255,8 +275,8 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                   style: PixelText.body(
                     size: 10,
                     color: _teamSize < floor
-                        ? AppColors.error
-                        : AppColors.textMid,
+                        ? AppColors.of(context).error
+                        : AppColors.of(context).textMid,
                   ),
                 ),
               ],
@@ -266,7 +286,8 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
             key: const Key('edit-team-size-plus'),
             icon: Icons.add_rounded,
             enabled: _teamSize < 5,
-            onTap: () => setState(() => _teamSize = (_teamSize + 1).clamp(1, 5)),
+            onTap: () =>
+                setState(() => _teamSize = (_teamSize + 1).clamp(1, 5)),
           ),
         ],
       ),
@@ -288,16 +309,22 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [AppColors.buttonLight, AppColors.buttonFace],
+              colors: [
+                AppColors.of(context).buttonLight,
+                AppColors.of(context).buttonFace,
+              ],
             ),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.buttonDark, width: 2.5),
-            boxShadow: const [
+            border: Border.all(
+              color: AppColors.of(context).buttonDark,
+              width: 2.5,
+            ),
+            boxShadow: [
               BoxShadow(
-                color: AppColors.buttonShadow,
+                color: AppColors.of(context).buttonShadow,
                 offset: Offset(0, 3),
                 blurRadius: 0,
               ),
@@ -329,7 +356,11 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: colorDark, width: 2.5),
         boxShadow: [
-          BoxShadow(color: colorDark, offset: const Offset(0, 3), blurRadius: 0),
+          BoxShadow(
+            color: colorDark,
+            offset: const Offset(0, 3),
+            blurRadius: 0,
+          ),
         ],
       ),
       child: Row(
@@ -415,8 +446,9 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
 
     final effectiveBuyIn = _buyInEnabled ? _buyInAmount : 0;
     if (effectiveBuyIn != _initialBuyInAmount) return true;
-    final effectivePreset =
-        _buyInEnabled ? _payoutPreset : _initialPayoutPreset;
+    final effectivePreset = _buyInEnabled
+        ? _payoutPreset
+        : _initialPayoutPreset;
     if (effectivePreset != _initialPayoutPreset) return true;
 
     return false;
@@ -573,7 +605,9 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
     }
     if (e.code != null) return teamRaceErrorCopy(e.code);
     final msg = e.message.trim();
-    return msg.isNotEmpty ? msg : 'Could not save changes. Give it another try!';
+    return msg.isNotEmpty
+        ? msg
+        : 'Could not save changes. Give it another try!';
   }
 
   @override
@@ -596,11 +630,11 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                     children: [
                       GestureDetector(
                         onTap: () => Navigator.of(context).pop(),
-                        child: const Padding(
+                        child: Padding(
                           padding: EdgeInsets.all(8),
                           child: Icon(
                             Icons.arrow_back,
-                            color: AppColors.parchmentLight,
+                            color: AppColors.of(context).textLight,
                             size: 24,
                           ),
                         ),
@@ -610,7 +644,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                         'EDIT RACE',
                         style: PixelText.title(
                           size: 22,
-                          color: AppColors.parchmentLight,
+                          color: AppColors.of(context).textLight,
                         ).copyWith(shadows: _textShadows),
                       ),
                     ],
@@ -636,7 +670,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                 'RACE NAME',
                                 style: PixelText.title(
                                   size: 13,
-                                  color: AppColors.textMid,
+                                  color: AppColors.of(context).textMid,
                                 ),
                               ),
                               const SizedBox(height: 8),
@@ -646,15 +680,15 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                 onChanged: (_) => setState(() {}),
                                 style: PixelText.body(
                                   size: 16,
-                                  color: AppColors.textDark,
+                                  color: AppColors.of(context).textDark,
                                 ),
                                 decoration: InputDecoration(
                                   hintText: 'e.g. Weekend Warriors',
                                   hintStyle: PixelText.body(
                                     size: 16,
-                                    color: AppColors.textMid.withValues(
-                                      alpha: 0.5,
-                                    ),
+                                    color: AppColors.of(
+                                      context,
+                                    ).textMid.withValues(alpha: 0.5),
                                   ),
                                   counterText: '',
                                   border: InputBorder.none,
@@ -684,7 +718,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                 'DURATION',
                                 style: PixelText.title(
                                   size: 13,
-                                  color: AppColors.textMid,
+                                  color: AppColors.of(context).textMid,
                                 ),
                               ),
                               const SizedBox(height: 10),
@@ -705,10 +739,15 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                         ),
                                         decoration: BoxDecoration(
                                           color: selected
-                                              ? AppColors.pillGreenDark
-                                              : AppColors.parchmentDark,
-                                          borderRadius:
-                                              BorderRadius.circular(8),
+                                              ? AppColors.of(
+                                                  context,
+                                                ).pillGreenDark
+                                              : AppColors.of(
+                                                  context,
+                                                ).parchmentDark,
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
                                         ),
                                         alignment: Alignment.center,
                                         child: Text(
@@ -717,7 +756,9 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                             size: 15,
                                             color: selected
                                                 ? Colors.white
-                                                : AppColors.textDark,
+                                                : AppColors.of(
+                                                    context,
+                                                  ).textDark,
                                           ),
                                         ),
                                       ),
@@ -744,18 +785,18 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                     'POWERUPS',
                                     style: PixelText.title(
                                       size: 13,
-                                      color: AppColors.textMid,
+                                      color: AppColors.of(context).textMid,
                                     ),
                                   ),
                                   SizedBox(
                                     height: 28,
                                     child: Switch.adaptive(
                                       value: _powerupsEnabled,
-                                      activeTrackColor:
-                                          AppColors.pillGreenDark,
-                                      onChanged: (v) => setState(
-                                        () => _powerupsEnabled = v,
-                                      ),
+                                      activeTrackColor: AppColors.of(
+                                        context,
+                                      ).pillGreenDark,
+                                      onChanged: (v) =>
+                                          setState(() => _powerupsEnabled = v),
                                     ),
                                   ),
                                 ],
@@ -766,7 +807,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                   'POWERUP EVERY',
                                   style: PixelText.body(
                                     size: 11,
-                                    color: AppColors.textMid,
+                                    color: AppColors.of(context).textMid,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -792,10 +833,15 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                           ),
                                           decoration: BoxDecoration(
                                             color: selected
-                                                ? AppColors.pillGreenDark
-                                                : AppColors.parchmentDark,
-                                            borderRadius:
-                                                BorderRadius.circular(8),
+                                                ? AppColors.of(
+                                                    context,
+                                                  ).pillGreenDark
+                                                : AppColors.of(
+                                                    context,
+                                                  ).parchmentDark,
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
                                           ),
                                           alignment: Alignment.center,
                                           child: Text(
@@ -804,7 +850,9 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                               size: 11,
                                               color: selected
                                                   ? Colors.white
-                                                  : AppColors.textDark,
+                                                  : AppColors.of(
+                                                      context,
+                                                    ).textDark,
                                             ),
                                           ),
                                         ),
@@ -840,7 +888,9 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                           'BUY-IN',
                                           style: PixelText.title(
                                             size: 13,
-                                            color: AppColors.textMid,
+                                            color: AppColors.of(
+                                              context,
+                                            ).textMid,
                                           ),
                                         ),
                                         const SizedBox(height: 2),
@@ -851,8 +901,8 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                           style: PixelText.body(
                                             size: 11,
                                             color: _buyInEnabled
-                                                ? AppColors.coinDark
-                                                : AppColors.textMid,
+                                                ? AppColors.of(context).coinDark
+                                                : AppColors.of(context).textMid,
                                           ),
                                         ),
                                       ],
@@ -862,10 +912,11 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                     height: 28,
                                     child: Switch.adaptive(
                                       value: _buyInEnabled,
-                                      activeTrackColor: AppColors.pillGreenDark,
-                                      onChanged: (value) => setState(
-                                        () => _buyInEnabled = value,
-                                      ),
+                                      activeTrackColor: AppColors.of(
+                                        context,
+                                      ).pillGreenDark,
+                                      onChanged: (value) =>
+                                          setState(() => _buyInEnabled = value),
                                     ),
                                   ),
                                 ],
@@ -881,14 +932,14 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                     vertical: 8,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: AppColors.coinLight.withValues(
-                                      alpha: 0.16,
-                                    ),
+                                    color: AppColors.of(
+                                      context,
+                                    ).coinLight.withValues(alpha: 0.16),
                                     borderRadius: BorderRadius.circular(8),
                                     border: Border.all(
-                                      color: AppColors.coinDark.withValues(
-                                        alpha: 0.4,
-                                      ),
+                                      color: AppColors.of(
+                                        context,
+                                      ).coinDark.withValues(alpha: 0.4),
                                       width: 1.5,
                                     ),
                                   ),
@@ -899,7 +950,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                       Icon(
                                         Icons.info_outline_rounded,
                                         size: 15,
-                                        color: AppColors.coinDark,
+                                        color: AppColors.of(context).coinDark,
                                       ),
                                       const SizedBox(width: 8),
                                       Expanded(
@@ -909,7 +960,9 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                           'joined.',
                                           style: PixelText.body(
                                             size: 11.5,
-                                            color: AppColors.textDark,
+                                            color: AppColors.of(
+                                              context,
+                                            ).textDark,
                                           ),
                                         ),
                                       ),
@@ -923,16 +976,18 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                   'BUY-IN PER RUNNER',
                                   style: PixelText.body(
                                     size: 11,
-                                    color: AppColors.textMid,
+                                    color: AppColors.of(context).textMid,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
                                 Container(
                                   key: const Key('edit-buyin-input'),
                                   decoration: BoxDecoration(
-                                    color: AppColors.parchment,
+                                    color: AppColors.of(context).parchment,
                                     border: Border.all(
-                                      color: AppColors.parchmentBorder,
+                                      color: AppColors.of(
+                                        context,
+                                      ).parchmentBorder,
                                       width: 2,
                                     ),
                                     borderRadius: BorderRadius.circular(6),
@@ -946,9 +1001,9 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                       Icon(
                                         Icons.edit_outlined,
                                         size: 16,
-                                        color: AppColors.textMid.withValues(
-                                          alpha: 0.6,
-                                        ),
+                                        color: AppColors.of(
+                                          context,
+                                        ).textMid.withValues(alpha: 0.6),
                                       ),
                                       const SizedBox(width: 8),
                                       Expanded(
@@ -967,14 +1022,17 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                           },
                                           style: PixelText.number(
                                             size: 24,
-                                            color: AppColors.coinDark,
+                                            color: AppColors.of(
+                                              context,
+                                            ).coinDark,
                                           ),
                                           decoration: InputDecoration(
                                             hintText: '0',
                                             hintStyle: PixelText.number(
                                               size: 24,
-                                              color: AppColors.coinDark
-                                                  .withValues(alpha: 0.3),
+                                              color: AppColors.of(
+                                                context,
+                                              ).coinDark.withValues(alpha: 0.3),
                                             ),
                                             border: InputBorder.none,
                                             isDense: true,
@@ -982,7 +1040,9 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                             suffixText: 'coins',
                                             suffixStyle: PixelText.body(
                                               size: 12,
-                                              color: AppColors.textMid,
+                                              color: AppColors.of(
+                                                context,
+                                              ).textMid,
                                             ),
                                           ),
                                         ),
@@ -995,17 +1055,15 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                   'PAYOUT MODE',
                                   style: PixelText.body(
                                     size: 11,
-                                    color: AppColors.textMid,
+                                    color: AppColors.of(context).textMid,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
                                 Column(
                                   children: payoutPresetOptions.map((option) {
-                                    final selected =
-                                        _payoutPreset == option.$2;
+                                    final selected = _payoutPreset == option.$2;
                                     return Padding(
-                                      padding:
-                                          const EdgeInsets.only(bottom: 8),
+                                      padding: const EdgeInsets.only(bottom: 8),
                                       child: GestureDetector(
                                         onTap: () => setState(
                                           () => _payoutPreset = option.$2,
@@ -1018,10 +1076,15 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                           ),
                                           decoration: BoxDecoration(
                                             color: selected
-                                                ? AppColors.pillGreenDark
-                                                : AppColors.parchmentDark,
-                                            borderRadius:
-                                                BorderRadius.circular(8),
+                                                ? AppColors.of(
+                                                    context,
+                                                  ).pillGreenDark
+                                                : AppColors.of(
+                                                    context,
+                                                  ).parchmentDark,
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
                                           ),
                                           child: Text(
                                             option.$1,
@@ -1029,7 +1092,9 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                               size: 12,
                                               color: selected
                                                   ? Colors.white
-                                                  : AppColors.textDark,
+                                                  : AppColors.of(
+                                                      context,
+                                                    ).textDark,
                                             ),
                                             textAlign: TextAlign.center,
                                           ),
@@ -1044,7 +1109,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                     payoutHelpText(_payoutPreset),
                                     style: PixelText.body(
                                       size: 12,
-                                      color: AppColors.textMid,
+                                      color: AppColors.of(context).textMid,
                                     ),
                                     textAlign: TextAlign.center,
                                   ),
@@ -1075,7 +1140,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                             : 'PRIVATE RACE',
                                         style: PixelText.title(
                                           size: 13,
-                                          color: AppColors.textMid,
+                                          color: AppColors.of(context).textMid,
                                         ),
                                       ),
                                       const SizedBox(height: 2),
@@ -1086,8 +1151,10 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                         style: PixelText.body(
                                           size: 11,
                                           color: _isPublic
-                                              ? AppColors.pillGreenDark
-                                              : AppColors.textMid,
+                                              ? AppColors.of(
+                                                  context,
+                                                ).pillGreenDark
+                                              : AppColors.of(context).textMid,
                                         ),
                                       ),
                                     ],
@@ -1096,8 +1163,9 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                     height: 28,
                                     child: Switch.adaptive(
                                       value: _isPublic,
-                                      activeTrackColor:
-                                          AppColors.pillGreenDark,
+                                      activeTrackColor: AppColors.of(
+                                        context,
+                                      ).pillGreenDark,
                                       onChanged: (v) =>
                                           setState(() => _isPublic = v),
                                     ),
@@ -1108,51 +1176,52 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                               // (2 x teamSize) — the runner-cap chips don't
                               // apply; the size stepper above owns it.
                               if (!_isTeamRace) ...[
-                              const SizedBox(height: 12),
-                              Text(
-                                'MAX RUNNERS',
-                                style: PixelText.body(
-                                  size: 11,
-                                  color: AppColors.textMid,
+                                const SizedBox(height: 12),
+                                Text(
+                                  'MAX RUNNERS',
+                                  style: PixelText.body(
+                                    size: 11,
+                                    color: AppColors.of(context).textMid,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  ..._maxParticipantsPresets.map((preset) {
-                                    final selected = _maxParticipants == preset;
-                                    final disabled = preset < _acceptedCount;
-                                    return _maxRunnersChip(
-                                      label: '$preset',
-                                      selected: selected,
-                                      disabled: disabled,
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    ..._maxParticipantsPresets.map((preset) {
+                                      final selected =
+                                          _maxParticipants == preset;
+                                      final disabled = preset < _acceptedCount;
+                                      return _maxRunnersChip(
+                                        label: '$preset',
+                                        selected: selected,
+                                        disabled: disabled,
+                                        onTap: () => setState(
+                                          () => _maxParticipants = preset,
+                                        ),
+                                      );
+                                    }),
+                                    _maxRunnersChip(
+                                      label: 'NO LIMIT',
+                                      selected: _maxParticipants == null,
+                                      disabled: false,
                                       onTap: () => setState(
-                                        () => _maxParticipants = preset,
+                                        () => _maxParticipants = null,
                                       ),
-                                    );
-                                  }),
-                                  _maxRunnersChip(
-                                    label: 'NO LIMIT',
-                                    selected: _maxParticipants == null,
-                                    disabled: false,
-                                    onTap: () => setState(
-                                      () => _maxParticipants = null,
+                                    ),
+                                  ],
+                                ),
+                                if (_acceptedCount > 1) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    '$_acceptedCount runners already accepted.',
+                                    style: PixelText.body(
+                                      size: 11,
+                                      color: AppColors.of(context).textMid,
                                     ),
                                   ),
                                 ],
-                              ),
-                              if (_acceptedCount > 1) ...[
-                                const SizedBox(height: 8),
-                                Text(
-                                  '$_acceptedCount runners already accepted.',
-                                  style: PixelText.body(
-                                    size: 11,
-                                    color: AppColors.textMid,
-                                  ),
-                                ),
-                              ],
                               ],
                             ],
                           ),
@@ -1169,9 +1238,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                             horizontal: 24,
                             vertical: 14,
                           ),
-                          onPressed: (_isSaving || !_hasChanges)
-                              ? null
-                              : _save,
+                          onPressed: (_isSaving || !_hasChanges) ? null : _save,
                         ),
                         const SizedBox(height: 12),
                         PillButton(

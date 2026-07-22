@@ -408,9 +408,9 @@ class _RacesTabState extends State<RacesTab> {
 
     return Stack(
       children: [
-        const Positioned.fill(
+        Positioned.fill(
           child: ColoredBox(
-            color: AppColors.roofLight,
+            color: AppColors.of(context).roofLight,
             child: CustomPaint(
               painter: ArcadeCheckerPainter(drawBottomStripe: false),
             ),
@@ -420,8 +420,8 @@ class _RacesTabState extends State<RacesTab> {
           padding: EdgeInsets.only(top: topInset + 14, bottom: tabBarHeight),
           child: RefreshIndicator(
             onRefresh: widget.onRefresh ?? () async {},
-            color: AppColors.accent,
-            backgroundColor: AppColors.parchment,
+            color: AppColors.of(context).accent,
+            backgroundColor: AppColors.of(context).parchment,
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               // §9.5: lazily-built slivers. The header/pills/featured block stays
@@ -506,21 +506,26 @@ class _RacesTabState extends State<RacesTab> {
             padding: const EdgeInsets.symmetric(vertical: 6),
             decoration: BoxDecoration(
               gradient: selected
-                  ? const LinearGradient(
+                  ? LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: [AppColors.pillGold, AppColors.pillGoldDark],
+                      colors: [
+                        AppColors.of(context).pillGold,
+                        AppColors.of(context).pillGoldDark,
+                      ],
                     )
                   : null,
               borderRadius: BorderRadius.circular(9),
               border: Border.all(
-                color: selected ? AppColors.pillGoldShadow : Colors.transparent,
+                color: selected
+                    ? AppColors.of(context).pillGoldShadow
+                    : Colors.transparent,
                 width: 2,
               ),
               boxShadow: selected
-                  ? const [
+                  ? [
                       BoxShadow(
-                        color: AppColors.pillGoldShadow,
+                        color: AppColors.of(context).pillGoldShadow,
                         offset: Offset(0, 2),
                       ),
                     ]
@@ -534,8 +539,8 @@ class _RacesTabState extends State<RacesTab> {
               style: PixelText.title(
                 size: 10,
                 color: selected
-                    ? AppColors.textDark
-                    : AppColors.parchment.withValues(alpha: 0.85),
+                    ? AppColors.of(context).textDark
+                    : AppColors.of(context).textLight.withValues(alpha: 0.85),
               ),
             ),
           ),
@@ -548,9 +553,9 @@ class _RacesTabState extends State<RacesTab> {
       child: Container(
         padding: const EdgeInsets.all(3),
         decoration: BoxDecoration(
-          color: AppColors.roofDark.withValues(alpha: 0.38),
+          color: AppColors.of(context).roofDark.withValues(alpha: 0.38),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.roofDark, width: 1),
+          border: Border.all(color: AppColors.of(context).roofDark, width: 1),
         ),
         child: Row(
           children: [
@@ -585,30 +590,30 @@ class _RacesTabState extends State<RacesTab> {
     final elim = Tournament.myEliminatedInRound(t);
     final isChamp = Tournament.isChampion(t, widget.authService.userId);
     final stripeColor = index.isOdd
-        ? AppColors.parchmentLight
-        : AppColors.parchment;
+        ? AppColors.of(context).parchmentLight
+        : AppColors.of(context).parchment;
     final responding = _respondingTournamentId == id;
 
     Color badgeColor;
     String badgeLabel;
     if (isInvite) {
       badgeLabel = 'INVITE';
-      badgeColor = AppColors.pillGoldDark;
+      badgeColor = AppColors.of(context).feedGold;
     } else if (isChamp) {
       badgeLabel = 'CHAMPION';
-      badgeColor = AppColors.pillGold;
+      badgeColor = AppColors.of(context).feedGold;
     } else if (elim != null) {
       badgeLabel = 'OUT';
-      badgeColor = AppColors.textMid;
+      badgeColor = AppColors.of(context).textMid;
     } else if (Tournament.isActive(t)) {
       badgeLabel = 'ALIVE';
-      badgeColor = AppColors.pillGreenDark;
+      badgeColor = AppColors.of(context).successText;
     } else if (Tournament.isPending(t)) {
       badgeLabel = 'LOBBY';
-      badgeColor = AppColors.pillGoldDark;
+      badgeColor = AppColors.of(context).feedGold;
     } else {
       badgeLabel = '';
-      badgeColor = AppColors.textMid;
+      badgeColor = AppColors.of(context).textMid;
     }
 
     return GestureDetector(
@@ -627,7 +632,10 @@ class _RacesTabState extends State<RacesTab> {
                     name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: PixelText.title(size: 15, color: AppColors.textDark),
+                    style: PixelText.title(
+                      size: 15,
+                      color: AppColors.of(context).textDark,
+                    ),
                   ),
                 ),
                 if (badgeLabel.isNotEmpty)
@@ -644,9 +652,11 @@ class _RacesTabState extends State<RacesTab> {
                       badgeLabel,
                       style: PixelText.title(
                         size: 9,
-                        color: badgeColor == AppColors.pillGold
-                            ? AppColors.textDark
-                            : AppColors.parchment,
+                        color: AppColors.of(context).isDark
+                            ? AppColors.of(context).woodDarker
+                            : badgeColor == AppColors.of(context).feedGold
+                            ? AppColors.of(context).textDark
+                            : AppColors.of(context).textLight,
                       ),
                     ),
                   ),
@@ -658,13 +668,19 @@ class _RacesTabState extends State<RacesTab> {
                 Expanded(
                   child: Text(
                     statusLine,
-                    style: PixelText.body(size: 12, color: AppColors.textMid),
+                    style: PixelText.body(
+                      size: 12,
+                      color: AppColors.of(context).textMid,
+                    ),
                   ),
                 ),
                 if (winnings > 0) ...[
                   Text(
                     '$winnings',
-                    style: PixelText.body(size: 12, color: AppColors.coinDark),
+                    style: PixelText.body(
+                      size: 12,
+                      color: AppColors.of(context).coinDark,
+                    ),
                   ),
                   const SizedBox(width: 4),
                   const SpinningCoin(size: 13),
@@ -718,9 +734,11 @@ class _RacesTabState extends State<RacesTab> {
     GlobalKey? potKey,
   }) {
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: AppColors.roofLight,
-        border: Border(bottom: BorderSide(color: AppColors.roofDark, width: 1)),
+      decoration: BoxDecoration(
+        color: AppColors.of(context).roofLight,
+        border: Border(
+          bottom: BorderSide(color: AppColors.of(context).roofDark, width: 1),
+        ),
       ),
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
@@ -735,7 +753,7 @@ class _RacesTabState extends State<RacesTab> {
                   'RACES',
                   style: PixelText.title(
                     size: 30,
-                    color: AppColors.parchment,
+                    color: AppColors.of(context).textLight,
                   ).copyWith(shadows: _textShadows),
                 ),
                 const SizedBox(height: 5),
@@ -743,7 +761,9 @@ class _RacesTabState extends State<RacesTab> {
                   'Race friends, climb the board, and turn daily steps into wins.',
                   style: PixelText.body(
                     size: 15,
-                    color: AppColors.parchment.withValues(alpha: 0.92),
+                    color: AppColors.of(
+                      context,
+                    ).textLight.withValues(alpha: 0.92),
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -839,11 +859,11 @@ class _RacesTabState extends State<RacesTab> {
           padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
           child: Row(
             children: [
-              const WobbleBadge(
+              WobbleBadge(
                 child: Icon(
                   Icons.star_rounded,
                   size: 22,
-                  color: AppColors.pillGold,
+                  color: AppColors.of(context).pillGold,
                 ),
               ),
               const SizedBox(width: 5),
@@ -851,7 +871,7 @@ class _RacesTabState extends State<RacesTab> {
                 'FEATURED',
                 style: PixelText.title(
                   size: 22,
-                  color: AppColors.parchment,
+                  color: AppColors.of(context).textLight,
                 ).copyWith(shadows: _textShadows),
               ),
               const Spacer(),
@@ -860,7 +880,9 @@ class _RacesTabState extends State<RacesTab> {
                 icon: Icon(
                   Icons.settings_rounded,
                   size: 22,
-                  color: AppColors.parchment.withValues(alpha: 0.85),
+                  color: AppColors.of(
+                    context,
+                  ).textLight.withValues(alpha: 0.85),
                 ),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
@@ -909,7 +931,7 @@ class _RacesTabState extends State<RacesTab> {
         textAlign: TextAlign.center,
         style: PixelText.body(
           size: 13,
-          color: AppColors.parchment.withValues(alpha: 0.9),
+          color: AppColors.of(context).textLight.withValues(alpha: 0.9),
         ),
       ),
     );
@@ -920,7 +942,7 @@ class _RacesTabState extends State<RacesTab> {
   Future<void> _openFeaturedSettings() async {
     await showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.parchment,
+      backgroundColor: AppColors.of(context).parchment,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -1049,12 +1071,12 @@ class _RacesTabState extends State<RacesTab> {
 
     return <Widget>[
       if (state.isRefreshing)
-        const SliverToBoxAdapter(
+        SliverToBoxAdapter(
           child: Padding(
             padding: EdgeInsets.only(bottom: 8),
             child: LinearProgressIndicator(
               minHeight: 2,
-              color: AppColors.accent,
+              color: AppColors.of(context).accent,
               backgroundColor: Colors.transparent,
             ),
           ),
@@ -1088,9 +1110,11 @@ class _RacesTabState extends State<RacesTab> {
                   width: 6,
                   height: 18,
                   decoration: BoxDecoration(
-                    color: AppColors.pillGold,
+                    color: AppColors.of(context).pillGold,
                     borderRadius: BorderRadius.circular(3),
-                    border: Border.all(color: AppColors.pillGoldDark),
+                    border: Border.all(
+                      color: AppColors.of(context).pillGoldDark,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -1098,7 +1122,7 @@ class _RacesTabState extends State<RacesTab> {
                   'INVITES',
                   style: PixelText.title(
                     size: 20,
-                    color: AppColors.parchment,
+                    color: AppColors.of(context).textLight,
                   ).copyWith(shadows: _textShadows),
                 ),
                 const SizedBox(width: 6),
@@ -1132,7 +1156,9 @@ class _RacesTabState extends State<RacesTab> {
             if (!isLast)
               Container(
                 height: 1,
-                color: AppColors.parchmentBorder.withValues(alpha: 0.9),
+                color: AppColors.of(
+                  context,
+                ).parchmentBorder.withValues(alpha: 0.9),
               ),
           ],
         );
@@ -1145,10 +1171,10 @@ class _RacesTabState extends State<RacesTab> {
         padding: const EdgeInsets.only(left: 10, right: 10, bottom: 8),
         sliver: DecoratedSliver(
           decoration: BoxDecoration(
-            color: AppColors.parchment,
+            color: AppColors.of(context).parchment,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: AppColors.roofDark.withValues(alpha: 0.55),
+              color: AppColors.of(context).roofDark.withValues(alpha: 0.55),
               width: 2,
             ),
             boxShadow: _raceCardShadow,
@@ -1176,21 +1202,26 @@ class _RacesTabState extends State<RacesTab> {
             padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 4),
             decoration: BoxDecoration(
               gradient: selected
-                  ? const LinearGradient(
+                  ? LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: [AppColors.pillGold, AppColors.pillGoldDark],
+                      colors: [
+                        AppColors.of(context).pillGold,
+                        AppColors.of(context).pillGoldDark,
+                      ],
                     )
                   : null,
               borderRadius: BorderRadius.circular(9),
               border: Border.all(
-                color: selected ? AppColors.pillGoldShadow : Colors.transparent,
+                color: selected
+                    ? AppColors.of(context).pillGoldShadow
+                    : Colors.transparent,
                 width: 2,
               ),
               boxShadow: selected
-                  ? const [
+                  ? [
                       BoxShadow(
-                        color: AppColors.pillGoldShadow,
+                        color: AppColors.of(context).pillGoldShadow,
                         offset: Offset(0, 2),
                       ),
                     ]
@@ -1207,20 +1238,52 @@ class _RacesTabState extends State<RacesTab> {
                     style: PixelText.title(
                       size: 12,
                       color: selected
-                          ? AppColors.textDark
-                          : AppColors.parchment,
+                          ? AppColors.of(context).textDark
+                          : AppColors.of(context).textLight,
                     ),
                   ),
                 ),
                 const SizedBox(width: 5),
-                Text(
-                  '$count',
-                  key: Key('personal-state-count-${state.name}'),
-                  style: PixelText.title(
-                    size: 12,
+                // B6 — circular min-width badge around the count. `padding`
+                // (not a fixed width) + `minWidth` keeps a single digit round
+                // while a two-digit count grows sideways without changing the
+                // pill height. Selected → dark-on-light; unselected →
+                // parchment-on-translucent, mirroring the count's own colors.
+                Container(
+                  key: Key('personal-state-badge-${state.name}'),
+                  constraints: const BoxConstraints(minWidth: 20),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 1,
+                  ),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
                     color: selected
-                        ? AppColors.textDark
-                        : AppColors.parchment.withValues(alpha: 0.75),
+                        ? AppColors.of(context).parchment.withValues(alpha: 0.9)
+                        : Colors.white.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: selected
+                          ? AppColors.of(
+                              context,
+                            ).pillGoldShadow.withValues(alpha: 0.6)
+                          : AppColors.of(
+                              context,
+                            ).textLight.withValues(alpha: 0.30),
+                      width: 1,
+                    ),
+                  ),
+                  child: Text(
+                    '$count',
+                    key: Key('personal-state-count-${state.name}'),
+                    style: PixelText.title(
+                      size: 12,
+                      color: selected
+                          ? AppColors.of(context).textDark
+                          : AppColors.of(
+                              context,
+                            ).textLight.withValues(alpha: 0.75),
+                    ),
                   ),
                 ),
               ],
@@ -1235,9 +1298,9 @@ class _RacesTabState extends State<RacesTab> {
       child: Container(
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
-          color: AppColors.roofDark.withValues(alpha: 0.45),
+          color: AppColors.of(context).roofDark.withValues(alpha: 0.45),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.roofDark, width: 1.5),
+          border: Border.all(color: AppColors.of(context).roofDark, width: 1.5),
         ),
         child: Row(
           children: [
@@ -1278,10 +1341,12 @@ class _RacesTabState extends State<RacesTab> {
                       horizontal: 18,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.parchment,
+                      color: AppColors.of(context).parchment,
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                        color: AppColors.roofDark.withValues(alpha: 0.55),
+                        color: AppColors.of(
+                          context,
+                        ).roofDark.withValues(alpha: 0.55),
                         width: 2,
                       ),
                       boxShadow: _raceCardShadow,
@@ -1289,7 +1354,10 @@ class _RacesTabState extends State<RacesTab> {
                     child: Text(
                       _selectedState.emptyMessage,
                       textAlign: TextAlign.center,
-                      style: PixelText.body(size: 14, color: AppColors.textMid),
+                      style: PixelText.body(
+                        size: 14,
+                        color: AppColors.of(context).textMid,
+                      ),
                     ),
                   ),
                 ),
@@ -1316,7 +1384,9 @@ class _RacesTabState extends State<RacesTab> {
             if (i != entries.length - 1)
               Container(
                 height: 1,
-                color: AppColors.parchmentBorder.withValues(alpha: 0.9),
+                color: AppColors.of(
+                  context,
+                ).parchmentBorder.withValues(alpha: 0.9),
               ),
           ],
         );
@@ -1328,10 +1398,10 @@ class _RacesTabState extends State<RacesTab> {
         padding: const EdgeInsets.only(left: 10, right: 10, bottom: 8),
         sliver: DecoratedSliver(
           decoration: BoxDecoration(
-            color: AppColors.parchment,
+            color: AppColors.of(context).parchment,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: AppColors.roofDark.withValues(alpha: 0.55),
+              color: AppColors.of(context).roofDark.withValues(alpha: 0.55),
               width: 2,
             ),
             boxShadow: _raceCardShadow,
@@ -1348,10 +1418,10 @@ class _RacesTabState extends State<RacesTab> {
       margin: const EdgeInsets.symmetric(horizontal: 10),
       padding: const EdgeInsets.fromLTRB(18, 34, 18, 36),
       decoration: BoxDecoration(
-        color: AppColors.parchment,
+        color: AppColors.of(context).parchment,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: AppColors.roofDark.withValues(alpha: 0.55),
+          color: AppColors.of(context).roofDark.withValues(alpha: 0.55),
           width: 2,
         ),
         boxShadow: _raceCardShadow,
@@ -1361,21 +1431,24 @@ class _RacesTabState extends State<RacesTab> {
           Icon(
             Icons.directions_run_rounded,
             size: 48,
-            color: AppColors.roofMid.withValues(alpha: 0.78),
+            color: AppColors.of(context).roofMid.withValues(alpha: 0.78),
           ),
           const SizedBox(height: 12),
           Text(
             'No races yet',
             style: PixelText.title(
               size: 20,
-              color: AppColors.textDark,
+              color: AppColors.of(context).textDark,
             ).copyWith(shadows: _textShadows),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 6),
           Text(
             'Start one with friends or jump into a public race.',
-            style: PixelText.body(size: 14, color: AppColors.textMid),
+            style: PixelText.body(
+              size: 14,
+              color: AppColors.of(context).textMid,
+            ),
             textAlign: TextAlign.center,
           ),
         ],
@@ -1407,8 +1480,8 @@ class _RacesTabState extends State<RacesTab> {
     final endsAt = Tournament.matchEndsAt(match);
 
     final stripeColor = index.isOdd
-        ? AppColors.parchmentLight
-        : AppColors.parchment;
+        ? AppColors.of(context).parchmentLight
+        : AppColors.of(context).parchment;
 
     // Badge language matches the old bracket ticket so the states stay
     // recognisable after the merge.
@@ -1418,44 +1491,44 @@ class _RacesTabState extends State<RacesTab> {
     Color badgeColor;
     if (isChamp) {
       badgeLabel = 'CHAMPION';
-      badgeColor = AppColors.pillGold;
+      badgeColor = AppColors.of(context).feedGold;
     } else if (elim != null) {
       badgeLabel = 'OUT';
-      badgeColor = AppColors.textMid;
+      badgeColor = AppColors.of(context).textMid;
     } else if (isLive) {
       badgeLabel = 'ALIVE';
-      badgeColor = AppColors.pillGreenDark;
+      badgeColor = AppColors.of(context).successText;
     } else if (Tournament.isPending(t)) {
       badgeLabel = 'LOBBY';
-      badgeColor = AppColors.pillGoldDark;
+      badgeColor = AppColors.of(context).feedGold;
     } else if (Tournament.isActive(t)) {
       badgeLabel = 'ALIVE';
-      badgeColor = AppColors.pillGreenDark;
+      badgeColor = AppColors.of(context).successText;
     } else {
       badgeLabel = '';
-      badgeColor = AppColors.textMid;
+      badgeColor = AppColors.of(context).textMid;
     }
 
     String timeLabel;
-    Color timeColor = AppColors.textMid;
+    Color timeColor = AppColors.of(context).textMid;
     if (isLive && endsAt != null) {
       final remaining = endsAt.difference(DateTime.now());
       if (remaining.isNegative) {
         timeLabel = 'ending soon';
-        timeColor = AppColors.error;
+        timeColor = AppColors.of(context).error;
       } else if (remaining.inDays > 0) {
         timeLabel =
             '${remaining.inDays}d ${remaining.inHours.remainder(24)}h left';
         timeColor = remaining.inDays >= 2
-            ? AppColors.pillGreenDark
-            : AppColors.pillGoldShadow;
+            ? AppColors.of(context).successText
+            : AppColors.of(context).feedGold;
       } else if (remaining.inHours > 0) {
         timeLabel =
             '${remaining.inHours}h ${remaining.inMinutes.remainder(60)}m left';
-        timeColor = AppColors.error;
+        timeColor = AppColors.of(context).error;
       } else {
         timeLabel = '${remaining.inMinutes}m left';
-        timeColor = AppColors.error;
+        timeColor = AppColors.of(context).error;
       }
     } else {
       // No matchup countdown available: fall back to the bracket status line.
@@ -1491,7 +1564,7 @@ class _RacesTabState extends State<RacesTab> {
                             name,
                             style: PixelText.title(
                               size: 18,
-                              color: AppColors.textDark,
+                              color: AppColors.of(context).textDark,
                             ),
                             overflow: TextOverflow.ellipsis,
                             maxLines: 1,
@@ -1518,7 +1591,7 @@ class _RacesTabState extends State<RacesTab> {
                             roundLabel,
                             style: PixelText.title(
                               size: 9,
-                              color: AppColors.textDark,
+                              color: AppColors.of(context).textDark,
                             ),
                           ),
                         ),
@@ -1552,18 +1625,22 @@ class _RacesTabState extends State<RacesTab> {
                   if (placement != null)
                     _buildMetaChip(
                       '${formatOrdinal(placement)} PLACE',
-                      backgroundColor: AppColors.pillGreenDark.withValues(
-                        alpha: 0.16,
-                      ),
-                      textColor: AppColors.pillGreenDark,
+                      backgroundColor: AppColors.of(context).isDark
+                          ? AppColors.of(context).pillGreenDark
+                          : AppColors.of(
+                              context,
+                            ).pillGreenDark.withValues(alpha: 0.16),
+                      textColor: AppColors.of(context).isDark
+                          ? AppColors.of(context).textLight
+                          : AppColors.of(context).pillGreenDark,
                     )
                   else if (placementHidden)
                     _buildMetaChip(
                       '??? PLACE',
-                      backgroundColor: AppColors.textMid.withValues(
-                        alpha: 0.16,
-                      ),
-                      textColor: AppColors.textMid,
+                      backgroundColor: AppColors.of(
+                        context,
+                      ).textMid.withValues(alpha: 0.16),
+                      textColor: AppColors.of(context).textMid,
                     ),
                   if (badgeLabel.isNotEmpty) ...[
                     if (placement != null || placementHidden)
@@ -1585,7 +1662,7 @@ class _RacesTabState extends State<RacesTab> {
                           '${Tournament.championWinnings(t)}',
                           style: PixelText.body(
                             size: 12,
-                            color: AppColors.coinDark,
+                            color: AppColors.of(context).coinDark,
                           ),
                         ),
                         const SizedBox(width: 4),
@@ -1643,29 +1720,29 @@ class _RacesTabState extends State<RacesTab> {
     Color badgeColor;
     if (isInvite && !isCreator) {
       statusLabel = 'INVITE';
-      badgeColor = AppColors.pillGoldDark;
+      badgeColor = AppColors.of(context).feedGold;
     } else if (status == 'ACTIVE') {
       statusLabel = 'ACTIVE';
-      badgeColor = AppColors.pillGreenDark;
+      badgeColor = AppColors.of(context).successText;
     } else if (status == 'COMPLETED') {
       statusLabel = '';
-      badgeColor = AppColors.textMid;
+      badgeColor = AppColors.of(context).textMid;
     } else if (status == 'PENDING' && isCreator) {
       statusLabel = 'SETUP';
-      badgeColor = AppColors.pillGoldDark;
+      badgeColor = AppColors.of(context).feedGold;
     } else {
       statusLabel = status;
-      badgeColor = AppColors.textMid;
+      badgeColor = AppColors.of(context).textMid;
     }
 
     final stripeColor = index.isOdd
-        ? AppColors.parchmentLight
-        : AppColors.parchment;
+        ? AppColors.of(context).parchmentLight
+        : AppColors.of(context).parchment;
 
     String timeLabel;
     // Default (non-active rows show "Xd race") stays muted; active rows get a
     // green→yellow→red urgency color based on how much time is left.
-    Color timeColor = AppColors.textMid;
+    Color timeColor = AppColors.of(context).textMid;
     if (status == 'ACTIVE' && endsAt != null) {
       final remaining = endsAt.difference(DateTime.now());
       if (remaining.isNegative) {
@@ -1680,11 +1757,15 @@ class _RacesTabState extends State<RacesTab> {
         timeLabel = '${remaining.inMinutes}m left';
       }
       if (remaining.inDays >= 2) {
-        timeColor = AppColors.pillGreenDark; // 2+ days: plenty of time
+        timeColor = AppColors.of(
+          context,
+        ).successText; // 2+ days: plenty of time
       } else if (remaining.inDays >= 1) {
-        timeColor = AppColors.pillGoldShadow; // 1–2 days: getting close
+        timeColor = AppColors.of(context).feedGold; // 1–2 days: getting close
       } else {
-        timeColor = AppColors.error; // under a day (or ended): urgent
+        timeColor = AppColors.of(
+          context,
+        ).error; // under a day (or ended): urgent
       }
     } else {
       timeLabel = '${maxDurationDays}d race';
@@ -1718,7 +1799,7 @@ class _RacesTabState extends State<RacesTab> {
                               name,
                               style: PixelText.title(
                                 size: 18,
-                                color: AppColors.textDark,
+                                color: AppColors.of(context).textDark,
                               ),
                               overflow: TextOverflow.ellipsis,
                               maxLines: 1,
@@ -1766,7 +1847,7 @@ class _RacesTabState extends State<RacesTab> {
                           '$participantCount runner${participantCount == 1 ? '' : 's'}${isInvite && creatorName.isNotEmpty ? ' \u2022 by ${atName(creatorName)}' : ''}',
                           style: PixelText.body(
                             size: 14,
-                            color: AppColors.textMid,
+                            color: AppColors.of(context).textMid,
                           ),
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
@@ -1783,18 +1864,22 @@ class _RacesTabState extends State<RacesTab> {
                       if (myPlacement != null)
                         _buildMetaChip(
                           '${formatOrdinal(myPlacement)} PLACE',
-                          backgroundColor: AppColors.pillGreenDark.withValues(
-                            alpha: 0.16,
-                          ),
-                          textColor: AppColors.pillGreenDark,
+                          backgroundColor: AppColors.of(context).isDark
+                              ? AppColors.of(context).pillGreenDark
+                              : AppColors.of(
+                                  context,
+                                ).pillGreenDark.withValues(alpha: 0.16),
+                          textColor: AppColors.of(context).isDark
+                              ? AppColors.of(context).textLight
+                              : AppColors.of(context).pillGreenDark,
                         )
                       else if (myPlacementHidden)
                         _buildMetaChip(
                           '??? PLACE',
-                          backgroundColor: AppColors.textMid.withValues(
-                            alpha: 0.16,
-                          ),
-                          textColor: AppColors.textMid,
+                          backgroundColor: AppColors.of(
+                            context,
+                          ).textMid.withValues(alpha: 0.16),
+                          textColor: AppColors.of(context).textMid,
                         ),
                       if (showTrailingStatus) ...[
                         if (myPlacement != null || myPlacementHidden)
@@ -1809,7 +1894,7 @@ class _RacesTabState extends State<RacesTab> {
                           timeLabel,
                           style: PixelText.body(
                             size: 12,
-                            color: AppColors.textMid,
+                            color: AppColors.of(context).textMid,
                           ),
                           textAlign: TextAlign.right,
                         ),
@@ -1918,9 +2003,8 @@ class _RacesLoadingSkeleton extends StatelessWidget {
 
   // Header sits on the arcade-green surface where text is parchment-toned, so
   // its skeleton bars are light rather than the dark on-card tone.
-  static final Color _headerTone = AppColors.parchment.withValues(alpha: 0.5);
-
-  Widget _header({required bool showPill}) {
+  Widget _header(BuildContext context, {required bool showPill}) {
+    final headerTone = AppColors.of(context).textLight.withValues(alpha: 0.5);
     return Padding(
       padding: const EdgeInsets.fromLTRB(2, 12, 2, 8),
       child: Row(
@@ -1929,27 +2013,33 @@ class _RacesLoadingSkeleton extends StatelessWidget {
             width: 6,
             height: 18,
             decoration: BoxDecoration(
-              color: AppColors.pillGold,
+              color: AppColors.of(context).pillGold,
               borderRadius: BorderRadius.circular(3),
-              border: Border.all(color: AppColors.pillGoldDark),
+              border: Border.all(color: AppColors.of(context).pillGoldDark),
             ),
           ),
           const SizedBox(width: 8),
-          SkeletonLine(width: 132, height: 18, color: _headerTone),
+          SkeletonLine(width: 132, height: 18, color: headerTone),
           if (showPill) ...[
             const SizedBox(width: 6),
-            SkeletonBox(width: 26, height: 20, radius: 10, color: _headerTone),
+            SkeletonBox(width: 26, height: 20, radius: 10, color: headerTone),
           ],
           const Spacer(),
-          SkeletonBox(width: 22, height: 22, radius: 6, color: _headerTone),
+          SkeletonBox(width: 22, height: 22, radius: 6, color: headerTone),
         ],
       ),
     );
   }
 
-  Widget _row({required bool striped, required bool withCrate}) {
+  Widget _row(
+    BuildContext context, {
+    required bool striped,
+    required bool withCrate,
+  }) {
     return Container(
-      color: striped ? AppColors.parchmentLight : AppColors.parchment,
+      color: striped
+          ? AppColors.of(context).parchmentLight
+          : AppColors.of(context).parchment,
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -1984,13 +2074,17 @@ class _RacesLoadingSkeleton extends StatelessWidget {
     );
   }
 
-  Widget _card({required int rows, required bool withCrate}) {
+  Widget _card(
+    BuildContext context, {
+    required int rows,
+    required bool withCrate,
+  }) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: AppColors.parchment,
+        color: AppColors.of(context).parchment,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: AppColors.roofDark.withValues(alpha: 0.55),
+          color: AppColors.of(context).roofDark.withValues(alpha: 0.55),
           width: 2,
         ),
         boxShadow: _raceCardShadow,
@@ -2003,9 +2097,11 @@ class _RacesLoadingSkeleton extends StatelessWidget {
               if (i > 0)
                 Container(
                   height: 1,
-                  color: AppColors.parchmentBorder.withValues(alpha: 0.9),
+                  color: AppColors.of(
+                    context,
+                  ).parchmentBorder.withValues(alpha: 0.9),
                 ),
-              _row(striped: i.isOdd, withCrate: withCrate),
+              _row(context, striped: i.isOdd, withCrate: withCrate),
             ],
           ],
         ),
@@ -2013,7 +2109,8 @@ class _RacesLoadingSkeleton extends StatelessWidget {
     );
   }
 
-  Widget _section({
+  Widget _section(
+    BuildContext context, {
     required bool showPill,
     required int rows,
     required bool withCrate,
@@ -2022,8 +2119,8 @@ class _RacesLoadingSkeleton extends StatelessWidget {
       padding: const EdgeInsets.only(left: 10, right: 10, bottom: 8),
       child: Column(
         children: [
-          _header(showPill: showPill),
-          _card(rows: rows, withCrate: withCrate),
+          _header(context, showPill: showPill),
+          _card(context, rows: rows, withCrate: withCrate),
         ],
       ),
     );
@@ -2035,8 +2132,8 @@ class _RacesLoadingSkeleton extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _section(showPill: false, rows: 2, withCrate: true),
-          _section(showPill: true, rows: 3, withCrate: false),
+          _section(context, showPill: false, rows: 2, withCrate: true),
+          _section(context, showPill: true, rows: 3, withCrate: false),
         ],
       ),
     );
@@ -2060,8 +2157,12 @@ class _RaceHeaderMetrics extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
         border: Border(
-          top: BorderSide(color: AppColors.parchment.withValues(alpha: 0.2)),
-          bottom: BorderSide(color: AppColors.parchment.withValues(alpha: 0.2)),
+          top: BorderSide(
+            color: AppColors.of(context).textLight.withValues(alpha: 0.2),
+          ),
+          bottom: BorderSide(
+            color: AppColors.of(context).textLight.withValues(alpha: 0.2),
+          ),
         ),
       ),
       child: Row(
@@ -2091,7 +2192,10 @@ class _RaceMetricText extends StatelessWidget {
         children: [
           Text(
             '$count',
-            style: PixelText.title(size: 18, color: AppColors.parchment),
+            style: PixelText.title(
+              size: 18,
+              color: AppColors.of(context).textLight,
+            ),
           ),
           const SizedBox(width: 5),
           Flexible(
@@ -2101,7 +2205,7 @@ class _RaceMetricText extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: PixelText.title(
                 size: 10,
-                color: AppColors.parchment.withValues(alpha: 0.82),
+                color: AppColors.of(context).textLight.withValues(alpha: 0.82),
               ),
             ),
           ),
@@ -2117,7 +2221,7 @@ class _MetricDivider extends StatelessWidget {
     return Container(
       width: 1,
       height: 18,
-      color: AppColors.parchment.withValues(alpha: 0.22),
+      color: AppColors.of(context).textLight.withValues(alpha: 0.22),
     );
   }
 }
@@ -2141,7 +2245,7 @@ class _CountBadge extends StatelessWidget {
         '$count',
         style: PixelText.title(
           size: 13,
-          color: AppColors.parchment.withValues(alpha: 0.92),
+          color: AppColors.of(context).textLight.withValues(alpha: 0.92),
         ),
       ),
     );
@@ -2164,7 +2268,10 @@ class _FeaturedSettingsSheet extends StatelessWidget {
         children: [
           Text(
             'FEATURED RACES',
-            style: PixelText.title(size: 18, color: AppColors.textDark),
+            style: PixelText.title(
+              size: 18,
+              color: AppColors.of(context).textDark,
+            ),
           ),
           const SizedBox(height: 16),
           _FeaturedAutoJoinToggle(authService: authService),
@@ -2214,9 +2321,12 @@ class _FeaturedAutoJoinToggleState extends State<_FeaturedAutoJoinToggle> {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
       decoration: BoxDecoration(
-        color: AppColors.parchmentLight,
+        color: AppColors.of(context).parchmentLight,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.parchmentBorder, width: 1.5),
+        border: Border.all(
+          color: AppColors.of(context).parchmentBorder,
+          width: 1.5,
+        ),
       ),
       child: Row(
         children: [
@@ -2226,7 +2336,10 @@ class _FeaturedAutoJoinToggleState extends State<_FeaturedAutoJoinToggle> {
               children: [
                 Text(
                   'Auto-join daily & weekly races',
-                  style: PixelText.body(size: 13, color: AppColors.textDark),
+                  style: PixelText.body(
+                    size: 13,
+                    color: AppColors.of(context).textDark,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -2234,7 +2347,10 @@ class _FeaturedAutoJoinToggleState extends State<_FeaturedAutoJoinToggle> {
                   'challenge, starting with the next one. Turning this off '
                   'stops future auto-joins but keeps races you already '
                   'entered.',
-                  style: PixelText.body(size: 11, color: AppColors.textMid),
+                  style: PixelText.body(
+                    size: 11,
+                    color: AppColors.of(context).textMid,
+                  ),
                 ),
               ],
             ),
@@ -2242,7 +2358,7 @@ class _FeaturedAutoJoinToggleState extends State<_FeaturedAutoJoinToggle> {
           const SizedBox(width: 12),
           CupertinoSwitch(
             value: widget.authService.autoJoinFeaturedRaces,
-            activeTrackColor: AppColors.accent,
+            activeTrackColor: AppColors.of(context).accent,
             onChanged: _toggle,
           ),
         ],

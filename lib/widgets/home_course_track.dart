@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../styles.dart';
 import 'goal_track.dart';
 import 'home_chrome.dart';
 import '../config/animals.dart';
@@ -47,7 +48,6 @@ class HomeCourseTrack extends StatefulWidget {
 
 class _HomeCourseTrackState extends State<HomeCourseTrack>
     with SingleTickerProviderStateMixin {
-  static const _courseAsset = 'assets/images/home_race_course_platformer.png';
   static const _sourceWidth = 1942.0;
   static const _sourceHeight = 809.0;
   // Drives the shared track walk cadence; per-runner sprites mod by their own
@@ -87,6 +87,15 @@ class _HomeCourseTrackState extends State<HomeCourseTrack>
       curve: Curves.easeOutCubic,
     );
     _controller.forward();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    for (final asset in const [AppThemeAssets.light, AppThemeAssets.night]) {
+      precacheImage(AssetImage(asset.homeCourse), context);
+      precacheImage(AssetImage(asset.raceDayCourse), context);
+    }
   }
 
   @override
@@ -145,7 +154,7 @@ class _HomeCourseTrackState extends State<HomeCourseTrack>
                                   cropTop: layout.cropTop,
                                   asset:
                                       widget.backdropAsset ??
-                                      _HomeCourseTrackState._courseAsset,
+                                      AppThemeAssets.of(context).homeCourse,
                                   frameless: widget.frameless,
                                 ),
                               ),
@@ -232,7 +241,7 @@ class _HomeCourseTrackState extends State<HomeCourseTrack>
       top: math.max(10, target.center.dy - target.radius - 42),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: HomeColors.ink,
+          color: AppColors.of(context).ink,
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
             color: Colors.white.withValues(alpha: 0.18),
@@ -483,7 +492,8 @@ class _CapybaraRunnerMarker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = runner.label ??
+    final name =
+        runner.label ??
         (runner.isStealthed
             ? '???'
             : (runner.isUser ? 'You' : atName(runner.name)));
@@ -503,7 +513,9 @@ class _CapybaraRunnerMarker extends StatelessWidget {
               children: [
                 Icon(Icons.flag_rounded, size: 11, color: teamColor),
                 const SizedBox(width: 2),
-                Flexible(child: _RunnerNameTag(label: name, isUser: runner.isUser)),
+                Flexible(
+                  child: _RunnerNameTag(label: name, isUser: runner.isUser),
+                ),
               ],
             )
           else
@@ -511,7 +523,9 @@ class _CapybaraRunnerMarker extends StatelessWidget {
           Icon(
             Icons.arrow_drop_down_rounded,
             size: 18,
-            color: runner.isUser ? HomeColors.gold : HomeColors.ink,
+            color: runner.isUser
+                ? AppColors.of(context).gold
+                : AppColors.of(context).ink,
           ),
           Container(
             width: capybaraSize,
@@ -607,7 +621,9 @@ class _CapybaraCustomizationPreviewState
                     bottom: widget.size * 0.08,
                     child: DecoratedBox(
                       decoration: BoxDecoration(
-                        color: HomeColors.ink.withValues(alpha: 0.18),
+                        color: AppColors.of(
+                          context,
+                        ).ink.withValues(alpha: 0.18),
                         borderRadius: BorderRadius.circular(widget.size * 0.08),
                       ),
                       child: SizedBox(
@@ -1199,7 +1215,7 @@ class _AccessoryPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final paint = Paint()..color = _colorForAsset(assetKey);
     final outline = Paint()
-      ..color = HomeColors.ink.withValues(alpha: 0.55)
+      ..color = AppColors.textDark.withValues(alpha: 0.55)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.4;
 
@@ -1286,11 +1302,11 @@ class _AccessoryPainter extends CustomPainter {
   }
 
   Color _colorForAsset(String assetKey) {
-    if (assetKey.contains('gold')) return HomeColors.gold;
-    if (assetKey.contains('red')) return HomeColors.clay;
-    if (assetKey.contains('green')) return HomeColors.sage;
-    if (assetKey.contains('blue')) return HomeColors.inkSoft;
-    return HomeColors.surfaceMuted;
+    if (assetKey.contains('gold')) return AppColors.pillGold;
+    if (assetKey.contains('red')) return AppColors.pillTerra;
+    if (assetKey.contains('green')) return AppColors.roofLight;
+    if (assetKey.contains('blue')) return AppColors.roofRidge;
+    return AppColors.parchmentDark;
   }
 
   @override
@@ -1309,12 +1325,14 @@ class _RunnerNameTag extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: isUser ? HomeColors.ink : Colors.white.withValues(alpha: 0.92),
+        color: isUser
+            ? AppColors.of(context).ink
+            : AppColors.of(context).parchment.withValues(alpha: 0.96),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
           color: isUser
-              ? HomeColors.ink
-              : HomeColors.line.withValues(alpha: 0.12),
+              ? AppColors.of(context).ink
+              : AppColors.of(context).line.withValues(alpha: 0.12),
           width: 2,
         ),
       ),
@@ -1329,7 +1347,9 @@ class _RunnerNameTag extends StatelessWidget {
             textAlign: TextAlign.center,
             style: HomeText.body(
               size: 10,
-              color: isUser ? Colors.white : HomeColors.ink,
+              color: isUser
+                  ? AppColors.of(context).textLight
+                  : AppColors.of(context).textDark,
               weight: FontWeight.w800,
               height: 1,
             ),
@@ -1361,22 +1381,28 @@ class _CourseBackdrop extends StatelessWidget {
       borderRadius: BorderRadius.circular(frameless ? 0 : 6),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: const Color(0xFFD6EEF8),
+          color: AppColors.of(context).cloudShadow,
           border: frameless
               ? null
               : Border.all(
-                  color: HomeColors.line.withValues(alpha: 0.14),
+                  color: AppColors.of(context).line.withValues(alpha: 0.14),
                   width: 2,
                 ),
         ),
         child: ClipRect(
           child: Transform.translate(
             offset: Offset(0, -cropTop),
-            child: Image.asset(
-              asset,
-              width: courseWidth,
-              height: worldHeight,
-              fit: BoxFit.fill,
+            child: AnimatedSwitcher(
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 250),
+              child: Image.asset(
+                asset,
+                key: ValueKey(asset),
+                width: courseWidth,
+                height: worldHeight,
+                fit: BoxFit.fill,
+              ),
             ),
           ),
         ),
@@ -1405,9 +1431,9 @@ class _MilestoneMarker extends StatelessWidget {
         children: [
           DecoratedBox(
             decoration: BoxDecoration(
-              color: HomeColors.gold,
+              color: AppColors.of(context).gold,
               borderRadius: BorderRadius.circular(5),
-              border: Border.all(color: HomeColors.ink, width: 2),
+              border: Border.all(color: AppColors.of(context).ink, width: 2),
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
@@ -1417,14 +1443,18 @@ class _MilestoneMarker extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: HomeText.body(
                   size: 10,
-                  color: HomeColors.ink,
+                  color: AppColors.of(context).ink,
                   weight: FontWeight.w800,
                   height: 1,
                 ),
               ),
             ),
           ),
-          Container(width: 3, height: _poleHeight, color: HomeColors.ink),
+          Container(
+            width: 3,
+            height: _poleHeight,
+            color: AppColors.of(context).ink,
+          ),
         ],
       ),
     );
@@ -1464,10 +1494,10 @@ class _LegendRow extends StatelessWidget {
             if (i > 0) const SizedBox(width: 10),
             DecoratedBox(
               decoration: BoxDecoration(
-                color: HomeColors.surfaceMuted,
+                color: AppColors.of(context).surfaceMuted,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: HomeColors.line.withValues(alpha: 0.10),
+                  color: AppColors.of(context).line.withValues(alpha: 0.10),
                   width: 2,
                 ),
               ),
@@ -1495,7 +1525,10 @@ class _LegendRow extends StatelessWidget {
                               : (runners[i].isUser
                                     ? 'You'
                                     : atName(runners[i].name))),
-                      style: HomeText.body(size: 12, color: HomeColors.inkSoft),
+                      style: HomeText.body(
+                        size: 12,
+                        color: AppColors.of(context).inkSoft,
+                      ),
                     ),
                   ],
                 ),

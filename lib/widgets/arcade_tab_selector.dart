@@ -29,9 +29,9 @@ class ArcadeTabSelector extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: AppColors.parchmentDark.withValues(alpha: 0.6),
+        color: AppColors.of(context).parchmentDark.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.parchmentBorder),
+        border: Border.all(color: AppColors.of(context).parchmentBorder),
       ),
       child: Row(
         children: [
@@ -40,8 +40,7 @@ class ArcadeTabSelector extends StatelessWidget {
               child: _TabPill(
                 label: labels[i],
                 active: i == activeIndex,
-                showUnread:
-                    i != activeIndex && i < unread.length && unread[i],
+                showUnread: i != activeIndex && i < unread.length && unread[i],
                 onTap: () => onChanged(i),
               ),
             ),
@@ -66,10 +65,10 @@ class _TabPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bgColor = active ? AppColors.accent : Colors.transparent;
+    final bgColor = active ? AppColors.of(context).accent : Colors.transparent;
     final textColor = active
         ? Colors.white
-        : AppColors.textMid.withValues(alpha: 0.8);
+        : AppColors.of(context).textMid.withValues(alpha: 0.8);
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -85,17 +84,14 @@ class _TabPill extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              label,
-              style: PixelText.title(size: 14, color: textColor),
-            ),
+            Text(label, style: PixelText.title(size: 14, color: textColor)),
             if (showUnread) ...[
               const SizedBox(width: 6),
               Container(
                 width: 7,
                 height: 7,
-                decoration: const BoxDecoration(
-                  color: AppColors.error,
+                decoration: BoxDecoration(
+                  color: AppColors.of(context).error,
                   shape: BoxShape.circle,
                 ),
               ),

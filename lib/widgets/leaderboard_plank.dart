@@ -68,24 +68,31 @@ class LeaderboardPlank extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.only(top: rank == 0 ? 0 : 4),
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 10, vertical: verticalPadding),
+        padding: EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: verticalPadding,
+        ),
         decoration: BoxDecoration(
           color: isFinished
-              ? AppColors.coinLight.withValues(alpha: 0.14)
+              ? AppColors.of(context).coinLight.withValues(alpha: 0.14)
               : _medalColor?.withValues(alpha: 0.08) ??
-                    AppColors.parchmentDark.withValues(alpha: 0.4),
+                    AppColors.of(context).parchmentDark.withValues(alpha: 0.4),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isFinished
-                ? AppColors.coinDark.withValues(alpha: 0.45)
+                ? AppColors.of(context).coinDark.withValues(alpha: 0.45)
                 : _medalColor?.withValues(alpha: 0.3) ??
-                      AppColors.parchmentBorder.withValues(alpha: 0.3),
+                      AppColors.of(
+                        context,
+                      ).parchmentBorder.withValues(alpha: 0.3),
             width: 1,
           ),
           boxShadow: isFinished
               ? [
                   BoxShadow(
-                    color: AppColors.coinDark.withValues(alpha: 0.18),
+                    color: AppColors.of(
+                      context,
+                    ).coinDark.withValues(alpha: 0.18),
                     offset: const Offset(0, 2),
                     blurRadius: 4,
                   ),
@@ -101,7 +108,7 @@ class LeaderboardPlank extends StatelessWidget {
               child: CustomPaint(
                 painter: _MedalPainter(
                   rank: rank,
-                  color: _medalColor ?? AppColors.woodMid,
+                  color: _medalColor ?? AppColors.of(context).woodMid,
                 ),
               ),
             ),
@@ -112,7 +119,7 @@ class LeaderboardPlank extends StatelessWidget {
               size: avatarSize,
               isUser: isUser,
               isStealthed: isStealthed,
-              borderColor: isUser ? AppColors.accent : Colors.white,
+              borderColor: isUser ? AppColors.of(context).accent : Colors.white,
             ),
             const SizedBox(width: 8),
             // Name + effects
@@ -125,10 +132,12 @@ class LeaderboardPlank extends StatelessWidget {
                       style: PixelText.body(
                         size: nameSize,
                         color: isStealthed
-                            ? AppColors.textMid.withValues(alpha: 0.5)
+                            ? AppColors.of(
+                                context,
+                              ).textMid.withValues(alpha: 0.5)
                             : isUser
-                            ? AppColors.accent
-                            : AppColors.textDark,
+                            ? AppColors.of(context).accent
+                            : AppColors.of(context).textDark,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -146,22 +155,26 @@ class LeaderboardPlank extends StatelessWidget {
                       ),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(7),
-                        gradient: const LinearGradient(
+                        gradient: LinearGradient(
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
-                            AppColors.roofLight,
-                            AppColors.roofMid,
-                            AppColors.roofDark,
+                            AppColors.of(context).roofLight,
+                            AppColors.of(context).roofMid,
+                            AppColors.of(context).roofDark,
                           ],
                         ),
                         border: Border.all(
-                          color: AppColors.coinLight.withValues(alpha: 0.9),
+                          color: AppColors.of(
+                            context,
+                          ).coinLight.withValues(alpha: 0.9),
                           width: 1.1,
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: AppColors.coinDark.withValues(alpha: 0.45),
+                            color: AppColors.of(
+                              context,
+                            ).coinDark.withValues(alpha: 0.45),
                             offset: const Offset(0, 2),
                             blurRadius: 0,
                           ),
@@ -170,10 +183,10 @@ class LeaderboardPlank extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.flag_rounded,
                             size: 12,
-                            color: AppColors.coinLight,
+                            color: AppColors.of(context).coinLight,
                           ),
                           const SizedBox(width: 4),
                           Text(
@@ -196,8 +209,8 @@ class LeaderboardPlank extends StatelessWidget {
               style: PixelText.number(
                 size: stepsSize,
                 color: isStealthed
-                    ? AppColors.textMid.withValues(alpha: 0.5)
-                    : AppColors.textMid,
+                    ? AppColors.of(context).textMid.withValues(alpha: 0.5)
+                    : AppColors.of(context).textMid,
               ),
             ),
           ],

@@ -37,7 +37,10 @@ class RankedResultsSummaryScreen extends StatelessWidget {
 
     final (headline, accent) = switch (outcome) {
       'PROMOTE' => ('Promoted to ${resultTier.label}!', resultTier.color),
-      'DEMOTE' => ('Moved down to ${resultTier.label}', AppColors.textMid),
+      'DEMOTE' => (
+        'Moved down to ${resultTier.label}',
+        AppColors.of(context).textMid,
+      ),
       _ => ('Held ${resultTier.label}', resultTier.color),
     };
 
@@ -55,7 +58,7 @@ class RankedResultsSummaryScreen extends StatelessWidget {
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 2.5),
               child: ColoredBox(
-                color: AppColors.roofDark.withValues(alpha: 0.54),
+                color: AppColors.of(context).roofDark.withValues(alpha: 0.54),
               ),
             ),
           ),
@@ -67,9 +70,9 @@ class RankedResultsSummaryScreen extends StatelessWidget {
                   constraints: const BoxConstraints(maxWidth: 460),
                   child: GameContainer(
                     padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
-                    frameColor: AppColors.accent,
-                    surfaceColor: AppColors.parchmentLight,
-                    glowColor: AppColors.coinMid,
+                    frameColor: AppColors.of(context).accent,
+                    surfaceColor: AppColors.of(context).parchmentLight,
+                    glowColor: AppColors.of(context).coinMid,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       mainAxisSize: MainAxisSize.min,
@@ -77,7 +80,10 @@ class RankedResultsSummaryScreen extends StatelessWidget {
                         Text(
                           'RANKED WEEK',
                           textAlign: TextAlign.center,
-                          style: HomeText.display(size: 28, color: HomeColors.ink),
+                          style: HomeText.display(
+                            size: 28,
+                            color: AppColors.of(context).ink,
+                          ),
                         ),
                         const SizedBox(height: 12),
                         TierMedal(tier: resultTier, size: 72),
@@ -94,9 +100,9 @@ class RankedResultsSummaryScreen extends StatelessWidget {
                             vertical: 12,
                           ),
                           decoration: BoxDecoration(
-                            color: AppColors.parchmentDark,
+                            color: AppColors.of(context).parchmentDark,
                             border: Border.all(
-                              color: AppColors.coinDark,
+                              color: AppColors.of(context).coinDark,
                               width: 2,
                             ),
                             borderRadius: BorderRadius.circular(10),
@@ -107,7 +113,7 @@ class RankedResultsSummaryScreen extends StatelessWidget {
                               if (rankText != null)
                                 _StatRow(
                                   icon: Icons.leaderboard_rounded,
-                                  iconColor: AppColors.textMid,
+                                  iconColor: AppColors.of(context).textMid,
                                   label: 'YOU FINISHED',
                                   value: rankText.toUpperCase(),
                                 ),
@@ -118,7 +124,7 @@ class RankedResultsSummaryScreen extends StatelessWidget {
                                   leading: const SpinningCoin(size: 18),
                                   label: 'PAYOUT',
                                   value: '+$coins',
-                                  valueColor: AppColors.coinDark,
+                                  valueColor: AppColors.of(context).coinDark,
                                 ),
                             ],
                           ),
@@ -129,7 +135,7 @@ class RankedResultsSummaryScreen extends StatelessWidget {
                           textAlign: TextAlign.center,
                           style: PixelText.body(
                             size: 12,
-                            color: AppColors.textMid,
+                            color: AppColors.of(context).textMid,
                           ),
                         ),
                         const SizedBox(height: 18),
@@ -177,15 +183,23 @@ class _StatRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        leading ?? Icon(icon, size: 18, color: iconColor ?? AppColors.textMid),
+        leading ??
+            Icon(
+              icon,
+              size: 18,
+              color: iconColor ?? AppColors.of(context).textMid,
+            ),
         const SizedBox(width: 6),
-        Text(label, style: PixelText.body(size: 11, color: AppColors.textMid)),
+        Text(
+          label,
+          style: PixelText.body(size: 11, color: AppColors.of(context).textMid),
+        ),
         const Spacer(),
         Text(
           value,
           style: PixelText.number(
             size: 14,
-            color: valueColor ?? AppColors.textDark,
+            color: valueColor ?? AppColors.of(context).textDark,
           ),
         ),
       ],

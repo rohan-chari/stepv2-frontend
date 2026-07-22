@@ -91,15 +91,12 @@ class _RaceCardCapybaraRowState extends State<RaceCardCapybaraRow>
     );
   }
 
-  Widget _buildRacer(
-    Map<String, dynamic> entry,
-    int index,
-    int frameIndex,
-  ) {
+  Widget _buildRacer(Map<String, dynamic> entry, int index, int frameIndex) {
     final rank = (entry['rank'] as num?)?.toInt() ?? (index + 1);
     final isStealthed = entry['isStealthed'] == true;
-    final displayName =
-        isStealthed ? '???' : (entry['displayName'] as String? ?? 'Anonymous');
+    final displayName = isStealthed
+        ? '???'
+        : (entry['displayName'] as String? ?? 'Anonymous');
     final accessories = isStealthed
         ? const <Map<String, dynamic>>[]
         : ((entry['equippedAccessories'] as List?)
@@ -118,7 +115,7 @@ class _RaceCardCapybaraRowState extends State<RaceCardCapybaraRow>
           height: widget.capybaraSize + 8,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: Color.lerp(medal, AppColors.parchment, 0.62),
+            color: Color.lerp(medal, AppColors.of(context).parchment, 0.62),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: medal, width: 2),
           ),
@@ -139,10 +136,7 @@ class _RaceCardCapybaraRowState extends State<RaceCardCapybaraRow>
             children: [
               Row(
                 children: [
-                  Text(
-                    '$rank.',
-                    style: PixelText.body(size: 11, color: medal),
-                  ),
+                  Text('$rank.', style: PixelText.body(size: 11, color: medal)),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
@@ -151,7 +145,7 @@ class _RaceCardCapybaraRowState extends State<RaceCardCapybaraRow>
                       overflow: TextOverflow.ellipsis,
                       style: PixelText.body(
                         size: 11,
-                        color: AppColors.textDark,
+                        color: AppColors.of(context).textDark,
                       ),
                     ),
                   ),
@@ -162,7 +156,10 @@ class _RaceCardCapybaraRowState extends State<RaceCardCapybaraRow>
                   '${_formatSteps(totalSteps.toInt())} steps',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: PixelText.body(size: 9, color: AppColors.textMid),
+                  style: PixelText.body(
+                    size: 9,
+                    color: AppColors.of(context).textMid,
+                  ),
                 ),
             ],
           ),

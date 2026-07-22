@@ -24,7 +24,7 @@ class RaceFinishersBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: AppColors.woodShadow.withValues(alpha: 0.35),
+            color: AppColors.of(context).woodShadow.withValues(alpha: 0.35),
             offset: const Offset(0, 4),
             blurRadius: 0,
           ),
@@ -34,32 +34,35 @@ class RaceFinishersBanner extends StatelessWidget {
         padding: const EdgeInsets.all(2),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          gradient: const LinearGradient(
+          gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              AppColors.coinLight,
-              AppColors.coinMid,
-              AppColors.coinDark,
+              AppColors.of(context).coinLight,
+              AppColors.of(context).coinMid,
+              AppColors.of(context).coinDark,
             ],
           ),
-          border: Border.all(color: AppColors.woodShadow, width: 1.2),
+          border: Border.all(
+            color: AppColors.of(context).woodShadow,
+            width: 1.2,
+          ),
         ),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                AppColors.roofLight,
-                AppColors.roofMid,
-                AppColors.roofDark,
+                AppColors.of(context).roofLight,
+                AppColors.of(context).roofMid,
+                AppColors.of(context).roofDark,
               ],
             ),
             border: Border.all(
-              color: AppColors.pillGold.withValues(alpha: 0.9),
+              color: AppColors.of(context).pillGold.withValues(alpha: 0.9),
               width: 1,
             ),
           ),
@@ -71,12 +74,18 @@ class RaceFinishersBanner extends StatelessWidget {
                 height: 34,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: const LinearGradient(
+                  gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [AppColors.coinLight, AppColors.coinDark],
+                    colors: [
+                      AppColors.of(context).coinLight,
+                      AppColors.of(context).coinDark,
+                    ],
                   ),
-                  border: Border.all(color: AppColors.woodShadow, width: 1.1),
+                  border: Border.all(
+                    color: AppColors.of(context).woodShadow,
+                    width: 1.1,
+                  ),
                 ),
                 child: const Icon(
                   Icons.flag_rounded,
@@ -101,7 +110,7 @@ class RaceFinishersBanner extends StatelessWidget {
                       textAlign: TextAlign.center,
                       style: PixelText.body(
                         size: 12.5,
-                        color: AppColors.parchmentLight,
+                        color: AppColors.of(context).textLight,
                       ),
                     ),
                   ],

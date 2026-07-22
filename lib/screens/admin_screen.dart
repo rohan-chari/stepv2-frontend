@@ -221,7 +221,10 @@ class _AdminSettingsCardState extends State<_AdminSettingsCard> {
         children: [
           Text(
             'SETTINGS',
-            style: PixelText.title(size: 16, color: AppColors.textDark),
+            style: PixelText.title(
+              size: 16,
+              color: AppColors.of(context).textDark,
+            ),
           ),
           const SizedBox(height: 8),
           if (_loading)
@@ -232,7 +235,10 @@ class _AdminSettingsCardState extends State<_AdminSettingsCard> {
           else if (_settings == null)
             Text(
               'Couldn\'t load settings.',
-              style: PixelText.body(size: 12, color: AppColors.textMid),
+              style: PixelText.body(
+                size: 12,
+                color: AppColors.of(context).textMid,
+              ),
             )
           else
             Row(
@@ -245,7 +251,7 @@ class _AdminSettingsCardState extends State<_AdminSettingsCard> {
                         'Banner ads (iOS)',
                         style: PixelText.title(
                           size: 13,
-                          color: AppColors.textDark,
+                          color: AppColors.of(context).textDark,
                         ),
                       ),
                       Text(
@@ -253,7 +259,7 @@ class _AdminSettingsCardState extends State<_AdminSettingsCard> {
                         'next launch/resume.',
                         style: PixelText.body(
                           size: 11,
-                          color: AppColors.textMid,
+                          color: AppColors.of(context).textMid,
                         ),
                       ),
                     ],
@@ -319,12 +325,18 @@ class _AdminStatsCardState extends State<_AdminStatsCard> {
           Expanded(
             child: Text(
               label,
-              style: PixelText.body(size: 12, color: AppColors.textMid),
+              style: PixelText.body(
+                size: 12,
+                color: AppColors.of(context).textMid,
+              ),
             ),
           ),
           Text(
             value,
-            style: PixelText.title(size: 13, color: AppColors.textDark),
+            style: PixelText.title(
+              size: 13,
+              color: AppColors.of(context).textDark,
+            ),
           ),
         ],
       ),
@@ -336,7 +348,7 @@ class _AdminStatsCardState extends State<_AdminStatsCard> {
       padding: const EdgeInsets.only(top: 10, bottom: 4),
       child: Text(
         title,
-        style: PixelText.title(size: 12, color: AppColors.textDark),
+        style: PixelText.title(size: 12, color: AppColors.of(context).textDark),
       ),
     );
   }
@@ -373,14 +385,17 @@ class _AdminStatsCardState extends State<_AdminStatsCard> {
               Expanded(
                 child: Text(
                   'STATISTICS',
-                  style: PixelText.title(size: 16, color: AppColors.textDark),
+                  style: PixelText.title(
+                    size: 16,
+                    color: AppColors.of(context).textDark,
+                  ),
                 ),
               ),
               IconButton(
-                icon: const Icon(
+                icon: Icon(
                   Icons.refresh,
                   size: 18,
-                  color: AppColors.textDark,
+                  color: AppColors.of(context).textDark,
                 ),
                 onPressed: _loading ? null : _load,
               ),
@@ -394,31 +409,38 @@ class _AdminStatsCardState extends State<_AdminStatsCard> {
           else if (stats == null)
             Text(
               'Couldn\'t load stats (older backend?).',
-              style: PixelText.body(size: 12, color: AppColors.textMid),
+              style: PixelText.body(
+                size: 12,
+                color: AppColors.of(context).textMid,
+              ),
             )
           else ...[
             _section('USERS'),
             _row('Total', '${users?['total'] ?? '—'}'),
-            _row('New (7d / 30d)',
-                '${users?['newLast7Days'] ?? '—'} / ${users?['newLast30Days'] ?? '—'}'),
+            _row(
+              'New (7d / 30d)',
+              '${users?['newLast7Days'] ?? '—'} / ${users?['newLast30Days'] ?? '—'}',
+            ),
             _section('TODAY'),
             _row('DAU (stepped today)', '${activity?['dauToday'] ?? '—'}'),
             _row(
               'In an active race',
               '${activity?['dauInActiveRace'] ?? '—'} '
-              '(${activity?['pctDauInActiveRace'] ?? '—'}%)',
+                  '(${activity?['pctDauInActiveRace'] ?? '—'}%)',
             ),
             // Item 9: avg unique users opening an in-race mystery box per ET day.
             // Null-safe — the backend field only exists after the box-open
             // logging deploy, and reads '—' until data accrues.
-            _row('Avg box openers/day',
-                '${activity?['avgUniqueBoxOpenersPerDay'] ?? '—'}'),
+            _row(
+              'Avg box openers/day',
+              '${activity?['avgUniqueBoxOpenersPerDay'] ?? '—'}',
+            ),
             _section('FRIENDS PER USER'),
             _row(
               '0 / 1 / 2 / 3-5 / 6+',
               '${friends?['0'] ?? 0} / ${friends?['1'] ?? 0} / '
-              '${friends?['2'] ?? 0} / ${friends?['3-5'] ?? 0} / '
-              '${friends?['6+'] ?? 0}',
+                  '${friends?['2'] ?? 0} / ${friends?['3-5'] ?? 0} / '
+                  '${friends?['6+'] ?? 0}',
             ),
             _section('RETENTION (LAST 32D COHORT)'),
             _row('D1 with friend', _retentionLine(withFriend, 'd1')),
@@ -426,10 +448,14 @@ class _AdminStatsCardState extends State<_AdminStatsCard> {
             _row('D7 with friend', _retentionLine(withFriend, 'd7')),
             _row('D7 no friend', _retentionLine(withoutFriend, 'd7')),
             _section('INVITE FUNNEL'),
-            _row('Link opens (7d / all)',
-                '${funnel?['linkOpensLast7Days'] ?? '—'} / ${funnel?['linkOpensTotal'] ?? '—'}'),
-            _row('Referred signups (7d / all)',
-                '${funnel?['signupsLast7Days'] ?? '—'} / ${funnel?['signups'] ?? '—'}'),
+            _row(
+              'Link opens (7d / all)',
+              '${funnel?['linkOpensLast7Days'] ?? '—'} / ${funnel?['linkOpensTotal'] ?? '—'}',
+            ),
+            _row(
+              'Referred signups (7d / all)',
+              '${funnel?['signupsLast7Days'] ?? '—'} / ${funnel?['signups'] ?? '—'}',
+            ),
             _row('Joined a race', '${funnel?['joinedRace'] ?? '—'}'),
             _row('Finished a race', '${funnel?['finishedRace'] ?? '—'}'),
             _row('Rewarded', '${funnel?['rewarded'] ?? '—'}'),
@@ -460,7 +486,7 @@ class AdminScreen extends StatelessWidget {
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.textDark),
+          icon: Icon(Icons.arrow_back, color: AppColors.of(context).textDark),
           onPressed: () => Navigator.of(context).pop(),
         ),
         backgroundColor: Colors.transparent,
@@ -476,7 +502,10 @@ class AdminScreen extends StatelessWidget {
                   width: boardWidth,
                   child: Text(
                     'ADMIN TOOLS',
-                    style: PixelText.title(size: 22, color: AppColors.textDark),
+                    style: PixelText.title(
+                      size: 22,
+                      color: AppColors.of(context).textDark,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -498,7 +527,7 @@ class AdminScreen extends StatelessWidget {
                         'TOAST TESTS',
                         style: PixelText.title(
                           size: 14,
-                          color: AppColors.textDark,
+                          color: AppColors.of(context).textDark,
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -552,7 +581,7 @@ class AdminScreen extends StatelessWidget {
                         'POWERUP ICONS',
                         style: PixelText.title(
                           size: 16,
-                          color: AppColors.textDark,
+                          color: AppColors.of(context).textDark,
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -582,14 +611,14 @@ class AdminScreen extends StatelessWidget {
                                       entry.name,
                                       style: PixelText.title(
                                         size: 13,
-                                        color: AppColors.textDark,
+                                        color: AppColors.of(context).textDark,
                                       ),
                                     ),
                                     Text(
                                       entry.description,
                                       style: PixelText.body(
                                         size: 11,
-                                        color: AppColors.textMid,
+                                        color: AppColors.of(context).textMid,
                                       ),
                                     ),
                                   ],
@@ -611,7 +640,7 @@ class AdminScreen extends StatelessWidget {
                         'COSMETICS',
                         style: PixelText.title(
                           size: 16,
-                          color: AppColors.textDark,
+                          color: AppColors.of(context).textDark,
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -645,7 +674,7 @@ class AdminScreen extends StatelessWidget {
                         'ECONOMY',
                         style: PixelText.title(
                           size: 16,
-                          color: AppColors.textDark,
+                          color: AppColors.of(context).textDark,
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -696,7 +725,7 @@ class AdminScreen extends StatelessWidget {
                         'POWERUP CRATE',
                         style: PixelText.title(
                           size: 16,
-                          color: AppColors.textDark,
+                          color: AppColors.of(context).textDark,
                         ),
                       ),
                       const SizedBox(height: 16),

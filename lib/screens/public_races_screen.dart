@@ -216,13 +216,19 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
             children: [
               Text(
                 '$buyIn GOLD BUY-IN',
-                style: PixelText.title(size: 18, color: AppColors.textDark),
+                style: PixelText.title(
+                  size: 18,
+                  color: AppColors.of(context).textDark,
+                ),
               ),
               const SizedBox(height: 12),
               Text(
                 'Your $buyIn gold is held until the race starts, then moves into the live pot. It returns only if the race is cancelled.',
                 textAlign: TextAlign.center,
-                style: PixelText.body(size: 13.5, color: AppColors.textMid),
+                style: PixelText.body(
+                  size: 13.5,
+                  color: AppColors.of(context).textMid,
+                ),
               ),
               const SizedBox(height: 18),
               PillButton(
@@ -359,14 +365,20 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
             children: [
               Text(
                 '$buyIn GOLD BUY-IN',
-                style: PixelText.title(size: 18, color: AppColors.textDark),
+                style: PixelText.title(
+                  size: 18,
+                  color: AppColors.of(context).textDark,
+                ),
               ),
               const SizedBox(height: 12),
               Text(
                 'Your $buyIn gold is held until the bracket starts. You only '
                 'get it back if the tournament is cancelled.',
                 textAlign: TextAlign.center,
-                style: PixelText.body(size: 13.5, color: AppColors.textMid),
+                style: PixelText.body(
+                  size: 13.5,
+                  color: AppColors.of(context).textMid,
+                ),
               ),
               const SizedBox(height: 18),
               PillButton(
@@ -402,7 +414,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
     return Scaffold(
       body: ArcadePageBackground(
         headerHeight: 56,
-        headerColor: AppColors.roofLight,
+        headerColor: AppColors.of(context).roofLight,
         child: SafeArea(
           child: Column(
             children: [
@@ -415,11 +427,11 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
                   children: [
                     GestureDetector(
                       onTap: () => Navigator.of(context).pop(),
-                      child: const Padding(
+                      child: Padding(
                         padding: EdgeInsets.all(8),
                         child: Icon(
                           Icons.arrow_back,
-                          color: AppColors.parchmentLight,
+                          color: AppColors.of(context).textLight,
                           size: 24,
                         ),
                       ),
@@ -429,7 +441,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
                       'PUBLIC RACES',
                       style: PixelText.title(
                         size: 22,
-                        color: AppColors.parchmentLight,
+                        color: AppColors.of(context).textLight,
                       ).copyWith(shadows: _textShadows),
                     ),
                   ],
@@ -441,8 +453,8 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: _load,
-                  color: AppColors.accent,
-                  backgroundColor: AppColors.parchment,
+                  color: AppColors.of(context).accent,
+                  backgroundColor: AppColors.of(context).parchment,
                   child: _buildBody(),
                 ),
               ),
@@ -514,7 +526,9 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
                       Icon(
                         Icons.flag_outlined,
                         size: 48,
-                        color: AppColors.textMid.withValues(alpha: 0.6),
+                        color: AppColors.of(
+                          context,
+                        ).textMid.withValues(alpha: 0.6),
                       ),
                       const SizedBox(height: 12),
                       Text(
@@ -522,7 +536,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
                         textAlign: TextAlign.center,
                         style: PixelText.title(
                           size: 18,
-                          color: AppColors.textMid,
+                          color: AppColors.of(context).textMid,
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -531,7 +545,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
                         textAlign: TextAlign.center,
                         style: PixelText.body(
                           size: 14,
-                          color: AppColors.textMid,
+                          color: AppColors.of(context).textMid,
                         ),
                       ),
                       const SizedBox(height: 24),
@@ -612,7 +626,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
       child: Text(
         message,
         textAlign: TextAlign.center,
-        style: PixelText.body(size: 14, color: AppColors.textMid),
+        style: PixelText.body(size: 14, color: AppColors.of(context).textMid),
       ),
     );
   }
@@ -646,21 +660,26 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
             padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 2),
             decoration: BoxDecoration(
               gradient: selected
-                  ? const LinearGradient(
+                  ? LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: [AppColors.pillGold, AppColors.pillGoldDark],
+                      colors: [
+                        AppColors.of(context).pillGold,
+                        AppColors.of(context).pillGoldDark,
+                      ],
                     )
                   : null,
               borderRadius: BorderRadius.circular(9),
               border: Border.all(
-                color: selected ? AppColors.pillGoldShadow : Colors.transparent,
+                color: selected
+                    ? AppColors.of(context).pillGoldShadow
+                    : Colors.transparent,
                 width: 2,
               ),
               boxShadow: selected
-                  ? const [
+                  ? [
                       BoxShadow(
-                        color: AppColors.pillGoldShadow,
+                        color: AppColors.of(context).pillGoldShadow,
                         offset: Offset(0, 2),
                       ),
                     ]
@@ -677,7 +696,9 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
                 maxLines: 1,
                 style: PixelText.title(
                   size: 12,
-                  color: selected ? AppColors.textDark : AppColors.parchment,
+                  color: selected
+                      ? AppColors.of(context).textDark
+                      : AppColors.of(context).parchment,
                 ),
               ),
             ),
@@ -691,9 +712,9 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
       child: Container(
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
-          color: AppColors.roofDark.withValues(alpha: 0.45),
+          color: AppColors.of(context).roofDark.withValues(alpha: 0.45),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.roofDark, width: 1.5),
+          border: Border.all(color: AppColors.of(context).roofDark, width: 1.5),
         ),
         child: Row(
           children: [
@@ -726,7 +747,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
       padding: const EdgeInsets.only(bottom: 8, top: 4, left: 2),
       child: Text(
         text,
-        style: PixelText.title(size: 14, color: AppColors.textDark),
+        style: PixelText.title(size: 14, color: AppColors.of(context).textDark),
       ),
     );
   }
@@ -887,12 +908,18 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
           children: [
             Text(
               name.toUpperCase(),
-              style: PixelText.title(size: 16, color: AppColors.textDark),
+              style: PixelText.title(
+                size: 16,
+                color: AppColors.of(context).textDark,
+              ),
             ),
             const SizedBox(height: 4),
             Text(
               'BY ${atName(creatorName)}'.toUpperCase(),
-              style: PixelText.body(size: 11, color: AppColors.textMid),
+              style: PixelText.body(
+                size: 11,
+                color: AppColors.of(context).textMid,
+              ),
             ),
             // TR-206: team format + open-slot line ("2v2 · 1 slot left on
             // Blue"). Absent entirely for individual races.
@@ -913,7 +940,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
                       overflow: TextOverflow.ellipsis,
                       style: PixelText.title(
                         size: 12,
-                        color: AppColors.textDark,
+                        color: AppColors.of(context).textDark,
                       ),
                     ),
                   ),
@@ -959,11 +986,17 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: PixelText.body(size: 10, color: AppColors.textMid)),
+        Text(
+          label,
+          style: PixelText.body(size: 10, color: AppColors.of(context).textMid),
+        ),
         const SizedBox(height: 2),
         Text(
           value,
-          style: PixelText.title(size: 14, color: AppColors.textDark),
+          style: PixelText.title(
+            size: 14,
+            color: AppColors.of(context).textDark,
+          ),
         ),
       ],
     );

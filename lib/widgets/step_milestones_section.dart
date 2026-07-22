@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
-import '../widgets/home_chrome.dart';
 import '../widgets/spinning_coin.dart';
 
 String _todayLocalDate() {
@@ -176,11 +175,7 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildHeader(),
-          const SizedBox(height: 12),
-          _buildCard(),
-        ],
+        children: [_buildHeader(), const SizedBox(height: 12), _buildCard()],
       ),
     );
   }
@@ -194,16 +189,21 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
         Text(
           "Today's coins",
           // Light on the home tab's dark felt backdrop.
-          style: PixelText.title(size: 22, color: AppColors.parchment),
+          style: PixelText.title(
+            size: 22,
+            color: AppColors.of(context).textLight,
+          ),
         ),
         const Spacer(),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
           decoration: BoxDecoration(
-            color: AppColors.parchment,
+            color: AppColors.of(context).parchment,
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
-              color: AppColors.parchmentBorder.withValues(alpha: 0.9),
+              color: AppColors.of(
+                context,
+              ).parchmentBorder.withValues(alpha: 0.9),
             ),
           ),
           child: Text.rich(
@@ -211,11 +211,17 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
               children: [
                 TextSpan(
                   text: '$_totalCoinsClaimed',
-                  style: PixelText.title(size: 14, color: AppColors.coinDark),
+                  style: PixelText.title(
+                    size: 14,
+                    color: AppColors.of(context).coinDark,
+                  ),
                 ),
                 TextSpan(
                   text: ' / ${cap == 0 ? 110 : cap}',
-                  style: PixelText.title(size: 14, color: AppColors.textMid),
+                  style: PixelText.title(
+                    size: 14,
+                    color: AppColors.of(context).textMid,
+                  ),
                 ),
               ],
             ),
@@ -228,7 +234,7 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
   Widget _buildCard() {
     Widget body;
     if (_loading && _tiles.isEmpty) {
-      body = const SizedBox(
+      body = SizedBox(
         height: 96,
         child: Center(
           child: SizedBox(
@@ -236,7 +242,7 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
             height: 22,
             child: CircularProgressIndicator(
               strokeWidth: 2,
-              color: AppColors.accent,
+              color: AppColors.of(context).accent,
             ),
           ),
         ),
@@ -247,7 +253,10 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
         child: Center(
           child: Text(
             "Couldn't load milestones.",
-            style: PixelText.body(size: 13, color: AppColors.textMid),
+            style: PixelText.body(
+              size: 13,
+              color: AppColors.of(context).textMid,
+            ),
           ),
         ),
       );
@@ -258,7 +267,7 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
           const SizedBox(height: 16),
           Container(
             height: 1,
-            color: AppColors.parchmentBorder.withValues(alpha: 0.6),
+            color: AppColors.of(context).parchmentBorder.withValues(alpha: 0.6),
           ),
           const SizedBox(height: 12),
           _buildFooter(),
@@ -269,10 +278,10 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: AppColors.parchment,
+        color: AppColors.of(context).parchment,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: AppColors.roofDark.withValues(alpha: 0.55),
+          color: AppColors.of(context).roofDark.withValues(alpha: 0.55),
           width: 2,
         ),
       ),
@@ -299,8 +308,8 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
       child: Container(
         height: 3,
         color: filled
-            ? HomeColors.success
-            : AppColors.parchmentBorder.withValues(alpha: 0.6),
+            ? AppColors.of(context).success
+            : AppColors.of(context).parchmentBorder.withValues(alpha: 0.6),
       ),
     );
   }
@@ -310,10 +319,10 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
     final isClaimable = tile.claimable;
     final isBusy = _claimingThreshold == '${tile.threshold}';
     final color = isClaimed
-        ? HomeColors.success
+        ? AppColors.of(context).success
         : isClaimable
-        ? HomeColors.gold
-        : HomeColors.muted;
+        ? AppColors.of(context).gold
+        : AppColors.of(context).muted;
 
     final circle = Container(
       width: 56,
@@ -324,10 +333,12 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
             ? color.withValues(alpha: 0.16)
             : isClaimable
             ? color.withValues(alpha: 0.22)
-            : AppColors.parchmentDark.withValues(alpha: 0.5),
+            : AppColors.of(context).parchmentDark.withValues(alpha: 0.5),
         shape: BoxShape.circle,
         border: Border.all(
-          color: isClaimable ? color : color.withValues(alpha: isClaimed ? 1 : 0.45),
+          color: isClaimable
+              ? color
+              : color.withValues(alpha: isClaimed ? 1 : 0.45),
           width: isClaimable ? 3 : 2,
         ),
         boxShadow: isClaimable
@@ -347,10 +358,17 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
                 ? SizedBox(
                     width: 22,
                     height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: color),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: color,
+                    ),
                   )
                 : const SpinningCoin(size: 34))
-          : const Icon(Icons.lock_rounded, size: 20, color: HomeColors.muted),
+          : Icon(
+              Icons.lock_rounded,
+              size: 20,
+              color: AppColors.of(context).textMid,
+            ),
     );
 
     return Column(
@@ -367,19 +385,24 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
           style: PixelText.title(
             size: 15,
             color: isClaimed || isClaimable
-                ? AppColors.textDark
-                : AppColors.textMid,
+                ? AppColors.of(context).textDark
+                : AppColors.of(context).textMid,
           ),
         ),
         const SizedBox(height: 1),
         if (isClaimable)
-          Text('TAP!', style: PixelText.title(size: 11, color: HomeColors.gold))
+          Text(
+            'TAP!',
+            style: PixelText.title(size: 11, color: AppColors.of(context).gold),
+          )
         else
           Text(
             '+${tile.coins}',
             style: PixelText.body(
               size: 12,
-              color: isClaimed ? HomeColors.success : AppColors.textMid,
+              color: isClaimed
+                  ? AppColors.of(context).success
+                  : AppColors.of(context).textMid,
             ),
           ),
       ],
@@ -405,11 +428,17 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
               children: [
                 TextSpan(
                   text: _formatWithCommas(_currentSteps),
-                  style: PixelText.title(size: 14, color: AppColors.textDark),
+                  style: PixelText.title(
+                    size: 14,
+                    color: AppColors.of(context).textDark,
+                  ),
                 ),
                 TextSpan(
                   text: ' steps today',
-                  style: PixelText.body(size: 13, color: AppColors.textMid),
+                  style: PixelText.body(
+                    size: 13,
+                    color: AppColors.of(context).textMid,
+                  ),
                 ),
               ],
             ),
@@ -425,11 +454,17 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
                 children: [
                   TextSpan(
                     text: _formatWithCommas(stepsToNext),
-                    style: PixelText.title(size: 14, color: AppColors.textDark),
+                    style: PixelText.title(
+                      size: 14,
+                      color: AppColors.of(context).textDark,
+                    ),
                   ),
                   TextSpan(
                     text: ' to ${_formatCompact(next.threshold)}',
-                    style: PixelText.body(size: 13, color: AppColors.textMid),
+                    style: PixelText.body(
+                      size: 13,
+                      color: AppColors.of(context).textMid,
+                    ),
                   ),
                 ],
               ),
@@ -441,7 +476,10 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
         else
           Text(
             'All milestones hit!',
-            style: PixelText.body(size: 13, color: HomeColors.success),
+            style: PixelText.body(
+              size: 13,
+              color: AppColors.of(context).success,
+            ),
           ),
       ],
     );

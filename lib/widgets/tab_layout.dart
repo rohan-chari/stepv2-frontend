@@ -49,16 +49,16 @@ class TabLayout extends StatelessWidget {
                               title,
                               style: PixelText.title(
                                 size: 24,
-                                color: AppColors.textDark,
+                                color: AppColors.of(context).textDark,
                               ),
                               textAlign: TextAlign.center,
                             ),
                           ),
                           Container(
                             height: 1,
-                            color: AppColors.parchmentBorder.withValues(
-                              alpha: 0.5,
-                            ),
+                            color: AppColors.of(
+                              context,
+                            ).parchmentBorder.withValues(alpha: 0.5),
                           ),
                         ],
                         Expanded(
@@ -95,16 +95,19 @@ class TabLayout extends StatelessWidget {
                   Align(
                     alignment: Alignment.centerLeft,
                     child: IconButton(
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.arrow_back,
-                        color: AppColors.textDark,
+                        color: AppColors.of(context).textDark,
                       ),
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                   ),
                 Text(
                   title,
-                  style: PixelText.title(size: 24, color: AppColors.textDark),
+                  style: PixelText.title(
+                    size: 24,
+                    color: AppColors.of(context).textDark,
+                  ),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -112,7 +115,7 @@ class TabLayout extends StatelessWidget {
           ),
           Container(
             height: 1,
-            color: AppColors.parchmentBorder.withValues(alpha: 0.5),
+            color: AppColors.of(context).parchmentBorder.withValues(alpha: 0.5),
           ),
           const SizedBox(height: 12),
         ],
@@ -125,8 +128,8 @@ class TabLayout extends StatelessWidget {
     if (onRefresh != null) {
       return RefreshIndicator(
         onRefresh: onRefresh!,
-        color: AppColors.accent,
-        backgroundColor: AppColors.parchment,
+        color: AppColors.of(context).accent,
+        backgroundColor: AppColors.of(context).parchment,
         child: AlwaysScrollableScrollView(
           padding: const EdgeInsets.only(top: 4, bottom: 16),
           child: _buildScrollableContent(context),

@@ -109,9 +109,9 @@ class NotificationService {
       // us to push fresh steps now. The main-engine channel handler is registered,
       // so this enqueue path is reliable here.
       if (message.data['type'] == 'STEP_SYNC_REQUEST') {
-        _backgroundSyncChannel.invokeMethod('enqueueExpeditedSync').catchError(
-          (_) {},
-        );
+        _backgroundSyncChannel
+            .invokeMethod('enqueueExpeditedSync')
+            .catchError((_) {});
         return;
       }
       final notification = message.notification;

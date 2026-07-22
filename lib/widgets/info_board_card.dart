@@ -36,8 +36,8 @@ class InfoBoardCard extends StatelessWidget {
 
     return GameContainer(
       padding: EdgeInsets.zero,
-      frameColor: AppColors.accent,
-      surfaceColor: AppColors.accent,
+      frameColor: AppColors.of(context).accent,
+      surfaceColor: AppColors.of(context).accent,
       borderRadius: borderRadius,
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(),
@@ -60,7 +60,7 @@ class InfoBoardCard extends StatelessWidget {
                   textAlign: textAlign,
                   style: PixelText.title(
                     size: titleSize,
-                    color: AppColors.parchmentLight,
+                    color: AppColors.of(context).textLight,
                   ),
                 ),
               if (title != null && subtitle != null) const SizedBox(height: 4),
@@ -70,7 +70,7 @@ class InfoBoardCard extends StatelessWidget {
                   textAlign: textAlign,
                   style: PixelText.body(
                     size: subtitleSize,
-                    color: AppColors.parchment,
+                    color: AppColors.of(context).textLight,
                   ),
                 ),
               ...children,
@@ -93,12 +93,15 @@ class InfoBoardBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.pillGold,
+        color: AppColors.of(context).pillGold,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.pillGoldShadow, width: 1.5),
-        boxShadow: const [
+        border: Border.all(
+          color: AppColors.of(context).pillGoldShadow,
+          width: 1.5,
+        ),
+        boxShadow: [
           BoxShadow(
-            color: AppColors.pillGoldShadow,
+            color: AppColors.of(context).pillGoldShadow,
             offset: Offset(2, 2),
             blurRadius: 0,
           ),
@@ -106,7 +109,10 @@ class InfoBoardBadge extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: PixelText.pill(size: fontSize, color: AppColors.textDark),
+        style: PixelText.pill(
+          size: fontSize,
+          color: AppColors.of(context).textDark,
+        ),
       ),
     );
   }

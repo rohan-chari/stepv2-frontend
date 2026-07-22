@@ -77,15 +77,18 @@ class _RaceAlertOptInCardState extends State<RaceAlertOptInCard> {
           children: [
             Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.notifications_active_rounded,
-                  color: AppColors.pillGoldDark,
+                  color: AppColors.of(context).pillGoldDark,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'DON’T MISS THE FINISH',
-                    style: PixelText.title(size: 13, color: AppColors.textDark),
+                    style: PixelText.title(
+                      size: 13,
+                      color: AppColors.of(context).textDark,
+                    ),
                   ),
                 ),
               ],
@@ -93,7 +96,10 @@ class _RaceAlertOptInCardState extends State<RaceAlertOptInCard> {
             const SizedBox(height: 7),
             Text(
               'Get race invites and important match updates. Bara won’t ask the system until you tap below.',
-              style: PixelText.body(size: 12.5, color: AppColors.textMid),
+              style: PixelText.body(
+                size: 12.5,
+                color: AppColors.of(context).textMid,
+              ),
             ),
             const SizedBox(height: 14),
             Row(

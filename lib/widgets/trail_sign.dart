@@ -5,11 +5,7 @@ import 'content_board.dart';
 
 /// Compact modal/sign surface that now matches the homepage arcade chrome.
 class TrailSign extends StatelessWidget {
-  const TrailSign({
-    super.key,
-    required this.child,
-    this.width = 300,
-  });
+  const TrailSign({super.key, required this.child, this.width = 300});
 
   final Widget child;
   final double width;
@@ -19,12 +15,12 @@ class TrailSign extends StatelessWidget {
     return Container(
       width: width,
       decoration: BoxDecoration(
-        color: AppColors.parchment,
+        color: AppColors.of(context).parchment,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.textDark, width: 2),
+        border: Border.all(color: AppColors.of(context).textDark, width: 2),
         boxShadow: [
           BoxShadow(
-            color: AppColors.textDark.withValues(alpha: 0.20),
+            color: AppColors.of(context).textDark.withValues(alpha: 0.20),
             offset: const Offset(4, 4),
             blurRadius: 0,
           ),
@@ -34,8 +30,14 @@ class TrailSign extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
         child: Stack(
           children: [
-            const Positioned.fill(
-              child: CustomPaint(painter: PixelSurfacePainter()),
+            Positioned.fill(
+              child: CustomPaint(
+                painter: PixelSurfacePainter(
+                  dotColor: AppColors.of(
+                    context,
+                  ).parchmentDark.withValues(alpha: 0.32),
+                ),
+              ),
             ),
             Padding(
               padding: const EdgeInsets.all(18),

@@ -308,7 +308,9 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
         row.valueLabel,
         style: PixelText.title(
           size: _selectedType == _LeaderboardType.races ? 12 : 16,
-          color: row.isMe ? AppColors.accent : AppColors.textDark,
+          color: row.isMe
+              ? AppColors.of(context).accent
+              : AppColors.of(context).textDark,
         ),
         textAlign: TextAlign.right,
       );
@@ -331,9 +333,9 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
 
     return Stack(
       children: [
-        const Positioned.fill(
+        Positioned.fill(
           child: ColoredBox(
-            color: AppColors.roofLight,
+            color: AppColors.of(context).roofLight,
             child: CustomPaint(
               painter: ArcadeCheckerPainter(drawBottomStripe: false),
             ),
@@ -343,8 +345,8 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
           padding: EdgeInsets.only(top: topInset + 14, bottom: tabBarHeight),
           child: RefreshIndicator(
             onRefresh: _loadLeaderboard,
-            color: AppColors.accent,
-            backgroundColor: AppColors.parchment,
+            color: AppColors.of(context).accent,
+            backgroundColor: AppColors.of(context).parchment,
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
@@ -374,10 +376,10 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   /// Parchment game-piece card — same language as the home/races tabs.
   BoxDecoration _boardCardDecoration() {
     return BoxDecoration(
-      color: AppColors.parchment,
+      color: AppColors.of(context).parchment,
       borderRadius: BorderRadius.circular(14),
       border: Border.all(
-        color: AppColors.roofDark.withValues(alpha: 0.55),
+        color: AppColors.of(context).roofDark.withValues(alpha: 0.55),
         width: 2,
       ),
       boxShadow: const [
@@ -436,11 +438,11 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     return Column(
       children: [
         if (state.isRefreshing)
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(bottom: 8),
             child: LinearProgressIndicator(
               minHeight: 2,
-              color: AppColors.accent,
+              color: AppColors.of(context).accent,
               backgroundColor: Colors.transparent,
             ),
           ),
@@ -484,7 +486,10 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
           child: Text(
             _selectedScope.boardTitle,
             textAlign: TextAlign.center,
-            style: PixelText.title(size: 15, color: AppColors.textDark),
+            style: PixelText.title(
+              size: 15,
+              color: AppColors.of(context).textDark,
+            ),
           ),
         ),
         Align(
@@ -500,9 +505,11 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
 
   Widget _buildRankingControls() {
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: AppColors.roofLight,
-        border: Border(bottom: BorderSide(color: AppColors.roofDark, width: 1)),
+      decoration: BoxDecoration(
+        color: AppColors.of(context).roofLight,
+        border: Border(
+          bottom: BorderSide(color: AppColors.of(context).roofDark, width: 1),
+        ),
       ),
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
@@ -514,7 +521,10 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                 alignment: Alignment.centerLeft,
                 child: Text(
                   'LEADERBOARD',
-                  style: PixelText.title(size: 30, color: AppColors.parchment),
+                  style: PixelText.title(
+                    size: 30,
+                    color: AppColors.of(context).textLight,
+                  ),
                 ),
               ),
               const SizedBox(height: 14),
@@ -566,14 +576,14 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
           Icon(
             emptyIcon,
             size: 32,
-            color: AppColors.textMid.withValues(alpha: 0.6),
+            color: AppColors.of(context).textMid.withValues(alpha: 0.6),
           ),
           const SizedBox(height: 8),
           Text(
             emptyTitle,
             style: PixelText.body(
               size: 18,
-              color: AppColors.textMid,
+              color: AppColors.of(context).textMid,
             ).copyWith(shadows: _textShadows),
             textAlign: TextAlign.center,
           ),
@@ -583,7 +593,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
               emptySubtitle,
               style: PixelText.body(
                 size: 14,
-                color: AppColors.textMid,
+                color: AppColors.of(context).textMid,
               ).copyWith(shadows: _textShadows),
               textAlign: TextAlign.center,
             ),
@@ -697,6 +707,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
         borderRadius: BorderRadius.circular(12),
         child: ShineSweep(
           period: const Duration(milliseconds: 4200),
+          opacity: AppColors.of(context).isDark ? 0.05 : 0.30,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
             child: Column(
@@ -781,9 +792,11 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
               boxShadow: featured
                   ? [
                       BoxShadow(
-                        color: AppColors.medalGold.withValues(alpha: 0.55),
-                        blurRadius: 12,
-                        spreadRadius: 1,
+                        color: AppColors.of(context).medalGold.withValues(
+                          alpha: AppColors.of(context).isDark ? 0.14 : 0.55,
+                        ),
+                        blurRadius: AppColors.of(context).isDark ? 8 : 12,
+                        spreadRadius: AppColors.of(context).isDark ? 0 : 1,
                       ),
                     ]
                   : null,
@@ -813,7 +826,9 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
           textAlign: TextAlign.center,
           style: PixelText.body(
             size: nameSize,
-            color: row.isMe ? AppColors.accent : AppColors.textDark,
+            color: row.isMe
+                ? AppColors.of(context).accent
+                : AppColors.of(context).textDark,
           ),
         ),
         const SizedBox(height: 3),
@@ -837,7 +852,9 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
       overflow: TextOverflow.ellipsis,
       style: PixelText.title(
         size: valueSize,
-        color: row.isMe ? AppColors.accent : AppColors.textDark,
+        color: row.isMe
+            ? AppColors.of(context).accent
+            : AppColors.of(context).textDark,
       ),
       textAlign: TextAlign.center,
     );
@@ -860,7 +877,10 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
           child: Text(
             '· · ·',
             textAlign: TextAlign.center,
-            style: PixelText.title(size: 14, color: AppColors.textMid),
+            style: PixelText.title(
+              size: 14,
+              color: AppColors.of(context).textMid,
+            ),
           ),
         ),
       );
@@ -883,15 +903,17 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     };
 
     final stripeColor = index.isOdd
-        ? AppColors.parchmentDark.withValues(alpha: 0.45)
+        ? AppColors.of(context).parchmentDark.withValues(alpha: 0.45)
         : Colors.transparent;
     final backgroundColor = row.isMe
-        ? AppColors.accent.withValues(alpha: 0.16)
+        ? AppColors.of(context).accent.withValues(alpha: 0.16)
         : stripeColor;
 
     final nameStyle = PixelText.body(
       size: 16,
-      color: row.isMe ? AppColors.accent : AppColors.textDark,
+      color: row.isMe
+          ? AppColors.of(context).accent
+          : AppColors.of(context).textDark,
     );
 
     final content = Container(
@@ -899,7 +921,9 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
       decoration: BoxDecoration(
         color: backgroundColor,
         border: row.isMe
-            ? Border(left: BorderSide(color: AppColors.accent, width: 3))
+            ? Border(
+                left: BorderSide(color: AppColors.of(context).accent, width: 3),
+              )
             : null,
       ),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
@@ -912,7 +936,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
             imageUrl: row.profilePhotoUrl,
             size: 32,
             isUser: row.isMe,
-            borderColor: row.isMe ? AppColors.accent : Colors.white,
+            borderColor: row.isMe ? AppColors.of(context).accent : Colors.white,
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -929,7 +953,10 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                   const SizedBox(width: 6),
                   Text(
                     '(you)',
-                    style: PixelText.pill(size: 10.5, color: AppColors.accent),
+                    style: PixelText.pill(
+                      size: 10.5,
+                      color: AppColors.of(context).accent,
+                    ),
                   ),
                 ],
               ],
@@ -996,9 +1023,12 @@ class _ScopeIconToggle extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
-        color: AppColors.parchment,
+        color: AppColors.of(context).parchment,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.parchmentBorder, width: 1),
+        border: Border.all(
+          color: AppColors.of(context).parchmentBorder,
+          width: 1,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1037,13 +1067,15 @@ class _ScopeIconButton extends StatelessWidget {
           duration: const Duration(milliseconds: 120),
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
           decoration: BoxDecoration(
-            color: active ? AppColors.accent : Colors.transparent,
+            color: active ? AppColors.of(context).accent : Colors.transparent,
             borderRadius: BorderRadius.circular(999),
           ),
           child: Icon(
             icon,
             size: 16,
-            color: active ? AppColors.parchment : AppColors.textMid,
+            color: active
+                ? AppColors.of(context).parchment
+                : AppColors.of(context).textMid,
           ),
         ),
       ),
@@ -1083,7 +1115,7 @@ class _LeaderboardRow {
 /// lighter top tint and a darker border so the light fills still read as solid
 /// blocks, plus the worded ordinal shown on the pedestal.
 class _MedalStyle {
-  const _MedalStyle(this.base, this.top, this.border, this.label);
+  _MedalStyle(this.base, this.top, this.border, this.label);
 
   final Color base;
   final Color top;
@@ -1091,7 +1123,7 @@ class _MedalStyle {
   final String label;
 }
 
-const Map<int, _MedalStyle> _medalStyles = {
+Map<int, _MedalStyle> _medalStyles = {
   1: _MedalStyle(
     AppColors.medalGold,
     Color(0xFFFFE875),
@@ -1112,6 +1144,27 @@ const Map<int, _MedalStyle> _medalStyles = {
   ),
 };
 
+_MedalStyle _medalStyleFor(BuildContext context, int place) {
+  final colors = AppColors.of(context);
+  if (!colors.isDark) return _medalStyles[place]!;
+
+  final base = switch (place) {
+    1 => colors.medalGold,
+    2 => colors.medalSilver,
+    _ => colors.medalBronze,
+  };
+  return _MedalStyle(
+    base,
+    Color.lerp(base, colors.textLight, 0.08)!,
+    Color.lerp(base, colors.woodDarker, 0.52)!,
+    switch (place) {
+      1 => '1ST',
+      2 => '2ND',
+      _ => '3RD',
+    },
+  );
+}
+
 /// The medal-coloured pedestal under each podium avatar: a big dark numeral +
 /// worded ordinal so rank is explicit even ignoring colour and position.
 class _PedestalBlock extends StatelessWidget {
@@ -1127,7 +1180,7 @@ class _PedestalBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final medal = _medalStyles[place]!;
+    final medal = _medalStyleFor(context, place);
     final isFirst = place == 1;
     return Container(
       height: height,
@@ -1140,10 +1193,10 @@ class _PedestalBlock extends StatelessWidget {
                 end: Alignment.bottomCenter,
                 colors: [medal.top, medal.base],
               ),
-        color: empty ? AppColors.parchment : null,
+        color: empty ? AppColors.of(context).parchment : null,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(5)),
         border: Border.all(
-          color: empty ? AppColors.parchmentBorder : medal.border,
+          color: empty ? AppColors.of(context).parchmentBorder : medal.border,
           width: 1.5,
         ),
       ),
@@ -1154,7 +1207,7 @@ class _PedestalBlock extends StatelessWidget {
                 medal.label,
                 style: PixelText.title(
                   size: isFirst ? 24 : 20,
-                  color: AppColors.textDark,
+                  color: AppColors.of(context).textDark,
                 ),
               ),
             ),
@@ -1178,7 +1231,9 @@ class _RankPill extends StatelessWidget {
       textAlign: TextAlign.center,
       style: PixelText.title(
         size: isPodium ? 13 : 14,
-        color: isPodium ? AppColors.coinDark : AppColors.textDark,
+        color: isPodium
+            ? AppColors.of(context).coinDark
+            : AppColors.of(context).textDark,
       ),
     );
   }
@@ -1191,8 +1246,8 @@ class _PodiumSkeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     return GameContainer(
       padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
-      frameColor: AppColors.accent,
-      surfaceColor: AppColors.parchment,
+      frameColor: AppColors.of(context).accent,
+      surfaceColor: AppColors.of(context).parchment,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1200,7 +1255,9 @@ class _PodiumSkeleton extends StatelessWidget {
             width: 128,
             height: 18,
             decoration: BoxDecoration(
-              color: AppColors.parchmentBorder.withValues(alpha: 0.5),
+              color: AppColors.of(
+                context,
+              ).parchmentBorder.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(6),
             ),
           ),
@@ -1236,9 +1293,12 @@ class _SkeletonPodiumTile extends StatelessWidget {
     return Container(
       height: height,
       decoration: BoxDecoration(
-        color: AppColors.parchmentDark.withValues(alpha: 0.65),
+        color: AppColors.of(context).parchmentDark.withValues(alpha: 0.65),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.parchmentBorder, width: 1),
+        border: Border.all(
+          color: AppColors.of(context).parchmentBorder,
+          width: 1,
+        ),
       ),
     );
   }
@@ -1268,23 +1328,29 @@ class _RacePodiumBadges extends StatelessWidget {
         _RacePodiumBadge(
           label: '1ST',
           count: firsts,
-          fill: AppColors.medalGold.withValues(alpha: 0.18),
-          border: AppColors.medalGold,
-          textColor: isMe ? AppColors.accent : AppColors.textDark,
+          fill: AppColors.of(context).medalGold.withValues(alpha: 0.18),
+          border: AppColors.of(context).medalGold,
+          textColor: isMe
+              ? AppColors.of(context).accent
+              : AppColors.of(context).textDark,
         ),
         _RacePodiumBadge(
           label: '2ND',
           count: seconds,
-          fill: AppColors.medalSilver.withValues(alpha: 0.2),
-          border: AppColors.medalSilver.withValues(alpha: 0.9),
-          textColor: isMe ? AppColors.accent : AppColors.textDark,
+          fill: AppColors.of(context).medalSilver.withValues(alpha: 0.2),
+          border: AppColors.of(context).medalSilver.withValues(alpha: 0.9),
+          textColor: isMe
+              ? AppColors.of(context).accent
+              : AppColors.of(context).textDark,
         ),
         _RacePodiumBadge(
           label: '3RD',
           count: thirds,
-          fill: AppColors.medalBronze.withValues(alpha: 0.2),
-          border: AppColors.medalBronze.withValues(alpha: 0.9),
-          textColor: isMe ? AppColors.accent : AppColors.textDark,
+          fill: AppColors.of(context).medalBronze.withValues(alpha: 0.2),
+          border: AppColors.of(context).medalBronze.withValues(alpha: 0.9),
+          textColor: isMe
+              ? AppColors.of(context).accent
+              : AppColors.of(context).textDark,
         ),
       ],
     );

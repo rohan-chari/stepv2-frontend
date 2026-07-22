@@ -27,6 +27,7 @@ class CelebrationConfetti extends StatefulWidget {
 class _CelebrationConfettiState extends State<CelebrationConfetti> {
   late final ConfettiController _burst1;
   late final ConfettiController _burst2;
+  Timer? _secondBurstTimer;
   Timer? _hapticTimer;
 
   // Roughly how long the confetti is airborne: the second burst starts ~220ms
@@ -59,7 +60,7 @@ class _CelebrationConfettiState extends State<CelebrationConfetti> {
       if (!mounted) return;
       _burst1.play();
       _startHapticRumble();
-      Future.delayed(const Duration(milliseconds: 220), () {
+      _secondBurstTimer = Timer(const Duration(milliseconds: 220), () {
         if (mounted) _burst2.play();
       });
     });
@@ -82,6 +83,7 @@ class _CelebrationConfettiState extends State<CelebrationConfetti> {
 
   @override
   void dispose() {
+    _secondBurstTimer?.cancel();
     _hapticTimer?.cancel();
     _burst1.dispose();
     _burst2.dispose();

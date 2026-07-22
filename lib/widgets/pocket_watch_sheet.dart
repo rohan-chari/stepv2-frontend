@@ -151,6 +151,7 @@ class PocketWatchSheet extends StatefulWidget {
     required this.tierLabels,
     required this.costForLevel,
     required this.onConfirm,
+    this.onDiscard,
     this.participants = const [],
     this.now,
   });
@@ -161,6 +162,11 @@ class PocketWatchSheet extends StatefulWidget {
   final List<String> tierLabels;
   final int Function(int level) costForLevel;
   final PocketWatchConfirm onConfirm;
+
+  /// Optional discard action. When provided, the sheet renders a DISCARD button
+  /// (visual parity with the generic powerup sheet) so a Pocket Watch can be
+  /// thrown away like any other powerup. Null hides the button entirely.
+  final VoidCallback? onDiscard;
 
   /// Race participants, used to put a name and avatar on each rival. Purely
   /// cosmetic — a missing entry degrades to a neutral label.
@@ -178,27 +184,28 @@ class _PocketWatchSheetState extends State<PocketWatchSheet> {
   _Mode _mode = _Mode.buffs;
   String? _selectedEffectId;
 
-  bool get _targetingEnabled =>
-      pocketWatchTargetingEnabled(widget.powerupData);
+  bool get _targetingEnabled => pocketWatchTargetingEnabled(widget.powerupData);
 
   List<PocketWatchEffect> get _targets => pocketWatchTargetableEffects(
-        widget.powerupData,
-        viewerUserId: widget.viewerUserId,
-        now: widget.now,
-      );
+    widget.powerupData,
+    viewerUserId: widget.viewerUserId,
+    now: widget.now,
+  );
 
   int get _selfBuffCount => pocketWatchSelfBuffCount(
-        widget.powerupData,
-        viewerUserId: widget.viewerUserId,
-        now: widget.now,
-      );
+    widget.powerupData,
+    viewerUserId: widget.viewerUserId,
+    now: widget.now,
+  );
 
   String _rivalName(String? userId) {
     if (userId == null) return 'a rival';
     for (final p in widget.participants) {
       if (p['userId'] == userId) {
         final name = p['displayName'];
-        if (name is String && name.trim().isNotEmpty) return atName(name.trim());
+        if (name is String && name.trim().isNotEmpty) {
+          return atName(name.trim());
+        }
       }
     }
     return 'a rival';
@@ -230,8 +237,8 @@ class _PocketWatchSheetState extends State<PocketWatchSheet> {
     final targets = _targets;
     final selfCount = _selfBuffCount;
     final activeCount = _mode == _Mode.buffs ? selfCount : targets.length;
-    final canConfirm = activeCount > 0 &&
-        (_mode == _Mode.buffs || _selectedEffectId != null);
+    final canConfirm =
+        activeCount > 0 && (_mode == _Mode.buffs || _selectedEffectId != null);
 
     return SafeArea(
       child: Padding(
@@ -251,7 +258,10 @@ class _PocketWatchSheetState extends State<PocketWatchSheet> {
                 const SizedBox(width: 6),
                 Text(
                   PowerupCopy.nameFor('POCKET_WATCH'),
-                  style: PixelText.title(size: 18, color: AppColors.textDark),
+                  style: PixelText.title(
+                    size: 18,
+                    color: AppColors.of(context).textDark,
+                  ),
                 ),
               ],
             ),
@@ -264,6 +274,21 @@ class _PocketWatchSheetState extends State<PocketWatchSheet> {
               _buildDebuffsPane(targets),
             const SizedBox(height: 14),
             ..._buildTierButtons(canConfirm),
+            if (widget.onDiscard != null) ...[
+              const SizedBox(height: 8),
+              PillButton(
+                key: const Key('pocket-watch-discard'),
+                label: 'DISCARD',
+                variant: PillButtonVariant.accent,
+                fontSize: 13,
+                fullWidth: true,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 10,
+                ),
+                onPressed: widget.onDiscard,
+              ),
+            ],
           ],
         ),
       ),
@@ -287,10 +312,14 @@ class _PocketWatchSheetState extends State<PocketWatchSheet> {
             padding: const EdgeInsets.symmetric(vertical: 9),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: selected ? AppColors.pillGold : Colors.transparent,
+              color: selected
+                  ? AppColors.of(context).pillGold
+                  : Colors.transparent,
               borderRadius: BorderRadius.circular(9),
               border: Border.all(
-                color: selected ? AppColors.pillGoldShadow : Colors.transparent,
+                color: selected
+                    ? AppColors.of(context).pillGoldShadow
+                    : Colors.transparent,
                 width: 2,
               ),
             ),
@@ -301,7 +330,9 @@ class _PocketWatchSheetState extends State<PocketWatchSheet> {
                   label,
                   style: PixelText.title(
                     size: 12,
-                    color: selected ? AppColors.textDark : AppColors.textMid,
+                    color: selected
+                        ? AppColors.of(context).textDark
+                        : AppColors.of(context).textMid,
                   ),
                 ),
                 const SizedBox(width: 5),
@@ -312,8 +343,8 @@ class _PocketWatchSheetState extends State<PocketWatchSheet> {
                   style: PixelText.title(
                     size: 12,
                     color: selected
-                        ? AppColors.textDark
-                        : AppColors.textMid.withValues(alpha: 0.75),
+                        ? AppColors.of(context).textDark
+                        : AppColors.of(context).textMid.withValues(alpha: 0.75),
                   ),
                 ),
               ],
@@ -326,7 +357,7 @@ class _PocketWatchSheetState extends State<PocketWatchSheet> {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: AppColors.parchmentDark,
+        color: AppColors.of(context).parchmentDark,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -350,7 +381,10 @@ class _PocketWatchSheetState extends State<PocketWatchSheet> {
           Text(
             'MY BUFFS',
             textAlign: TextAlign.center,
-            style: PixelText.title(size: 13, color: AppColors.textMid),
+            style: PixelText.title(
+              size: 13,
+              color: AppColors.of(context).textMid,
+            ),
           ),
           const SizedBox(height: 6),
           _buffsBody(count),
@@ -366,14 +400,14 @@ class _PocketWatchSheetState extends State<PocketWatchSheet> {
         key: const Key('pocket-watch-buffs-empty'),
         'No timed buffs to extend right now.',
         textAlign: TextAlign.center,
-        style: PixelText.body(size: 13, color: AppColors.textMid),
+        style: PixelText.body(size: 13, color: AppColors.of(context).textMid),
       );
     }
     return Text(
       'Extends all $count active timed '
       '${count == 1 ? 'buff' : 'buffs'} on you.',
       textAlign: TextAlign.center,
-      style: PixelText.body(size: 13, color: AppColors.textMid),
+      style: PixelText.body(size: 13, color: AppColors.of(context).textMid),
     );
   }
 
@@ -383,7 +417,7 @@ class _PocketWatchSheetState extends State<PocketWatchSheet> {
         key: const Key('pocket-watch-debuffs-empty'),
         "You haven't put any timed effects on a rival yet.",
         textAlign: TextAlign.center,
-        style: PixelText.body(size: 13, color: AppColors.textMid),
+        style: PixelText.body(size: 13, color: AppColors.of(context).textMid),
       );
     }
 
@@ -393,7 +427,7 @@ class _PocketWatchSheetState extends State<PocketWatchSheet> {
         Text(
           'Extends ONE effect you chose.',
           textAlign: TextAlign.center,
-          style: PixelText.body(size: 13, color: AppColors.textMid),
+          style: PixelText.body(size: 13, color: AppColors.of(context).textMid),
         ),
         const SizedBox(height: 8),
         ConstrainedBox(
@@ -419,10 +453,14 @@ class _PocketWatchSheetState extends State<PocketWatchSheet> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: selected ? AppColors.pillGold : AppColors.parchmentDark,
+            color: selected
+                ? AppColors.of(context).pillGold
+                : AppColors.of(context).parchmentDark,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: selected ? AppColors.pillGoldShadow : Colors.transparent,
+              color: selected
+                  ? AppColors.of(context).pillGoldShadow
+                  : Colors.transparent,
               width: 2,
             ),
           ),
@@ -438,12 +476,15 @@ class _PocketWatchSheetState extends State<PocketWatchSheet> {
                       PowerupCopy.nameFor(effect.type),
                       style: PixelText.title(
                         size: 13,
-                        color: AppColors.textDark,
+                        color: AppColors.of(context).textDark,
                       ),
                     ),
                     Text(
                       'on ${_rivalName(effect.targetUserId)}',
-                      style: PixelText.body(size: 11, color: AppColors.textMid),
+                      style: PixelText.body(
+                        size: 11,
+                        color: AppColors.of(context).textMid,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -453,7 +494,10 @@ class _PocketWatchSheetState extends State<PocketWatchSheet> {
               const SizedBox(width: 8),
               Text(
                 _remainingLabel(effect.expiresAt),
-                style: PixelText.body(size: 11, color: AppColors.textMid),
+                style: PixelText.body(
+                  size: 11,
+                  color: AppColors.of(context).textMid,
+                ),
               ),
             ],
           ),

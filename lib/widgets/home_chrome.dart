@@ -1,24 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-abstract final class HomeColors {
-  static const ink = Color(0xFF213128);
-  static const inkSoft = Color(0xFF345345);
-  static const surface = Color(0xFFFFFBF5);
-  static const surfaceMuted = Color(0xFFF3EBDD);
-  static const line = Color(0xFF213128);
-  static const lineSoft = Color(0xFFD0C5B4);
-  static const sage = Color(0xFF4F8A6A);
-  static const sageDeep = Color(0xFF2E5D47);
-  static const clay = Color(0xFFD47C52);
-  static const gold = Color(0xFFECC86A);
-  static const cream = Color(0xFFF8F2E7);
-  static const muted = Color(0xFF66796F);
-  static const success = Color(0xFF2F7A49);
-}
+import '../styles.dart';
 
 abstract final class HomeText {
-  static TextStyle display({double size = 34, Color color = HomeColors.ink}) {
+  static TextStyle display({
+    double size = 34,
+    Color color = AppColors.textDark,
+  }) {
     return GoogleFonts.spaceGrotesk(
       fontSize: size,
       height: 1.0,
@@ -28,7 +17,7 @@ abstract final class HomeText {
     );
   }
 
-  static TextStyle title({double size = 20, Color color = HomeColors.ink}) {
+  static TextStyle title({double size = 20, Color color = AppColors.textDark}) {
     return GoogleFonts.spaceGrotesk(
       fontSize: size,
       height: 1.08,
@@ -40,7 +29,7 @@ abstract final class HomeText {
 
   static TextStyle body({
     double size = 14,
-    Color color = HomeColors.ink,
+    Color color = AppColors.textDark,
     FontWeight weight = FontWeight.w600,
     double height = 1.35,
   }) {
@@ -52,7 +41,7 @@ abstract final class HomeText {
     );
   }
 
-  static TextStyle label({double size = 12, Color color = HomeColors.muted}) {
+  static TextStyle label({double size = 12, Color color = AppColors.textMid}) {
     return GoogleFonts.dmSans(
       fontSize: size,
       height: 1.0,
@@ -68,29 +57,33 @@ class HomePanel extends StatelessWidget {
     super.key,
     required this.child,
     this.padding = const EdgeInsets.fromLTRB(22, 20, 22, 20),
-    this.backgroundColor = HomeColors.surface,
-    this.borderColor = HomeColors.lineSoft,
+    this.backgroundColor,
+    this.borderColor,
     this.radius = 8,
   });
 
   final Widget child;
   final EdgeInsetsGeometry padding;
-  final Color backgroundColor;
-  final Color borderColor;
+  final Color? backgroundColor;
+  final Color? borderColor;
   final double radius;
 
   @override
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: backgroundColor,
+        color: backgroundColor ?? AppColors.of(context).surface,
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: borderColor, width: 2),
+        border: Border.all(
+          color: borderColor ?? AppColors.of(context).lineSoft,
+          width: 2,
+        ),
         boxShadow: radius == 0
             ? null
             : [
                 BoxShadow(
-                  color: borderColor.withValues(alpha: 0.22),
+                  color: (borderColor ?? AppColors.of(context).lineSoft)
+                      .withValues(alpha: 0.22),
                   blurRadius: 0,
                   offset: const Offset(4, 4),
                 ),
@@ -109,24 +102,27 @@ class HomeInsetPanel extends StatelessWidget {
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(14),
-    this.backgroundColor = HomeColors.surfaceMuted,
-    this.borderColor = HomeColors.lineSoft,
+    this.backgroundColor,
+    this.borderColor,
     this.radius = 8,
   });
 
   final Widget child;
   final EdgeInsetsGeometry padding;
-  final Color backgroundColor;
-  final Color borderColor;
+  final Color? backgroundColor;
+  final Color? borderColor;
   final double radius;
 
   @override
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: backgroundColor,
+        color: backgroundColor ?? AppColors.of(context).surfaceMuted,
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: borderColor, width: 2),
+        border: Border.all(
+          color: borderColor ?? AppColors.of(context).lineSoft,
+          width: 2,
+        ),
       ),
       child: Padding(padding: padding, child: child),
     );
@@ -138,8 +134,8 @@ class HomePill extends StatelessWidget {
     super.key,
     required this.label,
     this.icon,
-    this.backgroundColor = HomeColors.surfaceMuted,
-    this.foregroundColor = HomeColors.ink,
+    this.backgroundColor,
+    this.foregroundColor,
     this.padding = const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
     this.fullWidth = false,
     this.mainAxisAlignment = MainAxisAlignment.start,
@@ -147,8 +143,8 @@ class HomePill extends StatelessWidget {
 
   final String label;
   final IconData? icon;
-  final Color backgroundColor;
-  final Color foregroundColor;
+  final Color? backgroundColor;
+  final Color? foregroundColor;
   final EdgeInsetsGeometry padding;
   final bool fullWidth;
   final MainAxisAlignment mainAxisAlignment;
@@ -157,10 +153,12 @@ class HomePill extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: backgroundColor,
+        color: backgroundColor ?? AppColors.of(context).surfaceMuted,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: foregroundColor.withValues(alpha: 0.14),
+          color: (foregroundColor ?? AppColors.of(context).ink).withValues(
+            alpha: 0.14,
+          ),
           width: 2,
         ),
       ),
@@ -171,7 +169,11 @@ class HomePill extends StatelessWidget {
           mainAxisAlignment: mainAxisAlignment,
           children: [
             if (icon != null) ...[
-              Icon(icon, size: 14, color: foregroundColor),
+              Icon(
+                icon,
+                size: 14,
+                color: foregroundColor ?? AppColors.of(context).ink,
+              ),
               const SizedBox(width: 6),
             ],
             Flexible(
@@ -179,7 +181,10 @@ class HomePill extends StatelessWidget {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: HomeText.label(size: 10, color: foregroundColor),
+                style: HomeText.label(
+                  size: 10,
+                  color: foregroundColor ?? AppColors.of(context).ink,
+                ),
               ),
             ),
           ],
@@ -195,16 +200,16 @@ class HomePillButton extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.icon,
-    this.backgroundColor = HomeColors.surfaceMuted,
-    this.foregroundColor = HomeColors.ink,
+    this.backgroundColor,
+    this.foregroundColor,
     this.padding = const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
   });
 
   final String label;
   final VoidCallback? onPressed;
   final IconData? icon;
-  final Color backgroundColor;
-  final Color foregroundColor;
+  final Color? backgroundColor;
+  final Color? foregroundColor;
   final EdgeInsetsGeometry padding;
 
   @override
@@ -218,10 +223,11 @@ class HomePillButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
           child: Ink(
             decoration: BoxDecoration(
-              color: backgroundColor,
+              color: backgroundColor ?? AppColors.of(context).surfaceMuted,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: foregroundColor.withValues(alpha: 0.14),
+                color: (foregroundColor ?? AppColors.of(context).ink)
+                    .withValues(alpha: 0.14),
                 width: 2,
               ),
             ),
@@ -232,7 +238,11 @@ class HomePillButton extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   if (icon != null) ...[
-                    Icon(icon, size: 14, color: foregroundColor),
+                    Icon(
+                      icon,
+                      size: 14,
+                      color: foregroundColor ?? AppColors.of(context).ink,
+                    ),
                     const SizedBox(width: 6),
                   ],
                   Flexible(
@@ -240,7 +250,10 @@ class HomePillButton extends StatelessWidget {
                       label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: HomeText.label(size: 10, color: foregroundColor),
+                      style: HomeText.label(
+                        size: 10,
+                        color: foregroundColor ?? AppColors.of(context).ink,
+                      ),
                     ),
                   ),
                 ],

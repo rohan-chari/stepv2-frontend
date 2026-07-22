@@ -38,21 +38,21 @@ class _PillButtonState extends State<PillButton> {
     switch (widget.variant) {
       case PillButtonVariant.primary:
         return (
-          AppColors.pillGreen,
-          AppColors.pillGreenDark,
-          AppColors.pillGreenShadow,
+          AppColors.of(context).pillGreen,
+          AppColors.of(context).pillGreenDark,
+          AppColors.of(context).pillGreenShadow,
         );
       case PillButtonVariant.secondary:
         return (
-          AppColors.pillGold,
-          AppColors.pillGoldDark,
-          AppColors.pillGoldShadow,
+          AppColors.of(context).pillGold,
+          AppColors.of(context).pillGoldDark,
+          AppColors.of(context).pillGoldShadow,
         );
       case PillButtonVariant.accent:
         return (
-          AppColors.pillTerra,
-          AppColors.pillTerraDark,
-          AppColors.pillTerraShadow,
+          AppColors.of(context).pillTerra,
+          AppColors.of(context).pillTerraDark,
+          AppColors.of(context).pillTerraShadow,
         );
     }
   }
@@ -68,9 +68,9 @@ class _PillButtonState extends State<PillButton> {
 
     final bool darkText = widget.variant == PillButtonVariant.secondary;
     final textColor = _enabled
-        ? (darkText ? AppColors.textDark : Colors.white)
+        ? (darkText ? AppColors.of(context).textDark : Colors.white)
         : (darkText
-              ? AppColors.textDark.withValues(alpha: 0.5)
+              ? AppColors.of(context).textDark.withValues(alpha: 0.5)
               : Colors.white.withValues(alpha: 0.7));
 
     final child = GestureDetector(

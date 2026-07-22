@@ -118,8 +118,21 @@ class _GoalTrackState extends State<GoalTrack>
                   return Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      const Positioned.fill(
-                        child: CustomPaint(painter: _GoalTrackPainter()),
+                      Positioned.fill(
+                        child: CustomPaint(
+                          painter: _GoalTrackPainter(
+                            grassColors: [
+                              AppColors.of(context).grassBright,
+                              AppColors.of(context).grassMid,
+                              AppColors.of(context).grassDark,
+                            ],
+                            treeColor: AppColors.of(context).grassDark,
+                            curbColor: AppColors.of(context).accent,
+                            lightColor: AppColors.of(context).textLight,
+                            darkColor: AppColors.of(context).woodDarker,
+                            roadColor: AppColors.of(context).pinMetal,
+                          ),
+                        ),
                       ),
                       for (final layout in layouts)
                         Positioned(
@@ -174,7 +187,7 @@ class _GoalTrackState extends State<GoalTrack>
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: AppColors.woodDark,
+            color: AppColors.of(context).woodDark,
             borderRadius: BorderRadius.circular(6),
             boxShadow: const [
               BoxShadow(
@@ -186,7 +199,10 @@ class _GoalTrackState extends State<GoalTrack>
           ),
           child: Text(
             label,
-            style: PixelText.title(size: 11, color: AppColors.parchment),
+            style: PixelText.title(
+              size: 11,
+              color: AppColors.of(context).textLight,
+            ),
           ),
         ),
       ),
@@ -216,7 +232,10 @@ class _GoalTrackState extends State<GoalTrack>
                 runner.isStealthed
                     ? '???'
                     : (runner.isUser ? 'You' : atName(runner.name)),
-                style: PixelText.body(size: 12, color: AppColors.textMid),
+                style: PixelText.body(
+                  size: 12,
+                  color: AppColors.of(context).textMid,
+                ),
               ),
             ],
           ),
@@ -353,7 +372,21 @@ class _GoalTrackPainter extends CustomPainter {
   static const double _friendAvatarRadius = 11.0;
   static const double _avatarBorder = 2.5;
 
-  const _GoalTrackPainter();
+  const _GoalTrackPainter({
+    required this.grassColors,
+    required this.treeColor,
+    required this.curbColor,
+    required this.lightColor,
+    required this.darkColor,
+    required this.roadColor,
+  });
+
+  final List<Color> grassColors;
+  final Color treeColor;
+  final Color curbColor;
+  final Color lightColor;
+  final Color darkColor;
+  final Color roadColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -370,10 +403,10 @@ class _GoalTrackPainter extends CustomPainter {
   void _drawGrass(Canvas canvas, Size size) {
     // Bright green grass background
     final paint = Paint()
-      ..shader = const LinearGradient(
+      ..shader = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [Color(0xFF8BC34A), Color(0xFF7CB342), Color(0xFF689F38)],
+        colors: grassColors,
       ).createShader(Offset.zero & size);
 
     canvas.drawRRect(
@@ -387,8 +420,7 @@ class _GoalTrackPainter extends CustomPainter {
 
   void _drawTrees(Canvas canvas, Size size) {
     final rng = math.Random(77);
-    final treePaint = Paint()
-      ..color = AppColors.grassDark.withValues(alpha: 0.5);
+    final treePaint = Paint()..color = treeColor.withValues(alpha: 0.5);
 
     // Scatter some tree blobs
     for (int i = 0; i < 8; i++) {
@@ -409,12 +441,12 @@ class _GoalTrackPainter extends CustomPainter {
     final totalLength = metrics.length;
     const stripeLen = 12.0;
     final redPaint = Paint()
-      ..color = AppColors.accent
+      ..color = curbColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = _trackWidth + 12
       ..strokeCap = StrokeCap.round;
     final whitePaint = Paint()
-      ..color = Colors.white
+      ..color = lightColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = _trackWidth + 12
       ..strokeCap = StrokeCap.round;
@@ -441,7 +473,7 @@ class _GoalTrackPainter extends CustomPainter {
     canvas.drawPath(
       trackPath,
       Paint()
-        ..color = const Color(0xFF9E9E9E)
+        ..color = roadColor
         ..style = PaintingStyle.stroke
         ..strokeWidth = _trackWidth
         ..strokeCap = StrokeCap.round
@@ -453,7 +485,7 @@ class _GoalTrackPainter extends CustomPainter {
     final metrics = trackPath.computeMetrics().first;
     final totalLength = metrics.length;
     final dashPaint = Paint()
-      ..color = Colors.white
+      ..color = lightColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.5
       ..strokeCap = StrokeCap.round;
@@ -497,7 +529,7 @@ class _GoalTrackPainter extends CustomPainter {
             checkerSize,
             checkerSize,
           ),
-          Paint()..color = isBlack ? Colors.black : Colors.white,
+          Paint()..color = isBlack ? darkColor : lightColor,
         );
       }
     }
@@ -506,7 +538,15 @@ class _GoalTrackPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _GoalTrackPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _GoalTrackPainter oldDelegate) =>
+      oldDelegate.grassColors[0] != grassColors[0] ||
+      oldDelegate.grassColors[1] != grassColors[1] ||
+      oldDelegate.grassColors[2] != grassColors[2] ||
+      oldDelegate.treeColor != treeColor ||
+      oldDelegate.curbColor != curbColor ||
+      oldDelegate.lightColor != lightColor ||
+      oldDelegate.darkColor != darkColor ||
+      oldDelegate.roadColor != roadColor;
 }
 
 Path _buildGoalTrackPath(Size size) {

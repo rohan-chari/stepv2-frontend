@@ -8,16 +8,16 @@ class ArcadePageBackground extends StatelessWidget {
     super.key,
     this.child,
     this.headerHeight = 132,
-    this.backgroundColor = AppColors.parchmentLight,
-    this.headerColor = AppColors.accent,
+    this.backgroundColor,
+    this.headerColor,
     this.showHeader = true,
     this.headerChecker = true,
   });
 
   final Widget? child;
   final double headerHeight;
-  final Color backgroundColor;
-  final Color headerColor;
+  final Color? backgroundColor;
+  final Color? headerColor;
   final bool showHeader;
   final bool headerChecker;
 
@@ -26,11 +26,17 @@ class ArcadePageBackground extends StatelessWidget {
     final topInset = MediaQuery.of(context).padding.top;
 
     return ColoredBox(
-      color: backgroundColor,
+      color: backgroundColor ?? AppColors.of(context).parchmentLight,
       child: Stack(
         children: [
-          const Positioned.fill(
-            child: CustomPaint(painter: PixelSurfacePainter()),
+          Positioned.fill(
+            child: CustomPaint(
+              painter: PixelSurfacePainter(
+                dotColor: AppColors.of(
+                  context,
+                ).parchmentDark.withValues(alpha: 0.32),
+              ),
+            ),
           ),
           if (showHeader)
             Positioned(
@@ -39,7 +45,7 @@ class ArcadePageBackground extends StatelessWidget {
               right: 0,
               height: topInset + headerHeight,
               child: ColoredBox(
-                color: headerColor,
+                color: headerColor ?? AppColors.of(context).accent,
                 child: headerChecker
                     ? const CustomPaint(painter: ArcadeCheckerPainter())
                     : null,

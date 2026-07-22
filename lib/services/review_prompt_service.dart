@@ -65,7 +65,8 @@ class ReviewPromptService {
     if (_askedThisSession) return;
     if (prefs.getBool(_keyAnswered) ?? false) return;
     if (happyMoments < _minHappyMoments) return;
-    if (now - firstSeen < _minDaysBeforeFirstAsk * Duration.millisecondsPerDay) {
+    if (now - firstSeen <
+        _minDaysBeforeFirstAsk * Duration.millisecondsPerDay) {
       return;
     }
     final askCount = prefs.getInt(_keyAskCount) ?? 0;
@@ -92,9 +93,9 @@ class ReviewPromptService {
     if (enjoying) {
       await _requestNativeReview();
     } else if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Thanks for the feedback!')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Thanks for the feedback!')));
     }
   }
 }
@@ -111,9 +112,9 @@ class _EnjoyingBaraDialog extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: 380),
         child: GameContainer(
           padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
-          frameColor: AppColors.accent,
-          surfaceColor: AppColors.parchmentLight,
-          glowColor: AppColors.coinMid,
+          frameColor: AppColors.of(context).accent,
+          surfaceColor: AppColors.of(context).parchmentLight,
+          glowColor: AppColors.of(context).coinMid,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
@@ -121,7 +122,10 @@ class _EnjoyingBaraDialog extends StatelessWidget {
               Text(
                 'ENJOYING BARA?',
                 textAlign: TextAlign.center,
-                style: HomeText.display(size: 24, color: HomeColors.ink),
+                style: HomeText.display(
+                  size: 24,
+                  color: AppColors.of(context).ink,
+                ),
               ),
               const SizedBox(height: 6),
               Text(
@@ -129,7 +133,7 @@ class _EnjoyingBaraDialog extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: HomeText.body(
                   size: 13,
-                  color: HomeColors.muted,
+                  color: AppColors.of(context).muted,
                   weight: FontWeight.w700,
                 ),
               ),

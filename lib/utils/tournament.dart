@@ -143,7 +143,8 @@ abstract final class Tournament {
 
   static bool isPublic(Map<String, dynamic> t) => t['isPublic'] == true;
 
-  static String? shareToken(Map<String, dynamic> t) => t['shareToken'] as String?;
+  static String? shareToken(Map<String, dynamic> t) =>
+      t['shareToken'] as String?;
 
   /// 0 = not started; 1..totalRounds while active.
   static int currentRound(Map<String, dynamic> t) =>
@@ -315,9 +316,10 @@ abstract final class Tournament {
   static List<Map<String, dynamic>> participants(Map<String, dynamic> t) {
     final raw = t['participants'];
     if (raw is List) {
-      return raw.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList(
-        growable: false,
-      );
+      return raw
+          .whereType<Map>()
+          .map((e) => e.cast<String, dynamic>())
+          .toList(growable: false);
     }
     return const [];
   }
@@ -326,9 +328,10 @@ abstract final class Tournament {
   static List<Map<String, dynamic>> rounds(Map<String, dynamic> t) {
     final raw = t['rounds'];
     if (raw is List) {
-      return raw.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList(
-        growable: false,
-      );
+      return raw
+          .whereType<Map>()
+          .map((e) => e.cast<String, dynamic>())
+          .toList(growable: false);
     }
     return const [];
   }
@@ -337,20 +340,24 @@ abstract final class Tournament {
   static List<Map<String, dynamic>> matchups(Map<String, dynamic> round) {
     final raw = round['matchups'];
     if (raw is List) {
-      return raw.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList(
-        growable: false,
-      );
+      return raw
+          .whereType<Map>()
+          .map((e) => e.cast<String, dynamic>())
+          .toList(growable: false);
     }
     return const [];
   }
 
   /// The players within a matchup map (may be empty for future rounds).
-  static List<Map<String, dynamic>> matchupPlayers(Map<String, dynamic> matchup) {
+  static List<Map<String, dynamic>> matchupPlayers(
+    Map<String, dynamic> matchup,
+  ) {
     final raw = matchup['players'];
     if (raw is List) {
-      return raw.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList(
-        growable: false,
-      );
+      return raw
+          .whereType<Map>()
+          .map((e) => e.cast<String, dynamic>())
+          .toList(growable: false);
     }
     return const [];
   }
@@ -435,9 +442,7 @@ abstract final class Tournament {
     for (final round in rounds(t)) {
       final roundNo = (round['round'] as num?)?.toInt();
       for (final m in matchups(round)) {
-        final inIt = matchupPlayers(
-          m,
-        ).any((p) => p['userId'] == userId);
+        final inIt = matchupPlayers(m).any((p) => p['userId'] == userId);
         if (!inIt) continue;
         // Prefer the current round's matchup (my live one).
         if (roundNo == cur) return m;

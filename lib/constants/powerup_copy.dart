@@ -89,12 +89,12 @@ class PowerupCopyEntry {
   final List<String> upgradeTierLabels;
 
   Map<String, dynamic> toJson() => {
-        'type': type,
-        'name': name,
-        'description': description,
-        'shortDescription': shortDescription,
-        'upgradeTierLabels': upgradeTierLabels,
-      };
+    'type': type,
+    'name': name,
+    'description': description,
+    'shortDescription': shortDescription,
+    'upgradeTierLabels': upgradeTierLabels,
+  };
 }
 
 /// A fully validated catalog snapshot. Constructed only through
@@ -159,9 +159,9 @@ class PowerupCopySnapshot {
   }
 
   Map<String, dynamic> toJson() => {
-        'version': version,
-        'powerups': [for (final e in entries.values) e.toJson()],
-      };
+    'version': version,
+    'powerups': [for (final e in entries.values) e.toJson()],
+  };
 }
 
 String? _trimmedOrNull(dynamic value) {
@@ -207,7 +207,9 @@ abstract final class PowerupCopy {
   static String descriptionFor(String? type) {
     if (type == null || type.isEmpty) return '';
     final key = type.toUpperCase();
-    return _resolve(key, (e) => e.description) ?? _bundledDescriptions[key] ?? '';
+    return _resolve(key, (e) => e.description) ??
+        _bundledDescriptions[key] ??
+        '';
   }
 
   /// Short effect-rail label, or null when this type has none.
@@ -252,10 +254,7 @@ abstract final class PowerupCopy {
   /// Levels 1 then 2 of the resolution order, for a single string field.
   /// Only a present, non-empty value wins; otherwise we fall through so a
   /// snapshot that simply omits a type can't blank out bundled copy.
-  static String? _resolve(
-    String key,
-    String? Function(PowerupCopyEntry) pick,
-  ) {
+  static String? _resolve(String key, String? Function(PowerupCopyEntry) pick) {
     for (final snapshot in [_memory, _persisted]) {
       final entry = snapshot?.entries[key];
       if (entry == null) continue;

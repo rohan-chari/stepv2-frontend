@@ -13,6 +13,7 @@ import '../services/race_chat_service.dart';
 import '../services/race_feed_service.dart';
 import '../styles.dart';
 import '../utils/at_name.dart';
+import '../utils/powerup_error_copy.dart';
 import '../utils/race_display.dart';
 import '../utils/race_participant_display.dart';
 import '../utils/share_helper.dart';
@@ -196,6 +197,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     });
     return out.isEmpty ? null : out;
   }
+
   // Active global step-multiplier event (BeReal-style 2x window), if any. Read
   // defensively from getRaceProgress: an older backend omits this field, which
   // simply means no banner. { active: true, multiplier, endsAt }.
@@ -410,9 +412,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           insetPadding: const EdgeInsets.symmetric(horizontal: 24),
           child: GameContainer(
             padding: const EdgeInsets.all(28),
-            frameColor: AppColors.accent,
-            surfaceColor: AppColors.parchmentLight,
-            glowColor: AppColors.coinMid,
+            frameColor: AppColors.of(context).accent,
+            surfaceColor: AppColors.of(context).parchmentLight,
+            glowColor: AppColors.of(context).coinMid,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -423,7 +425,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                   textAlign: TextAlign.center,
                   style: PixelText.title(
                     size: claimed ? 28 : 22,
-                    color: AppColors.textDark,
+                    color: AppColors.of(context).textDark,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -432,7 +434,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                       ? 'Starter reward claimed.'
                       : 'A little fuel for your Bara debut.',
                   textAlign: TextAlign.center,
-                  style: PixelText.body(size: 14, color: AppColors.textMid),
+                  style: PixelText.body(
+                    size: 14,
+                    color: AppColors.of(context).textMid,
+                  ),
                 ),
                 const SizedBox(height: 20),
                 PillButton(
@@ -829,7 +834,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             children: [
               Text(
                 '$buyInAmount GOLD BUY-IN',
-                style: PixelText.title(size: 18, color: AppColors.textDark),
+                style: PixelText.title(
+                  size: 18,
+                  color: AppColors.of(context).textDark,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 10),
@@ -837,7 +845,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 activeRace
                     ? 'Your $buyInAmount gold goes straight into the live pot.'
                     : 'Your $buyInAmount gold will be held until the race starts.',
-                style: PixelText.body(size: 14, color: AppColors.textMid),
+                style: PixelText.body(
+                  size: 14,
+                  color: AppColors.of(context).textMid,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 6),
@@ -845,7 +856,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 activeRace
                     ? 'This race is already underway. You will need to catch up when you join.'
                     : 'You can only get this gold back if the race is cancelled.',
-                style: PixelText.body(size: 13, color: AppColors.textMid),
+                style: PixelText.body(
+                  size: 13,
+                  color: AppColors.of(context).textMid,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
@@ -1014,7 +1028,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             children: [
               Text(
                 'FORFEIT THE RACE?',
-                style: PixelText.title(size: 18, color: AppColors.textDark),
+                style: PixelText.title(
+                  size: 18,
+                  color: AppColors.of(context).textDark,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 14),
@@ -1091,12 +1108,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 16, color: AppColors.textMid),
+        Icon(icon, size: 16, color: AppColors.of(context).textMid),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             text,
-            style: PixelText.body(size: 12.5, color: AppColors.textMid),
+            style: PixelText.body(
+              size: 12.5,
+              color: AppColors.of(context).textMid,
+            ),
           ),
         ),
       ],
@@ -1116,14 +1136,20 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             children: [
               Text(
                 'LEAVE THE LOBBY?',
-                style: PixelText.title(size: 18, color: AppColors.textDark),
+                style: PixelText.title(
+                  size: 18,
+                  color: AppColors.of(context).textDark,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
               Text(
                 'Your buy-in hold is released and your peg opens up. '
                 'You can rejoin any time before the race starts.',
-                style: PixelText.body(size: 14, color: AppColors.textMid),
+                style: PixelText.body(
+                  size: 14,
+                  color: AppColors.of(context).textMid,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 18),
@@ -1215,12 +1241,18 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             children: [
               Text(
                 'CANCEL RACE',
-                style: PixelText.title(size: 18, color: AppColors.textDark),
+                style: PixelText.title(
+                  size: 18,
+                  color: AppColors.of(context).textDark,
+                ),
               ),
               const SizedBox(height: 12),
               Text(
                 'This cannot be undone. Are you sure you want to cancel this race?',
-                style: PixelText.body(size: 14, color: AppColors.textMid),
+                style: PixelText.body(
+                  size: 14,
+                  color: AppColors.of(context).textMid,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
@@ -1474,7 +1506,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       _loadProgress();
     } catch (e) {
       restoreInventory();
-      if (mounted) showErrorToast(context, e.toString());
+      // B3 — map redeem/use rejection codes to friendly copy; unknown/absent
+      // codes fall back to the server message (old-backend compat).
+      if (mounted) showErrorToast(context, powerupUseErrorCopy(e));
     } finally {
       if (mounted) setState(() => _isActing = false);
     }
@@ -1588,7 +1622,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       }
       if (mounted) setState(() => _globalPowerupInventory = updated);
     } catch (e) {
-      if (mounted) showErrorToast(context, e.toString());
+      // B3 — the redeem pre-flight can now reject (SIGNAL_JAMMED /
+      // RAINSTORM_ACTIVE / NO_ELIGIBLE_TARGETS) BEFORE inventory is spent, so
+      // the item stays in the global stash. Friendly copy, server fallback.
+      if (mounted) showErrorToast(context, powerupUseErrorCopy(e));
       if (mounted) setState(() => _isActing = false);
       return;
     } finally {
@@ -1685,7 +1722,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   ) async {
     return showModalBottomSheet<String>(
       context: context,
-      backgroundColor: AppColors.parchment,
+      backgroundColor: AppColors.of(context).parchment,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -1717,7 +1754,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                           PowerupCopy.nameFor(powerupType),
                           style: PixelText.title(
                             size: 18,
-                            color: AppColors.textDark,
+                            color: AppColors.of(context).textDark,
                           ),
                         ),
                       ],
@@ -1727,11 +1764,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                       'CHOOSE A TARGET',
                       style: PixelText.title(
                         size: 12,
-                        color: AppColors.textMid,
+                        color: AppColors.of(context).textMid,
                       ),
                     ),
                     const SizedBox(height: 12),
-                    Container(height: 2, color: AppColors.parchmentDark),
+                    Container(
+                      height: 2,
+                      color: AppColors.of(context).parchmentDark,
+                    ),
                   ],
                 ),
               ),
@@ -1754,7 +1794,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                           vertical: 12,
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.parchmentDark,
+                          color: AppColors.of(context).parchmentDark,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
@@ -1770,7 +1810,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                                 atName(t['displayName'] as String? ?? '???'),
                                 style: PixelText.body(
                                   size: 14,
-                                  color: AppColors.textDark,
+                                  color: AppColors.of(context).textDark,
                                 ),
                               ),
                             ),
@@ -1779,7 +1819,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                                 '${_formatSteps((t['totalSteps'] as num).toInt())} steps',
                                 style: PixelText.number(
                                   size: 12,
-                                  color: AppColors.textMid,
+                                  color: AppColors.of(context).textMid,
                                 ),
                               ),
                           ],
@@ -1793,7 +1833,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
                 child: Column(
                   children: [
-                    Container(height: 2, color: AppColors.parchmentDark),
+                    Container(
+                      height: 2,
+                      color: AppColors.of(context).parchmentDark,
+                    ),
                     const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
@@ -1816,7 +1859,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   Future<String?> _showPineconeDirectionPicker() async {
     return showModalBottomSheet<String>(
       context: context,
-      backgroundColor: AppColors.parchment,
+      backgroundColor: AppColors.of(context).parchment,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -1830,7 +1873,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               children: [
                 Text(
                   'PINECONE TARGET',
-                  style: PixelText.title(size: 16, color: AppColors.textMid),
+                  style: PixelText.title(
+                    size: 16,
+                    color: AppColors.of(context).textMid,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -1873,7 +1919,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   ) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.parchment,
+      backgroundColor: AppColors.of(context).parchment,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -1905,6 +1951,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 targetEffectId: targetEffectId,
               );
             },
+            // B5 — parity with the generic sheet: discard is type-agnostic on
+            // the backend, so a Pocket Watch can be thrown away too. Matches the
+            // generic sheet's behavior: pop, then discard (no extra confirm).
+            onDiscard: () {
+              Navigator.of(ctx).pop();
+              _discardPowerup(powerup);
+            },
           ),
         );
       },
@@ -1928,7 +1981,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.parchment,
+      backgroundColor: AppColors.of(context).parchment,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -1951,7 +2004,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                           PowerupCopy.nameFor(type),
                           style: PixelText.title(
                             size: 18,
-                            color: AppColors.textDark,
+                            color: AppColors.of(context).textDark,
                           ),
                         ),
                       ],
@@ -1969,7 +2022,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: _rarityColors[rarity] ?? AppColors.textMid,
+                    color:
+                        _rarityColors[rarity] ?? AppColors.of(context).textMid,
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
@@ -1980,7 +2034,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 const SizedBox(height: 8),
                 Text(
                   PowerupCopy.descriptionFor(type),
-                  style: PixelText.body(size: 13, color: AppColors.textMid),
+                  style: PixelText.body(
+                    size: 13,
+                    color: AppColors.of(context).textMid,
+                  ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
@@ -2130,9 +2187,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       // so pushing into a race no longer flips back to the old parchment look.
       body: Stack(
         children: [
-          const Positioned.fill(
+          Positioned.fill(
             child: ColoredBox(
-              color: AppColors.roofLight,
+              color: AppColors.of(context).roofLight,
               child: CustomPaint(
                 painter: ArcadeCheckerPainter(drawBottomStripe: false),
               ),
@@ -2148,23 +2205,26 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                     horizontal: 16,
                     vertical: 8,
                   ),
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     // Opaque, so scrolled content can't show through the fixed
                     // header (guarded by race_detail_screen_header_test).
-                    color: AppColors.roofLight,
+                    color: AppColors.of(context).roofLight,
                     border: Border(
-                      bottom: BorderSide(color: AppColors.roofDark, width: 1),
+                      bottom: BorderSide(
+                        color: AppColors.of(context).roofDark,
+                        width: 1,
+                      ),
                     ),
                   ),
                   child: Row(
                     children: [
                       GestureDetector(
                         onTap: () => Navigator.of(context).pop(true),
-                        child: const Padding(
+                        child: Padding(
                           padding: EdgeInsets.all(8),
                           child: Icon(
                             Icons.arrow_back,
-                            color: AppColors.parchment,
+                            color: AppColors.of(context).textLight,
                             size: 24,
                           ),
                         ),
@@ -2178,7 +2238,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                           ),
                           style: PixelText.title(
                             size: 22,
-                            color: AppColors.parchment,
+                            color: AppColors.of(context).textLight,
                           ).copyWith(shadows: _headerTextShadows),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -2190,17 +2250,17 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                           child: Padding(
                             padding: const EdgeInsets.all(8),
                             child: _sharingRace
-                                ? const SizedBox(
+                                ? SizedBox(
                                     width: 24,
                                     height: 24,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
-                                      color: AppColors.parchment,
+                                      color: AppColors.of(context).textLight,
                                     ),
                                   )
-                                : const Icon(
+                                : Icon(
                                     Icons.ios_share,
-                                    color: AppColors.parchment,
+                                    color: AppColors.of(context).textLight,
                                     size: 24,
                                   ),
                           ),
@@ -2216,7 +2276,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                               _placementMuted
                                   ? Icons.notifications_off
                                   : Icons.notifications_active,
-                              color: AppColors.parchment,
+                              color: AppColors.of(context).textLight,
                               size: 24,
                             ),
                           ),
@@ -2232,11 +2292,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                               _race!['status'] == 'ACTIVE'))
                         GestureDetector(
                           onTap: _showRaceOptionsSheet,
-                          child: const Padding(
+                          child: Padding(
                             padding: EdgeInsets.all(8),
                             child: Icon(
                               Icons.more_horiz,
-                              color: AppColors.parchment,
+                              color: AppColors.of(context).textLight,
                               size: 24,
                             ),
                           ),
@@ -2247,9 +2307,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
                 Expanded(
                   child: _isLoading
-                      ? const Center(
+                      ? Center(
                           child: CircularProgressIndicator(
-                            color: AppColors.accent,
+                            color: AppColors.of(context).accent,
                           ),
                         )
                       : _race == null
@@ -2258,14 +2318,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                             'Failed to load race',
                             style: PixelText.body(
                               size: 14,
-                              color: AppColors.parchment,
+                              color: AppColors.of(context).textLight,
                             ),
                           ),
                         )
                       : RefreshIndicator(
                           onRefresh: _loadDetails,
-                          color: AppColors.accent,
-                          backgroundColor: AppColors.parchment,
+                          color: AppColors.of(context).accent,
+                          backgroundColor: AppColors.of(context).parchment,
                           child: SingleChildScrollView(
                             physics: const AlwaysScrollableScrollPhysics(),
                             padding: EdgeInsets.zero,
@@ -2357,8 +2417,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   // the sky — the race itself is the first thing on screen, home-hero style.
   // ---------------------------------------------------------------------------
 
-  static const _raceDayAsset = 'assets/images/race_day_course.png';
-
   Widget _buildRaceHero({
     required List<GoalTrackRunner> runners,
     List<Widget> chips = const [],
@@ -2369,7 +2427,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       children: [
         HomeCourseTrack(
           height: 286,
-          backdropAsset: _raceDayAsset,
+          backdropAsset: AppThemeAssets.of(context).raceDayCourse,
           frameless: true,
           runners: runners,
         ),
@@ -2402,7 +2460,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       key: key,
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
       decoration: BoxDecoration(
-        color: HomeColors.ink.withValues(alpha: 0.9),
+        color: AppColors.of(context).woodDarker.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: Colors.white.withValues(alpha: 0.18),
@@ -2427,7 +2485,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.timer_rounded, size: 16, color: AppColors.pillGold),
+          Icon(
+            Icons.timer_rounded,
+            size: 16,
+            color: AppColors.of(context).pillGold,
+          ),
           const SizedBox(width: 6),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2477,7 +2539,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               ),
               Text(
                 '$potCoins',
-                style: PixelText.title(size: 15, color: AppColors.pillGold),
+                style: PixelText.title(size: 15, color: Colors.white),
               ),
             ],
           ),
@@ -2499,7 +2561,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final payoutTiers = parsePayoutTiers(_race);
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.parchmentLight,
+      backgroundColor: AppColors.of(context).parchmentLight,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -2515,23 +2577,32 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: AppColors.woodMid,
+                    color: AppColors.of(ctx).woodMid,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
                 const SizedBox(height: 14),
                 Text(
                   'PRIZE POOL',
-                  style: PixelText.title(size: 16, color: AppColors.textMid),
+                  style: PixelText.title(
+                    size: 16,
+                    color: AppColors.of(ctx).textMid,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   '$potCoins',
-                  style: PixelText.number(size: 40, color: AppColors.coinDark),
+                  style: PixelText.number(
+                    size: 40,
+                    color: AppColors.of(ctx).coinDark,
+                  ),
                 ),
                 Text(
                   'gold',
-                  style: PixelText.body(size: 13, color: AppColors.textMid),
+                  style: PixelText.body(
+                    size: 13,
+                    color: AppColors.of(ctx).textMid,
+                  ),
                 ),
                 if (payoutTiers.isNotEmpty) ...[
                   const SizedBox(height: 16),
@@ -2540,6 +2611,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                     child: _buildPayoutBreakdown(
                       payoutTiers,
                       key: const Key('race-prize-pool-summary'),
+                      labelColor: AppColors.of(ctx).textMid,
+                      amountColor: AppColors.of(ctx).coinDark,
                     ),
                   ),
                 ],
@@ -2561,9 +2634,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             width: 6,
             height: 16,
             decoration: BoxDecoration(
-              color: AppColors.pillGold,
+              color: AppColors.of(context).pillGold,
               borderRadius: BorderRadius.circular(3),
-              border: Border.all(color: AppColors.pillGoldDark),
+              border: Border.all(color: AppColors.of(context).pillGoldDark),
             ),
           ),
           const SizedBox(width: 8),
@@ -2572,7 +2645,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               title,
               style: PixelText.title(
                 size: 16,
-                color: AppColors.parchment,
+                color: AppColors.of(context).textLight,
               ).copyWith(shadows: _headerTextShadows),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -2595,7 +2668,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       child: Container(
         width: double.infinity,
         padding: padding,
-        decoration: raceCardDecoration(),
+        decoration: raceCardDecoration(context),
         child: child,
       ),
     );
@@ -2625,7 +2698,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                   label: 'BUY-IN',
                   value: '$buyInAmount',
                   alignment: CrossAxisAlignment.center,
-                  valueColor: AppColors.coinDark,
+                  valueColor: AppColors.of(context).coinDark,
                 ),
               ),
               Expanded(
@@ -2633,7 +2706,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                   label: 'POT',
                   value: '$potCoins',
                   alignment: CrossAxisAlignment.center,
-                  valueColor: AppColors.coinDark,
+                  valueColor: AppColors.of(context).coinDark,
                 ),
               ),
             ],
@@ -2703,10 +2776,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.flag_rounded,
                       size: 16,
-                      color: AppColors.pillGold,
+                      color: AppColors.of(context).pillGold,
                     ),
                     const SizedBox(width: 6),
                     Text(
@@ -2754,10 +2827,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                       vertical: 10,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.parchmentDark,
+                      color: AppColors.of(context).parchmentDark,
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                        color: AppColors.parchmentBorder,
+                        color: AppColors.of(context).parchmentBorder,
                         width: 2,
                       ),
                     ),
@@ -2766,7 +2839,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                         Icon(
                           Icons.hourglass_top_rounded,
                           size: 18,
-                          color: AppColors.textMid.withValues(alpha: 0.8),
+                          color: AppColors.of(
+                            context,
+                          ).textMid.withValues(alpha: 0.8),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
@@ -2776,7 +2851,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                             'straight in.',
                             style: PixelText.body(
                               size: 12.5,
-                              color: AppColors.textMid,
+                              color: AppColors.of(context).textMid,
                             ),
                           ),
                         ),
@@ -2788,14 +2863,20 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                   Text(
                     'Tap an empty peg to pick your side and join!',
                     textAlign: TextAlign.center,
-                    style: PixelText.body(size: 13, color: AppColors.textMid),
+                    style: PixelText.body(
+                      size: 13,
+                      color: AppColors.of(context).textMid,
+                    ),
                   ),
                 ] else if (myStatus == 'ACCEPTED') ...[
                   const SizedBox(height: 12),
                   Text(
                     'Tap an empty peg on the other side to switch teams',
                     textAlign: TextAlign.center,
-                    style: PixelText.body(size: 12, color: AppColors.textMid),
+                    style: PixelText.body(
+                      size: 12,
+                      color: AppColors.of(context).textMid,
+                    ),
                   ),
                 ],
               ],
@@ -2806,8 +2887,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             'PARTICIPANTS',
             trailing: Pill(
               label: '$acceptedCount',
-              background: AppColors.parchmentDark,
-              foreground: AppColors.textMid,
+              background: AppColors.of(context).parchmentDark,
+              foreground: AppColors.of(context).textMid,
               fontSize: 12,
             ),
           ),
@@ -2879,10 +2960,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
             child: Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.pause_circle_filled_rounded,
                   size: 18,
-                  color: AppColors.error,
+                  color: AppColors.of(context).error,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -2893,7 +2974,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                         'START PAUSED — WAITING FOR EVEN TEAMS',
                         style: PixelText.title(
                           size: 12,
-                          color: AppColors.textDark,
+                          color: AppColors.of(context).textDark,
                         ),
                       ),
                       const SizedBox(height: 3),
@@ -2906,7 +2987,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                                   'the teams are even.',
                         style: PixelText.body(
                           size: 12,
-                          color: AppColors.textMid,
+                          color: AppColors.of(context).textMid,
                         ),
                       ),
                     ],
@@ -2926,7 +3007,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
             child: Row(
               children: [
-                Icon(Icons.schedule, size: 18, color: AppColors.pillGreenDark),
+                Icon(
+                  Icons.schedule,
+                  size: 18,
+                  color: AppColors.of(context).pillGreenDark,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(
@@ -2938,7 +3023,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                         'AUTO-START SCHEDULED',
                         style: PixelText.title(
                           size: 14,
-                          color: AppColors.textDark,
+                          color: AppColors.of(context).textDark,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -2946,7 +3031,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                         'at ${_formatScheduledStart(scheduledStartAt)}',
                         style: PixelText.body(
                           size: 12,
-                          color: AppColors.textMid,
+                          color: AppColors.of(context).textMid,
                         ),
                       ),
                     ],
@@ -2968,7 +3053,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                   Icon(
                     Icons.groups_rounded,
                     size: 18,
-                    color: AppColors.pillGreenDark,
+                    color: AppColors.of(context).pillGreenDark,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -2977,7 +3062,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                       '2+ have joined, tap Start Race — it won’t begin on its own.',
                       style: PixelText.body(
                         size: 13,
-                        color: AppColors.textDark,
+                        color: AppColors.of(context).textDark,
                       ),
                     ),
                   ),
@@ -3020,7 +3105,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                   : 'Need at least 2 participants to start',
               style: PixelText.body(
                 size: 12,
-                color: AppColors.parchment.withValues(alpha: 0.9),
+                color: AppColors.of(context).textLight.withValues(alpha: 0.9),
               ),
               textAlign: TextAlign.center,
             ),
@@ -3073,8 +3158,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                               : Icons.hourglass_top_rounded,
                           size: 32,
                           color: isSeeded
-                              ? AppColors.pillGreenDark
-                              : AppColors.textMid.withValues(alpha: 0.6),
+                              ? AppColors.of(context).pillGreenDark
+                              : AppColors.of(
+                                  context,
+                                ).textMid.withValues(alpha: 0.6),
                         ),
                         const SizedBox(height: 8),
                         Text(
@@ -3084,7 +3171,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                               : 'Waiting for the creator to start the race',
                           style: PixelText.body(
                             size: 14,
-                            color: AppColors.textMid,
+                            color: AppColors.of(context).textMid,
                           ),
                           textAlign: TextAlign.center,
                         ),
@@ -3127,18 +3214,24 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               Icon(
                 Icons.directions_run_rounded,
                 size: 32,
-                color: AppColors.accent,
+                color: AppColors.of(context).accent,
               ),
               const SizedBox(height: 8),
               Text(
                 'This race is already underway!',
-                style: PixelText.title(size: 16, color: AppColors.textDark),
+                style: PixelText.title(
+                  size: 16,
+                  color: AppColors.of(context).textDark,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 4),
               Text(
                 'Join now and your steps will count from when you accept.',
-                style: PixelText.body(size: 14, color: AppColors.textMid),
+                style: PixelText.body(
+                  size: 14,
+                  color: AppColors.of(context).textMid,
+                ),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -3297,11 +3390,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         ),
 
         if (_progressState.isRefreshing)
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(horizontal: 12),
             child: LinearProgressIndicator(
               minHeight: 2,
-              color: AppColors.accent,
+              color: AppColors.of(context).accent,
               backgroundColor: Colors.transparent,
             ),
           ),
@@ -3348,7 +3441,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                       textAlign: TextAlign.center,
                       style: PixelText.title(
                         size: 16,
-                        color: AppColors.pillGold,
+                        color: AppColors.of(context).pillGold,
                       ).copyWith(shadows: _headerTextShadows),
                     ),
                   if (finishRewardPool > 0) ...[
@@ -3362,7 +3455,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                       textAlign: TextAlign.center,
                       style: PixelText.body(
                         size: 13,
-                        color: AppColors.pillGold,
+                        color: AppColors.of(context).pillGold,
                       ),
                     ),
                   ],
@@ -3450,7 +3543,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                             Icon(
                               Icons.block_rounded,
                               size: 18,
-                              color: AppColors.textMid.withValues(alpha: 0.5),
+                              color: AppColors.of(
+                                context,
+                              ).textMid.withValues(alpha: 0.5),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
@@ -3458,7 +3553,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                                 'Powerups are disabled for this race',
                                 style: PixelText.body(
                                   size: 14,
-                                  color: AppColors.textMid,
+                                  color: AppColors.of(context).textMid,
                                 ),
                               ),
                             ),
@@ -3540,9 +3635,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
-        color: AppColors.woodDark,
+        color: AppColors.of(context).woodDark,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.roofEdge, width: 2),
+        border: Border.all(color: AppColors.of(context).roofEdge, width: 2),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -3596,13 +3691,19 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
+          gradient: LinearGradient(
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
-            colors: [AppColors.pillGold, AppColors.pillGoldDark],
+            colors: [
+              AppColors.of(context).pillGold,
+              AppColors.of(context).pillGoldDark,
+            ],
           ),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.pillGoldShadow, width: 2),
+          border: Border.all(
+            color: AppColors.of(context).pillGoldShadow,
+            width: 2,
+          ),
         ),
         child: Row(
           children: [
@@ -3614,18 +3715,24 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                     '$label — ${name.toUpperCase()}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: PixelText.title(size: 12, color: AppColors.textDark),
+                    style: PixelText.title(
+                      size: 12,
+                      color: AppColors.of(context).textDark,
+                    ),
                   ),
                   Text(
                     'Tap to see the bracket',
-                    style: PixelText.body(size: 11, color: AppColors.textDark),
+                    style: PixelText.body(
+                      size: 11,
+                      color: AppColors.of(context).textDark,
+                    ),
                   ),
                 ],
               ),
             ),
-            const Icon(
+            Icon(
               Icons.chevron_right_rounded,
-              color: AppColors.textDark,
+              color: AppColors.of(context).textDark,
               size: 22,
             ),
           ],
@@ -3675,7 +3782,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
     return Text(
       'You earn a powerup every ${_formatSteps(powerupStepInterval)} steps this race. ${_formatSteps(stepsUntilNextPowerup)} to go.',
-      style: PixelText.body(size: 13, color: AppColors.textMid),
+      style: PixelText.body(size: 13, color: AppColors.of(context).textMid),
     );
   }
 
@@ -3890,7 +3997,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           padding: const EdgeInsets.only(top: 16, bottom: 8),
           child: Text(
             'ACTIVE EFFECTS',
-            style: PixelText.title(size: 14, color: AppColors.textMid),
+            style: PixelText.title(
+              size: 14,
+              color: AppColors.of(context).textMid,
+            ),
           ),
         ),
         ...effects.map((e) {
@@ -3934,14 +4044,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                         name,
                         style: PixelText.title(
                           size: 13,
-                          color: AppColors.textDark,
+                          color: AppColors.of(context).textDark,
                         ),
                       ),
                       Text(
                         desc,
                         style: PixelText.body(
                           size: 11,
-                          color: AppColors.textMid,
+                          color: AppColors.of(context).textMid,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -3956,14 +4066,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: AppColors.woodDark,
+                    color: AppColors.of(context).woodDark,
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
                     timeLabel,
                     style: PixelText.title(
                       size: 11,
-                      color: AppColors.parchment,
+                      color: AppColors.of(context).textLight,
                     ),
                   ),
                 ),
@@ -3974,7 +4084,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 12),
           child: Divider(
-            color: AppColors.parchmentBorder.withValues(alpha: 0.5),
+            color: AppColors.of(context).parchmentBorder.withValues(alpha: 0.5),
             height: 1,
           ),
         ),
@@ -3989,7 +4099,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: AppColors.parchment.withValues(alpha: 0.9),
+        color: AppColors.of(context).parchment.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -3999,7 +4109,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           const SizedBox(width: 4),
           Text(
             '$_queuedBoxCount queued',
-            style: PixelText.body(size: 11, color: AppColors.coinDark),
+            style: PixelText.body(
+              size: 11,
+              color: AppColors.of(context).coinDark,
+            ),
           ),
         ],
       ),
@@ -4074,7 +4187,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       const SizedBox(height: 12),
       Text(
         'YOUR STASH',
-        style: PixelText.title(size: 13, color: AppColors.textMid),
+        style: PixelText.title(size: 13, color: AppColors.of(context).textMid),
       ),
       const SizedBox(height: 6),
       for (final e in entries)
@@ -4087,7 +4200,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               Expanded(
                 child: Text(
                   '${PowerupCopy.nameFor(e.key)} x${e.value}',
-                  style: PixelText.body(size: 14, color: AppColors.textDark),
+                  style: PixelText.body(
+                    size: 14,
+                    color: AppColors.of(context).textDark,
+                  ),
                 ),
               ),
               PillButton(
@@ -4242,7 +4358,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final status = _race?['status'] as String? ?? '';
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.parchment,
+      backgroundColor: AppColors.of(context).parchment,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -4253,7 +4369,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           children: [
             Text(
               'RACE OPTIONS',
-              style: PixelText.title(size: 18, color: AppColors.textDark),
+              style: PixelText.title(
+                size: 18,
+                color: AppColors.of(context).textDark,
+              ),
             ),
             const SizedBox(height: 16),
             PillButton(
@@ -4432,7 +4551,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 onPressed: isLoading ? null : feed.loadMore,
                 child: Text(
                   isLoading ? 'Loading…' : 'Load older',
-                  style: PixelText.body(size: 13, color: AppColors.accent),
+                  style: PixelText.body(
+                    size: 13,
+                    color: AppColors.of(context).accent,
+                  ),
                 ),
               ),
             ),
@@ -4481,6 +4603,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     } else {
       body = ListView(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        // B7 — dragging the message list dismisses the keyboard (scoped to the
+        // chat tab; no global unfocus wrapper).
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         // IM-style: newest at the bottom, anchored there; scroll up for older.
         // messages are newest-first, so reverse lays child 0 (newest) at the
         // bottom and the "Load older" control ends up at the top.
@@ -4495,7 +4620,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                   onPressed: isLoading ? null : chat.loadMore,
                   child: Text(
                     isLoading ? 'Loading…' : 'Load older',
-                    style: PixelText.body(size: 13, color: AppColors.accent),
+                    style: PixelText.body(
+                      size: 13,
+                      color: AppColors.of(context).accent,
+                    ),
                   ),
                 ),
               ),
@@ -4535,7 +4663,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           textAlign: TextAlign.center,
           style: PixelText.body(
             size: 16,
-            color: AppColors.textMid.withValues(alpha: 0.6),
+            color: AppColors.of(context).textMid.withValues(alpha: 0.6),
           ),
         ),
       ),
@@ -4560,10 +4688,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(12),
-        color: AppColors.parchmentDark.withValues(alpha: 0.3),
+        color: AppColors.of(context).parchmentDark.withValues(alpha: 0.3),
         child: Text(
           reason,
-          style: PixelText.body(size: 14, color: AppColors.textMid),
+          style: PixelText.body(size: 14, color: AppColors.of(context).textMid),
           textAlign: TextAlign.center,
         ),
       );
@@ -4571,9 +4699,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
       decoration: BoxDecoration(
-        color: AppColors.parchmentLight,
+        color: AppColors.of(context).parchmentLight,
         border: Border(
-          top: BorderSide(color: AppColors.textMid.withValues(alpha: 0.2)),
+          top: BorderSide(
+            color: AppColors.of(context).textMid.withValues(alpha: 0.2),
+          ),
         ),
       ),
       child: Row(
@@ -4588,9 +4718,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               maxLength: 500,
               textInputAction: TextInputAction.send,
               onSubmitted: (_) => _sendMessage(),
+              // B7 — tapping outside the field dismisses the keyboard. The send
+              // button is a separate tap target, so it still fires. Scoped to
+              // the composer; no global unfocus wrapper on the screen.
+              onTapOutside: (_) => FocusScope.of(context).unfocus(),
               decoration: InputDecoration(
                 hintText: 'Message…',
-                hintStyle: PixelText.body(size: 16, color: AppColors.textMid),
+                hintStyle: PixelText.body(
+                  size: 16,
+                  color: AppColors.of(context).textMid,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(20),
                 ),
@@ -4611,7 +4748,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.send),
-            color: AppColors.accent,
+            color: AppColors.of(context).accent,
             onPressed: _sendingMessage ? null : _sendMessage,
           ),
         ],
@@ -4652,10 +4789,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.emoji_events_rounded,
                     size: 16,
-                    color: AppColors.pillGold,
+                    color: AppColors.of(context).pillGold,
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -4711,7 +4848,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                             : 'Unknown',
                         style: PixelText.title(
                           size: 22,
-                          color: AppColors.textDark,
+                          color: AppColors.of(context).textDark,
                         ),
                         textAlign: TextAlign.center,
                       ),
@@ -4722,7 +4859,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                         'No winner',
                         style: PixelText.title(
                           size: 18,
-                          color: AppColors.textMid,
+                          color: AppColors.of(context).textMid,
                         ),
                         textAlign: TextAlign.center,
                       ),
@@ -4752,12 +4889,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             ],
           ),
         ),
-        const SizedBox(height: 18),
+        SizedBox(height: 18),
 
         // ACTIVITY / CHAT — still viewable after the race ends. The composer
         // auto-disables (read-only) via _canPostMessage.
         StaggerIn(index: 2, child: _buildActivityTabsSection()),
-        const SizedBox(height: 24),
+        SizedBox(height: 24),
       ],
     );
   }
@@ -4766,22 +4903,22 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(height: 64),
+        SizedBox(height: 64),
         Icon(
           Icons.cancel_outlined,
           size: 48,
-          color: AppColors.parchment.withValues(alpha: 0.75),
+          color: AppColors.of(context).textLight.withValues(alpha: 0.75),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: 12),
         Text(
           'This race was cancelled',
           style: PixelText.title(
             size: 18,
-            color: AppColors.parchment,
+            color: AppColors.of(context).textLight,
           ).copyWith(shadows: _headerTextShadows),
           textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 24),
+        SizedBox(height: 24),
       ],
     );
   }
@@ -4789,9 +4926,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   Widget _buildPayoutBreakdown(
     List<PayoutTier> tiers, {
     Key? key,
-    Color labelColor = AppColors.textMid,
-    Color amountColor = AppColors.coinDark,
+    Color? labelColor,
+    Color? amountColor,
   }) {
+    final resolvedLabelColor = labelColor ?? AppColors.of(context).textMid;
+    final resolvedAmountColor = amountColor ?? AppColors.of(context).coinDark;
     final shown = tiers.take(3).toList();
     final extra = tiers.length - shown.length;
     return Row(
@@ -4803,8 +4942,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           _buildPayoutInlineValue(
             label: payoutPlacementLabel(shown[i].placement),
             amount: shown[i].amount,
-            labelColor: labelColor,
-            amountColor: amountColor,
+            labelColor: resolvedLabelColor,
+            amountColor: resolvedAmountColor,
           ),
         ],
         if (extra > 0) ...[
@@ -4816,9 +4955,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               children: [
                 Text(
                   '+$extra MORE',
-                  style: PixelText.title(size: 10, color: labelColor),
+                  style: PixelText.title(size: 10, color: resolvedLabelColor),
                 ),
-                Icon(Icons.chevron_right, size: 12, color: labelColor),
+                Icon(Icons.chevron_right, size: 12, color: resolvedLabelColor),
               ],
             ),
           ),
@@ -4830,7 +4969,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   void _showPayoutBreakdownSheet(List<PayoutTier> tiers) {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.parchmentLight,
+      backgroundColor: AppColors.of(context).parchmentLight,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -4844,7 +4983,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               children: [
                 Text(
                   'PAYOUTS',
-                  style: PixelText.title(size: 14, color: AppColors.textDark),
+                  style: PixelText.title(
+                    size: 14,
+                    color: AppColors.of(context).textDark,
+                  ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
@@ -4854,22 +4996,22 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                       children: [
                         for (final tier in tiers)
                           Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 5),
+                            padding: EdgeInsets.symmetric(vertical: 5),
                             child: Row(
                               children: [
                                 Text(
                                   payoutPlacementLabel(tier.placement),
                                   style: PixelText.title(
                                     size: 12,
-                                    color: AppColors.textMid,
+                                    color: AppColors.of(context).textMid,
                                   ),
                                 ),
-                                const Spacer(),
+                                Spacer(),
                                 Text(
                                   '${tier.amount}',
                                   style: PixelText.number(
                                     size: 14,
-                                    color: AppColors.coinDark,
+                                    color: AppColors.of(context).coinDark,
                                   ),
                                 ),
                               ],
@@ -4890,17 +5032,22 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   Widget _buildPayoutInlineValue({
     required String label,
     required Object? amount,
-    Color labelColor = AppColors.textMid,
-    Color amountColor = AppColors.coinDark,
+    Color? labelColor,
+    Color? amountColor,
   }) {
+    final resolvedLabelColor = labelColor ?? AppColors.of(context).textMid;
+    final resolvedAmountColor = amountColor ?? AppColors.of(context).coinDark;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label, style: PixelText.title(size: 10, color: labelColor)),
+        Text(
+          label,
+          style: PixelText.title(size: 10, color: resolvedLabelColor),
+        ),
         const SizedBox(width: 3),
         Text(
           _formatCoinAmount(amount),
-          style: PixelText.title(size: 10, color: amountColor),
+          style: PixelText.title(size: 10, color: resolvedAmountColor),
         ),
       ],
     );
@@ -4923,13 +5070,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     String badgeText;
     switch (status) {
       case 'ACCEPTED':
-        badgeColor = AppColors.pillGreenDark;
+        badgeColor = AppColors.of(context).pillGreenDark;
         badgeText = 'JOINED';
       case 'DECLINED':
-        badgeColor = AppColors.error;
+        badgeColor = AppColors.of(context).error;
         badgeText = 'DECLINED';
       default:
-        badgeColor = AppColors.textMid;
+        badgeColor = AppColors.of(context).textMid;
         badgeText = 'INVITED';
     }
 
@@ -4949,7 +5096,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               isMe ? '${atName(name)} (you)' : atName(name),
               style: PixelText.body(
                 size: 18,
-                color: isMe ? AppColors.accent : AppColors.textDark,
+                color: isMe
+                    ? AppColors.of(context).accent
+                    : AppColors.of(context).textDark,
               ),
             ),
           ),
@@ -4968,12 +5117,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             const SizedBox(width: 8),
             GestureDetector(
               onTap: () => _confirmKick(userId, name),
-              child: const Padding(
+              child: Padding(
                 padding: EdgeInsets.all(4),
                 child: Icon(
                   Icons.person_remove,
                   size: 18,
-                  color: AppColors.error,
+                  color: AppColors.of(context).error,
                 ),
               ),
             ),
@@ -4986,7 +5135,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   Future<void> _confirmKick(String userId, String displayName) async {
     final confirmed = await showModalBottomSheet<bool>(
       context: context,
-      backgroundColor: AppColors.parchment,
+      backgroundColor: AppColors.of(context).parchment,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -5000,10 +5149,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.person_remove,
                       size: 22,
-                      color: AppColors.error,
+                      color: AppColors.of(context).error,
                     ),
                     const SizedBox(width: 6),
                     Flexible(
@@ -5011,7 +5160,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                         'Remove ${atName(displayName)}?',
                         style: PixelText.title(
                           size: 18,
-                          color: AppColors.textDark,
+                          color: AppColors.of(context).textDark,
                         ),
                         textAlign: TextAlign.center,
                         maxLines: 2,
@@ -5023,7 +5172,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 const SizedBox(height: 8),
                 Text(
                   'They will be removed from the race. Any held buy-in will be refunded.',
-                  style: PixelText.body(size: 13, color: AppColors.textMid),
+                  style: PixelText.body(
+                    size: 13,
+                    color: AppColors.of(context).textMid,
+                  ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
@@ -5103,22 +5255,28 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     if (winnerTeam == null) {
       return Column(
         children: [
-          const Icon(
+          Icon(
             Icons.handshake_rounded,
             size: 44,
-            color: AppColors.textMid,
+            color: AppColors.of(context).textMid,
           ),
           const SizedBox(height: 10),
           Text(
             'It\u2019s a tie \u2014 buy-ins refunded',
             textAlign: TextAlign.center,
-            style: PixelText.title(size: 16, color: AppColors.textDark),
+            style: PixelText.title(
+              size: 16,
+              color: AppColors.of(context).textDark,
+            ),
           ),
           const SizedBox(height: 4),
           Text(
             'Both teams finished dead even. Everyone got their coins back.',
             textAlign: TextAlign.center,
-            style: PixelText.body(size: 12, color: AppColors.textMid),
+            style: PixelText.body(
+              size: 12,
+              color: AppColors.of(context).textMid,
+            ),
           ),
         ],
       );
@@ -5210,7 +5368,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                         textAlign: TextAlign.center,
                         style: PixelText.body(
                           size: 11,
-                          color: AppColors.textDark,
+                          color: AppColors.of(context).textDark,
                         ),
                       ),
                     ),
@@ -5405,7 +5563,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           alignment: Alignment.center,
           child: Text(
             'No one yet',
-            style: PixelText.body(size: 12.5, color: AppColors.textLight),
+            style: PixelText.body(
+              size: 12.5,
+              color: AppColors.of(context).textLight,
+            ),
           ),
         ),
       );
@@ -5484,7 +5645,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
-          style: PixelText.body(size: 15, color: AppColors.textDark),
+          style: PixelText.body(
+            size: 15,
+            color: AppColors.of(context).textDark,
+          ),
         ),
         const SizedBox(height: 1),
         Text(
@@ -5503,10 +5667,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         decoration: BoxDecoration(
           color: isMe
               ? colorLight.withValues(alpha: 0.22)
-              : AppColors.parchmentLight,
+              : AppColors.of(context).parchmentLight,
           borderRadius: BorderRadius.circular(11),
           border: Border.all(
-            color: isMe ? colorDark : AppColors.parchmentBorder,
+            color: isMe ? colorDark : AppColors.of(context).parchmentBorder,
             width: isMe ? 2 : 1.5,
           ),
         ),
@@ -5579,7 +5743,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         (scan?['opponents'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.parchment,
+      backgroundColor: AppColors.of(context).parchment,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -5600,7 +5764,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                     width: 40,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: AppColors.woodMid,
+                      color: AppColors.of(context).woodMid,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -5615,7 +5779,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                       'X-RAY RECON',
                       style: PixelText.title(
                         size: 20,
-                        color: AppColors.textDark,
+                        color: AppColors.of(context).textDark,
                       ),
                     ),
                   ],
@@ -5626,7 +5790,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                       ? 'Recon unavailable right now.'
                       : 'Active defenses across the field',
                   textAlign: TextAlign.center,
-                  style: PixelText.body(size: 12, color: AppColors.textMid),
+                  style: PixelText.body(
+                    size: 12,
+                    color: AppColors.of(context).textMid,
+                  ),
                 ),
                 const SizedBox(height: 14),
                 if (scan == null)
@@ -5663,15 +5830,22 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   Widget _reconEmptyState(String message) {
     return GameContainer(
       padding: const EdgeInsets.all(16),
-      frameColor: AppColors.parchmentBorder,
+      frameColor: AppColors.of(context).parchmentBorder,
       child: Row(
         children: [
-          const Icon(Icons.radar_rounded, color: AppColors.textMid, size: 22),
+          Icon(
+            Icons.radar_rounded,
+            color: AppColors.of(context).textMid,
+            size: 22,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               message,
-              style: PixelText.body(size: 13, color: AppColors.textMid),
+              style: PixelText.body(
+                size: 13,
+                color: AppColors.of(context).textMid,
+              ),
             ),
           ),
         ],
@@ -5687,28 +5861,34 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     return GameContainer(
       padding: const EdgeInsets.all(10),
       frameColor: defenses.isEmpty
-          ? AppColors.parchmentBorder
-          : AppColors.accent,
+          ? AppColors.of(context).parchmentBorder
+          : AppColors.of(context).accent,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             atName(name),
-            style: PixelText.title(size: 14, color: AppColors.textDark),
+            style: PixelText.title(
+              size: 14,
+              color: AppColors.of(context).textDark,
+            ),
           ),
           const SizedBox(height: 6),
           if (defenses.isEmpty)
             Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.lock_open_rounded,
                   size: 16,
-                  color: AppColors.pillGreen,
+                  color: AppColors.of(context).pillGreen,
                 ),
                 const SizedBox(width: 6),
                 Text(
                   'No defenses up — safe to attack',
-                  style: PixelText.body(size: 12, color: AppColors.textMid),
+                  style: PixelText.body(
+                    size: 12,
+                    color: AppColors.of(context).textMid,
+                  ),
                 ),
               ],
             )
@@ -5734,9 +5914,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
-        color: AppColors.parchmentDark,
+        color: AppColors.of(context).parchmentDark,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.parchmentBorder, width: 1),
+        border: Border.all(
+          color: AppColors.of(context).parchmentBorder,
+          width: 1,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -5745,13 +5928,19 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           const SizedBox(width: 6),
           Text(
             PowerupCopy.nameFor(type),
-            style: PixelText.body(size: 12, color: AppColors.textDark),
+            style: PixelText.body(
+              size: 12,
+              color: AppColors.of(context).textDark,
+            ),
           ),
           if (remaining != null) ...[
             const SizedBox(width: 6),
             Text(
               remaining,
-              style: PixelText.body(size: 11, color: AppColors.textMid),
+              style: PixelText.body(
+                size: 11,
+                color: AppColors.of(context).textMid,
+              ),
             ),
           ],
         ],
@@ -6082,10 +6271,14 @@ class _RaceProgressSkeleton extends StatelessWidget {
                 Container(
                   height: 170,
                   decoration: BoxDecoration(
-                    color: AppColors.parchmentDark.withValues(alpha: 0.35),
+                    color: AppColors.of(
+                      context,
+                    ).parchmentDark.withValues(alpha: 0.35),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: AppColors.parchmentBorder.withValues(alpha: 0.45),
+                      color: AppColors.of(
+                        context,
+                      ).parchmentBorder.withValues(alpha: 0.45),
                     ),
                   ),
                   child: const Center(
@@ -6141,12 +6334,15 @@ class _OpenAllButton extends StatelessWidget {
           child: Ink(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              color: AppColors.pillGold,
+              color: AppColors.of(context).pillGold,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.pillGoldDark, width: 1.5),
-              boxShadow: const [
+              border: Border.all(
+                color: AppColors.of(context).pillGoldDark,
+                width: 1.5,
+              ),
+              boxShadow: [
                 BoxShadow(
-                  color: AppColors.pillGoldShadow,
+                  color: AppColors.of(context).pillGoldShadow,
                   offset: Offset(2, 2),
                   blurRadius: 0,
                 ),
@@ -6155,15 +6351,18 @@ class _OpenAllButton extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
+                Icon(
                   Icons.auto_awesome_rounded,
                   size: 14,
-                  color: AppColors.textDark,
+                  color: AppColors.of(context).textDark,
                 ),
                 const SizedBox(width: 4),
                 Text(
                   'OPEN ALL',
-                  style: PixelText.pill(size: 11, color: AppColors.textDark),
+                  style: PixelText.pill(
+                    size: 11,
+                    color: AppColors.of(context).textDark,
+                  ),
                 ),
               ],
             ),
@@ -6236,7 +6435,7 @@ OverlayEntry _buildClampedEffectTooltip({
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.woodDark,
+                      color: AppColors.of(ctx).woodDark,
                       borderRadius: BorderRadius.circular(6),
                       boxShadow: const [
                         BoxShadow(
@@ -6299,7 +6498,7 @@ class _EffectIconWithTooltipState extends State<_EffectIconWithTooltip> {
       onDismiss: _dismiss,
       child: Text(
         '$name: $desc',
-        style: PixelText.body(size: 11, color: AppColors.parchment),
+        style: PixelText.body(size: 11, color: AppColors.of(context).textLight),
       ),
     );
     Overlay.of(context).insert(_entry!);
@@ -6322,15 +6521,15 @@ class _EffectIconWithTooltipState extends State<_EffectIconWithTooltip> {
     final name = PowerupCopy.nameFor(widget.type);
     final icon = Container(
       decoration: BoxDecoration(
-        color: AppColors.woodDark,
+        color: AppColors.of(context).woodDark,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppColors.woodShadow, width: 0.5),
+        border: Border.all(color: AppColors.of(context).woodShadow, width: 0.5),
       ),
       padding: const EdgeInsets.all(1.5),
       child: Container(
         padding: const EdgeInsets.all(3),
         decoration: BoxDecoration(
-          color: AppColors.parchment,
+          color: AppColors.of(context).textLight,
           borderRadius: BorderRadius.circular(4.5),
         ),
         child: PowerupIcon(type: widget.type, size: 18),
@@ -6391,7 +6590,13 @@ class _EffectOverflowChipState extends State<_EffectOverflowChip> {
           : name;
       if (lines.isNotEmpty) lines.add(const SizedBox(height: 3));
       lines.add(
-        Text(text, style: PixelText.body(size: 11, color: AppColors.parchment)),
+        Text(
+          text,
+          style: PixelText.body(
+            size: 11,
+            color: AppColors.of(context).textLight,
+          ),
+        ),
       );
     }
 
@@ -6434,14 +6639,20 @@ class _EffectOverflowChipState extends State<_EffectOverflowChip> {
             child: Container(
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: AppColors.woodDark,
+                color: AppColors.of(context).woodDark,
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AppColors.woodShadow, width: 0.5),
+                border: Border.all(
+                  color: AppColors.of(context).woodShadow,
+                  width: 0.5,
+                ),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
               child: Text(
                 '+${widget.effects.length}',
-                style: PixelText.number(size: 12, color: AppColors.parchment),
+                style: PixelText.number(
+                  size: 12,
+                  color: AppColors.of(context).textLight,
+                ),
               ),
             ),
           ),
@@ -6471,11 +6682,15 @@ class _ChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bubbleColor = isMine ? AppColors.accent : Colors.white;
-    final textColor = isMine ? Colors.white : AppColors.textDark;
+    final bubbleColor = isMine
+        ? AppColors.of(context).accent
+        : AppColors.of(context).parchmentDark;
+    final textColor = isMine
+        ? AppColors.of(context).textLight
+        : AppColors.of(context).textDark;
     final metaColor = isMine
-        ? Colors.white.withValues(alpha: 0.72)
-        : AppColors.textMid.withValues(alpha: 0.8);
+        ? AppColors.of(context).textLight.withValues(alpha: 0.72)
+        : AppColors.of(context).textMid.withValues(alpha: 0.8);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -6505,7 +6720,7 @@ class _ChatBubble extends StatelessWidget {
                   color: bubbleColor,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: AppColors.textMid.withValues(alpha: 0.2),
+                    color: AppColors.of(context).textMid.withValues(alpha: 0.2),
                   ),
                 ),
                 child: Column(
@@ -6516,7 +6731,7 @@ class _ChatBubble extends StatelessWidget {
                         atName(message.senderName!),
                         style: PixelText.title(
                           size: 12,
-                          color: AppColors.textMid,
+                          color: AppColors.of(context).textMid,
                         ),
                       ),
                     Text(
@@ -6540,7 +6755,7 @@ class _ChatBubble extends StatelessWidget {
                           Icon(
                             Icons.error_outline,
                             size: 11,
-                            color: AppColors.feedAttack,
+                            color: AppColors.of(context).feedAttack,
                           ),
                         ],
                       ],

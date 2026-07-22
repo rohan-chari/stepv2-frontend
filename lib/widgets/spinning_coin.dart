@@ -46,14 +46,14 @@ class _CoinFallback extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: AppColors.coinLight,
-        border: Border.all(color: AppColors.coinEdge, width: 1.5),
+        color: AppColors.of(context).coinLight,
+        border: Border.all(color: AppColors.of(context).coinEdge, width: 1.5),
       ),
       child: Center(
         child: Icon(
           Icons.pets_rounded,
           size: size * 0.54,
-          color: AppColors.coinEdge,
+          color: AppColors.of(context).coinEdge,
         ),
       ),
     );

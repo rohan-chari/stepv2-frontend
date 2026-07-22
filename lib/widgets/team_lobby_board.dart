@@ -120,18 +120,19 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
   @override
   void initState() {
     super.initState();
-    _hopController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 640),
-    )..addStatusListener((status) {
-        if (status == AnimationStatus.completed) {
-          if (!mounted) return;
-          setState(() {
-            _hopFrom = null;
-            _hopTo = null;
-          });
-        }
-      });
+    _hopController =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 640),
+        )..addStatusListener((status) {
+          if (status == AnimationStatus.completed) {
+            if (!mounted) return;
+            setState(() {
+              _hopFrom = null;
+              _hopTo = null;
+            });
+          }
+        });
   }
 
   @override
@@ -149,7 +150,7 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
       final me = _findMe();
       _hopAccessories =
           (me?['accessories'] as List?)?.cast<Map<String, dynamic>>() ??
-              const [];
+          const [];
       _hopAnimal = me?['animal'] as String?;
       // A genuine side change (even mid-flight) replaces the arc cleanly.
       _hopController.forward(from: 0);
@@ -176,8 +177,7 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
     return participants
         .where(
           (p) =>
-              p['status'] == 'ACCEPTED' &&
-              TeamRace.participantTeam(p) == team,
+              p['status'] == 'ACCEPTED' && TeamRace.participantTeam(p) == team,
         )
         .toList(growable: false);
   }
@@ -205,8 +205,10 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
     // Defensive: a team race without a size still shows both rosters.
     if (size <= 0) {
       return math.max(
-        math.max(_sideMembers(RaceTeam.teamA).length,
-            _sideMembers(RaceTeam.teamB).length),
+        math.max(
+          _sideMembers(RaceTeam.teamA).length,
+          _sideMembers(RaceTeam.teamB).length,
+        ),
         1,
       );
     }
@@ -286,7 +288,11 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: colorDark, width: 3),
         boxShadow: [
-          BoxShadow(color: colorDark, offset: const Offset(0, 4), blurRadius: 0),
+          BoxShadow(
+            color: colorDark,
+            offset: const Offset(0, 4),
+            blurRadius: 0,
+          ),
         ],
       ),
       child: Column(
@@ -332,12 +338,16 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
       margin: const EdgeInsets.symmetric(horizontal: 6),
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: const RadialGradient(
+        gradient: RadialGradient(
           center: Alignment(-0.3, -0.4),
-          colors: [AppColors.dirtLight, AppColors.dirtMid, AppColors.dirtDark],
+          colors: [
+            AppColors.of(context).dirtLight,
+            AppColors.of(context).dirtMid,
+            AppColors.of(context).dirtDark,
+          ],
           stops: [0.0, 0.55, 1.0],
         ),
-        border: Border.all(color: AppColors.dirtDark, width: 3),
+        border: Border.all(color: AppColors.of(context).dirtDark, width: 3),
         boxShadow: const [
           BoxShadow(
             color: Color(0x59000000),
@@ -376,9 +386,7 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
           if (i > 0) const SizedBox(height: _slotGap),
           if (i < members.length)
             _wobbleWrapper(
-              wobbles: hopActive &&
-                  _hopTo!.team == team &&
-                  _hopTo!.index == i,
+              wobbles: hopActive && _hopTo!.team == team && _hopTo!.index == i,
               child: _filledSlot(
                 key: Key('lobby-slot-$sideLetter-$i'),
                 team: team,
@@ -390,10 +398,7 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
               ),
             )
           else
-            _emptySlot(
-              key: Key('lobby-empty-$sideLetter-$i'),
-              team: team,
-            ),
+            _emptySlot(key: Key('lobby-empty-$sideLetter-$i'), team: team),
         ],
       ],
     );
@@ -428,7 +433,7 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
     final name = member['displayName'] as String? ?? '???';
     final accessories =
         (member['accessories'] as List?)?.cast<Map<String, dynamic>>() ??
-            const <Map<String, dynamic>>[];
+        const <Map<String, dynamic>>[];
 
     final capy = SizedBox(
       width: _avatarSize,
@@ -468,8 +473,10 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
           if (isArriving)
             AnimatedBuilder(
               animation: _hopController,
-              builder: (context, inner) =>
-                  Opacity(opacity: _landFade(_hopController.value), child: inner),
+              builder: (context, inner) => Opacity(
+                opacity: _landFade(_hopController.value),
+                child: inner,
+              ),
               child: capy,
             )
           else
@@ -486,7 +493,7 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
                   overflow: TextOverflow.ellipsis,
                   style: PixelText.body(
                     size: 14.5,
-                    color: AppColors.textDark,
+                    color: AppColors.of(context).textDark,
                   ),
                 ),
                 if (isMe)
@@ -608,7 +615,8 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
                 child: Transform.scale(
                   scale: scale,
                   child: Transform.rotate(
-                    angle: math.sin(e * math.pi) *
+                    angle:
+                        math.sin(e * math.pi) *
                         (_hopTo!.team == RaceTeam.teamB ? 0.16 : -0.16),
                     child: child,
                   ),
@@ -642,7 +650,9 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
             height: 7 + 3 * t,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: AppColors.dirtLight.withValues(alpha: 0.55 * fade),
+              color: AppColors.of(
+                context,
+              ).dirtLight.withValues(alpha: 0.55 * fade),
             ),
           ),
         ),
@@ -672,10 +682,7 @@ class _DashedPegPainter extends CustomPainter {
     for (final metric in path.computeMetrics()) {
       var distance = 0.0;
       while (distance < metric.length) {
-        canvas.drawPath(
-          metric.extractPath(distance, distance + dash),
-          paint,
-        );
+        canvas.drawPath(metric.extractPath(distance, distance + dash), paint);
         distance += dash + gap;
       }
     }

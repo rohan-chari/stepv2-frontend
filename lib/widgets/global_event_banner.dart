@@ -74,12 +74,12 @@ class _GlobalEventBannerState extends State<GlobalEventBanner> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.parchmentLight,
+        color: AppColors.of(context).parchmentLight,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.woodDark, width: 2),
+        border: Border.all(color: AppColors.of(context).woodDark, width: 2),
         boxShadow: [
           BoxShadow(
-            color: AppColors.woodShadow.withValues(alpha: 0.22),
+            color: AppColors.of(context).woodShadow.withValues(alpha: 0.22),
             offset: const Offset(4, 4),
             blurRadius: 0,
           ),
@@ -91,14 +91,17 @@ class _GlobalEventBannerState extends State<GlobalEventBanner> {
             width: 34,
             height: 34,
             decoration: BoxDecoration(
-              color: AppColors.roofMid,
+              color: AppColors.of(context).roofMid,
               shape: BoxShape.circle,
-              border: Border.all(color: AppColors.woodDark, width: 1.5),
+              border: Border.all(
+                color: AppColors.of(context).woodDark,
+                width: 1.5,
+              ),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.bolt_rounded,
               size: 20,
-              color: AppColors.parchment,
+              color: AppColors.of(context).textLight,
             ),
           ),
           const SizedBox(width: 10),
@@ -109,12 +112,18 @@ class _GlobalEventBannerState extends State<GlobalEventBanner> {
               children: [
                 Text(
                   '${multiplier}x RACE STEPS',
-                  style: PixelText.title(size: 14, color: AppColors.woodDark),
+                  style: PixelText.title(
+                    size: 14,
+                    color: AppColors.of(context).woodDark,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   'STEPS COUNT ${multiplier}x IN ALL RACES — GO!',
-                  style: PixelText.body(size: 12.5, color: AppColors.roofDark),
+                  style: PixelText.body(
+                    size: 12.5,
+                    color: AppColors.of(context).roofDark,
+                  ),
                 ),
               ],
             ),
@@ -123,12 +132,15 @@ class _GlobalEventBannerState extends State<GlobalEventBanner> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: AppColors.woodDark,
+              color: AppColors.of(context).woodDark,
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
               'ends in $countdown',
-              style: PixelText.title(size: 11, color: AppColors.parchment),
+              style: PixelText.title(
+                size: 11,
+                color: AppColors.of(context).textLight,
+              ),
             ),
           ),
         ],

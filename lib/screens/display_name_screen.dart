@@ -74,8 +74,7 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
       setState(() {
         _isAvailable = null;
         _isChecking = false;
-        _availabilityMessage =
-            'Only letters, numbers, and underscores allowed';
+        _availabilityMessage = 'Only letters, numbers, and underscores allowed';
       });
       return;
     }
@@ -255,9 +254,9 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          const Positioned.fill(
+          Positioned.fill(
             child: ColoredBox(
-              color: AppColors.roofLight,
+              color: AppColors.of(context).roofLight,
               child: CustomPaint(
                 painter: ArcadeCheckerPainter(drawBottomStripe: false),
               ),
@@ -274,7 +273,7 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
                   _buildHeader(canPop: canPop),
                   Expanded(
                     child: ColoredBox(
-                      color: AppColors.parchment,
+                      color: AppColors.of(context).parchment,
                       child: SingleChildScrollView(
                         keyboardDismissBehavior:
                             ScrollViewKeyboardDismissBehavior.onDrag,
@@ -298,39 +297,43 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
                               ),
                               style: PixelText.body(
                                 size: 18,
-                                color: AppColors.textDark,
+                                color: AppColors.of(context).textDark,
                               ),
                               decoration: InputDecoration(
                                 filled: true,
-                                fillColor: AppColors.parchmentLight,
+                                fillColor: AppColors.of(context).parchmentLight,
                                 // Visual-only handle hint; the '@' never enters
                                 // the controller, so the stored/validated value
                                 // stays bare.
                                 prefixText: '@',
                                 prefixStyle: PixelText.body(
                                   size: 18,
-                                  color: AppColors.textMid,
+                                  color: AppColors.of(context).textMid,
                                 ),
                                 hintText: 'Choose your name',
                                 hintStyle: PixelText.body(
                                   size: 18,
-                                  color: AppColors.parchmentBorder,
+                                  color: AppColors.of(context).parchmentBorder,
                                 ),
                                 border: OutlineInputBorder(
                                   borderSide: BorderSide(
-                                    color: AppColors.parchmentBorder,
+                                    color: AppColors.of(
+                                      context,
+                                    ).parchmentBorder,
                                   ),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderSide: BorderSide(
-                                    color: AppColors.parchmentBorder,
+                                    color: AppColors.of(
+                                      context,
+                                    ).parchmentBorder,
                                   ),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 focusedBorder: OutlineInputBorder(
-                                  borderSide: const BorderSide(
-                                    color: AppColors.accent,
+                                  borderSide: BorderSide(
+                                    color: AppColors.of(context).accent,
                                     width: 2,
                                   ),
                                   borderRadius: BorderRadius.circular(8),
@@ -348,14 +351,14 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
                               '4–30 characters. Letters, numbers, and underscores only.',
                               style: PixelText.body(
                                 size: 13,
-                                color: AppColors.textMid,
+                                color: AppColors.of(context).textMid,
                               ),
                             ),
                             const SizedBox(height: 28),
                             _isSaving
-                                ? const Center(
+                                ? Center(
                                     child: CircularProgressIndicator(
-                                      color: AppColors.accent,
+                                      color: AppColors.of(context).accent,
                                     ),
                                   )
                                 : PillButton(
@@ -385,9 +388,11 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
 
   Widget _buildHeader({required bool canPop}) {
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: AppColors.roofLight,
-        border: Border(bottom: BorderSide(color: AppColors.roofDark, width: 1)),
+      decoration: BoxDecoration(
+        color: AppColors.of(context).roofLight,
+        border: Border(
+          bottom: BorderSide(color: AppColors.of(context).roofDark, width: 1),
+        ),
       ),
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
@@ -404,9 +409,9 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
                     child: IconButton(
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.arrow_back,
-                        color: AppColors.parchment,
+                        color: AppColors.of(context).textLight,
                       ),
                       onPressed: () => Navigator.of(context).pop(),
                     ),
@@ -416,7 +421,7 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
                 'DISPLAY NAME',
                 style: PixelText.title(
                   size: 30,
-                  color: AppColors.parchment,
+                  color: AppColors.of(context).textLight,
                 ).copyWith(shadows: _textShadows),
               ),
               const SizedBox(height: 5),
@@ -424,7 +429,9 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
                 'This is how friends will find you.',
                 style: PixelText.body(
                   size: 15,
-                  color: AppColors.parchment.withValues(alpha: 0.92),
+                  color: AppColors.of(
+                    context,
+                  ).textLight.withValues(alpha: 0.92),
                 ),
               ),
             ],
@@ -438,18 +445,21 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
     if (_isChecking) {
       return Row(
         children: [
-          const SizedBox(
+          SizedBox(
             width: 12,
             height: 12,
             child: CircularProgressIndicator(
               strokeWidth: 2,
-              color: AppColors.textMid,
+              color: AppColors.of(context).textMid,
             ),
           ),
           const SizedBox(width: 8),
           Text(
             'Checking…',
-            style: PixelText.body(size: 13, color: AppColors.textMid),
+            style: PixelText.body(
+              size: 13,
+              color: AppColors.of(context).textMid,
+            ),
           ),
         ],
       );
@@ -460,12 +470,15 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
           Icon(
             Icons.check_circle_rounded,
             size: 16,
-            color: Colors.green.shade700,
+            color: AppColors.of(context).successText,
           ),
           const SizedBox(width: 6),
           Text(
             'Name is available',
-            style: PixelText.body(size: 13, color: Colors.green.shade700),
+            style: PixelText.body(
+              size: 13,
+              color: AppColors.of(context).successText,
+            ),
           ),
         ],
       );
@@ -476,13 +489,16 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
           Icon(
             Icons.error_outline_rounded,
             size: 16,
-            color: Colors.red.shade700,
+            color: AppColors.of(context).error,
           ),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
               _availabilityMessage!,
-              style: PixelText.body(size: 13, color: Colors.red.shade700),
+              style: PixelText.body(
+                size: 13,
+                color: AppColors.of(context).error,
+              ),
             ),
           ),
         ],

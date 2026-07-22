@@ -125,12 +125,8 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
       _selectedItemId = id;
       _extraMetadata = Map<String, dynamic>.from(map)
         ..removeWhere(
-          (key, _) => const {
-            'offsetX',
-            'offsetY',
-            'rotation',
-            'scale',
-          }.contains(key),
+          (key, _) =>
+              const {'offsetX', 'offsetY', 'rotation', 'scale'}.contains(key),
         );
       _baseSliders = {
         for (final key in const ['offsetX', 'offsetY', 'rotation', 'scale'])
@@ -202,12 +198,8 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
     setState(() {
       _extraMetadata = Map<String, dynamic>.from(banked)
         ..removeWhere(
-          (key, _) => const {
-            'offsetX',
-            'offsetY',
-            'rotation',
-            'scale',
-          }.contains(key),
+          (key, _) =>
+              const {'offsetX', 'offsetY', 'rotation', 'scale'}.contains(key),
         );
       _baseSliders = {
         for (final key in const ['offsetX', 'offsetY', 'rotation', 'scale'])
@@ -287,7 +279,7 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.textDark),
+          icon: Icon(Icons.arrow_back, color: AppColors.of(context).textDark),
           onPressed: () => Navigator.of(context).pop(),
         ),
         backgroundColor: Colors.transparent,
@@ -308,7 +300,7 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
                       'ACCESSORY RENDER TUNER',
                       style: PixelText.title(
                         size: 18,
-                        color: AppColors.textDark,
+                        color: AppColors.of(context).textDark,
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -323,11 +315,11 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
                             onRetry: _load,
                           )
                         : _isLoading
-                        ? const Padding(
+                        ? Padding(
                             padding: EdgeInsets.symmetric(vertical: 24),
                             child: Center(
                               child: CircularProgressIndicator(
-                                color: AppColors.accent,
+                                color: AppColors.of(context).accent,
                               ),
                             ),
                           )
@@ -338,7 +330,7 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
                               'No shop items found.',
                               style: PixelText.body(
                                 size: 14,
-                                color: AppColors.textMid,
+                                color: AppColors.of(context).textMid,
                               ),
                               textAlign: TextAlign.center,
                             ),
@@ -360,7 +352,7 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
                                   _active ? 'Enabled' : 'Disabled',
                                   style: PixelText.body(
                                     size: 14,
-                                    color: AppColors.textDark,
+                                    color: AppColors.of(context).textDark,
                                   ),
                                 ),
                                 subtitle: Text(
@@ -369,21 +361,23 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
                                       : 'Hidden from the shop',
                                   style: PixelText.body(
                                     size: 11,
-                                    color: AppColors.textMid,
+                                    color: AppColors.of(context).textMid,
                                   ),
                                 ),
                                 value: _active,
-                                activeThumbColor: AppColors.accent,
+                                activeThumbColor: AppColors.of(context).accent,
                                 onChanged: (v) => setState(() => _active = v),
                               ),
                               SwitchListTile(
                                 contentPadding: EdgeInsets.zero,
                                 dense: true,
                                 title: Text(
-                                  _testOnly ? 'TestFlight only' : 'Live in prod',
+                                  _testOnly
+                                      ? 'TestFlight only'
+                                      : 'Live in prod',
                                   style: PixelText.body(
                                     size: 14,
-                                    color: AppColors.textDark,
+                                    color: AppColors.of(context).textDark,
                                   ),
                                 ),
                                 subtitle: Text(
@@ -392,11 +386,11 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
                                       : 'Visible to everyone on the App Store',
                                   style: PixelText.body(
                                     size: 11,
-                                    color: AppColors.textMid,
+                                    color: AppColors.of(context).textMid,
                                   ),
                                 ),
                                 value: _testOnly,
-                                activeThumbColor: AppColors.accent,
+                                activeThumbColor: AppColors.of(context).accent,
                                 onChanged: (v) => setState(() => _testOnly = v),
                               ),
                               SwitchListTile(
@@ -406,7 +400,7 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
                                   _bobble ? 'Bobbles' : 'Static',
                                   style: PixelText.body(
                                     size: 14,
-                                    color: AppColors.textDark,
+                                    color: AppColors.of(context).textDark,
                                   ),
                                 ),
                                 subtitle: Text(
@@ -415,11 +409,11 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
                                       : 'Stays still as the capybara moves',
                                   style: PixelText.body(
                                     size: 11,
-                                    color: AppColors.textMid,
+                                    color: AppColors.of(context).textMid,
                                   ),
                                 ),
                                 value: _bobble,
-                                activeThumbColor: AppColors.accent,
+                                activeThumbColor: AppColors.of(context).accent,
                                 onChanged: (v) => setState(() => _bobble = v),
                               ),
                               const SizedBox(height: 4),
@@ -437,13 +431,14 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
                                   width: 200,
                                   height: 180,
                                   decoration: BoxDecoration(
-                                    color: AppColors.parchmentDark.withValues(
-                                      alpha: 0.25,
-                                    ),
+                                    color: AppColors.of(
+                                      context,
+                                    ).parchmentDark.withValues(alpha: 0.25),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   alignment: Alignment.bottomCenter,
-                                  child: item != null &&
+                                  child:
+                                      item != null &&
                                           item['slot'] == 'CHARACTER'
                                       // A character item IS the body — preview
                                       // it directly instead of overlaying it.
@@ -455,8 +450,7 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
                                       : CapybaraCustomizationPreview(
                                           accessories: [_previewAccessory()],
                                           size: 140,
-                                          animal:
-                                              _tunerAnimal == kDefaultAnimal
+                                          animal: _tunerAnimal == kDefaultAnimal
                                               ? null
                                               : _tunerAnimal,
                                         ),
@@ -575,9 +569,7 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
             (animal) => DropdownMenuItem<String>(
               value: animal,
               child: Text(
-                animal == kDefaultAnimal
-                    ? 'Capybara (base)'
-                    : animal,
+                animal == kDefaultAnimal ? 'Capybara (base)' : animal,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -614,12 +606,18 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
               Expanded(
                 child: Text(
                   label,
-                  style: PixelText.body(size: 13, color: AppColors.textDark),
+                  style: PixelText.body(
+                    size: 13,
+                    color: AppColors.of(context).textDark,
+                  ),
                 ),
               ),
               Text(
                 value.toStringAsFixed(3),
-                style: PixelText.number(size: 13, color: AppColors.textMid),
+                style: PixelText.number(
+                  size: 13,
+                  color: AppColors.of(context).textMid,
+                ),
               ),
             ],
           ),
@@ -635,7 +633,7 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
                   min: min,
                   max: max,
                   onChanged: onChanged,
-                  activeColor: AppColors.accent,
+                  activeColor: AppColors.of(context).accent,
                 ),
               ),
               _StepButton(
@@ -663,8 +661,8 @@ class _StepButton extends StatelessWidget {
       height: 36,
       child: Material(
         color: onPressed == null
-            ? AppColors.parchmentDark.withValues(alpha: 0.2)
-            : AppColors.parchmentDark.withValues(alpha: 0.5),
+            ? AppColors.of(context).parchmentDark.withValues(alpha: 0.2)
+            : AppColors.of(context).parchmentDark.withValues(alpha: 0.5),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         child: InkWell(
           borderRadius: BorderRadius.circular(8),
@@ -672,7 +670,9 @@ class _StepButton extends StatelessWidget {
           child: Icon(
             icon,
             size: 18,
-            color: onPressed == null ? AppColors.textMid : AppColors.textDark,
+            color: onPressed == null
+                ? AppColors.of(context).textMid
+                : AppColors.of(context).textDark,
           ),
         ),
       ),

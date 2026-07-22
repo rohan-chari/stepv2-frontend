@@ -80,15 +80,13 @@ class AttackOutcomeModal extends StatelessWidget {
       ? 'Your attack was reflected back at you'
       : 'Your attack was blocked';
 
-  Color get _accentColor =>
-      _isReflected ? AppColors.coinDark : AppColors.error;
-
   @override
   Widget build(BuildContext context) {
     final interceptorType = _interceptorType;
-    final interceptorName =
-        PowerupCopy.nameFor(interceptorType);
-    final accent = _accentColor;
+    final interceptorName = PowerupCopy.nameFor(interceptorType);
+    final accent = _isReflected
+        ? AppColors.of(context).coinDark
+        : AppColors.of(context).error;
 
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
@@ -103,7 +101,7 @@ class AttackOutcomeModal extends StatelessWidget {
       child: GameContainer(
         padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
         frameColor: accent,
-        surfaceColor: AppColors.parchmentLight,
+        surfaceColor: AppColors.of(context).parchmentLight,
         glowColor: accent,
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -112,7 +110,10 @@ class AttackOutcomeModal extends StatelessWidget {
             Text(
               _title,
               textAlign: TextAlign.center,
-              style: HomeText.display(size: 32, color: HomeColors.ink),
+              style: HomeText.display(
+                size: 32,
+                color: AppColors.of(context).ink,
+              ),
             ),
             const SizedBox(height: 14),
             Center(
@@ -120,7 +121,7 @@ class AttackOutcomeModal extends StatelessWidget {
                 width: 112,
                 height: 112,
                 decoration: BoxDecoration(
-                  color: AppColors.parchmentDark,
+                  color: AppColors.of(context).parchmentDark,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: accent, width: 2),
                 ),
@@ -135,13 +136,19 @@ class AttackOutcomeModal extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               interceptorName,
-              style: PixelText.title(size: 24, color: AppColors.textDark),
+              style: PixelText.title(
+                size: 24,
+                color: AppColors.of(context).textDark,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               _subtitle,
-              style: PixelText.body(size: 14, color: AppColors.textMid),
+              style: PixelText.body(
+                size: 14,
+                color: AppColors.of(context).textMid,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 22),
@@ -179,7 +186,7 @@ Future<void> showAttackOutcomeModal(
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 2.5),
                 child: ColoredBox(
-                  color: AppColors.roofDark.withValues(alpha: 0.54),
+                  color: AppColors.of(context).roofDark.withValues(alpha: 0.54),
                 ),
               ),
             ),

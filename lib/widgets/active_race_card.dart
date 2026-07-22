@@ -96,13 +96,13 @@ class _ActiveRaceCardState extends State<ActiveRaceCard> {
   Color _placementColor(int? placement) {
     switch (placement) {
       case 1:
-        return AppColors.medalGold;
+        return AppColors.of(context).medalGold;
       case 2:
-        return AppColors.medalSilver;
+        return AppColors.of(context).medalSilver;
       case 3:
-        return AppColors.medalBronze;
+        return AppColors.of(context).medalBronze;
       default:
-        return AppColors.accent;
+        return AppColors.of(context).accent;
     }
   }
 
@@ -125,7 +125,7 @@ class _ActiveRaceCardState extends State<ActiveRaceCard> {
               overflow: TextOverflow.ellipsis,
               style: PixelText.title(
                 size: 14,
-                color: AppColors.parchment,
+                color: AppColors.of(context).textLight,
               ),
             ),
             if (endsAt != null) ...[
@@ -134,7 +134,9 @@ class _ActiveRaceCardState extends State<ActiveRaceCard> {
                 '${_formatTimeLeft(endsAt)} LEFT',
                 style: PixelText.body(
                   size: 11,
-                  color: AppColors.parchment.withValues(alpha: 0.75),
+                  color: AppColors.of(
+                    context,
+                  ).textLight.withValues(alpha: 0.75),
                 ),
               ),
             ],
@@ -154,7 +156,7 @@ class _ActiveRaceCardState extends State<ActiveRaceCard> {
                     '${_ordinal(placement).toUpperCase()} PLACE',
                     style: PixelText.title(
                       size: 12,
-                      color: AppColors.parchment,
+                      color: AppColors.of(context).textLight,
                     ),
                   ),
                 ] else
@@ -162,7 +164,9 @@ class _ActiveRaceCardState extends State<ActiveRaceCard> {
                     'NOT RANKED',
                     style: PixelText.body(
                       size: 11,
-                      color: AppColors.parchment.withValues(alpha: 0.7),
+                      color: AppColors.of(
+                        context,
+                      ).textLight.withValues(alpha: 0.7),
                     ),
                   ),
               ],

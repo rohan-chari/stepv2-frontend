@@ -97,14 +97,17 @@ class _PowerupFallbackIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: AppColors.parchmentDark,
+        color: AppColors.of(context).parchmentDark,
         borderRadius: BorderRadius.circular(size * 0.18),
-        border: Border.all(color: AppColors.parchmentBorder, width: 1.5),
+        border: Border.all(
+          color: AppColors.of(context).parchmentBorder,
+          width: 1.5,
+        ),
       ),
       child: Icon(
         Icons.bolt_rounded,
         size: size * 0.62,
-        color: AppColors.coinDark,
+        color: AppColors.of(context).coinDark,
       ),
     );
   }

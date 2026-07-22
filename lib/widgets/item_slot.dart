@@ -7,7 +7,6 @@ import 'powerup_icon.dart';
 import 'spinning_crate.dart';
 import '../constants/powerup_copy.dart';
 
-
 enum ItemSlotState { empty, held, mysteryBox }
 
 /// An animated powerup slot with three visual states.
@@ -110,14 +109,15 @@ class _ItemSlotState extends State<ItemSlot>
 
   Widget _buildEmpty(double t) {
     final rotationY = t * 2 * pi;
+    final colors = AppColors.of(context);
 
     return _buildSlotShell(
-      color: const Color(0xFFC48C3C),
-      borderColor: const Color(0xFF6B4420),
+      color: colors.emptySlotFace,
+      borderColor: colors.emptySlotBorder,
       borderWidth: 2,
       boxShadow: [
         BoxShadow(
-          color: AppColors.woodShadow.withValues(alpha: 0.3),
+          color: AppColors.of(context).woodShadow.withValues(alpha: 0.3),
           offset: const Offset(0, 3),
           blurRadius: 6,
         ),
@@ -131,16 +131,16 @@ class _ItemSlotState extends State<ItemSlot>
                 transform: Matrix4.identity()
                   ..setEntry(3, 2, 0.003)
                   ..rotateY(rotationY),
-                child: const Text(
+                child: Text(
                   '?',
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.w900,
-                    color: Color(0xFFFFD740),
+                    color: colors.emptySlotMark,
                     shadows: [
                       Shadow(
-                        color: Color(0xFF6B4420),
-                        offset: Offset(1.5, 1.5),
+                        color: colors.emptySlotBorder,
+                        offset: const Offset(1.5, 1.5),
                         blurRadius: 0,
                       ),
                     ],
@@ -152,10 +152,7 @@ class _ItemSlotState extends State<ItemSlot>
           const SizedBox(height: 4),
           Text(
             widget.isExtraSlot ? 'Bonus' : 'Empty',
-            style: PixelText.title(
-              size: 9,
-              color: AppColors.textMid.withValues(alpha: 0.5),
-            ),
+            style: PixelText.title(size: 9, color: colors.emptySlotLabel),
             textAlign: TextAlign.center,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -167,12 +164,12 @@ class _ItemSlotState extends State<ItemSlot>
 
   Widget _buildHeld() {
     return _buildSlotShell(
-      color: AppColors.parchmentLight,
-      borderColor: AppColors.parchmentBorder,
+      color: AppColors.of(context).parchmentLight,
+      borderColor: AppColors.of(context).parchmentBorder,
       borderWidth: widget.isExtraSlot ? 2.5 : 2,
       boxShadow: [
         BoxShadow(
-          color: AppColors.woodShadow.withValues(alpha: 0.25),
+          color: AppColors.of(context).woodShadow.withValues(alpha: 0.25),
           offset: const Offset(0, 3),
           blurRadius: 6,
         ),
@@ -187,7 +184,10 @@ class _ItemSlotState extends State<ItemSlot>
           const SizedBox(height: 4),
           Text(
             PowerupCopy.nameFor(widget.powerupType),
-            style: PixelText.title(size: 8, color: AppColors.textDark),
+            style: PixelText.title(
+              size: 8,
+              color: AppColors.of(context).textDark,
+            ),
             textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -199,17 +199,17 @@ class _ItemSlotState extends State<ItemSlot>
 
   Widget _buildMysteryBox() {
     return _buildSlotShell(
-      color: AppColors.parchmentDark,
-      borderColor: AppColors.coinMid,
+      color: AppColors.of(context).parchmentDark,
+      borderColor: AppColors.of(context).coinMid,
       borderWidth: 2,
       boxShadow: [
         BoxShadow(
-          color: AppColors.coinMid.withValues(alpha: 0.35),
+          color: AppColors.of(context).coinMid.withValues(alpha: 0.35),
           spreadRadius: 1,
           blurRadius: 8,
         ),
         BoxShadow(
-          color: AppColors.woodShadow.withValues(alpha: 0.25),
+          color: AppColors.of(context).woodShadow.withValues(alpha: 0.25),
           offset: const Offset(0, 3),
           blurRadius: 6,
         ),
@@ -220,7 +220,10 @@ class _ItemSlotState extends State<ItemSlot>
           const SizedBox(height: 4),
           Text(
             'Open',
-            style: PixelText.title(size: 9, color: AppColors.coinDark),
+            style: PixelText.title(
+              size: 9,
+              color: AppColors.of(context).coinDark,
+            ),
             textAlign: TextAlign.center,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,

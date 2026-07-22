@@ -68,11 +68,11 @@ class _RaceInviteScreenState extends State<RaceInviteScreen> {
                   children: [
                     GestureDetector(
                       onTap: () => Navigator.of(context).pop(),
-                      child: const Padding(
+                      child: Padding(
                         padding: EdgeInsets.all(8),
                         child: Icon(
                           Icons.arrow_back,
-                          color: AppColors.parchmentLight,
+                          color: AppColors.of(context).textLight,
                           size: 24,
                         ),
                       ),
@@ -86,7 +86,7 @@ class _RaceInviteScreenState extends State<RaceInviteScreen> {
                             'INVITE FRIENDS',
                             style: PixelText.title(
                               size: 22,
-                              color: AppColors.parchmentLight,
+                              color: AppColors.of(context).textLight,
                             ).copyWith(shadows: _textShadows),
                           ),
                           const SizedBox(height: 2),
@@ -94,7 +94,7 @@ class _RaceInviteScreenState extends State<RaceInviteScreen> {
                             'Select friends to race against',
                             style: PixelText.body(
                               size: 13,
-                              color: AppColors.parchment,
+                              color: AppColors.of(context).textLight,
                             ).copyWith(shadows: _textShadows),
                           ),
                         ],
@@ -117,7 +117,7 @@ class _RaceInviteScreenState extends State<RaceInviteScreen> {
                                 'No friends available to invite',
                                 style: PixelText.body(
                                   size: 14,
-                                  color: AppColors.textMid,
+                                  color: AppColors.of(context).textMid,
                                 ),
                               ),
                             )
@@ -192,12 +192,12 @@ class _RaceInviteScreenState extends State<RaceInviteScreen> {
                   height: 24,
                   decoration: BoxDecoration(
                     color: selected
-                        ? AppColors.pillGreenDark
+                        ? AppColors.of(context).pillGreenDark
                         : Colors.transparent,
                     border: Border.all(
                       color: selected
-                          ? AppColors.pillGreenDark
-                          : AppColors.textMid,
+                          ? AppColors.of(context).pillGreenDark
+                          : AppColors.of(context).textMid,
                       width: 2,
                     ),
                     borderRadius: BorderRadius.circular(6),
@@ -215,8 +215,8 @@ class _RaceInviteScreenState extends State<RaceInviteScreen> {
                     style: PixelText.title(
                       size: 18,
                       color: ineligible
-                          ? AppColors.textMid
-                          : AppColors.textDark,
+                          ? AppColors.of(context).textMid
+                          : AppColors.of(context).textDark,
                     ),
                   ),
                 ),
@@ -227,10 +227,10 @@ class _RaceInviteScreenState extends State<RaceInviteScreen> {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.parchmentDark,
+                      color: AppColors.of(context).parchmentDark,
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(
-                        color: AppColors.parchmentBorder,
+                        color: AppColors.of(context).parchmentBorder,
                         width: 1.5,
                       ),
                     ),
@@ -238,7 +238,7 @@ class _RaceInviteScreenState extends State<RaceInviteScreen> {
                       'NEEDS APP UPDATE',
                       style: PixelText.title(
                         size: 8.5,
-                        color: AppColors.textMid,
+                        color: AppColors.of(context).textMid,
                       ),
                     ),
                   ),

@@ -19,10 +19,11 @@ class RetroCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final border =
-        highlightColor ?? AppColors.roofDark.withValues(alpha: 0.55);
+        highlightColor ??
+        AppColors.of(context).roofDark.withValues(alpha: 0.55);
     final fill = highlightColor == null
-        ? AppColors.parchment
-        : Color.lerp(highlightColor, AppColors.parchment, 0.82)!;
+        ? AppColors.of(context).parchment
+        : Color.lerp(highlightColor, AppColors.of(context).parchment, 0.82)!;
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -42,8 +43,14 @@ class RetroCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: Stack(
           children: [
-            const Positioned.fill(
-              child: CustomPaint(painter: PixelSurfacePainter()),
+            Positioned.fill(
+              child: CustomPaint(
+                painter: PixelSurfacePainter(
+                  dotColor: AppColors.of(
+                    context,
+                  ).parchmentDark.withValues(alpha: 0.32),
+                ),
+              ),
             ),
             Padding(padding: padding, child: child),
           ],

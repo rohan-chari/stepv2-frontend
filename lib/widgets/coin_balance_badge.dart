@@ -45,7 +45,7 @@ class _CoinBalanceBadgeState extends State<CoinBalanceBadge> {
           '${widget.coins}',
           style: PixelText.number(
             size: 19,
-            color: AppColors.coinLight,
+            color: AppColors.of(context).coinLight,
           ).copyWith(shadows: _textShadows),
         ),
         if (isTappable) ...[
@@ -53,7 +53,7 @@ class _CoinBalanceBadgeState extends State<CoinBalanceBadge> {
           Icon(
             Icons.chevron_right_rounded,
             size: widget.coinSize,
-            color: AppColors.coinLight,
+            color: AppColors.of(context).coinLight,
             shadows: _textShadows,
           ),
         ],
@@ -106,10 +106,10 @@ class _AddCoinsButtonState extends State<_AddCoinsButton> {
   Widget build(BuildContext context) {
     final button = Container(
       decoration: BoxDecoration(
-        color: AppColors.coinMid.withValues(alpha: 0.28),
+        color: AppColors.of(context).coinMid.withValues(alpha: 0.28),
         shape: BoxShape.circle,
         border: Border.all(
-          color: AppColors.coinLight.withValues(alpha: 0.7),
+          color: AppColors.of(context).coinLight.withValues(alpha: 0.7),
           width: 1.5,
         ),
       ),
@@ -117,7 +117,7 @@ class _AddCoinsButtonState extends State<_AddCoinsButton> {
       child: Icon(
         Icons.add_rounded,
         size: widget.size - 4,
-        color: AppColors.coinLight,
+        color: AppColors.of(context).coinLight,
         shadows: _shadows,
       ),
     );

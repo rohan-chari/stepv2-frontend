@@ -40,7 +40,7 @@ class FriendPickerScreen extends StatelessWidget {
                         padding: const EdgeInsets.all(8),
                         child: Icon(
                           Icons.arrow_back,
-                          color: AppColors.parchmentLight,
+                          color: AppColors.of(context).textLight,
                           size: 24,
                         ),
                       ),
@@ -54,7 +54,7 @@ class FriendPickerScreen extends StatelessWidget {
                             'CHALLENGE A FRIEND',
                             style: PixelText.title(
                               size: 22,
-                              color: AppColors.parchmentLight,
+                              color: AppColors.of(context).textLight,
                             ).copyWith(shadows: _textShadows),
                           ),
                           const SizedBox(height: 2),
@@ -62,7 +62,7 @@ class FriendPickerScreen extends StatelessWidget {
                             'Pick someone to battle this week',
                             style: PixelText.body(
                               size: 13,
-                              color: AppColors.parchment,
+                              color: AppColors.of(context).textLight,
                             ).copyWith(shadows: _textShadows),
                           ),
                         ],
@@ -105,12 +105,15 @@ class FriendPickerScreen extends StatelessWidget {
               Expanded(
                 child: Text(
                   atName(name),
-                  style: PixelText.title(size: 18, color: AppColors.textDark),
+                  style: PixelText.title(
+                    size: 18,
+                    color: AppColors.of(context).textDark,
+                  ),
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.chevron_right,
-                color: AppColors.textMid,
+                color: AppColors.of(context).textMid,
                 size: 24,
               ),
             ],

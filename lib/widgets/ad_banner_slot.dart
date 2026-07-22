@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
@@ -47,9 +49,12 @@ class AdBannerSlot extends StatefulWidget {
 }
 
 class _AdBannerSlotState extends State<AdBannerSlot> {
+  static const _retryDelay = Duration(seconds: 60);
+
   BannerAd? _ad;
   bool _loaded = false;
   bool _loadStarted = false;
+  Timer? _retryTimer;
 
   @override
   void didChangeDependencies() {
@@ -62,15 +67,17 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
   }
 
   Future<void> _load() async {
+    _retryTimer?.cancel();
+    _retryTimer = null;
     if (!AdService.bannersEnabled) return;
     await AdService.ensureInitialized();
     if (!mounted) return;
-    // Meta Audience Network doesn't support anchored-adaptive banners. Keep
-    // the near-full-width treatment, but use Meta's supported flexible-width,
-    // fixed-height banner format. The small inset keeps the tappable creative
-    // off the screen edges and leaves room for the 2px poster frame.
-    final width = (MediaQuery.of(context).size.width - 16).truncate();
-    final size = AdSize(width: width, height: 50);
+    // Use the standard 320x50 banner format shared by Google demand and our
+    // mediation providers. In particular, Meta Audience Network rejects
+    // anchored/inline adaptive sizes, while arbitrary screen-width AdSize
+    // values are not standard Google banner inventory. AdSize.banner keeps a
+    // single request eligible across Google, Meta, and AppLovin.
+    const size = AdSize.banner;
     final ad = BannerAd(
       adUnitId: AdService.bannerAdUnitId,
       size: size,
@@ -91,6 +98,9 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
               _ad = null;
               _loaded = false;
             });
+            // No-fill is often transient. Retry conservatively instead of
+            // leaving this placement empty for the widget's entire lifetime.
+            _retryTimer = Timer(_retryDelay, _load);
           }
         },
       ),
@@ -101,6 +111,7 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
 
   @override
   void dispose() {
+    _retryTimer?.cancel();
     _ad?.dispose();
     super.dispose();
   }
@@ -142,10 +153,13 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
           children: [
             Text(
               'SPONSOR',
-              style: PixelText.body(size: 8, color: AppColors.textMid),
+              style: PixelText.body(
+                size: 8,
+                color: AppColors.of(context).textMid,
+              ),
             ),
             const SizedBox(height: 2),
-            _poster(ad, frame: AppColors.parchmentBorder),
+            _poster(ad, frame: AppColors.of(context).parchmentBorder),
           ],
         ),
       );
@@ -156,9 +170,11 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
     // same header/footer treatment the rest of the screen chrome uses — so
     // the footer belongs to the scene and only the small poster is "ad".
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: AppColors.roofMid,
-        border: Border(top: BorderSide(color: AppColors.roofEdge, width: 2)),
+      decoration: BoxDecoration(
+        color: AppColors.of(context).roofMid,
+        border: Border(
+          top: BorderSide(color: AppColors.of(context).roofEdge, width: 2),
+        ),
       ),
       child: SizedBox(
         width: double.infinity,
@@ -169,10 +185,13 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
             children: [
               Text(
                 'SPONSOR',
-                style: PixelText.body(size: 8, color: AppColors.roofRidge),
+                style: PixelText.body(
+                  size: 8,
+                  color: AppColors.of(context).roofRidge,
+                ),
               ),
               const SizedBox(height: 2),
-              _poster(ad, frame: AppColors.roofEdge),
+              _poster(ad, frame: AppColors.of(context).roofEdge),
             ],
           ),
         ),

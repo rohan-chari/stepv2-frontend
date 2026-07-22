@@ -3,7 +3,6 @@ import '../styles.dart';
 import 'player_avatar.dart';
 import '../constants/powerup_copy.dart';
 
-
 const _offensiveTypes = {
   'LEG_CRAMP',
   'RED_CARD',
@@ -53,20 +52,21 @@ class FeedBubble extends StatelessWidget {
     this.actorIsUser = false,
   });
 
-  Color get _accentColor {
+  Color _accentColor(BuildContext context) {
+    final colors = AppColors.of(context);
     if (eventType == 'POWERUP_BLOCKED' || eventType == 'POWERUP_REFLECTED') {
-      return AppColors.feedShield;
+      return colors.feedShield;
     }
     if (eventType == 'MYSTERY_BOX_EARNED' ||
         eventType == 'MYSTERY_BOX_OPENED') {
-      return AppColors.feedGold;
+      return colors.feedGold;
     }
     if (eventType == 'POWERUP_USED' && powerupType != null) {
-      if (_offensiveTypes.contains(powerupType)) return AppColors.feedAttack;
-      if (_shieldTypes.contains(powerupType)) return AppColors.feedShield;
-      if (_boostTypes.contains(powerupType)) return AppColors.feedBoost;
+      if (_offensiveTypes.contains(powerupType)) return colors.feedAttack;
+      if (_shieldTypes.contains(powerupType)) return colors.feedShield;
+      if (_boostTypes.contains(powerupType)) return colors.feedBoost;
     }
-    return AppColors.textMid.withValues(alpha: 0.4);
+    return colors.textMid.withValues(alpha: colors.isDark ? 0.9 : 0.4);
   }
 
   @override
@@ -80,19 +80,23 @@ class FeedBubble extends StatelessWidget {
           PlayerAvatar(name: actorName, size: 26, isUser: actorIsUser),
           const SizedBox(width: 8),
           // Description
-          Expanded(child: _buildRichDescription()),
+          Expanded(child: _buildRichDescription(context)),
           const SizedBox(width: 8),
           // Time
           Text(
             relativeTime,
-            style: PixelText.title(size: 12, color: AppColors.textMid),
+            style: PixelText.title(
+              size: 12,
+              color: AppColors.of(context).textMid,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildRichDescription() {
+  Widget _buildRichDescription(BuildContext context) {
+    final colors = AppColors.of(context);
     if (powerupType != null) {
       // Highlights the powerup's name inside the server-authored description.
       // Resolves through the consolidated copy source so a backend copy change
@@ -106,7 +110,7 @@ class FeedBubble extends StatelessWidget {
             spans.add(
               TextSpan(
                 text: parts[i],
-                style: PixelText.body(size: 16, color: AppColors.textDark),
+                style: PixelText.body(size: 16, color: colors.textDark),
               ),
             );
           }
@@ -114,7 +118,7 @@ class FeedBubble extends StatelessWidget {
             spans.add(
               TextSpan(
                 text: powerupName,
-                style: PixelText.title(size: 15, color: _accentColor),
+                style: PixelText.title(size: 15, color: _accentColor(context)),
               ),
             );
           }
@@ -129,7 +133,7 @@ class FeedBubble extends StatelessWidget {
 
     return Text(
       description,
-      style: PixelText.body(size: 16, color: AppColors.textDark),
+      style: PixelText.body(size: 16, color: colors.textDark),
       maxLines: 3,
       overflow: TextOverflow.ellipsis,
     );

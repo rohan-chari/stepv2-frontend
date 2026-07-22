@@ -22,7 +22,8 @@ class RaceCardUser {
 
   static RaceCardUser? fromJson(Map<String, dynamic>? json) {
     if (json == null) return null;
-    final accessories = (json['accessories'] as List?)
+    final accessories =
+        (json['accessories'] as List?)
             ?.whereType<Map<String, dynamic>>()
             .toList() ??
         const <Map<String, dynamic>>[];

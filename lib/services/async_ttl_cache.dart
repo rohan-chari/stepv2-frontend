@@ -6,7 +6,7 @@
 /// clear it. It deliberately does not persist across app launches.
 class AsyncTtlCache<T> {
   AsyncTtlCache({required this.ttl, DateTime Function()? clock})
-      : _clock = clock ?? DateTime.now;
+    : _clock = clock ?? DateTime.now;
 
   final Duration ttl;
   final DateTime Function() _clock;
@@ -29,10 +29,7 @@ class AsyncTtlCache<T> {
   /// Returns a fresh value without calling [fetch]; otherwise runs (or joins) a
   /// single in-flight [fetch]. On success the value + timestamp are recorded; on
   /// error nothing is cached and the error propagates to every joined caller.
-  Future<T> get(
-    Future<T> Function() fetch, {
-    bool forceRefresh = false,
-  }) {
+  Future<T> get(Future<T> Function() fetch, {bool forceRefresh = false}) {
     if (!forceRefresh && isFresh) {
       return Future<T>.value(_value as T);
     }

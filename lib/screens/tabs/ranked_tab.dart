@@ -198,9 +198,9 @@ class _RankedTabState extends State<RankedTab> {
 
     return Stack(
       children: [
-        const Positioned.fill(
+        Positioned.fill(
           child: ColoredBox(
-            color: AppColors.roofLight,
+            color: AppColors.of(context).roofLight,
             child: CustomPaint(
               painter: ArcadeCheckerPainter(drawBottomStripe: false),
             ),
@@ -210,8 +210,8 @@ class _RankedTabState extends State<RankedTab> {
           padding: EdgeInsets.only(top: topInset + 14, bottom: tabBarHeight),
           child: RefreshIndicator(
             onRefresh: _load,
-            color: AppColors.accent,
-            backgroundColor: AppColors.parchment,
+            color: AppColors.of(context).accent,
+            backgroundColor: AppColors.of(context).parchment,
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [SliverToBoxAdapter(child: _buildShell())],
@@ -227,7 +227,7 @@ class _RankedTabState extends State<RankedTab> {
       children: [
         _buildHeader(),
         ColoredBox(
-          color: AppColors.parchment,
+          color: AppColors.of(context).parchment,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
             child: _buildBody(),
@@ -239,9 +239,11 @@ class _RankedTabState extends State<RankedTab> {
 
   Widget _buildHeader() {
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: AppColors.roofLight,
-        border: Border(bottom: BorderSide(color: AppColors.roofDark, width: 1)),
+      decoration: BoxDecoration(
+        color: AppColors.of(context).roofLight,
+        border: Border(
+          bottom: BorderSide(color: AppColors.of(context).roofDark, width: 1),
+        ),
       ),
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
@@ -258,7 +260,7 @@ class _RankedTabState extends State<RankedTab> {
                       'RANKED',
                       style: PixelText.title(
                         size: 28,
-                        color: AppColors.parchment,
+                        color: AppColors.of(context).textLight,
                       ).copyWith(shadows: _headerShadows),
                     ),
                     const SizedBox(height: 3),
@@ -266,13 +268,15 @@ class _RankedTabState extends State<RankedTab> {
                       _seasonLabel(),
                       style: PixelText.body(
                         size: 12,
-                        color: AppColors.parchment.withValues(alpha: 0.9),
+                        color: AppColors.of(
+                          context,
+                        ).textLight.withValues(alpha: 0.9),
                       ),
                     ),
                   ],
                 ),
               ),
-              _howItWorksButton(AppColors.parchment),
+              _howItWorksButton(AppColors.of(context).textLight),
             ],
           ),
         ),
@@ -369,11 +373,11 @@ class _RankedTabState extends State<RankedTab> {
     return Column(
       children: [
         if (state.isRefreshing)
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(bottom: 8),
             child: LinearProgressIndicator(
               minHeight: 2,
-              color: AppColors.accent,
+              color: AppColors.of(context).accent,
               backgroundColor: Colors.transparent,
             ),
           ),
@@ -535,28 +539,28 @@ class _RankedTabState extends State<RankedTab> {
     switch (s.kind) {
       case 'top':
       case 'promo':
-        bg = AppColors.roofLight;
-        fg = AppColors.parchment;
+        bg = AppColors.of(context).roofLight;
+        fg = AppColors.of(context).parchment;
         numColor = Colors.white;
-        pillBg = AppColors.pillGold;
-        pillFg = AppColors.textDark;
-        border = AppColors.roofDark;
+        pillBg = AppColors.of(context).pillGold;
+        pillFg = AppColors.of(context).textDark;
+        border = AppColors.of(context).roofDark;
         headline = s.kind == 'top' ? 'LEADING' : 'MOVING UP';
       case 'danger':
-        bg = AppColors.pillTerra;
-        fg = AppColors.parchment;
+        bg = AppColors.of(context).error;
+        fg = AppColors.of(context).textLight;
         numColor = Colors.white;
-        pillBg = AppColors.parchment;
-        pillFg = AppColors.pillTerraShadow;
-        border = AppColors.pillTerraShadow;
+        pillBg = AppColors.of(context).parchment;
+        pillFg = AppColors.of(context).error;
+        border = AppColors.of(context).error;
         headline = 'AT RISK';
       default:
-        bg = AppColors.parchmentLight;
-        fg = AppColors.textDark;
-        numColor = AppColors.accent;
-        pillBg = AppColors.parchmentDark;
-        pillFg = AppColors.textDark;
-        border = AppColors.parchmentBorder;
+        bg = AppColors.of(context).parchmentLight;
+        fg = AppColors.of(context).textDark;
+        numColor = AppColors.of(context).accent;
+        pillBg = AppColors.of(context).parchmentDark;
+        pillFg = AppColors.of(context).textDark;
+        border = AppColors.of(context).parchmentBorder;
         headline = 'HOLDING';
     }
 
@@ -597,9 +601,7 @@ class _RankedTabState extends State<RankedTab> {
     }
 
     final weekIndex = (_week?['index'] as num?)?.toInt();
-    final metaParts = <String>[
-      if (weekIndex != null) 'Week $weekIndex',
-    ];
+    final metaParts = <String>[if (weekIndex != null) 'Week $weekIndex'];
 
     return Container(
       decoration: BoxDecoration(
@@ -712,7 +714,11 @@ class _RankedTabState extends State<RankedTab> {
         ),
         if (s.projectedCoins > 0) ...[
           const SizedBox(width: 8),
-          const Icon(Icons.paid_rounded, size: 13, color: AppColors.medalGold),
+          Icon(
+            Icons.paid_rounded,
+            size: 13,
+            color: AppColors.of(context).medalGold,
+          ),
           const SizedBox(width: 3),
           Text(
             '+${s.projectedCoins}',
@@ -731,9 +737,12 @@ class _RankedTabState extends State<RankedTab> {
     final weekIndex = (_week?['index'] as num?)?.toInt();
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.parchmentLight,
+        color: AppColors.of(context).parchmentLight,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.parchmentBorder, width: 1.5),
+        border: Border.all(
+          color: AppColors.of(context).parchmentBorder,
+          width: 1.5,
+        ),
       ),
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
       child: Column(
@@ -742,17 +751,23 @@ class _RankedTabState extends State<RankedTab> {
           const SizedBox(height: 12),
           Text(
             "You're in${weekIndex != null ? ' — Week $weekIndex' : ''}",
-            style: PixelText.title(size: 18, color: AppColors.textDark),
+            style: PixelText.title(
+              size: 18,
+              color: AppColors.of(context).textDark,
+            ),
           ),
           const SizedBox(height: 6),
           Text(
             'Walk 5,000+ steps today to join this week’s ${shown.label} '
             'group — about 30 walkers at your level — and start climbing.',
             textAlign: TextAlign.center,
-            style: PixelText.body(size: 13, color: AppColors.textMid),
+            style: PixelText.body(
+              size: 13,
+              color: AppColors.of(context).textMid,
+            ),
           ),
           const SizedBox(height: 10),
-          _howItWorksButton(AppColors.accent),
+          _howItWorksButton(AppColors.of(context).accent),
         ],
       ),
     );
@@ -798,16 +813,26 @@ class _RankedTabState extends State<RankedTab> {
     final children = <Widget>[
       Row(
         children: [
-          const Icon(Icons.groups_rounded, size: 16, color: AppColors.textDark),
+          Icon(
+            Icons.groups_rounded,
+            size: 16,
+            color: AppColors.of(context).textDark,
+          ),
           const SizedBox(width: 8),
           Text(
             'Your group',
-            style: PixelText.title(size: 15, color: AppColors.textDark),
+            style: PixelText.title(
+              size: 15,
+              color: AppColors.of(context).textDark,
+            ),
           ),
           const Spacer(),
           Text(
             '$size walkers',
-            style: PixelText.body(size: 11, color: AppColors.textMid),
+            style: PixelText.body(
+              size: 11,
+              color: AppColors.of(context).textMid,
+            ),
           ),
         ],
       ),
@@ -817,7 +842,7 @@ class _RankedTabState extends State<RankedTab> {
           if (promote > 0) 'Top $promote move up',
           if (demote > 0) 'bottom $demote drop',
         ].join(' · '),
-        style: PixelText.body(size: 11, color: AppColors.textMid),
+        style: PixelText.body(size: 11, color: AppColors.of(context).textMid),
       ),
       const SizedBox(height: 8),
       ..._groupRows(
@@ -840,7 +865,10 @@ class _RankedTabState extends State<RankedTab> {
           ),
           child: Text(
             _groupExpanded ? 'Show less' : 'See full group ($size)',
-            style: PixelText.body(size: 12, color: AppColors.accent),
+            style: PixelText.body(
+              size: 12,
+              color: AppColors.of(context).accent,
+            ),
           ),
         ),
       ),
@@ -925,13 +953,13 @@ class _RankedTabState extends State<RankedTab> {
       padding: const EdgeInsets.fromLTRB(8, 7, 8, 7),
       decoration: BoxDecoration(
         color: isMe
-            ? AppColors.accent.withValues(alpha: 0.14)
-            : AppColors.parchment,
+            ? AppColors.of(context).accent.withValues(alpha: 0.14)
+            : AppColors.of(context).parchment,
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
           color: isMe
-              ? AppColors.accent.withValues(alpha: 0.45)
-              : AppColors.parchmentBorder.withValues(alpha: 0.6),
+              ? AppColors.of(context).accent.withValues(alpha: 0.45)
+              : AppColors.of(context).parchmentBorder.withValues(alpha: 0.6),
           width: isMe ? 1.5 : 1,
         ),
       ),
@@ -944,7 +972,10 @@ class _RankedTabState extends State<RankedTab> {
             child: Text(
               rank != null ? '$rank' : '--',
               textAlign: TextAlign.center,
-              style: PixelText.body(size: 12, color: AppColors.textMid),
+              style: PixelText.body(
+                size: 12,
+                color: AppColors.of(context).textMid,
+              ),
             ),
           ),
           const SizedBox(width: 8),
@@ -953,7 +984,7 @@ class _RankedTabState extends State<RankedTab> {
             imageUrl: profilePhotoUrl,
             size: 34,
             isUser: isMe,
-            borderColor: isMe ? AppColors.accent : tier.color,
+            borderColor: isMe ? AppColors.of(context).accent : tier.color,
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -963,20 +994,25 @@ class _RankedTabState extends State<RankedTab> {
               overflow: TextOverflow.ellipsis,
               style: PixelText.body(
                 size: 13,
-                color: isMe ? AppColors.accent : AppColors.textDark,
+                color: isMe
+                    ? AppColors.of(context).accent
+                    : AppColors.of(context).textDark,
               ),
             ),
           ),
           if (reward > 0) ...[
-            const Icon(
+            Icon(
               Icons.paid_rounded,
               size: 12,
-              color: AppColors.medalGold,
+              color: AppColors.of(context).medalGold,
             ),
             const SizedBox(width: 2),
             Text(
               '$reward',
-              style: PixelText.body(size: 10, color: AppColors.textMid),
+              style: PixelText.body(
+                size: 10,
+                color: AppColors.of(context).textMid,
+              ),
             ),
             const SizedBox(width: 8),
           ],
@@ -987,7 +1023,9 @@ class _RankedTabState extends State<RankedTab> {
               textAlign: TextAlign.right,
               style: PixelText.title(
                 size: 12,
-                color: isMe ? AppColors.accent : AppColors.textDark,
+                color: isMe
+                    ? AppColors.of(context).accent
+                    : AppColors.of(context).textDark,
               ),
             ),
           ),
@@ -1022,13 +1060,16 @@ class _RankedTabState extends State<RankedTab> {
     // tailor the rule rather than printing "the bottom 0 drop down".
     final String rule;
     if (promote > 0 && demote > 0) {
-      rule = 'Most steps wins. Finish in the top $promote to move up a tier; '
+      rule =
+          'Most steps wins. Finish in the top $promote to move up a tier; '
           'the bottom $demote drop down.';
     } else if (demote == 0) {
-      rule = 'Most steps wins. Finish in the top $promote to move up a tier — '
+      rule =
+          'Most steps wins. Finish in the top $promote to move up a tier — '
           'Bronze is the bottom, so you can only climb.';
     } else {
-      rule = 'Most steps wins. The bottom $demote drop a tier — Legend is the '
+      rule =
+          'Most steps wins. The bottom $demote drop a tier — Legend is the '
           'top, so hold your spot to defend it.';
     }
     showModalBottomSheet<void>(
@@ -1039,9 +1080,12 @@ class _RankedTabState extends State<RankedTab> {
           child: Container(
             margin: const EdgeInsets.fromLTRB(12, 12, 12, 16),
             decoration: BoxDecoration(
-              color: AppColors.parchment,
+              color: AppColors.of(context).parchment,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.parchmentBorder, width: 2),
+              border: Border.all(
+                color: AppColors.of(context).parchmentBorder,
+                width: 2,
+              ),
             ),
             padding: const EdgeInsets.fromLTRB(18, 16, 18, 20),
             child: Column(
@@ -1050,21 +1094,24 @@ class _RankedTabState extends State<RankedTab> {
               children: [
                 Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.help_outline_rounded,
                       size: 20,
-                      color: AppColors.textDark,
+                      color: AppColors.of(context).textDark,
                     ),
                     const SizedBox(width: 8),
                     Text(
                       'How Ranked works',
-                      style: PixelText.title(size: 18, color: AppColors.textDark),
+                      style: PixelText.title(
+                        size: 18,
+                        color: AppColors.of(context).textDark,
+                      ),
                     ),
                     const Spacer(),
                     IconButton(
                       onPressed: () => Navigator.of(sheetContext).pop(),
                       icon: const Icon(Icons.close_rounded),
-                      color: AppColors.textMid,
+                      color: AppColors.of(context).textMid,
                       iconSize: 20,
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
@@ -1074,7 +1121,8 @@ class _RankedTabState extends State<RankedTab> {
                 const SizedBox(height: 14),
                 const _HowItWorksLine(
                   icon: Icons.groups_rounded,
-                  text: 'Each week you’re matched with ~30 walkers at your level.',
+                  text:
+                      'Each week you’re matched with ~30 walkers at your level.',
                 ),
                 _HowItWorksLine(
                   icon: Icons.directions_walk_rounded,
@@ -1120,8 +1168,8 @@ class _RankedTabState extends State<RankedTab> {
                     style: PixelText.body(
                       size: 7,
                       color: t['key'] == myKey
-                          ? AppColors.textDark
-                          : AppColors.textMid,
+                          ? AppColors.of(context).textDark
+                          : AppColors.of(context).textMid,
                     ),
                   ),
                 ],
@@ -1153,8 +1201,8 @@ class _RankedTabState extends State<RankedTab> {
                         center: Alignment.topRight,
                         radius: 0.95,
                         colors: [
-                          AppColors.accent.withValues(alpha: 0.16),
-                          AppColors.parchment.withValues(alpha: 0),
+                          AppColors.of(context).accent.withValues(alpha: 0.16),
+                          AppColors.of(context).parchment.withValues(alpha: 0),
                         ],
                       ),
                     ),
@@ -1165,12 +1213,12 @@ class _RankedTabState extends State<RankedTab> {
                   child: CustomPaint(
                     size: const Size(128, 116),
                     painter: _RankShieldPainter(
-                      color: AppColors.parchmentBorder,
+                      color: AppColors.of(context).parchmentBorder,
                     ),
                   ),
                 ),
                 const Positioned(top: 18, child: _CrownedCapybara(size: 74)),
-                const Positioned(top: 104, child: _RankRibbon(label: 'JOIN')),
+                Positioned(top: 104, child: _RankRibbon(label: 'JOIN')),
                 Positioned(
                   top: 144,
                   child: Column(
@@ -1179,15 +1227,15 @@ class _RankedTabState extends State<RankedTab> {
                         'UNRANKED',
                         style: PixelText.title(
                           size: 27,
-                          color: AppColors.textDark,
+                          color: AppColors.of(context).textDark,
                         ),
                       ),
-                      const SizedBox(height: 2),
+                      SizedBox(height: 2),
                       Text(
                         'Not ranked yet',
                         style: PixelText.body(
                           size: 11,
-                          color: AppColors.textMid,
+                          color: AppColors.of(context).textMid,
                         ),
                       ),
                     ],
@@ -1197,12 +1245,12 @@ class _RankedTabState extends State<RankedTab> {
             ),
           ),
           Row(
-            children: const [
+            children: [
               Expanded(
                 child: _HeroMetric(
                   value: '5K',
                   label: 'STEP DAY',
-                  accent: AppColors.accent,
+                  accent: AppColors.of(context).accent,
                   strong: true,
                 ),
               ),
@@ -1211,7 +1259,7 @@ class _RankedTabState extends State<RankedTab> {
                 child: _HeroMetric(
                   value: '0',
                   label: 'RP',
-                  accent: AppColors.textDark,
+                  accent: AppColors.of(context).textDark,
                 ),
               ),
               SizedBox(width: 8),
@@ -1219,7 +1267,7 @@ class _RankedTabState extends State<RankedTab> {
                 child: _HeroMetric(
                   value: '--',
                   label: 'RANK',
-                  accent: AppColors.textDark,
+                  accent: AppColors.of(context).textDark,
                 ),
               ),
             ],
@@ -1259,7 +1307,7 @@ class _RankedTabState extends State<RankedTab> {
                       radius: 0.95,
                       colors: [
                         tier.color.withValues(alpha: 0.28),
-                        AppColors.parchment.withValues(alpha: 0),
+                        AppColors.of(context).parchment.withValues(alpha: 0),
                       ],
                     ),
                   ),
@@ -1290,7 +1338,7 @@ class _RankedTabState extends State<RankedTab> {
               child: _HeroStat(
                 value: rank != null ? '$rank' : '--',
                 label: 'GLOBAL RANK',
-                color: AppColors.textDark,
+                color: AppColors.of(context).textDark,
               ),
             ),
           ],
@@ -1355,7 +1403,10 @@ class _RankedTabState extends State<RankedTab> {
           child: Text(
             '· · ·',
             textAlign: TextAlign.center,
-            style: PixelText.title(size: 14, color: AppColors.textMid),
+            style: PixelText.title(
+              size: 14,
+              color: AppColors.of(context).textMid,
+            ),
           ),
         ),
       );
@@ -1417,8 +1468,8 @@ class _RankedTabState extends State<RankedTab> {
     final rankLabel = row.rank != null ? '${row.rank}' : '--';
     final progress = _tierProgress(row.tier, row.points);
     final backgroundColor = row.isMe
-        ? AppColors.accent.withValues(alpha: 0.14)
-        : AppColors.parchment;
+        ? AppColors.of(context).accent.withValues(alpha: 0.14)
+        : AppColors.of(context).parchment;
 
     final content = Container(
       margin: const EdgeInsets.symmetric(vertical: 3),
@@ -1428,8 +1479,8 @@ class _RankedTabState extends State<RankedTab> {
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
           color: row.isMe
-              ? AppColors.accent.withValues(alpha: 0.45)
-              : AppColors.parchmentBorder.withValues(alpha: 0.6),
+              ? AppColors.of(context).accent.withValues(alpha: 0.45)
+              : AppColors.of(context).parchmentBorder.withValues(alpha: 0.6),
           width: row.isMe ? 1.5 : 1,
         ),
       ),
@@ -1440,7 +1491,10 @@ class _RankedTabState extends State<RankedTab> {
             child: Text(
               rankLabel,
               textAlign: TextAlign.center,
-              style: PixelText.body(size: 12, color: AppColors.textMid),
+              style: PixelText.body(
+                size: 12,
+                color: AppColors.of(context).textMid,
+              ),
             ),
           ),
           const SizedBox(width: 8),
@@ -1449,7 +1503,9 @@ class _RankedTabState extends State<RankedTab> {
             imageUrl: row.profilePhotoUrl,
             size: 34,
             isUser: row.isMe,
-            borderColor: row.isMe ? AppColors.accent : row.tier.color,
+            borderColor: row.isMe
+                ? AppColors.of(context).accent
+                : row.tier.color,
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -1462,7 +1518,9 @@ class _RankedTabState extends State<RankedTab> {
                   overflow: TextOverflow.ellipsis,
                   style: PixelText.body(
                     size: 13,
-                    color: row.isMe ? AppColors.accent : AppColors.textDark,
+                    color: row.isMe
+                        ? AppColors.of(context).accent
+                        : AppColors.of(context).textDark,
                   ),
                 ),
                 const SizedBox(height: 5),
@@ -1471,9 +1529,9 @@ class _RankedTabState extends State<RankedTab> {
                   child: LinearProgressIndicator(
                     value: progress,
                     minHeight: 4,
-                    backgroundColor: AppColors.parchmentBorder.withValues(
-                      alpha: 0.55,
-                    ),
+                    backgroundColor: AppColors.of(
+                      context,
+                    ).parchmentBorder.withValues(alpha: 0.55),
                     color: row.tier.color,
                   ),
                 ),
@@ -1495,7 +1553,9 @@ class _RankedTabState extends State<RankedTab> {
               textAlign: TextAlign.right,
               style: PixelText.title(
                 size: 13,
-                color: row.isMe ? AppColors.accent : AppColors.textDark,
+                color: row.isMe
+                    ? AppColors.of(context).accent
+                    : AppColors.of(context).textDark,
               ),
             ),
           ),
@@ -1574,12 +1634,18 @@ class _TierSectionHeader extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             tier.label.toUpperCase(),
-            style: PixelText.title(size: 13, color: AppColors.textDark),
+            style: PixelText.title(
+              size: 13,
+              color: AppColors.of(context).textDark,
+            ),
           ),
           const SizedBox(width: 6),
           Text(
             '$rankPrefix$count',
-            style: PixelText.body(size: 12, color: AppColors.textMid),
+            style: PixelText.body(
+              size: 12,
+              color: AppColors.of(context).textMid,
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -1590,15 +1656,18 @@ class _TierSectionHeader extends StatelessWidget {
           ),
           if (reward > 0) ...[
             const SizedBox(width: 8),
-            const Icon(
+            Icon(
               Icons.paid_rounded,
               size: 13,
-              color: AppColors.medalGold,
+              color: AppColors.of(context).medalGold,
             ),
             const SizedBox(width: 3),
             Text(
               '$reward',
-              style: PixelText.body(size: 12, color: AppColors.textMid),
+              style: PixelText.body(
+                size: 12,
+                color: AppColors.of(context).textMid,
+              ),
             ),
           ],
         ],
@@ -1650,7 +1719,7 @@ class _GapRow extends StatelessWidget {
       child: Text(
         '· · ·',
         textAlign: TextAlign.center,
-        style: PixelText.title(size: 13, color: AppColors.textMid),
+        style: PixelText.title(size: 13, color: AppColors.of(context).textMid),
       ),
     );
   }
@@ -1670,12 +1739,15 @@ class _HowItWorksLine extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 16, color: AppColors.accent),
+          Icon(icon, size: 16, color: AppColors.of(context).accent),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               text,
-              style: PixelText.body(size: 12, color: AppColors.textDark),
+              style: PixelText.body(
+                size: 12,
+                color: AppColors.of(context).textDark,
+              ),
             ),
           ),
         ],
@@ -1762,7 +1834,7 @@ class _PositionBar extends StatelessWidget {
                           flex: hold,
                           child: Container(
                             height: 8,
-                            color: AppColors.parchmentBorder,
+                            color: AppColors.of(context).parchmentBorder,
                           ),
                         ),
                       if (promote > 0)
@@ -1784,7 +1856,7 @@ class _PositionBar extends StatelessWidget {
                   width: markerW,
                   height: markerW,
                   decoration: BoxDecoration(
-                    color: AppColors.accent,
+                    color: AppColors.of(context).accent,
                     shape: BoxShape.circle,
                     border: Border.all(color: Colors.white, width: 2),
                     boxShadow: const [
@@ -1851,7 +1923,7 @@ class _DivisionPill extends StatelessWidget {
       ),
       child: Text(
         romanDivision(division),
-        style: PixelText.title(size: 10, color: AppColors.textDark),
+        style: PixelText.title(size: 10, color: AppColors.of(context).textDark),
       ),
     );
   }
@@ -1868,11 +1940,15 @@ class _RewardLine extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Icon(Icons.paid_rounded, size: 15, color: AppColors.medalGold),
+        Icon(
+          Icons.paid_rounded,
+          size: 15,
+          color: AppColors.of(context).medalGold,
+        ),
         const SizedBox(width: 6),
         Text(
           '$label → $coins coins',
-          style: PixelText.body(size: 13, color: AppColors.textMid),
+          style: PixelText.body(size: 13, color: AppColors.of(context).textMid),
         ),
       ],
     );
@@ -2006,7 +2082,7 @@ class _HeroMetric extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: AppColors.parchment,
+        color: AppColors.of(context).parchment,
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: accent, width: strong ? 1.6 : 1.1),
       ),
@@ -2019,14 +2095,20 @@ class _HeroMetric extends StatelessWidget {
               value,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: PixelText.title(size: 17, color: AppColors.textDark),
+              style: PixelText.title(
+                size: 17,
+                color: AppColors.of(context).textDark,
+              ),
             ),
             const SizedBox(height: 2),
             Text(
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: PixelText.body(size: 7.5, color: AppColors.textMid),
+              style: PixelText.body(
+                size: 7.5,
+                color: AppColors.of(context).textMid,
+              ),
             ),
           ],
         ),
@@ -2063,7 +2145,10 @@ class _HeroStat extends StatelessWidget {
           label,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: PixelText.body(size: 9.5, color: AppColors.textMid),
+          style: PixelText.body(
+            size: 9.5,
+            color: AppColors.of(context).textMid,
+          ),
         ),
       ],
     );
@@ -2086,13 +2171,21 @@ class _TierProgressLine extends StatelessWidget {
             child: LinearProgressIndicator(
               value: progress,
               minHeight: 7,
-              backgroundColor: AppColors.parchmentBorder.withValues(alpha: 0.8),
-              color: AppColors.medalGold,
+              backgroundColor: AppColors.of(
+                context,
+              ).parchmentBorder.withValues(alpha: 0.8),
+              color: AppColors.of(context).medalGold,
             ),
           ),
         ),
         const SizedBox(width: 8),
-        Text(label, style: PixelText.body(size: 10, color: AppColors.textDark)),
+        Text(
+          label,
+          style: PixelText.body(
+            size: 10,
+            color: AppColors.of(context).textDark,
+          ),
+        ),
       ],
     );
   }
@@ -2115,7 +2208,10 @@ class _RankRibbon extends StatelessWidget {
             padding: const EdgeInsets.only(top: 6),
             child: Text(
               label,
-              style: PixelText.title(size: 16, color: AppColors.textDark),
+              style: PixelText.title(
+                size: 16,
+                color: AppColors.of(context).textDark,
+              ),
             ),
           ),
         ),
@@ -2188,15 +2284,18 @@ class _LadderTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        const Icon(
+        Icon(
           Icons.emoji_events_outlined,
           size: 15,
-          color: AppColors.textDark,
+          color: AppColors.of(context).textDark,
         ),
         const SizedBox(width: 8),
         Text(
           'Global ladder',
-          style: PixelText.body(size: 14, color: AppColors.textDark),
+          style: PixelText.body(
+            size: 14,
+            color: AppColors.of(context).textDark,
+          ),
         ),
         const Spacer(),
         TextButton(
@@ -2208,7 +2307,10 @@ class _LadderTitle extends StatelessWidget {
           ),
           child: Text(
             'FRIENDS',
-            style: PixelText.body(size: 9, color: AppColors.textMid),
+            style: PixelText.body(
+              size: 9,
+              color: AppColors.of(context).textMid,
+            ),
           ),
         ),
       ],
@@ -2278,15 +2380,24 @@ class _PodiumPlace extends StatelessWidget {
             atName(entry.displayName),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: PixelText.body(size: 10, color: AppColors.textDark),
+            style: PixelText.body(
+              size: 10,
+              color: AppColors.of(context).textDark,
+            ),
           ),
           Text(
             '${entry.points}',
-            style: PixelText.body(size: 9, color: AppColors.skyBand1),
+            style: PixelText.body(
+              size: 9,
+              color: AppColors.of(context).skyBand1,
+            ),
           ),
           Text(
             entry.tier.label.toUpperCase(),
-            style: PixelText.body(size: 7.5, color: AppColors.textMid),
+            style: PixelText.body(
+              size: 7.5,
+              color: AppColors.of(context).textMid,
+            ),
           ),
         ] else
           const SizedBox(height: 64),
@@ -2306,7 +2417,10 @@ class _PodiumPlace extends StatelessWidget {
           child: Center(
             child: Text(
               '$place',
-              style: PixelText.title(size: 18, color: AppColors.textDark),
+              style: PixelText.title(
+                size: 18,
+                color: AppColors.of(context).textDark,
+              ),
             ),
           ),
         ),
@@ -2461,18 +2575,24 @@ class _ComingSoonPanel extends StatelessWidget {
           Icon(
             Icons.shield_outlined,
             size: 34,
-            color: AppColors.textMid.withValues(alpha: 0.6),
+            color: AppColors.of(context).textMid.withValues(alpha: 0.6),
           ),
           const SizedBox(height: 8),
           Text(
             'Ranked is coming soon',
-            style: PixelText.title(size: 18, color: AppColors.textMid),
+            style: PixelText.title(
+              size: 18,
+              color: AppColors.of(context).textMid,
+            ),
           ),
           const SizedBox(height: 6),
           Text(
             'Keep walking — your steps will count toward the ladder.',
             textAlign: TextAlign.center,
-            style: PixelText.body(size: 13, color: AppColors.textMid),
+            style: PixelText.body(
+              size: 13,
+              color: AppColors.of(context).textMid,
+            ),
           ),
         ],
       ),
@@ -2487,15 +2607,17 @@ class _HeroSkeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     return GameContainer(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-      frameColor: AppColors.accent,
-      surfaceColor: AppColors.parchment,
+      frameColor: AppColors.of(context).accent,
+      surfaceColor: AppColors.of(context).parchment,
       child: Column(
         children: [
           Container(
             width: 150,
             height: 28,
             decoration: BoxDecoration(
-              color: AppColors.parchmentBorder.withValues(alpha: 0.5),
+              color: AppColors.of(
+                context,
+              ).parchmentBorder.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(8),
             ),
           ),
@@ -2504,7 +2626,9 @@ class _HeroSkeleton extends StatelessWidget {
             width: 120,
             height: 18,
             decoration: BoxDecoration(
-              color: AppColors.parchmentBorder.withValues(alpha: 0.4),
+              color: AppColors.of(
+                context,
+              ).parchmentBorder.withValues(alpha: 0.4),
               borderRadius: BorderRadius.circular(6),
             ),
           ),

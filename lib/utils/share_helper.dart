@@ -7,11 +7,7 @@ import 'package:share_plus/share_plus.dart';
 /// non-zero") if no origin rect is supplied — so always pass a sensible one.
 /// Falls back to no origin (phones, where it's ignored) if the box isn't laid
 /// out yet.
-Future<void> shareText(
-  BuildContext context,
-  String text, {
-  String? subject,
-}) {
+Future<void> shareText(BuildContext context, String text, {String? subject}) {
   final box = context.findRenderObject() as RenderBox?;
   final origin = (box != null && box.hasSize)
       ? box.localToGlobal(Offset.zero) & box.size

@@ -61,15 +61,18 @@ class ReferralRulesScreen extends StatelessWidget {
     final topInset = MediaQuery.of(context).padding.top;
 
     return Scaffold(
-      backgroundColor: AppColors.parchment,
+      backgroundColor: AppColors.of(context).parchment,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           DecoratedBox(
-            decoration: const BoxDecoration(
-              color: AppColors.roofLight,
+            decoration: BoxDecoration(
+              color: AppColors.of(context).roofLight,
               border: Border(
-                bottom: BorderSide(color: AppColors.roofDark, width: 1),
+                bottom: BorderSide(
+                  color: AppColors.of(context).roofDark,
+                  width: 1,
+                ),
               ),
             ),
             child: CustomPaint(
@@ -84,9 +87,9 @@ class ReferralRulesScreen extends StatelessWidget {
                       child: IconButton(
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.arrow_back,
-                          color: AppColors.parchment,
+                          color: AppColors.of(context).textLight,
                         ),
                         onPressed: () => Navigator.of(context).pop(),
                       ),
@@ -96,7 +99,7 @@ class ReferralRulesScreen extends StatelessWidget {
                       'PROGRAM RULES',
                       style: PixelText.title(
                         size: 26,
-                        color: AppColors.parchment,
+                        color: AppColors.of(context).textLight,
                       ).copyWith(shadows: _textShadows),
                     ),
                   ],
@@ -111,14 +114,17 @@ class ReferralRulesScreen extends StatelessWidget {
                 for (final (title, body) in _sections) ...[
                   Text(
                     title,
-                    style: PixelText.title(size: 16, color: AppColors.textDark),
+                    style: PixelText.title(
+                      size: 16,
+                      color: AppColors.of(context).textDark,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     body,
                     style: PixelText.body(
                       size: 14,
-                      color: AppColors.textMid,
+                      color: AppColors.of(context).textMid,
                     ).copyWith(height: 1.4),
                   ),
                   const SizedBox(height: 18),

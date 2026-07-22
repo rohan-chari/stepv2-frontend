@@ -52,7 +52,13 @@ class SpotlightOverlay extends StatelessWidget {
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: () {},
-                child: CustomPaint(painter: _SpotlightPainter(rect: padded)),
+                child: CustomPaint(
+                  painter: _SpotlightPainter(
+                    rect: padded,
+                    accentColor: AppColors.of(context).pillGold,
+                    highlightColor: AppColors.of(context).textLight,
+                  ),
+                ),
               ),
             ),
             Positioned.fill(child: _calloutLayer(size, padded)),
@@ -114,8 +120,14 @@ class SpotlightOverlay extends StatelessWidget {
 }
 
 class _SpotlightPainter extends CustomPainter {
-  _SpotlightPainter({required this.rect});
+  _SpotlightPainter({
+    required this.rect,
+    required this.accentColor,
+    required this.highlightColor,
+  });
   final Rect? rect;
+  final Color accentColor;
+  final Color highlightColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -132,20 +144,23 @@ class _SpotlightPainter extends CustomPainter {
     canvas.drawPath(shape, dim);
 
     final border = Paint()
-      ..color = AppColors.pillGold
+      ..color = accentColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3;
     canvas.drawRRect(cutout, border);
 
     final innerBorder = Paint()
-      ..color = Colors.white.withValues(alpha: 0.72)
+      ..color = highlightColor.withValues(alpha: 0.72)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
     canvas.drawRRect(cutout.deflate(3), innerBorder);
   }
 
   @override
-  bool shouldRepaint(covariant _SpotlightPainter old) => old.rect != rect;
+  bool shouldRepaint(covariant _SpotlightPainter old) =>
+      old.rect != rect ||
+      old.accentColor != accentColor ||
+      old.highlightColor != highlightColor;
 }
 
 class _CalloutCard extends StatelessWidget {
@@ -176,8 +191,8 @@ class _CalloutCard extends StatelessWidget {
       child: GameContainer(
         key: const Key('tutorial-callout-card'),
         padding: EdgeInsets.zero,
-        frameColor: AppColors.accent,
-        surfaceColor: AppColors.accent,
+        frameColor: AppColors.of(context).accent,
+        surfaceColor: AppColors.of(context).accent,
         borderRadius: 8,
         child: CustomPaint(
           painter: const ArcadeCheckerPainter(
@@ -213,9 +228,9 @@ class _CalloutCard extends StatelessWidget {
                             color: Colors.white.withValues(alpha: 0.14),
                             borderRadius: BorderRadius.circular(999),
                             border: Border.all(
-                              color: AppColors.parchment.withValues(
-                                alpha: 0.55,
-                              ),
+                              color: AppColors.of(
+                                context,
+                              ).textLight.withValues(alpha: 0.55),
                               width: 1.5,
                             ),
                           ),
@@ -226,14 +241,14 @@ class _CalloutCard extends StatelessWidget {
                                 'SKIP',
                                 style: PixelText.title(
                                   size: 11,
-                                  color: AppColors.parchment,
+                                  color: AppColors.of(context).textLight,
                                 ),
                               ),
                               const SizedBox(width: 4),
-                              const Icon(
+                              Icon(
                                 Icons.close_rounded,
                                 size: 13,
-                                color: AppColors.parchment,
+                                color: AppColors.of(context).textLight,
                               ),
                             ],
                           ),
@@ -245,12 +260,18 @@ class _CalloutCard extends StatelessWidget {
                 const SizedBox(height: 12),
                 Text(
                   title,
-                  style: PixelText.title(size: 22, color: AppColors.parchment),
+                  style: PixelText.title(
+                    size: 22,
+                    color: AppColors.of(context).textLight,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   body,
-                  style: PixelText.body(size: 14, color: AppColors.parchment),
+                  style: PixelText.body(
+                    size: 14,
+                    color: AppColors.of(context).textLight,
+                  ),
                 ),
                 const SizedBox(height: 14),
                 _ProgressDots(stepIndex: stepIndex, stepCount: stepCount),
@@ -312,8 +333,8 @@ class _ProgressDots extends StatelessWidget {
               height: 5,
               decoration: BoxDecoration(
                 color: i <= stepIndex
-                    ? AppColors.pillGold
-                    : AppColors.parchment.withValues(alpha: 0.22),
+                    ? AppColors.of(context).pillGold
+                    : AppColors.of(context).parchment.withValues(alpha: 0.22),
                 borderRadius: BorderRadius.circular(999),
               ),
             ),

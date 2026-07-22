@@ -164,7 +164,9 @@ class _ShopTabState extends State<ShopTab> {
       // filters it out, but guard here too so a not-yet-deployed backend can't
       // surface a purchasable-but-inert Imposter tile.
       _powerupStoreItems = storeItems
-          .where((item) => !_hiddenShopPowerupTypes.contains(item['powerupType']))
+          .where(
+            (item) => !_hiddenShopPowerupTypes.contains(item['powerupType']),
+          )
           .toList();
       _powerupInventory = inventory;
       _powerupsAvailable = true;
@@ -287,9 +289,9 @@ class _ShopTabState extends State<ShopTab> {
     return Scaffold(
       body: Stack(
         children: [
-          const Positioned.fill(
+          Positioned.fill(
             child: ColoredBox(
-              color: AppColors.roofLight,
+              color: AppColors.of(context).roofLight,
               child: CustomPaint(
                 painter: ArcadeCheckerPainter(drawBottomStripe: false),
               ),
@@ -299,8 +301,8 @@ class _ShopTabState extends State<ShopTab> {
             padding: EdgeInsets.only(top: topInset + 14, bottom: tabBarHeight),
             child: RefreshIndicator(
               onRefresh: _loadCatalog,
-              color: AppColors.accent,
-              backgroundColor: AppColors.parchment,
+              color: AppColors.of(context).accent,
+              backgroundColor: AppColors.of(context).parchment,
               child: CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
@@ -319,9 +321,11 @@ class _ShopTabState extends State<ShopTab> {
 
   Widget _buildHeader({required bool showBackButton}) {
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: AppColors.roofLight,
-        border: Border(bottom: BorderSide(color: AppColors.roofDark, width: 1)),
+      decoration: BoxDecoration(
+        color: AppColors.of(context).roofLight,
+        border: Border(
+          bottom: BorderSide(color: AppColors.of(context).roofDark, width: 1),
+        ),
       ),
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
@@ -340,9 +344,9 @@ class _ShopTabState extends State<ShopTab> {
                         width: 40,
                         height: 40,
                       ),
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.arrow_back,
-                        color: AppColors.parchment,
+                        color: AppColors.of(context).textLight,
                       ),
                       onPressed: () => Navigator.of(context).pop(),
                     ),
@@ -353,7 +357,7 @@ class _ShopTabState extends State<ShopTab> {
                       'SHOP',
                       style: PixelText.title(
                         size: 30,
-                        color: AppColors.parchment,
+                        color: AppColors.of(context).textLight,
                       ).copyWith(shadows: _textShadows),
                     ),
                   ),
@@ -377,7 +381,9 @@ class _ShopTabState extends State<ShopTab> {
                 'Spend coins on gear and powerups. Earn more by walking and racing.',
                 style: PixelText.body(
                   size: 15,
-                  color: AppColors.parchment.withValues(alpha: 0.92),
+                  color: AppColors.of(
+                    context,
+                  ).textLight.withValues(alpha: 0.92),
                 ),
               ),
               const SizedBox(height: 12),
@@ -400,7 +406,9 @@ class _ShopTabState extends State<ShopTab> {
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 9),
             decoration: BoxDecoration(
-              color: selected ? AppColors.parchment : Colors.transparent,
+              color: selected
+                  ? AppColors.of(context).parchment
+                  : Colors.transparent,
               borderRadius: BorderRadius.circular(6),
             ),
             alignment: Alignment.center,
@@ -408,7 +416,9 @@ class _ShopTabState extends State<ShopTab> {
               label,
               style: PixelText.title(
                 size: 13,
-                color: selected ? AppColors.textDark : AppColors.parchment,
+                color: selected
+                    ? AppColors.of(context).textDark
+                    : AppColors.of(context).parchment,
               ),
             ),
           ),
@@ -472,13 +482,13 @@ class _ShopTabState extends State<ShopTab> {
         padding: const EdgeInsets.symmetric(vertical: 7),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: selected ? AppColors.pillGold : Colors.black.withValues(
-            alpha: 0.18,
-          ),
+          color: selected
+              ? AppColors.of(context).pillGold
+              : Colors.black.withValues(alpha: 0.18),
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
             color: selected
-                ? AppColors.pillGoldDark
+                ? AppColors.of(context).pillGoldDark
                 : Colors.black.withValues(alpha: 0.12),
             width: 1.5,
           ),
@@ -490,8 +500,8 @@ class _ShopTabState extends State<ShopTab> {
           style: PixelText.title(
             size: 11,
             color: selected
-                ? AppColors.textDark
-                : AppColors.parchment.withValues(alpha: 0.75),
+                ? AppColors.of(context).textDark
+                : AppColors.of(context).parchment.withValues(alpha: 0.75),
           ),
         ),
       ),
@@ -526,11 +536,11 @@ class _ShopTabState extends State<ShopTab> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (state.isRefreshing)
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(vertical: 4),
               child: LinearProgressIndicator(
                 minHeight: 2,
-                color: AppColors.accent,
+                color: AppColors.of(context).accent,
                 backgroundColor: Colors.transparent,
               ),
             ),
@@ -546,10 +556,10 @@ class _ShopTabState extends State<ShopTab> {
   /// Parchment game-piece card — same language as the other tabs.
   BoxDecoration _shopCardDecoration() {
     return BoxDecoration(
-      color: AppColors.parchment,
+      color: AppColors.of(context).parchment,
       borderRadius: BorderRadius.circular(14),
       border: Border.all(
-        color: AppColors.roofDark.withValues(alpha: 0.55),
+        color: AppColors.of(context).roofDark.withValues(alpha: 0.55),
         width: 2,
       ),
       boxShadow: const [
@@ -597,7 +607,7 @@ class _ShopTabState extends State<ShopTab> {
   }) {
     return showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.parchment,
+      backgroundColor: AppColors.of(context).parchment,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -612,10 +622,12 @@ class _ShopTabState extends State<ShopTab> {
                 height: 96,
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppColors.parchmentDark,
+                  color: AppColors.of(context).parchmentDark,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: AppColors.roofDark.withValues(alpha: 0.4),
+                    color: AppColors.of(
+                      context,
+                    ).roofDark.withValues(alpha: 0.4),
                     width: 2,
                   ),
                 ),
@@ -625,7 +637,10 @@ class _ShopTabState extends State<ShopTab> {
               Text(
                 name,
                 textAlign: TextAlign.center,
-                style: PixelText.title(size: 20, color: AppColors.textDark),
+                style: PixelText.title(
+                  size: 20,
+                  color: AppColors.of(context).textDark,
+                ),
               ),
               if (slotLabel != null || badge != null) ...[
                 const SizedBox(height: 6),
@@ -633,10 +648,11 @@ class _ShopTabState extends State<ShopTab> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (slotLabel != null)
-                      _sheetChip(slotLabel, AppColors.textMid),
+                      _sheetChip(slotLabel, AppColors.of(context).textMid),
                     if (slotLabel != null && badge != null)
                       const SizedBox(width: 6),
-                    if (badge != null) _sheetChip(badge, AppColors.accent),
+                    if (badge != null)
+                      _sheetChip(badge, AppColors.of(context).accent),
                   ],
                 ),
               ],
@@ -645,7 +661,10 @@ class _ShopTabState extends State<ShopTab> {
                 Text(
                   description,
                   textAlign: TextAlign.center,
-                  style: PixelText.body(size: 14, color: AppColors.textMid),
+                  style: PixelText.body(
+                    size: 14,
+                    color: AppColors.of(context).textMid,
+                  ),
                 ),
               ],
               if (actions.isNotEmpty) ...[
@@ -691,7 +710,9 @@ class _ShopTabState extends State<ShopTab> {
             errorBuilder: (context, error, stackTrace) => Icon(
               Icons.pets_rounded,
               size: iconSize,
-              color: equipped ? AppColors.accent : AppColors.textMid,
+              color: equipped
+                  ? AppColors.of(context).accent
+                  : AppColors.of(context).textMid,
             ),
           )
         : AccessoryThumbnail(
@@ -700,7 +721,9 @@ class _ShopTabState extends State<ShopTab> {
             errorBuilder: (context, error, stackTrace) => Icon(
               Icons.checkroom_rounded,
               size: iconSize,
-              color: equipped ? AppColors.accent : AppColors.textMid,
+              color: equipped
+                  ? AppColors.of(context).accent
+                  : AppColors.of(context).textMid,
             ),
           );
   }
@@ -956,11 +979,18 @@ class _ShopTabState extends State<ShopTab> {
       decoration: _shopCardDecoration(),
       child: Column(
         children: [
-          Icon(icon, size: 32, color: AppColors.textMid.withValues(alpha: 0.7)),
+          Icon(
+            icon,
+            size: 32,
+            color: AppColors.of(context).textMid.withValues(alpha: 0.7),
+          ),
           const SizedBox(height: 8),
           Text(
             message,
-            style: PixelText.body(size: 14, color: AppColors.textMid),
+            style: PixelText.body(
+              size: 14,
+              color: AppColors.of(context).textMid,
+            ),
             textAlign: TextAlign.center,
           ),
         ],
@@ -976,17 +1006,21 @@ class _ShopTabState extends State<ShopTab> {
 class _ShopLoadingSkeleton extends StatelessWidget {
   const _ShopLoadingSkeleton();
 
-  Widget _tile() {
+  Widget _tile(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: AppColors.parchment,
+        color: AppColors.of(context).parchment,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: AppColors.roofDark.withValues(alpha: 0.55),
+          color: AppColors.of(context).roofDark.withValues(alpha: 0.55),
           width: 2,
         ),
         boxShadow: const [
-          BoxShadow(color: Color(0x66000000), offset: Offset(0, 4), blurRadius: 0),
+          BoxShadow(
+            color: Color(0x66000000),
+            offset: Offset(0, 4),
+            blurRadius: 0,
+          ),
         ],
       ),
       child: ClipRRect(
@@ -997,7 +1031,9 @@ class _ShopLoadingSkeleton extends StatelessWidget {
             // Art box
             Expanded(
               child: ColoredBox(
-                color: AppColors.parchmentDark.withValues(alpha: 0.6),
+                color: AppColors.of(
+                  context,
+                ).parchmentDark.withValues(alpha: 0.6),
                 child: const Center(
                   child: SkeletonBox(width: 46, height: 46, radius: 8),
                 ),
@@ -1012,10 +1048,13 @@ class _ShopLoadingSkeleton extends StatelessWidget {
             // Price strip
             Container(
               height: 30,
-              decoration: const BoxDecoration(
-                color: AppColors.parchmentDark,
+              decoration: BoxDecoration(
+                color: AppColors.of(context).parchmentDark,
                 border: Border(
-                  top: BorderSide(color: AppColors.parchmentBorder, width: 1.5),
+                  top: BorderSide(
+                    color: AppColors.of(context).parchmentBorder,
+                    width: 1.5,
+                  ),
                 ),
               ),
               alignment: Alignment.center,
@@ -1027,7 +1066,7 @@ class _ShopLoadingSkeleton extends StatelessWidget {
     );
   }
 
-  Widget _section(int tileCount) {
+  Widget _section(BuildContext context, int tileCount) {
     return GridView.count(
       crossAxisCount: 4,
       shrinkWrap: true,
@@ -1036,7 +1075,7 @@ class _ShopLoadingSkeleton extends StatelessWidget {
       mainAxisSpacing: 12,
       crossAxisSpacing: 10,
       childAspectRatio: 0.66,
-      children: [for (var i = 0; i < tileCount; i++) _tile()],
+      children: [for (var i = 0; i < tileCount; i++) _tile(context)],
     );
   }
 
@@ -1047,7 +1086,7 @@ class _ShopLoadingSkeleton extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: 8),
         // One category is shown at a time now, so the skeleton is a single
         // grid rather than a stack of headed sections.
-        child: _section(8),
+        child: _section(context, 8),
       ),
     );
   }
@@ -1089,12 +1128,12 @@ class _ShopTile extends StatelessWidget {
       onTap: onTap,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: AppColors.parchment,
+          color: AppColors.of(context).parchment,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: highlighted
-                ? AppColors.pillGoldDark
-                : AppColors.roofDark.withValues(alpha: 0.55),
+                ? AppColors.of(context).pillGoldDark
+                : AppColors.of(context).roofDark.withValues(alpha: 0.55),
             width: 2,
           ),
           boxShadow: const [
@@ -1116,7 +1155,9 @@ class _ShopTile extends StatelessWidget {
                   children: [
                     Positioned.fill(
                       child: ColoredBox(
-                        color: AppColors.parchmentDark.withValues(alpha: 0.6),
+                        color: AppColors.of(
+                          context,
+                        ).parchmentDark.withValues(alpha: 0.6),
                         child: Padding(
                           padding: const EdgeInsets.all(10),
                           child: Center(child: art),
@@ -1134,13 +1175,13 @@ class _ShopTile extends StatelessWidget {
                           ),
                           decoration: BoxDecoration(
                             color: highlighted
-                                ? AppColors.pillGold
-                                : AppColors.roofMid,
+                                ? AppColors.of(context).pillGold
+                                : AppColors.of(context).roofMid,
                             borderRadius: BorderRadius.circular(999),
                             border: Border.all(
                               color: highlighted
-                                  ? AppColors.pillGoldDark
-                                  : AppColors.roofDark,
+                                  ? AppColors.of(context).pillGoldDark
+                                  : AppColors.of(context).roofDark,
                             ),
                           ),
                           child: Text(
@@ -1148,8 +1189,8 @@ class _ShopTile extends StatelessWidget {
                             style: PixelText.title(
                               size: 8,
                               color: highlighted
-                                  ? AppColors.textDark
-                                  : AppColors.parchment,
+                                  ? AppColors.of(context).textDark
+                                  : AppColors.of(context).parchment,
                             ),
                           ),
                         ),
@@ -1167,7 +1208,10 @@ class _ShopTile extends StatelessWidget {
                   maxLines: 2,
                   textAlign: TextAlign.center,
                   overflow: TextOverflow.ellipsis,
-                  style: PixelText.title(size: 11, color: AppColors.textDark),
+                  style: PixelText.title(
+                    size: 11,
+                    color: AppColors.of(context).textDark,
+                  ),
                 ),
               ),
               // Action strip
@@ -1177,15 +1221,15 @@ class _ShopTile extends StatelessWidget {
                   height: 30,
                   decoration: BoxDecoration(
                     color: onStrip == null
-                        ? AppColors.parchmentDark
-                        : AppColors.pillGold.withValues(
-                            alpha: stripEnabled ? 1 : 0.5,
-                          ),
+                        ? AppColors.of(context).parchmentDark
+                        : AppColors.of(
+                            context,
+                          ).pillGold.withValues(alpha: stripEnabled ? 1 : 0.5),
                     border: Border(
                       top: BorderSide(
                         color: onStrip == null
-                            ? AppColors.parchmentBorder
-                            : AppColors.pillGoldDark,
+                            ? AppColors.of(context).parchmentBorder
+                            : AppColors.of(context).pillGoldDark,
                         width: 1.5,
                       ),
                     ),
@@ -1197,8 +1241,8 @@ class _ShopTile extends StatelessWidget {
                         stripIcon,
                         size: 13,
                         color: onStrip == null
-                            ? AppColors.textMid
-                            : AppColors.pillGoldShadow,
+                            ? AppColors.of(context).textMid
+                            : AppColors.of(context).pillGoldShadow,
                       ),
                       const SizedBox(width: 4),
                       Flexible(
@@ -1209,8 +1253,8 @@ class _ShopTile extends StatelessWidget {
                           style: PixelText.title(
                             size: 12,
                             color: onStrip == null
-                                ? AppColors.textMid
-                                : AppColors.textDark,
+                                ? AppColors.of(context).textMid
+                                : AppColors.of(context).textDark,
                           ),
                         ),
                       ),

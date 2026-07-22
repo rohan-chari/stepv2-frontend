@@ -158,7 +158,9 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
                   borderRadius: BorderRadius.circular(8),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.pillGold.withValues(alpha: 0.85),
+                      color: AppColors.of(
+                        context,
+                      ).pillGold.withValues(alpha: 0.85),
                       blurRadius: 18,
                       spreadRadius: 2,
                     ),
@@ -200,8 +202,8 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
 
           return GameContainer(
             padding: const EdgeInsets.fromLTRB(10, 12, 10, 14),
-            frameColor: AppColors.textDark,
-            surfaceColor: AppColors.parchment,
+            frameColor: AppColors.of(context).textDark,
+            surfaceColor: AppColors.of(context).parchment,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -211,7 +213,10 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
                       : _waitingForSwipe
                       ? (widget.hideSwipeHint ? 'READY' : 'SWIPE OR TAP')
                       : 'OPENING...',
-                  style: PixelText.title(size: 14, color: AppColors.textMid),
+                  style: PixelText.title(
+                    size: 14,
+                    color: AppColors.of(context).textMid,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Stack(
@@ -234,9 +239,9 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
                                 ? const []
                                 : [
                                     BoxShadow(
-                                      color: AppColors.pillGold.withValues(
-                                        alpha: 0.65 * t,
-                                      ),
+                                      color: AppColors.of(
+                                        context,
+                                      ).pillGold.withValues(alpha: 0.65 * t),
                                       blurRadius: 6 + 14 * t,
                                       spreadRadius: 2 * t,
                                     ),
@@ -253,14 +258,14 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: AppColors.pillGoldShadow,
+                            color: AppColors.of(context).pillGoldShadow,
                             width: 2,
                           ),
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(6),
                           child: ColoredBox(
-                            color: AppColors.felt,
+                            color: AppColors.of(context).felt,
                             child: ClipRect(
                               child: OverflowBox(
                                 maxWidth: double.infinity,
@@ -371,17 +376,17 @@ class _CaseOpeningReelState extends State<CaseOpeningReel>
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.swipe_rounded,
                         size: 18,
-                        color: AppColors.accent,
+                        color: AppColors.of(context).accent,
                       ),
                       const SizedBox(width: 8),
                       Text(
                         'drag across the reel',
                         style: HomeText.body(
                           size: 13,
-                          color: HomeColors.muted,
+                          color: AppColors.of(context).muted,
                           weight: FontWeight.w800,
                         ),
                       ),
@@ -432,7 +437,7 @@ class CaseReelTile extends StatelessWidget {
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: AppColors.parchment,
+        color: AppColors.of(context).parchment,
         border: Border.all(color: borderColor, width: 2.5),
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
@@ -590,10 +595,7 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip> {
     }
   }
 
-  static bool _sameRarityTable(
-    Map<String, String>? a,
-    Map<String, String>? b,
-  ) {
+  static bool _sameRarityTable(Map<String, String>? a, Map<String, String>? b) {
     if (identical(a, b)) return true;
     if (a == null || b == null) return false;
     if (a.length != b.length) return false;
@@ -668,7 +670,10 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip> {
               const SizedBox(height: 3),
               Text(
                 _typeName(item.type),
-                style: PixelText.body(size: 10, color: AppColors.textDark),
+                style: PixelText.body(
+                  size: 10,
+                  color: AppColors.of(context).textDark,
+                ),
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,

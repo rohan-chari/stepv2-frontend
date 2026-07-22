@@ -331,7 +331,8 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
     if (index == null) return candidates;
     final parent = path.substring(0, lastDot);
     final isOddsTriplet =
-        parent.startsWith('positionOdds.') || parent.startsWith('dailyBox.odds.');
+        parent.startsWith('positionOdds.') ||
+        parent.startsWith('dailyBox.odds.');
     if (isOddsTriplet && index >= 0 && index < _rarityKeys.length) {
       candidates.add('$parent.${_rarityKeys[index]}');
     }
@@ -408,7 +409,10 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
           children: [
             Text(
               'Saving as version ${_version + 1}. Only these paths change:',
-              style: PixelText.body(size: 12, color: AppColors.textMid),
+              style: PixelText.body(
+                size: 12,
+                color: AppColors.of(context).textMid,
+              ),
             ),
             const SizedBox(height: 10),
             for (final row in rows) _DiffTile(row: row),
@@ -419,14 +423,20 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
             onPressed: () => Navigator.of(dialogContext).pop(false),
             child: Text(
               'CANCEL',
-              style: PixelText.pill(size: 12, color: AppColors.textMid),
+              style: PixelText.pill(
+                size: 12,
+                color: AppColors.of(context).textMid,
+              ),
             ),
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: Text(
               'SAVE',
-              style: PixelText.pill(size: 12, color: AppColors.roofMid),
+              style: PixelText.pill(
+                size: 12,
+                color: AppColors.of(context).roofMid,
+              ),
             ),
           ),
         ],
@@ -496,21 +506,27 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
           'Someone else changed this while you were editing. The server is now '
           'on version ${result.currentVersion ?? '?'}. Your edits were NOT '
           'applied — review them against the new config before saving.',
-          style: PixelText.body(size: 12, color: AppColors.textMid),
+          style: PixelText.body(size: 12, color: AppColors.of(context).textMid),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
             child: Text(
               'DISCARD',
-              style: PixelText.pill(size: 12, color: AppColors.textMid),
+              style: PixelText.pill(
+                size: 12,
+                color: AppColors.of(context).textMid,
+              ),
             ),
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: Text(
               'REVIEW AGAIN',
-              style: PixelText.pill(size: 12, color: AppColors.roofMid),
+              style: PixelText.pill(
+                size: 12,
+                color: AppColors.of(context).roofMid,
+              ),
             ),
           ),
         ],
@@ -522,9 +538,7 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
 
   /// 422: render the server's warnings and block the save behind an explicit
   /// acknowledgement (D11). The toggle is the only path to `true`.
-  Future<void> _handleBoundWarnings(
-    List<BalanceBoundWarning> warnings,
-  ) async {
+  Future<void> _handleBoundWarnings(List<BalanceBoundWarning> warnings) async {
     final proceed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
@@ -539,7 +553,10 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
                 Text(
                   'These values are outside their sane ranges. The save is '
                   'allowed, but it will be recorded as an override.',
-                  style: PixelText.body(size: 12, color: AppColors.textMid),
+                  style: PixelText.body(
+                    size: 12,
+                    color: AppColors.of(context).textMid,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 for (final warning in warnings)
@@ -548,8 +565,11 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
                     child: Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: AppColors.parchmentDark,
-                        border: Border.all(color: AppColors.error, width: 2),
+                        color: AppColors.of(context).parchmentDark,
+                        border: Border.all(
+                          color: AppColors.of(context).error,
+                          width: 2,
+                        ),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Column(
@@ -559,7 +579,7 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
                             warning.path,
                             style: PixelText.title(
                               size: 11,
-                              color: AppColors.error,
+                              color: AppColors.of(context).error,
                             ),
                           ),
                           const SizedBox(height: 3),
@@ -567,7 +587,7 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
                             warning.message,
                             style: PixelText.body(
                               size: 11,
-                              color: AppColors.textMid,
+                              color: AppColors.of(context).textMid,
                             ),
                           ),
                         ],
@@ -583,7 +603,10 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
                       setDialogState(() => acknowledged = v ?? false),
                   title: Text(
                     'I understand',
-                    style: PixelText.body(size: 12, color: AppColors.textDark),
+                    style: PixelText.body(
+                      size: 12,
+                      color: AppColors.of(context).textDark,
+                    ),
                   ),
                 ),
               ],
@@ -593,7 +616,10 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
                 onPressed: () => Navigator.of(dialogContext).pop(false),
                 child: Text(
                   'CANCEL',
-                  style: PixelText.pill(size: 12, color: AppColors.textMid),
+                  style: PixelText.pill(
+                    size: 12,
+                    color: AppColors.of(context).textMid,
+                  ),
                 ),
               ),
               TextButton(
@@ -604,7 +630,9 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
                   'SAVE ANYWAY',
                   style: PixelText.pill(
                     size: 12,
-                    color: acknowledged ? AppColors.error : AppColors.textMid,
+                    color: acknowledged
+                        ? AppColors.of(context).error
+                        : AppColors.of(context).textMid,
                   ),
                 ),
               ),
@@ -628,21 +656,27 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
           'This copies version ${version.version} forward into a NEW version '
           '${_version + 1} and activates it. History is never rewritten. '
           'Unsaved edits in the form are discarded.',
-          style: PixelText.body(size: 12, color: AppColors.textMid),
+          style: PixelText.body(size: 12, color: AppColors.of(context).textMid),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
             child: Text(
               'CANCEL',
-              style: PixelText.pill(size: 12, color: AppColors.textMid),
+              style: PixelText.pill(
+                size: 12,
+                color: AppColors.of(context).textMid,
+              ),
             ),
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: Text(
               'ROLL BACK',
-              style: PixelText.pill(size: 12, color: AppColors.error),
+              style: PixelText.pill(
+                size: 12,
+                color: AppColors.of(context).error,
+              ),
             ),
           ),
         ],
@@ -690,7 +724,7 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.textDark),
+          icon: Icon(Icons.arrow_back, color: AppColors.of(context).textDark),
           onPressed: () => Navigator.of(context).pop(),
         ),
         backgroundColor: Colors.transparent,
@@ -706,7 +740,10 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
                   width: boardWidth,
                   child: Text(
                     'BALANCE CONFIG',
-                    style: PixelText.title(size: 20, color: AppColors.textDark),
+                    style: PixelText.title(
+                      size: 20,
+                      color: AppColors.of(context).textDark,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -723,9 +760,13 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
   List<Widget> _buildBody(double boardWidth) {
     switch (_state) {
       case _LoadState.loading:
-        return const [
+        return [
           SizedBox(height: 40),
-          Center(child: CircularProgressIndicator(color: AppColors.accent)),
+          Center(
+            child: CircularProgressIndicator(
+              color: AppColors.of(context).accent,
+            ),
+          ),
         ];
 
       case _LoadState.unsupported:
@@ -737,14 +778,20 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
               children: [
                 Text(
                   'UNAVAILABLE',
-                  style: PixelText.title(size: 14, color: AppColors.error),
+                  style: PixelText.title(
+                    size: 14,
+                    color: AppColors.of(context).error,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   'Balance config is not supported by this backend. Deploy the '
                   'backend that serves /admin/balance-config, then reopen this '
                   'screen.',
-                  style: PixelText.body(size: 12, color: AppColors.textMid),
+                  style: PixelText.body(
+                    size: 12,
+                    color: AppColors.of(context).textMid,
+                  ),
                 ),
               ],
             ),
@@ -760,12 +807,18 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
               children: [
                 Text(
                   'COULD NOT LOAD',
-                  style: PixelText.title(size: 14, color: AppColors.error),
+                  style: PixelText.title(
+                    size: 14,
+                    color: AppColors.of(context).error,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   _loadError ?? 'Unknown error.',
-                  style: PixelText.body(size: 12, color: AppColors.textMid),
+                  style: PixelText.body(
+                    size: 12,
+                    color: AppColors.of(context).textMid,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 PillButton(
@@ -794,14 +847,19 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
             Expanded(
               child: Text(
                 'VERSION $_version',
-                style: PixelText.title(size: 16, color: AppColors.textDark),
+                style: PixelText.title(
+                  size: 16,
+                  color: AppColors.of(context).textDark,
+                ),
               ),
             ),
             Text(
               changed == 0 ? 'no changes' : '$changed changed',
               style: PixelText.body(
                 size: 11,
-                color: changed == 0 ? AppColors.textMid : AppColors.roofMid,
+                color: changed == 0
+                    ? AppColors.of(context).textMid
+                    : AppColors.of(context).roofMid,
               ),
             ),
           ],
@@ -810,20 +868,26 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
       const SizedBox(height: 16),
 
       _section(boardWidth, 'RARITY', [
-        _hint('Canonical rarity per powerup. Drives drops, upgrade price and '
-            'the colour every client shows.'),
+        _hint(
+          'Canonical rarity per powerup. Drives drops, upgrade price and '
+          'the colour every client shows.',
+        ),
         ..._rarityRows(),
       ]),
 
       _section(boardWidth, 'DROP POOL', [
-        _hint('Which types can drop in each tier. Store-only types are '
-            'excluded server-side and are not editable here.'),
+        _hint(
+          'Which types can drop in each tier. Store-only types are '
+          'excluded server-side and are not editable here.',
+        ),
         ..._dropPoolRows(),
       ]),
 
       _section(boardWidth, 'POSITION ODDS', [
-        _hint('COMMON / UNCOMMON / RARE for the leader (first) and the '
-            'trailer (last). Each row must sum to 1.0.'),
+        _hint(
+          'COMMON / UNCOMMON / RARE for the leader (first) and the '
+          'trailer (last). Each row must sum to 1.0.',
+        ),
         for (final row in const ['first', 'last'])
           _tripletRow('positionOdds.$row', row.toUpperCase()),
       ]),
@@ -835,8 +899,10 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
       ]),
 
       _section(boardWidth, 'LUCKY HORSESHOE', [
-        _hint('Chance of a RARE roll at each upgrade level. Level 3 should '
-            'be 1.0.'),
+        _hint(
+          'Chance of a RARE roll at each upgrade level. Level 3 should '
+          'be 1.0.',
+        ),
         _quadRow('luckyHorseshoe.rareChanceByLevel', 'RARE CHANCE'),
       ]),
 
@@ -857,10 +923,16 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
       _section(boardWidth, 'PUBLISH', [
         TextField(
           controller: _noteController,
-          style: PixelText.body(size: 12, color: AppColors.textDark),
+          style: PixelText.body(
+            size: 12,
+            color: AppColors.of(context).textDark,
+          ),
           decoration: InputDecoration(
             labelText: 'Note (why this change)',
-            labelStyle: PixelText.body(size: 11, color: AppColors.textMid),
+            labelStyle: PixelText.body(
+              size: 11,
+              color: AppColors.of(context).textMid,
+            ),
             border: const OutlineInputBorder(),
             isDense: true,
           ),
@@ -878,7 +950,10 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
         if (_versions.isEmpty)
           Text(
             'No history returned by the backend.',
-            style: PixelText.body(size: 12, color: AppColors.textMid),
+            style: PixelText.body(
+              size: 12,
+              color: AppColors.of(context).textMid,
+            ),
           )
         else
           for (final version in _versions) _versionRow(version),
@@ -896,7 +971,10 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
           children: [
             Text(
               title,
-              style: PixelText.title(size: 14, color: AppColors.textDark),
+              style: PixelText.title(
+                size: 14,
+                color: AppColors.of(context).textDark,
+              ),
             ),
             const SizedBox(height: 10),
             ...children,
@@ -910,7 +988,7 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
     padding: const EdgeInsets.only(bottom: 10),
     child: Text(
       text,
-      style: PixelText.body(size: 10, color: AppColors.textMid),
+      style: PixelText.body(size: 10, color: AppColors.of(context).textMid),
     ),
   );
 
@@ -920,7 +998,7 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
       return [
         Text(
           'This config carries no rarityByType block.',
-          style: PixelText.body(size: 11, color: AppColors.textMid),
+          style: PixelText.body(size: 11, color: AppColors.of(context).textMid),
         ),
       ];
     }
@@ -934,7 +1012,10 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
               Expanded(
                 child: Text(
                   type,
-                  style: PixelText.body(size: 11, color: AppColors.textDark),
+                  style: PixelText.body(
+                    size: 11,
+                    color: AppColors.of(context).textDark,
+                  ),
                 ),
               ),
               _RarityPicker(
@@ -962,7 +1043,7 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
       return [
         Text(
           'This config carries no dropPool block.',
-          style: PixelText.body(size: 11, color: AppColors.textMid),
+          style: PixelText.body(size: 11, color: AppColors.of(context).textMid),
         ),
       ];
     }
@@ -975,25 +1056,27 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
             children: [
               Text(
                 tier,
-                style: PixelText.title(size: 11, color: AppColors.textDark),
+                style: PixelText.title(
+                  size: 11,
+                  color: AppColors.of(context).textDark,
+                ),
               ),
               const SizedBox(height: 4),
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
                 children: [
-                  for (final entry in (pool[tier] is List
-                      ? (pool[tier] as List)
-                      : const []))
+                  for (final entry
+                      in (pool[tier] is List ? (pool[tier] as List) : const []))
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: AppColors.parchmentDark,
+                        color: AppColors.of(context).parchmentDark,
                         border: Border.all(
-                          color: AppColors.parchmentBorder,
+                          color: AppColors.of(context).parchmentBorder,
                           width: 2,
                         ),
                         borderRadius: BorderRadius.circular(6),
@@ -1002,7 +1085,7 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
                         entry.toString(),
                         style: PixelText.body(
                           size: 10,
-                          color: AppColors.textDark,
+                          color: AppColors.of(context).textDark,
                         ),
                       ),
                     ),
@@ -1022,7 +1105,10 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
         children: [
           Text(
             label,
-            style: PixelText.title(size: 11, color: AppColors.textDark),
+            style: PixelText.title(
+              size: 11,
+              color: AppColors.of(context).textDark,
+            ),
           ),
           const SizedBox(height: 4),
           Row(
@@ -1051,7 +1137,10 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
         children: [
           Text(
             label,
-            style: PixelText.title(size: 11, color: AppColors.textDark),
+            style: PixelText.title(
+              size: 11,
+              color: AppColors.of(context).textDark,
+            ),
           ),
           const SizedBox(height: 4),
           Row(
@@ -1077,7 +1166,10 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
         children: [
           Text(
             label,
-            style: PixelText.title(size: 11, color: AppColors.textDark),
+            style: PixelText.title(
+              size: 11,
+              color: AppColors.of(context).textDark,
+            ),
           ),
           const SizedBox(height: 4),
           Row(
@@ -1103,7 +1195,10 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
         children: [
           Text(
             'COINS $tier',
-            style: PixelText.title(size: 11, color: AppColors.textDark),
+            style: PixelText.title(
+              size: 11,
+              color: AppColors.of(context).textDark,
+            ),
           ),
           const SizedBox(height: 4),
           Row(
@@ -1131,13 +1226,18 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
   Widget _weightModeRow() {
     const path = 'dailyBox.accessoryWeightMode';
     final current =
-        (_edits[path] as String?) ?? _baselineValue(path)?.toString() ?? 'inverse';
+        (_edits[path] as String?) ??
+        _baselineValue(path)?.toString() ??
+        'inverse';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           'ACCESSORY WEIGHT MODE',
-          style: PixelText.title(size: 11, color: AppColors.textDark),
+          style: PixelText.title(
+            size: 11,
+            color: AppColors.of(context).textDark,
+          ),
         ),
         const SizedBox(height: 4),
         Wrap(
@@ -1147,7 +1247,10 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
               ChoiceChip(
                 label: Text(
                   mode,
-                  style: PixelText.body(size: 11, color: AppColors.textDark),
+                  style: PixelText.body(
+                    size: 11,
+                    color: AppColors.of(context).textDark,
+                  ),
                 ),
                 selected: current == mode,
                 onSelected: (_) => setState(() {
@@ -1167,7 +1270,10 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
               'legacy is the 36x prestige inversion — it makes 1500-coin '
               'accessories the most common daily-box drop. Retained only so a '
               'rollback can reproduce history.',
-              style: PixelText.body(size: 10, color: AppColors.error),
+              style: PixelText.body(
+                size: 10,
+                color: AppColors.of(context).error,
+              ),
             ),
           ),
       ],
@@ -1193,10 +1299,16 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
             ),
           ],
           onChanged: (raw) => _onFieldChanged(field, raw),
-          style: PixelText.number(size: 13, color: AppColors.textDark),
+          style: PixelText.number(
+            size: 13,
+            color: AppColors.of(context).textDark,
+          ),
           decoration: InputDecoration(
             labelText: label,
-            labelStyle: PixelText.body(size: 10, color: AppColors.textMid),
+            labelStyle: PixelText.body(
+              size: 10,
+              color: AppColors.of(context).textMid,
+            ),
             isDense: true,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 8,
@@ -1206,10 +1318,10 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
             enabledBorder: OutlineInputBorder(
               borderSide: BorderSide(
                 color: warning != null
-                    ? AppColors.error
+                    ? AppColors.of(context).error
                     : edited
-                    ? AppColors.roofMid
-                    : AppColors.parchmentBorder,
+                    ? AppColors.of(context).roofMid
+                    : AppColors.of(context).parchmentBorder,
                 width: 2,
               ),
             ),
@@ -1220,7 +1332,10 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
             padding: const EdgeInsets.only(top: 3, bottom: 4),
             child: Text(
               warning,
-              style: PixelText.body(size: 9, color: AppColors.error),
+              style: PixelText.body(
+                size: 9,
+                color: AppColors.of(context).error,
+              ),
             ),
           ),
       ],
@@ -1233,9 +1348,11 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: AppColors.parchmentDark,
+          color: AppColors.of(context).parchmentDark,
           border: Border.all(
-            color: version.active ? AppColors.roofMid : AppColors.parchmentBorder,
+            color: version.active
+                ? AppColors.of(context).roofMid
+                : AppColors.of(context).parchmentBorder,
             width: 2,
           ),
           borderRadius: BorderRadius.circular(8),
@@ -1252,7 +1369,7 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
                         'v${version.version}',
                         style: PixelText.title(
                           size: 12,
-                          color: AppColors.textDark,
+                          color: AppColors.of(context).textDark,
                         ),
                       ),
                       if (version.active) ...[
@@ -1261,7 +1378,7 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
                           'ACTIVE',
                           style: PixelText.pill(
                             size: 9,
-                            color: AppColors.roofMid,
+                            color: AppColors.of(context).roofMid,
                           ),
                         ),
                       ],
@@ -1271,7 +1388,7 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
                           'OVERRIDE',
                           style: PixelText.pill(
                             size: 9,
-                            color: AppColors.error,
+                            color: AppColors.of(context).error,
                           ),
                         ),
                       ],
@@ -1282,7 +1399,7 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
                       version.note!,
                       style: PixelText.body(
                         size: 10,
-                        color: AppColors.textMid,
+                        color: AppColors.of(context).textMid,
                       ),
                     ),
                 ],
@@ -1293,7 +1410,10 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
                 onPressed: _saving ? null : () => _rollback(version),
                 child: Text(
                   'ROLL BACK',
-                  style: PixelText.pill(size: 10, color: AppColors.error),
+                  style: PixelText.pill(
+                    size: 10,
+                    color: AppColors.of(context).error,
+                  ),
                 ),
               ),
           ],
@@ -1362,8 +1482,8 @@ class _DiffTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: AppColors.parchmentDark,
-          border: Border.all(color: AppColors.roofMid, width: 2),
+          color: AppColors.of(context).parchmentDark,
+          border: Border.all(color: AppColors.of(context).roofMid, width: 2),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Column(
@@ -1371,12 +1491,18 @@ class _DiffTile extends StatelessWidget {
           children: [
             Text(
               row.path,
-              style: PixelText.body(size: 11, color: AppColors.textDark),
+              style: PixelText.body(
+                size: 11,
+                color: AppColors.of(context).textDark,
+              ),
             ),
             const SizedBox(height: 2),
             Text(
               '${row.before} → ${row.after}',
-              style: PixelText.number(size: 13, color: AppColors.roofMid),
+              style: PixelText.number(
+                size: 13,
+                color: AppColors.of(context).roofMid,
+              ),
             ),
           ],
         ),
@@ -1397,7 +1523,7 @@ class _RarityPicker extends StatelessWidget {
           ? value
           : 'COMMON',
       underline: const SizedBox.shrink(),
-      style: PixelText.body(size: 11, color: AppColors.textDark),
+      style: PixelText.body(size: 11, color: AppColors.of(context).textDark),
       items: const [
         DropdownMenuItem(value: 'COMMON', child: Text('COMMON')),
         DropdownMenuItem(value: 'UNCOMMON', child: Text('UNCOMMON')),
@@ -1424,11 +1550,11 @@ class _BalanceDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: AppColors.parchmentLight,
+      backgroundColor: AppColors.of(context).parchmentLight,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: AppColors.roofDark, width: 2),
+        side: BorderSide(color: AppColors.of(context).roofDark, width: 2),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -1438,15 +1564,15 @@ class _BalanceDialog extends StatelessWidget {
           children: [
             Text(
               title,
-              style: PixelText.title(size: 16, color: AppColors.textDark),
+              style: PixelText.title(
+                size: 16,
+                color: AppColors.of(context).textDark,
+              ),
             ),
             const SizedBox(height: 10),
             Flexible(child: SingleChildScrollView(child: body)),
             const SizedBox(height: 6),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: actions,
-            ),
+            Row(mainAxisAlignment: MainAxisAlignment.end, children: actions),
           ],
         ),
       ),

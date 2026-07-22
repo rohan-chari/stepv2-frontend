@@ -34,7 +34,7 @@ class UpdateRequiredScreen extends StatelessWidget {
     return PopScope(
       canPop: false,
       child: Scaffold(
-        backgroundColor: AppColors.parchment,
+        backgroundColor: AppColors.of(context).parchment,
         body: SafeArea(
           child: Center(
             child: Padding(
@@ -45,20 +45,26 @@ class UpdateRequiredScreen extends StatelessWidget {
                   Icon(
                     Icons.system_update,
                     size: 72,
-                    color: AppColors.accent,
+                    color: AppColors.of(context).accent,
                   ),
                   const SizedBox(height: 24),
                   Text(
                     'Update Required',
                     textAlign: TextAlign.center,
-                    style: PixelText.title(size: 28),
+                    style: PixelText.title(
+                      size: 28,
+                      color: AppColors.of(context).textDark,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Text(
                     'This version of Bara is no longer supported. '
                     'Please update to the latest version to keep playing.',
                     textAlign: TextAlign.center,
-                    style: PixelText.body(size: 15, color: AppColors.textMid),
+                    style: PixelText.body(
+                      size: 15,
+                      color: AppColors.of(context).textMid,
+                    ),
                   ),
                   const SizedBox(height: 32),
                   if (_storeUrl != null)

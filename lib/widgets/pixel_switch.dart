@@ -14,9 +14,13 @@ class PixelSwitch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final trackFace = value ? AppColors.pillGreen : AppColors.parchmentDark;
-    final trackDark = value ? AppColors.pillGreenDark : AppColors.parchmentBorder;
-    final labelColor = value ? Colors.white : AppColors.textMid;
+    final trackFace = value
+        ? AppColors.of(context).pillGreen
+        : AppColors.of(context).parchmentDark;
+    final trackDark = value
+        ? AppColors.of(context).pillGreenDark
+        : AppColors.of(context).parchmentBorder;
+    final labelColor = value ? Colors.white : AppColors.of(context).textMid;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -46,9 +50,7 @@ class PixelSwitch extends StatelessWidget {
               AnimatedAlign(
                 duration: const Duration(milliseconds: 140),
                 curve: Curves.easeOut,
-                alignment: value
-                    ? Alignment.centerLeft
-                    : Alignment.centerRight,
+                alignment: value ? Alignment.centerLeft : Alignment.centerRight,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: Text(
@@ -60,14 +62,12 @@ class PixelSwitch extends StatelessWidget {
               AnimatedAlign(
                 duration: const Duration(milliseconds: 140),
                 curve: Curves.easeOut,
-                alignment: value
-                    ? Alignment.centerRight
-                    : Alignment.centerLeft,
+                alignment: value ? Alignment.centerRight : Alignment.centerLeft,
                 child: Container(
                   width: 20,
                   height: 20,
                   decoration: BoxDecoration(
-                    color: AppColors.parchmentLight,
+                    color: AppColors.of(context).parchmentLight,
                     borderRadius: BorderRadius.circular(5),
                     border: Border.all(color: trackDark, width: 2),
                   ),

@@ -16,20 +16,12 @@ import '../styles.dart';
 /// Honors `MediaQuery.disableAnimations` by freezing the drift instead of
 /// running the ambient ticker.
 class HomeHeroScene extends StatefulWidget {
-  const HomeHeroScene({
-    super.key,
-    required this.child,
-    this.groundHeight = 86,
-  });
+  const HomeHeroScene({super.key, required this.child, this.groundHeight = 86});
 
   final Widget child;
 
   /// Height of the grass + dirt strip at the bottom of the scene.
   final double groundHeight;
-
-  /// Top-edge color of the sky artwork; painted behind the status bar so the
-  /// scene bleeds seamlessly to the screen edge.
-  static const skyTopColor = Color(0xFF0089FB);
 
   /// Source dimensions of home_hero_ground.png (the course-strip crop); used
   /// to size each tile to [groundHeight] exactly.
@@ -56,6 +48,10 @@ class _HomeHeroSceneState extends State<HomeHeroScene>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    precacheImage(AssetImage(AppThemeAssets.light.homeHeroSky), context);
+    precacheImage(AssetImage(AppThemeAssets.night.homeHeroSky), context);
+    precacheImage(AssetImage(AppThemeAssets.light.homeHeroGround), context);
+    precacheImage(AssetImage(AppThemeAssets.night.homeHeroGround), context);
     if (MediaQuery.of(context).disableAnimations) {
       _ambient.stop();
       _ambient.value = 0.35;
@@ -72,6 +68,11 @@ class _HomeHeroSceneState extends State<HomeHeroScene>
 
   @override
   Widget build(BuildContext context) {
+    final assets = AppThemeAssets.of(context);
+    final palette = AppColors.of(context);
+    final transitionDuration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 250);
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -83,11 +84,17 @@ class _HomeHeroSceneState extends State<HomeHeroScene>
           top: 0,
           bottom: widget.groundHeight - 20,
           child: ClipRect(
-            child: Image.asset(
-              'assets/images/home_hero_sky.png',
-              fit: BoxFit.cover,
-              alignment: Alignment.bottomCenter,
-              filterQuality: FilterQuality.none,
+            child: AnimatedSwitcher(
+              duration: transitionDuration,
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeOutCubic,
+              child: Image.asset(
+                assets.homeHeroSky,
+                key: ValueKey(assets.homeHeroSky),
+                fit: BoxFit.cover,
+                alignment: Alignment.bottomCenter,
+                filterQuality: FilterQuality.none,
+              ),
             ),
           ),
         ),
@@ -99,8 +106,13 @@ class _HomeHeroSceneState extends State<HomeHeroScene>
           bottom: widget.groundHeight,
           child: AnimatedBuilder(
             animation: _ambient,
-            builder: (context, _) =>
-                CustomPaint(painter: _DriftCloudsPainter(t: _ambient.value)),
+            builder: (context, _) => CustomPaint(
+              painter: _DriftCloudsPainter(
+                t: _ambient.value,
+                white: palette.cloudWhite,
+                shadow: palette.cloudShadow,
+              ),
+            ),
           ),
         ),
         // Ground strip: the course scene's grass+dirt crop, tiled to exactly
@@ -130,7 +142,8 @@ class _HomeHeroSceneState extends State<HomeHeroScene>
                     children: [
                       for (var i = 0; i < tiles; i++)
                         Image.asset(
-                          'assets/images/home_hero_ground.png',
+                          assets.homeHeroGround,
+                          key: ValueKey('${assets.homeHeroGround}-$i'),
                           width: tileW,
                           height: widget.groundHeight,
                           fit: BoxFit.fill,
@@ -153,15 +166,18 @@ class _HomeHeroSceneState extends State<HomeHeroScene>
 /// band between the step-count HUD and the horizon so they never cross the
 /// number. [t] is a looping 0..1 ambient clock.
 class _DriftCloudsPainter extends CustomPainter {
-  const _DriftCloudsPainter({required this.t});
+  const _DriftCloudsPainter({
+    required this.t,
+    required this.white,
+    required this.shadow,
+  });
 
   final double t;
+  final Color white;
+  final Color shadow;
 
   // (yFrac of sky, scale, horizontal cycles per loop, phase)
-  static const _clouds = [
-    (0.58, 0.9, 1.0, 0.15),
-    (0.72, 0.6, 2.0, 0.62),
-  ];
+  static const _clouds = [(0.58, 0.9, 1.0, 0.15), (0.72, 0.6, 2.0, 0.62)];
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -170,13 +186,17 @@ class _DriftCloudsPainter extends CustomPainter {
       // before re-entering. Integer cycle counts keep the loop seamless.
       const span = 1.3;
       final xFrac = ((phase + t * cycles) % span) - (span - 1) / 2 - 0.1;
-      _paintCloud(canvas, Offset(xFrac * size.width, size.height * yFrac), scale);
+      _paintCloud(
+        canvas,
+        Offset(xFrac * size.width, size.height * yFrac),
+        scale,
+      );
     }
   }
 
   void _paintCloud(Canvas canvas, Offset origin, double scale) {
-    final white = Paint()..color = AppColors.cloudWhite;
-    final shadow = Paint()..color = AppColors.cloudShadow;
+    final whitePaint = Paint()..color = white;
+    final shadowPaint = Paint()..color = shadow;
     RRect blob(double dx, double dy, double w, double h) {
       return RRect.fromRectAndRadius(
         Rect.fromLTWH(
@@ -189,15 +209,17 @@ class _DriftCloudsPainter extends CustomPainter {
       );
     }
 
-    canvas.drawRRect(blob(0, 14, 58, 13), shadow);
-    canvas.drawRRect(blob(0, 10, 58, 13), white);
-    canvas.drawRRect(blob(9, 2, 34, 13), white);
-    canvas.drawRRect(blob(18, -5, 18, 11), white);
+    canvas.drawRRect(blob(0, 14, 58, 13), shadowPaint);
+    canvas.drawRRect(blob(0, 10, 58, 13), whitePaint);
+    canvas.drawRRect(blob(9, 2, 34, 13), whitePaint);
+    canvas.drawRRect(blob(18, -5, 18, 11), whitePaint);
   }
 
   @override
   bool shouldRepaint(covariant _DriftCloudsPainter oldDelegate) =>
-      oldDelegate.t != t;
+      oldDelegate.t != t ||
+      oldDelegate.white != white ||
+      oldDelegate.shadow != shadow;
 }
 
 /// A number that counts up to [value] (and re-animates between values on

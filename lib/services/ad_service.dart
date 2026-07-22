@@ -45,9 +45,12 @@ class AdService implements ExtraSpinAdController {
   // Android uses the parallel `_ANDROID` defines (added so Android can reach
   // full parity without changing the iOS ids). An absent/empty id for a surface
   // disables that surface on this platform (see the *Enabled getters below).
-  static const _envAdUnitId = String.fromEnvironment('ADMOB_EXTRA_SPIN_AD_UNIT_ID');
-  static const _envAdUnitIdAndroid =
-      String.fromEnvironment('ADMOB_EXTRA_SPIN_AD_UNIT_ID_ANDROID');
+  static const _envAdUnitId = String.fromEnvironment(
+    'ADMOB_EXTRA_SPIN_AD_UNIT_ID',
+  );
+  static const _envAdUnitIdAndroid = String.fromEnvironment(
+    'ADMOB_EXTRA_SPIN_AD_UNIT_ID_ANDROID',
+  );
   // Google's documented test rewarded ad units.
   static const _testAdUnitAndroid = 'ca-app-pub-3940256099942544/5224354917';
   static const _testAdUnitIos = 'ca-app-pub-3940256099942544/1712485313';
@@ -56,10 +59,12 @@ class AdService implements ExtraSpinAdController {
   // SSV, no reward, no backend. Like the rewarded unit, the real banner unit is
   // baked in per-build via --dart-define; absent, we fall back to Google's
   // public test banner so dev/staging shows a placeholder ad, never a real one.
-  static const _envBannerAdUnitId =
-      String.fromEnvironment('ADMOB_BANNER_AD_UNIT_ID');
-  static const _envBannerAdUnitIdAndroid =
-      String.fromEnvironment('ADMOB_BANNER_AD_UNIT_ID_ANDROID');
+  static const _envBannerAdUnitId = String.fromEnvironment(
+    'ADMOB_BANNER_AD_UNIT_ID',
+  );
+  static const _envBannerAdUnitIdAndroid = String.fromEnvironment(
+    'ADMOB_BANNER_AD_UNIT_ID_ANDROID',
+  );
   static const _testBannerIos = 'ca-app-pub-3940256099942544/2934735716';
   static const _testBannerAndroid = 'ca-app-pub-3940256099942544/6300978111';
 
@@ -67,10 +72,12 @@ class AdService implements ExtraSpinAdController {
   // unit: real id baked in per-build via --dart-define, Google's public
   // "native advanced" test unit otherwise. Gated by the SAME bannersEnabled
   // switch — natives are just a better-dressed banner, not a new ad surface.
-  static const _envNativeAdUnitId =
-      String.fromEnvironment('ADMOB_NATIVE_AD_UNIT_ID');
-  static const _envNativeAdUnitIdAndroid =
-      String.fromEnvironment('ADMOB_NATIVE_AD_UNIT_ID_ANDROID');
+  static const _envNativeAdUnitId = String.fromEnvironment(
+    'ADMOB_NATIVE_AD_UNIT_ID',
+  );
+  static const _envNativeAdUnitIdAndroid = String.fromEnvironment(
+    'ADMOB_NATIVE_AD_UNIT_ID_ANDROID',
+  );
   static const _testNativeIos = 'ca-app-pub-3940256099942544/3986624511';
   static const _testNativeAndroid = 'ca-app-pub-3940256099942544/2247696110';
 
@@ -112,9 +119,7 @@ class AdService implements ExtraSpinAdController {
   /// (and web) show nothing at all. When off, [AdBannerSlot] collapses to zero
   /// size.
   static bool get bannersEnabled =>
-      remoteBannersEnabled &&
-      !kIsWeb &&
-      _platformBannerUnitId.isNotEmpty;
+      remoteBannersEnabled && !kIsWeb && _platformBannerUnitId.isNotEmpty;
 
   /// Ad unit for [AdBannerSlot]. The real unit when injected at build time,
   /// otherwise Google's public test banner for this platform (only reached in
@@ -122,7 +127,9 @@ class AdService implements ExtraSpinAdController {
   static String get bannerAdUnitId {
     final id = _platformBannerUnitId;
     if (id.isNotEmpty) return id;
-    return (!kIsWeb && Platform.isAndroid) ? _testBannerAndroid : _testBannerIos;
+    return (!kIsWeb && Platform.isAndroid)
+        ? _testBannerAndroid
+        : _testBannerIos;
   }
 
   /// Ad unit for [AdInlineCard]'s native in-feed ad. The real unit when
@@ -132,7 +139,9 @@ class AdService implements ExtraSpinAdController {
   static String get nativeAdUnitId {
     final id = _platformNativeUnitId;
     if (id.isNotEmpty) return id;
-    return (!kIsWeb && Platform.isAndroid) ? _testNativeAndroid : _testNativeIos;
+    return (!kIsWeb && Platform.isAndroid)
+        ? _testNativeAndroid
+        : _testNativeIos;
   }
 
   /// Initialize the ads SDK once (with an iOS ATT prompt on first run). Shared
@@ -188,12 +197,13 @@ class AdService implements ExtraSpinAdController {
     }
     final id = _platformExtraSpinUnitId;
     if (id.isNotEmpty) return id;
-    return (!kIsWeb && Platform.isAndroid) ? _testAdUnitAndroid : _testAdUnitIos;
+    return (!kIsWeb && Platform.isAndroid)
+        ? _testAdUnitAndroid
+        : _testAdUnitIos;
   }
 
   @override
-  bool get isSupported =>
-      !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+  bool get isSupported => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
   @override
   bool get isReady => _ad != null;
@@ -253,9 +263,7 @@ class AdService implements ExtraSpinAdController {
         if (!completer.isCompleted) completer.complete(false);
       },
     );
-    await ad.show(
-      onUserEarnedReward: (_, _) => earned = true,
-    );
+    await ad.show(onUserEarnedReward: (_, _) => earned = true);
     return completer.future;
   }
 

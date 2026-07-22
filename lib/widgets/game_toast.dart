@@ -100,8 +100,8 @@ class _GameToastOverlayState extends State<_GameToastOverlay>
       reverseDuration: const Duration(milliseconds: 200),
     );
     // Springy drop-in: overshoots the resting spot slightly, then settles.
-    _slideAnimation = Tween<Offset>(begin: const Offset(0, -1.2), end: Offset.zero)
-        .animate(
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0, -1.2), end: Offset.zero).animate(
           CurvedAnimation(
             parent: _controller,
             curve: Curves.easeOutBack,
@@ -201,7 +201,7 @@ class _GameToastOverlayState extends State<_GameToastOverlay>
                 color: widget.palette.shadow,
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: AppColors.roofDark.withValues(alpha: 0.55),
+                  color: AppColors.of(context).roofDark.withValues(alpha: 0.55),
                   width: 2,
                 ),
                 boxShadow: const [
@@ -218,7 +218,7 @@ class _GameToastOverlayState extends State<_GameToastOverlay>
                   borderRadius: BorderRadius.circular(11),
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      color: AppColors.parchment,
+                      color: AppColors.of(context).parchment,
                       borderRadius: BorderRadius.circular(11),
                     ),
                     child: Padding(

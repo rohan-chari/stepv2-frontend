@@ -59,7 +59,7 @@ class TournamentGameCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final card = Container(
-      decoration: raceCardDecoration(),
+      decoration: raceCardDecoration(context),
       padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -68,16 +68,19 @@ class TournamentGameCard extends StatelessWidget {
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Pill(
+              Pill(
                 label: 'BRACKET',
-                background: AppColors.pillGold,
+                background: AppColors.of(context).pillGold,
                 fontSize: 11,
               ),
               const SizedBox(height: 8),
               Text(
                 name,
                 textAlign: TextAlign.center,
-                style: PixelText.title(size: 17, color: AppColors.textDark),
+                style: PixelText.title(
+                  size: 17,
+                  color: AppColors.of(context).textDark,
+                ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -92,7 +95,10 @@ class TournamentGameCard extends StatelessWidget {
                       child: Text(
                         prizeLabel,
                         textAlign: TextAlign.center,
-                        style: PixelText.body(size: 11, color: AppColors.textMid),
+                        style: PixelText.body(
+                          size: 11,
+                          color: AppColors.of(context).textMid,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -100,7 +106,10 @@ class TournamentGameCard extends StatelessWidget {
                     const SizedBox(width: 6),
                     Text(
                       '$prizeValue',
-                      style: PixelText.title(size: 15, color: AppColors.coinDark),
+                      style: PixelText.title(
+                        size: 15,
+                        color: AppColors.of(context).coinDark,
+                      ),
                     ),
                   ],
                 ),
@@ -108,7 +117,10 @@ class TournamentGameCard extends StatelessWidget {
               Text(
                 metaLine,
                 textAlign: TextAlign.center,
-                style: PixelText.body(size: 11.5, color: AppColors.textMid),
+                style: PixelText.body(
+                  size: 11.5,
+                  color: AppColors.of(context).textMid,
+                ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -116,7 +128,10 @@ class TournamentGameCard extends StatelessWidget {
               Text(
                 filledLabel,
                 textAlign: TextAlign.center,
-                style: PixelText.body(size: 12, color: AppColors.textMid),
+                style: PixelText.body(
+                  size: 12,
+                  color: AppColors.of(context).textMid,
+                ),
               ),
             ],
           ),

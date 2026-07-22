@@ -40,9 +40,9 @@ class WoodenTabBar extends StatelessWidget {
       // Deep forest bar so the arcade-green tabs sit on a darker "ledge";
       // matches the ink borders of the game-piece cards above it.
       decoration: BoxDecoration(
-        color: AppColors.roofDark,
-        border: const Border(
-          top: BorderSide(color: AppColors.roofEdge, width: 2),
+        color: AppColors.of(context).roofDark,
+        border: Border(
+          top: BorderSide(color: AppColors.of(context).roofEdge, width: 2),
         ),
         boxShadow: [
           BoxShadow(
@@ -95,12 +95,14 @@ class _TabItemWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Selected tab reads like the gold game buttons; the rest stay quiet
-    // parchment silhouettes on the dark ledge.
+    // Selected tab reads like the clay-gold game buttons; inactive items keep
+    // enough contrast to remain obvious navigation in both themes.
     final color = selected
-        ? AppColors.textDark
-        : AppColors.parchment.withValues(alpha: 0.72);
-    final background = selected ? AppColors.pillGold : Colors.transparent;
+        ? AppColors.of(context).textDark
+        : AppColors.of(context).textMid;
+    final background = selected
+        ? AppColors.of(context).pillGold
+        : Colors.transparent;
 
     return Material(
       color: Colors.transparent,
@@ -116,7 +118,9 @@ class _TabItemWidget extends StatelessWidget {
             color: background,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: selected ? AppColors.pillGoldDark : Colors.transparent,
+              color: selected
+                  ? AppColors.of(context).pillGoldDark
+                  : Colors.transparent,
               width: 2,
             ),
           ),
@@ -163,9 +167,9 @@ class _Badge extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: AppColors.pillTerra,
+        color: AppColors.of(context).pillTerra,
         shape: BoxShape.circle,
-        border: Border.all(color: AppColors.roofDark, width: 1.5),
+        border: Border.all(color: AppColors.of(context).roofDark, width: 1.5),
       ),
       child: Padding(
         padding: const EdgeInsets.all(4),

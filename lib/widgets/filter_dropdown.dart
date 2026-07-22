@@ -19,26 +19,39 @@ class FilterDropdown<T> extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       decoration: BoxDecoration(
-        color: AppColors.parchmentLight,
-        border: Border.all(color: AppColors.parchmentBorder, width: 2),
+        color: AppColors.of(context).parchmentLight,
+        border: Border.all(
+          color: AppColors.of(context).parchmentBorder,
+          width: 2,
+        ),
         borderRadius: BorderRadius.circular(8),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<T?>(
           value: value,
           isExpanded: true,
-          icon: Icon(Icons.expand_more, color: AppColors.textMid, size: 22),
-          dropdownColor: AppColors.parchment,
+          icon: Icon(
+            Icons.expand_more,
+            color: AppColors.of(context).textMid,
+            size: 22,
+          ),
+          dropdownColor: AppColors.of(context).parchment,
           borderRadius: BorderRadius.circular(8),
           alignment: AlignmentDirectional.bottomStart,
-          style: PixelText.title(size: 16, color: AppColors.textDark),
+          style: PixelText.title(
+            size: 16,
+            color: AppColors.of(context).textDark,
+          ),
           selectedItemBuilder: (context) {
             return options.map((o) {
               return Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
                   o.$2,
-                  style: PixelText.title(size: 16, color: AppColors.textDark),
+                  style: PixelText.title(
+                    size: 16,
+                    color: AppColors.of(context).textDark,
+                  ),
                 ),
               );
             }).toList();
@@ -52,7 +65,9 @@ class FilterDropdown<T> extends StatelessWidget {
                 label,
                 style: PixelText.body(
                   size: 16,
-                  color: selected ? AppColors.accent : AppColors.textDark,
+                  color: selected
+                      ? AppColors.of(context).accent
+                      : AppColors.of(context).textDark,
                 ),
               ),
             );

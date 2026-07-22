@@ -11,7 +11,8 @@ extension RaceTeamX on RaceTeam {
   String get wireValue => this == RaceTeam.teamA ? 'TEAM_A' : 'TEAM_B';
 
   /// The opposite side — used for enemy-only powerup targeting and switching.
-  RaceTeam get other => this == RaceTeam.teamA ? RaceTeam.teamB : RaceTeam.teamA;
+  RaceTeam get other =>
+      this == RaceTeam.teamA ? RaceTeam.teamB : RaceTeam.teamA;
 }
 
 /// Parses a wire team string (`TEAM_A` / `TEAM_B`) into a [RaceTeam].
@@ -29,7 +30,7 @@ RaceTeam? parseRaceTeam(dynamic value) {
 /// Team colors for chrome (plaques, glow, pennants, rope). Locked palette from
 /// TR-802/803: teams are drawn straight from the app's own palette so they sit
 /// inside the wood/parchment world instead of clashing — Team A is campfire
-/// clay ([AppColors.pillTerra]), Team B is forest green ([AppColors.pillGreen]/
+/// clay ([AppColors.of(context).pillTerra]), Team B is forest green ([AppColors.of(context).pillGreen]/
 /// roof greens). Warm-vs-cool keeps the two sides instantly readable.
 abstract final class TeamColors {
   // Team A — trail gold (warm).
@@ -48,7 +49,8 @@ abstract final class TeamColors {
 /// a race without `isTeamRace` renders cleanly as an individual race (TR-705).
 abstract final class TeamRace {
   /// True only when the backend explicitly flags this as a team race.
-  static bool isTeamRace(Map<String, dynamic> race) => race['isTeamRace'] == true;
+  static bool isTeamRace(Map<String, dynamic> race) =>
+      race['isTeamRace'] == true;
 
   /// Configured per-side cap (1–5), or null if absent/individual.
   static int? teamSize(Map<String, dynamic> race) =>
@@ -65,7 +67,9 @@ abstract final class TeamRace {
   /// The display name for a side, with a plain "Team A/B" fallback when the
   /// backend omitted it or sent blank.
   static String teamName(Map<String, dynamic> race, RaceTeam team) {
-    final raw = (team == RaceTeam.teamA ? race['teamAName'] : race['teamBName']);
+    final raw = (team == RaceTeam.teamA
+        ? race['teamAName']
+        : race['teamBName']);
     if (raw is String && raw.trim().isNotEmpty) return raw.trim();
     return team == RaceTeam.teamA ? 'Team A' : 'Team B';
   }
@@ -95,10 +99,7 @@ abstract final class TeamRace {
 
   /// Combined effective steps for a side (sum of member `totalSteps`). The
   /// team total is always honest — never masked by stealth/imposter (TR-658).
-  static int teamTotal(
-    List<Map<String, dynamic>> participants,
-    RaceTeam team,
-  ) {
+  static int teamTotal(List<Map<String, dynamic>> participants, RaceTeam team) {
     var total = 0;
     for (final p in participants) {
       if (participantTeam(p) == team) {
@@ -142,8 +143,9 @@ abstract final class TeamRace {
     final b = _blockInt(race, 'teamB', 'memberCount');
     if (a != null && b != null) return (a, b);
 
-    final participants =
-        (race['participants'] as List?)?.whereType<Map>().toList();
+    final participants = (race['participants'] as List?)
+        ?.whereType<Map>()
+        .toList();
     if (participants == null || participants.isEmpty) return null;
     var countA = 0;
     var countB = 0;
@@ -204,13 +206,15 @@ abstract final class TeamRace {
       }
     }
 
-    return participants.where((p) {
-      if ((p['userId'] as String?) == myUserId) return false;
-      if (p['stealthed'] == true) return false;
-      if (hasForfeited(p)) return false;
-      if (myTeam != null && participantTeam(p) == myTeam) return false;
-      return true;
-    }).toList(growable: false);
+    return participants
+        .where((p) {
+          if ((p['userId'] as String?) == myUserId) return false;
+          if (p['stealthed'] == true) return false;
+          if (hasForfeited(p)) return false;
+          if (myTeam != null && participantTeam(p) == myTeam) return false;
+          return true;
+        })
+        .toList(growable: false);
   }
 
   /// "1 slot left on Turbo Beavers" / "Red is full" copy for list + browser

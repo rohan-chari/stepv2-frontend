@@ -24,8 +24,9 @@ class GameContainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final border = frameColor ?? AppColors.roofDark.withValues(alpha: 0.55);
-    final surface = surfaceColor ?? AppColors.parchment;
+    final border =
+        frameColor ?? AppColors.of(context).roofDark.withValues(alpha: 0.55);
+    final surface = surfaceColor ?? AppColors.of(context).parchment;
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -54,8 +55,14 @@ class GameContainer extends StatelessWidget {
         child: Stack(
           children: [
             if (surfaceColor == null)
-              const Positioned.fill(
-                child: CustomPaint(painter: PixelSurfacePainter()),
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: PixelSurfacePainter(
+                    dotColor: AppColors.of(
+                      context,
+                    ).parchmentDark.withValues(alpha: 0.32),
+                  ),
+                ),
               ),
             Padding(padding: padding, child: child),
           ],

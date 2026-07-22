@@ -252,12 +252,12 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
     final topInset = MediaQuery.of(context).padding.top;
 
     return Scaffold(
-      backgroundColor: AppColors.parchment,
+      backgroundColor: AppColors.of(context).parchment,
       body: Stack(
         children: [
-          const Positioned.fill(
+          Positioned.fill(
             child: ColoredBox(
-              color: AppColors.roofLight,
+              color: AppColors.of(context).roofLight,
               child: CustomPaint(
                 painter: ArcadeCheckerPainter(drawBottomStripe: false),
               ),
@@ -271,7 +271,7 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
                 _buildHeader(),
                 Expanded(
                   child: ColoredBox(
-                    color: AppColors.parchment,
+                    color: AppColors.of(context).parchment,
                     child: ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
@@ -299,9 +299,11 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
 
   Widget _buildHeader() {
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: AppColors.roofLight,
-        border: Border(bottom: BorderSide(color: AppColors.roofDark, width: 1)),
+      decoration: BoxDecoration(
+        color: AppColors.of(context).roofLight,
+        border: Border(
+          bottom: BorderSide(color: AppColors.of(context).roofDark, width: 1),
+        ),
       ),
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
@@ -315,9 +317,9 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
                   IconButton(
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.arrow_back,
-                      color: AppColors.parchment,
+                      color: AppColors.of(context).textLight,
                     ),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
@@ -330,7 +332,7 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
                 'GET COINS',
                 style: PixelText.title(
                   size: 28,
-                  color: AppColors.parchment,
+                  color: AppColors.of(context).textLight,
                 ).copyWith(shadows: _textShadows),
               ),
               const SizedBox(height: 5),
@@ -338,7 +340,9 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
                 'Watch ads, invite friends, and open your daily box.',
                 style: PixelText.body(
                   size: 14,
-                  color: AppColors.parchment.withValues(alpha: 0.92),
+                  color: AppColors.of(
+                    context,
+                  ).textLight.withValues(alpha: 0.92),
                 ),
               ),
             ],
@@ -357,21 +361,27 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
       decoration: BoxDecoration(
-        color: AppColors.parchmentLight,
+        color: AppColors.of(context).parchmentLight,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.parchmentBorder, width: 1.5),
+        border: Border.all(
+          color: AppColors.of(context).parchmentBorder,
+          width: 1.5,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Icon(icon, size: 20, color: AppColors.textDark),
+              Icon(icon, size: 20, color: AppColors.of(context).textDark),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   title,
-                  style: PixelText.title(size: 16, color: AppColors.textDark),
+                  style: PixelText.title(
+                    size: 16,
+                    color: AppColors.of(context).textDark,
+                  ),
                 ),
               ),
             ],
@@ -379,7 +389,10 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
           const SizedBox(height: 6),
           Text(
             subtitle,
-            style: PixelText.body(size: 13, color: AppColors.textMid),
+            style: PixelText.body(
+              size: 13,
+              color: AppColors.of(context).textMid,
+            ),
           ),
           const SizedBox(height: 12),
           action,

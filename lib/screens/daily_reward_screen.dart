@@ -105,7 +105,8 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
   /// Exact box odds (spec §5.3 `box.itemOdds`). Null when the backend omits it
   /// OR sends something incoherent — both hide the ODDS affordance entirely,
   /// because a wrong odds display is worse than none (§6.3.B.10).
-  OddsBreakdown? get _itemOdds => OddsBreakdown.parseItemOdds(_box?['itemOdds']);
+  OddsBreakdown? get _itemOdds =>
+      OddsBreakdown.parseItemOdds(_box?['itemOdds']);
 
   /// Rewarded-ad extra spin offer — present only when the backend has the
   /// feature enabled AND this build declared the `ads` capability. Older
@@ -316,7 +317,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 2.5),
               child: ColoredBox(
-                color: AppColors.roofDark.withValues(alpha: 0.78),
+                color: AppColors.of(context).roofDark.withValues(alpha: 0.78),
                 child: const CustomPaint(
                   painter: ArcadeCheckerPainter(
                     tileColor: Color(0x0AFFFFFF),
@@ -365,9 +366,11 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
   }
 
   Widget _buildLoading() {
-    return const Padding(
+    return Padding(
       padding: EdgeInsets.all(48),
-      child: Center(child: CircularProgressIndicator(color: AppColors.accent)),
+      child: Center(
+        child: CircularProgressIndicator(color: AppColors.of(context).accent),
+      ),
     );
   }
 
@@ -376,14 +379,17 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
     if (status == null) {
       return GameContainer(
         padding: const EdgeInsets.all(20),
-        frameColor: AppColors.accent,
-        surfaceColor: AppColors.parchmentLight,
+        frameColor: AppColors.of(context).accent,
+        surfaceColor: AppColors.of(context).parchmentLight,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               'Daily reward unavailable.',
-              style: PixelText.body(size: 14, color: AppColors.textMid),
+              style: PixelText.body(
+                size: 14,
+                color: AppColors.of(context).textMid,
+              ),
             ),
             const SizedBox(height: 12),
             PillButton(
@@ -403,9 +409,9 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
 
     return GameContainer(
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
-      frameColor: AppColors.accent,
-      surfaceColor: AppColors.parchmentLight,
-      glowColor: AppColors.coinMid,
+      frameColor: AppColors.of(context).accent,
+      surfaceColor: AppColors.of(context).parchmentLight,
+      glowColor: AppColors.of(context).coinMid,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
@@ -415,7 +421,10 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
               Expanded(
                 child: Text(
                   'DAILY REWARD',
-                  style: HomeText.display(size: 26, color: HomeColors.ink),
+                  style: HomeText.display(
+                    size: 26,
+                    color: AppColors.of(context).ink,
+                  ),
                 ),
               ),
               _CloseButton(onTap: () => Navigator.of(context).pop(false)),
@@ -428,7 +437,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
                 : 'Day $currentDay of 6 — claim to keep your streak.',
             style: HomeText.body(
               size: 13,
-              color: HomeColors.muted,
+              color: AppColors.of(context).muted,
               weight: FontWeight.w700,
             ),
           ),
@@ -469,9 +478,9 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
 
     return GameContainer(
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
-      frameColor: AppColors.accent,
-      surfaceColor: AppColors.parchmentLight,
-      glowColor: AppColors.coinMid,
+      frameColor: AppColors.of(context).accent,
+      surfaceColor: AppColors.of(context).parchmentLight,
+      glowColor: AppColors.of(context).coinMid,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
@@ -481,7 +490,10 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
               Expanded(
                 child: Text(
                   'DAILY REWARD',
-                  style: HomeText.display(size: 26, color: HomeColors.ink),
+                  style: HomeText.display(
+                    size: 26,
+                    color: AppColors.of(context).ink,
+                  ),
                 ),
               ),
               _OddsEntry(odds: _itemOdds),
@@ -499,7 +511,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
                 : 'You\'ve opened today\'s box. Come back tomorrow!',
             style: HomeText.body(
               size: 13,
-              color: HomeColors.muted,
+              color: AppColors.of(context).muted,
               weight: FontWeight.w700,
             ),
           ),
@@ -508,22 +520,28 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
               decoration: BoxDecoration(
-                color: AppColors.coinLight.withValues(alpha: 0.35),
-                border: Border.all(color: AppColors.coinDark, width: 2),
+                color: AppColors.of(context).coinLight.withValues(alpha: 0.35),
+                border: Border.all(
+                  color: AppColors.of(context).coinDark,
+                  width: 2,
+                ),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.local_fire_department_rounded,
                     size: 20,
-                    color: AppColors.error,
+                    color: AppColors.of(context).error,
                   ),
                   const SizedBox(width: 6),
                   Text(
                     '$streak-DAY STREAK',
-                    style: PixelText.title(size: 14, color: AppColors.textDark),
+                    style: PixelText.title(
+                      size: 14,
+                      color: AppColors.of(context).textDark,
+                    ),
                   ),
                 ],
               ),
@@ -589,9 +607,9 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
     return GameContainer(
       key: const ValueKey('opening'),
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
-      frameColor: AppColors.accent,
-      surfaceColor: AppColors.parchmentLight,
-      glowColor: AppColors.coinMid,
+      frameColor: AppColors.of(context).accent,
+      surfaceColor: AppColors.of(context).parchmentLight,
+      glowColor: AppColors.of(context).coinMid,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
@@ -601,7 +619,10 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
               Expanded(
                 child: Text(
                   'DAILY REWARD',
-                  style: HomeText.display(size: 28, color: HomeColors.ink),
+                  style: HomeText.display(
+                    size: 28,
+                    color: AppColors.of(context).ink,
+                  ),
                 ),
               ),
               _OddsEntry(odds: _itemOdds),
@@ -618,7 +639,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
             'Swipe the reel to crack it open',
             style: HomeText.body(
               size: 14,
-              color: HomeColors.muted,
+              color: AppColors.of(context).muted,
               weight: FontWeight.w800,
             ),
           ),
@@ -627,22 +648,28 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               decoration: BoxDecoration(
-                color: AppColors.coinLight.withValues(alpha: 0.35),
-                border: Border.all(color: AppColors.coinDark, width: 2),
+                color: AppColors.of(context).coinLight.withValues(alpha: 0.35),
+                border: Border.all(
+                  color: AppColors.of(context).coinDark,
+                  width: 2,
+                ),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.local_fire_department_rounded,
                     size: 18,
-                    color: AppColors.error,
+                    color: AppColors.of(context).error,
                   ),
                   const SizedBox(width: 6),
                   Text(
                     '$streak-DAY STREAK',
-                    style: PixelText.title(size: 13, color: AppColors.textDark),
+                    style: PixelText.title(
+                      size: 13,
+                      color: AppColors.of(context).textDark,
+                    ),
                   ),
                 ],
               ),
@@ -659,18 +686,20 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
                   _DailyReelTile(item: items[index]),
             )
           else
-            const SizedBox(
+            SizedBox(
               height: 160,
               child: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    CircularProgressIndicator(color: AppColors.accent),
+                    CircularProgressIndicator(
+                      color: AppColors.of(context).accent,
+                    ),
                     SizedBox(height: 12),
                     Text(
                       'PREPARING...',
                       style: TextStyle(
-                        color: AppColors.textMid,
+                        color: AppColors.of(context).textMid,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 1.5,
                       ),
@@ -761,8 +790,8 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
         // RARE decoy: mix accessories and powerups from whatever's winnable.
         // When both pools have stock, roughly half-and-half (mirrors the
         // backend's 50/50 RARE sub-roll); otherwise draw from the non-empty one.
-        final usePowerup = powerupPool.isNotEmpty &&
-            (accessoryPool.isEmpty || rng.nextBool());
+        final usePowerup =
+            powerupPool.isNotEmpty && (accessoryPool.isEmpty || rng.nextBool());
         if (usePowerup) {
           items.add(
             _DailyStripItem.powerup(
@@ -815,8 +844,8 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
         insetPadding: const EdgeInsets.symmetric(horizontal: 24),
         child: GameContainer(
           padding: const EdgeInsets.all(18),
-          frameColor: AppColors.accent,
-          surfaceColor: AppColors.parchmentLight,
+          frameColor: AppColors.of(context).accent,
+          surfaceColor: AppColors.of(context).parchmentLight,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -824,7 +853,10 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
               Text(
                 'HOW IT WORKS',
                 textAlign: TextAlign.center,
-                style: HomeText.display(size: 22, color: HomeColors.ink),
+                style: HomeText.display(
+                  size: 22,
+                  color: AppColors.of(context).ink,
+                ),
               ),
               const SizedBox(height: 10),
               Text(
@@ -834,7 +866,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
                 'own yet. Miss a day and your streak resets!',
                 style: HomeText.body(
                   size: 13,
-                  color: HomeColors.muted,
+                  color: AppColors.of(context).muted,
                   weight: FontWeight.w700,
                 ),
               ),
@@ -972,11 +1004,14 @@ class _DailyReelTile extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Expanded(child: Center(child: _buildFace())),
+          Expanded(child: Center(child: _buildFace(context))),
           const SizedBox(height: 3),
           Text(
             item.isCoins ? '+${item.coinAmount}' : (item.name ?? '???'),
-            style: PixelText.body(size: 10, color: AppColors.textDark),
+            style: PixelText.body(
+              size: 10,
+              color: AppColors.of(context).textDark,
+            ),
             textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -986,7 +1021,7 @@ class _DailyReelTile extends StatelessWidget {
     );
   }
 
-  Widget _buildFace() {
+  Widget _buildFace(BuildContext context) {
     if (item.isCoins) {
       // Static coin face — dozens of tiles scroll past, so no spin animation.
       return Image.asset(
@@ -994,8 +1029,11 @@ class _DailyReelTile extends StatelessWidget {
         width: 42,
         height: 42,
         fit: BoxFit.contain,
-        errorBuilder: (_, _, _) =>
-            const Icon(Icons.paid_rounded, size: 38, color: AppColors.coinDark),
+        errorBuilder: (_, _, _) => Icon(
+          Icons.paid_rounded,
+          size: 38,
+          color: AppColors.of(context).coinDark,
+        ),
       );
     }
     if (item.isPowerup) {
@@ -1008,18 +1046,18 @@ class _DailyReelTile extends StatelessWidget {
         child: AccessoryThumbnail(
           assetKey: item.assetKey!,
           animationFrames: item.animationFrames,
-          errorBuilder: (_, _, _) => const Icon(
+          errorBuilder: (_, _, _) => Icon(
             Icons.checkroom_rounded,
             size: 38,
-            color: AppColors.accent,
+            color: AppColors.of(context).accent,
           ),
         ),
       );
     }
-    return const Icon(
+    return Icon(
       Icons.checkroom_rounded,
       size: 38,
-      color: AppColors.accent,
+      color: AppColors.of(context).accent,
     );
   }
 }
@@ -1042,7 +1080,7 @@ class _OddsRow extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.parchmentDark,
+        color: AppColors.of(context).parchmentDark,
         border: Border.all(color: color, width: 2),
         borderRadius: BorderRadius.circular(8),
       ),
@@ -1053,7 +1091,10 @@ class _OddsRow extends StatelessWidget {
           Expanded(
             child: Text(
               detail,
-              style: PixelText.body(size: 11, color: AppColors.textMid),
+              style: PixelText.body(
+                size: 11,
+                color: AppColors.of(context).textMid,
+              ),
             ),
           ),
           Text(pct, style: PixelText.number(size: 13, color: color)),
@@ -1102,14 +1143,17 @@ class _InfoButton extends StatelessWidget {
           width: 36,
           height: 36,
           decoration: BoxDecoration(
-            color: AppColors.parchmentDark,
+            color: AppColors.of(context).parchmentDark,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.coinDark, width: 2),
+            border: Border.all(color: AppColors.of(context).coinDark, width: 2),
           ),
           child: Center(
             child: Text(
               '?',
-              style: PixelText.title(size: 18, color: AppColors.coinDark),
+              style: PixelText.title(
+                size: 18,
+                color: AppColors.of(context).coinDark,
+              ),
             ),
           ),
         ),
@@ -1132,13 +1176,13 @@ class _LadderTile extends StatelessWidget {
     final coinAmount = (reward['coinAmount'] as num?)?.toInt() ?? 0;
 
     final borderColor = claimed
-        ? AppColors.parchmentBorder
+        ? AppColors.of(context).parchmentBorder
         : isToday
-        ? AppColors.coinDark
-        : AppColors.parchmentBorder;
+        ? AppColors.of(context).coinDark
+        : AppColors.of(context).parchmentBorder;
     final bgColor = isToday
-        ? AppColors.coinLight.withValues(alpha: 0.35)
-        : AppColors.parchmentDark;
+        ? AppColors.of(context).coinLight.withValues(alpha: 0.35)
+        : AppColors.of(context).parchmentDark;
 
     return Container(
       decoration: BoxDecoration(
@@ -1148,7 +1192,7 @@ class _LadderTile extends StatelessWidget {
         boxShadow: isToday
             ? [
                 BoxShadow(
-                  color: AppColors.coinDark.withValues(alpha: 0.4),
+                  color: AppColors.of(context).coinDark.withValues(alpha: 0.4),
                   blurRadius: 12,
                   spreadRadius: 1,
                 ),
@@ -1163,23 +1207,32 @@ class _LadderTile extends StatelessWidget {
             'DAY $day',
             style: PixelText.title(
               size: 11,
-              color: isToday ? AppColors.textDark : AppColors.textMid,
+              color: isToday
+                  ? AppColors.of(context).textDark
+                  : AppColors.of(context).textMid,
             ),
           ),
           if (rewardType == 'ACCESSORY')
-            const Icon(
+            Icon(
               Icons.checkroom_rounded,
               size: 36,
-              color: AppColors.accent,
+              color: AppColors.of(context).accent,
             )
           else
             const SpinningCoin(size: 32),
           Text(
             rewardType == 'ACCESSORY' ? 'ITEM' : '+$coinAmount',
-            style: PixelText.number(size: 14, color: AppColors.coinDark),
+            style: PixelText.number(
+              size: 14,
+              color: AppColors.of(context).coinDark,
+            ),
           ),
           if (claimed)
-            const Icon(Icons.check_circle, size: 16, color: AppColors.accent)
+            Icon(
+              Icons.check_circle,
+              size: 16,
+              color: AppColors.of(context).accent,
+            )
           else
             const SizedBox(height: 16),
         ],
@@ -1261,9 +1314,9 @@ class _RewardRevealState extends State<_RewardReveal> {
       },
       child: GameContainer(
         padding: const EdgeInsets.all(20),
-        frameColor: rarityColor ?? AppColors.coinDark,
-        surfaceColor: AppColors.parchmentLight,
-        glowColor: rarityColor ?? AppColors.coinMid,
+        frameColor: rarityColor ?? AppColors.of(context).coinDark,
+        surfaceColor: AppColors.of(context).parchmentLight,
+        glowColor: rarityColor ?? AppColors.of(context).coinMid,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1271,7 +1324,10 @@ class _RewardRevealState extends State<_RewardReveal> {
             Text(
               'CLAIMED!',
               textAlign: TextAlign.center,
-              style: HomeText.display(size: 32, color: HomeColors.ink),
+              style: HomeText.display(
+                size: 32,
+                color: AppColors.of(context).ink,
+              ),
             ),
             if (rarity != null) ...[
               const SizedBox(height: 6),
@@ -1299,8 +1355,11 @@ class _RewardRevealState extends State<_RewardReveal> {
                   width: 130,
                   height: 130,
                   decoration: BoxDecoration(
-                    color: AppColors.parchmentDark,
-                    border: Border.all(color: AppColors.coinDark, width: 3),
+                    color: AppColors.of(context).parchmentDark,
+                    border: Border.all(
+                      color: AppColors.of(context).coinDark,
+                      width: 3,
+                    ),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   padding: const EdgeInsets.all(14),
@@ -1316,13 +1375,19 @@ class _RewardRevealState extends State<_RewardReveal> {
               Text(
                 powerup['name'] as String? ?? 'Powerup',
                 textAlign: TextAlign.center,
-                style: PixelText.title(size: 22, color: AppColors.textDark),
+                style: PixelText.title(
+                  size: 22,
+                  color: AppColors.of(context).textDark,
+                ),
               ),
               const SizedBox(height: 6),
               Text(
                 'Added to your powerups',
                 textAlign: TextAlign.center,
-                style: PixelText.body(size: 12, color: AppColors.textMid),
+                style: PixelText.body(
+                  size: 12,
+                  color: AppColors.of(context).textMid,
+                ),
               ),
             ] else if (type == 'ACCESSORY' && shopItem != null) ...[
               Center(
@@ -1330,18 +1395,21 @@ class _RewardRevealState extends State<_RewardReveal> {
                   width: 130,
                   height: 130,
                   decoration: BoxDecoration(
-                    color: AppColors.parchmentDark,
-                    border: Border.all(color: AppColors.coinDark, width: 3),
+                    color: AppColors.of(context).parchmentDark,
+                    border: Border.all(
+                      color: AppColors.of(context).coinDark,
+                      width: 3,
+                    ),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   padding: const EdgeInsets.all(10),
                   child: AccessoryThumbnail(
                     assetKey: shopItem['assetKey'] as String? ?? '',
                     animationFrames: AccessoryThumbnail.framesOf(shopItem),
-                    errorBuilder: (_, _, _) => const Icon(
+                    errorBuilder: (_, _, _) => Icon(
                       Icons.checkroom_rounded,
                       size: 80,
-                      color: AppColors.accent,
+                      color: AppColors.of(context).accent,
                     ),
                   ),
                 ),
@@ -1350,7 +1418,10 @@ class _RewardRevealState extends State<_RewardReveal> {
               Text(
                 shopItem['name'] as String? ?? 'Accessory',
                 textAlign: TextAlign.center,
-                style: PixelText.title(size: 22, color: AppColors.textDark),
+                style: PixelText.title(
+                  size: 22,
+                  color: AppColors.of(context).textDark,
+                ),
               ),
             ] else ...[
               const Center(child: SpinningCoin(size: 96)),
@@ -1358,14 +1429,20 @@ class _RewardRevealState extends State<_RewardReveal> {
               Text(
                 '+$coinAmount COINS',
                 textAlign: TextAlign.center,
-                style: PixelText.title(size: 26, color: AppColors.coinDark),
+                style: PixelText.title(
+                  size: 26,
+                  color: AppColors.of(context).coinDark,
+                ),
               ),
               if (type == 'COINS_FALLBACK') ...[
                 const SizedBox(height: 6),
                 Text(
                   'You own every accessory! Bonus coins instead.',
                   textAlign: TextAlign.center,
-                  style: PixelText.body(size: 12, color: AppColors.textMid),
+                  style: PixelText.body(
+                    size: 12,
+                    color: AppColors.of(context).textMid,
+                  ),
                 ),
               ],
             ],
@@ -1469,15 +1546,18 @@ class _AccessorySpinnerState extends State<_AccessorySpinner>
 
           return GameContainer(
             padding: const EdgeInsets.fromLTRB(10, 14, 10, 16),
-            frameColor: AppColors.coinDark,
-            surfaceColor: AppColors.parchmentLight,
-            glowColor: AppColors.coinMid,
+            frameColor: AppColors.of(context).coinDark,
+            surfaceColor: AppColors.of(context).parchmentLight,
+            glowColor: AppColors.of(context).coinMid,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   _waiting ? 'TAP OR SWIPE TO SPIN' : 'SPINNING...',
-                  style: PixelText.title(size: 14, color: AppColors.textMid),
+                  style: PixelText.title(
+                    size: 14,
+                    color: AppColors.of(context).textMid,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
@@ -1489,7 +1569,7 @@ class _AccessorySpinnerState extends State<_AccessorySpinner>
                       ClipRRect(
                         borderRadius: BorderRadius.circular(8),
                         child: ColoredBox(
-                          color: AppColors.parchmentDark,
+                          color: AppColors.of(context).parchmentDark,
                           child: ClipRect(
                             child: OverflowBox(
                               maxWidth: double.infinity,
@@ -1533,7 +1613,9 @@ class _AccessorySpinnerState extends State<_AccessorySpinner>
                         child: Container(
                           width: 3,
                           height: 130,
-                          color: AppColors.coinDark.withValues(alpha: 0.75),
+                          color: AppColors.of(
+                            context,
+                          ).coinDark.withValues(alpha: 0.75),
                         ),
                       ),
                     ],
@@ -1559,8 +1641,8 @@ class _SpinTile extends StatelessWidget {
       width: _AccessorySpinnerState._itemWidth,
       height: 110,
       decoration: BoxDecoration(
-        color: AppColors.parchment,
-        border: Border.all(color: AppColors.coinDark, width: 2),
+        color: AppColors.of(context).parchment,
+        border: Border.all(color: AppColors.of(context).coinDark, width: 2),
         borderRadius: BorderRadius.circular(8),
       ),
       padding: const EdgeInsets.all(6),
@@ -1568,7 +1650,7 @@ class _SpinTile extends StatelessWidget {
         assetKey: assetKey,
         animationFrames: AccessoryThumbnail.framesOf(item),
         errorBuilder: (_, _, _) =>
-            const Icon(Icons.checkroom_rounded, color: AppColors.accent),
+            Icon(Icons.checkroom_rounded, color: AppColors.of(context).accent),
       ),
     );
   }
@@ -1589,15 +1671,15 @@ class _CloseButton extends StatelessWidget {
           width: 36,
           height: 36,
           decoration: BoxDecoration(
-            color: AppColors.errorLight,
+            color: AppColors.of(context).errorLight,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.error, width: 2),
+            border: Border.all(color: AppColors.of(context).error, width: 2),
           ),
-          child: const Center(
+          child: Center(
             child: Icon(
               Icons.close_rounded,
               size: 18,
-              color: AppColors.textDark,
+              color: AppColors.of(context).textDark,
             ),
           ),
         ),

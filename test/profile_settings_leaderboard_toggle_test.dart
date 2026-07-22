@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/tabs/profile_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/styles.dart';
+import 'package:step_tracker/theme_controller.dart';
 import 'package:step_tracker/widgets/pixel_switch.dart';
 
 class _LeaderboardApi extends BackendApiService {
@@ -75,19 +77,30 @@ Future<AuthService> _createAuthService(
   return authService;
 }
 
-Future<void> _openSettings(WidgetTester tester, AuthService auth, BackendApiService api) async {
-  await tester.pumpWidget(
-    MaterialApp(
-      home: Scaffold(
-        body: ProfileTab(
-          authService: auth,
-          displayName: 'Trail Walker',
-          email: 'walker@example.com',
-          onSettingsChanged: () {},
-          backendApiService: api,
-        ),
+Future<void> _openSettings(
+  WidgetTester tester,
+  AuthService auth,
+  BackendApiService api, {
+  AppThemeController? themeController,
+}) async {
+  final app = MaterialApp(
+    theme: AppThemeData.light(),
+    darkTheme: AppThemeData.night(),
+    themeMode: themeController?.resolvedMode ?? ThemeMode.light,
+    home: Scaffold(
+      body: ProfileTab(
+        authService: auth,
+        displayName: 'Trail Walker',
+        email: 'walker@example.com',
+        onSettingsChanged: () {},
+        backendApiService: api,
       ),
     ),
+  );
+  await tester.pumpWidget(
+    themeController == null
+        ? app
+        : AppThemeScope(controller: themeController, child: app),
   );
   await tester.pump();
   await tester.pump();
@@ -115,6 +128,34 @@ void main() {
     final switchFinder = find.byType(PixelSwitch);
     expect(switchFinder, findsOneWidget);
     expect(tester.widget<PixelSwitch>(switchFinder).value, isTrue);
+  });
+
+  testWidgets('appearance control applies and persists a dark override', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final api = _LeaderboardApi();
+    final auth = await _createAuthService(api);
+    final controller = AppThemeController(
+      preference: AppThemePreference.automatic,
+      clock: () => DateTime(2026, 7, 21, 12),
+    );
+    addTearDown(controller.dispose);
+    await _openSettings(tester, auth, api, themeController: controller);
+
+    expect(
+      find.byKey(const Key('appearance-preference-control')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('appearance-dark')));
+    await tester.pump();
+
+    expect(controller.preference, AppThemePreference.dark);
+    expect(controller.resolvedMode, ThemeMode.dark);
   });
 
   testWidgets('toggling the switch calls updateLeaderboardVisibility', (

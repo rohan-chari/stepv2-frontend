@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../styles.dart';
+
 /// Arcade-style UI effects shared by the home screen (and any tab that wants
 /// the same energy): a periodic shine sweep across a card, a pulsing glow for
 /// primary CTAs, and a gentle badge wobble. All three freeze to a static
@@ -117,7 +119,7 @@ class PulseGlow extends StatefulWidget {
   const PulseGlow({
     super.key,
     required this.child,
-    this.color = const Color(0xFFECC86A),
+    this.color,
     this.borderRadius = 8,
     this.minAlpha = 0.25,
     this.maxAlpha = 0.60,
@@ -125,7 +127,7 @@ class PulseGlow extends StatefulWidget {
   });
 
   final Widget child;
-  final Color color;
+  final Color? color;
   final double borderRadius;
   final double minAlpha;
   final double maxAlpha;
@@ -167,6 +169,7 @@ class _PulseGlowState extends State<PulseGlow>
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
+        final glowColor = widget.color ?? AppColors.of(context).pillGold;
         final wave = 0.5 + 0.5 * math.sin(_controller.value * 2 * math.pi);
         final alpha =
             widget.minAlpha + (widget.maxAlpha - widget.minAlpha) * wave;
@@ -175,7 +178,7 @@ class _PulseGlowState extends State<PulseGlow>
             borderRadius: BorderRadius.circular(widget.borderRadius),
             boxShadow: [
               BoxShadow(
-                color: widget.color.withValues(alpha: alpha),
+                color: glowColor.withValues(alpha: alpha),
                 blurRadius: 10 + 6 * wave,
                 spreadRadius: 1 + wave,
               ),

@@ -70,7 +70,9 @@ class SkeletonBox extends StatelessWidget {
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: color ?? AppColors.parchmentDark.withValues(alpha: 0.55),
+        color:
+            color ??
+            AppColors.of(context).parchmentDark.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(radius),
       ),
     );
@@ -107,7 +109,9 @@ class SkeletonCircle extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: color ?? AppColors.parchmentDark.withValues(alpha: 0.55),
+        color:
+            color ??
+            AppColors.of(context).parchmentDark.withValues(alpha: 0.55),
         shape: BoxShape.circle,
       ),
     );
@@ -138,7 +142,9 @@ class ListSkeleton extends StatelessWidget {
                 Container(
                   height: 1,
                   margin: const EdgeInsets.symmetric(horizontal: 14),
-                  color: AppColors.parchmentBorder.withValues(alpha: 0.35),
+                  color: AppColors.of(
+                    context,
+                  ).parchmentBorder.withValues(alpha: 0.35),
                 ),
               SizedBox(
                 height: itemHeight,
@@ -196,18 +202,28 @@ class LoadErrorPanel extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 32, color: AppColors.textMid.withValues(alpha: 0.7)),
+          Icon(
+            icon,
+            size: 32,
+            color: AppColors.of(context).textMid.withValues(alpha: 0.7),
+          ),
           const SizedBox(height: 8),
           Text(
             title,
-            style: PixelText.title(size: 15, color: AppColors.textDark),
+            style: PixelText.title(
+              size: 15,
+              color: AppColors.of(context).textDark,
+            ),
             textAlign: TextAlign.center,
           ),
           if (message != null && message!.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(
               message!,
-              style: PixelText.body(size: 13, color: AppColors.textMid),
+              style: PixelText.body(
+                size: 13,
+                color: AppColors.of(context).textMid,
+              ),
               textAlign: TextAlign.center,
             ),
           ],

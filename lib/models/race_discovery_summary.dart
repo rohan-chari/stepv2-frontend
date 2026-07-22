@@ -25,15 +25,17 @@ class RaceDiscoverySummary {
   /// the caller keeps its last known values and does NOT fall back to legacy.
   static const RaceDiscoverySummary empty = RaceDiscoverySummary();
 
-  static const RaceDiscoverySummary unsupportedResult =
-      RaceDiscoverySummary(unsupported: true);
+  static const RaceDiscoverySummary unsupportedResult = RaceDiscoverySummary(
+    unsupported: true,
+  );
 
   /// Parses a decoded `200` body, honoring the `resolved` bits. Absent/invalid
   /// `resolved` maps default every bit to `false` (retain last known).
   factory RaceDiscoverySummary.fromJson(Map<String, dynamic> json) {
     final resolved = json['resolved'];
-    final resolvedMap =
-        resolved is Map<String, dynamic> ? resolved : const <String, dynamic>{};
+    final resolvedMap = resolved is Map<String, dynamic>
+        ? resolved
+        : const <String, dynamic>{};
 
     bool isResolved(String key) => resolvedMap[key] == true;
 
@@ -46,15 +48,17 @@ class RaceDiscoverySummary {
     List<Map<String, dynamic>>? races;
     final rawRaces = json['featuredRaces'];
     if (isResolved('featuredRaces') && rawRaces is List) {
-      races = rawRaces.whereType<Map<String, dynamic>>().toList(growable: false);
+      races = rawRaces.whereType<Map<String, dynamic>>().toList(
+        growable: false,
+      );
     }
 
     List<Map<String, dynamic>>? tournaments;
     final rawTournaments = json['featuredTournaments'];
     if (isResolved('featuredTournaments') && rawTournaments is List) {
-      tournaments = rawTournaments
-          .whereType<Map<String, dynamic>>()
-          .toList(growable: false);
+      tournaments = rawTournaments.whereType<Map<String, dynamic>>().toList(
+        growable: false,
+      );
     }
 
     return RaceDiscoverySummary(

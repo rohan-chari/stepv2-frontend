@@ -141,10 +141,7 @@ class BracketModel {
 ///   participants fill the leftmost leaf slots in join order (earliest
 ///   `joinedAt` first); later rounds are TBD. The backend seeds for real at
 ///   start, so these positions are a preview only (surfaced honestly in the UI).
-BracketModel buildTournamentBracket(
-  Map<String, dynamic> t,
-  String? myUserId,
-) {
+BracketModel buildTournamentBracket(Map<String, dynamic> t, String? myUserId) {
   final size = Tournament.bracketSize(t);
   final totalRounds = Tournament.totalRounds(t);
   final status = Tournament.status(t);
@@ -224,9 +221,9 @@ List<List<BracketMatchup>> _pendingRounds(
 /// ACCEPTED participants sorted by `joinedAt` ascending (stable: entries with a
 /// missing/unparseable time keep their payload order, sorted after timed ones).
 List<Map<String, dynamic>> _acceptedInJoinOrder(Map<String, dynamic> t) {
-  final accepted = Tournament.participants(t)
-      .where((p) => p['status'] == 'ACCEPTED')
-      .toList();
+  final accepted = Tournament.participants(
+    t,
+  ).where((p) => p['status'] == 'ACCEPTED').toList();
   final indexed = <(int, DateTime?, Map<String, dynamic>)>[];
   for (var i = 0; i < accepted.length; i++) {
     final raw = accepted[i]['joinedAt'];
@@ -331,8 +328,7 @@ BracketMatchup _matchupFromPayload(
       : (players.isEmpty ? BracketSlot.tbd : BracketSlot.open);
 
   final mine = players.any((p) => p['userId'] == myUserId);
-  final live =
-      mine && !completed && raceId != null && raceId.isNotEmpty;
+  final live = mine && !completed && raceId != null && raceId.isNotEmpty;
 
   return BracketMatchup(
     round: round,

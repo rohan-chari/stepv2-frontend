@@ -19,7 +19,7 @@ Future<String?> showTeamSidePicker({
 
   return showModalBottomSheet<String>(
     context: context,
-    backgroundColor: AppColors.parchment,
+    backgroundColor: AppColors.of(context).parchment,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
     ),
@@ -90,7 +90,10 @@ Future<String?> showTeamSidePicker({
             children: [
               Text(
                 'PICK YOUR SIDE',
-                style: PixelText.title(size: 16, color: AppColors.textDark),
+                style: PixelText.title(
+                  size: 16,
+                  color: AppColors.of(context).textDark,
+                ),
               ),
               const SizedBox(height: 14),
               Row(
@@ -100,8 +103,10 @@ Future<String?> showTeamSidePicker({
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     child: Text(
                       'VS',
-                      style:
-                          PixelText.title(size: 14, color: AppColors.textMid),
+                      style: PixelText.title(
+                        size: 14,
+                        color: AppColors.of(context).textMid,
+                      ),
                     ),
                   ),
                   sideButton(RaceTeam.teamB),
