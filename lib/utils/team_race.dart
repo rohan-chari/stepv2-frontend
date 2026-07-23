@@ -217,6 +217,22 @@ abstract final class TeamRace {
         .toList(growable: false);
   }
 
+  /// §7 powerups5 — the Bounty picker pool: only rivals currently AHEAD of the
+  /// caster in standings (strictly more effective steps). Client-side pre-filter
+  /// so a losing wager is never even offered; the server still validates the
+  /// "target ahead" rule (it may reject on a fresher scoreline). Defensive:
+  /// a target with no `totalSteps` is treated as 0 steps.
+  static List<Map<String, dynamic>> targetsAheadOf({
+    required List<Map<String, dynamic>> targets,
+    required int myTotalSteps,
+  }) {
+    return targets
+        .where(
+          (t) => ((t['totalSteps'] as num?)?.toInt() ?? 0) > myTotalSteps,
+        )
+        .toList(growable: false);
+  }
+
   /// "1 slot left on Turbo Beavers" / "Red is full" copy for list + browser
   /// cards (TR-206, TR-806) and the lobby.
   static String slotsLeftLabel({

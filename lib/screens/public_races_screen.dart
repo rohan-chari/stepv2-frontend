@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoSwitch;
 import 'package:flutter/material.dart';
 
 import '../models/loadable.dart';
@@ -11,6 +12,7 @@ import '../utils/tournament.dart';
 import '../widgets/ad_banner_slot.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
+import '../widgets/featured_race_card.dart';
 import '../widgets/info_toast.dart';
 import '../widgets/loading_skeleton.dart';
 import '../widgets/pill_button.dart';
@@ -19,6 +21,7 @@ import '../widgets/team_side_picker.dart';
 import '../widgets/tournament_game_card.dart';
 import '../widgets/trail_sign.dart';
 import 'create_race_screen.dart';
+import 'race_detail_screen.dart';
 import 'tournament_detail_screen.dart';
 
 class PublicRacesScreen extends StatefulWidget {
@@ -60,6 +63,12 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
   List<Map<String, dynamic>> _myTournaments = const [];
   String? _joiningTournamentId;
 
+  // The live seeded daily/weekly races for the FEATURED strip (moved here from
+  // the Races tab). Best-effort like the tournament buckets: an older backend
+  // without the endpoint simply yields no strip.
+  List<Map<String, dynamic>> _featuredRaces = const [];
+  String? _joiningFeaturedRaceId;
+
   @override
   void initState() {
     super.initState();
@@ -81,9 +90,10 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
           ? const Loadable.loading()
           : Loadable.refreshing(_races);
     });
-    // Load tournaments best-effort in parallel — never let a missing/older
-    // tournaments endpoint break the public races list.
+    // Load tournaments + featured races best-effort in parallel — never let a
+    // missing/older endpoint break the public races list.
     _loadTournaments(token);
+    _loadFeaturedRaces(token);
 
     try {
       final races = await widget.backendApiService.fetchPublicRaces(
@@ -280,6 +290,59 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
             const [];
       });
     } catch (_) {}
+  }
+
+  Future<void> _loadFeaturedRaces(String token) async {
+    try {
+      final featured = await widget.backendApiService.fetchFeaturedRaces(
+        identityToken: token,
+      );
+      if (!mounted) return;
+      setState(() => _featuredRaces = featured);
+    } catch (_) {
+      // Older backend / offline → no featured strip.
+    }
+  }
+
+  /// One-tap join for a featured (seeded) race — always free, no confirm.
+  Future<void> _joinFeaturedRace(String raceId) async {
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) return;
+    if (raceId.isEmpty || _joiningFeaturedRaceId != null) return;
+    setState(() => _joiningFeaturedRaceId = raceId);
+    try {
+      await widget.backendApiService.joinPublicRace(
+        identityToken: token,
+        raceId: raceId,
+      );
+      if (!mounted) return;
+      setState(() => _joiningFeaturedRaceId = null);
+      showInfoToast(context, "You're in!");
+      // Refresh so the card flips to VIEW.
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _joiningFeaturedRaceId = null);
+      showErrorToast(context, 'Could not join: $e');
+    }
+  }
+
+  /// Opens the race screen for a featured race I'm in, refreshing on return.
+  void _viewFeaturedRace(String raceId) {
+    if (raceId.isEmpty) return;
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => RaceDetailScreen(
+              authService: widget.authService,
+              raceId: raceId,
+              backendApiService: widget.backendApiService,
+            ),
+          ),
+        )
+        .then((_) {
+          if (mounted) _load();
+        });
   }
 
   /// Opens the bracket screen for [tournamentId], refreshing on return.
@@ -506,7 +569,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
     final hasTournaments =
         _featuredTournaments.isNotEmpty || _userTournaments.isNotEmpty;
 
-    if (races.isEmpty && !hasTournaments) {
+    if (races.isEmpty && !hasTournaments && _featuredRaces.isEmpty) {
       return LayoutBuilder(
         builder: (context, constraints) {
           return SingleChildScrollView(
@@ -572,13 +635,21 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
     final showRaces =
         _filter == _PublicFilter.all || _filter == _PublicFilter.races;
 
-    final featuredVisible = showFeatured && _featuredTournaments.isNotEmpty;
+    final featuredVisible =
+        showFeatured &&
+        (_featuredRaces.isNotEmpty || _featuredTournaments.isNotEmpty);
     final userVisible = showTournaments && _userTournaments.isNotEmpty;
     final racesVisible = showRaces && races.isNotEmpty;
 
     final children = <Widget>[
       if (featuredVisible) ...[
-        _sectionLabel('FEATURED'),
+        // FEATURED (moved here from the Races tab): the seeded daily/weekly
+        // race strip first, then the seeded brackets.
+        _featuredSectionHeader(),
+        if (_featuredRaces.isNotEmpty) ...[
+          _buildFeaturedRacesStrip(),
+          const SizedBox(height: 12),
+        ],
         for (final t in _featuredTournaments) _buildFeaturedTournamentCard(t),
       ],
       if (userVisible) ...[
@@ -610,7 +681,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
   String _emptyNoteForFilter() {
     switch (_filter) {
       case _PublicFilter.featured:
-        return 'No featured tournaments right now.';
+        return 'No featured races or brackets right now.';
       case _PublicFilter.tournaments:
         return 'No public tournaments right now.';
       case _PublicFilter.races:
@@ -641,6 +712,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
     }
     if (state.isError && !state.hasData) return false;
     return races.isNotEmpty ||
+        _featuredRaces.isNotEmpty ||
         _featuredTournaments.isNotEmpty ||
         _userTournaments.isNotEmpty;
   }
@@ -749,6 +821,83 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
         text,
         style: PixelText.title(size: 14, color: AppColors.of(context).textDark),
       ),
+    );
+  }
+
+  /// FEATURED section header — the plain label plus the auto-join settings
+  /// gear that used to sit on the races-tab strip.
+  Widget _featuredSectionHeader() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8, top: 4, left: 2),
+      child: Row(
+        children: [
+          Text(
+            'FEATURED',
+            style: PixelText.title(
+              size: 14,
+              color: AppColors.of(context).textDark,
+            ),
+          ),
+          const Spacer(),
+          IconButton(
+            icon: Icon(
+              Icons.settings_rounded,
+              size: 20,
+              color: AppColors.of(context).textMid,
+            ),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            onPressed: _openFeaturedSettings,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Slide-up settings sheet for the featured strip. Currently holds only the
+  // auto-join toggle.
+  Future<void> _openFeaturedSettings() async {
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.of(context).parchment,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) =>
+          _FeaturedSettingsSheet(authService: widget.authService),
+    );
+  }
+
+  /// The horizontal strip of seeded daily/weekly race cards, exactly as it
+  /// rendered on the Races tab.
+  Widget _buildFeaturedRacesStrip() {
+    return SizedBox(
+      height: 232,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        itemCount: _featuredRaces.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 10),
+        itemBuilder: (context, i) => _buildFeaturedRaceCard(_featuredRaces[i]),
+      ),
+    );
+  }
+
+  Widget _buildFeaturedRaceCard(Map<String, dynamic> race) {
+    final raceId = race['raceId'] as String? ?? '';
+    final reward = race['finishReward'] as Map<String, dynamic>?;
+    return FeaturedRaceCard(
+      name: race['name'] as String? ?? 'Race',
+      seedKind: race['seedKind'] as String?,
+      endsAt: DateTime.tryParse(race['endsAt'] as String? ?? ''),
+      participantCount: (race['participantCount'] as num?)?.toInt() ?? 0,
+      finishRewardPool: (reward?['pool'] as num?)?.toInt() ?? 0,
+      finishRewardPlaces: (reward?['paidPlaces'] as num?)?.toInt() ?? 0,
+      isJoined: race['myStatus'] != null,
+      isFull: race['isFull'] as bool? ?? false,
+      isJoining: _joiningFeaturedRaceId == raceId,
+      onJoin: () => _joinFeaturedRace(raceId),
+      onView: () => _viewFeaturedRace(raceId),
     );
   }
 
@@ -999,6 +1148,119 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _FeaturedSettingsSheet extends StatelessWidget {
+  final AuthService authService;
+
+  const _FeaturedSettingsSheet({required this.authService});
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'FEATURED RACES',
+            style: PixelText.title(
+              size: 18,
+              color: AppColors.of(context).textDark,
+            ),
+          ),
+          const SizedBox(height: 16),
+          _FeaturedAutoJoinToggle(authService: authService),
+        ],
+      ),
+    );
+  }
+}
+
+/// Apple-settings-style row toggling auto-join for the daily/weekly featured
+/// challenges. Listens to [authService] so it reflects the latest value
+/// (including a revert if the backend write fails). Same pattern as the
+/// profile tab's leaderboard-visibility toggle.
+class _FeaturedAutoJoinToggle extends StatefulWidget {
+  final AuthService authService;
+
+  const _FeaturedAutoJoinToggle({required this.authService});
+
+  @override
+  State<_FeaturedAutoJoinToggle> createState() =>
+      _FeaturedAutoJoinToggleState();
+}
+
+class _FeaturedAutoJoinToggleState extends State<_FeaturedAutoJoinToggle> {
+  void _handleChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.authService.addListener(_handleChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.authService.removeListener(_handleChanged);
+    super.dispose();
+  }
+
+  Future<void> _toggle(bool value) async {
+    await widget.authService.updateFeaturedAutoJoin(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+      decoration: BoxDecoration(
+        color: AppColors.of(context).parchmentLight,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: AppColors.of(context).parchmentBorder,
+          width: 1.5,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Auto-join daily & weekly races',
+                  style: PixelText.body(
+                    size: 13,
+                    color: AppColors.of(context).textDark,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Automatically enters you into each new daily and weekly '
+                  'challenge, starting with the next one. Turning this off '
+                  'stops future auto-joins but keeps races you already '
+                  'entered.',
+                  style: PixelText.body(
+                    size: 11,
+                    color: AppColors.of(context).textMid,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          CupertinoSwitch(
+            value: widget.authService.autoJoinFeaturedRaces,
+            activeTrackColor: AppColors.of(context).accent,
+            onChanged: _toggle,
+          ),
+        ],
+      ),
     );
   }
 }

@@ -50,6 +50,19 @@ class PowerupIcon extends StatelessWidget {
     'HITCHHIKE': 'hitchhike',
     'QUICK_RINSE': 'quick_rinse',
     'QUICKSAND': 'quicksand',
+    // §7 powerups5 store-only additions — generated via the Codex imagegen
+    // pipeline (CLAUDE.md), same side-profile pixel-art style as the wave above.
+    'UPRISING': 'uprising',
+    'GHOST_PEPPER': 'ghost_pepper',
+    'COIN_FLIP': 'coin_flip',
+    'MYSTERY_POTION': 'mystery_potion',
+    'DECOY': 'decoy',
+    'POWER_OUTAGE': 'power_outage',
+    'UMBRELLA': 'umbrella',
+    'RALLY_FLAG': 'rally_flag',
+    'DRILL_SERGEANT': 'drill_sergeant',
+    'PIGGY_BANK': 'piggy_bank',
+    'BOUNTY': 'bounty',
   };
 
   static int get knownTypeCount => _assetNames.length;

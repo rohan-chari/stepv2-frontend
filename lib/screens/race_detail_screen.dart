@@ -13,6 +13,7 @@ import '../services/race_chat_service.dart';
 import '../services/race_feed_service.dart';
 import '../styles.dart';
 import '../utils/at_name.dart';
+import '../utils/effect_polarity.dart';
 import '../utils/powerup_error_copy.dart';
 import '../utils/race_display.dart';
 import '../utils/race_participant_display.dart';
@@ -34,6 +35,7 @@ import '../widgets/trail_sign.dart';
 import '../widgets/powerup_icon.dart';
 import '../widgets/pocket_watch_sheet.dart';
 import '../widgets/attack_outcome_modal.dart';
+import '../widgets/powerup_reveal_modal.dart';
 import '../widgets/spinning_coin.dart';
 import '../widgets/coin_balance_badge.dart';
 import '../widgets/spinning_crate.dart';
@@ -1415,6 +1417,29 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       // old two-step SWAP AWAY / TAKE FROM TARGET pickers are gone.
       targetUserId = await _showTargetPicker(swapTargets, type);
       if (targetUserId == null) return;
+    } else if (type == 'BOUNTY') {
+      // §7 powerups5 — Bounty may only wager on a rival currently AHEAD of me.
+      // Pre-filter the picker client-side (server still validates on a fresher
+      // scoreline); never present a losing wager.
+      var myTotalSteps = 0;
+      for (final p in participants) {
+        if ((p['userId'] as String?) == _myUserId) {
+          myTotalSteps = (p['totalSteps'] as num?)?.toInt() ?? 0;
+          break;
+        }
+      }
+      final aheadTargets = TeamRace.targetsAheadOf(
+        targets: targets,
+        myTotalSteps: myTotalSteps,
+      );
+      if (aheadTargets.isEmpty) {
+        if (mounted) {
+          showInfoToast(context, 'No rivals are ahead of you to target');
+        }
+        return;
+      }
+      targetUserId = await _showTargetPicker(aheadTargets, type);
+      if (targetUserId == null) return;
     } else if (kTargetedPowerupTypes.contains(type)) {
       if (targets.isEmpty) {
         if (mounted) {
@@ -1485,8 +1510,55 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             (res?['scan'] as Map<String, dynamic>?);
         await _showDefenseScanSheet(scan);
       } else if (outcome == AttackOutcome.blocked ||
-          outcome == AttackOutcome.reflected) {
+          outcome == AttackOutcome.reflected ||
+          outcome == AttackOutcome.redirected) {
+        // Blocked / Reflected / Decoy-redirected all get the reveal modal.
         await showAttackOutcomeModal(context, res ?? const {});
+      } else if (type == 'COIN_FLIP') {
+        // Server-rolled 2x/0.5x. A missing `flip` (older backend) degrades to
+        // the generic toast below rather than a blank reveal.
+        final reveal = CoinFlipReveal.fromResult(res);
+        if (reveal != null) {
+          await showPowerupRevealModal(
+            context,
+            iconType: 'COIN_FLIP',
+            title: reveal.won ? 'HEADS!' : 'TAILS!',
+            subtitle: reveal.won
+                ? 'Your steps are doubled for the next hour!'
+                : 'Tough luck — your steps are halved for the next hour.',
+            accent: reveal.won
+                ? AppColors.of(context).coinDark
+                : AppColors.of(context).error,
+          );
+        } else {
+          showInfoToast(context, '${PowerupCopy.nameFor(type)} activated!');
+        }
+      } else if (type == 'MYSTERY_POTION') {
+        // Server-rolled outcome. A missing `rolled` degrades to generic toast.
+        final reveal = MysteryPotionReveal.fromResult(res);
+        if (reveal != null) {
+          await showPowerupRevealModal(
+            context,
+            iconType: reveal.iconType,
+            title: 'MYSTERY POTION',
+            subtitle: reveal.subtitle(),
+          );
+        } else {
+          showInfoToast(context, '${PowerupCopy.nameFor(type)} activated!');
+        }
+      } else if (type == 'UPRISING' ||
+          type == 'POWER_OUTAGE' ||
+          type == 'RALLY_FLAG') {
+        // AoE / team fan-outs report how many racers they touched. `affected`
+        // is additive — absent on an older backend → plain activation toast.
+        final affected = _readInt(res?['affected'], fallback: -1);
+        final name = PowerupCopy.nameFor(type);
+        showInfoToast(
+          context,
+          affected >= 0
+              ? '$name activated — $affected racer${affected == 1 ? '' : 's'} affected!'
+              : '$name activated!',
+        );
       } else if (type == 'SNEAKY_SWAP') {
         // Reveal what was stolen. Additive field — older backends (mutual
         // swap) return no stolenPowerup, so fall back to the generic toast.
@@ -4178,6 +4250,20 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     }
   }
 
+  /// Whether an active effect row on ME reads as a boost or a rival attack.
+  /// Thin wrapper over the shared [effectIsBoost] helper so this screen and the
+  /// races-tab badge cluster classify every effect identically. Deliberately
+  /// does NOT consult the row's `onSelf` flag: the backend sets that to "this
+  /// row targets the viewer" (true for rival attacks too), so classification is
+  /// source-based only.
+  bool _effectIsBoost(Map<String, dynamic> e) {
+    return effectIsBoost(
+      type: e['type'] as String?,
+      sourceUserId: e['sourceUserId'] as String?,
+      myUserId: widget.authService.userId,
+    );
+  }
+
   Widget _buildActiveEffectsSection() {
     final effects =
         (_powerupData?['activeEffects'] as List?)
@@ -4192,6 +4278,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
     if (effects.isEmpty) return const SizedBox.shrink();
 
+    final boosts = effects.where(_effectIsBoost).toList();
+    final debuffs = effects.where((e) => !_effectIsBoost(e)).toList();
+    final palette = AppColors.of(context);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -4199,98 +4289,193 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           padding: const EdgeInsets.only(top: 16, bottom: 8),
           child: Text(
             'ACTIVE EFFECTS',
-            style: PixelText.title(
-              size: 14,
-              color: AppColors.of(context).textMid,
-            ),
+            style: PixelText.title(size: 14, color: palette.textMid),
           ),
         ),
-        ...effects.map((e) {
-          final type = e['type'] as String?;
-          final name = type == null ? 'Unknown' : PowerupCopy.nameFor(type);
-          // Shipped chain: short description, else the FULL description, else
-          // empty. 11 of 26 types have no short copy and rely on the
-          // description here — omitting the line would blank their subtitle.
-          final desc = PowerupCopy.effectRailSubtitleFor(type);
-          final expiresAtStr = e['expiresAt'] as String?;
-
-          String timeLabel;
-          if (expiresAtStr != null) {
-            final expiresAt = DateTime.parse(expiresAtStr);
-            final remaining = expiresAt.difference(_countdownNow);
-            if (remaining.isNegative) {
-              timeLabel = 'Expiring...';
-            } else if (remaining.inHours > 0) {
-              timeLabel = '${remaining.inHours}h ${remaining.inMinutes % 60}m';
-            } else if (remaining.inMinutes > 0) {
-              timeLabel =
-                  '${remaining.inMinutes}m ${remaining.inSeconds % 60}s';
-            } else {
-              timeLabel = '${remaining.inSeconds}s';
-            }
-          } else {
-            timeLabel = 'Until used';
-          }
-
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Row(
-              children: [
-                PowerupIcon(type: type ?? '', size: 22, spinning: true),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        style: PixelText.title(
-                          size: 13,
-                          color: AppColors.of(context).textDark,
-                        ),
-                      ),
-                      Text(
-                        desc,
-                        style: PixelText.body(
-                          size: 11,
-                          color: AppColors.of(context).textMid,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.of(context).woodDark,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    timeLabel,
-                    style: PixelText.title(
-                      size: 11,
-                      color: AppColors.of(context).textLight,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        }),
+        if (boosts.isNotEmpty)
+          _effectGroup(
+            label: 'BOOSTS',
+            icon: Icons.arrow_upward_rounded,
+            tint: palette.feedBoost,
+            effects: boosts,
+            isBoost: true,
+          ),
+        if (boosts.isNotEmpty && debuffs.isNotEmpty) const SizedBox(height: 10),
+        if (debuffs.isNotEmpty)
+          _effectGroup(
+            label: 'DEBUFFS',
+            icon: Icons.arrow_downward_rounded,
+            tint: palette.feedAttack,
+            effects: debuffs,
+            isBoost: false,
+          ),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 12),
           child: Divider(
-            color: AppColors.of(context).parchmentBorder.withValues(alpha: 0.5),
+            color: palette.parchmentBorder.withValues(alpha: 0.5),
             height: 1,
           ),
         ),
       ],
+    );
+  }
+
+  /// One polarity group of the active-effects block: a tinted header chip
+  /// (BOOSTS ↑ green / DEBUFFS ↓ terracotta) over a matching tinted panel of
+  /// effect rows, so helping-vs-hurting reads at a glance without parsing copy.
+  Widget _effectGroup({
+    required String label,
+    required IconData icon,
+    required Color tint,
+    required List<Map<String, dynamic>> effects,
+    required bool isBoost,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Row(
+            children: [
+              Container(
+                width: 18,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: tint.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: Icon(icon, size: 13, color: tint),
+              ),
+              const SizedBox(width: 6),
+              Text(label, style: PixelText.title(size: 12, color: tint)),
+              const SizedBox(width: 6),
+              Text(
+                '${effects.length}',
+                style: PixelText.title(
+                  size: 12,
+                  color: tint.withValues(alpha: 0.6),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Container(
+                  height: 1,
+                  color: tint.withValues(alpha: 0.25),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            color: tint.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: tint.withValues(alpha: 0.25)),
+          ),
+          child: Column(
+            children: [
+              for (var i = 0; i < effects.length; i++) ...[
+                if (i > 0)
+                  Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: tint.withValues(alpha: 0.12),
+                  ),
+                _effectRow(effects[i], tint: tint, isBoost: isBoost),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _effectRow(
+    Map<String, dynamic> e, {
+    required Color tint,
+    required bool isBoost,
+  }) {
+    final palette = AppColors.of(context);
+    final type = e['type'] as String?;
+    final name = type == null ? 'Unknown' : PowerupCopy.nameFor(type);
+    // Shipped chain: short description, else the FULL description, else
+    // empty. 11 of 26 types have no short copy and rely on the
+    // description here — omitting the line would blank their subtitle.
+    final desc = PowerupCopy.effectRailSubtitleFor(type);
+    // A debuff leads with who did it — the attacker matters more than the
+    // mechanic, and leading keeps the name safe from end-ellipsis.
+    final attacker = isBoost
+        ? null
+        : _displayNameForUser(e['sourceUserId'] as String?);
+    final subtitle = attacker == null
+        ? desc
+        : (desc.isEmpty ? 'from @$attacker' : 'from @$attacker · $desc');
+    final expiresAtStr = e['expiresAt'] as String?;
+
+    String timeLabel;
+    if (expiresAtStr != null) {
+      final expiresAt = DateTime.parse(expiresAtStr);
+      final remaining = expiresAt.difference(_countdownNow);
+      if (remaining.isNegative) {
+        timeLabel = 'Expiring...';
+      } else if (remaining.inHours > 0) {
+        timeLabel = '${remaining.inHours}h ${remaining.inMinutes % 60}m';
+      } else if (remaining.inMinutes > 0) {
+        timeLabel = '${remaining.inMinutes}m ${remaining.inSeconds % 60}s';
+      } else {
+        timeLabel = '${remaining.inSeconds}s';
+      }
+    } else {
+      timeLabel = 'Until used';
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      child: Row(
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: tint.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: PowerupIcon(type: type ?? '', size: 22, spinning: true),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: PixelText.title(size: 13, color: palette.textDark),
+                ),
+                if (subtitle.isNotEmpty)
+                  Text(
+                    subtitle,
+                    style: PixelText.body(size: 11, color: palette.textMid),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: isBoost ? palette.woodDark : palette.error,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              timeLabel,
+              style: PixelText.title(size: 11, color: palette.textLight),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

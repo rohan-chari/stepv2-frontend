@@ -139,6 +139,62 @@ const _powerupEntries = [
     description:
         'Jam a rival\'s signal — they can\'t use any powerups for 1 hour',
   ),
+  // §7 powerups5 store-only additions.
+  (
+    type: 'UPRISING',
+    name: 'Uprising',
+    description: '2x steps for 2 hours for everyone in the bottom half',
+  ),
+  (
+    type: 'GHOST_PEPPER',
+    name: 'Ghost Pepper',
+    description: '3x steps for 30 min, then frozen for 30 min',
+  ),
+  (
+    type: 'COIN_FLIP',
+    name: 'Coin Flip',
+    description: 'Heads doubles your steps for 1 hour, tails halves them',
+  ),
+  (
+    type: 'MYSTERY_POTION',
+    name: 'Mystery Potion',
+    description: 'A random effect — boost, attack, or nasty surprise',
+  ),
+  (
+    type: 'DECOY',
+    name: 'Decoy',
+    description: 'Redirect the next single-target attack to another racer',
+  ),
+  (
+    type: 'POWER_OUTAGE',
+    name: 'Power Outage',
+    description: 'No rival can use powerups for 30 minutes',
+  ),
+  (
+    type: 'UMBRELLA',
+    name: 'Umbrella',
+    description: 'Immune to Rainstorm and Power Outage for 12 hours',
+  ),
+  (
+    type: 'RALLY_FLAG',
+    name: 'Rally Flag',
+    description: '1.25x steps for your whole team for 1 hour',
+  ),
+  (
+    type: 'DRILL_SERGEANT',
+    name: 'Drill Sergeant',
+    description: 'Dare a rival to hit a step goal in 2 hours or lose steps',
+  ),
+  (
+    type: 'PIGGY_BANK',
+    name: 'Piggy Bank',
+    description: 'Bank steps for 24 hours and cash them out as coins',
+  ),
+  (
+    type: 'BOUNTY',
+    name: 'Bounty',
+    description: 'Out-place a rival ahead of you by race end to collect',
+  ),
 ];
 
 /// Runtime feature flags (backend AppSetting rows) — currently just the banner

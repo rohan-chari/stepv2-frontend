@@ -152,7 +152,11 @@ class HomeTab extends StatelessWidget {
                 stops: [0.5, 0.5],
                 colors: [
                   AppColors.of(context).sceneSkyTop,
-                  AppColors.of(context).roofLight,
+                  // Night mode dims the arcade field a step further so the
+                  // below-the-fold board doesn't glow against the dark chrome.
+                  AppColors.of(context).isDark
+                      ? AppColors.of(context).roofMid
+                      : AppColors.of(context).roofLight,
                 ],
               ),
             ),
@@ -167,7 +171,11 @@ class HomeTab extends StatelessWidget {
           child: RefreshIndicator(
             onRefresh: onRefresh,
             edgeOffset: topInset,
-            color: AppColors.of(context).accent,
+            // Night mode swaps the dark-green spinner for the slate-blue
+            // accent — dark green is illegible on the night parchment.
+            color: AppColors.of(context).isDark
+                ? AppColors.of(context).pillTerra
+                : AppColors.of(context).accent,
             backgroundColor: AppColors.of(context).parchment,
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -175,7 +183,9 @@ class HomeTab extends StatelessWidget {
                 SliverToBoxAdapter(child: _buildHeroSection(context)),
                 SliverToBoxAdapter(
                   child: ColoredBox(
-                    color: AppColors.of(context).roofLight,
+                    color: AppColors.of(context).isDark
+                        ? AppColors.of(context).roofMid
+                        : AppColors.of(context).roofLight,
                     child: CustomPaint(
                       painter: const ArcadeCheckerPainter(
                         drawBottomStripe: false,
@@ -1370,6 +1380,13 @@ class _HomeActiveRaceTicket extends StatelessWidget {
     }
   }
 
+  /// The periodic shine sweep reads as a stray light flash on the dark night
+  /// cards, so it only runs on the light theme.
+  Widget _maybeShineSweep(BuildContext context, {required Widget child}) {
+    if (AppColors.of(context).isDark) return child;
+    return ShineSweep(delay: sweepDelay, child: child);
+  }
+
   @override
   Widget build(BuildContext context) {
     final endsAt = this.endsAt;
@@ -1401,8 +1418,8 @@ class _HomeActiveRaceTicket extends StatelessWidget {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: ShineSweep(
-                delay: sweepDelay,
+              child: _maybeShineSweep(
+                context,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [

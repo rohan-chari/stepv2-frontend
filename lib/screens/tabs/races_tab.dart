@@ -1,4 +1,3 @@
-import 'package:flutter/cupertino.dart' show CupertinoSwitch;
 import 'package:flutter/material.dart';
 
 import '../../models/loadable.dart';
@@ -8,11 +7,11 @@ import '../../services/backend_api_service.dart';
 import '../../services/notification_service.dart';
 import '../../styles.dart';
 import '../../utils/at_name.dart';
+import '../../utils/effect_polarity.dart';
 import '../../utils/race_participant_display.dart';
 import '../../utils/tournament.dart';
 import '../../widgets/arcade_fx.dart';
 import '../../widgets/error_toast.dart';
-import '../../widgets/featured_race_card.dart';
 import '../../widgets/info_toast.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
@@ -21,7 +20,6 @@ import '../../widgets/powerup_icon.dart';
 import '../../widgets/spinning_coin.dart';
 import '../../widgets/spinning_crate.dart';
 import '../../widgets/team_scoreline.dart';
-import '../../widgets/tournament_game_card.dart';
 import '../create_race_screen.dart';
 import '../public_races_screen.dart';
 import '../race_detail_screen.dart';
@@ -37,17 +35,14 @@ class RacesTab extends StatefulWidget {
   final Map<String, dynamic>? racesData;
   final Loadable<Map<String, dynamic>>? racesState;
   final List<Map<String, dynamic>> friendsSteps;
+  // Legacy featured-strip inputs, accepted but no longer rendered here: the
+  // FEATURED strip (and its join flows) moved to PublicRacesScreen, which
+  // loads its own featured data. Kept so existing call sites keep compiling.
   final List<Map<String, dynamic>> featuredRaces;
-  // D13: featured (seeded) tournaments merged into the same featured row.
-  // Defaults to const [] so an older backend / missing key → race-only row.
   final List<Map<String, dynamic>> featuredTournaments;
   final Future<void> Function() onRacesChanged;
   final Future<void> Function()? onRefresh;
-  // Joins a featured (seeded) race; returns true on success. The card shows a
-  // confirmation toast and flips to VIEW once the refreshed data comes back.
   final Future<bool> Function(String raceId)? onJoinFeaturedRace;
-  // D13: joins a featured (seeded) tournament; returns true on success, then the
-  // callback opens the lobby. Mirrors [onJoinFeaturedRace].
   final Future<bool> Function(String tournamentId)? onJoinFeaturedTournament;
   // Number of joinable public races (matches PublicRacesScreen's list). Shown
   // inline in the PUBLIC RACES button label. Defaults to 0 until loaded; the
@@ -91,10 +86,6 @@ class RacesTab extends StatefulWidget {
   @override
   State<RacesTab> createState() => _RacesTabState();
 }
-
-/// D13: the ALL / RACES / TOURNAMENTS filter that lives in the FEATURED
-/// section header. It scopes ONLY the featured strip — never the personal list.
-enum _ContentFilter { all, races, tournaments }
 
 /// §4.1: the personal-list state filter. Races and tournaments are merged into
 /// one list per state; unanswered invites are pinned ABOVE these pills so the
@@ -141,8 +132,6 @@ class _RacesTabState extends State<RacesTab> {
 
   // Guards against double-pushing RaceDetailScreen from rapid taps.
   bool _navigatingToRace = false;
-  // D13 featured-strip filter (the personal list is unaffected).
-  _ContentFilter _contentFilter = _ContentFilter.all;
 
   /// §4.1: the selected personal-list state. Always initialised to ACTIVE for a
   /// freshly created state — that's where the actionable races live.
@@ -155,37 +144,6 @@ class _RacesTabState extends State<RacesTab> {
     _PersonalState.pending: 0,
     _PersonalState.completed: 0,
   };
-  // tournamentId being joined from a featured card (shows JOINING… state).
-  String? _joiningFeaturedTournamentId;
-
-  // raceId currently being joined from a featured card (shows JOINING… state).
-  String? _joiningFeaturedId;
-
-  Future<void> _joinFeatured(String raceId) async {
-    final onJoin = widget.onJoinFeaturedRace;
-    if (onJoin == null || raceId.isEmpty || _joiningFeaturedId != null) return;
-    setState(() => _joiningFeaturedId = raceId);
-    final joined = await onJoin(raceId);
-    if (!mounted) return;
-    setState(() => _joiningFeaturedId = null);
-    if (joined) {
-      showInfoToast(context, "You're in!");
-    }
-  }
-
-  Future<void> _joinFeaturedTournament(String tournamentId) async {
-    final onJoin = widget.onJoinFeaturedTournament;
-    if (onJoin == null ||
-        tournamentId.isEmpty ||
-        _joiningFeaturedTournamentId != null) {
-      return;
-    }
-    setState(() => _joiningFeaturedTournamentId = tournamentId);
-    await onJoin(tournamentId);
-    if (!mounted) return;
-    setState(() => _joiningFeaturedTournamentId = null);
-  }
-
   // Declined races are excluded server-side on current backends, but an older
   // backend may still return them — filter defensively so a declined race
   // never shows up (the user opted out; it's dead weight they can't act on).
@@ -229,11 +187,6 @@ class _RacesTabState extends State<RacesTab> {
           .where((t) => Tournament.myStatus(t) != 'DECLINED')
           .toList() ??
       const [];
-
-  /// The rest of my brackets (ACCEPTED, or any non-invite state). Still used by
-  /// the featured strip's repeat-entry guard.
-  List<Map<String, dynamic>> get _myTournaments =>
-      _tournaments.where((t) => !Tournament.amInvited(t)).toList();
 
   /// §4.2: tournaments classified into one personal-list state.
   List<Map<String, dynamic>> _tournamentsIn(TournamentListState state) {
@@ -474,7 +427,9 @@ class _RacesTabState extends State<RacesTab> {
               waitingCount: _countFor(_PersonalState.pending),
               potKey: widget.tutorialPotKey,
             ),
-            StaggerIn(index: 1, child: _buildFeaturedSection()),
+            // The FEATURED strip (seeded daily/weekly races + seeded brackets)
+            // moved to the Public Races screen — discovery lives there now;
+            // this tab is purely the user's own races.
           ],
         ),
       ),
@@ -485,97 +440,6 @@ class _RacesTabState extends State<RacesTab> {
       // Preserves the former outer group's bottom padding (was Padding bottom:8).
       const SliverToBoxAdapter(child: SizedBox(height: 8)),
     ];
-  }
-
-  /// D13 ALL / RACES / TOURNAMENTS segmented control. Selects which FEATURED
-  /// items appear in the row directly below it — the user's own races/brackets
-  /// are never affected.
-  Widget _buildContentFilterPills() {
-    Widget seg(String label, _ContentFilter value, Key key) {
-      final selected = _contentFilter == value;
-      return Expanded(
-        child: GestureDetector(
-          key: key,
-          onTap: () => setState(() => _contentFilter = value),
-          behavior: HitTestBehavior.opaque,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            curve: Curves.easeOut,
-            // Tighter than the personal-state pills: this is a sub-control
-            // scoping one strip, not the page's primary navigation.
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            decoration: BoxDecoration(
-              gradient: selected
-                  ? LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        AppColors.of(context).pillGold,
-                        AppColors.of(context).pillGoldDark,
-                      ],
-                    )
-                  : null,
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(
-                color: selected
-                    ? AppColors.of(context).pillGoldShadow
-                    : Colors.transparent,
-                width: 2,
-              ),
-              boxShadow: selected
-                  ? [
-                      BoxShadow(
-                        color: AppColors.of(context).pillGoldShadow,
-                        offset: Offset(0, 2),
-                      ),
-                    ]
-                  : null,
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: PixelText.title(
-                size: 10,
-                color: selected
-                    ? AppColors.of(context).textDark
-                    : AppColors.of(context).textLight.withValues(alpha: 0.85),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 0, 10, 9),
-      child: Container(
-        padding: const EdgeInsets.all(3),
-        decoration: BoxDecoration(
-          color: AppColors.of(context).roofDark.withValues(alpha: 0.38),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.of(context).roofDark, width: 1),
-        ),
-        child: Row(
-          children: [
-            seg('ALL', _ContentFilter.all, const Key('content-filter-all')),
-            const SizedBox(width: 3),
-            seg(
-              'RACES',
-              _ContentFilter.races,
-              const Key('content-filter-races'),
-            ),
-            const SizedBox(width: 3),
-            seg(
-              'TOURNAMENTS',
-              _ContentFilter.tournaments,
-              const Key('content-filter-tournaments'),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   Widget _buildTournamentTicket(
@@ -813,215 +677,6 @@ class _RacesTabState extends State<RacesTab> {
           ),
         ),
       ),
-    );
-  }
-
-  // Pinned "Featured" strip — the live seeded daily/weekly races + seeded
-  // tournaments. Always shown (even with no personal races) as a discovery
-  // hook. Hidden only when the backend returns nothing at all. D13 (revised):
-  // the ALL/RACES/TOURNAMENTS pill above selects which featured items appear —
-  // ALL shows both, RACES only featured races, TOURNAMENTS only seeded brackets;
-  // an empty selection shows a small note so the pill state always reads clearly.
-  Widget _buildFeaturedSection() {
-    final featured = widget.featuredRaces;
-    final featuredTournaments = widget.featuredTournaments;
-    // Hidden only when BOTH are empty (older backend, or the seeding gap).
-    if (featured.isEmpty && featuredTournaments.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    final showRaces = _contentFilter != _ContentFilter.tournaments;
-    final showTournaments = _contentFilter != _ContentFilter.races;
-
-    // Flatten to a card list per the pill. Featured tournaments lead (novel +
-    // time-boxed), then each live seeded race followed by its pre-registerable
-    // "next" race.
-    final cards = <Widget>[];
-    if (showTournaments) {
-      for (final t in featuredTournaments) {
-        cards.add(_buildFeaturedTournamentCard(t));
-      }
-    }
-    if (showRaces) {
-      for (final race in featured) {
-        cards.add(_buildFeaturedCard(race));
-        // Item 5: the featured row no longer shows the upcoming/opt-in "next
-        // race" card — auto-join (managed by the gear toggle above) covers the
-        // next daily/weekly. The backend still sends `race['upcoming']`; we
-        // simply ignore it here (old clients keep rendering it, which is fine).
-      }
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
-          child: Row(
-            children: [
-              WobbleBadge(
-                child: Icon(
-                  Icons.star_rounded,
-                  size: 22,
-                  color: AppColors.of(context).pillGold,
-                ),
-              ),
-              const SizedBox(width: 5),
-              Text(
-                'FEATURED',
-                style: PixelText.title(
-                  size: 22,
-                  color: AppColors.of(context).textLight,
-                ).copyWith(shadows: _textShadows),
-              ),
-              const Spacer(),
-              // Featured-races settings (auto-join toggle).
-              IconButton(
-                icon: Icon(
-                  Icons.settings_rounded,
-                  size: 22,
-                  color: AppColors.of(
-                    context,
-                  ).textLight.withValues(alpha: 0.85),
-                ),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                onPressed: _openFeaturedSettings,
-              ),
-            ],
-          ),
-        ),
-        // §4.1: the ALL / RACES / TOURNAMENTS filter lives INSIDE the Featured
-        // section header now. It scopes only the strip below it — as a
-        // full-width row above the header it read as a page-level filter while
-        // actually doing something much narrower.
-        _buildContentFilterPills(),
-        if (cards.isEmpty)
-          _buildFeaturedEmptyNote()
-        else
-          SizedBox(
-            height: 232,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              physics: const BouncingScrollPhysics(),
-              itemCount: cards.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 10),
-              itemBuilder: (context, i) => cards[i],
-            ),
-          ),
-        const SizedBox(height: 4),
-      ],
-    );
-  }
-
-  /// Small in-row note when the selected featured filter has no items, so the
-  /// pill state always reads clearly instead of leaving a blank strip.
-  Widget _buildFeaturedEmptyNote() {
-    final message = _contentFilter == _ContentFilter.tournaments
-        ? 'No featured tournaments right now'
-        : 'No featured races right now';
-    return Container(
-      key: const Key('featured-empty-note'),
-      height: 64,
-      alignment: Alignment.center,
-      margin: const EdgeInsets.symmetric(horizontal: 10),
-      child: Text(
-        message,
-        textAlign: TextAlign.center,
-        style: PixelText.body(
-          size: 13,
-          color: AppColors.of(context).textLight.withValues(alpha: 0.9),
-        ),
-      ),
-    );
-  }
-
-  // Slide-up settings sheet for the featured strip (same pattern as the
-  // profile settings sheet). Currently holds only the auto-join toggle.
-  Future<void> _openFeaturedSettings() async {
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.of(context).parchment,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) =>
-          _FeaturedSettingsSheet(authService: widget.authService),
-    );
-  }
-
-  Widget _buildFeaturedCard(Map<String, dynamic> race) {
-    final raceId = race['raceId'] as String? ?? '';
-    final reward = race['finishReward'] as Map<String, dynamic>?;
-    return FeaturedRaceCard(
-      name: race['name'] as String? ?? 'Race',
-      seedKind: race['seedKind'] as String?,
-      endsAt: DateTime.tryParse(race['endsAt'] as String? ?? ''),
-      participantCount: (race['participantCount'] as num?)?.toInt() ?? 0,
-      finishRewardPool: (reward?['pool'] as num?)?.toInt() ?? 0,
-      finishRewardPlaces: (reward?['paidPlaces'] as num?)?.toInt() ?? 0,
-      isJoined: race['myStatus'] != null,
-      isFull: race['isFull'] as bool? ?? false,
-      isJoining: _joiningFeaturedId == raceId,
-      onJoin: () => _joinFeatured(raceId),
-      onView: () => _navigateToRaceDetail(raceId),
-    );
-  }
-
-  /// D13 featured-row card for a seeded tournament. Same width/visual language
-  /// as [FeaturedRaceCard] (leads with a badge, name, key stats, one-tap CTA)
-  /// but wired to the tournament join/view flow. D12: JOIN is
-  /// pre-disabled while I'm still alive in another same-seed bracket.
-  Widget _buildFeaturedTournamentCard(Map<String, dynamic> t) {
-    final id = Tournament.id(t) ?? '';
-    final joined = Tournament.amIn(t);
-    final full = Tournament.isFull(t);
-    final aliveElsewhere =
-        !joined &&
-        Tournament.aliveInSeed(_myTournaments, Tournament.seedKind(t));
-    final isJoining = _joiningFeaturedTournamentId == id;
-
-    final String label;
-    final PillButtonVariant variant;
-    final VoidCallback? onPressed;
-    var glow = false;
-    if (joined) {
-      label = 'VIEW';
-      variant = PillButtonVariant.secondary;
-      onPressed = () => _navigateToTournamentDetail(id);
-    } else if (aliveElsewhere) {
-      label = 'IN A BRACKET';
-      variant = PillButtonVariant.secondary;
-      onPressed = null;
-    } else if (full) {
-      label = 'FULL';
-      variant = PillButtonVariant.secondary;
-      onPressed = null;
-    } else {
-      label = isJoining ? 'JOINING…' : 'JOIN';
-      variant = AppColors.of(context).isDark
-          ? PillButtonVariant.accent
-          : PillButtonVariant.primary;
-      glow = !isJoining;
-      onPressed = isJoining ? null : () => _joinFeaturedTournament(id);
-    }
-
-    return TournamentGameCard(
-      width: 250,
-      name: Tournament.name(t),
-      metaLine:
-          '${Tournament.sizeSubcopy(Tournament.bracketSize(t))} · '
-          '${Tournament.durationSubcopy(Tournament.matchupDurationDays(t))}',
-      filledLabel:
-          '${Tournament.acceptedCount(t)}/${Tournament.bracketSize(t)} IN',
-      prizeLabel: 'CHAMPION WINS',
-      prizeValue: Tournament.championPrizeCoins(t),
-      ctaKey: Key('featured-tournament-join-$id'),
-      ctaLabel: label,
-      ctaVariant: variant,
-      ctaGlow: glow,
-      onPressed: onPressed,
     );
   }
 
@@ -1541,16 +1196,9 @@ class _RacesTabState extends State<RacesTab> {
       color: stripeColor,
       child: InkWell(
         key: Key('tournament-row-$id'),
-        // A live matchup opens the RACE; everything else opens the bracket.
-        onTap: id.isEmpty && liveRaceId == null
-            ? null
-            : () {
-                if (liveRaceId != null && liveRaceId.isNotEmpty) {
-                  _navigateToRaceDetail(liveRaceId);
-                } else {
-                  _navigateToTournamentDetail(id);
-                }
-              },
+        // Always open the BRACKET — it's the tournament's home screen and has
+        // its own "GO TO MY MATCHUP" path into the live race.
+        onTap: id.isEmpty ? null : () => _navigateToTournamentDetail(id),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
           child: Row(
@@ -1712,6 +1360,17 @@ class _RacesTabState extends State<RacesTab> {
     final slotItems =
         (race['slotItems'] as List?)?.whereType<Map>().toList() ?? const [];
 
+    // Effects currently on ME in this race (additive `myActiveEffects` field on
+    // ACTIVE summaries). Absent on older backends -> empty -> no cluster, so the
+    // row is byte-identical to today. Only ACTIVE rows carry the field, but the
+    // read is defensive regardless of status.
+    final myEffects =
+        (race['myActiveEffects'] as List?)?.whereType<Map>().toList() ??
+        const [];
+    final effectCluster = status == 'ACTIVE'
+        ? _buildEffectCluster(raceId, myEffects)
+        : null;
+
     // TR-806: team-race chrome for list rows. All reads are defensive — an
     // individual race (or an old payload) has none of these fields.
     final isTeamRace = TeamRace.isTeamRace(race);
@@ -1819,11 +1478,24 @@ class _RacesTabState extends State<RacesTab> {
                       // queued crates, then empty). Everything else keeps the
                       // runner count.
                       if (status == 'ACTIVE') ...[
-                        Text(
-                          timeLabel,
-                          style: PixelText.body(size: 13, color: timeColor),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                timeLabel,
+                                style: PixelText.body(
+                                  size: 13,
+                                  color: timeColor,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                            if (effectCluster != null) ...[
+                              const SizedBox(width: 8),
+                              effectCluster,
+                            ],
+                          ],
                         ),
                         // TR-806: mini team scoreline (only when the payload
                         // carries totals — older backends simply omit it).
@@ -1909,6 +1581,80 @@ class _RacesTabState extends State<RacesTab> {
           ),
         ),
       ),
+    );
+  }
+
+  // Compact cluster of the effects currently on ME for an ACTIVE race row,
+  // shown on the time-left line right of the label. Boosts first (feedBoost
+  // tint), then debuffs (feedAttack tint), payload order preserved within each
+  // group — matching the race-detail BOOSTS-above-DEBUFFS grouping. At most 3
+  // sprite plates render; the rest collapse into a "+N" chip so the line never
+  // wraps. Returns null when there are no effects (absent field on an old
+  // backend, or an empty list) so the row is identical to today.
+  Widget? _buildEffectCluster(String raceId, List myEffects) {
+    if (myEffects.isEmpty) return null;
+
+    final myUserId = widget.authService.userId;
+    final boosts = <Map>[];
+    final debuffs = <Map>[];
+    for (final raw in myEffects) {
+      final e = raw as Map;
+      final isBoost = effectIsBoost(
+        type: e['type'] as String?,
+        sourceUserId: e['sourceUserId'] as String?,
+        myUserId: myUserId,
+      );
+      (isBoost ? boosts : debuffs).add(e);
+    }
+
+    final ordered = [...boosts, ...debuffs];
+    const maxPlates = 3;
+    final visible = ordered.take(maxPlates).toList();
+    final overflow = ordered.length - visible.length;
+
+    final palette = AppColors.of(context);
+    const plateSize = 18.0;
+
+    final children = <Widget>[];
+    for (var i = 0; i < visible.length; i++) {
+      if (i > 0) children.add(const SizedBox(width: 3));
+      // `ordered` is boosts-then-debuffs, so the first `boosts.length` plates
+      // are boosts.
+      final isBoost = i < boosts.length;
+      final tint = isBoost ? palette.feedBoost : palette.feedAttack;
+      final type = visible[i]['type'] as String?;
+      children.add(
+        Container(
+          key: ValueKey(
+            'effect-plate-${isBoost ? 'boost' : 'debuff'}-$raceId-$i',
+          ),
+          width: plateSize,
+          height: plateSize,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: tint.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(5),
+            border: Border.all(color: tint.withValues(alpha: 0.35), width: 1),
+          ),
+          child: PowerupIcon(type: type ?? '', size: 14),
+        ),
+      );
+    }
+
+    if (overflow > 0) {
+      children.add(const SizedBox(width: 3));
+      children.add(
+        Text(
+          '+$overflow',
+          style: PixelText.title(size: 10, color: palette.textMid),
+        ),
+      );
+    }
+
+    return Row(
+      key: Key('race-effects-$raceId'),
+      mainAxisSize: MainAxisSize.min,
+      children: children,
     );
   }
 
@@ -2256,115 +2002,3 @@ class _CountBadge extends StatelessWidget {
 
 /// Bottom sheet with settings for the featured daily/weekly challenges.
 /// Mirrors the profile settings sheet's layout.
-class _FeaturedSettingsSheet extends StatelessWidget {
-  final AuthService authService;
-
-  const _FeaturedSettingsSheet({required this.authService});
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'FEATURED RACES',
-            style: PixelText.title(
-              size: 18,
-              color: AppColors.of(context).textDark,
-            ),
-          ),
-          const SizedBox(height: 16),
-          _FeaturedAutoJoinToggle(authService: authService),
-        ],
-      ),
-    );
-  }
-}
-
-/// Apple-settings-style row toggling auto-join for the daily/weekly featured
-/// challenges. Listens to [authService] so it reflects the latest value
-/// (including a revert if the backend write fails). Same pattern as the
-/// profile tab's leaderboard-visibility toggle.
-class _FeaturedAutoJoinToggle extends StatefulWidget {
-  final AuthService authService;
-
-  const _FeaturedAutoJoinToggle({required this.authService});
-
-  @override
-  State<_FeaturedAutoJoinToggle> createState() =>
-      _FeaturedAutoJoinToggleState();
-}
-
-class _FeaturedAutoJoinToggleState extends State<_FeaturedAutoJoinToggle> {
-  void _handleChanged() {
-    if (mounted) setState(() {});
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    widget.authService.addListener(_handleChanged);
-  }
-
-  @override
-  void dispose() {
-    widget.authService.removeListener(_handleChanged);
-    super.dispose();
-  }
-
-  Future<void> _toggle(bool value) async {
-    await widget.authService.updateFeaturedAutoJoin(value);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
-      decoration: BoxDecoration(
-        color: AppColors.of(context).parchmentLight,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: AppColors.of(context).parchmentBorder,
-          width: 1.5,
-        ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Auto-join daily & weekly races',
-                  style: PixelText.body(
-                    size: 13,
-                    color: AppColors.of(context).textDark,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Automatically enters you into each new daily and weekly '
-                  'challenge, starting with the next one. Turning this off '
-                  'stops future auto-joins but keeps races you already '
-                  'entered.',
-                  style: PixelText.body(
-                    size: 11,
-                    color: AppColors.of(context).textMid,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          CupertinoSwitch(
-            value: widget.authService.autoJoinFeaturedRaces,
-            activeTrackColor: AppColors.of(context).accent,
-            onChanged: _toggle,
-          ),
-        ],
-      ),
-    );
-  }
-}

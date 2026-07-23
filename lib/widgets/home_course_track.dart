@@ -1529,9 +1529,13 @@ class _LegendRow extends StatelessWidget {
                               : (runners[i].isUser
                                     ? 'You'
                                     : atName(runners[i].name))),
+                      // `inkSoft` is a muted green that all but vanishes on the
+                      // night surfaceMuted pill — night mode uses full ink.
                       style: HomeText.body(
                         size: 12,
-                        color: AppColors.of(context).inkSoft,
+                        color: AppColors.of(context).isDark
+                            ? AppColors.of(context).ink
+                            : AppColors.of(context).inkSoft,
                       ),
                     ),
                   ],

@@ -115,9 +115,17 @@ class BackendApiService {
   //
   // NOTE: the token must appear in BOTH branches of the ternary. Editing only
   // the ads branch silently disables the whole feature on ad-less builds.
+  // `powerups5` tells the backend this build can render the FIFTH-wave shop
+  // powerups (Uprising, Ghost Pepper, Coin Flip, Mystery Potion, Decoy, Power
+  // Outage, Umbrella, Rally Flag, Drill Sergeant, Piggy Bank, Bounty): their
+  // icons/copy, the Drill Sergeant + Bounty target pickers, the Coin Flip and
+  // Mystery Potion reveals, and the REDIRECTED (Decoy) attack outcome. Old
+  // binaries omit it, so the gated catalog never offers them, the backend
+  // downcasts/withholds their active effects, and the app can't crash on the
+  // unknown enum values. Must appear in BOTH branches of the ternary.
   static final String clientFeaturesHeader = _adsSupported
-      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3,powerups4,stealth_runner_duration,hitchhike_effective_steps'
-      : 'characters,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3,powerups4,stealth_runner_duration,hitchhike_effective_steps';
+      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps'
+      : 'characters,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps';
   final HttpClient _httpClient;
   String? _cachedTimeZone;
   String? _cachedReleaseChannel;

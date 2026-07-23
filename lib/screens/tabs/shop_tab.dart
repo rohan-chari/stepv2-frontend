@@ -608,6 +608,11 @@ class _ShopTabState extends State<ShopTab> {
     return showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.of(context).parchment,
+      // Explicit constraints pin the sheet edge-to-edge; without them the M3
+      // defaults float it as an inset card, unlike every other sheet here.
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.72,
+      ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -652,7 +657,10 @@ class _ShopTabState extends State<ShopTab> {
                     if (slotLabel != null && badge != null)
                       const SizedBox(width: 6),
                     if (badge != null)
-                      _sheetChip(badge, AppColors.of(context).accent),
+                      // textAccent, not accent: identical in daylight, but the
+                      // night palette keeps textAccent legible on parchment
+                      // where the night accent green sinks into it.
+                      _sheetChip(badge, AppColors.of(context).textAccent),
                   ],
                 ),
               ],
@@ -729,17 +737,14 @@ class _ShopTabState extends State<ShopTab> {
   }
 
   /// STORE tile for a cosmetic/character: art + name + gold price strip.
+  ///
+  /// The price strip opens the detail sheet, same as the tile body — a user
+  /// mis-tapped the strip while reading descriptions and was instantly
+  /// charged. The sheet's BUY button is the only purchase path.
   Widget _storeCosmeticTile(Map<String, dynamic> item) {
     final name = item['name'] as String? ?? 'Accessory';
     final price = item['priceCoins'] as int? ?? 0;
-    return _ShopTile(
-      art: _cosmeticArt(item),
-      name: name,
-      stripLabel: '$price',
-      stripIcon: Icons.monetization_on_rounded,
-      stripEnabled: !_saving,
-      onStrip: () => _purchase(item),
-      onTap: () => _showItemSheet(
+    void openSheet() => _showItemSheet(
         art: _cosmeticArt(item, iconSize: 48),
         name: name,
         slotLabel: _slotLabels[item['slot']],
@@ -759,7 +764,15 @@ class _ShopTabState extends State<ShopTab> {
                   },
           ),
         ],
-      ),
+      );
+    return _ShopTile(
+      art: _cosmeticArt(item),
+      name: name,
+      stripLabel: '$price',
+      stripIcon: Icons.monetization_on_rounded,
+      stripEnabled: !_saving,
+      onStrip: openSheet,
+      onTap: openSheet,
     );
   }
 
@@ -821,20 +834,15 @@ class _ShopTabState extends State<ShopTab> {
   }
 
   /// STORE tile for a re-buyable powerup.
+  ///
+  /// Same as the cosmetic tile: the price strip opens the detail sheet, and
+  /// only the sheet's BUY button purchases.
   Widget _storePowerupTile(Map<String, dynamic> item) {
     final name = item['name'] as String? ?? 'Powerup';
     final price = (item['priceCoins'] as num?)?.toInt() ?? 0;
     final type = item['powerupType'] as String? ?? '';
     final owned = _ownedQuantityFor(item);
-    return _ShopTile(
-      art: _powerupArt(type),
-      name: name,
-      badge: owned > 0 ? 'x$owned' : null,
-      stripLabel: '$price',
-      stripIcon: Icons.monetization_on_rounded,
-      stripEnabled: !_saving,
-      onStrip: () => _purchasePowerup(item),
-      onTap: () => _showItemSheet(
+    void openSheet() => _showItemSheet(
         art: _powerupArt(type, fallbackSize: 64),
         name: name,
         badge: owned > 0 ? 'OWNED x$owned' : null,
@@ -854,7 +862,16 @@ class _ShopTabState extends State<ShopTab> {
                   },
           ),
         ],
-      ),
+      );
+    return _ShopTile(
+      art: _powerupArt(type),
+      name: name,
+      badge: owned > 0 ? 'x$owned' : null,
+      stripLabel: '$price',
+      stripIcon: Icons.monetization_on_rounded,
+      stripEnabled: !_saving,
+      onStrip: openSheet,
+      onTap: openSheet,
     );
   }
 
@@ -865,6 +882,9 @@ class _ShopTabState extends State<ShopTab> {
     // consolidated copy source instead — an eighth duplicate the §9.4 checklist
     // didn't enumerate.
     final name = PowerupCopy.nameFor(type);
+    // The real per-powerup copy; the generic line is only the unknown-type
+    // fallback (a future backend powerup this build has no copy for).
+    final description = PowerupCopy.descriptionFor(type);
     return _ShopTile(
       art: _powerupArt(type),
       name: name,
@@ -877,7 +897,9 @@ class _ShopTabState extends State<ShopTab> {
         art: _powerupArt(type, fallbackSize: 64),
         name: name,
         badge: 'OWNED x$quantity',
-        description: 'Use it from a race to unleash it on your rivals.',
+        description: description.isNotEmpty
+            ? description
+            : 'Use it from a race to unleash it on your rivals.',
       ),
     );
   }

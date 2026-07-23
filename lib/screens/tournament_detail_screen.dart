@@ -658,6 +658,19 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     );
   }
 
+  /// HUD-tile fill. `ink` flips to cream on the night palette (it doubles as
+  /// the night text color), which turned these tiles into unreadable
+  /// white-on-white boards — `woodDarker` stays dark in both themes, matching
+  /// the race-detail `_heroChip` fill this HUD borrows its language from.
+  Color get _tileFill => AppColors.of(context).woodDarker.withValues(alpha: 0.92);
+
+  /// Gold accent for the HUD tiles. The night palette migrates `pillGold` to
+  /// twilight violet, which disappears against the dark tile fill — `feedGold`
+  /// stays a legible bright gold there.
+  Color get _tileGold => AppColors.of(context).isDark
+      ? AppColors.of(context).feedGold
+      : AppColors.of(context).pillGold;
+
   /// A full-height dark refresh tile matching the hero tiles (via IntrinsicHeight
   /// stretch), instead of a short square.
   Widget _refreshTile() {
@@ -667,7 +680,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
-          color: AppColors.of(context).ink.withValues(alpha: 0.9),
+          color: _tileFill,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: Colors.white.withValues(alpha: 0.18),
@@ -691,7 +704,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.of(context).ink.withValues(alpha: 0.9),
+        color: _tileFill,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: Colors.white.withValues(alpha: 0.18),
@@ -700,11 +713,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.timer_rounded,
-            size: 22,
-            color: AppColors.of(context).pillGold,
-          ),
+          Icon(Icons.timer_rounded, size: 22, color: _tileGold),
           const SizedBox(width: 9),
           Text(
             'ROUND ENDS IN',
@@ -735,7 +744,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.of(context).ink.withValues(alpha: 0.9),
+        color: _tileFill,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: Colors.white.withValues(alpha: 0.18),
@@ -783,7 +792,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
         leading: const SpinningCoin(size: 28),
         label: 'CHAMPION WINS',
         value: '${Tournament.championWinnings(t)}',
-        valueColor: AppColors.of(context).pillGold,
+        valueColor: _tileGold,
       );
     }
     // Free bracket — no coin prize; the gold value conveys the stakes (no
@@ -791,7 +800,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     return _heroTile(
       label: 'PLAYING FOR',
       value: 'THE CROWN',
-      valueColor: AppColors.of(context).pillGold,
+      valueColor: _tileGold,
     );
   }
 
@@ -802,7 +811,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
           leading: Icon(
             Icons.account_tree_rounded,
             size: 26,
-            color: AppColors.of(context).pillGold,
+            color: _tileGold,
           ),
           label: 'ROUND',
           value: '${Tournament.currentRound(t)}/${Tournament.totalRounds(t)}',
@@ -816,7 +825,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
           value: Tournament.isChampion(t, _myUserId)
               ? 'YOU!'
               : (champ != null ? Tournament.displayName(t, champ) : 'CROWNED'),
-          valueColor: AppColors.of(context).pillGold,
+          valueColor: _tileGold,
         );
       case TournamentStatus.pending:
       case TournamentStatus.cancelled:
@@ -825,7 +834,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
           leading: Icon(
             Icons.groups_2_rounded,
             size: 26,
-            color: AppColors.of(context).pillGold,
+            color: _tileGold,
           ),
           label: 'FILLED',
           value: '${Tournament.acceptedCount(t)}/${Tournament.bracketSize(t)}',

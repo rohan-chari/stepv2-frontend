@@ -10,7 +10,10 @@ import 'powerup_icon.dart';
 import '../constants/powerup_copy.dart';
 
 /// How an offensive powerup landed on the target, from the use-powerup result.
-enum AttackOutcome { applied, blocked, reflected }
+///
+/// `redirected` is the powerups5 Decoy outcome: a single-target attack aimed at
+/// a Decoy holder is bounced onto a third racer.
+enum AttackOutcome { applied, blocked, reflected, redirected }
 
 /// Friendly display names for the powerups that can intercept an attack.
 
@@ -30,12 +33,16 @@ AttackOutcome attackOutcomeFromResult(Map<String, dynamic>? result) {
         return AttackOutcome.blocked;
       case 'REFLECTED':
         return AttackOutcome.reflected;
+      case 'REDIRECTED':
+        return AttackOutcome.redirected;
       case 'APPLIED':
         return AttackOutcome.applied;
     }
   }
 
   // Legacy / older-backend fallback: no (recognized) outcome discriminator.
+  // A newer backend may still send `redirected: true` without the string.
+  if (result['redirected'] == true) return AttackOutcome.redirected;
   if (result['reflected'] == true) return AttackOutcome.reflected;
   if (result['blocked'] == true) return AttackOutcome.blocked;
 
@@ -62,31 +69,61 @@ class AttackOutcomeModal extends StatelessWidget {
   /// Called when the user dismisses the modal.
   final VoidCallback onDismiss;
 
-  bool get _isReflected =>
-      attackOutcomeFromResult(result) == AttackOutcome.reflected;
+  AttackOutcome get _outcome => attackOutcomeFromResult(result);
 
   String get _interceptorType {
-    if (_isReflected) {
-      final by = result['reflectedBy'];
-      return by is String && by.isNotEmpty ? by : 'MIRROR';
+    switch (_outcome) {
+      case AttackOutcome.reflected:
+        final by = result['reflectedBy'];
+        return by is String && by.isNotEmpty ? by : 'MIRROR';
+      case AttackOutcome.redirected:
+        final by = result['redirectedBy'];
+        return by is String && by.isNotEmpty ? by : 'DECOY';
+      case AttackOutcome.blocked:
+      case AttackOutcome.applied:
+        final by = result['blockedBy'];
+        return by is String && by.isNotEmpty ? by : 'COMPRESSION_SOCKS';
     }
-    final by = result['blockedBy'];
-    return by is String && by.isNotEmpty ? by : 'COMPRESSION_SOCKS';
   }
 
-  String get _title => _isReflected ? 'REFLECTED!' : 'BLOCKED!';
+  String get _title {
+    switch (_outcome) {
+      case AttackOutcome.reflected:
+        return 'REFLECTED!';
+      case AttackOutcome.redirected:
+        return 'REDIRECTED!';
+      case AttackOutcome.blocked:
+      case AttackOutcome.applied:
+        return 'BLOCKED!';
+    }
+  }
 
-  String get _subtitle => _isReflected
-      ? 'Your attack was reflected back at you'
-      : 'Your attack was blocked';
+  String get _subtitle {
+    switch (_outcome) {
+      case AttackOutcome.reflected:
+        return 'Your attack was reflected back at you';
+      case AttackOutcome.redirected:
+        return 'A decoy bounced your attack onto another racer';
+      case AttackOutcome.blocked:
+      case AttackOutcome.applied:
+        return 'Your attack was blocked';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final interceptorType = _interceptorType;
     final interceptorName = PowerupCopy.nameFor(interceptorType);
-    final accent = _isReflected
-        ? AppColors.of(context).coinDark
-        : AppColors.of(context).error;
+    final Color accent;
+    switch (_outcome) {
+      case AttackOutcome.reflected:
+        accent = AppColors.of(context).coinDark;
+      case AttackOutcome.redirected:
+        accent = AppColors.of(context).feedShield;
+      case AttackOutcome.blocked:
+      case AttackOutcome.applied:
+        accent = AppColors.of(context).error;
+    }
 
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),

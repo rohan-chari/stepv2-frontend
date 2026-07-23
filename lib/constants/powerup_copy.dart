@@ -51,6 +51,11 @@ const List<String> kTargetedPowerupTypes = [
   'HITCHHIKE',
   // QUICKSAND selects up to three rivals in its dedicated multi-target flow.
   'QUICKSAND',
+  // §7 powerups5 — DRILL_SERGEANT dares one rival to hit a step goal.
+  'DRILL_SERGEANT',
+  // BOUNTY wagers on out-placing one rival ahead of you; the race screen
+  // pre-filters the picker to enemies currently ahead (server still validates).
+  'BOUNTY',
 ];
 
 /// Thrown by a fetcher when `/powerups/catalog` answered but not usefully
@@ -187,7 +192,8 @@ abstract final class PowerupCopy {
   /// endpoint (unlike the `EndpointSupport` caches used elsewhere).
   static bool get isPermanentlyUnsupported => false;
 
-  /// The 28 user-renderable powerup types this build knows about.
+  /// The user-renderable powerup types this build knows about (28 through the
+  /// powerups3 wave, plus the 11 powerups5 store-only additions).
   /// `MYSTERY_BOX` is intentionally excluded — it is an unopened-container
   /// inventory state, not a usable powerup with use-sheet or effect copy.
   static Iterable<String> get bundledTypes => _bundledNames.keys;
@@ -379,6 +385,18 @@ abstract final class PowerupCopy {
     'HITCHHIKE': 'Hitchhike',
     'QUICK_RINSE': 'Quick Rinse',
     'QUICKSAND': 'Quicksand',
+    // §7 powerups5 store-only additions.
+    'UPRISING': 'Uprising',
+    'GHOST_PEPPER': 'Ghost Pepper',
+    'COIN_FLIP': 'Coin Flip',
+    'MYSTERY_POTION': 'Mystery Potion',
+    'DECOY': 'Decoy',
+    'POWER_OUTAGE': 'Power Outage',
+    'UMBRELLA': 'Umbrella',
+    'RALLY_FLAG': 'Rally Flag',
+    'DRILL_SERGEANT': 'Drill Sergeant',
+    'PIGGY_BANK': 'Piggy Bank',
+    'BOUNTY': 'Bounty',
   };
 
   /// Labels that are NOT user-renderable powerup types but which former call
@@ -433,6 +451,29 @@ abstract final class PowerupCopy {
         'Cut the remaining time on every opponent effect currently on you in half',
     'QUICKSAND':
         "Freeze up to three rivals' steps for 2 hours. Compression Socks resolve separately for each target",
+    // §7 powerups5 store-only additions.
+    'UPRISING':
+        'Rally the underdogs: everyone in the bottom half, you included, gets 2x steps for 2 hours',
+    'GHOST_PEPPER':
+        'Blaze with 3x steps for 30 min, then burn out — frozen for the next 30 min',
+    'COIN_FLIP':
+        'Flip a coin: heads doubles your steps for an hour, tails cuts them in half',
+    'MYSTERY_POTION':
+        'Drink up for a random effect — a boost, an attack on a rival, or a nasty surprise',
+    'DECOY':
+        'Set a decoy that redirects the next single-target attack aimed at you to another racer',
+    'POWER_OUTAGE':
+        "Cut the power on every rival — no one else can use powerups for 30 minutes. Compression Socks keep a racer online",
+    'UMBRELLA':
+        'Stay dry for 12 hours — immune to Rainstorm and Power Outage',
+    'RALLY_FLAG':
+        'Raise the flag: 1.25x steps for your whole team for 1 hour',
+    'DRILL_SERGEANT':
+        'Dare a rival to hit a step goal within 2 hours — if they fall short they lose steps',
+    'PIGGY_BANK':
+        'Bank your steps for 24 hours and cash them out as coins',
+    'BOUNTY':
+        'Place a bounty on a rival ahead of you — out-place them by race end to collect the payout',
   };
 
   // Short-form copy for the active-effects rail, where the countdown badge on
@@ -456,6 +497,17 @@ abstract final class PowerupCopy {
     'LEECH': 'Steps being stolen',
     'HITCHHIKE': 'Steps being copied',
     'QUICKSAND': 'Steps frozen',
+    // §7 powerups5 store-only additions.
+    'UPRISING': 'Underdog rally: 2x steps',
+    'GHOST_PEPPER': 'Blazing, then frozen',
+    'COIN_FLIP': 'Coin flip in play',
+    'DECOY': 'Decoy set',
+    'POWER_OUTAGE': 'Powerups jammed',
+    'UMBRELLA': 'Shielded from storms',
+    'RALLY_FLAG': 'Team rally: 1.25x steps',
+    'DRILL_SERGEANT': 'On the clock',
+    'PIGGY_BANK': 'Banking steps for coins',
+    'BOUNTY': 'Bounty placed',
   };
 
   static const _bundledUpgradeTierLabels = {
