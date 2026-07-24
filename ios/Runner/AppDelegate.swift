@@ -374,6 +374,13 @@ protocol BackgroundStepSyncStateStoring {
   var sessionToken: String? { get }
   var backendBaseURL: URL? { get }
   var healthAuthorized: Bool { get }
+  var stepSampleBucketMinutes: Int { get }
+}
+
+// Default keeps every existing conformer (and shipped behavior) on hourly;
+// only the real store opts accounts into the sub-hourly gating below.
+extension BackgroundStepSyncStateStoring {
+  var stepSampleBucketMinutes: Int { 60 }
 }
 
 protocol ChallengeSyncDaysFetching {
@@ -444,6 +451,28 @@ final class BackgroundStepSyncCoordinator {
     self.now = now
   }
 
+  // Upper bound for this path's hourly-sample upload. On a sub-hourly account
+  // the in-progress hour is EXCLUDED (floor to the top of the current hour):
+  // this native path always uploads full-clock-hour rows, and letting one
+  // claim the open hour front-runs the Dart fine-grained sync and smears live
+  // powerup-window scoring until finer rows replace it (2026-07-24). Hourly
+  // accounts keep the legacy behavior (upload through `currentTime`).
+  // Completed-hour rows are safe on every account: the backend reconcile
+  // always prefers finer data.
+  static func hourlySamplesEnd(
+    currentTime: Date,
+    bucketMinutes: Int,
+    calendar: Calendar = .current
+  ) -> Date {
+    guard
+      bucketMinutes < 60,
+      let currentHour = calendar.dateInterval(of: .hour, for: currentTime)
+    else {
+      return currentTime
+    }
+    return currentHour.start
+  }
+
   func performSync(completion: @escaping (BackgroundStepSyncResult) -> Void) {
     guard
       let sessionToken = stateStore.sessionToken,
@@ -454,6 +483,9 @@ final class BackgroundStepSyncCoordinator {
       completion(.noData)
       return
     }
+    // Read once up front: the nested completion closures below would otherwise
+    // capture self for a late stateStore read.
+    let bucketMinutes = stateStore.stepSampleBucketMinutes
 
     let currentTime = now()
 
@@ -487,9 +519,19 @@ final class BackgroundStepSyncCoordinator {
               return
             }
 
-            // After daily sync succeeds, sync hourly samples for today
+            // After daily sync succeeds, sync hourly samples for today. On a
+            // sub-hourly account, COMPLETED hours only (see hourlySamplesEnd)
+            // — an early-out when no hour has completed yet today.
             let todayStart = Calendar.current.startOfDay(for: currentTime)
-            stepReader.fetchHourlyStepCounts(from: todayStart, to: currentTime) { hourlyResult in
+            let hourlyEnd = Self.hourlySamplesEnd(
+              currentTime: currentTime,
+              bucketMinutes: bucketMinutes
+            )
+            guard hourlyEnd > todayStart else {
+              completion(.success)
+              return
+            }
+            stepReader.fetchHourlyStepCounts(from: todayStart, to: hourlyEnd) { hourlyResult in
               switch hourlyResult {
               case .failure:
                 // Don't fail the overall sync if hourly samples fail
@@ -624,6 +666,15 @@ final class UserDefaultsBackgroundSyncStateStore: BackgroundStepSyncStateStoring
 
   var healthAuthorized: Bool {
     userDefaults.bool(forKey: "flutter.health_authorized")
+  }
+
+  // Mirrors AuthService._keyStepSampleBucketMinutes (auth_service.dart) — the
+  // last backend-accepted featureFlags.stepSampleBucketMinutes value. Absent
+  // (0) or out-of-set values resolve to 60 (hourly), matching the Dart
+  // resolver, so a missing/renamed pref can only ever restore legacy behavior.
+  var stepSampleBucketMinutes: Int {
+    let raw = userDefaults.integer(forKey: "flutter.auth_step_sample_bucket_minutes")
+    return [5, 10, 15, 30, 60].contains(raw) ? raw : 60
   }
 }
 

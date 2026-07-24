@@ -83,6 +83,7 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/images/fx/
     - assets/images/accessories/
     - assets/images/powerups/
     # Variable TTFs registered at runtime by the iOS native ad factory

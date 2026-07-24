@@ -6,6 +6,7 @@ import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../services/notification_service.dart';
 import '../../styles.dart';
+import '../../widgets/app_refresh_indicator.dart';
 import '../../utils/at_name.dart';
 import '../../utils/effect_polarity.dart';
 import '../../utils/race_participant_display.dart';
@@ -371,10 +372,8 @@ class _RacesTabState extends State<RacesTab> {
         ),
         Padding(
           padding: EdgeInsets.only(top: topInset + 14, bottom: tabBarHeight),
-          child: RefreshIndicator(
+          child: AppRefreshIndicator(
             onRefresh: widget.onRefresh ?? () async {},
-            color: AppColors.of(context).accent,
-            backgroundColor: AppColors.of(context).parchment,
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               // §9.5: lazily-built slivers. The header/pills/featured block stays
@@ -1478,24 +1477,11 @@ class _RacesTabState extends State<RacesTab> {
                       // queued crates, then empty). Everything else keeps the
                       // runner count.
                       if (status == 'ACTIVE') ...[
-                        Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                timeLabel,
-                                style: PixelText.body(
-                                  size: 13,
-                                  color: timeColor,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
-                              ),
-                            ),
-                            if (effectCluster != null) ...[
-                              const SizedBox(width: 8),
-                              effectCluster,
-                            ],
-                          ],
+                        Text(
+                          timeLabel,
+                          style: PixelText.body(size: 13, color: timeColor),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
                         // TR-806: mini team scoreline (only when the payload
                         // carries totals — older backends simply omit it).
@@ -1510,11 +1496,36 @@ class _RacesTabState extends State<RacesTab> {
                           ),
                         ],
                         const SizedBox(height: 4),
-                        _buildInventoryRow(
-                          slotItems,
-                          mysteryBoxCount,
-                          queuedBoxCount,
-                          rowKey: boxKey,
+                        // Boxes and the buff/debuff badges share one row, split
+                        // by a slim muted rule. The separator + cluster only
+                        // render when there are active effects, so a no-effects
+                        // row is just the boxes as before.
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _buildInventoryRow(
+                              slotItems,
+                              mysteryBoxCount,
+                              queuedBoxCount,
+                              rowKey: boxKey,
+                            ),
+                            if (effectCluster != null) ...[
+                              Padding(
+                                key: Key('race-effects-sep-$raceId'),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                ),
+                                child: Container(
+                                  width: 1,
+                                  height: 18,
+                                  color: AppColors.of(
+                                    context,
+                                  ).textMid.withValues(alpha: 0.35),
+                                ),
+                              ),
+                              Flexible(child: effectCluster),
+                            ],
+                          ],
                         ),
                       ] else
                         Text(

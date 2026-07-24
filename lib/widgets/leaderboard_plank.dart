@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import 'app_avatar.dart';
+import 'fire_aura.dart';
 import '../styles.dart';
 import '../utils/at_name.dart';
 import '../utils/race_participant_display.dart';
@@ -18,6 +19,12 @@ class LeaderboardPlank extends StatelessWidget {
   final String formattedSteps;
   final List<Widget> effectIcons;
   final String? profilePhotoUrl;
+
+  /// The participant's current (stacked, global-event-inclusive) step
+  /// multiplier from the backend. Nullable/absent on older backends → no badge
+  /// and no fire (safe degradation). Semantics: >1 buffed (fire + "Nx" badge),
+  /// 1 neutral (nothing), 0 frozen (frost chip), <0 reversed (reversed chip).
+  final double? currentMultiplier;
 
   // Issue 1: team races render larger, more legible rows. These default to the
   // solo/ranked values so those layouts are UNCHANGED; the team-grouped
@@ -39,6 +46,7 @@ class LeaderboardPlank extends StatelessWidget {
     this.finishPlace,
     this.effectIcons = const [],
     this.profilePhotoUrl,
+    this.currentMultiplier,
     this.avatarSize = 32,
     this.nameSize = 15,
     this.stepsSize = 16,
@@ -56,6 +64,111 @@ class LeaderboardPlank extends StatelessWidget {
       default:
         return null;
     }
+  }
+
+  /// The avatar, optionally wrapped in a fire aura when the multiplier is >1.
+  /// A stealthed runner never shows fire (its own multiplier is hidden). The
+  /// fire is centered behind the avatar via an [OverflowBox] so it can lick
+  /// past the edges without changing the row's layout size.
+  Widget _buildAvatar(BuildContext context) {
+    final avatar = AppAvatar(
+      // The raw name, not displayName: the " (you)" suffix would turn the
+      // fallback initials into "M(".
+      name: isStealthed ? '???' : name,
+      imageUrl: isStealthed ? null : profilePhotoUrl,
+      size: avatarSize,
+      isUser: isUser,
+      isStealthed: isStealthed,
+      borderColor: isUser ? AppColors.of(context).accent : Colors.white,
+    );
+
+    final m = currentMultiplier;
+    if (isStealthed || m == null || m <= 1.001) return avatar;
+
+    final tier = m.floor();
+    final fireSize = avatarSize * (1.55 + 0.12 * (tier - 2).clamp(0, 4));
+    return SizedBox(
+      width: avatarSize,
+      height: avatarSize,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          OverflowBox(
+            maxWidth: fireSize,
+            maxHeight: fireSize,
+            child: FireAura(size: fireSize, tier: tier),
+          ),
+          avatar,
+        ],
+      ),
+    );
+  }
+
+  /// The name-row chip reflecting the multiplier: "Nx" for a buff, a frost chip
+  /// when frozen (0), a reversed chip when negative. Null (no chip) at exactly
+  /// 1x, a mild sub-1 debuff, absent multiplier, or for a stealthed runner.
+  Widget? _multiplierChip(BuildContext context) {
+    final m = currentMultiplier;
+    if (isStealthed || m == null) return null;
+    if (m <= -0.001) {
+      // Reversed (e.g. Wrong Turn) — steps counting backward.
+      return _chip(
+        context,
+        icon: Icons.u_turn_left_rounded,
+        label: '${_fmtMult(m.abs())}x',
+        bg: AppColors.of(context).feedAttack,
+      );
+    }
+    if (m < 0.5) {
+      // Frozen (e.g. Leg Cramp) — no forward progress.
+      return _chip(
+        context,
+        icon: Icons.ac_unit_rounded,
+        label: 'FROZEN',
+        bg: AppColors.of(context).feedShield,
+      );
+    }
+    if (m > 1.001) {
+      // Buffed — warm ember chip to match the fire aura.
+      return _chip(
+        context,
+        icon: Icons.local_fire_department_rounded,
+        label: '${_fmtMult(m)}x',
+        bg: const Color(0xFFE8622A),
+      );
+    }
+    return null;
+  }
+
+  Widget _chip(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required Color bg,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: bg.withValues(alpha: 0.85), width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: bg),
+          const SizedBox(width: 3),
+          Text(label, style: PixelText.title(size: 10, color: bg)),
+        ],
+      ),
+    );
+  }
+
+  static String _fmtMult(double v) {
+    final rounded = v.roundToDouble();
+    if ((v - rounded).abs() < 0.05) return rounded.toInt().toString();
+    return v.toStringAsFixed(1);
   }
 
   @override
@@ -114,16 +227,7 @@ class LeaderboardPlank extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            AppAvatar(
-              // The raw name, not displayName: the " (you)" suffix would turn
-              // the fallback initials into "M(".
-              name: isStealthed ? '???' : name,
-              imageUrl: isStealthed ? null : profilePhotoUrl,
-              size: avatarSize,
-              isUser: isUser,
-              isStealthed: isStealthed,
-              borderColor: isUser ? AppColors.of(context).accent : Colors.white,
-            ),
+            _buildAvatar(context),
             const SizedBox(width: 8),
             // Name + effects
             Expanded(
@@ -145,6 +249,12 @@ class LeaderboardPlank extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  ...() {
+                    final chip = _multiplierChip(context);
+                    return chip == null
+                        ? const <Widget>[]
+                        : [const SizedBox(width: 6), chip];
+                  }(),
                   if (effectIcons.isNotEmpty) ...[
                     const SizedBox(width: 4),
                     ...effectIcons,

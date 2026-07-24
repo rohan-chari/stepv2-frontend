@@ -80,11 +80,11 @@ List<TutorialStep> _buildSteps() {
           'race and rank against each other.',
     ),
     TutorialStep(
-      page: TutorialMockPage.profile,
+      page: TutorialMockPage.friends,
       targetKey: 'profile.invite',
       title: 'Invite friends, earn coins',
       body:
-          'Share your invite link from Profile — when a friend joins Bara '
+          'Tap Invite Friends to share your link — when a friend joins Bara '
           'with it, you BOTH earn coins.',
     ),
     TutorialStep(

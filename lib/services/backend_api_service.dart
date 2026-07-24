@@ -2704,6 +2704,28 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  /// Unlocks a powerup the user is a little short on by watching SSV-verified
+  /// rewarded ads. The server is the authority on the shortfall + ad count; on
+  /// success it zeroes the user's coins and grants the powerup, returning the
+  /// updated `{coins, inventory}`. NEW endpoint — older backends 404 here, so
+  /// callers MUST catch and NOT mutate the local balance on failure. Idempotent
+  /// via the Idempotency-Key header + body `idempotencyKey`.
+  Future<Map<String, dynamic>> unlockPowerupWithAds({
+    required String identityToken,
+    required String sku,
+    required String idempotencyKey,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/shop/powerups/unlock-with-ads',
+      body: {'sku': sku, 'idempotencyKey': idempotencyKey},
+      identityToken: identityToken,
+      headers: {'Idempotency-Key': idempotencyKey},
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
   /// The user's GLOBAL powerup inventory (powerupType + quantity). Additive
   /// endpoint; older backends 404 here, so callers must degrade gracefully.
   Future<Map<String, dynamic>> fetchPowerupInventory({

@@ -515,6 +515,12 @@ class AppPalette extends ThemeExtension<AppPalette> {
   Color get cream => parchmentLight;
   Color get muted => textMid;
   Color get success => grassDark;
+
+  /// Collected/claimed milestone accent. Light mode keeps the celebratory
+  /// green; dark mode flips to the slate-blue the app migrated to (pillTerra),
+  /// since the old dark green (grassDark = 0xFF29483B) is illegible on the
+  /// night parchment. Mirrors the home pull-to-refresh treatment.
+  Color get milestoneCollected => isDark ? pillTerra : success;
 }
 
 @immutable

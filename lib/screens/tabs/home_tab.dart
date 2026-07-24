@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/loadable.dart';
 import '../../styles.dart';
+import '../../widgets/app_refresh_indicator.dart';
 import '../../models/step_data.dart';
 import '../../utils/at_name.dart';
 import '../../utils/race_display.dart';
@@ -168,15 +169,9 @@ class HomeTab extends StatelessWidget {
           // reads as a weird blue header once you scroll). The hero adds the
           // inset internally to keep its HUD clear of the status bar.
           padding: EdgeInsets.only(bottom: bottomPadding),
-          child: RefreshIndicator(
+          child: AppRefreshIndicator(
             onRefresh: onRefresh,
             edgeOffset: topInset,
-            // Night mode swaps the dark-green spinner for the slate-blue
-            // accent — dark green is illegible on the night parchment.
-            color: AppColors.of(context).isDark
-                ? AppColors.of(context).pillTerra
-                : AppColors.of(context).accent,
-            backgroundColor: AppColors.of(context).parchment,
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [

@@ -1,10 +1,14 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../config/animals.dart';
 import '../../models/loadable.dart';
+import '../../services/ad_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
+import '../../widgets/app_refresh_indicator.dart';
 import '../../widgets/accessory_thumbnail.dart';
 import '../../widgets/arcade_fx.dart';
 import '../../widgets/coin_balance_badge.dart';
@@ -32,17 +36,57 @@ extension on _ShopCategory {
   };
 }
 
+/// Powerup store sub-filter (item 9). Matches the additive `category` field on
+/// each catalog item; an older backend that omits it defaults every item to
+/// `utility` (see `_powerupCategoryOf`), so ALL/UTILITY still show everything.
+enum _PowerupFilter { all, offense, defense, utility }
+
+extension on _PowerupFilter {
+  String get label => switch (this) {
+    _PowerupFilter.all => 'ALL',
+    _PowerupFilter.offense => 'OFFENSE',
+    _PowerupFilter.defense => 'DEFENSE',
+    _PowerupFilter.utility => 'UTILITY',
+  };
+
+  /// The `category` value this filter keeps; null = keep everything.
+  String? get category => switch (this) {
+    _PowerupFilter.all => null,
+    _PowerupFilter.offense => 'offense',
+    _PowerupFilter.defense => 'defense',
+    _PowerupFilter.utility => 'utility',
+  };
+}
+
+/// Powerup store sort order (item 9). Default is [nameAsc].
+enum _PowerupSort { nameAsc, priceAsc, priceDesc, rarity }
+
+extension on _PowerupSort {
+  String get label => switch (this) {
+    _PowerupSort.nameAsc => 'Name (A–Z)',
+    _PowerupSort.priceAsc => 'Price: Low→High',
+    _PowerupSort.priceDesc => 'Price: High→Low',
+    _PowerupSort.rarity => 'Rarity',
+  };
+}
+
 class ShopTab extends StatefulWidget {
   const ShopTab({
     super.key,
     required this.authService,
     this.backendApiService,
     this.onShopChanged,
+    this.adControllerBuilder,
   });
 
   final AuthService authService;
   final BackendApiService? backendApiService;
   final ValueChanged<Map<String, dynamic>>? onShopChanged;
+
+  /// Builds a fresh rewarded-ad controller for the powerup-unlock flow (item
+  /// 10). Overridable in tests; defaults to a real [AdService] pointed at the
+  /// powerup-unlock ad unit (falling back to the extra-spin/test unit).
+  final ExtraSpinAdController Function()? adControllerBuilder;
 
   @override
   State<ShopTab> createState() => _ShopTabState();
@@ -67,6 +111,19 @@ class _ShopTabState extends State<ShopTab> {
   bool _saving = false;
   _ShopSection _section = _ShopSection.store;
   _ShopCategory _category = _ShopCategory.powerups;
+
+  // Powerup store sub-filter + sort (item 9). Persisted in screen state.
+  _PowerupFilter _powerupFilter = _PowerupFilter.all;
+  _PowerupSort _powerupSort = _PowerupSort.nameAsc;
+
+  // Within 150 coins of a powerup → offer the watch-ads unlock (item 10).
+  static const _maxAdUnlockShortfall = 150;
+  static const _rarityOrder = {
+    'COMMON': 0,
+    'RARE': 1,
+    'EPIC': 2,
+    'LEGENDARY': 3,
+  };
 
   @override
   void initState() {
@@ -299,10 +356,8 @@ class _ShopTabState extends State<ShopTab> {
           ),
           Padding(
             padding: EdgeInsets.only(top: topInset + 14, bottom: tabBarHeight),
-            child: RefreshIndicator(
+            child: AppRefreshIndicator(
               onRefresh: _loadCatalog,
-              color: AppColors.of(context).accent,
-              backgroundColor: AppColors.of(context).parchment,
               child: CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
@@ -330,7 +385,7 @@ class _ShopTabState extends State<ShopTab> {
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 15, 16, 14),
+          padding: const EdgeInsets.fromLTRB(16, 15, 16, 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -390,6 +445,13 @@ class _ShopTabState extends State<ShopTab> {
               _buildSegmentControl(),
               const SizedBox(height: 8),
               _buildCategoryPills(),
+              // Powerup-store filter + sort live in the (fixed) header so they
+              // don't disturb the body's stagger-in tile list.
+              if (_section == _ShopSection.store &&
+                  _activeCategory == _ShopCategory.powerups) ...[
+                const SizedBox(height: 2),
+                _buildPowerupControls(),
+              ],
             ],
           ),
         ),
@@ -837,41 +899,358 @@ class _ShopTabState extends State<ShopTab> {
   ///
   /// Same as the cosmetic tile: the price strip opens the detail sheet, and
   /// only the sheet's BUY button purchases.
+  // ── Item 9: powerup store filter + sort ────────────────────────────────
+  /// The category bucket for a powerup item. An older backend without the
+  /// additive `category` field defaults to `utility` so the item still shows
+  /// under ALL and UTILITY rather than disappearing.
+  String _powerupCategoryOf(Map<String, dynamic> item) {
+    final c = (item['category'] as String?)?.toLowerCase();
+    if (c == 'offense' || c == 'defense' || c == 'utility') return c!;
+    return 'utility';
+  }
+
+  /// Rarity rank for sorting; unknown/missing rarity sorts last.
+  int _rarityRank(Map<String, dynamic> item) {
+    final r = (item['rarity'] as String?)?.toUpperCase();
+    return _rarityOrder[r] ?? 999;
+  }
+
+  int _byName(Map<String, dynamic> a, Map<String, dynamic> b) =>
+      (a['name'] as String? ?? '').toLowerCase().compareTo(
+        (b['name'] as String? ?? '').toLowerCase(),
+      );
+
+  /// The powerup store items after the active filter + sort. Never mutates
+  /// `_powerupStoreItems`.
+  List<Map<String, dynamic>> _visiblePowerupStoreItems() {
+    final wanted = _powerupFilter.category;
+    final list = _powerupStoreItems
+        .where((i) => wanted == null || _powerupCategoryOf(i) == wanted)
+        .toList();
+    int price(Map<String, dynamic> m) => (m['priceCoins'] as num?)?.toInt() ?? 0;
+    switch (_powerupSort) {
+      case _PowerupSort.nameAsc:
+        list.sort(_byName);
+      case _PowerupSort.priceAsc:
+        list.sort((a, b) {
+          final c = price(a).compareTo(price(b));
+          return c != 0 ? c : _byName(a, b);
+        });
+      case _PowerupSort.priceDesc:
+        list.sort((a, b) {
+          final c = price(b).compareTo(price(a));
+          return c != 0 ? c : _byName(a, b);
+        });
+      case _PowerupSort.rarity:
+        list.sort((a, b) {
+          final c = _rarityRank(a).compareTo(_rarityRank(b));
+          return c != 0 ? c : _byName(a, b);
+        });
+    }
+    return list;
+  }
+
+  Widget _buildPowerupControls() {
+    // One compact row: the four filter pills share the leading space, the sort
+    // control trails. Lives in the header, which already supplies horizontal
+    // padding.
+    return SizedBox(
+      child: Row(
+        children: [
+          Expanded(
+            child: Row(
+              children: [
+                for (var i = 0; i < _PowerupFilter.values.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 4),
+                  Expanded(child: _powerupFilterPill(_PowerupFilter.values[i])),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          _buildSortControl(),
+        ],
+      ),
+    );
+  }
+
+  Widget _powerupFilterPill(_PowerupFilter filter) {
+    final selected = _powerupFilter == filter;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => setState(() => _powerupFilter = filter),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(vertical: 5),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.of(context).pillGold
+              : Colors.black.withValues(alpha: 0.18),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: selected
+                ? AppColors.of(context).pillGoldDark
+                : Colors.black.withValues(alpha: 0.12),
+            width: 1.5,
+          ),
+        ),
+        child: Text(
+          filter.label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: PixelText.title(
+            size: 10,
+            color: selected
+                ? AppColors.of(context).textDark
+                : AppColors.of(context).textLight.withValues(alpha: 0.88),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSortControl() {
+    return PopupMenuButton<_PowerupSort>(
+      initialValue: _powerupSort,
+      tooltip: 'Sort powerups',
+      color: AppColors.of(context).parchment,
+      onSelected: (value) => setState(() => _powerupSort = value),
+      itemBuilder: (context) => [
+        for (final sort in _PowerupSort.values)
+          PopupMenuItem<_PowerupSort>(
+            value: sort,
+            child: Text(
+              sort.label,
+              style: PixelText.body(
+                size: 14,
+                color: AppColors.of(context).textDark,
+              ),
+            ),
+          ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        decoration: BoxDecoration(
+          color: AppColors.of(context).parchment,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: AppColors.of(context).parchmentBorder),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.swap_vert_rounded,
+              size: 16,
+              color: AppColors.of(context).textMid,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Sort: ${_powerupSort.label}',
+              style: PixelText.body(
+                size: 12.5,
+                color: AppColors.of(context).textDark,
+              ),
+            ),
+            Icon(
+              Icons.arrow_drop_down_rounded,
+              size: 18,
+              color: AppColors.of(context).textMid,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Item 10: watch-ads-to-unlock / get-coins on an unaffordable tile ────
+  void _openGetCoins() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => GetCoinsScreen(
+          authService: widget.authService,
+          backendApiService: _backendApiService,
+        ),
+      ),
+    );
+  }
+
+  ExtraSpinAdController _newAdController() =>
+      widget.adControllerBuilder?.call() ??
+      AdService(adUnitId: AdService.powerupUnlockAdUnitId);
+
+  /// Watches [adsNeeded] rewarded ads back-to-back, then asks the server to
+  /// unlock the powerup (which zeroes coins + grants it). The SERVER is the
+  /// authority on the shortfall + ad count via SSV — this only drives the ads
+  /// and calls the endpoint. Bailing on any ad aborts with no grant and no coin
+  /// change. Degrades safely if ads are unsupported or the endpoint is absent.
+  Future<void> _unlockPowerupWithAds(
+    Map<String, dynamic> item,
+    int adsNeeded,
+  ) async {
+    if (_saving) return;
+    final token = widget.authService.authToken;
+    final sku = item['sku'] as String?;
+    if (token == null || token.isEmpty || sku == null || adsNeeded < 1) return;
+
+    final controller = _newAdController();
+    if (!controller.isSupported) {
+      showErrorToast(context, 'Ads aren’t available on this device.');
+      return;
+    }
+
+    final userId = widget.authService.userId ?? 'user';
+    // SSV custom-data tag scopes each verified watch to this flow (item 10).
+    final customData = 'powerup_unlock:$userId:$sku';
+    final name = item['name'] as String? ?? 'Powerup';
+
+    setState(() => _saving = true);
+    try {
+      for (var k = 1; k <= adsNeeded; k++) {
+        if (!mounted) return;
+        showInfoToast(context, 'Ad $k of $adsNeeded…');
+        await controller.load(userId: userId, localDate: customData);
+        if (!controller.isReady) {
+          if (mounted) {
+            showErrorToast(context, 'Ad didn’t load — no coins spent.');
+          }
+          return;
+        }
+        final earned = await controller.showAndAwaitReward();
+        if (!earned) {
+          if (mounted) {
+            showErrorToast(context, 'Ad not finished — no coins spent.');
+          }
+          return;
+        }
+      }
+
+      final result = await _backendApiService.unlockPowerupWithAds(
+        identityToken: token,
+        sku: sku,
+        idempotencyKey:
+            '${widget.authService.userId ?? 'user'}-pwunlock-${DateTime.now().microsecondsSinceEpoch}',
+      );
+      final coins = result['coins'] as int?;
+      if (coins != null) {
+        await widget.authService.updateCoins(coins);
+      }
+      await _loadCatalog();
+      if (mounted) showInfoToast(context, '$name unlocked!');
+    } on ApiException catch (error) {
+      if (mounted) showErrorToast(context, error.message);
+    } catch (_) {
+      if (mounted) {
+        showErrorToast(context, 'Couldn’t unlock this powerup. Please try again.');
+      }
+    } finally {
+      controller.dispose();
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   Widget _storePowerupTile(Map<String, dynamic> item) {
     final name = item['name'] as String? ?? 'Powerup';
     final price = (item['priceCoins'] as num?)?.toInt() ?? 0;
     final type = item['powerupType'] as String? ?? '';
     final owned = _ownedQuantityFor(item);
+
+    // Affordability drives the strip + sheet action (item 10). Read coins
+    // defensively off the auth service.
+    final coins = widget.authService.coins;
+    final affordable = coins >= price;
+    final shortfall = price - coins;
+    final canAdUnlock =
+        !affordable && shortfall > 0 && shortfall <= _maxAdUnlockShortfall;
+    final adsNeeded = canAdUnlock ? math.min(3, (shortfall / 50).ceil()) : 0;
+
     void openSheet() => _showItemSheet(
-        art: _powerupArt(type, fallbackSize: 64),
-        name: name,
-        badge: owned > 0 ? 'OWNED x$owned' : null,
-        description: item['description'] as String? ?? '',
-        actions: [
-          PillButton(
-            label: 'BUY · $price',
-            icon: Icons.monetization_on_rounded,
-            variant: PillButtonVariant.secondary,
-            fontSize: 14,
-            fullWidth: true,
-            onPressed: _saving
-                ? null
-                : () {
-                    Navigator.of(context).pop();
-                    _purchasePowerup(item);
-                  },
-          ),
-        ],
-      );
+      art: _powerupArt(type, fallbackSize: 64),
+      name: name,
+      badge: owned > 0 ? 'OWNED x$owned' : null,
+      description: item['description'] as String? ?? '',
+      actions: [_powerupSheetAction(item, price, affordable, canAdUnlock, adsNeeded)],
+    );
+
+    // Strip label reflects the primary action; the tap always opens the sheet
+    // where the matching button lives (so a coin-zeroing unlock is explicit).
+    final String stripLabel;
+    final IconData stripIcon;
+    if (affordable) {
+      stripLabel = '$price';
+      stripIcon = Icons.monetization_on_rounded;
+    } else if (canAdUnlock) {
+      stripLabel = adsNeeded == 1 ? 'Watch 1 ad' : 'Watch $adsNeeded ads';
+      stripIcon = Icons.smart_display_rounded;
+    } else {
+      stripLabel = 'Get coins';
+      stripIcon = Icons.add_circle_rounded;
+    }
+
     return _ShopTile(
       art: _powerupArt(type),
       name: name,
       badge: owned > 0 ? 'x$owned' : null,
-      stripLabel: '$price',
-      stripIcon: Icons.monetization_on_rounded,
+      stripLabel: stripLabel,
+      stripIcon: stripIcon,
       stripEnabled: !_saving,
       onStrip: openSheet,
       onTap: openSheet,
+    );
+  }
+
+  /// The primary action button for a powerup detail sheet: BUY when affordable,
+  /// the scaled watch-ads unlock when within 150 coins, else a Get-coins route.
+  Widget _powerupSheetAction(
+    Map<String, dynamic> item,
+    int price,
+    bool affordable,
+    bool canAdUnlock,
+    int adsNeeded,
+  ) {
+    if (affordable) {
+      return PillButton(
+        label: 'BUY · $price',
+        icon: Icons.monetization_on_rounded,
+        variant: PillButtonVariant.secondary,
+        fontSize: 14,
+        fullWidth: true,
+        onPressed: _saving
+            ? null
+            : () {
+                Navigator.of(context).pop();
+                _purchasePowerup(item);
+              },
+      );
+    }
+    if (canAdUnlock) {
+      return PillButton(
+        label: adsNeeded == 1
+            ? 'WATCH 1 AD TO UNLOCK'
+            : 'WATCH $adsNeeded ADS TO UNLOCK',
+        icon: Icons.smart_display_rounded,
+        variant: PillButtonVariant.secondary,
+        fontSize: 13,
+        fullWidth: true,
+        onPressed: _saving
+            ? null
+            : () {
+                Navigator.of(context).pop();
+                _unlockPowerupWithAds(item, adsNeeded);
+              },
+      );
+    }
+    return PillButton(
+      label: 'GET MORE COINS',
+      icon: Icons.add_circle_rounded,
+      variant: PillButtonVariant.secondary,
+      fontSize: 14,
+      fullWidth: true,
+      onPressed: () {
+        Navigator.of(context).pop();
+        _openGetCoins();
+      },
     );
   }
 
@@ -931,9 +1310,14 @@ class _ShopTabState extends State<ShopTab> {
 
     return switch (_activeCategory) {
       _ShopCategory.powerups => _buildCategoryBody(
-        [for (final item in _powerupStoreItems) _storePowerupTile(item)],
+        [
+          for (final item in _visiblePowerupStoreItems())
+            _storePowerupTile(item),
+        ],
         emptyIcon: Icons.bolt_rounded,
-        emptyMessage: 'No powerups for sale right now.',
+        emptyMessage: _powerupFilter == _PowerupFilter.all
+            ? 'No powerups for sale right now.'
+            : 'No ${_powerupFilter.label.toLowerCase()} powerups right now.',
       ),
       _ShopCategory.characters => _buildCategoryBody(
         [

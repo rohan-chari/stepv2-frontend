@@ -55,6 +55,18 @@ class AdService implements ExtraSpinAdController {
   static const _testAdUnitAndroid = 'ca-app-pub-3940256099942544/5224354917';
   static const _testAdUnitIos = 'ca-app-pub-3940256099942544/1712485313';
 
+  // Rewarded unit for the shop "watch ads to unlock a powerup" flow. A
+  // dedicated unit is preferred so its SSV callback can be scoped to this flow,
+  // but when the define is absent we fall back to the extra-spin rewarded unit
+  // (and, absent that, Google's test unit) so the feature is never blocked on
+  // Rohan creating the unit. iOS uses the base define; Android the `_ANDROID`.
+  static const _envPowerupUnlockAdUnitId = String.fromEnvironment(
+    'ADMOB_POWERUP_UNLOCK_AD_UNIT_ID',
+  );
+  static const _envPowerupUnlockAdUnitIdAndroid = String.fromEnvironment(
+    'ADMOB_POWERUP_UNLOCK_AD_UNIT_ID_ANDROID',
+  );
+
   // Banner placements (shop, race mystery-box overlay) are display-only: no
   // SSV, no reward, no backend. Like the rewarded unit, the real banner unit is
   // baked in per-build via --dart-define; absent, we fall back to Google's
@@ -95,6 +107,20 @@ class AdService implements ExtraSpinAdController {
     if (Platform.isIOS) return _envAdUnitId;
     if (Platform.isAndroid) return _envAdUnitIdAndroid;
     return '';
+  }
+
+  /// Resolved rewarded unit for the powerup-unlock flow: the dedicated define
+  /// for this platform when baked in, else the extra-spin real unit, else ''
+  /// (which makes [AdService] fall back to Google's public test unit). Pass to
+  /// `AdService(adUnitId: AdService.powerupUnlockAdUnitId)`.
+  static String get powerupUnlockAdUnitId {
+    if (kIsWeb) return '';
+    final id = Platform.isIOS
+        ? _envPowerupUnlockAdUnitId
+        : Platform.isAndroid
+        ? _envPowerupUnlockAdUnitIdAndroid
+        : '';
+    return id.isNotEmpty ? id : _platformExtraSpinUnitId;
   }
 
   static String get _platformBannerUnitId {

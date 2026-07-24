@@ -4,6 +4,7 @@ import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../services/health_service.dart';
 import '../styles.dart';
+import '../widgets/app_refresh_indicator.dart';
 import '../utils/at_name.dart';
 import '../utils/share_helper.dart';
 import 'referral_rules_screen.dart';
@@ -189,10 +190,8 @@ class _ReferralScreenState extends State<ReferralScreen> {
               children: [
                 _buildHeader(),
                 Expanded(
-                  child: RefreshIndicator(
+                  child: AppRefreshIndicator(
                     onRefresh: _load,
-                    color: AppColors.of(context).accent,
-                    backgroundColor: AppColors.of(context).parchment,
                     child: ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),

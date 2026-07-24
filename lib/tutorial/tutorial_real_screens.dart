@@ -145,7 +145,6 @@ class TutorialRealHost extends StatelessWidget {
           email: null,
           onSettingsChanged: () {},
           showBackButton: false,
-          tutorialInviteKey: keys['profile.invite'],
         );
       case TutorialMockPage.leaderboard:
         return LeaderboardTab(
@@ -161,6 +160,7 @@ class TutorialRealHost extends StatelessWidget {
           backendApiService: api,
           displayName: 'Rohan',
           tutorialSearchKey: keys['friends.search'],
+          tutorialInviteKey: keys['profile.invite'],
         );
     }
   }

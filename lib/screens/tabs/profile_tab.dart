@@ -5,13 +5,13 @@ import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../services/notification_service.dart';
 import '../../styles.dart';
+import '../../widgets/app_refresh_indicator.dart';
 import '../../widgets/arcade_fx.dart';
 import '../../utils/at_name.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/step_calendar.dart';
 import '../../widgets/loading_skeleton.dart';
-import '../referral_screen.dart';
 import '../settings_screen.dart';
 
 class ProfileTab extends StatefulWidget {
@@ -28,10 +28,6 @@ class ProfileTab extends StatefulWidget {
   final Future<void> Function()? onRemoveProfilePhoto;
   final bool showBackButton;
 
-  // Optional tutorial spotlight anchor for the invite-friends button (null in
-  // the shipped app; the tutorial passes a key so its overlay can measure it).
-  final GlobalKey? tutorialInviteKey;
-
   const ProfileTab({
     super.key,
     required this.authService,
@@ -46,7 +42,6 @@ class ProfileTab extends StatefulWidget {
     this.onAddProfilePhoto,
     this.onRemoveProfilePhoto,
     this.showBackButton = true,
-    this.tutorialInviteKey,
   });
 
   @override
@@ -221,10 +216,8 @@ class _ProfileTabState extends State<ProfileTab> {
           ),
           Padding(
             padding: EdgeInsets.only(top: topInset, bottom: bottomPadding),
-            child: RefreshIndicator(
+            child: AppRefreshIndicator(
               onRefresh: _handleRefresh,
-              color: AppColors.of(context).accent,
-              backgroundColor: AppColors.of(context).parchment,
               child: CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
@@ -414,45 +407,6 @@ class _ProfileTabState extends State<ProfileTab> {
             index: 0,
             child: Column(
               children: [
-                _buildSectionHeader('INVITE FRIENDS'),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
-                  child: KeyedSubtree(
-                    key: widget.tutorialInviteKey,
-                    child: PulseGlow(
-                      child: PillButton(
-                        label: 'INVITE FRIENDS & EARN COINS',
-                        icon: Icons.group_add_rounded,
-                        // Gold, not green — the primary green pill vanishes
-                        // against the checkered green backdrop.
-                        variant: PillButtonVariant.secondary,
-                        fontSize: 13,
-                        fullWidth: true,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 12,
-                        ),
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => ReferralScreen(
-                                authService: widget.authService,
-                                backendApiService: _api,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          StaggerIn(
-            index: 1,
-            child: Column(
-              children: [
                 _buildSectionHeader('STEP CALENDAR'),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
@@ -469,7 +423,7 @@ class _ProfileTabState extends State<ProfileTab> {
             ),
           ),
           StaggerIn(
-            index: 2,
+            index: 1,
             child: Column(
               children: [
                 _buildSectionHeader('STATS'),

@@ -181,6 +181,107 @@ class RunnerTests: XCTestCase {
     XCTAssertEqual(stepReader.capturedSyncDays.first?.endsAt, fallbackNow)
   }
 
+  // Sub-hourly accounts must not let this native path claim the in-progress
+  // hour (it uploads full-clock-hour rows that front-run the Dart fine sync
+  // and smear live powerup-window scoring — 2026-07-24).
+  func testHourlySamplesEndFloorsToHourStartOnSubHourlyAccounts() {
+    var utc = Calendar(identifier: .gregorian)
+    utc.timeZone = TimeZone(identifier: "UTC")!
+    let midHour = isoDate("2026-03-19T15:37:12Z")
+
+    XCTAssertEqual(
+      BackgroundStepSyncCoordinator.hourlySamplesEnd(
+        currentTime: midHour, bucketMinutes: 5, calendar: utc),
+      isoDate("2026-03-19T15:00:00Z")
+    )
+    XCTAssertEqual(
+      BackgroundStepSyncCoordinator.hourlySamplesEnd(
+        currentTime: midHour, bucketMinutes: 30, calendar: utc),
+      isoDate("2026-03-19T15:00:00Z")
+    )
+    // Hourly accounts keep legacy behavior: upload through `currentTime`.
+    XCTAssertEqual(
+      BackgroundStepSyncCoordinator.hourlySamplesEnd(
+        currentTime: midHour, bucketMinutes: 60, calendar: utc),
+      midHour
+    )
+  }
+
+  func testPerformSyncExcludesOpenHourOnSubHourlyAccounts() {
+    let poster = MockPoster()
+    let stepReader = MockStepReader(result: .success([
+      BackgroundDailyStep(date: "2026-03-19", steps: 8765)
+    ]))
+    let nowTime = isoDate("2026-03-19T15:30:00Z")
+    let coordinator = BackgroundStepSyncCoordinator(
+      stateStore: MockStateStore(
+        sessionToken: "session-token",
+        backendBaseURL: URL(string: "http://127.0.0.1:3000"),
+        healthAuthorized: true,
+        stepSampleBucketMinutes: 5
+      ),
+      challengeSyncDaysFetcher: MockChallengeSyncDaysFetcher(syncDays: [
+        BackgroundSyncDay(
+          date: "2026-03-19",
+          startsAt: isoDate("2026-03-19T04:00:00Z"),
+          endsAt: nowTime
+        )
+      ]),
+      stepReader: stepReader,
+      poster: poster,
+      now: { nowTime }
+    )
+
+    let expectation = expectation(description: "sync completion")
+    coordinator.performSync { result in
+      XCTAssertEqual(result, .success)
+      expectation.fulfill()
+    }
+
+    wait(for: [expectation], timeout: 1)
+    let range = stepReader.capturedHourlyRange
+    XCTAssertNotNil(range)
+    // End is the top of the current LOCAL hour — never `now` mid-hour.
+    XCTAssertEqual(
+      range?.to,
+      Calendar.current.dateInterval(of: .hour, for: nowTime)?.start
+    )
+  }
+
+  func testPerformSyncKeepsOpenHourOnHourlyAccounts() {
+    let poster = MockPoster()
+    let stepReader = MockStepReader(result: .success([
+      BackgroundDailyStep(date: "2026-03-19", steps: 8765)
+    ]))
+    let nowTime = isoDate("2026-03-19T15:30:00Z")
+    let coordinator = BackgroundStepSyncCoordinator(
+      stateStore: MockStateStore(
+        sessionToken: "session-token",
+        backendBaseURL: URL(string: "http://127.0.0.1:3000"),
+        healthAuthorized: true
+      ),
+      challengeSyncDaysFetcher: MockChallengeSyncDaysFetcher(syncDays: [
+        BackgroundSyncDay(
+          date: "2026-03-19",
+          startsAt: isoDate("2026-03-19T04:00:00Z"),
+          endsAt: nowTime
+        )
+      ]),
+      stepReader: stepReader,
+      poster: poster,
+      now: { nowTime }
+    )
+
+    let expectation = expectation(description: "sync completion")
+    coordinator.performSync { result in
+      XCTAssertEqual(result, .success)
+      expectation.fulfill()
+    }
+
+    wait(for: [expectation], timeout: 1)
+    XCTAssertEqual(stepReader.capturedHourlyRange?.to, nowTime)
+  }
+
   func testStepSyncRequestPayloadDetection() {
     XCTAssertTrue(
       BackgroundSyncPushPayload.isStepSyncRequest([
@@ -203,6 +304,7 @@ private struct MockStateStore: BackgroundStepSyncStateStoring {
   let sessionToken: String?
   let backendBaseURL: URL?
   let healthAuthorized: Bool
+  var stepSampleBucketMinutes: Int = 60
 }
 
 private final class MockChallengeSyncDaysFetcher: ChallengeSyncDaysFetching {
@@ -224,6 +326,7 @@ private final class MockChallengeSyncDaysFetcher: ChallengeSyncDaysFetching {
 private final class MockStepReader: StepReading {
   private let result: Result<[BackgroundDailyStep], Error>
   var capturedSyncDays: [BackgroundSyncDay] = []
+  var capturedHourlyRange: (from: Date, to: Date)?
 
   init(result: Result<[BackgroundDailyStep], Error>) {
     self.result = result
@@ -235,6 +338,15 @@ private final class MockStepReader: StepReading {
   ) {
     capturedSyncDays = syncDays
     completion(result)
+  }
+
+  func fetchHourlyStepCounts(
+    from startDate: Date,
+    to endDate: Date,
+    completion: @escaping (Result<[[String: Any]], Error>) -> Void
+  ) {
+    capturedHourlyRange = (from: startDate, to: endDate)
+    completion(.success([]))
   }
 }
 

@@ -8,11 +8,13 @@ import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
+import '../../widgets/app_refresh_indicator.dart';
 import '../../utils/at_name.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
+import '../referral_screen.dart';
 
 enum _SearchResultState { addable, friends, pending }
 
@@ -29,6 +31,10 @@ class FriendsTab extends StatefulWidget {
   // overlay can measure the real search box.
   final GlobalKey? tutorialSearchKey;
 
+  // Optional tutorial spotlight anchor for the invite-friends button (moved
+  // here from Profile). Null in the shipped app.
+  final GlobalKey? tutorialInviteKey;
+
   const FriendsTab({
     super.key,
     required this.authService,
@@ -39,6 +45,7 @@ class FriendsTab extends StatefulWidget {
     this.displayName,
     this.onOpenProfile,
     this.tutorialSearchKey,
+    this.tutorialInviteKey,
   });
 
   @override
@@ -351,16 +358,15 @@ class _FriendsTabState extends State<FriendsTab> {
             child: GestureDetector(
               onTap: () => FocusScope.of(context).unfocus(),
               behavior: HitTestBehavior.opaque,
-              child: RefreshIndicator(
+              child: AppRefreshIndicator(
                 onRefresh: _handleRefresh,
-                color: AppColors.of(context).accent,
-                backgroundColor: AppColors.of(context).parchment,
                 child: CustomScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   slivers: [
                     SliverToBoxAdapter(
                       child: _buildFriendsHeader(showBackButton: canPop),
                     ),
+                    SliverToBoxAdapter(child: _buildInviteButton()),
                     SliverToBoxAdapter(child: _buildBody(state: state)),
                   ],
                 ),
@@ -486,6 +492,38 @@ class _FriendsTabState extends State<FriendsTab> {
               ),
               if (_showDropdown) _buildSearchDropdown(),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Invite CTA (moved here from Profile). Gold pill so it reads on the green
+  /// checker backdrop, PulseGlow to draw the eye, and it carries the tutorial
+  /// spotlight anchor for the invite step.
+  Widget _buildInviteButton() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 2),
+      child: KeyedSubtree(
+        key: widget.tutorialInviteKey,
+        child: PulseGlow(
+          child: PillButton(
+            label: 'INVITE FRIENDS & EARN COINS',
+            icon: Icons.group_add_rounded,
+            variant: PillButtonVariant.secondary,
+            fontSize: 13,
+            fullWidth: true,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ReferralScreen(
+                    authService: widget.authService,
+                    backendApiService: _backendApiService,
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ),

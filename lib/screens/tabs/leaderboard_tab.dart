@@ -7,6 +7,7 @@ import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
+import '../../widgets/app_refresh_indicator.dart';
 import '../../utils/at_name.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/filter_dropdown.dart';
@@ -343,10 +344,8 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
         ),
         Padding(
           padding: EdgeInsets.only(top: topInset + 14, bottom: tabBarHeight),
-          child: RefreshIndicator(
+          child: AppRefreshIndicator(
             onRefresh: _loadLeaderboard,
-            color: AppColors.of(context).accent,
-            backgroundColor: AppColors.of(context).parchment,
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [

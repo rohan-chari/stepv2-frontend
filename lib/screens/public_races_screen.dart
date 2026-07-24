@@ -6,6 +6,7 @@ import '../models/race_handoff_result.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
+import '../widgets/app_refresh_indicator.dart';
 import '../utils/at_name.dart';
 import '../utils/team_race.dart';
 import '../utils/tournament.dart';
@@ -514,10 +515,8 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
               // filter (hidden during loading / error / the empty state).
               if (_hasAnyContent) _buildContentFilterPills(),
               Expanded(
-                child: RefreshIndicator(
+                child: AppRefreshIndicator(
                   onRefresh: _load,
-                  color: AppColors.of(context).accent,
-                  backgroundColor: AppColors.of(context).parchment,
                   child: _buildBody(),
                 ),
               ),
@@ -570,57 +569,58 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
         _featuredTournaments.isNotEmpty || _userTournaments.isNotEmpty;
 
     if (races.isEmpty && !hasTournaments && _featuredRaces.isEmpty) {
+      final showFeaturedControls =
+          _filter == _PublicFilter.all || _filter == _PublicFilter.featured;
       return LayoutBuilder(
         builder: (context, constraints) {
           return SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: ConstrainedBox(
               constraints: BoxConstraints(minHeight: constraints.maxHeight),
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 32,
-                    vertical: 48,
+              child: Column(
+                // Centered as a block within the min-height box (no Expanded —
+                // this lives inside a scrollable, so flex children are illegal).
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Keep the auto-join opt-in discoverable even with no live
+                  // featured races — the toggle governs FUTURE auto-joins.
+                  if (showFeaturedControls) ...[
+                    const SizedBox(height: 12),
+                    _buildAutoJoinCard(),
+                    const SizedBox(height: 32),
+                  ],
+                  Icon(
+                    Icons.flag_outlined,
+                    size: 48,
+                    color: AppColors.of(context).textMid.withValues(alpha: 0.6),
                   ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.flag_outlined,
-                        size: 48,
-                        color: AppColors.of(
-                          context,
-                        ).textMid.withValues(alpha: 0.6),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'NO PUBLIC RACES',
-                        textAlign: TextAlign.center,
-                        style: PixelText.title(
-                          size: 18,
-                          color: AppColors.of(context).textMid,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Check back later or start your own.',
-                        textAlign: TextAlign.center,
-                        style: PixelText.body(
-                          size: 14,
-                          color: AppColors.of(context).textMid,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      PillButton(
-                        label: 'CREATE A RACE',
-                        variant: PillButtonVariant.primary,
-                        fontSize: 13,
-                        onPressed: _navigateToCreateRace,
-                      ),
-                    ],
+                  const SizedBox(height: 12),
+                  Text(
+                    'NO PUBLIC RACES',
+                    textAlign: TextAlign.center,
+                    style: PixelText.title(
+                      size: 18,
+                      color: AppColors.of(context).textMid,
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Check back later or start your own.',
+                    textAlign: TextAlign.center,
+                    style: PixelText.body(
+                      size: 14,
+                      color: AppColors.of(context).textMid,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  PillButton(
+                    label: 'CREATE A RACE',
+                    variant: PillButtonVariant.primary,
+                    fontSize: 13,
+                    onPressed: _navigateToCreateRace,
+                  ),
+                ],
               ),
             ),
           );
@@ -642,6 +642,11 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
     final racesVisible = showRaces && races.isNotEmpty;
 
     final children = <Widget>[
+      // Auto-join is a featured-races setting, so surface it (visibly, not
+      // buried behind the gear) whenever the featured group is in view — even
+      // when no featured race is live yet, since the toggle governs FUTURE
+      // auto-joins. Reuses the exact same authService-bound toggle as the sheet.
+      if (showFeatured) _buildAutoJoinCard(),
       if (featuredVisible) ...[
         // FEATURED (moved here from the Races tab): the seeded daily/weekly
         // race strip first, then the seeded brackets.
@@ -665,7 +670,10 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
       ],
     ];
 
-    if (children.isEmpty) {
+    // The auto-join card isn't "content" — base the empty note on the actual
+    // race/tournament groups so a filter with nothing still shows its note.
+    final hasContent = featuredVisible || userVisible || racesVisible;
+    if (!hasContent) {
       // The selected filter has nothing, but the screen has other content — a
       // small note keeps the pill state legible.
       children.add(_buildFilterEmpty(_emptyNoteForFilter()));
@@ -821,6 +829,18 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
         text,
         style: PixelText.title(size: 14, color: AppColors.of(context).textDark),
       ),
+    );
+  }
+
+  /// Visible, labeled auto-join card pinned above the FEATURED group. Reuses
+  /// the same [_FeaturedAutoJoinToggle] the settings sheet uses, so it's bound
+  /// to the identical `authService.autoJoinFeaturedRaces` /
+  /// `updateFeaturedAutoJoin` state — no second source of truth. The gear sheet
+  /// stays reachable from the FEATURED header for parity.
+  Widget _buildAutoJoinCard() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: _FeaturedAutoJoinToggle(authService: widget.authService),
     );
   }
 

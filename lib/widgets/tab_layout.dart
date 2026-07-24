@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'content_board.dart';
 import '../styles.dart';
+import 'app_refresh_indicator.dart';
 
 /// Single full-screen section layout for non-home tabs.
 class TabLayout extends StatelessWidget {
@@ -126,10 +127,8 @@ class TabLayout extends StatelessWidget {
 
   Widget _buildScrollable(BuildContext context) {
     if (onRefresh != null) {
-      return RefreshIndicator(
+      return AppRefreshIndicator(
         onRefresh: onRefresh!,
-        color: AppColors.of(context).accent,
-        backgroundColor: AppColors.of(context).parchment,
         child: AlwaysScrollableScrollView(
           padding: const EdgeInsets.only(top: 4, bottom: 16),
           child: _buildScrollableContent(context),

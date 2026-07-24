@@ -12,6 +12,7 @@ import '../services/notification_service.dart';
 import '../services/race_chat_service.dart';
 import '../services/race_feed_service.dart';
 import '../styles.dart';
+import '../widgets/app_refresh_indicator.dart';
 import '../utils/at_name.dart';
 import '../utils/effect_polarity.dart';
 import '../utils/powerup_error_copy.dart';
@@ -2591,10 +2592,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                             ),
                           ),
                         )
-                      : RefreshIndicator(
+                      : AppRefreshIndicator(
                           onRefresh: _loadDetails,
-                          color: AppColors.of(context).accent,
-                          backgroundColor: AppColors.of(context).parchment,
                           child: SingleChildScrollView(
                             physics: const AlwaysScrollableScrollPhysics(),
                             padding: EdgeInsets.zero,
@@ -6475,6 +6474,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final isMe = userId == _myUserId;
     final isStealthed = p['stealthed'] == true;
     final isFinished = p['finishedAt'] != null;
+    // Additive backend field (item 6). Absent/null on older backends → no
+    // badge and no fire aura.
+    final currentMultiplier = (p['currentMultiplier'] as num?)?.toDouble();
 
     final plank = LeaderboardPlank(
       rank: rank,
@@ -6493,6 +6495,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       stepsSize: large ? 18 : 16,
       verticalPadding: large ? 11 : 8,
       effectIcons: _effectIconsFor(userId),
+      currentMultiplier: currentMultiplier,
     );
 
     // Tap a non-self, non-stealthed runner to open a friend-request sheet.

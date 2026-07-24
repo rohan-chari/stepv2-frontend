@@ -7,6 +7,7 @@ import '../../models/loadable.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
+import '../../widgets/app_refresh_indicator.dart';
 import '../../utils/at_name.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/home_course_track.dart'
@@ -208,10 +209,8 @@ class _RankedTabState extends State<RankedTab> {
         ),
         Padding(
           padding: EdgeInsets.only(top: topInset + 14, bottom: tabBarHeight),
-          child: RefreshIndicator(
+          child: AppRefreshIndicator(
             onRefresh: _load,
-            color: AppColors.of(context).accent,
-            backgroundColor: AppColors.of(context).parchment,
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [SliverToBoxAdapter(child: _buildShell())],
