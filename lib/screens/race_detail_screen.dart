@@ -4390,6 +4390,29 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     );
   }
 
+  /// The live "Banked X/Y coins" subtitle for a viewer-owned Piggy Bank, or
+  /// null to fall back to the static effect-rail copy.
+  ///
+  /// The backend attaches `piggyBank` (bankedCoins/coinCap/windowSteps) only to
+  /// the owner's own PIGGY_BANK entry, and only when the snapshot will actually
+  /// mint. An older backend omits it and a kill-switched snapshot never carries
+  /// it, so this returns null unless `bankedCoins` is present and num-parseable
+  /// (JSON numbers can arrive as `int` or `double`). `coinCap` is optional: a
+  /// missing/unparseable cap degrades to "Banked X coins".
+  String? _piggyBankSubtitle(Map<String, dynamic> e) {
+    if (e['type'] != 'PIGGY_BANK') return null;
+    final piggy = e['piggyBank'];
+    if (piggy is! Map) return null;
+    final banked = piggy['bankedCoins'];
+    if (banked is! num) return null;
+    final bankedCoins = banked.toInt();
+    final cap = piggy['coinCap'];
+    if (cap is num) {
+      return 'Banked $bankedCoins/${cap.toInt()} coins';
+    }
+    return 'Banked $bankedCoins coins';
+  }
+
   Widget _effectRow(
     Map<String, dynamic> e, {
     required Color tint,
@@ -4401,7 +4424,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     // Shipped chain: short description, else the FULL description, else
     // empty. 11 of 26 types have no short copy and rely on the
     // description here — omitting the line would blank their subtitle.
-    final desc = PowerupCopy.effectRailSubtitleFor(type);
+    // A viewer-owned Piggy Bank swaps in a live "banked so far" counter when
+    // the backend attaches the optional `piggyBank` snapshot. Absent/malformed
+    // (an older backend, or a kill-switched snapshot) falls through to the
+    // static copy unchanged — the field and every subfield are read defensively
+    // and parsed num-safely, since JSON numbers aren't guaranteed to be `int`.
+    final desc = _piggyBankSubtitle(e) ?? PowerupCopy.effectRailSubtitleFor(type);
     // A debuff leads with who did it — the attacker matters more than the
     // mechanic, and leading keeps the name safe from end-ellipsis.
     final attacker = isBoost

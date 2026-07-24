@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:health/health.dart';
 import 'package:step_tracker/services/health_service.dart';
+import 'package:step_tracker/models/step_sample_data.dart';
 
 /// Fake keyed on the (start, end) window so a coarse hourly window and a fine
 /// sub-window that share a start (e.g. 8:00-9:00 and 8:00-8:05) resolve to
@@ -229,6 +230,81 @@ void main() {
       expect(perBucketSum, greaterThanOrEqualTo(hourlyFloor));
       expect(perBucketSum, 100);
       expect(hourlyFloor, 90);
+    });
+  });
+
+  // ---- 2026-07-23 prod incident: fine buckets must sum to the hourly truth.
+  //
+  // Per-window HealthKit reads count a raw recording chunk IN FULL in every
+  // fine bucket it straddles, so pass-2 buckets could sum to more steps than
+  // the (deduped, correct) pass-1 hourly aggregate — DrAmogh's 9-10PM hour
+  // read 4,456 hourly but 7,115 across its 5-min buckets, inflating race
+  // scores ~47%. The fine read is only trusted for SHAPE: each active hour's
+  // buckets are normalized so they sum exactly to that hour's aggregate.
+  group('getStepSamples normalizes fine buckets to the hourly aggregate', () {
+    Map<String, int?> hourWith(int hourTotal, Map<int, int> fineByMinute) {
+      final m = <String, int?>{
+        _WindowFakeHealth.key(
+          DateTime(2026, 5, 1, 9),
+          DateTime(2026, 5, 1, 10),
+        ): hourTotal,
+      };
+      fineByMinute.forEach((minute, steps) {
+        m[_WindowFakeHealth.key(
+          DateTime(2026, 5, 1, 9, minute),
+          DateTime(2026, 5, 1, 9, minute + 5),
+        )] = steps;
+      });
+      return m;
+    }
+
+    Future<List<StepSampleData>> read(Map<String, int?> values) {
+      final service = HealthService(health: _WindowFakeHealth(values));
+      return service.getStepSamples(
+        startTime: DateTime(2026, 5, 1, 9),
+        endTime: DateTime(2026, 5, 1, 10),
+        bucketMinutes: 5,
+      );
+    }
+
+    test('inflated fine buckets are scaled DOWN to the hour total', () async {
+      // Fine buckets sum to 1500 but the hour truthfully holds 1000.
+      final samples = await read(hourWith(1000, {0: 900, 5: 300, 10: 300}));
+      final sum = samples.fold<int>(0, (a, s) => a + s.steps);
+      expect(sum, 1000, reason: 'hour must sum exactly to the aggregate');
+      // Shape preserved: first bucket keeps its 3:1:1 dominance.
+      expect(samples.first.steps, 600);
+    });
+
+    test('undercounting fine buckets are scaled UP to the hour total', () async {
+      final samples = await read(hourWith(1000, {0: 400, 30: 400}));
+      final sum = samples.fold<int>(0, (a, s) => a + s.steps);
+      expect(sum, 1000);
+    });
+
+    test('matching fine buckets pass through unchanged', () async {
+      final samples = await read(hourWith(150, {0: 100, 10: 50}));
+      expect(samples.length, 2);
+      expect(samples[0].steps, 100);
+      expect(samples[1].steps, 50);
+    });
+
+    test('active hour with zero/null fine reads falls back to one hourly sample',
+        () async {
+      // Pass 1 sees 500 steps but every fine read returns 0 (or errors) —
+      // the steps must not vanish from the payload.
+      final samples = await read(hourWith(500, {}));
+      expect(samples.length, 1);
+      expect(samples.single.periodStart, DateTime(2026, 5, 1, 9).toUtc());
+      expect(samples.single.periodEnd, DateTime(2026, 5, 1, 10).toUtc());
+      expect(samples.single.steps, 500);
+    });
+
+    test('rounding never changes the hour sum (largest remainder)', () async {
+      // 3 equal buckets into 100: 33/33/34 (any order), sum exactly 100.
+      final samples = await read(hourWith(100, {0: 7, 5: 7, 10: 7}));
+      final sum = samples.fold<int>(0, (a, s) => a + s.steps);
+      expect(sum, 100);
     });
   });
 }

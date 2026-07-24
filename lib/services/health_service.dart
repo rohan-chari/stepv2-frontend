@@ -283,22 +283,75 @@ class HealthService {
 
     // Pass 2: subdivide only the active hours into fine buckets.
     final fineWindows = <_Window>[];
+    // Each active hour keeps its window, its trusted total, and the index
+    // range of its fine buckets inside the batched fineWindows list, so the
+    // normalization below can slice per hour after ONE batched read.
+    final activeHours = <({_Window hour, int total, int fineStart, int fineCount})>[];
     for (var i = 0; i < hourWindows.length; i++) {
       final total = hourTotals[i];
       if (total != null && total > 0) {
-        fineWindows.addAll(
-          buildBucketWindows(
-            hourWindows[i].start,
-            hourWindows[i].end,
-            bucketMinutes,
-          ),
+        final buckets = buildBucketWindows(
+          hourWindows[i].start,
+          hourWindows[i].end,
+          bucketMinutes,
         );
+        activeHours.add((
+          hour: hourWindows[i],
+          total: total,
+          fineStart: fineWindows.length,
+          fineCount: buckets.length,
+        ));
+        fineWindows.addAll(buckets);
       }
     }
     if (fineWindows.isEmpty) return <StepSampleData>[];
 
     final fineTotals = await _fineTotals(fineWindows, startTime, endTime);
-    return _emitSamples(fineWindows, fineTotals);
+
+    // Fine reads are trusted for SHAPE only, never for magnitude: a raw
+    // HealthKit recording chunk that straddles a bucket boundary is counted in
+    // full by every fine window it touches, so fine buckets can sum well past
+    // the (deduped, correct) hourly aggregate — the 2026-07-23 incident
+    // inflated an hour by ~60% and race scores by ~47%. Normalize each hour's
+    // buckets to sum exactly to its pass-1 aggregate; an hour whose fine reads
+    // all came back 0/null still ships as one hourly sample so no steps vanish.
+    final samples = <StepSampleData>[];
+    for (final h in activeHours) {
+      final windows = fineWindows.sublist(h.fineStart, h.fineStart + h.fineCount);
+      final raw = fineTotals
+          .sublist(h.fineStart, h.fineStart + h.fineCount)
+          .map((v) => (v == null || v < 0) ? 0 : v)
+          .toList();
+      final rawSum = raw.fold<int>(0, (a, v) => a + v);
+      if (rawSum <= 0) {
+        samples.addAll(_emitSamples([h.hour], [h.total]));
+        continue;
+      }
+      final scaled = rawSum == h.total ? raw : scaleToTotal(raw, h.total);
+      samples.addAll(_emitSamples(windows, scaled));
+    }
+    return samples;
+  }
+
+  /// Scales [values] (non-negative, not all zero) so they sum exactly to
+  /// [total], preserving proportions. Largest-remainder rounding: floor each
+  /// scaled value, then hand the leftover units to the largest fractional
+  /// remainders, so the sum is exact without any value going negative.
+  @visibleForTesting
+  static List<int> scaleToTotal(List<int> values, int total) {
+    final sum = values.fold<int>(0, (a, v) => a + v);
+    final floors = List<int>.filled(values.length, 0);
+    final remainders = List<({int index, double frac})>.generate(values.length, (i) {
+      final exact = values[i] * total / sum;
+      floors[i] = exact.floor();
+      return (index: i, frac: exact - exact.floor());
+    });
+    var leftover = total - floors.fold<int>(0, (a, v) => a + v);
+    remainders.sort((a, b) => b.frac.compareTo(a.frac));
+    for (var i = 0; leftover > 0 && i < remainders.length; i++, leftover--) {
+      floors[remainders[i].index]++;
+    }
+    return floors;
   }
 
   /// Reads accurate step totals for the pass-2 fine [windows]. On iOS this is
