@@ -355,7 +355,15 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
     );
   }
 
+  // Prefer the backend copy catalog so duration text stays truthful when the
+  // backend restandardizes powerup windows (spec §3.4/§6). The bundled
+  // `_powerupEntries` string is only a last-resort fallback for a type the
+  // catalog somehow doesn't cover.
   String? _descriptionFor(String type) {
+    final catalogDesc = PowerupCopy.descriptionFor(type);
+    if (catalogDesc.trim().isNotEmpty) {
+      return catalogDesc;
+    }
     for (final entry in _powerupEntries) {
       if (entry.type == type) return entry.description;
     }
@@ -539,7 +547,8 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
                                       ),
                                     ),
                                     Text(
-                                      entry.description,
+                                      _descriptionFor(entry.type) ??
+                                          entry.description,
                                       style: PixelText.body(
                                         size: 12,
                                         color: AppColors.of(context).textMid,

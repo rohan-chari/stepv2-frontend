@@ -70,7 +70,8 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
   // bracket size) and re-clamps when the bracket size changes.
   bool _isTournament = false;
   int _bracketSize = 8;
-  int _matchupDuration = 1;
+  // §3.5 — rounds are at least 2 days; 1-day matchups were removed.
+  int _matchupDuration = 2;
 
   @override
   void initState() {

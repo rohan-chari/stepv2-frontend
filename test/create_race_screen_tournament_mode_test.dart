@@ -123,7 +123,7 @@ void main() {
     expect(find.byKey(const Key('bracket-size-4')), findsOneWidget);
     expect(find.byKey(const Key('bracket-size-8')), findsOneWidget);
     expect(find.byKey(const Key('bracket-size-16')), findsOneWidget);
-    expect(find.byKey(const Key('matchup-duration-1')), findsOneWidget);
+    expect(find.byKey(const Key('matchup-duration-1')), findsNothing);
     expect(find.byKey(const Key('matchup-duration-2')), findsOneWidget);
     expect(find.byKey(const Key('matchup-duration-3')), findsOneWidget);
   });

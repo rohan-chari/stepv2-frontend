@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../constants/powerup_copy.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
@@ -14,6 +15,15 @@ import '../widgets/trail_sign.dart';
 import 'admin_accessory_tuner_screen.dart';
 import 'admin_balance_config_screen.dart';
 import 'admin_powerup_shop_screen.dart';
+
+/// Prefer the backend copy catalog so duration text tracks the server's
+/// standardized powerup windows (spec §3.4/§6); fall back to the bundled
+/// string only when the catalog doesn't cover the type.
+String _adminPowerupDescription(String type, String fallback) {
+  final catalog = PowerupCopy.descriptionFor(type);
+  if (catalog.trim().isNotEmpty) return catalog;
+  return fallback;
+}
 
 const _powerupEntries = [
   (
@@ -738,7 +748,10 @@ class AdminScreen extends StatelessWidget {
                                       ),
                                     ),
                                     Text(
-                                      entry.description,
+                                      _adminPowerupDescription(
+                                        entry.type,
+                                        entry.description,
+                                      ),
                                       style: PixelText.body(
                                         size: 11,
                                         color: AppColors.of(context).textMid,

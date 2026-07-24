@@ -42,8 +42,10 @@ const int kTournamentBuyInMin = 10;
 /// The legal bracket sizes (D1 — powers of two, full-only).
 const List<int> kTournamentBracketSizes = [4, 8, 16];
 
-/// The legal matchup durations in days (D2).
-const List<int> kTournamentDurations = [1, 2, 3];
+/// The legal matchup durations in days (D2). 1-day rounds were dropped so a
+/// single busy day can't decide a bracket (spec §3.5); the server clamps any
+/// stale 1 a frozen client still sends.
+const List<int> kTournamentDurations = [2, 3];
 
 /// Number of rounds for a bracket size (log2). Defensive default of 0 for an
 /// unexpected size so the UI simply draws nothing rather than crashing.

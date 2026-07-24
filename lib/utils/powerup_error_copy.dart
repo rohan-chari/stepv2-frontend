@@ -16,6 +16,12 @@ String powerupUseErrorCopy(Object error) {
         return 'Your Rainstorm is already active in this race.';
       case 'NO_ELIGIBLE_TARGETS':
         return "Nobody else is out running to rain on right now.";
+      case 'TARGET_ASLEEP':
+        // Drill Sergeant blocked during the target's sleep window. Keep the
+        // server's human message (it names the hours) and lead with a sleepy
+        // cue. POWERUPS_DISABLED intentionally isn't special-cased — its
+        // server message is already user-facing and falls through below.
+        return '😴 ${error.message}';
       default:
         // Unknown/absent code: show whatever the backend said (old-backend
         // compat — its message is already user-facing).

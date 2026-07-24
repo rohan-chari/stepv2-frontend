@@ -3804,12 +3804,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                     children: [
                       if (_powerupData != null &&
                           _powerupData!['enabled'] == true) ...[
-                        _buildInventoryContent(),
+                        // §3.2 — the "X steps to go" helper sits ABOVE the
+                        // box/item slots so the earn-progress reads before the
+                        // slots it fills.
                         if (_buildNextPowerupHelper() case final helper?)
                           Padding(
-                            padding: const EdgeInsets.only(top: 10),
+                            padding: const EdgeInsets.only(bottom: 10),
                             child: helper,
                           ),
+                        _buildInventoryContent(),
                       ] else
                         Row(
                           children: [
@@ -4275,7 +4278,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             .toList() ??
         [];
 
-    if (effects.isEmpty) return const SizedBox.shrink();
+    // §4.4 — character powers (herd bonus, zoomies) are additive fields on the
+    // viewer's own progress participant, not powerup effect rows. They're
+    // rendered as their own boost-polarity group so a lone capybara with no
+    // powerups still sees the effect. Absent ⇒ empty list ⇒ nothing rendered.
+    final characterRows = _buildCharacterEffectRows();
+
+    if (effects.isEmpty && characterRows.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
     final boosts = effects.where(_effectIsBoost).toList();
     final debuffs = effects.where((e) => !_effectIsBoost(e)).toList();
@@ -4299,7 +4310,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             effects: boosts,
             isBoost: true,
           ),
-        if (boosts.isNotEmpty && debuffs.isNotEmpty) const SizedBox(height: 10),
+        if (boosts.isNotEmpty && characterRows.isNotEmpty)
+          const SizedBox(height: 10),
+        // Character powers are unconditionally self-beneficial, so they carry
+        // the same boost polarity effect_polarity.dart assigns a null-source
+        // self-buff — always the green BOOSTS tint, never DEBUFFS.
+        if (characterRows.isNotEmpty)
+          _characterEffectGroup(rows: characterRows, tint: palette.feedBoost),
+        if ((boosts.isNotEmpty || characterRows.isNotEmpty) &&
+            debuffs.isNotEmpty)
+          const SizedBox(height: 10),
         if (debuffs.isNotEmpty)
           _effectGroup(
             label: 'DEBUFFS',
@@ -4316,6 +4336,226 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           ),
         ),
       ],
+    );
+  }
+
+  /// The signed-in viewer's own participant on the latest progress payload, or
+  /// null before progress loads / if they aren't listed. Character powers
+  /// (herd bonus, zoomies) ride additively on this row.
+  Map<String, dynamic>? get _myProgressParticipant {
+    final progress = _progressState.data ?? _progress;
+    final participants = (progress?['participants'] as List?)
+        ?.cast<Map<String, dynamic>>();
+    if (participants == null) return null;
+    for (final p in participants) {
+      if ((p['userId'] as String?) == _myUserId) return p;
+    }
+    return null;
+  }
+
+  /// §4.4 — builds the character-power rows (herd bonus + active zoomies) from
+  /// the viewer's participant. Every field is read defensively: an older
+  /// backend omits the blocks entirely (⇒ empty list ⇒ the group renders
+  /// nothing), and a malformed/partial block degrades to nothing rather than
+  /// crashing.
+  List<Widget> _buildCharacterEffectRows() {
+    final me = _myProgressParticipant;
+    if (me == null) return const [];
+    final rows = <Widget>[];
+
+    final herd = me['characterBonus'];
+    if (herd is Map) {
+      final perDay = _readNullableInt(herd['perDay']) ?? 0;
+      final bonusSteps = _readNullableInt(herd['bonusSteps']) ?? 0;
+      // Show only when the herd is actually earning something — a lone
+      // capybara still earns its base per-day, so perDay > 0 is the gate.
+      if (perDay > 0) {
+        rows.add(_herdBonusRow(perDay: perDay, bonusSteps: bonusSteps));
+      }
+    }
+
+    final zoomies = me['zoomies'];
+    if (zoomies is Map && zoomies['active'] == true) {
+      rows.add(_zoomiesRow(endsAtStr: zoomies['endsAt'] as String?));
+    }
+
+    return rows;
+  }
+
+  /// Boost-tinted panel wrapping the character-power rows, mirroring the visual
+  /// language of [_effectGroup]'s BOOSTS group (pets-marked header + tinted
+  /// panel) so the rail reads as one system.
+  Widget _characterEffectGroup({
+    required List<Widget> rows,
+    required Color tint,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Row(
+            children: [
+              Container(
+                width: 18,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: tint.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: Icon(Icons.pets_rounded, size: 13, color: tint),
+              ),
+              const SizedBox(width: 6),
+              Text('CHARACTER', style: PixelText.title(size: 12, color: tint)),
+              const SizedBox(width: 6),
+              Text(
+                '${rows.length}',
+                style: PixelText.title(
+                  size: 12,
+                  color: tint.withValues(alpha: 0.6),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Container(
+                  height: 1,
+                  color: tint.withValues(alpha: 0.25),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            color: tint.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: tint.withValues(alpha: 0.25)),
+          ),
+          child: Column(
+            children: [
+              for (var i = 0; i < rows.length; i++) ...[
+                if (i > 0)
+                  Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: tint.withValues(alpha: 0.12),
+                  ),
+                rows[i],
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// A single character-power row styled like [_effectRow]: a tinted glyph, a
+  /// name + subtitle column, and a trailing value badge. [glow] wraps the row
+  /// in a pulsing halo for the zoomies hype moment.
+  Widget _characterEffectChipRow({
+    required IconData icon,
+    required Color tint,
+    required String name,
+    required String subtitle,
+    required String badge,
+    bool glow = false,
+  }) {
+    final palette = AppColors.of(context);
+    final row = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      child: Row(
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: tint.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 18, color: tint),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: PixelText.title(size: 13, color: palette.textDark),
+                ),
+                if (subtitle.isNotEmpty)
+                  Text(
+                    subtitle,
+                    style: PixelText.body(size: 11, color: palette.textMid),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: palette.woodDark,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              badge,
+              style: PixelText.title(size: 11, color: palette.textLight),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (!glow) return row;
+    // Juice for the 3x hype window — an obvious pulsing halo, no confetti
+    // (that's reserved for race finishes).
+    return PulseGlow(
+      color: tint,
+      borderRadius: 10,
+      minAlpha: 0.25,
+      maxAlpha: 0.7,
+      child: row,
+    );
+  }
+
+  /// Herd bonus (+N/day per capybara in the race). Positive, never a debuff.
+  Widget _herdBonusRow({required int perDay, required int bonusSteps}) {
+    return _characterEffectChipRow(
+      icon: Icons.groups_rounded,
+      tint: AppColors.of(context).feedBoost,
+      name: 'Herd Bonus',
+      subtitle: '+${_formatSteps(perDay)} steps/day from your herd',
+      badge: '+${_formatSteps(bonusSteps)}',
+    );
+  }
+
+  /// Zoomies — the 3x-for-10-minutes corgi window. Rendered only while active,
+  /// with a live countdown to [endsAtStr] and a pulsing glow.
+  Widget _zoomiesRow({required String? endsAtStr}) {
+    String timeLabel = 'Active';
+    if (endsAtStr != null) {
+      final endsAt = DateTime.tryParse(endsAtStr);
+      if (endsAt != null) {
+        final remaining = endsAt.difference(_countdownNow);
+        if (remaining.isNegative) {
+          timeLabel = 'Ending...';
+        } else if (remaining.inMinutes > 0) {
+          timeLabel = '${remaining.inMinutes}m ${remaining.inSeconds % 60}s';
+        } else {
+          timeLabel = '${remaining.inSeconds}s';
+        }
+      }
+    }
+    return _characterEffectChipRow(
+      icon: Icons.bolt_rounded,
+      tint: AppColors.of(context).feedBoost,
+      name: 'Zoomies',
+      subtitle: '3x steps — go go go!',
+      badge: timeLabel,
+      glow: true,
     );
   }
 
