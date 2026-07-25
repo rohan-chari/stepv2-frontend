@@ -41,6 +41,12 @@ class TournamentDetailScreen extends StatefulWidget {
   final List<Map<String, dynamic>> friends;
   final BackendApiService backendApiService;
 
+  /// Counts per-second countdown ticks so a test can prove the timer really is
+  /// cancelled once a round enters settlement (spec §4). The state class is
+  /// private, so this is the only seam a widget test can observe it through.
+  @visibleForTesting
+  static int debugCountdownTicks = 0;
+
   @override
   State<TournamentDetailScreen> createState() => _TournamentDetailScreenState();
 }
@@ -168,9 +174,23 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
   void _startCountdown() {
     _countdownTimer?.cancel();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() => _now = DateTime.now());
+      if (!mounted) return;
+      TournamentDetailScreen.debugCountdownTicks++;
+      setState(() => _now = DateTime.now());
+      // Once the round's clock has run out the bar shows a settling state with
+      // no seconds in it, so a per-second repaint buys nothing — the 60s poll
+      // is what surfaces the settled result.
+      final ends = _countdownEndsAt;
+      if (ends != null && !_now.isBefore(ends)) {
+        _countdownTimer?.cancel();
+        _countdownTimer = null;
+      }
     });
   }
+
+  /// The `endsAt` the visible countdown bar is currently counting toward, so
+  /// the tick above can stop itself when it passes.
+  DateTime? _countdownEndsAt;
 
   // -- Actions -------------------------------------------------------------
 
@@ -703,7 +723,14 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
   }
 
   /// Full-width "ROUND ENDS IN {time}" HUD bar (its own row under the tiles).
+  ///
+  /// Once `ends` passes, the whole bar swaps to a settling state: the round is
+  /// genuinely over and the server catches up on the raceExpiry cron's 5-minute
+  /// tick, so counting down further would be a lie (spec §4). The refresh tile
+  /// beside it stays the manual way to pull the result.
   Widget _countdownBar(DateTime ends) {
+    _countdownEndsAt = ends;
+    final settled = _hasSettled(ends);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -717,19 +744,51 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
       ),
       child: Row(
         children: [
-          Icon(Icons.timer_rounded, size: 22, color: _tileGold),
+          Icon(
+            settled ? Icons.hourglass_bottom_rounded : Icons.timer_rounded,
+            size: 22,
+            color: _tileGold,
+          ),
           const SizedBox(width: 9),
           Text(
-            'ROUND ENDS IN',
+            settled ? 'SETTLING' : 'ROUND ENDS IN',
             style: HomeText.label(
               size: 11,
               color: Colors.white.withValues(alpha: 0.7),
             ),
           ),
-          const Spacer(),
-          Text(
-            _countdownShort(ends),
-            style: PixelText.title(size: 20, color: Colors.white),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 260),
+                  switchInCurve: Curves.easeOutBack,
+                  transitionBuilder: (child, anim) => FadeTransition(
+                    opacity: anim,
+                    child: ScaleTransition(scale: anim, child: child),
+                  ),
+                  child: settled
+                      ? Text(
+                          'Results in a few minutes',
+                          key: const ValueKey('settling'),
+                          style: PixelText.title(
+                            size: 12,
+                            color: Colors.white.withValues(alpha: 0.92),
+                          ),
+                        )
+                      : Text(
+                          _countdownShort(ends),
+                          key: const ValueKey('ticking'),
+                          style:
+                              PixelText.title(size: 20, color: Colors.white),
+                        ),
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -859,16 +918,26 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
   }
 
   /// Short countdown for a HUD tile (no "left" suffix — the label supplies it).
+  ///
+  /// Under a minute this drops to seconds — the old code floored to minutes and
+  /// spent the last 59 seconds of every round reading "0m" (spec §4). Callers
+  /// handle the elapsed case themselves via [_hasSettled]; this only ever
+  /// formats a positive remainder.
   String _countdownShort(DateTime ends) {
     final diff = ends.difference(_now);
-    if (diff.isNegative) return 'soon';
+    if (diff.isNegative) return '0s';
     final d = diff.inDays;
     final h = diff.inHours % 24;
     final mn = diff.inMinutes % 60;
     if (d > 0) return '${d}d ${h}h';
     if (h > 0) return '${h}h ${mn}m';
-    return '${mn}m';
+    if (mn > 0) return '${mn}m';
+    return '${diff.inSeconds}s';
   }
+
+  /// True once a round's clock has run out. The server then settles on the
+  /// `raceExpiry` cron's 5-minute tick, so this can be true for several minutes.
+  bool _hasSettled(DateTime ends) => !_now.isBefore(ends);
 
   DateTime? _currentRoundEndsAt(Map<String, dynamic> t) {
     final cur = Tournament.currentRound(t);

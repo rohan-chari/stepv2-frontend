@@ -116,6 +116,23 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   List<Map<String, dynamic>> _equippedAccessories = const [];
   // Equipped base character assetKey (e.g. 'corgi_puppy'); null = capybara.
   String? _equippedAnimal;
+
+  /// Contract §4.4 — the server's `characterPowersEnabled` kill switch, read
+  /// off whichever payload carries it. It rides additively, so we accept it
+  /// from either the home batch or the shop catalog and default to FALSE when
+  /// no payload mentions it (older backend, or the switch flipped off).
+  bool _characterPowersEnabled = false;
+
+  /// Reads the additive flag defensively: only an explicit `true` turns the
+  /// home power chip on, and a payload that omits the key leaves the current
+  /// value alone rather than silently clearing it.
+  void _applyCharacterPowersFlag(Object? payload) {
+    if (payload is! Map) return;
+    final raw = payload['characterPowersEnabled'];
+    if (raw is! bool) return;
+    if (_characterPowersEnabled == raw) return;
+    if (mounted) setState(() => _characterPowersEnabled = raw);
+  }
   Loadable<Map<String, dynamic>> _shopCatalogState = const Loadable.initial();
   Map<String, dynamic>? _raceCard;
   bool _raceCardLoading = true;
@@ -1447,6 +1464,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   void _applyShopCatalog(Map<String, dynamic> catalog) {
+    _applyCharacterPowersFlag(catalog);
     final equipped = catalog['equipped'] as Map<String, dynamic>? ?? {};
     // The CHARACTER entry is the base animal, not a wearable — keep it out of
     // the accessory overlay list.
@@ -1569,6 +1587,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           _raceCardLoading = false;
         });
       }
+      _applyCharacterPowersFlag(data);
     } catch (_) {
       // Card is non-critical; ignore fetch errors and keep last value.
       if (mounted) {
@@ -2199,6 +2218,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                           friendsStepsState: _friendsStepsState,
                           equippedAccessories: _equippedAccessories,
                           equippedAnimal: _equippedAnimal,
+                          characterPowersEnabled: _characterPowersEnabled,
                           shopCatalogState: _shopCatalogState,
                           onOpenRacesTab: _openRacesTab,
                           onOpenLeaderboardTab: _openLeaderboardTab,

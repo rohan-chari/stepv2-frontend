@@ -2561,6 +2561,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                       // (TOURNAMENT_RACE_LOCKED), so hide the options entry
                       // entirely (spec §6.5/§9).
                       if (_race != null &&
+                          !_isSpectator &&
                           _race!['tournamentId'] == null &&
                           (_race!['isCreator'] as bool? ?? false) &&
                           (_race!['status'] == 'PENDING' ||
@@ -5097,6 +5098,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   bool _canMutePlacementAlerts() {
     final race = _race;
     if (race == null) return false;
+    // A spectator gets no pushes for this race, and the toggle is a write.
+    if (_isSpectator) return false;
     return race['myStatus'] == 'ACCEPTED' && race['status'] == 'ACTIVE';
   }
 
@@ -5224,6 +5227,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   bool get _canPostMessage {
     final race = _race;
     if (race == null) return false;
+    // Spectator-ness is derived from the participants list, not from a backend
+    // field (spec §5), so a differently-versioned backend can never hand a
+    // bracket spectator a composer whose posts the server would 403.
+    if (_isSpectator) return false;
     return race['myStatus'] == 'ACCEPTED' &&
         race['status'] != 'COMPLETED' &&
         race['status'] != 'CANCELLED';

@@ -12,6 +12,7 @@ import '../../utils/team_race.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../widgets/arcade_fx.dart';
+import '../../widgets/character_power_chip.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/global_event_banner.dart';
 import '../../widgets/pill_button.dart';
@@ -51,6 +52,12 @@ class HomeTab extends StatelessWidget {
   final List<Map<String, dynamic>> equippedAccessories;
   // Equipped base character assetKey; null = capybara.
   final String? equippedAnimal;
+
+  /// Mirrors the server's `characterPowersEnabled` (contract §4.4). It is a
+  /// KILL SWITCH read per request, so the power chip renders only while this is
+  /// true — an older backend that omits the field, or a flip back to off, hides
+  /// the chip on its own rather than advertising a power that does nothing.
+  final bool characterPowersEnabled;
   final Loadable<Map<String, dynamic>>? shopCatalogState;
   // Retained for backward compatibility with callers (e.g. the tutorial
   // preview) that still pass it. The add-friends hero button that consumed it
@@ -100,6 +107,7 @@ class HomeTab extends StatelessWidget {
     this.friendsStepsState,
     this.equippedAccessories = const [],
     this.equippedAnimal,
+    this.characterPowersEnabled = false,
     this.shopCatalogState,
     this.incomingFriendRequests = 0,
     this.onOpenRacesTab,
@@ -209,6 +217,25 @@ class HomeTab extends StatelessWidget {
                                 ),
                               ),
                             ),
+                            // The equipped character's power, right under the
+                            // hero so it reads as "this is MY capy's power"
+                            // (spec §9). Collapsed until tapped; hidden whenever
+                            // the server's kill switch is off or absent.
+                            if (characterPowersEnabled)
+                              StaggerIn(
+                                index: 0,
+                                child: Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    16,
+                                    14,
+                                    16,
+                                    0,
+                                  ),
+                                  child: CharacterPowerChip(
+                                    animal: equippedAnimal,
+                                  ),
+                                ),
+                              ),
                             // Streak + shop live just under the hero scene so the
                             // world stays clean; they're the first card to bounce in.
                             StaggerIn(

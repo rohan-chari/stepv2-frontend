@@ -24,6 +24,61 @@ import '../get_coins_screen.dart';
 // them. Currently only IMPOSTER, disabled server-side (item #3).
 const _hiddenShopPowerupTypes = {'IMPOSTER'};
 
+/// The watch-ads-to-unlock rules (spec §7 / contract §4.3).
+///
+/// The server owns these numbers so they can be retuned without an App Store
+/// cycle. [legacy] reproduces exactly what shipped binaries compile in, and is
+/// what we fall back to when the backend is older than the `adUnlock` block —
+/// a missing block must never change today's behaviour.
+class _AdUnlockConfig {
+  const _AdUnlockConfig({
+    required this.maxShortfall,
+    required this.coinsPerAd,
+    required this.maxAds,
+    required this.remainingToday,
+  });
+
+  final int maxShortfall;
+  final int coinsPerAd;
+  final int maxAds;
+
+  /// Ad unlocks left today. `null` means the backend didn't say — treat that as
+  /// "allowed" so an older backend keeps working; only an explicit `0` hides
+  /// the button, which is what makes us fail BEFORE the ad rather than after.
+  final int? remainingToday;
+
+  static const legacy = _AdUnlockConfig(
+    maxShortfall: 150,
+    coinsPerAd: 50,
+    maxAds: 3,
+    remainingToday: null,
+  );
+
+  bool get hasUnlockLeft => remainingToday == null || remainingToday! > 0;
+
+  /// Reads the block defensively: any missing or non-numeric field falls back
+  /// to its legacy value rather than zeroing the flow out.
+  static _AdUnlockConfig fromJson(Object? raw) {
+    if (raw is! Map) return legacy;
+    int intOr(String key, int fallback) {
+      final value = raw[key];
+      final parsed = value is num ? value.toInt() : null;
+      return parsed != null && parsed > 0 ? parsed : fallback;
+    }
+
+    final remainingRaw = raw['remainingToday'];
+    return _AdUnlockConfig(
+      maxShortfall: intOr('maxShortfall', legacy.maxShortfall),
+      coinsPerAd: intOr('coinsPerAd', legacy.coinsPerAd),
+      maxAds: intOr('maxAds', legacy.maxAds),
+      remainingToday: remainingRaw is num ? remainingRaw.toInt() : null,
+    );
+  }
+}
+
+/// How the tile should offer an unaffordable item.
+enum _AffordRoute { affordable, watchAds, getCoins }
+
 enum _ShopSection { store, inventory }
 
 enum _ShopCategory { powerups, characters, accessories }
@@ -116,8 +171,10 @@ class _ShopTabState extends State<ShopTab> {
   _PowerupFilter _powerupFilter = _PowerupFilter.all;
   _PowerupSort _powerupSort = _PowerupSort.nameAsc;
 
-  // Within 150 coins of a powerup → offer the watch-ads unlock (item 10).
-  static const _maxAdUnlockShortfall = 150;
+  // Ad-unlock rules. The server serves them in the catalog's `adUnlock` block
+  // (contract §4.3); when it is absent — an older backend — we keep the
+  // compiled-in legacy behaviour byte for byte.
+  _AdUnlockConfig _adUnlock = _AdUnlockConfig.legacy;
   static const _rarityOrder = {
     'COMMON': 0,
     'RARE': 1,
@@ -165,6 +222,13 @@ class _ShopTabState extends State<ShopTab> {
 
       // Powerups are loaded best-effort and never block the cosmetics catalog.
       await _loadPowerups(token);
+
+      // The ad-unlock rules ride on either catalog (contract §4.3). Prefer the
+      // powerup store's copy when it carried one, else the cosmetics catalog's,
+      // else the legacy compiled-in rules.
+      _adUnlock = _powerupAdUnlockBlock != null
+          ? _AdUnlockConfig.fromJson(_powerupAdUnlockBlock)
+          : _AdUnlockConfig.fromJson(catalog['adUnlock']);
 
       if (mounted) {
         setState(() {
@@ -227,12 +291,19 @@ class _ShopTabState extends State<ShopTab> {
           .toList();
       _powerupInventory = inventory;
       _powerupsAvailable = true;
+      final adUnlock = results[0]['adUnlock'];
+      _powerupAdUnlockBlock = adUnlock is Map ? adUnlock : null;
     } catch (_) {
       _powerupStoreItems = const [];
       _powerupInventory = const {};
       _powerupsAvailable = false;
+      _powerupAdUnlockBlock = null;
     }
   }
+
+  /// The raw `adUnlock` block from the powerup store catalog, or null when the
+  /// backend didn't serve one.
+  Map<dynamic, dynamic>? _powerupAdUnlockBlock;
 
   Future<void> _purchase(Map<String, dynamic> item) async {
     if (_saving) return;
@@ -732,7 +803,7 @@ class _ShopTabState extends State<ShopTab> {
                   description,
                   textAlign: TextAlign.center,
                   style: PixelText.body(
-                    size: 14,
+                    size: 15,
                     color: AppColors.of(context).textMid,
                   ),
                 ),
@@ -755,7 +826,7 @@ class _ShopTabState extends State<ShopTab> {
         color: color.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(label, style: PixelText.title(size: 10, color: color)),
+      child: Text(label, style: PixelText.title(size: 11, color: color)),
     );
   }
 
@@ -806,32 +877,73 @@ class _ShopTabState extends State<ShopTab> {
   Widget _storeCosmeticTile(Map<String, dynamic> item) {
     final name = item['name'] as String? ?? 'Accessory';
     final price = item['priceCoins'] as int? ?? 0;
+    // Cosmetics get the same watch-ads top-up powerups have (spec §7), driven
+    // by the same server-served rules.
+    final route = _routeFor(price);
+    final adsNeeded = _adsNeededFor(price);
     void openSheet() => _showItemSheet(
         art: _cosmeticArt(item, iconSize: 48),
         name: name,
         slotLabel: _slotLabels[item['slot']],
         description: item['description'] as String? ?? '',
         actions: [
-          PillButton(
-            label: 'BUY · $price',
-            icon: Icons.monetization_on_rounded,
-            variant: PillButtonVariant.secondary,
-            fontSize: 14,
-            fullWidth: true,
-            onPressed: _saving
-                ? null
-                : () {
-                    Navigator.of(context).pop();
-                    _purchase(item);
-                  },
-          ),
+          ?_adUnlockCapNotice(price),
+          switch (route) {
+            _AffordRoute.affordable => PillButton(
+                label: 'BUY · $price',
+                icon: Icons.monetization_on_rounded,
+                variant: PillButtonVariant.secondary,
+                fontSize: 14,
+                fullWidth: true,
+                onPressed: _saving
+                    ? null
+                    : () {
+                        Navigator.of(context).pop();
+                        _purchase(item);
+                      },
+              ),
+            _AffordRoute.watchAds => PillButton(
+                label: adsNeeded == 1
+                    ? 'WATCH 1 AD TO UNLOCK'
+                    : 'WATCH $adsNeeded ADS TO UNLOCK',
+                icon: Icons.smart_display_rounded,
+                variant: PillButtonVariant.secondary,
+                fontSize: 13,
+                fullWidth: true,
+                onPressed: _saving
+                    ? null
+                    : () {
+                        Navigator.of(context).pop();
+                        _unlockCosmeticWithAds(item, adsNeeded);
+                      },
+              ),
+            _AffordRoute.getCoins => PillButton(
+                label: 'GET MORE COINS',
+                icon: Icons.add_circle_rounded,
+                variant: PillButtonVariant.secondary,
+                fontSize: 14,
+                fullWidth: true,
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  _openGetCoins();
+                },
+              ),
+          },
         ],
       );
     return _ShopTile(
       art: _cosmeticArt(item),
       name: name,
-      stripLabel: '$price',
-      stripIcon: Icons.monetization_on_rounded,
+      stripLabel: switch (route) {
+        _AffordRoute.affordable => '$price',
+        _AffordRoute.watchAds => _watchAdsStripLabel(adsNeeded),
+        _AffordRoute.getCoins => 'Get coins',
+      },
+      stripIcon: switch (route) {
+        _AffordRoute.affordable => Icons.monetization_on_rounded,
+        _AffordRoute.watchAds => Icons.smart_display_rounded,
+        _AffordRoute.getCoins => Icons.add_circle_rounded,
+      },
       stripEnabled: !_saving,
       onStrip: openSheet,
       onTap: openSheet,
@@ -1065,6 +1177,50 @@ class _ShopTabState extends State<ShopTab> {
   }
 
   // ── Item 10: watch-ads-to-unlock / get-coins on an unaffordable tile ────
+
+  /// Which action an item at [price] offers, entirely from the server's
+  /// `adUnlock` rules (spec §7). A `remainingToday` of 0 removes the ad route
+  /// altogether — the daily cap has to fail BEFORE the ad, never after it.
+  _AffordRoute _routeFor(int price) {
+    final shortfall = price - widget.authService.coins;
+    if (shortfall <= 0) return _AffordRoute.affordable;
+    if (shortfall > _adUnlock.maxShortfall) return _AffordRoute.getCoins;
+    if (!_adUnlock.hasUnlockLeft) return _AffordRoute.getCoins;
+    return _AffordRoute.watchAds;
+  }
+
+  int _adsNeededFor(int price) {
+    if (_routeFor(price) != _AffordRoute.watchAds) return 0;
+    final shortfall = price - widget.authService.coins;
+    return math.max(
+      1,
+      math.min(_adUnlock.maxAds, (shortfall / _adUnlock.coinsPerAd).ceil()),
+    );
+  }
+
+  String _watchAdsStripLabel(int adsNeeded) =>
+      adsNeeded == 1 ? 'Watch 1 ad' : 'Watch $adsNeeded ads';
+
+  /// A one-line explanation for the detail sheet when the ONLY reason the ad
+  /// route is missing is that today's unlock is already spent. Without it the
+  /// sheet silently looks like the item is simply too expensive.
+  Widget? _adUnlockCapNotice(int price) {
+    if (_adUnlock.hasUnlockLeft) return null;
+    final shortfall = price - widget.authService.coins;
+    if (shortfall <= 0 || shortfall > _adUnlock.maxShortfall) return null;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Text(
+        'You’ve used today’s ad unlock. Come back tomorrow.',
+        textAlign: TextAlign.center,
+        style: PixelText.body(
+          size: 13,
+          color: AppColors.of(context).textMid,
+        ),
+      ),
+    );
+  }
+
   void _openGetCoins() {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -1131,6 +1287,7 @@ class _ShopTabState extends State<ShopTab> {
         sku: sku,
         idempotencyKey:
             '${widget.authService.userId ?? 'user'}-pwunlock-${DateTime.now().microsecondsSinceEpoch}',
+        localDate: _localDate(),
       );
       final coins = result['coins'] as int?;
       if (coins != null) {
@@ -1150,6 +1307,97 @@ class _ShopTabState extends State<ShopTab> {
     }
   }
 
+  /// The device's local calendar day, so the server's once-per-day ad-unlock
+  /// cap uses the user's midnight rather than UTC's (contract §4.1/§4.2).
+  String _localDate() {
+    final now = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${now.year}-${two(now.month)}-${two(now.day)}';
+  }
+
+  /// The cosmetic/character twin of [_unlockPowerupWithAds], against the
+  /// sibling `POST /shop/:sku/unlock-with-ads` endpoint (contract §4.2). A
+  /// backend that doesn't have it 404s; the API layer caches that as
+  /// unsupported for the session and we route the user to Get-coins instead —
+  /// no crash, no retry loop.
+  Future<void> _unlockCosmeticWithAds(
+    Map<String, dynamic> item,
+    int adsNeeded,
+  ) async {
+    if (_saving) return;
+    final token = widget.authService.authToken;
+    final sku = item['sku'] as String?;
+    if (token == null || token.isEmpty || sku == null || adsNeeded < 1) return;
+
+    if (!_backendApiService.shopAdUnlockSupported) {
+      _openGetCoins();
+      return;
+    }
+
+    final controller = _newAdController();
+    if (!controller.isSupported) {
+      showErrorToast(context, 'Ads aren’t available on this device.');
+      return;
+    }
+
+    final userId = widget.authService.userId ?? 'user';
+    // Distinct SSV custom-data prefix from the powerup flow (contract §4.2).
+    final customData = 'shop_unlock:$userId:$sku';
+    final name = item['name'] as String? ?? 'Item';
+
+    setState(() => _saving = true);
+    try {
+      for (var k = 1; k <= adsNeeded; k++) {
+        if (!mounted) return;
+        showInfoToast(context, 'Ad $k of $adsNeeded…');
+        await controller.load(userId: userId, localDate: customData);
+        if (!controller.isReady) {
+          if (mounted) {
+            showErrorToast(context, 'Ad didn’t load — no coins spent.');
+          }
+          return;
+        }
+        final earned = await controller.showAndAwaitReward();
+        if (!earned) {
+          if (mounted) {
+            showErrorToast(context, 'Ad not finished — no coins spent.');
+          }
+          return;
+        }
+      }
+
+      final result = await _backendApiService.unlockShopItemWithAds(
+        identityToken: token,
+        sku: sku,
+        idempotencyKey:
+            '${widget.authService.userId ?? 'user'}-shopunlock-${DateTime.now().microsecondsSinceEpoch}',
+        localDate: _localDate(),
+      );
+      final coins = result['coins'] as int?;
+      if (coins != null) {
+        await widget.authService.updateCoins(coins);
+      }
+      await _loadCatalog();
+      if (mounted) showInfoToast(context, '$name unlocked!');
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      // A 404 means this backend has no cosmetic ad-unlock at all. Say so once
+      // and send the user down the coin route rather than looping on ads.
+      if (error.statusCode == 404) {
+        _openGetCoins();
+        return;
+      }
+      showErrorToast(context, error.message);
+    } catch (_) {
+      if (mounted) {
+        showErrorToast(context, 'Couldn’t unlock this item. Please try again.');
+      }
+    } finally {
+      controller.dispose();
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   Widget _storePowerupTile(Map<String, dynamic> item) {
     final name = item['name'] as String? ?? 'Powerup';
     final price = (item['priceCoins'] as num?)?.toInt() ?? 0;
@@ -1160,17 +1408,19 @@ class _ShopTabState extends State<ShopTab> {
     // defensively off the auth service.
     final coins = widget.authService.coins;
     final affordable = coins >= price;
-    final shortfall = price - coins;
-    final canAdUnlock =
-        !affordable && shortfall > 0 && shortfall <= _maxAdUnlockShortfall;
-    final adsNeeded = canAdUnlock ? math.min(3, (shortfall / 50).ceil()) : 0;
+    final route = _routeFor(price);
+    final canAdUnlock = route == _AffordRoute.watchAds;
+    final adsNeeded = _adsNeededFor(price);
 
     void openSheet() => _showItemSheet(
       art: _powerupArt(type, fallbackSize: 64),
       name: name,
       badge: owned > 0 ? 'OWNED x$owned' : null,
       description: item['description'] as String? ?? '',
-      actions: [_powerupSheetAction(item, price, affordable, canAdUnlock, adsNeeded)],
+      actions: [
+        ?_adUnlockCapNotice(price),
+        _powerupSheetAction(item, price, affordable, canAdUnlock, adsNeeded),
+      ],
     );
 
     // Strip label reflects the primary action; the tap always opens the sheet
@@ -1181,7 +1431,7 @@ class _ShopTabState extends State<ShopTab> {
       stripLabel = '$price';
       stripIcon = Icons.monetization_on_rounded;
     } else if (canAdUnlock) {
-      stripLabel = adsNeeded == 1 ? 'Watch 1 ad' : 'Watch $adsNeeded ads';
+      stripLabel = _watchAdsStripLabel(adsNeeded);
       stripIcon = Icons.smart_display_rounded;
     } else {
       stripLabel = 'Get coins';
@@ -1592,11 +1842,18 @@ class _ShopTile extends StatelessWidget {
                           ),
                           child: Text(
                             badge!,
+                            // `textLight`, NOT `parchment` (spec §6).
+                            // `parchment` is a SURFACE token — cream by day,
+                            // near-black navy at night — so using it as a text
+                            // color painted near-black on the dark-green
+                            // `roofMid` pill. `textLight` is cream in both
+                            // palettes, which is what the day design intended.
+                            // The `highlighted` branch is already correct.
                             style: PixelText.title(
-                              size: 8,
+                              size: 10,
                               color: highlighted
                                   ? AppColors.of(context).textDark
-                                  : AppColors.of(context).parchment,
+                                  : AppColors.of(context).textLight,
                             ),
                           ),
                         ),
@@ -1604,27 +1861,31 @@ class _ShopTile extends StatelessWidget {
                   ],
                 ),
               ),
-              // Name
+              // Name. The box height tracks the type size (spec §8): two lines
+              // of 13pt pixel type need ~38dp, and under-sizing the box is what
+              // clips the second line.
+              //
+              // The grid is four tiles wide, so a tile is only ~68–85dp across.
+              // Pinning every name at 13pt would push two-word names like
+              // "Ghost Pepper" and "Signal Jammer" into an ellipsis on a 360dp
+              // phone — a regression on the 11pt they fit at today. So the name
+              // takes 13pt when it fits and steps down toward the old size only
+              // as far as it must: short names get the bigger type, long ones
+              // are never worse off than before.
               Container(
-                height: 34,
+                height: 38,
                 alignment: Alignment.center,
                 padding: const EdgeInsets.symmetric(horizontal: 5),
-                child: Text(
-                  name,
-                  maxLines: 2,
-                  textAlign: TextAlign.center,
-                  overflow: TextOverflow.ellipsis,
-                  style: PixelText.title(
-                    size: 11,
-                    color: AppColors.of(context).textDark,
-                  ),
+                child: _FittedTileName(
+                  name: name,
+                  color: AppColors.of(context).textDark,
                 ),
               ),
               // Action strip
               GestureDetector(
                 onTap: stripEnabled ? onStrip : null,
                 child: Container(
-                  height: 30,
+                  height: 34,
                   decoration: BoxDecoration(
                     color: onStrip == null
                         ? AppColors.of(context).parchmentDark
@@ -1657,7 +1918,7 @@ class _ShopTile extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: PixelText.title(
-                            size: 12,
+                            size: 13,
                             color: onStrip == null
                                 ? AppColors.of(context).textMid
                                 : AppColors.of(context).textDark,
@@ -1672,6 +1933,58 @@ class _ShopTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The tile's item name at the largest size that still fits two lines.
+///
+/// Spec §8 raised the nominal name size to 13pt, but the shop grid is four
+/// tiles wide (a ~68dp tile on a 320dp phone), so a fixed 13pt would ellipsise
+/// names that fit today. This picks the biggest size from [_sizes] whose
+/// two-line layout fits the tile, so the type gets bigger wherever there's room
+/// and never smaller than what shipped.
+class _FittedTileName extends StatelessWidget {
+  const _FittedTileName({required this.name, required this.color});
+
+  final String name;
+  final Color color;
+
+  /// Largest first. The floor is deliberately below the old 11pt: on the
+  /// narrowest phones a long name would otherwise still ellipsise.
+  static const _sizes = [13.0, 12.0, 11.0, 10.0, 9.0];
+
+  @override
+  Widget build(BuildContext context) {
+    final textScaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        var chosen = _sizes.last;
+        for (final size in _sizes) {
+          final painter = TextPainter(
+            text: TextSpan(text: name, style: PixelText.title(size: size)),
+            maxLines: 2,
+            textAlign: TextAlign.center,
+            textDirection: direction,
+            textScaler: textScaler,
+          )..layout(maxWidth: constraints.maxWidth);
+          final fits =
+              !painter.didExceedMaxLines && painter.height <= constraints.maxHeight;
+          painter.dispose();
+          if (fits) {
+            chosen = size;
+            break;
+          }
+        }
+        return Text(
+          name,
+          maxLines: 2,
+          textAlign: TextAlign.center,
+          overflow: TextOverflow.ellipsis,
+          style: PixelText.title(size: chosen, color: color),
+        );
+      },
     );
   }
 }

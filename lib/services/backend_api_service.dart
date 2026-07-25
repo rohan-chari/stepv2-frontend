@@ -137,6 +137,7 @@ class BackendApiService {
   EndpointSupport _syncV2Support = EndpointSupport.unknown;
   EndpointSupport _discoverySummarySupport = EndpointSupport.unknown;
   EndpointSupport _raceResolutionStatusSupport = EndpointSupport.unknown;
+  EndpointSupport _shopAdUnlockSupport = EndpointSupport.unknown;
   // Identity guards: capability caches are keyed to (user, base URL). A plain
   // token refresh for the SAME user must not clear them.
   String? _sessionUserId;
@@ -152,11 +153,17 @@ class BackendApiService {
   EndpointSupport get raceResolutionStatusSupport =>
       _raceResolutionStatusSupport;
 
+  /// False once this session has seen a 404 from the cosmetic ad-unlock
+  /// endpoint, so the shop can route to Get-coins without watching an ad first.
+  bool get shopAdUnlockSupported =>
+      _shopAdUnlockSupport != EndpointSupport.unsupported;
+
   /// Clears every session-scoped capability cache. Call on sign-out.
   void resetSessionCapabilities() {
     _syncV2Support = EndpointSupport.unknown;
     _discoverySummarySupport = EndpointSupport.unknown;
     _raceResolutionStatusSupport = EndpointSupport.unknown;
+    _shopAdUnlockSupport = EndpointSupport.unknown;
     _sessionUserId = null;
   }
 
@@ -169,6 +176,7 @@ class BackendApiService {
       _syncV2Support = EndpointSupport.unknown;
       _discoverySummarySupport = EndpointSupport.unknown;
       _raceResolutionStatusSupport = EndpointSupport.unknown;
+      _shopAdUnlockSupport = EndpointSupport.unknown;
       _sessionUserId = userId;
       _sessionBaseUrl = baseUrl;
     }
@@ -2714,14 +2722,62 @@ class BackendApiService {
     required String identityToken,
     required String sku,
     required String idempotencyKey,
+    String? localDate,
   }) async {
+    // `localDate` is additive and OPTIONAL on the server (contract §4.1) —
+    // every already-shipped binary omits it and the backend falls back to its
+    // own date. New builds send it so the once-per-day cap uses the user's
+    // midnight, not UTC's.
     final response = await _sendJsonRequest(
       method: 'POST',
       path: '/shop/powerups/unlock-with-ads',
-      body: {'sku': sku, 'idempotencyKey': idempotencyKey},
+      body: {
+        'sku': sku,
+        'idempotencyKey': idempotencyKey,
+        'localDate': localDate ?? _formatDate(DateTime.now()),
+      },
       identityToken: identityToken,
       headers: {'Idempotency-Key': idempotencyKey},
     );
+
+    return _decodeJsonResponse(response);
+  }
+
+  /// `POST /shop/:sku/unlock-with-ads` (contract §4.2) — the cosmetic/character
+  /// sibling of [unlockPowerupWithAds]. Additive endpoint: an older backend
+  /// 404s, which flips the session capability cache to `unsupported` so the
+  /// shop stops offering the ad route and sends the user to Get-coins instead.
+  /// Only a 404 does that; a 5xx or timeout leaves the cache untouched.
+  Future<Map<String, dynamic>> unlockShopItemWithAds({
+    required String identityToken,
+    required String sku,
+    required String idempotencyKey,
+    String? localDate,
+  }) async {
+    if (_shopAdUnlockSupport == EndpointSupport.unsupported) {
+      throw ApiException(
+        'Ad unlocks aren’t available yet.',
+        statusCode: 404,
+      );
+    }
+
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/shop/${Uri.encodeComponent(sku)}/unlock-with-ads',
+      body: {
+        'sku': sku,
+        'idempotencyKey': idempotencyKey,
+        'localDate': localDate ?? _formatDate(DateTime.now()),
+      },
+      identityToken: identityToken,
+      headers: {'Idempotency-Key': idempotencyKey},
+    );
+
+    if (response.statusCode == 404) {
+      _shopAdUnlockSupport = EndpointSupport.unsupported;
+    } else if (response.statusCode >= 200 && response.statusCode < 300) {
+      _shopAdUnlockSupport = EndpointSupport.supported;
+    }
 
     return _decodeJsonResponse(response);
   }
