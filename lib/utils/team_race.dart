@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../styles.dart';
+
 /// The two sides of a team race. Team races always have exactly two teams
 /// (TR summary); an individual race has none.
 enum RaceTeam { teamA, teamB }
@@ -29,11 +31,18 @@ RaceTeam? parseRaceTeam(dynamic value) {
 
 /// Team colors for chrome (plaques, glow, pennants, rope). Locked palette from
 /// TR-802/803: teams are drawn straight from the app's own palette so they sit
-/// inside the wood/parchment world instead of clashing — Team A is campfire
-/// clay ([AppColors.of(context).pillTerra]), Team B is forest green ([AppColors.of(context).pillGreen]/
-/// roof greens). Warm-vs-cool keeps the two sides instantly readable.
+/// inside the wood/parchment world instead of clashing — Team A is trail gold,
+/// Team B is forest green. Warm-vs-cool keeps the two sides instantly readable.
+///
+/// NIGHT MODE: the daytime gold is a bright daylight ochre that screams against
+/// the dark board, so at night Team A follows the palette's twilight-violet
+/// migration (the same flip [AppPalette] already applies to `pillGold`) and
+/// Team B rides the night greens. Resolve through the `*Of(context)` accessors
+/// (or [TeamRace.color] with a context) so the flip actually happens; the bare
+/// constants are the LIGHT values and exist only for contexts that have no
+/// BuildContext to hand.
 abstract final class TeamColors {
-  // Team A — trail gold (warm).
+  // Team A — trail gold (warm) by day, twilight violet at night.
   static const teamA = Color(0xFFECC86A); // pillGold
   static const teamALight = Color(0xFFF4DD9C);
   static const teamADark = Color(0xFF9A7A2D); // pillGoldShadow
@@ -42,6 +51,22 @@ abstract final class TeamColors {
   static const teamB = Color(0xFF4F8A6A); // roofLight / pillGreen
   static const teamBLight = Color(0xFF77A98B); // roofRidge
   static const teamBDark = Color(0xFF2E5D47); // roofMid
+
+  /// Night-only lift for the Team A plaque gradient — the violet equivalent of
+  /// the daytime `teamALight`. `pillGold` has no "light" token to borrow.
+  static const _teamALightNight = Color(0xFF8B76B4);
+
+  static Color teamAOf(BuildContext context) => AppColors.of(context).pillGold;
+  static Color teamALightOf(BuildContext context) =>
+      AppColors.of(context).isDark ? _teamALightNight : teamALight;
+  static Color teamADarkOf(BuildContext context) =>
+      AppColors.of(context).pillGoldShadow;
+
+  static Color teamBOf(BuildContext context) => AppColors.of(context).pillGreen;
+  static Color teamBLightOf(BuildContext context) =>
+      AppColors.of(context).roofRidge;
+  static Color teamBDarkOf(BuildContext context) =>
+      AppColors.of(context).roofMid;
 }
 
 /// Defensive read/format helpers over the race/participant JSON maps that flow
@@ -74,15 +99,39 @@ abstract final class TeamRace {
     return team == RaceTeam.teamA ? 'Team A' : 'Team B';
   }
 
-  /// Chrome color for a side.
-  static Color color(RaceTeam team) =>
-      team == RaceTeam.teamA ? TeamColors.teamA : TeamColors.teamB;
+  /// Chrome color for a side. Pass [context] wherever one is available so the
+  /// side reads correctly in night mode; without it these fall back to the
+  /// light-mode constants.
+  static Color color(RaceTeam team, [BuildContext? context]) {
+    if (context == null) {
+      return team == RaceTeam.teamA ? TeamColors.teamA : TeamColors.teamB;
+    }
+    return team == RaceTeam.teamA
+        ? TeamColors.teamAOf(context)
+        : TeamColors.teamBOf(context);
+  }
 
-  static Color colorLight(RaceTeam team) =>
-      team == RaceTeam.teamA ? TeamColors.teamALight : TeamColors.teamBLight;
+  static Color colorLight(RaceTeam team, [BuildContext? context]) {
+    if (context == null) {
+      return team == RaceTeam.teamA
+          ? TeamColors.teamALight
+          : TeamColors.teamBLight;
+    }
+    return team == RaceTeam.teamA
+        ? TeamColors.teamALightOf(context)
+        : TeamColors.teamBLightOf(context);
+  }
 
-  static Color colorDark(RaceTeam team) =>
-      team == RaceTeam.teamA ? TeamColors.teamADark : TeamColors.teamBDark;
+  static Color colorDark(RaceTeam team, [BuildContext? context]) {
+    if (context == null) {
+      return team == RaceTeam.teamA
+          ? TeamColors.teamADark
+          : TeamColors.teamBDark;
+    }
+    return team == RaceTeam.teamA
+        ? TeamColors.teamADarkOf(context)
+        : TeamColors.teamBDarkOf(context);
+  }
 
   /// "2v2" style format label from a per-side size.
   static String formatLabel(int teamSize) => '${teamSize}v$teamSize';

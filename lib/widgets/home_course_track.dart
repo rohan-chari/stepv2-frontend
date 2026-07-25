@@ -688,7 +688,15 @@ class CapybaraSpriteWithAccessories extends StatelessWidget {
               maxWidth: double.infinity,
               alignment: Alignment.topLeft,
               child: Transform.translate(
-                offset: Offset(-bodyFrame * capybaraSize, 0),
+                // dy is the ground-line correction (see
+                // AnimalSprite.baselineOffset): sheets pad their subject
+                // differently, so without it a corgi stands lower than a
+                // capybara. The accessory overlays apply the SAME shift via
+                // baselineShiftFor(), so body and gear move together.
+                offset: Offset(
+                  -bodyFrame * capybaraSize,
+                  sprite.baselineOffset * capybaraSize,
+                ),
                 child: Image.asset(
                   sprite.asset,
                   width: capybaraSize * sprite.frameCount,
@@ -818,11 +826,15 @@ class _AccessoryOverlay extends StatelessWidget {
       capybaraSize,
       fallback: isHeadSlot ? -1 : 0,
     );
-    final offsetY = _metadataOffset(
-      _metadataDouble(metadata, 'offsetY'),
-      capybaraSize,
-      fallback: isHeadSlot ? 2 : 0,
-    );
+    // Ground-line correction, applied on top of the tuned placement so gear
+    // rides along when the body is lifted (see AnimalSprite.baselineOffset).
+    final offsetY =
+        _metadataOffset(
+          _metadataDouble(metadata, 'offsetY'),
+          capybaraSize,
+          fallback: isHeadSlot ? 2 : 0,
+        ) +
+        animalSpriteFor(animal).baselineOffset * capybaraSize;
     final rotation =
         _metadataDouble(metadata, 'rotation') ?? (isHeadSlot ? -0.14 : 0.0);
     final scale = _metadataDouble(metadata, 'scale') ?? 1.0;
@@ -975,11 +987,14 @@ class _BehindCapybaraAccessoryOverlay extends StatelessWidget {
       capybaraSize,
       fallback: 0,
     );
-    final offsetY = _metadataOffset(
-      _metadataDouble(metadata, 'offsetY'),
-      capybaraSize,
-      fallback: 0,
-    );
+    // Same ground-line correction the body gets, so a cape/tail stays attached.
+    final offsetY =
+        _metadataOffset(
+          _metadataDouble(metadata, 'offsetY'),
+          capybaraSize,
+          fallback: 0,
+        ) +
+        animalSpriteFor(animal).baselineOffset * capybaraSize;
     final rotation = _metadataDouble(metadata, 'rotation') ?? 0.0;
     final scale = _metadataDouble(metadata, 'scale') ?? 1.0;
     final animationFrames = _metadataInt(metadata, 'animationFrames') ?? 1;

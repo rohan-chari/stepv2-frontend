@@ -449,7 +449,7 @@ class _RacesTabState extends State<RacesTab> {
     final id = Tournament.id(t) ?? '';
     final name = Tournament.name(t);
     final statusLine = Tournament.ticketStatusLine(t);
-    final winnings = Tournament.championWinnings(t);
+    final winnings = Tournament.prizeCoins(t);
     final elim = Tournament.myEliminatedInRound(t);
     final isChamp = Tournament.isChampion(t, widget.authService.userId);
     final stripeColor = index.isOdd
@@ -1302,13 +1302,13 @@ class _RacesTabState extends State<RacesTab> {
                   ],
                   // What the bracket pays out — the reason to care about a
                   // finished row at all.
-                  if (Tournament.championWinnings(t) > 0) ...[
+                  if (Tournament.prizeCoins(t) > 0) ...[
                     const SizedBox(height: 3),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          '${Tournament.championWinnings(t)}',
+                          '${Tournament.prizeCoins(t)}',
                           style: PixelText.body(
                             size: 12,
                             color: AppColors.of(context).coinDark,

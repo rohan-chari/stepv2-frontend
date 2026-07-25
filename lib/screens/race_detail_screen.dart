@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../config/animals.dart';
 import '../models/loadable.dart';
 import '../models/race_payouts.dart';
+import '../models/race_prize_pool.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../services/notification_service.dart';
@@ -807,9 +808,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     });
   }
 
+  /// Legacy-only. Funded races cost nothing, so accepting is a single tap and
+  /// this sheet never appears. It survives for one case: a race created before
+  /// app-funded pools that still holds real buy-ins — charging someone's coins
+  /// without asking would be the worse bug.
   Future<bool> _confirmPaidInvite({required bool activeRace}) async {
     final buyInAmount = _readInt(_race?['buyInAmount'], fallback: 0);
-    if (buyInAmount <= 0) {
+    if (buyInAmount <= 0 || _prizePool != null) {
       return true;
     }
 
@@ -2783,9 +2788,48 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     );
   }
 
+  // -- Prize pool ----------------------------------------------------------
+  //
+  // App-funded pools (contract §5.1). `prizePool` is additive: when it is
+  // absent — an older backend, or a legacy buy-in race — every read falls back
+  // to the buy-in / pot fields and the screen renders exactly as it did before.
+
+  RacePrizePool? get _prizePool => RacePrizePool.fromRace(_race);
+
+  /// The number shown as the prize. A funded race carries it in `prizePool`;
+  /// otherwise the projected pot (which is what the pool re-uses on the wire,
+  /// so this is also correct against a newer backend on an old read path).
+  int get _prizeCoins =>
+      _prizePool?.coins ?? _readInt(_race?['projectedPotCoins'], fallback: 0);
+
+  /// Whether there is any prize worth showing: a funded pool with coins in it,
+  /// or a legacy buy-in race.
+  bool get _hasPrizeDisplay {
+    final pool = _prizePool;
+    if (pool != null) return pool.coins > 0;
+    return _readInt(_race?['buyInAmount'], fallback: 0) > 0;
+  }
+
+  /// A small gold tag: `PROJECTED` while the pool can still move, `MAX` once it
+  /// has saturated the ceiling and stops growing.
+  Widget _prizeTag(String label, {Key? key}) {
+    return Container(
+      key: key,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.of(context).coinDark,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        label,
+        style: PixelText.title(size: 8, color: Colors.white),
+      ),
+    );
+  }
+
   /// Prize-pool chip — tapping opens the payout breakdown sheet.
   Widget _prizeChip() {
-    final potCoins = _readInt(_race!['projectedPotCoins'], fallback: 0);
+    final potCoins = _prizeCoins;
     return _heroChip(
       key: const Key('race-prize-pool-board'),
       onTap: _showPrizePoolSheet,
@@ -2806,7 +2850,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 ),
               ),
               Text(
-                '$potCoins',
+                formatPrizeCoins(potCoins),
                 style: PixelText.title(size: 15, color: Colors.white),
               ),
             ],
@@ -2825,7 +2869,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// Bottom sheet with the pot and the full payout breakdown (podium +
   /// "+N MORE" expansion, same as before — just summoned from the hero chip).
   void _showPrizePoolSheet() {
-    final potCoins = _readInt(_race!['projectedPotCoins'], fallback: 0);
+    final potCoins = _prizeCoins;
+    final pool = _prizePool;
     final payoutTiers = parsePayoutTiers(_race);
     showModalBottomSheet<void>(
       context: context,
@@ -2850,16 +2895,32 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                   ),
                 ),
                 const SizedBox(height: 14),
-                Text(
-                  'PRIZE POOL',
-                  style: PixelText.title(
-                    size: 16,
-                    color: AppColors.of(ctx).textMid,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'PRIZE POOL',
+                      style: PixelText.title(
+                        size: 16,
+                        color: AppColors.of(ctx).textMid,
+                      ),
+                    ),
+                    if (pool != null && pool.projected) ...[
+                      const SizedBox(width: 8),
+                      _prizeTag(
+                        'PROJECTED',
+                        key: const Key('race-prize-pool-sheet-projected'),
+                      ),
+                    ],
+                    if (pool != null && pool.atMax) ...[
+                      const SizedBox(width: 6),
+                      _prizeTag('MAX'),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '$potCoins',
+                  formatPrizeCoins(potCoins),
                   style: PixelText.number(
                     size: 40,
                     color: AppColors.of(ctx).coinDark,
@@ -2872,6 +2933,21 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                     color: AppColors.of(ctx).textMid,
                   ),
                 ),
+                if (pool != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    pool.projected
+                        ? 'Funded by Bara — free to enter. The pool grows as '
+                              'more runners join, and settles on who actually '
+                              'walked.'
+                        : 'Funded by Bara — free to enter.',
+                    textAlign: TextAlign.center,
+                    style: PixelText.body(
+                      size: 12,
+                      color: AppColors.of(ctx).textMid,
+                    ),
+                  ),
+                ],
                 if (payoutTiers.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   FittedBox(
@@ -2947,6 +3023,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final buyInAmount = _readInt(_race!['buyInAmount'], fallback: 0);
     final potCoins = _readInt(_race!['projectedPotCoins'], fallback: 0);
     final payoutTiers = parsePayoutTiers(_race);
+    final pool = _prizePool;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2960,7 +3037,57 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 alignment: CrossAxisAlignment.center,
               ),
             ),
-            if (buyInAmount > 0) ...[
+            // Funded race (contract §5.1): one honest number, no buy-in.
+            if (pool != null && pool.coins > 0)
+              Expanded(
+                child: Column(
+                  key: const Key('race-info-prize-pool'),
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            'PRIZE POOL',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: PixelText.body(
+                              size: 11,
+                              color: AppColors.of(context).textMid,
+                            ),
+                          ),
+                        ),
+                        if (pool.projected) ...[
+                          const SizedBox(width: 5),
+                          _prizeTag(
+                            'PROJECTED',
+                            key: const Key('race-prize-pool-projected'),
+                          ),
+                        ],
+                        if (pool.atMax) ...[
+                          const SizedBox(width: 5),
+                          _prizeTag(
+                            'MAX',
+                            key: const Key('race-prize-pool-max'),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      pool.formattedCoins,
+                      style: PixelText.title(
+                        size: 18,
+                        color: AppColors.of(context).coinDark,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            // Legacy buy-in race, or a backend older than this build: exactly
+            // the stats this screen has always shown.
+            else if (buyInAmount > 0) ...[
               Expanded(
                 child: StatColumn(
                   label: 'BUY-IN',
@@ -2980,7 +3107,21 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             ],
           ],
         ),
-        if (buyInAmount > 0 && payoutTiers.isNotEmpty) ...[
+        if (pool != null && pool.coins > 0) ...[
+          const SizedBox(height: 8),
+          Text(
+            key: const Key('race-prize-pool-funded-copy'),
+            pool.atMax
+                ? 'Funded by Bara — free to enter. This pool is maxed out.'
+                : 'Funded by Bara — free to enter.',
+            textAlign: TextAlign.center,
+            style: PixelText.body(
+              size: 11.5,
+              color: AppColors.of(context).textMid,
+            ),
+          ),
+        ],
+        if (_hasPrizeDisplay && payoutTiers.isNotEmpty) ...[
           const SizedBox(height: 10),
           FittedBox(
             fit: BoxFit.scaleDown,
@@ -3058,7 +3199,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 ),
               ),
             const Spacer(),
-            if (_readInt(_race!['buyInAmount'], fallback: 0) > 0) _prizeChip(),
+            if (_hasPrizeDisplay) _prizeChip(),
           ],
         ),
         const SizedBox(height: 16),
@@ -3545,7 +3686,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   Widget _buildActiveContent() {
     // TR-901: target-steps races are gone — `targetSteps` may still arrive on
     // the wire from the backend (compat, TR-903) but is deliberately ignored.
-    final buyInAmount = _readInt(_race!['buyInAmount'], fallback: 0);
     final finishReward = _race!['finishReward'] as Map<String, dynamic>?;
     final finishRewardPool = finishReward != null
         ? _readInt(finishReward['pool'], fallback: 0)
@@ -3561,7 +3701,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final chips = <Widget>[
       if (endsAt != null) _countdownChip(endsAt),
       const Spacer(),
-      if (buyInAmount > 0) _prizeChip(),
+      if (_hasPrizeDisplay) _prizeChip(),
     ];
 
     if (_progressState.shouldShowInitialLoading) {
@@ -3645,7 +3785,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 // TR-804: team glow + pennant chrome on course capys.
                 teamColor: isTeamRace
                     ? switch (TeamRace.participantTeam(p)) {
-                        final team? => TeamRace.color(team),
+                        final team? => TeamRace.color(team, context),
                         null => null,
                       }
                     : null,
@@ -5456,6 +5596,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 ],
               ),
             ),
+            // A finished funded race still shows what the pool paid out.
+            if (_prizePool != null && _prizePool!.coins > 0) ...[
+              const Spacer(),
+              _prizeChip(),
+            ],
           ],
           runners: [
             for (final p in participants)
@@ -5937,9 +6082,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     }
 
     final members = TeamRace.membersOf(participants, winnerTeam);
-    final color = TeamRace.color(winnerTeam);
-    final colorLight = TeamRace.colorLight(winnerTeam);
-    final colorDark = TeamRace.colorDark(winnerTeam);
+    final color = TeamRace.color(winnerTeam, context);
+    final colorLight = TeamRace.colorLight(winnerTeam, context);
+    final colorDark = TeamRace.colorDark(winnerTeam, context);
 
     return Column(
       children: [
@@ -6090,9 +6235,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     required RaceTeam team,
     required int memberCount,
   }) {
-    final color = TeamRace.color(team);
-    final colorLight = TeamRace.colorLight(team);
-    final colorDark = TeamRace.colorDark(team);
+    final color = TeamRace.color(team, context);
+    final colorLight = TeamRace.colorLight(team, context);
+    final colorDark = TeamRace.colorDark(team, context);
     return Container(
       key: key,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
@@ -6245,8 +6390,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final isMe = userId == _myUserId;
     final isStealthed = p['stealthed'] == true;
     final isForfeited = TeamRace.hasForfeited(p);
-    final colorLight = TeamRace.colorLight(team);
-    final colorDark = TeamRace.colorDark(team);
+    final colorLight = TeamRace.colorLight(team, context);
+    final colorDark = TeamRace.colorDark(team, context);
     final accessories = isStealthed
         ? const <Map<String, dynamic>>[]
         : (p['accessories'] as List?)?.cast<Map<String, dynamic>>() ?? const [];

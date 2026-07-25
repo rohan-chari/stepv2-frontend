@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/create_race_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+
+// App-funded prize pools (spec §7.1 / D7). This file used to cover the buy-in
+// amount field: typing coins, digit filtering, and the affordability guard.
+// There is no amount to type any more — the pool is derived from the race's own
+// shape and paid by the app — so the same screen is covered here through the
+// derived figure instead.
 
 class _FakeBackendApiService extends BackendApiService {
   Map<String, dynamic>? lastCreateRaceCall;
@@ -25,7 +30,6 @@ class _FakeBackendApiService extends BackendApiService {
     lastCreateRaceCall = {
       'identityToken': identityToken,
       'name': name,
-
       'maxDurationDays': maxDurationDays,
       'powerupsEnabled': powerupsEnabled,
       'powerupStepInterval': powerupStepInterval,
@@ -41,7 +45,7 @@ class _FakeBackendApiService extends BackendApiService {
 
   @override
   Future<Map<String, dynamic>> fetchMe({required String identityToken}) async {
-    return const {'coins': 320, 'heldCoins': 100};
+    return const {'coins': 320, 'heldCoins': 0};
   }
 }
 
@@ -61,139 +65,93 @@ Future<AuthService> _createAuthService({int coins = 420}) async {
   return authService;
 }
 
-Finder _buyInTextFieldFinder() {
-  // Buy-in field is the third TextField on screen (name, steps, buy-in).
-  return find.byType(TextField).at(1);
+Future<void> _pump(
+  WidgetTester tester,
+  BackendApiService api, {
+  int coins = 420,
+}) async {
+  final authService = await _createAuthService(coins: coins);
+  await tester.pumpWidget(
+    MaterialApp(
+      home: CreateRaceScreen(
+        authService: authService,
+        backendApiService: api,
+        initialCustomizeExpanded: true,
+      ),
+    ),
+  );
+  await tester.pump();
 }
+
+String _poolCoins(WidgetTester tester) => tester
+    .widget<Text>(find.byKey(const Key('create-prize-pool-coins')))
+    .data!;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('Buy-in input is hidden when disabled and shown when enabled', (
+  testWidgets('there is no buy-in amount field to type into', (
     WidgetTester tester,
   ) async {
-    final authService = await _createAuthService();
-    await tester.pumpWidget(
-      MaterialApp(
-        home: CreateRaceScreen(
-          authService: authService,
-          backendApiService: _FakeBackendApiService(),
-          initialCustomizeExpanded: true,
-        ),
-      ),
-    );
+    await _pump(tester, _FakeBackendApiService());
 
-    // Only the race-name TextField is visible when buy-in is disabled.
+    // The race name is the only thing left to type on this screen.
     expect(find.byType(TextField), findsOneWidget);
-
-    await tester.ensureVisible(find.text('BUY-IN'));
-    await tester.tap(find.text('BUY-IN'));
-    await tester.pump();
-
-    // Now buy-in is rendered after race name.
-    expect(find.byType(TextField), findsNWidgets(2));
+    expect(find.text('BUY-IN'), findsNothing);
+    expect(find.text('BUY-IN PER RUNNER'), findsNothing);
   });
 
-  testWidgets(
-    'Buy-in field accepts arbitrary numeric input (150) and is sent on submit',
-    (WidgetTester tester) async {
-      final authService = await _createAuthService(coins: 5000);
-      final backend = _FakeBackendApiService();
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: CreateRaceScreen(
-            authService: authService,
-            backendApiService: backend,
-            initialCustomizeExpanded: true,
-          ),
-        ),
-      );
-
-      await tester.enterText(find.byType(TextField).at(0), 'Gold Rush');
-      await tester.ensureVisible(find.text('BUY-IN'));
-      await tester.tap(find.text('BUY-IN'));
-      await tester.pump();
-
-      final buyIn = _buyInTextFieldFinder();
-      await tester.ensureVisible(buyIn);
-      await tester.enterText(buyIn, '150');
-      await tester.pump();
-
-      tester.testTextInput.hide();
-      await tester.pump();
-      await tester.ensureVisible(find.text('CREATE RACE'));
-      await tester.tap(find.text('CREATE RACE'));
-      await tester.pumpAndSettle();
-
-      expect(backend.lastCreateRaceCall, isNotNull);
-      expect(backend.lastCreateRaceCall!['buyInAmount'], 150);
-    },
-  );
-
-  testWidgets(
-    'Buy-in field filters non-numeric input via digitsOnly formatter',
-    (WidgetTester tester) async {
-      final authService = await _createAuthService();
-      await tester.pumpWidget(
-        MaterialApp(
-          home: CreateRaceScreen(
-            authService: authService,
-            backendApiService: _FakeBackendApiService(),
-            initialCustomizeExpanded: true,
-          ),
-        ),
-      );
-
-      await tester.ensureVisible(find.text('BUY-IN'));
-      await tester.tap(find.text('BUY-IN'));
-      await tester.pump();
-
-      final buyInFinder = _buyInTextFieldFinder();
-      final buyInWidget = tester.widget<TextField>(buyInFinder);
-
-      expect(buyInWidget.keyboardType, TextInputType.number);
-      expect(
-        buyInWidget.inputFormatters!.any(
-          (f) => f is FilteringTextInputFormatter,
-        ),
-        isTrue,
-      );
-    },
-  );
-
-  testWidgets('Submission blocked when buy-in exceeds user coin balance', (
+  testWidgets('the prize pool is derived from the race, not entered', (
     WidgetTester tester,
   ) async {
-    final authService = await _createAuthService(coins: 100);
     final backend = _FakeBackendApiService();
+    await _pump(tester, backend, coins: 5000);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: CreateRaceScreen(
-          authService: authService,
-          backendApiService: backend,
-          initialCustomizeExpanded: true,
-        ),
-      ),
+    await tester.enterText(
+      find.byKey(const Key('race-name-field')),
+      'Gold Rush',
     );
 
-    await tester.enterText(find.byType(TextField).at(0), 'Gold Rush');
-    await tester.ensureVisible(find.text('BUY-IN'));
-    await tester.tap(find.text('BUY-IN'));
-    await tester.pump();
+    // 10 runners x 3 days -> 10 x 2 x 20 = 400.
+    expect(_poolCoins(tester), '400');
 
-    final buyIn = _buyInTextFieldFinder();
-    await tester.ensureVisible(buyIn);
-    await tester.enterText(buyIn, '9999');
+    // Growing the field grows the pool, with no coin input anywhere.
+    await tester.ensureVisible(find.text('25'));
+    await tester.tap(find.text('25'));
     await tester.pump();
+    expect(_poolCoins(tester), '1,000');
 
     tester.testTextInput.hide();
-    await tester.pump();
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('CREATE RACE'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('CREATE RACE'));
+    await tester.pumpAndSettle();
+
+    expect(backend.lastCreateRaceCall, isNotNull);
+    // Nothing is staked — the server funds the pool.
+    expect(backend.lastCreateRaceCall!['buyInAmount'], 0);
+    expect(backend.lastCreateRaceCall!['maxParticipants'], 25);
+  });
+
+  testWidgets('creation is never blocked by the player coin balance', (
+    WidgetTester tester,
+  ) async {
+    final backend = _FakeBackendApiService();
+    await _pump(tester, backend, coins: 0);
+
+    await tester.enterText(
+      find.byKey(const Key('race-name-field')),
+      'Gold Rush',
+    );
     await tester.ensureVisible(find.text('CREATE RACE'));
     await tester.tap(find.text('CREATE RACE'));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
-    expect(backend.lastCreateRaceCall, isNull);
+    expect(backend.lastCreateRaceCall, isNotNull);
+    expect(
+      find.text('You do not have enough gold for this buy-in'),
+      findsNothing,
+    );
   });
 }

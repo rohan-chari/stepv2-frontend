@@ -20,7 +20,21 @@ class _FakePublicRacesApi extends BackendApiService {
         'targetSteps': 50000,
         'participantCount': 1,
         'maxParticipants': 10,
-        'buyInAmount': 100,
+        // App-funded prize pool (contract §5.1): free to enter, so joining is
+        // a single tap and no buy-in is ever confirmed or charged.
+        'buyInAmount': 0,
+        'projectedPotCoins': 200,
+        'prizePool': const {
+          'coins': 200,
+          'projected': true,
+          'atMax': false,
+          'playerCount': 1,
+          'durationDays': 3,
+          'durationPoints': 2,
+          'coinUnit': 20,
+          'maxCoins': 3200,
+          'funded': true,
+        },
         'creator': {'displayName': 'RaceMaker'},
         'powerupsEnabled': true,
       },
@@ -64,7 +78,7 @@ Future<AuthService> _authService() async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('joining a paid public race refreshes wallet state', (
+  testWidgets('joining a funded public race refreshes wallet state', (
     WidgetTester tester,
   ) async {
     final authService = await _authService();
@@ -83,8 +97,8 @@ void main() {
     expect(find.text('Gold Sprint'.toUpperCase()), findsOneWidget);
     await tester.tap(find.text('JOIN'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('LOCK IT IN'));
-    await tester.pumpAndSettle();
+    // No buy-in confirm sheet stands between the tap and the join.
+    expect(find.text('LOCK IT IN'), findsNothing);
 
     expect(api.joined, isTrue);
     expect(authService.coins, 320);
@@ -108,8 +122,6 @@ void main() {
       await tester.pump();
 
       await tester.tap(find.text('JOIN'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('LOCK IT IN'));
       await tester.pumpAndSettle();
 
       expect(api.joined, isTrue);

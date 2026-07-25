@@ -259,7 +259,17 @@ class _GameToastOverlayState extends State<_GameToastOverlay>
                                   overflow: TextOverflow.ellipsis,
                                   style: PixelText.pill(
                                     size: 11,
-                                    color: widget.palette.dark,
+                                    // The palette's `dark` shade is tuned to sit
+                                    // on light parchment; at night the toast
+                                    // surface is nearly as dark as it is, so the
+                                    // label is lifted toward the light text.
+                                    color: AppColors.of(context).isDark
+                                        ? Color.lerp(
+                                            widget.palette.face,
+                                            AppColors.of(context).textLight,
+                                            0.5,
+                                          )!
+                                        : widget.palette.dark,
                                   ).copyWith(decoration: TextDecoration.none),
                                 ),
                                 const SizedBox(height: 2),

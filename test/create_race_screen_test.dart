@@ -98,7 +98,7 @@ void main() {
     },
   );
 
-  testWidgets('CreateRaceScreen sends buy-in and payout preset selections', (
+  testWidgets('CreateRaceScreen sends the payout preset selection', (
     WidgetTester tester,
   ) async {
     final authService = await _createAuthService();
@@ -116,10 +116,9 @@ void main() {
 
     await tester.enterText(find.byType(TextField).at(0), 'Gold Rush');
 
-    // Enable buy-in (defaults to 100 coins) so the payout mode picker shows.
-    await tester.ensureVisible(find.text('BUY-IN'));
-    await tester.tap(find.text('BUY-IN'));
-    await tester.pump();
+    // App-funded prize pools: every race has a pool, so the payout picker is
+    // its own card rather than something a buy-in toggle reveals.
+    expect(find.byKey(const Key('payout-mode-card')), findsOneWidget);
 
     await tester.ensureVisible(find.text('TOP 3'));
     await tester.tap(find.text('TOP 3'));
@@ -135,10 +134,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(backendApiService.lastCreateRaceCall, isNotNull);
-    expect(backendApiService.lastCreateRaceCall!['buyInAmount'], 100);
     expect(
       backendApiService.lastCreateRaceCall!['payoutPreset'],
       'TOP3_70_20_10',
     );
+    // Entry is free — the preset only decides how the app's pool is split.
+    expect(backendApiService.lastCreateRaceCall!['buyInAmount'], 0);
   });
 }

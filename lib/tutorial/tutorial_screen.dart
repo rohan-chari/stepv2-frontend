@@ -98,10 +98,10 @@ List<TutorialStep> _buildSteps() {
     TutorialStep(
       page: TutorialMockPage.races,
       targetKey: 'races.pot',
-      title: 'Race for the pot',
+      title: 'Race for the prize pool',
       body:
-          'Races can stake coins: every buy-in feeds the pot, and the winner '
-          'takes it all — or the top 3 split it.',
+          'Every race is free to enter and pays real coins: Bara funds the '
+          'prize pool, and it grows with every runner who joins.',
     ),
     TutorialStep(
       page: TutorialMockPage.raceDetail,

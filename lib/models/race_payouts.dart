@@ -1,6 +1,7 @@
 /// Shared race payout-preset definitions and helpers.
 ///
-/// A payout preset decides how a race's buy-in pot is split among finishers.
+/// A payout preset decides how a race's app-funded prize pool is split among
+/// finishers.
 /// The backend owns the actual coin math; the app only needs the selectable
 /// option list (for the create/edit pickers), a line of help text per preset,
 /// and a way to read the projected/settled breakdown out of a race payload.
@@ -26,17 +27,17 @@ const List<(String, String)> payoutPresetOptions = [
 String payoutHelpText(String preset) {
   switch (preset) {
     case 'WINNER_TAKES_ALL':
-      return 'Winner takes the whole pot.';
+      return 'Winner takes the whole prize pool.';
     case 'TOP3_70_20_10':
     case 'TOP3_80_15_5':
-      return 'Top 3 finishers split the pot. Needs at least 4 accepted '
+      return 'Top 3 finishers split the prize pool. Needs at least 4 accepted '
           'runners to start.';
     case 'TOP_HALF':
-      return 'The top half of finishers get paid — the higher you place, the '
-          'more you win. Needs at least 4 accepted runners to start.';
+      return 'The top half of finishers split the prize pool evenly. Needs at '
+          'least 4 accepted runners to start.';
     case 'ALL_BUT_LAST':
-      return 'Everyone but last place gets paid — the higher you place, the '
-          'more you win. Needs at least 4 accepted runners to start.';
+      return 'Everyone but last place splits the prize pool evenly. Needs at '
+          'least 4 accepted runners to start.';
     default:
       return 'Needs at least 4 accepted runners to start.';
   }
@@ -52,7 +53,7 @@ typedef PayoutTier = ({int placement, int amount});
 /// renders a breakdown against a backend that predates payoutTiers — and so an
 /// older app build that only ever reads first/second/third keeps working. Zero
 /// (and missing) amounts are dropped, so winner-takes-all yields a single tier.
-/// Returns an empty list when there's nothing to pay (no buy-in / empty pot).
+/// Returns an empty list when there's nothing to pay (empty prize pool).
 List<PayoutTier> parsePayoutTiers(Map<String, dynamic>? race) {
   if (race == null) return const [];
 

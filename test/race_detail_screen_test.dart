@@ -24,11 +24,24 @@ class _FakeBackendApiService extends BackendApiService {
       'status': 'PENDING',
       'targetSteps': 100000,
       'maxDurationDays': 7,
-      'buyInAmount': 100,
+      // App-funded prize pool (contract §5.1): free to enter, so accepting an
+      // invite is a single tap with nothing held and nothing to confirm.
+      'buyInAmount': 0,
       'payoutPreset': 'WINNER_TAKES_ALL',
       'potCoins': 0,
-      'heldPotCoins': 100,
+      'heldPotCoins': 0,
       'projectedPotCoins': 100,
+      'prizePool': const {
+        'coins': 100,
+        'projected': true,
+        'atMax': false,
+        'playerCount': 2,
+        'durationDays': 7,
+        'durationPoints': 4,
+        'coinUnit': 20,
+        'maxCoins': 3200,
+        'funded': true,
+      },
       'payouts': {'first': 100, 'second': 0, 'third': 0},
       'myStatus': 'INVITED',
       'isCreator': false,
@@ -380,7 +393,7 @@ void main() {
   );
 
   testWidgets(
-    'RaceDetailScreen confirms paid invite acceptance before joining',
+    'RaceDetailScreen accepts a funded-race invite in one tap',
     (WidgetTester tester) async {
       final authService = await _createAuthService();
       final backendApiService = _FakeBackendApiService();
@@ -406,14 +419,10 @@ void main() {
       await tester.tap(find.text('ACCEPT'));
       await tester.pump();
 
-      expect(find.text('100 GOLD BUY-IN'), findsOneWidget);
-      expect(
-        find.text('Your 100 gold will be held until the race starts.'),
-        findsOneWidget,
-      );
-      expect(backendApiService.respondCalls, 0);
+      // Nothing is charged, so no buy-in sheet interrupts the accept.
+      expect(find.textContaining('GOLD BUY-IN'), findsNothing);
+      expect(find.text('LOCK IT IN'), findsNothing);
 
-      await tester.tap(find.text('LOCK IT IN'));
       // Bounded pumps instead of pumpAndSettle: the hero's spinning-coin
       // prize chip animates forever, so the tree never fully settles.
       await tester.pump();

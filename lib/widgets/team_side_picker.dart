@@ -28,9 +28,9 @@ Future<String?> showTeamSidePicker({
         final sideLetter = team == RaceTeam.teamA ? 'A' : 'B';
         final filled = (team == RaceTeam.teamA ? counts?.$1 : counts?.$2) ?? 0;
         final full = teamSize > 0 && filled >= teamSize;
-        final color = TeamRace.color(team);
-        final colorLight = TeamRace.colorLight(team);
-        final colorDark = TeamRace.colorDark(team);
+        final color = TeamRace.color(team, context);
+        final colorLight = TeamRace.colorLight(team, context);
+        final colorDark = TeamRace.colorDark(team, context);
 
         return Expanded(
           child: GestureDetector(

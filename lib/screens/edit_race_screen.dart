@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../models/race_payouts.dart';
 import '../services/auth_service.dart';
@@ -9,6 +8,7 @@ import '../utils/team_race.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/pill_button.dart';
+import '../widgets/powerup_interval_note.dart';
 import '../widgets/retro_card.dart';
 
 /// Full-screen editor for race settings. Available only to the creator while
@@ -34,7 +34,6 @@ class EditRaceScreen extends StatefulWidget {
 
 class _EditRaceScreenState extends State<EditRaceScreen> {
   late final TextEditingController _nameController;
-  late final TextEditingController _buyInController;
 
   bool _isSaving = false;
 
@@ -42,9 +41,10 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
   late final String _initialName;
   late final int _initialMaxDurationDays;
   late final bool _initialPowerupsEnabled;
-  late final int _initialPowerupInterval;
-  late final bool _initialBuyInEnabled;
-  late final int _initialBuyInAmount;
+
+  /// The race's own spacing, read once for display only. Never sent back: the
+  /// interval is fixed at 2,000 for new races and frozen for existing ones.
+  late final int _storedPowerupInterval;
   late final String _initialPayoutPreset;
   late final bool _initialIsPublic;
   // null => no participant limit (unlimited).
@@ -53,9 +53,6 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
   // Live values
   late int _maxDurationDays;
   late bool _powerupsEnabled;
-  late int _powerupInterval;
-  late bool _buyInEnabled;
-  late int _buyInAmount;
   late String _payoutPreset;
   late bool _isPublic;
   // null => no participant limit (unlimited).
@@ -85,8 +82,8 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
 
-  static const _durationOptions = [3, 5, 7, 14];
-  static const _intervalPresets = [2000, 3000, 4000, 5000, 10000, 25000];
+  // Every option lands on a prize-pool band boundary (D3).
+  static const _durationOptions = [1, 3, 7, 14];
   static const _maxParticipantsPresets = [5, 10, 25, 50, 100];
 
   @override
@@ -97,12 +94,15 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
     _initialName = (race['name'] as String?) ?? '';
     _initialMaxDurationDays = _readInt(race['maxDurationDays'], 7);
     _initialPowerupsEnabled = race['powerupsEnabled'] == true;
-    _initialPowerupInterval = _readInt(
+    // Defensive read: a missing, null, or nonsense interval falls back to the
+    // fixed 2,000 rather than throwing or rendering "null" (spec §7.3).
+    final storedInterval = _readInt(
       race['powerupStepInterval'],
-      5000,
-    ).clamp(2000, 50000);
-    _initialBuyInAmount = _readInt(race['buyInAmount'], 0);
-    _initialBuyInEnabled = _initialBuyInAmount > 0;
+      kFixedPowerupStepInterval,
+    );
+    _storedPowerupInterval = storedInterval > 0
+        ? storedInterval
+        : kFixedPowerupStepInterval;
     _initialPayoutPreset =
         (race['payoutPreset'] as String?) ?? 'WINNER_TAKES_ALL';
     _initialIsPublic = race['isPublic'] == true;
@@ -136,19 +136,21 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
         .length;
 
     _nameController = TextEditingController(text: _initialName);
-    _buyInController = TextEditingController(
-      text: (_initialBuyInEnabled ? _initialBuyInAmount : 100).toString(),
-    );
 
     _maxDurationDays = _initialMaxDurationDays;
     _powerupsEnabled = _initialPowerupsEnabled;
-    _powerupInterval = _initialPowerupInterval;
-    _buyInEnabled = _initialBuyInEnabled;
-    _buyInAmount = _initialBuyInAmount > 0 ? _initialBuyInAmount : 100;
     _payoutPreset = _initialPayoutPreset;
     _isPublic = _initialIsPublic;
     _maxParticipants = _initialMaxParticipants;
   }
+
+  /// What the note says this race's spacing is. A race that already runs
+  /// powerups keeps its own stored interval — a grandfathered 5,000-step race
+  /// says 5,000, not 2,000. Switching powerups on now starts the race from
+  /// nothing, so it gets the fixed 2,000.
+  int get _displayedPowerupInterval => _initialPowerupsEnabled
+      ? _storedPowerupInterval
+      : kFixedPowerupStepInterval;
 
   Widget _maxRunnersChip({
     required String label,
@@ -341,9 +343,9 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
     required RaceTeam team,
     required TextEditingController controller,
   }) {
-    final color = TeamRace.color(team);
-    final colorLight = TeamRace.colorLight(team);
-    final colorDark = TeamRace.colorDark(team);
+    final color = TeamRace.color(team, context);
+    final colorLight = TeamRace.colorLight(team, context);
+    final colorDark = TeamRace.colorDark(team, context);
     return Container(
       key: key,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -418,7 +420,6 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
   @override
   void dispose() {
     _nameController.dispose();
-    _buyInController.dispose();
     _teamANameController.dispose();
     _teamBNameController.dispose();
     super.dispose();
@@ -429,9 +430,6 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
     if (name != _initialName.trim()) return true;
     if (_maxDurationDays != _initialMaxDurationDays) return true;
     if (_powerupsEnabled != _initialPowerupsEnabled) return true;
-    if (_powerupsEnabled && _powerupInterval != _initialPowerupInterval) {
-      return true;
-    }
     if (_isPublic != _initialIsPublic) return true;
     if (_maxParticipants != _initialMaxParticipants) return true;
     if (_isTeamRace) {
@@ -444,12 +442,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
       if (_teamSize != _initialTeamSize) return true;
     }
 
-    final effectiveBuyIn = _buyInEnabled ? _buyInAmount : 0;
-    if (effectiveBuyIn != _initialBuyInAmount) return true;
-    final effectivePreset = _buyInEnabled
-        ? _payoutPreset
-        : _initialPayoutPreset;
-    if (effectivePreset != _initialPayoutPreset) return true;
+    if (_payoutPreset != _initialPayoutPreset) return true;
 
     return false;
   }
@@ -467,15 +460,6 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
 
     if (_maxDurationDays < 1 || _maxDurationDays > 30) {
       showErrorToast(context, 'Duration must be between 1 and 30 days');
-      return;
-    }
-
-    if (_buyInEnabled && _buyInAmount > 0 && _buyInAmount < 10) {
-      showErrorToast(context, 'Buy-in must be at least 10 coins');
-      return;
-    }
-    if (_buyInEnabled && _buyInAmount > 200) {
-      showErrorToast(context, 'Buy-in cannot exceed 200 coins');
       return;
     }
 
@@ -520,9 +504,9 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
     if (_powerupsEnabled != _initialPowerupsEnabled) {
       updates['powerupsEnabled'] = _powerupsEnabled;
     }
-    if (_powerupsEnabled && _powerupInterval != _initialPowerupInterval) {
-      updates['powerupStepInterval'] = _powerupInterval;
-    }
+    // powerupStepInterval is deliberately never sent (spec §4.3): lowering a
+    // running race's interval back-mints every box the tighter spacing says the
+    // runner should already have earned.
     if (_isPublic != _initialIsPublic) updates['isPublic'] = _isPublic;
     // maxParticipants is derived (2 x teamSize) for team races — never sent.
     if (!_isTeamRace && _maxParticipants != _initialMaxParticipants) {
@@ -538,11 +522,8 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
       if (_teamSize != _initialTeamSize) updates['teamSize'] = _teamSize;
     }
 
-    final effectiveBuyIn = _buyInEnabled ? _buyInAmount : 0;
-    if (effectiveBuyIn != _initialBuyInAmount) {
-      updates['buyInAmount'] = effectiveBuyIn;
-    }
-    if (_buyInEnabled && _payoutPreset != _initialPayoutPreset) {
+    // No buy-in field is ever sent: entry is free and the pool is app-funded.
+    if (_payoutPreset != _initialPayoutPreset) {
       updates['payoutPreset'] = _payoutPreset;
     }
 
@@ -568,8 +549,6 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
         maxDurationDays: updates['maxDurationDays'] as int?,
         isPublic: updates['isPublic'] as bool?,
         powerupsEnabled: updates['powerupsEnabled'] as bool?,
-        powerupStepInterval: updates['powerupStepInterval'] as int?,
-        buyInAmount: updates['buyInAmount'] as int?,
         payoutPreset: updates['payoutPreset'] as String?,
         maxParticipants: updates['maxParticipants'] as int?,
         setMaxParticipantsUnlimited: maxChanged && _maxParticipants == null,
@@ -727,6 +706,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                   final selected = _maxDurationDays == days;
                                   return Expanded(
                                     child: GestureDetector(
+                                      key: Key('duration-option-$days'),
                                       onTap: () => setState(
                                         () => _maxDurationDays = days,
                                       ),
@@ -789,6 +769,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                     ),
                                   ),
                                   SizedBox(
+                                    key: const Key('powerups-toggle'),
                                     height: 28,
                                     child: Switch.adaptive(
                                       value: _powerupsEnabled,
@@ -801,264 +782,39 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                   ),
                                 ],
                               ),
-                              if (_powerupsEnabled) ...[
-                                const SizedBox(height: 8),
-                                Text(
-                                  'POWERUP EVERY',
-                                  style: PixelText.body(
-                                    size: 11,
-                                    color: AppColors.of(context).textMid,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: _intervalPresets.map((interval) {
-                                    final selected =
-                                        _powerupInterval == interval;
-                                    final label = interval >= 1000
-                                        ? '${(interval / 1000).toStringAsFixed(interval % 1000 == 0 ? 0 : 1)}k'
-                                        : '$interval';
-                                    return SizedBox(
-                                      width: 72,
-                                      child: GestureDetector(
-                                        onTap: () => setState(
-                                          () => _powerupInterval = interval,
-                                        ),
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            vertical: 10,
-                                            horizontal: 6,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: selected
-                                                ? AppColors.of(
-                                                    context,
-                                                  ).pillGreenDark
-                                                : AppColors.of(
-                                                    context,
-                                                  ).parchmentDark,
-                                            borderRadius: BorderRadius.circular(
-                                              8,
-                                            ),
-                                          ),
-                                          alignment: Alignment.center,
-                                          child: Text(
-                                            label,
-                                            style: PixelText.title(
-                                              size: 11,
-                                              color: selected
-                                                  ? Colors.white
-                                                  : AppColors.of(
-                                                      context,
-                                                    ).textDark,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  }).toList(),
-                                ),
-                              ],
+                              const SizedBox(height: 10),
+                              // The interval is no longer editable: changing a
+                              // running race's spacing would back-mint every box
+                              // the new spacing says the runner already earned.
+                              PowerupIntervalNote(
+                                key: const Key('powerup-interval-note'),
+                                enabled: _powerupsEnabled,
+                                stepInterval: _displayedPowerupInterval,
+                              ),
                             ],
                           ),
                         ),
                         const SizedBox(height: 24),
 
-                        // Buy-in
-                        RetroCard(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  GestureDetector(
-                                    onTap: () => setState(
-                                      () => _buyInEnabled = !_buyInEnabled,
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'BUY-IN',
-                                          style: PixelText.title(
-                                            size: 13,
-                                            color: AppColors.of(
-                                              context,
-                                            ).textMid,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          _buyInEnabled
-                                              ? 'PAID RACE'
-                                              : 'FREE RACE',
-                                          style: PixelText.body(
-                                            size: 11,
-                                            color: _buyInEnabled
-                                                ? AppColors.of(context).coinDark
-                                                : AppColors.of(context).textMid,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  SizedBox(
-                                    height: 28,
-                                    child: Switch.adaptive(
-                                      value: _buyInEnabled,
-                                      activeTrackColor: AppColors.of(
-                                        context,
-                                      ).pillGreenDark,
-                                      onChanged: (value) =>
-                                          setState(() => _buyInEnabled = value),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              // Issue 4: changing the buy-in on a race that
-                              // already has runners reconciles their coins.
-                              if (_acceptedCount > 0) ...[
-                                const SizedBox(height: 10),
-                                Container(
-                                  key: const Key('edit-buyin-consequence'),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 8,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.of(
-                                      context,
-                                    ).coinLight.withValues(alpha: 0.16),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: AppColors.of(
-                                        context,
-                                      ).coinDark.withValues(alpha: 0.4),
-                                      width: 1.5,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Icon(
-                                        Icons.info_outline_rounded,
-                                        size: 15,
-                                        color: AppColors.of(context).coinDark,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          'Changing the buy-in refunds or '
-                                          're-charges everyone who\'s already '
-                                          'joined.',
-                                          style: PixelText.body(
-                                            size: 11.5,
-                                            color: AppColors.of(
-                                              context,
-                                            ).textDark,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                              if (_buyInEnabled) ...[
-                                const SizedBox(height: 12),
-                                Text(
-                                  'BUY-IN PER RUNNER',
-                                  style: PixelText.body(
-                                    size: 11,
-                                    color: AppColors.of(context).textMid,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Container(
-                                  key: const Key('edit-buyin-input'),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.of(context).parchment,
-                                    border: Border.all(
-                                      color: AppColors.of(
-                                        context,
-                                      ).parchmentBorder,
-                                      width: 2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 8,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.edit_outlined,
-                                        size: 16,
-                                        color: AppColors.of(
-                                          context,
-                                        ).textMid.withValues(alpha: 0.6),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: TextField(
-                                          controller: _buyInController,
-                                          keyboardType: TextInputType.number,
-                                          inputFormatters: [
-                                            FilteringTextInputFormatter
-                                                .digitsOnly,
-                                          ],
-                                          onChanged: (value) {
-                                            setState(() {
-                                              _buyInAmount =
-                                                  int.tryParse(value) ?? 0;
-                                            });
-                                          },
-                                          style: PixelText.number(
-                                            size: 24,
-                                            color: AppColors.of(
-                                              context,
-                                            ).coinDark,
-                                          ),
-                                          decoration: InputDecoration(
-                                            hintText: '0',
-                                            hintStyle: PixelText.number(
-                                              size: 24,
-                                              color: AppColors.of(
-                                                context,
-                                              ).coinDark.withValues(alpha: 0.3),
-                                            ),
-                                            border: InputBorder.none,
-                                            isDense: true,
-                                            contentPadding: EdgeInsets.zero,
-                                            suffixText: 'coins',
-                                            suffixStyle: PixelText.body(
-                                              size: 12,
-                                              color: AppColors.of(
-                                                context,
-                                              ).textMid,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
+                        // Payout mode — how the app-funded prize pool is
+                        // split. Buy-ins are gone, so this is no longer behind
+                        // a paid/free toggle. Team races split evenly (TR-102),
+                        // so they get a line instead of a picker.
+                        if (!_isTeamRace) ...[
+                          RetroCard(
+                            key: const Key('payout-mode-card'),
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
                                 Text(
                                   'PAYOUT MODE',
-                                  style: PixelText.body(
-                                    size: 11,
+                                  style: PixelText.title(
+                                    size: 13,
                                     color: AppColors.of(context).textMid,
                                   ),
                                 ),
-                                const SizedBox(height: 8),
+                                const SizedBox(height: 10),
                                 Column(
                                   children: payoutPresetOptions.map((option) {
                                     final selected = _payoutPreset == option.$2;
@@ -1115,10 +871,10 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                                   ),
                                 ),
                               ],
-                            ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 24),
+                          const SizedBox(height: 24),
+                        ],
 
                         // Public race
                         RetroCard(

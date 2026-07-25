@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../models/race_payouts.dart';
+import '../models/race_prize_pool.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
@@ -10,6 +10,7 @@ import '../utils/tournament.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/pill_button.dart';
+import '../widgets/powerup_interval_note.dart';
 import '../widgets/retro_card.dart';
 import 'tournament_detail_screen.dart';
 
@@ -33,13 +34,9 @@ class CreateRaceScreen extends StatefulWidget {
 
 class CreateRaceScreenState extends State<CreateRaceScreen> {
   final _nameController = TextEditingController();
-  final _buyInController = TextEditingController(text: '100');
   int _selectedDuration = 3;
   bool _isCreating = false;
   bool _powerupsEnabled = false;
-  int _powerupInterval = 2000;
-  bool _buyInEnabled = false;
-  int _buyInAmount = 100;
   String _payoutPreset = 'WINNER_TAKES_ALL';
   bool _isPublic = false;
   // Participant cap. Required selection: the user must pick a preset number or
@@ -66,8 +63,8 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
   bool _suggestingNames = false;
 
   // Tournaments (spec §9). A single-elimination bracket mode, mutually
-  // exclusive with FFA/Teams. Buy-in follows the D4 ladder (max scales with
-  // bracket size) and re-clamps when the bracket size changes.
+  // exclusive with FFA/Teams. Entry is free — the bracket pool is app-funded
+  // off the total bracket length (app-funded prize pools, D9).
   bool _isTournament = false;
   int _bracketSize = 8;
   // §3.5 — rounds are at least 2 days; 1-day matchups were removed.
@@ -135,14 +132,14 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
 
-  static const _durationOptions = [3, 5, 7, 14];
-  static const _intervalPresets = [2000, 3000, 4000, 5000, 10000, 25000];
+  // Every option lands on a prize-pool band boundary (D3), so the previewed
+  // pool always reflects the exact multiplier the backend will apply.
+  static const _durationOptions = [1, 3, 7, 14];
   static const _maxParticipantsPresets = [5, 10, 25, 50, 100];
 
   @override
   void dispose() {
     _nameController.dispose();
-    _buyInController.dispose();
     _teamANameController.dispose();
     _teamBNameController.dispose();
     super.dispose();
@@ -185,6 +182,173 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
             color: selected ? Colors.white : AppColors.of(context).textDark,
           ),
         ),
+      ),
+    );
+  }
+
+  // -- App-funded prize pool preview ---------------------------------------
+  //
+  // The race doesn't exist yet, so the pool is computed client-side from the
+  // mirrored duration table in `models/race_prize_pool.dart` (guarded against
+  // the backend's fixtures by `race_prize_pool_test`). It is a PROJECTION off
+  // the field cap — the settled pool counts only runners who actually walked —
+  // so the copy says "up to", never "you will win".
+
+  /// The field size the preview projects against: the team-race field is fixed
+  /// at 2 × teamSize, otherwise it's the runner cap. Null = NO LIMIT, which
+  /// saturates the ceiling.
+  int? get _projectedFieldSize {
+    if (_isTeamRace) return _teamSize * 2;
+    if (_noLimit) return null;
+    return _maxParticipants;
+  }
+
+  int get _projectedPrizePool {
+    final field = _projectedFieldSize;
+    if (field == null) return kPrizePoolMaxCoins;
+    return computePrizePool(
+      playerCount: field,
+      durationDays: _selectedDuration,
+    );
+  }
+
+  String get _projectedPrizeDerivation {
+    final field = _projectedFieldSize;
+    final days = _selectedDuration == 1 ? '1 DAY' : '$_selectedDuration DAYS';
+    final players = field == null
+        ? 'UNLIMITED PLAYERS'
+        : (field == 1 ? '1 PLAYER' : '$field PLAYERS');
+    return '$players × $days';
+  }
+
+  /// The carved gold plaque that carries a pool figure: an "up to" number that
+  /// re-stamps itself whenever the field or the duration changes, its own
+  /// arithmetic spelled out underneath so the number is never a mystery.
+  Widget _prizePoolPlaque({
+    required int coins,
+    required bool atMax,
+    required String derivation,
+    required String footnote,
+    Key? key,
+    Key? coinsKey,
+    Key? derivationKey,
+    Key? maxKey,
+  }) {
+    final palette = AppColors.of(context);
+    return Container(
+      key: key,
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: palette.coinLight.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: palette.coinDark.withValues(alpha: 0.45),
+          width: 2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'PRIZE POOL',
+                  style: PixelText.title(size: 12, color: palette.textMid),
+                ),
+              ),
+              if (atMax)
+                Container(
+                  key: maxKey,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: palette.coinDark,
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: Text(
+                    'MAX',
+                    style: PixelText.title(size: 9, color: Colors.white),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Image.asset(
+                'assets/images/coin.png',
+                width: 24,
+                height: 24,
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) =>
+                    Icon(Icons.paid_rounded, size: 22, color: palette.coinDark),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'UP TO',
+                style: PixelText.body(size: 10, color: palette.textMid),
+              ),
+              const SizedBox(width: 6),
+              // Re-stamps with a quick punch on every change, so a bigger
+              // field visibly pays more.
+              Flexible(
+                child: TweenAnimationBuilder<double>(
+                  key: ValueKey(coins),
+                  tween: Tween<double>(begin: 0.84, end: 1),
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutBack,
+                  builder: (_, value, child) => Transform.scale(
+                    scale: value,
+                    alignment: Alignment.centerLeft,
+                    child: child,
+                  ),
+                  child: Text(
+                    formatPrizeCoins(coins),
+                    key: coinsKey,
+                    maxLines: 1,
+                    style: PixelText.number(size: 28, color: palette.coinDark),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            derivation,
+            key: derivationKey,
+            style: PixelText.body(size: 11, color: palette.textMid),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            footnote,
+            style: PixelText.body(size: 10, color: palette.textMid),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The race-side preview card, shown under the duration picker.
+  Widget _buildPrizePoolPreview() {
+    final coins = _projectedPrizePool;
+    // A field that can't pay anybody shows nothing rather than a hollow 0.
+    if (coins <= 0) return const SizedBox.shrink();
+    return RetroCard(
+      padding: const EdgeInsets.all(16),
+      child: _prizePoolPlaque(
+        key: const Key('create-prize-pool-preview'),
+        coinsKey: const Key('create-prize-pool-coins'),
+        derivationKey: const Key('create-prize-pool-derivation'),
+        maxKey: const Key('create-prize-pool-max'),
+        coins: coins,
+        atMax: coins >= kPrizePoolMaxCoins,
+        derivation: _projectedPrizeDerivation,
+        footnote: 'FUNDED BY BARA · FREE TO ENTER',
       ),
     );
   }
@@ -317,31 +481,8 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
       }
     }
 
-    if (_buyInEnabled && _buyInAmount > 0 && _buyInAmount < 10) {
-      showErrorToast(context, 'Buy-in must be at least 10 coins');
-      return;
-    }
-
-    if (_isTournament) {
-      // D4 ladder: 0 or 10..max(bracketSize).
-      if (_buyInEnabled &&
-          !isValidTournamentBuyIn(_buyInAmount, _bracketSize)) {
-        final max = tournamentBuyInMaxForSize(_bracketSize);
-        showErrorToast(
-          context,
-          'Buy-in must be 0 or 10–$max for a $_bracketSize-racer bracket',
-        );
-        return;
-      }
-    } else if (_buyInEnabled && _buyInAmount > 200) {
-      showErrorToast(context, 'Buy-in cannot exceed 200 coins');
-      return;
-    }
-
-    if (_buyInEnabled && _buyInAmount > widget.authService.coins) {
-      showErrorToast(context, 'You do not have enough gold for this buy-in');
-      return;
-    }
+    // Entry is free: there is no buy-in to validate and nothing to afford.
+    // Prize pools are funded by the app (app-funded prize pools, §4).
 
     setState(() => _isCreating = true);
 
@@ -355,15 +496,17 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
           name: name,
           bracketSize: _bracketSize,
           matchupDurationDays: _matchupDuration,
-          buyInAmount: _buyInEnabled ? _buyInAmount : 0,
           powerupsEnabled: _powerupsEnabled,
-          powerupStepInterval: _powerupsEnabled ? _powerupInterval : null,
+          powerupStepInterval: _powerupsEnabled
+              ? kFixedPowerupStepInterval
+              : null,
           isPublic: _isPublic,
           inviteeIds: widget.presetInviteeIds,
         );
         final t = res['tournament'] as Map<String, dynamic>?;
         final tournamentId = t?['id'] as String?;
-        // Keep the wallet fresh (a paid bracket holds the creator's buy-in).
+        // Nothing is charged for a bracket any more, but keep the wallet in
+        // sync anyway — it's cheap and the header shows it.
         try {
           final user = await widget.backendApiService.fetchMe(
             identityToken: token,
@@ -400,8 +543,9 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
               teamSize: _teamSize,
               maxDurationDays: _selectedDuration,
               powerupsEnabled: _powerupsEnabled,
-              powerupStepInterval: _powerupsEnabled ? _powerupInterval : null,
-              buyInAmount: _buyInEnabled ? _buyInAmount : 0,
+              powerupStepInterval: _powerupsEnabled
+                  ? kFixedPowerupStepInterval
+                  : null,
               isPublic: _isPublic,
               scheduledStartAt: _scheduledStartAt,
               teamAName: teamAName,
@@ -413,9 +557,11 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
               name: name,
               maxDurationDays: _selectedDuration,
               powerupsEnabled: _powerupsEnabled,
-              powerupStepInterval: _powerupsEnabled ? _powerupInterval : null,
-              buyInAmount: _buyInEnabled ? _buyInAmount : 0,
-              payoutPreset: _buyInEnabled ? _payoutPreset : 'WINNER_TAKES_ALL',
+              powerupStepInterval: _powerupsEnabled
+                  ? kFixedPowerupStepInterval
+                  : null,
+              // Every race has a funded pool now, so the preset always counts.
+              payoutPreset: _payoutPreset,
               isPublic: _isPublic,
               maxParticipants: _noLimit ? null : _maxParticipants,
               scheduledStartAt: _scheduledStartAt,
@@ -535,9 +681,6 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                     // Powerups default ON for tournaments — set only on entry so
                     // a later manual toggle-off isn't stomped by re-tapping.
                     if (entering) _powerupsEnabled = true;
-                    // Keep the buy-in inside the D4 ladder for the current
-                    // bracket size the moment the mode is entered.
-                    _clampTournamentBuyIn();
                   }),
                 ),
               ],
@@ -735,8 +878,6 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
   /// The tournament reveal: bracket-size picker (4/8/16) + matchup-duration
   /// chips (1/2/3 days). Buy-in / powerups / public are the shared cards below.
   Widget _buildTournamentReveal() {
-    final maxBuyIn = tournamentBuyInMaxForSize(_bracketSize);
-    final potCap = _bracketSize * maxBuyIn;
     return Column(
       key: const Key('tournament-reveal'),
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -755,11 +896,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
               Expanded(
                 child: GestureDetector(
                   key: Key('bracket-size-$size'),
-                  onTap: () => setState(() {
-                    _bracketSize = size;
-                    // Re-clamp so a stale 100 can't survive a switch to 16 (D4).
-                    _clampTournamentBuyIn();
-                  }),
+                  onTap: () => setState(() => _bracketSize = size),
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     alignment: Alignment.center,
@@ -830,32 +967,34 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
         const SizedBox(height: 6),
         Text(
           'Every round is a $_matchupDuration-day 1v1. '
-          'Winner takes the whole pot.',
+          'The champion takes the whole prize pool.',
           style: PixelText.body(size: 11, color: AppColors.of(context).textMid),
         ),
-        const SizedBox(height: 4),
-        Text(
-          'Buy-in max $maxBuyIn · pot up to $potCap coins',
-          key: const Key('tournament-buyin-hint'),
-          style: PixelText.body(
-            size: 11,
-            color: AppColors.of(context).coinDark,
-          ),
+        const SizedBox(height: 12),
+        _prizePoolPlaque(
+          key: const Key('tournament-prize-pool-preview'),
+          coinsKey: const Key('tournament-prize-pool-coins'),
+          derivationKey: const Key('tournament-prize-pool-derivation'),
+          maxKey: const Key('tournament-prize-pool-max'),
+          coins: _tournamentPrizePool,
+          atMax: _tournamentPrizePool >= kTournamentPrizePoolMaxCoins,
+          derivation: '$_bracketSize PLAYERS × $_tournamentTotalDays DAYS',
+          footnote: 'FREE TO ENTER · CHAMPION TAKES ALL',
         ),
       ],
     );
   }
 
-  /// Snaps the buy-in field into the current bracket size's D4 window when the
-  /// bracket size changes (a stale 100 can't survive a switch to a 16-bracket,
-  /// which caps at 62).
-  void _clampTournamentBuyIn() {
-    final clamped = clampTournamentBuyIn(_buyInAmount, _bracketSize);
-    if (clamped != _buyInAmount) {
-      _buyInAmount = clamped;
-      _buyInController.text = clamped == 0 ? '' : '$clamped';
-    }
-  }
+  /// The whole bracket's length in days — every round back to back (D9).
+  int get _tournamentTotalDays =>
+      tournamentRoundsForSize(_bracketSize) * _matchupDuration;
+
+  /// A bracket only starts full, so the projected field is the bracket size.
+  int get _tournamentPrizePool => computePrizePool(
+    playerCount: _bracketSize,
+    durationDays: _tournamentTotalDays,
+    max: kTournamentPrizePoolMaxCoins,
+  );
 
   Widget _buildTeamSizeStepper() {
     return Container(
@@ -960,9 +1099,9 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
     required RaceTeam team,
     required TextEditingController controller,
   }) {
-    final color = TeamRace.color(team);
-    final colorLight = TeamRace.colorLight(team);
-    final colorDark = TeamRace.colorDark(team);
+    final color = TeamRace.color(team, context);
+    final colorLight = TeamRace.colorLight(team, context);
+    final colorDark = TeamRace.colorDark(team, context);
     return Container(
       key: key,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1021,8 +1160,8 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
 
   Widget _sideChip({required Key key, required RaceTeam team}) {
     final selected = _creatorSide == team;
-    final color = TeamRace.color(team);
-    final colorDark = TeamRace.colorDark(team);
+    final color = TeamRace.color(team, context);
+    final colorDark = TeamRace.colorDark(team, context);
     final controller = team == RaceTeam.teamA
         ? _teamANameController
         : _teamBNameController;
@@ -1207,6 +1346,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                     final selected = _selectedDuration == days;
                                     return Expanded(
                                       child: GestureDetector(
+                                        key: Key('duration-option-$days'),
                                         onTap: () => setState(
                                           () => _selectedDuration = days,
                                         ),
@@ -1249,6 +1389,12 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                               ],
                             ),
                           ),
+                          const SizedBox(height: 12),
+
+                          // What the field is racing for. Sits right under the
+                          // duration + (below) the runner cap, because those
+                          // two controls are what move the number.
+                          _buildPrizePoolPreview(),
                           const SizedBox(height: 12),
 
                           GestureDetector(
@@ -1436,6 +1582,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                       ),
                                     ),
                                     SizedBox(
+                                      key: const Key('powerups-toggle'),
                                       height: 28,
                                       child: Switch.adaptive(
                                         value: _powerupsEnabled,
@@ -1449,309 +1596,100 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                     ),
                                   ],
                                 ),
-                                if (_powerupsEnabled) ...[
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'POWERUP EVERY',
-                                    style: PixelText.body(
-                                      size: 11,
-                                      color: AppColors.of(context).textMid,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Wrap(
-                                    spacing: 8,
-                                    runSpacing: 8,
-                                    children: _intervalPresets.map((interval) {
-                                      final selected =
-                                          _powerupInterval == interval;
-                                      final label = interval >= 1000
-                                          ? '${(interval / 1000).toStringAsFixed(interval % 1000 == 0 ? 0 : 1)}k'
-                                          : '$interval';
-                                      return SizedBox(
-                                        width: 72,
-                                        child: GestureDetector(
-                                          onTap: () => setState(
-                                            () => _powerupInterval = interval,
-                                          ),
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              vertical: 10,
-                                              horizontal: 6,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: selected
-                                                  ? AppColors.of(
-                                                      context,
-                                                    ).pillGreenDark
-                                                  : AppColors.of(
-                                                      context,
-                                                    ).parchmentDark,
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                            ),
-                                            alignment: Alignment.center,
-                                            child: Text(
-                                              label,
-                                              style: PixelText.title(
-                                                size: 11,
-                                                color: selected
-                                                    ? Colors.white
-                                                    : AppColors.of(
-                                                        context,
-                                                      ).textDark,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      );
-                                    }).toList(),
-                                  ),
-                                ],
+                                const SizedBox(height: 10),
+                                // The creator no longer picks the spacing —
+                                // every race earns a box every 2,000 steps.
+                                PowerupIntervalNote(
+                                  key: const Key('powerup-interval-note'),
+                                  enabled: _powerupsEnabled,
+                                ),
                               ],
                             ),
                           ),
                         if (_customizeExpanded) const SizedBox(height: 24),
 
-                        // Buy-in
-                        if (_customizeExpanded)
+                        // Payout mode — how the app-funded prize pool is
+                        // carved up. Every race has a pool now, so this is no
+                        // longer gated behind a buy-in toggle. Team races split
+                        // their pool evenly and brackets are winner-takes-all,
+                        // so neither offers a picker (TR-102 / bracket rules).
+                        if (_customizeExpanded &&
+                            !_isTournament &&
+                            !_isTeamRace) ...[
                           RetroCard(
+                            key: const Key('payout-mode-card'),
                             padding: const EdgeInsets.all(16),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    GestureDetector(
-                                      onTap: () => setState(
-                                        () => _buyInEnabled = !_buyInEnabled,
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'BUY-IN',
-                                            style: PixelText.title(
-                                              size: 13,
-                                              color: AppColors.of(
-                                                context,
-                                              ).textMid,
+                                Text(
+                                  'PAYOUT MODE',
+                                  style: PixelText.title(
+                                    size: 13,
+                                    color: AppColors.of(context).textMid,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                Column(
+                                  children: payoutPresetOptions.map((option) {
+                                    final selected = _payoutPreset == option.$2;
+                                    return Padding(
+                                      padding: const EdgeInsets.only(bottom: 8),
+                                      child: GestureDetector(
+                                        onTap: () => setState(
+                                          () => _payoutPreset = option.$2,
+                                        ),
+                                        child: Container(
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 10,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: selected
+                                                ? AppColors.of(
+                                                    context,
+                                                  ).pillGreenDark
+                                                : AppColors.of(
+                                                    context,
+                                                  ).parchmentDark,
+                                            borderRadius: BorderRadius.circular(
+                                              8,
                                             ),
                                           ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            _buyInEnabled
-                                                ? 'PAID RACE'
-                                                : 'FREE RACE',
-                                            style: PixelText.body(
-                                              size: 11,
-                                              color: _buyInEnabled
-                                                  ? AppColors.of(
-                                                      context,
-                                                    ).coinDark
+                                          child: Text(
+                                            option.$1,
+                                            style: PixelText.title(
+                                              size: 12,
+                                              color: selected
+                                                  ? Colors.white
                                                   : AppColors.of(
                                                       context,
-                                                    ).textMid,
+                                                    ).textDark,
                                             ),
+                                            textAlign: TextAlign.center,
                                           ),
-                                        ],
-                                      ),
-                                    ),
-                                    SizedBox(
-                                      height: 28,
-                                      child: Switch.adaptive(
-                                        value: _buyInEnabled,
-                                        activeTrackColor: AppColors.of(
-                                          context,
-                                        ).pillGreenDark,
-                                        onChanged: (value) => setState(
-                                          () => _buyInEnabled = value,
                                         ),
                                       ),
-                                    ),
-                                  ],
+                                    );
+                                  }).toList(),
                                 ),
-                                if (_buyInEnabled) ...[
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    'BUY-IN PER RUNNER',
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: Text(
+                                    payoutHelpText(_payoutPreset),
                                     style: PixelText.body(
-                                      size: 11,
+                                      size: 12,
                                       color: AppColors.of(context).textMid,
                                     ),
+                                    textAlign: TextAlign.center,
                                   ),
-                                  const SizedBox(height: 8),
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: AppColors.of(context).parchment,
-                                      border: Border.all(
-                                        color: AppColors.of(
-                                          context,
-                                        ).parchmentBorder,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 8,
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          Icons.edit_outlined,
-                                          size: 16,
-                                          color: AppColors.of(
-                                            context,
-                                          ).textMid.withValues(alpha: 0.6),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: TextField(
-                                            controller: _buyInController,
-                                            keyboardType: TextInputType.number,
-                                            inputFormatters: [
-                                              FilteringTextInputFormatter
-                                                  .digitsOnly,
-                                            ],
-                                            onChanged: (value) {
-                                              setState(() {
-                                                _buyInAmount =
-                                                    int.tryParse(value) ?? 0;
-                                              });
-                                            },
-                                            style: PixelText.number(
-                                              size: 24,
-                                              color: AppColors.of(
-                                                context,
-                                              ).coinDark,
-                                            ),
-                                            decoration: InputDecoration(
-                                              hintText: '0',
-                                              hintStyle: PixelText.number(
-                                                size: 24,
-                                                color: AppColors.of(context)
-                                                    .coinDark
-                                                    .withValues(alpha: 0.3),
-                                              ),
-                                              border: InputBorder.none,
-                                              isDense: true,
-                                              contentPadding: EdgeInsets.zero,
-                                              suffixText: 'coins',
-                                              suffixStyle: PixelText.body(
-                                                size: 12,
-                                                color: AppColors.of(
-                                                  context,
-                                                ).textMid,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  // TR-102: payout presets are ignored for team
-                                  // races (the team pot splits evenly) — hide the
-                                  // picker in Teams mode. Tournaments are always
-                                  // winner-takes-all (champion takes the pot), so
-                                  // hide it there too (spec §9).
-                                  if (_isTournament) ...[
-                                    // Nothing to pick — WTA is implied.
-                                  ] else if (!_isTeamRace) ...[
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      'PAYOUT MODE',
-                                      style: PixelText.body(
-                                        size: 11,
-                                        color: AppColors.of(context).textMid,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Column(
-                                      children: payoutPresetOptions.map((
-                                        option,
-                                      ) {
-                                        final selected =
-                                            _payoutPreset == option.$2;
-                                        return Padding(
-                                          padding: const EdgeInsets.only(
-                                            bottom: 8,
-                                          ),
-                                          child: GestureDetector(
-                                            onTap: () => setState(
-                                              () => _payoutPreset = option.$2,
-                                            ),
-                                            child: Container(
-                                              width: double.infinity,
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 12,
-                                                    vertical: 10,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: selected
-                                                    ? AppColors.of(
-                                                        context,
-                                                      ).pillGreenDark
-                                                    : AppColors.of(
-                                                        context,
-                                                      ).parchmentDark,
-                                                borderRadius:
-                                                    BorderRadius.circular(8),
-                                              ),
-                                              child: Text(
-                                                option.$1,
-                                                style: PixelText.title(
-                                                  size: 12,
-                                                  color: selected
-                                                      ? Colors.white
-                                                      : AppColors.of(
-                                                          context,
-                                                        ).textDark,
-                                                ),
-                                                textAlign: TextAlign.center,
-                                              ),
-                                            ),
-                                          ),
-                                        );
-                                      }).toList(),
-                                    ),
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: Text(
-                                        payoutHelpText(_payoutPreset),
-                                        style: PixelText.body(
-                                          size: 12,
-                                          color: AppColors.of(context).textMid,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ),
-                                  ] else
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: Padding(
-                                        padding: const EdgeInsets.only(top: 12),
-                                        child: Text(
-                                          'Winning team splits the whole pot evenly',
-                                          style: PixelText.body(
-                                            size: 12,
-                                            color: AppColors.of(
-                                              context,
-                                            ).textMid,
-                                          ),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                      ),
-                                    ),
-                                ],
+                                ),
                               ],
                             ),
                           ),
-                        if (_customizeExpanded) const SizedBox(height: 24),
+                          const SizedBox(height: 24),
+                        ],
 
                         // Public race
                         if (_customizeExpanded)

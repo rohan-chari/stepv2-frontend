@@ -359,10 +359,14 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     }
   }
 
-  /// Returns true to proceed. Shows a buy-in confirm only for a paid bracket.
+  /// Returns true to proceed. Funded brackets are free, so joining is one tap;
+  /// the confirm survives only for a pre-flip bracket that still holds real
+  /// buy-ins (charging without asking would be the worse bug).
   Future<bool> _confirmBuyInIfNeeded() async {
     final t = _tournament;
-    final buyIn = t == null ? 0 : Tournament.buyInAmount(t);
+    final buyIn = t == null || Tournament.prizePool(t) != null
+        ? 0
+        : Tournament.buyInAmount(t);
     if (buyIn <= 0) return true;
     final ok = await _confirm(
       title: '$buyIn GOLD BUY-IN',
@@ -787,6 +791,17 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
   }
 
   Widget _prizeTile(Map<String, dynamic> t) {
+    // A funded bracket's pool is paid by the app; a featured/seeded bracket
+    // keeps its own minted champion prize (§4.4 branch 2).
+    final pool = Tournament.prizePool(t);
+    if (pool != null && pool.coins > 0 && !Tournament.isFeatured(t)) {
+      return _heroTile(
+        leading: const SpinningCoin(size: 28),
+        label: 'PRIZE POOL',
+        value: pool.formattedCoins,
+        valueColor: _tileGold,
+      );
+    }
     if (Tournament.hasPrize(t)) {
       return _heroTile(
         leading: const SpinningCoin(size: 28),

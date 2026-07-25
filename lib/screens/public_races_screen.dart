@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../models/loadable.dart';
 import '../models/race_handoff_result.dart';
+import '../models/race_prize_pool.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
@@ -144,7 +145,11 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
     final token = widget.authService.authToken;
     if (token == null || token.isEmpty) return;
     final raceId = race['id'] as String;
-    final buyIn = (race['buyInAmount'] as int?) ?? 0;
+    // Funded races (contract §5.1) cost nothing — joining is one tap. The
+    // guard below only survives for a legacy race created before app-funded
+    // pools that still holds real buy-ins.
+    final isFunded = RacePrizePool.fromRace(race) != null;
+    final buyIn = isFunded ? 0 : ((race['buyInAmount'] as int?) ?? 0);
     if (buyIn > 0 && buyIn > widget.authService.coins) {
       showErrorToast(context, 'Not enough gold for this buy-in');
       return;
@@ -372,7 +377,10 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
     final id = Tournament.id(t) ?? '';
     if (id.isEmpty || _joiningTournamentId != null) return;
 
-    final buyIn = Tournament.buyInAmount(t);
+    // Funded brackets are free (§5.2); only a pre-flip paid bracket confirms.
+    final buyIn = Tournament.prizePool(t) != null
+        ? 0
+        : Tournament.buyInAmount(t);
     if (!featured && buyIn > 0) {
       if (buyIn > widget.authService.coins) {
         showErrorToast(context, 'Not enough gold for this buy-in');
@@ -977,7 +985,8 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
     );
   }
 
-  /// A user-created public bracket card — paid joins pop the buy-in confirm.
+  /// A user-created public bracket card — free to join, playing for the
+  /// app-funded pool.
   Widget _buildUserTournamentCard(Map<String, dynamic> t) {
     final id = Tournament.id(t) ?? '';
     final joined = Tournament.amIn(t);
@@ -1010,10 +1019,12 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
             '${Tournament.durationSubcopy(Tournament.matchupDurationDays(t))}',
         filledLabel:
             '${Tournament.acceptedCount(t)}/${Tournament.bracketSize(t)} IN',
-        // The pot (what the champion actually walks away with) is the meaningful
-        // number on a paid user bracket; falls back to the crown for free ones.
-        prizeLabel: 'WINNER TAKES',
-        prizeValue: Tournament.championWinnings(t),
+        // What the champion walks away with: the app-funded pool, falling back
+        // to the pot for a bracket from an older backend.
+        prizeLabel: Tournament.prizePool(t) != null
+            ? 'PRIZE POOL'
+            : 'WINNER TAKES',
+        prizeValue: Tournament.prizeCoins(t),
         ctaKey: Key('user-tournament-join-$id'),
         ctaLabel: label,
         ctaVariant: variant,
@@ -1033,7 +1044,12 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
     final runnersLabel = maxParticipants == null
         ? '$participantCount'
         : '$participantCount/$maxParticipants';
-    final buyIn = race['buyInAmount'] as int? ?? 0;
+    // What the field is racing for: the app-funded pool when the backend sends
+    // one, else the projected pot (which is where an older backend carries it).
+    final prizeCoins =
+        RacePrizePool.fromRace(race)?.coins ??
+        (race['projectedPotCoins'] as num?)?.toInt() ??
+        0;
     final creator = race['creator'] as Map<String, dynamic>?;
     final creatorName = creator?['displayName'] as String? ?? 'Someone';
     final powerupsEnabled = race['powerupsEnabled'] as bool? ?? false;
@@ -1099,7 +1115,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
                   Icon(
                     Icons.groups_rounded,
                     size: 14,
-                    color: TeamRace.colorDark(RaceTeam.teamA),
+                    color: TeamRace.colorDark(RaceTeam.teamA, context),
                   ),
                   const SizedBox(width: 5),
                   Flexible(
@@ -1122,9 +1138,9 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
                 _buildStat('ENDS IN', timeLeftLabel),
                 const SizedBox(width: 16),
                 _buildStat('RUNNERS', runnersLabel),
-                if (buyIn > 0) ...[
+                if (prizeCoins > 0) ...[
                   const SizedBox(width: 16),
-                  _buildStat('BUY-IN', '$buyIn'),
+                  _buildStat('PRIZE', formatPrizeCoins(prizeCoins)),
                 ],
                 if (finishRewardPool > 0) ...[
                   const SizedBox(width: 16),

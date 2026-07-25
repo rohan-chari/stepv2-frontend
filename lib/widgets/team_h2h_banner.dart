@@ -68,9 +68,9 @@ class TeamH2HBanner extends StatelessWidget {
     required String name,
     required int total,
   }) {
-    final color = TeamRace.color(team);
-    final colorLight = TeamRace.colorLight(team);
-    final colorDark = TeamRace.colorDark(team);
+    final color = TeamRace.color(team, context);
+    final colorLight = TeamRace.colorLight(team, context);
+    final colorDark = TeamRace.colorDark(team, context);
     // Light plaques (e.g. the gold team) can't carry white text — flip the
     // title to the team's dark tone and drop the dark drop-shadow.
     final lightPlaque = color.computeLuminance() > 0.55;
@@ -150,8 +150,8 @@ class TeamTugRope extends StatelessWidget {
           child: CustomPaint(
             painter: _TugRopePainter(
               share: animatedShare,
-              teamAColor: TeamRace.color(RaceTeam.teamA),
-              teamBColor: TeamRace.color(RaceTeam.teamB),
+              teamAColor: TeamRace.color(RaceTeam.teamA, context),
+              teamBColor: TeamRace.color(RaceTeam.teamB, context),
               markerColor: AppColors.of(context).textMid,
               ropeDark: AppColors.of(context).dirtDark,
               ropeMid: AppColors.of(context).dirtMid,

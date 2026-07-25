@@ -62,25 +62,34 @@ class AccessoryThumbnail extends StatelessWidget {
     );
   }
 
+  /// Crops a horizontal frame sheet down to frame 0 and centers it.
+  ///
+  /// The sheet is laid out at its INTRINSIC size and clipped to its first
+  /// 1/frames slice ([Align.widthFactor] shrink-wraps to that slice), so the
+  /// crop is exact for any sheet aspect ratio. The surrounding [FittedBox] then
+  /// scales that single frame to the tile and [Center] centers it.
+  ///
+  /// The previous version stretched the sheet into a `frameWidth * frames` box
+  /// with `BoxFit.contain`; whenever the tile's aspect ratio didn't happen to
+  /// match the sheet's, `contain` letterboxed it and the top-left crop sliced
+  /// the letterbox instead of the frame — which is why the corgi and turtle sat
+  /// off-center in the shop.
   Widget _frameZeroCrop(String assetPath, int frames) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final frameWidth = constraints.maxWidth;
-        return ClipRect(
-          child: OverflowBox(
-            maxWidth: double.infinity,
-            alignment: Alignment.topLeft,
+    return Center(
+      child: FittedBox(
+        fit: BoxFit.contain,
+        child: ClipRect(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            widthFactor: 1 / frames,
             child: Image.asset(
               assetPath,
-              width: frameWidth * frames,
-              height: constraints.maxHeight,
-              fit: BoxFit.contain,
               filterQuality: FilterQuality.none,
               errorBuilder: errorBuilder,
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

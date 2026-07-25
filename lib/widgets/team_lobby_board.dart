@@ -267,9 +267,9 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
   // --- header chrome --------------------------------------------------------
 
   Widget _teamPlaque(RaceTeam team) {
-    final color = TeamRace.color(team);
-    final colorLight = TeamRace.colorLight(team);
-    final colorDark = TeamRace.colorDark(team);
+    final color = TeamRace.color(team, context);
+    final colorLight = TeamRace.colorLight(team, context);
+    final colorDark = TeamRace.colorDark(team, context);
     final name = TeamRace.teamName(widget.race, team).toUpperCase();
     final filled = _sideMembers(team).length;
     // Light plaques (the gold team) can't carry white text — flip the title to
@@ -427,8 +427,8 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
     required Map<String, dynamic> member,
     bool isArriving = false,
   }) {
-    final color = TeamRace.color(team);
-    final colorDark = TeamRace.colorDark(team);
+    final color = TeamRace.color(team, context);
+    final colorDark = TeamRace.colorDark(team, context);
     final isMe = member['userId'] == widget.myUserId;
     final name = member['displayName'] as String? ?? '???';
     final accessories =
@@ -528,7 +528,7 @@ class _TeamLobbyBoardState extends State<TeamLobbyBoard>
   }
 
   Widget _emptySlot({required Key key, required RaceTeam team}) {
-    final color = TeamRace.color(team);
+    final color = TeamRace.color(team, context);
     final tappable = widget.onTapEmptySlot != null;
 
     return GestureDetector(

@@ -405,6 +405,10 @@ abstract final class PowerupCopy {
   static const _extraDisplayNames = {
     'BANANA_PEEL': 'Banana Peel',
     'COINS': 'Coins',
+    // The Turtle character's passive block. Never a usable powerup — it only
+    // ever arrives as `blockedBy: "SHELL"` on a use-powerup result and inside
+    // a server-rendered feed line, so it stays out of [bundledTypes].
+    'SHELL': 'Shell',
   };
 
   static const _bundledDescriptions = {

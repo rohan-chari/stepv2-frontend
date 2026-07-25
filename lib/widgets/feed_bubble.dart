@@ -18,7 +18,9 @@ const _offensiveTypes = {
   'SIGNAL_JAMMER',
 };
 
-const _shieldTypes = {'COMPRESSION_SOCKS', 'MIRROR'};
+// SHELL is the Turtle character's passive block, not a held powerup, but it
+// reads as a defensive event in the feed and gets the same shield accent.
+const _shieldTypes = {'COMPRESSION_SOCKS', 'MIRROR', 'SHELL'};
 
 const _boostTypes = {
   'PROTEIN_SHAKE',

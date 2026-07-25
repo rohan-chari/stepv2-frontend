@@ -236,13 +236,20 @@ class RacerAvatarStack extends StatelessWidget {
       child: Stack(
         children: [
           for (int i = 0; i < shown.length; i++)
-            Positioned(left: i * step, child: _avatar(shown[i], i + 1)),
+            Positioned(
+              left: i * step,
+              child: _avatar(context, shown[i], i + 1),
+            ),
         ],
       ),
     );
   }
 
-  Widget _avatar(Map<String, dynamic> entry, int fallbackRank) {
+  Widget _avatar(
+    BuildContext context,
+    Map<String, dynamic> entry,
+    int fallbackRank,
+  ) {
     final rank = (entry['rank'] as num?)?.toInt() ?? fallbackRank;
     final isStealthed = entry['isStealthed'] == true;
     final accessories = isStealthed
@@ -261,7 +268,7 @@ class RacerAvatarStack extends StatelessWidget {
       accessories: accessories,
       size: size,
       animal: animal,
-      ringColor: team != null ? TeamRace.color(team) : null,
+      ringColor: team != null ? TeamRace.color(team, context) : null,
     );
   }
 }

@@ -289,19 +289,18 @@ void main() {
     final authService = await _createAuthService();
     await _pump(tester, authService, _RecordingApi());
 
-    // Free-for-all shows MAX RUNNERS.
+    // Free-for-all shows MAX RUNNERS and offers a payout preset.
     expect(find.text('MAX RUNNERS'), findsOneWidget);
+    expect(find.text('PAYOUT MODE'), findsOneWidget);
 
     await _switchToTeams(tester);
-    expect(find.text('MAX RUNNERS'), findsNothing);
 
-    // Buy-in stays available in Teams mode, but the payout-preset picker
-    // (ignored for team races) is gone.
-    await tester.ensureVisible(find.text('BUY-IN'));
-    await tester.tap(find.text('BUY-IN'));
-    await tester.pumpAndSettle();
-    expect(find.text('BUY-IN PER RUNNER'), findsOneWidget);
+    // Teams fix the field at 2 x teamSize and split their pool evenly, so
+    // neither control belongs here. (App-funded prize pools: there is no
+    // buy-in card left to reveal either.)
+    expect(find.text('MAX RUNNERS'), findsNothing);
     expect(find.text('PAYOUT MODE'), findsNothing);
+    expect(find.byKey(const Key('payout-mode-card')), findsNothing);
   });
 
   group('TR-103: server-pool name suggestions (contract §3b)', () {

@@ -44,10 +44,10 @@ class TeamScoreline extends StatelessWidget {
     final colors = AppColors.of(context);
     final aColor = colors.isDark
         ? colors.feedGold
-        : TeamRace.colorDark(RaceTeam.teamA);
+        : TeamRace.colorDark(RaceTeam.teamA, context);
     final bColor = colors.isDark
         ? colors.successText
-        : TeamRace.colorDark(RaceTeam.teamB);
+        : TeamRace.colorDark(RaceTeam.teamB, context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -114,8 +114,11 @@ class TeamFormatChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [TeamColors.teamA, TeamColors.teamB],
+        gradient: LinearGradient(
+          colors: [
+            TeamColors.teamAOf(context),
+            TeamColors.teamBOf(context),
+          ],
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
         ),

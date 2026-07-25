@@ -1,3 +1,4 @@
+import '../models/race_prize_pool.dart';
 import '../styles.dart';
 
 /// Lifecycle of a bracket (contract §5 `TournamentStatus`).
@@ -309,8 +310,18 @@ abstract final class Tournament {
     return championPrizeCoins(t);
   }
 
+  /// The app-funded bracket pool (contract §5.2), or null when the backend
+  /// predates app-funded pools or the bracket is a legacy paid / seeded one.
+  static RacePrizePool? prizePool(Map<String, dynamic> t) =>
+      RacePrizePool.fromRace(t);
+
+  /// The coins on the line, preferring the funded pool and falling back to
+  /// today's pot / minted-prize reading.
+  static int prizeCoins(Map<String, dynamic> t) =>
+      prizePool(t)?.coins ?? championWinnings(t);
+
   /// Whether the champion takes any coins at all (drives "…for the crown" copy).
-  static bool hasPrize(Map<String, dynamic> t) => championWinnings(t) > 0;
+  static bool hasPrize(Map<String, dynamic> t) => prizeCoins(t) > 0;
 
   // -- Collections ---------------------------------------------------------
 
@@ -530,6 +541,12 @@ abstract final class Tournament {
   /// "CHAMPION WINS 150" for a featured minted prize, "WINNER TAKES THE CROWN"
   /// for a free user bracket.
   static String prizePlaque(Map<String, dynamic> t) {
+    // App-funded bracket (§5.2): the whole pool goes to the champion, but the
+    // number is the app's, not the players'.
+    final pool = prizePool(t);
+    if (pool != null && pool.coins > 0 && !isFeatured(t)) {
+      return 'PRIZE POOL ${pool.formattedCoins}';
+    }
     if (isFeatured(t)) {
       final prize = championPrizeCoins(t);
       if (prize > 0) return 'CHAMPION WINS $prize';

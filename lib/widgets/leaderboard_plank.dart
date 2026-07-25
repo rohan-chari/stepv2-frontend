@@ -1,4 +1,6 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 
 import 'app_avatar.dart';
@@ -67,9 +69,15 @@ class LeaderboardPlank extends StatelessWidget {
   }
 
   /// The avatar, optionally wrapped in a fire aura when the multiplier is >1.
-  /// A stealthed runner never shows fire (its own multiplier is hidden). The
-  /// fire is centered behind the avatar via an [OverflowBox] so it can lick
-  /// past the edges without changing the row's layout size.
+  /// A stealthed runner never shows fire (its own multiplier is hidden).
+  ///
+  /// The flame is drawn IN FRONT of the avatar and anchored to its BASE so it
+  /// rises upward, which is the only direction it can grow freely: planks are
+  /// Column siblings painted top-to-bottom over an opaque background, so
+  /// downward bleed is painted over by the next plank (the bug that once made a
+  /// 10x aura vanish) while upward bleed paints over the row above. Anchoring
+  /// the growth upward is what lets the flame be genuinely bigger than the
+  /// avatar instead of a thin rim clipped to the row's padding budget.
   Widget _buildAvatar(BuildContext context) {
     final avatar = AppAvatar(
       // The raw name, not displayName: the " (you)" suffix would turn the
@@ -86,7 +94,28 @@ class LeaderboardPlank extends StatelessWidget {
     if (isStealthed || m == null || m <= 1.001) return avatar;
 
     final tier = m.floor();
-    final fireSize = avatarSize * (1.55 + 0.12 * (tier - 2).clamp(0, 4));
+
+    // Size is FIXED at 2x the avatar for every tier. The ring's hole is a fixed
+    // fraction of the sprite, so "bigger flame" and "bigger hole" are the same
+    // knob — ramping size per tier changes how much of the avatar the ring
+    // covers, which is what read as low tiers being misaligned. Tier intensity
+    // is carried by FireAura instead (flicker speed, colour grade, pulse,
+    // bloom), which is also what an 11x should look like: hotter, not chunkier.
+    final fireSize = avatarSize * 2.0;
+
+    // Land the ring's HOLE on the avatar's centre. The hole is not the frame's
+    // centre — it sits low in the frame (0.63) because the flames lick upward,
+    // so aligning frame-centre-to-avatar-centre would sink the ring.
+    final hole = FireAura.holeCenter(fireSize);
+    final avatarCenter = Offset(avatarSize / 2, avatarSize / 2);
+    final left = avatarCenter.dx - hole.dx;
+    // Below the avatar box, the flame may only use the row's own padding: any
+    // further and the next plank's opaque background slices its base off.
+    final bottomOverhang = math.min(
+      verticalPadding,
+      fireSize - hole.dy - avatarSize / 2,
+    );
+
     return SizedBox(
       width: avatarSize,
       height: avatarSize,
@@ -94,12 +123,16 @@ class LeaderboardPlank extends StatelessWidget {
         clipBehavior: Clip.none,
         alignment: Alignment.center,
         children: [
-          OverflowBox(
-            maxWidth: fireSize,
-            maxHeight: fireSize,
-            child: FireAura(size: fireSize, tier: tier),
-          ),
           avatar,
+          Positioned(
+            left: left,
+            bottom: -bottomOverhang,
+            child: SizedBox(
+              width: fireSize,
+              height: fireSize,
+              child: FireAura(size: fireSize, tier: tier),
+            ),
+          ),
         ],
       ),
     );

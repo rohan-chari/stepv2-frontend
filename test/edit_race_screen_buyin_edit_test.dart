@@ -5,10 +5,11 @@ import 'package:step_tracker/screens/edit_race_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 
-// Issue 4: the owner can edit the buy-in on a PENDING race even after runners
-// have paid in. The field is no longer hard-locked; a consequence line warns
-// that changing it refunds/re-charges everyone, and a BUYIN_UNAFFORDABLE error
-// surfaces the server's named-player message verbatim.
+// App-funded prize pools (spec §7 / D7). This file used to assert that the
+// owner could edit a race's buy-in. Buy-ins are gone: there is no buy-in card,
+// nothing is ever charged or refunded when a race is edited, and the PATCH
+// carries no buy-in field. What the owner still controls is how the funded pool
+// is split — the payout mode.
 
 class _RecordingApi extends BackendApiService {
   Map<String, dynamic>? lastUpdate;
@@ -30,54 +31,59 @@ class _RecordingApi extends BackendApiService {
     String? teamBName,
     int? teamSize,
   }) async {
-    lastUpdate = {'buyInAmount': buyInAmount};
+    lastUpdate = {
+      'buyInAmount': buyInAmount,
+      'payoutPreset': payoutPreset,
+      'maxDurationDays': maxDurationDays,
+    };
     return {
       'race': {'id': raceId},
     };
   }
 }
 
-class _ThrowingApi extends BackendApiService {
-  @override
-  Future<Map<String, dynamic>> updateRace({
-    required String identityToken,
-    required String raceId,
-    String? name,
-    int? maxDurationDays,
-    bool? isPublic,
-    bool? powerupsEnabled,
-    int? powerupStepInterval,
-    int? buyInAmount,
-    String? payoutPreset,
-    int? maxParticipants,
-    bool setMaxParticipantsUnlimited = false,
-    String? teamAName,
-    String? teamBName,
-    int? teamSize,
-  }) async {
-    throw const ApiException(
-      "Trail Walker doesn't have enough coins for the new buy-in.",
-      statusCode: 400,
-      code: 'BUYIN_UNAFFORDABLE',
-    );
-  }
-}
+/// A funded race with runners already in it (contract §5.1: `buyInAmount: 0`,
+/// nothing held).
+Map<String, dynamic> _fundedRace() => {
+  'id': 'race-1',
+  'name': 'Free Ride',
+  'status': 'PENDING',
+  'maxDurationDays': 3,
+  'buyInAmount': 0,
+  'payoutPreset': 'WINNER_TAKES_ALL',
+  'isPublic': false,
+  'maxParticipants': 10,
+  'prizePool': const {
+    'coins': 400,
+    'projected': true,
+    'atMax': false,
+    'playerCount': 2,
+    'durationDays': 3,
+    'durationPoints': 2,
+    'coinUnit': 20,
+    'maxCoins': 3200,
+    'funded': true,
+  },
+  'participants': const [
+    {'userId': 'u1', 'status': 'ACCEPTED', 'buyInStatus': 'NONE'},
+    {'userId': 'u2', 'status': 'ACCEPTED', 'buyInStatus': 'NONE'},
+  ],
+};
 
-Map<String, dynamic> _paidRace() => {
-      'id': 'race-1',
-      'name': 'Coin Clash',
-      'status': 'PENDING',
-      'maxDurationDays': 7,
-      'buyInAmount': 100,
-      'payoutPreset': 'WINNER_TAKES_ALL',
-      'isPublic': false,
-      'maxParticipants': 10,
-      'participants': const [
-        // Someone has already paid in -> buyInStatus HELD.
-        {'userId': 'u1', 'status': 'ACCEPTED', 'buyInStatus': 'HELD'},
-        {'userId': 'u2', 'status': 'ACCEPTED', 'buyInStatus': 'HELD'},
-      ],
-    };
+/// A race from a backend older than this build: no `prizePool` at all.
+Map<String, dynamic> _legacyRace() => {
+  'id': 'race-1',
+  'name': 'Coin Clash',
+  'status': 'PENDING',
+  'maxDurationDays': 7,
+  'buyInAmount': 100,
+  'payoutPreset': 'WINNER_TAKES_ALL',
+  'isPublic': false,
+  'maxParticipants': 10,
+  'participants': const [
+    {'userId': 'u1', 'status': 'ACCEPTED', 'buyInStatus': 'HELD'},
+  ],
+};
 
 Future<AuthService> _authService() async {
   SharedPreferences.setMockInitialValues({
@@ -104,83 +110,86 @@ Future<void> _pump(
         authService: authService,
         backendApiService: api,
         raceId: 'race-1',
-        race: race ?? _paidRace(),
+        race: race ?? _fundedRace(),
       ),
     ),
   );
   await tester.pump();
 }
 
-Future<void> _editBuyIn(WidgetTester tester, String value) async {
-  final field = find.descendant(
-    of: find.byKey(const Key('edit-buyin-input')),
-    matching: find.byType(TextField),
-  );
-  await tester.ensureVisible(field);
-  await tester.enterText(field, value);
-  await tester.pump();
-}
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('buy-in input is editable with paid participants (not locked)',
-      (tester) async {
+  testWidgets('the buy-in card is gone', (tester) async {
     await _pump(tester, _RecordingApi());
 
-    // The old hard lock copy must be gone.
-    expect(find.text('LOCKED — RUNNERS PAID'), findsNothing);
-    expect(
-      find.text('Buy-in is locked — a runner has already paid in.'),
-      findsNothing,
-    );
-
-    // The input is enabled (enabled == null means "use default: enabled").
-    final field = tester.widget<TextField>(
-      find.descendant(
-        of: find.byKey(const Key('edit-buyin-input')),
-        matching: find.byType(TextField),
-      ),
-    );
-    expect(field.enabled ?? true, isTrue);
+    expect(find.text('BUY-IN'), findsNothing);
+    expect(find.text('BUY-IN PER RUNNER'), findsNothing);
+    expect(find.text('PAID RACE'), findsNothing);
+    expect(find.byKey(const Key('edit-buyin-input')), findsNothing);
+    // No coins move on an edit any more, so there is nothing to warn about.
+    expect(find.byKey(const Key('edit-buyin-consequence')), findsNothing);
+    expect(find.textContaining('refunds or re-charges'), findsNothing);
+    // Only the race-name field remains.
+    expect(find.byType(TextField), findsOneWidget);
   });
 
-  testWidgets('shows the refund/re-charge consequence line', (tester) async {
-    await _pump(tester, _RecordingApi());
-    expect(
-      find.textContaining('refunds or re-charges'),
-      findsOneWidget,
-    );
+  testWidgets('the buy-in card is gone for a legacy paid race too', (
+    tester,
+  ) async {
+    await _pump(tester, _RecordingApi(), race: _legacyRace());
+
+    expect(find.byKey(const Key('edit-buyin-input')), findsNothing);
+    expect(find.text('BUY-IN PER RUNNER'), findsNothing);
   });
 
-  testWidgets('editing the amount PATCHes the new buy-in', (tester) async {
+  testWidgets('saving sends no buy-in field', (tester) async {
     final api = _RecordingApi();
     await _pump(tester, api);
 
-    await _editBuyIn(tester, '150');
+    // Change something real so the sparse PATCH actually fires.
+    await tester.ensureVisible(find.byKey(const Key('duration-option-7')));
+    await tester.tap(find.byKey(const Key('duration-option-7')));
+    await tester.pump();
+
     await tester.ensureVisible(find.text('SAVE CHANGES'));
     await tester.tap(find.text('SAVE CHANGES'));
     await tester.pump();
     await tester.pump();
 
     expect(api.lastUpdate, isNotNull);
-    expect(api.lastUpdate!['buyInAmount'], 150);
+    expect(api.lastUpdate!['maxDurationDays'], 7);
+    expect(api.lastUpdate!['buyInAmount'], isNull);
   });
 
-  testWidgets('BUYIN_UNAFFORDABLE surfaces the server named-player message',
-      (tester) async {
-    await _pump(tester, _ThrowingApi());
+  testWidgets('the payout mode is still editable and is PATCHed', (
+    tester,
+  ) async {
+    final api = _RecordingApi();
+    await _pump(tester, api);
 
-    await _editBuyIn(tester, '175');
+    expect(find.text('PAYOUT MODE'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('TOP 3'));
+    await tester.tap(find.text('TOP 3'));
+    await tester.pump();
+
     await tester.ensureVisible(find.text('SAVE CHANGES'));
     await tester.tap(find.text('SAVE CHANGES'));
     await tester.pump();
     await tester.pump();
 
-    expect(
-      find.text("Trail Walker doesn't have enough coins for the new buy-in."),
-      findsOneWidget,
-    );
-    await tester.pump(const Duration(seconds: 4));
+    expect(api.lastUpdate, isNotNull);
+    expect(api.lastUpdate!['payoutPreset'], 'TOP3_70_20_10');
+    expect(api.lastUpdate!['buyInAmount'], isNull);
+  });
+
+  testWidgets('duration options land on the prize-pool bands', (tester) async {
+    await _pump(tester, _RecordingApi());
+
+    for (final days in [1, 3, 7, 14]) {
+      expect(find.byKey(Key('duration-option-$days')), findsOneWidget);
+    }
+    expect(find.byKey(const Key('duration-option-5')), findsNothing);
   });
 }

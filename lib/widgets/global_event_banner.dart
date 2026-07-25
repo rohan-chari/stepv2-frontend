@@ -113,8 +113,11 @@ class _GlobalEventBannerState extends State<GlobalEventBanner> {
                 Text(
                   '${multiplier}x RACE STEPS',
                   style: PixelText.title(
+                    // textDark flips to cream at night; woodDark/roofDark are
+                    // both near-black in the night palette and vanished into
+                    // the dark parchment surface.
                     size: 14,
-                    color: AppColors.of(context).woodDark,
+                    color: AppColors.of(context).textDark,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -122,7 +125,7 @@ class _GlobalEventBannerState extends State<GlobalEventBanner> {
                   'STEPS COUNT ${multiplier}x IN ALL RACES — GO!',
                   style: PixelText.body(
                     size: 12.5,
-                    color: AppColors.of(context).roofDark,
+                    color: AppColors.of(context).textMid,
                   ),
                 ),
               ],
