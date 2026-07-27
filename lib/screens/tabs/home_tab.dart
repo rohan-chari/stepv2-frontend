@@ -16,7 +16,6 @@ import '../../widgets/arcade_fx.dart';
 import '../../widgets/coach_tip.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/global_event_banner.dart';
-import '../../widgets/hero_pace_sign.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/step_milestones_section.dart';
 import '../../widgets/streak_chip.dart' show StreakChip, StreakChipState;
@@ -847,30 +846,9 @@ class HomeTab extends StatelessWidget {
               top: topInset + (compact ? 52 : 72),
               child: hud,
             ),
-            // The pace line stands on a wooden trail sign planted in the dirt
-            // strip, rather than floating on the scrolling brick texture with
-            // only a drop shadow holding it up (item 18). The board is sized
-            // from the copy (HeroPaceSign.heightFor) — at the original 40pt it
-            // shrank the two-sentence line to ~7pt and was unreadable. Its top
-            // edge still clears the capybara's feet, which land at roughly
-            // `groundHeight - 4 - capySize * 0.22` + the sprite's 22% padding,
-            // i.e. ~80pt above the scene bottom.
-            if (!(isLoading && stepData == null) && error == null)
-              Positioned(
-                left: 12,
-                right: 12,
-                // Sits low in the dirt: bottom + the board's height must stay
-                // under the grass fringe at the top of the ground strip.
-                bottom: 4,
-                child: Center(
-                  child: _PaceSignFrame(
-                    height: HeroPaceSign.heightFor(compact: compact),
-                    child: HeroPaceSign(
-                      text: _heroSummary(steps: stepData?.steps),
-                    ),
-                  ),
-                ),
-              ),
+            // The wooden pace-line trail sign that used to stand in the dirt
+            // strip here is gone: the line was narration the scene didn't need,
+            // and the plank crowded the capybara.
             // The capybara stands on the grass line. The walk sprite has
             // ~22% transparent padding below the feet, so pull the widget
             // down by that much to land the feet a few px into the grass.
@@ -940,23 +918,6 @@ class HomeTab extends StatelessWidget {
     Shadow(color: Color(0x59102A3C), blurRadius: 0, offset: Offset(0, 4)),
     Shadow(color: Color(0x33000000), blurRadius: 10, offset: Offset(0, 2)),
   ];
-
-  /// The pace line under the capy. [steps] is null when today hasn't started —
-  /// either no steps yet, or no `stepData` at all (item 18). Both used to fall
-  /// through to the positive "Clean pace so far" bucket, which read as praise
-  /// for standing still at midnight.
-  String _heroSummary({required int? steps}) {
-    if (steps == null || steps <= 0) {
-      return 'Fresh day. Get moving to hit your first milestone.';
-    }
-    if (steps >= 20000) {
-      return 'Huge day. You cleared every milestone — go claim those coins.';
-    }
-    if (steps >= 5000) {
-      return 'Nice pace. Tap the milestones below to claim your coins.';
-    }
-    return 'Clean pace so far. Keep walking to hit your first milestone.';
-  }
 
   static String _formatNumber(int n) {
     final s = n.toString();
@@ -1995,36 +1956,6 @@ class _HomeSectionHeader extends StatelessWidget {
             ).copyWith(shadows: _textShadows),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// Gives the trail sign its intended height, and scales the whole board down
-/// proportionally on phones too narrow to seat it.
-///
-/// A bare `SizedBox(height:)` around the sign's [AspectRatio] would overflow
-/// horizontally below ~340pt of usable width instead of shrinking, so the
-/// board is laid out at its natural size and fitted into whatever is actually
-/// available. Scaling the plank and its type together keeps the wood grain and
-/// the pace line in the same proportion at every width.
-class _PaceSignFrame extends StatelessWidget {
-  const _PaceSignFrame({required this.height, required this.child});
-
-  final double height;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: height,
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: SizedBox(
-          height: height,
-          width: height * HeroPaceSign.plankAspect,
-          child: child,
-        ),
       ),
     );
   }

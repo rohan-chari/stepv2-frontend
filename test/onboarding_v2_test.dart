@@ -53,9 +53,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Sunrise Sprint'), findsOneWidget);
+    // The headline is the moment, not the race's own name.
+    expect(find.text('Now you’re ready to join your first race'), findsOneWidget);
+    expect(find.text('DAILY CHALLENGE'), findsOneWidget);
     expect(find.text('@Trail Walker'), findsOneWidget);
-    expect(find.text('SEE MY RACE'), findsOneWidget);
+    expect(find.text('JOIN RACE'), findsOneWidget);
     expect(find.text('NOTIFICATIONS'), findsNothing);
     expect(find.text('START TUTORIAL'), findsNothing);
   });
@@ -73,7 +75,7 @@ void main() {
     expect(find.text('NOTIFICATIONS'), findsOneWidget);
     expect(find.text('Stay in the race'), findsOneWidget);
     // The daily intro waits its turn behind the gate.
-    expect(find.text('SEE MY RACE'), findsNothing);
+    expect(find.text('JOIN RACE'), findsNothing);
     expect(find.text('FIND A RACE'), findsNothing);
   });
 
@@ -121,6 +123,6 @@ void main() {
 
     expect(skipped, isTrue);
     expect(fetched, isFalse);
-    expect(find.text('SEE MY RACE'), findsNothing);
+    expect(find.text('JOIN RACE'), findsNothing);
   });
 }

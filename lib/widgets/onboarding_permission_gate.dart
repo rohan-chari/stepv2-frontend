@@ -56,7 +56,8 @@ class OnboardingPermissionGate extends StatelessWidget {
     final colors = AppColors.of(context);
     return OnboardingScene(
       headline: headline,
-      emblem: _PermissionEmblem(icon: icon),
+      // No emblem: the icon-in-a-ring floating in the sky read as a tappable
+      // button (it isn't). The icon still appears on the real CTA below.
       dockLabel: label,
       dockBody: body,
       error: error,
@@ -107,26 +108,6 @@ class OnboardingPermissionGate extends StatelessWidget {
           ),
         ],
       ],
-    );
-  }
-}
-
-/// The permission icon floating in the night sky — a soft moonlit ring, sized
-/// to read as scenery rather than chrome.
-class _PermissionEmblem extends StatelessWidget {
-  const _PermissionEmblem({required this.icon});
-
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
-    return Container(
-      width: 108,
-      height: 108,
-      decoration: onboardingSkyRing(context, shape: BoxShape.circle),
-      alignment: Alignment.center,
-      child: Icon(icon, size: 52, color: colors.textLight),
     );
   }
 }

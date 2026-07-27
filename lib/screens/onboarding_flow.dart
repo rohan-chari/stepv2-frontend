@@ -317,15 +317,18 @@ class _OnboardingDailyIntroStepState extends State<OnboardingDailyIntroStep> {
     final handle = atName(
       racerName == null || racerName.isEmpty ? 'Racer' : racerName,
     );
+    // The headline used to be the race's own name ("Daily 10K Sprint"), which
+    // read as a title card for a thing the user had no context for. Say what
+    // this moment actually is instead — the race name is not load-bearing here.
     final title = verified
-        ? (daily['name'] as String? ?? 'Daily Race')
+        ? 'Now you’re ready to join your first race'
         : 'Your first race is waiting';
 
     return OnboardingScene(
       headline: title,
       // No trophy emblem: the race name IS the centerpiece here, and a generic
       // cup in a ring only pushed it up into the corner of the sky.
-      dockLabel: verified ? 'TODAY’S RACE' : 'READY TO RACE',
+      dockLabel: verified ? 'DAILY CHALLENGE' : 'READY TO RACE',
       // The one thing worth saying here, and the only thing the demo could not
       // teach: the next race is not a script. The countdown-plus-rules line
       // this replaced was a third voice explaining mechanics they just played.
@@ -364,7 +367,7 @@ class _OnboardingDailyIntroStepState extends State<OnboardingDailyIntroStep> {
           child: PillButton(
             key: const Key('onboarding-v2-primary'),
             label: verified
-                ? (_entering ? 'OPENING...' : 'SEE MY RACE')
+                ? (_entering ? 'OPENING...' : 'JOIN RACE')
                 : 'FIND A RACE',
             variant: PillButtonVariant.secondary,
             fullWidth: true,
