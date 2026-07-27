@@ -250,10 +250,10 @@ class HomeTab extends StatelessWidget {
                                   child: banner,
                                 ),
                               ),
-                            // SETUP sits directly above the races: finishing
-                            // setup is a prerequisite for everything below it,
-                            // and a user with no name or photo is worse off in
-                            // every race they join. It collapses to a zero-
+                            // SETUP leads the page: finishing setup is a
+                            // prerequisite for everything below it, and a user
+                            // with no name or photo is worse off in every race
+                            // they join. It collapses to a zero-
                             // height SizedBox.shrink when there's nothing to
                             // do, so a finished user sees no gap here. The
                             // stagger indices below must stay in visual order
@@ -280,15 +280,13 @@ class HomeTab extends StatelessWidget {
                                 onFindFriends: onOpenFriendsTab,
                               ),
                             ),
-                            if (raceCard != null)
-                              StaggerIn(index: 3, child: _buildRaceSection())
-                            else if (raceCardLoading)
-                              StaggerIn(
-                                index: 3,
-                                child: _buildRaceSkeletonSection(),
-                              ),
+                            // Today's coins sits above the races: it's the one
+                            // section that moves every single day whether or not
+                            // the user is in a race, so it earns the higher
+                            // slot. The stagger index moves with it — the
+                            // cascade is ordered by index, not by position.
                             StaggerIn(
-                              index: 4,
+                              index: 3,
                               child: KeyedSubtree(
                                 key: tutorialMilestonesKey,
                                 child: CoachTipHost(
@@ -317,6 +315,13 @@ class HomeTab extends StatelessWidget {
                                 ),
                               ),
                             ),
+                            if (raceCard != null)
+                              StaggerIn(index: 4, child: _buildRaceSection())
+                            else if (raceCardLoading)
+                              StaggerIn(
+                                index: 4,
+                                child: _buildRaceSkeletonSection(),
+                              ),
                           ],
                         ),
                       ),
