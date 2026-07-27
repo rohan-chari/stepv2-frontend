@@ -721,13 +721,26 @@
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
-	<!-- Portrait only. Every screen is designed for a portrait phone; landscape
-	     was never laid out. The ~ipad variant is gone along with iPad support
-	     (TARGETED_DEVICE_FAMILY = 1). Mirrored in main.dart via
-	     SystemChrome.setPreferredOrientations so Android matches. -->
+	<!-- iPhone is portrait-only: every screen is laid out for a portrait phone
+	     and landscape was never designed.
+	     The ~ipad list must keep ALL FOUR orientations. iPad support cannot be
+	     dropped (App Store error 90101 rejects any bundle that supports fewer
+	     devices than the previously shipped version, and 1.3.6 shipped
+	     universal), and an iPad app that declares multitasking is expected to
+	     declare every orientation. Runtime behaviour is still portrait
+	     everywhere via SystemChrome.setPreferredOrientations in main.dart, so
+	     the layout never actually rotates — this list only satisfies Apple's
+	     declaration check. -->
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 </dict>
 </plist>
