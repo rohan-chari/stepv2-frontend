@@ -20,9 +20,9 @@ bool get onboardingSceneInTestEnv {
 
 /// Shared scaffold for every onboarding step, mirroring the title screen's
 /// composition exactly: the [HomeHeroScene] daytime sky/sun/clouds with the
-/// [HeroTreeline] hedge and the walking capybara on the ground strip up top,
-/// and the green arcade-checker dock pinned to the bottom carrying the step's
-/// copy and actions. Steps differ only in the headline floating in the sky, an
+/// walking capybara on the scrolling ground strip up top, and the green
+/// arcade-checker dock pinned to the bottom carrying the step's copy and
+/// actions. Steps differ only in the headline floating in the sky, an
 /// optional emblem hovering mid-scene, and the dock contents.
 class OnboardingScene extends StatelessWidget {
   const OnboardingScene({
@@ -96,17 +96,14 @@ class OnboardingScene extends StatelessWidget {
               child: HomeHeroScene(
                 groundHeight: groundHeight,
                 skyAlignment: const Alignment(0.6, 1),
+                // Same walking ground the title screen and home hero use, so
+                // the world is in motion the whole way through onboarding
+                // rather than freezing the moment the title screen ends.
+                groundScrollSpeed: 26,
                 child: Stack(
                   children: [
-                    // Same horizon hedge the title screen draws, so stepping
-                    // from it into onboarding doesn't change the world.
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: groundHeight - 8,
-                      height: compact ? 76 : 96,
-                      child: const IgnorePointer(child: HeroTreeline()),
-                    ),
+                    // No horizon hedge: the scene is bare sky + ground, matching
+                    // the title screen and the home tab's hero.
                     SafeArea(
                       bottom: false,
                       child: Stack(
@@ -325,6 +322,9 @@ class OnboardingSceneLoading extends StatelessWidget {
           Widget scene = HomeHeroScene(
             groundHeight: 80,
             skyAlignment: const Alignment(0.6, 1),
+            // Keeps walking through the handoff frame too, so the ground never
+            // stalls between steps.
+            groundScrollSpeed: 26,
             child: Center(
               child: CircularProgressIndicator(
                 color: colors.textLight,

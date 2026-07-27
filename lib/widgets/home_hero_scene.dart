@@ -339,49 +339,6 @@ class _CloudInstance extends StatelessWidget {
   }
 }
 
-/// Generated pixel-art hedge tiled across the horizon. Sized by height and
-/// repeated horizontally — the same explicit-width tiling the hero scene's
-/// ground strip uses, because `Image`'s own repeat sizing renders short on
-/// high devicePixelRatio screens.
-class HeroTreeline extends StatelessWidget {
-  const HeroTreeline({super.key});
-
-  static const _asset = 'assets/images/hero_treeline_day.png';
-  static const _srcWidth = 1200.0;
-  static const _srcHeight = 206.0;
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRect(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final tileW = _srcWidth * constraints.maxHeight / _srcHeight;
-          final tiles = (constraints.maxWidth / tileW).ceil();
-          return OverflowBox(
-            maxWidth: double.infinity,
-            alignment: Alignment.bottomLeft,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                for (var i = 0; i < tiles; i++)
-                  Image.asset(
-                    _asset,
-                    width: tileW,
-                    height: constraints.maxHeight,
-                    fit: BoxFit.fill,
-                    filterQuality: FilterQuality.none,
-                    errorBuilder: (_, _, _) => SizedBox(width: tileW),
-                  ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
 /// A number that counts up to [value] (and re-animates between values on
 /// refresh). Settles instantly when animations are disabled.
 class CountUpText extends StatelessWidget {
