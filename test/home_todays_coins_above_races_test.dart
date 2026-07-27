@@ -7,6 +7,7 @@ import 'package:step_tracker/screens/tabs/home_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/widgets/arcade_fx.dart';
+import 'package:step_tracker/widgets/step_milestones_section.dart';
 
 // Home section order: SETUP, then "Today's coins", then RACES.
 //
@@ -102,6 +103,37 @@ void main() {
       tester.getTopLeft(coins).dy,
       lessThan(tester.getTopLeft(races.first).dy),
     );
+  });
+
+  testWidgets("Today's coins breathes above and hugs the RACES header below", (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final api = _FakeApi();
+    final authService = await _authService(api);
+
+    await tester.pumpWidget(_buildHome(authService, api));
+    await _flush(tester);
+
+    final section = tester.getRect(find.byType(StepMilestonesSection));
+    final coins = tester.getRect(find.text("Today's coins"));
+    final races = tester.getRect(find.text('RACES').first);
+
+    // The quick-actions row above ends flush, so this inset is the entire gap
+    // under the EXTRA SPIN / SHOP buttons. It used to be 6 and read as a
+    // collision.
+    final aboveHeader = coins.top - section.top;
+    expect(aboveHeader, greaterThan(16));
+
+    // ...and the RACES header sits close to the card it follows rather than
+    // floating midway between the two sections.
+    final belowCard = races.top - section.bottom;
+    expect(belowCard, lessThan(14));
+
+    // The asymmetry is the point: more air above the section than below it.
+    expect(aboveHeader, greaterThan(belowCard));
   });
 
   testWidgets('the stagger cascade still runs in visual order', (tester) async {
