@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 2.0.1
+version: 2.0.2
 
 environment:
   sdk: ^3.10.1
@@ -83,12 +83,20 @@ flutter:
 
   assets:
     - assets/images/
-    - assets/images/fx/
     - assets/images/accessories/
     - assets/images/powerups/
     # Variable TTFs registered at runtime by the iOS native ad factory
     # (RaceFeedNativeAdFactory) — assets only, NOT a flutter fonts: entry.
+    # (Jersey25-Regular.ttf in here IS a real fonts: family — see below.)
     - assets/fonts/
+
+  # Bundled, not fetched: the title-screen wordmark is the first thing a new
+  # user sees, often before the device has a usable network. google_fonts
+  # would fall back to a non-pixel face on a cold offline launch.
+  fonts:
+    - family: Jersey25
+      fonts:
+        - asset: assets/fonts/Jersey25-Regular.ttf
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

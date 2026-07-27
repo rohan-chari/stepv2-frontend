@@ -25,6 +25,12 @@ class OnboardingFlow extends StatelessWidget {
     required this.onEnterDaily,
     required this.onSkipFirstRace,
     this.onboardingV2Enabled = false,
+    this.onboardingV3Enabled = false,
+    this.healthAttemptCount = 0,
+    this.onOpenHealthSettings,
+    this.onEscapeHealthGate,
+    this.onFetchInviterRace,
+    this.onJoinInviterRace,
     this.displayName,
     this.onFetchActiveDaily,
     this.onEnterVerifiedDaily,
@@ -69,6 +75,32 @@ class OnboardingFlow extends StatelessWidget {
 
   /// Explicit remote opt-in. False/missing retains every v1 gate above.
   final bool onboardingV2Enabled;
+
+  /// Explicit remote opt-in to the onboarding revamp. False/missing renders
+  /// the v2 (or v1) sequence byte-for-byte as it ships today — that is the
+  /// rollback path, and it is why the v2 branch below is untouched.
+  final bool onboardingV3Enabled;
+
+  /// How many completed health-permission attempts the user has made. Drives
+  /// the Android ladder; the host owns the counter (it must survive an app
+  /// kill mid-onboarding).
+  final int healthAttemptCount;
+
+  /// Launches the platform health settings. Only wired once retrying has
+  /// stopped being useful.
+  final VoidCallback? onOpenHealthSettings;
+
+  /// Lets the user out of the health gate into the degraded state.
+  final VoidCallback? onEscapeHealthGate;
+
+  /// Resolves the inviter's joinable race for a referred install
+  /// (`GET /referrals/inviter-race`). Null result, `{race: null}`, a 404 from
+  /// an older backend, or any error all fall through to the Daily intro.
+  final Future<Map<String, dynamic>?> Function()? onFetchInviterRace;
+
+  /// Joins the inviter's race and hands off to it, closing the first-race gate.
+  final Future<void> Function(String raceId)? onJoinInviterRace;
+
   final String? displayName;
   final Future<Map<String, dynamic>?> Function()? onFetchActiveDaily;
   final Future<void> Function(String raceId)? onEnterVerifiedDaily;
@@ -109,6 +141,11 @@ class OnboardingFlow extends StatelessWidget {
     }
 
     // Step 1: health permission (required to proceed).
+    //
+    // "Hard-blocking" is the default posture, not an absolute (spec §3): the
+    // gate blocks until the OS has demonstrably stopped cooperating, at which
+    // point the host wires the settings launcher and the escape hatch. A user
+    // who simply hasn't tapped Allow yet is still blocked.
     if (!healthAuthorized) {
       return OnboardingPermissionGate(
         label: 'HEALTH DATA',
@@ -120,6 +157,36 @@ class OnboardingFlow extends StatelessWidget {
         error: error,
         isLoading: isLoading,
         retryLabel: 'TRY AGAIN',
+        onOpenSettings: onboardingV3Enabled ? onOpenHealthSettings : null,
+        onEscape: onboardingV3Enabled ? onEscapeHealthGate : null,
+      );
+    }
+
+    // V3: notifications are no longer a gate — the ask moved to the first
+    // mystery-box open (§5.4), with a third-session backstop. The tutorial is
+    // deliberately back in the critical path, cut from ten steps to five, and
+    // sits BEFORE the race intro because that intro's CTA drops the user into
+    // a live race — they should know what a race is first (§5.11.2).
+    if (onboardingV3Enabled) {
+      if (!tutorialOnboardingSeen) {
+        // Demo-race spec §5.8: same position, same two callbacks — the
+        // passive spotlight walkthrough is replaced by a playable 90-second
+        // race the user wins. The spotlight tutorial itself is untouched and
+        // still reachable from Profile → Settings.
+        return OnboardingDemoRaceStep(
+          onStart: onStartTutorial,
+          onSkip: onSkipTutorial,
+        );
+      }
+      return OnboardingInviterRaceStep(
+        displayName: displayName,
+        skipForPendingShare: firstRaceShareTokenPending,
+        onSkipForShare: onSkipFirstRace,
+        onFetchInviterRace: onFetchInviterRace,
+        onJoinInviterRace: onJoinInviterRace,
+        onFetchDaily: onFetchActiveDaily,
+        onEnterDaily: onEnterVerifiedDaily,
+        onFindRace: onFindRace,
       );
     }
 
@@ -271,14 +338,7 @@ class _OnboardingDailyIntroStepState extends State<OnboardingDailyIntroStep> {
       emblem: Container(
         width: 104,
         height: 104,
-        decoration: BoxDecoration(
-          color: colors.textLight.withValues(alpha: 0.12),
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: colors.textLight.withValues(alpha: 0.30),
-            width: 3,
-          ),
-        ),
+        decoration: onboardingSkyRing(context, shape: BoxShape.circle),
         alignment: Alignment.center,
         child: Icon(
           Icons.emoji_events_rounded,
@@ -337,6 +397,170 @@ class _OnboardingDailyIntroStepState extends State<OnboardingDailyIntroStep> {
       ],
     );
   }
+}
+
+/// V3's final gate for a referred user: land on the *inviter's* race instead of
+/// the generic Daily intro (spec §5.8).
+///
+/// The fallback is the important part. `GET /referrals/inviter-race` is a new
+/// endpoint, and the backend deploys independently of the app — a client
+/// carrying this code can absolutely hit a backend that has never heard of it.
+/// A 404, a timeout, any error, an explicit `{race: null}`, or simply no wired
+/// fetcher all render [OnboardingDailyIntroStep] exactly as today. There is no
+/// error state here on purpose: a referred user who can't be matched is just an
+/// ordinary new user, and should be treated as one.
+class OnboardingInviterRaceStep extends StatefulWidget {
+  const OnboardingInviterRaceStep({
+    super.key,
+    required this.displayName,
+    required this.skipForPendingShare,
+    required this.onSkipForShare,
+    this.onFetchInviterRace,
+    this.onJoinInviterRace,
+    this.onFetchDaily,
+    this.onEnterDaily,
+    this.onFindRace,
+  });
+
+  final String? displayName;
+  final bool skipForPendingShare;
+  final VoidCallback onSkipForShare;
+  final Future<Map<String, dynamic>?> Function()? onFetchInviterRace;
+  final Future<void> Function(String raceId)? onJoinInviterRace;
+  final Future<Map<String, dynamic>?> Function()? onFetchDaily;
+  final Future<void> Function(String raceId)? onEnterDaily;
+  final Future<void> Function()? onFindRace;
+
+  @override
+  State<OnboardingInviterRaceStep> createState() =>
+      _OnboardingInviterRaceStepState();
+}
+
+class _OnboardingInviterRaceStepState extends State<OnboardingInviterRaceStep> {
+  bool _loading = true;
+  bool _joining = false;
+  Map<String, dynamic>? _race;
+  Map<String, dynamic>? _inviter;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.skipForPendingShare) {
+      // A pending share link is a more specific intent than a referral offer;
+      // hand off immediately rather than showing either race screen.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onSkipForShare();
+      });
+      return;
+    }
+    _load();
+  }
+
+  Future<void> _load() async {
+    final fetch = widget.onFetchInviterRace;
+    if (fetch == null) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
+    try {
+      final payload = await fetch();
+      if (!mounted) return;
+      final race = payload?['race'];
+      final inviter = payload?['inviter'];
+      setState(() {
+        _race = race is Map<String, dynamic> ? race : null;
+        _inviter = inviter is Map<String, dynamic> ? inviter : null;
+        _loading = false;
+      });
+    } catch (_) {
+      // 404 on an older backend, offline, timeout — all identical here.
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  String get _inviterName {
+    final raw = (_inviter?['displayName'] as String?)?.trim();
+    return (raw == null || raw.isEmpty) ? 'your friend' : raw;
+  }
+
+  Future<void> _join() async {
+    final raceId = (_race?['id'] ?? _race?['raceId']) as String?;
+    if (raceId == null || raceId.isEmpty || _joining) return;
+    setState(() => _joining = true);
+    await widget.onJoinInviterRace?.call(raceId);
+    if (mounted) setState(() => _joining = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.skipForPendingShare || _loading) {
+      return const OnboardingSceneLoading();
+    }
+
+    final race = _race;
+    if (race == null) {
+      return OnboardingDailyIntroStep(
+        displayName: widget.displayName,
+        skipForPendingShare: false,
+        onSkipForShare: widget.onSkipForShare,
+        onFetchDaily: widget.onFetchDaily,
+        onEnterDaily: widget.onEnterDaily,
+        onFindRace: widget.onFindRace,
+      );
+    }
+
+    final colors = AppColors.of(context);
+    final name = _inviterName;
+    final steps = (_inviter?['steps'] as num?)?.toInt();
+    final alreadyJoined = race['alreadyJoined'] == true;
+    final raceName = (race['name'] as String?) ?? 'their race';
+
+    return OnboardingScene(
+      headline: 'Race $name',
+      emblem: AppAvatar(
+        name: name,
+        imageUrl: _inviter?['profilePhotoUrl'] as String?,
+        size: 96,
+        borderColor: colors.textLight,
+        borderWidth: 3,
+      ),
+      dockLabel: alreadyJoined ? 'YOU’RE BOTH IN' : 'YOUR FIRST RACE',
+      dockBody: alreadyJoined
+          ? 'You’re both in $raceName. Start walking — every step counts from now.'
+          : steps != null && steps > 0
+          ? '$name is ${_formatSteps(steps)} steps into $raceName. Jump in and start closing the gap.'
+          : '$name is racing in $raceName. Jump in and start closing the gap.',
+      actions: [
+        SizedBox(
+          width: double.infinity,
+          height: 54,
+          child: PillButton(
+            key: const Key('onboarding-inviter-race-primary'),
+            label: _joining
+                ? 'OPENING...'
+                : alreadyJoined
+                ? 'OPEN THE RACE'
+                : "JOIN ${name.toUpperCase()}'S RACE",
+            variant: PillButtonVariant.secondary,
+            fullWidth: true,
+            fontSize: 14,
+            padding: EdgeInsets.zero,
+            onPressed: _joining ? null : _join,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String _formatSteps(int steps) {
+  final digits = steps.toString();
+  final buffer = StringBuffer();
+  for (var i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) buffer.write(',');
+    buffer.write(digits[i]);
+  }
+  return buffer.toString();
 }
 
 /// Tailored welcome for a referred user (onboarding step 0). Greets them by
@@ -461,14 +685,7 @@ class OnboardingTutorialStep extends StatelessWidget {
       emblem: Container(
         width: 112,
         height: 112,
-        decoration: BoxDecoration(
-          color: colors.textLight.withValues(alpha: 0.12),
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: colors.textLight.withValues(alpha: 0.30),
-            width: 3,
-          ),
-        ),
+        decoration: onboardingSkyRing(context, shape: BoxShape.circle),
         alignment: Alignment.center,
         child: Text(
           '100',
@@ -495,6 +712,72 @@ class OnboardingTutorialStep extends StatelessWidget {
         ),
         const SizedBox(height: 2),
         TextButton(
+          onPressed: onSkip,
+          child: Text(
+            'Skip for now',
+            style: PixelText.body(
+              size: 14,
+              color: colors.textMid,
+            ).copyWith(fontWeight: FontWeight.w800),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The v3 teaching step: a playable 90-second demo race the user wins.
+///
+/// The old step sold a tour ("take the quick tour"). This one sells a race,
+/// because that is what it is — and the promise on the button has to match what
+/// the tap actually opens.
+class OnboardingDemoRaceStep extends StatelessWidget {
+  const OnboardingDemoRaceStep({
+    super.key,
+    required this.onStart,
+    required this.onSkip,
+  });
+
+  final VoidCallback onStart;
+  final VoidCallback onSkip;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return OnboardingScene(
+      // Framed as learning, not winning. "Win your first race" reads like a
+      // challenge you can decline — and the whole problem with this step is
+      // people skipping it. A practice run against bots asks for 90 seconds of
+      // curiosity instead of a commitment to compete.
+      headline: 'Learn how to race',
+      emblem: Container(
+        width: 112,
+        height: 112,
+        decoration: onboardingSkyRing(context, shape: BoxShape.circle),
+        alignment: Alignment.center,
+        child: Icon(Icons.flag_rounded, size: 52, color: colors.textLight),
+      ),
+      dockLabel: '90 SECONDS · 100 COINS',
+      // One line. The label above already carries "90 SECONDS · 100 COINS", so
+      // repeating the duration or the payout here just adds words to skim past.
+      dockBody: 'Practice against three bots. Learn the moves, keep the coins.',
+      actions: [
+        SizedBox(
+          width: double.infinity,
+          height: 54,
+          child: PillButton(
+            key: const Key('onboarding-demo-race-start'),
+            label: 'START THE RACE',
+            variant: PillButtonVariant.secondary,
+            fullWidth: true,
+            padding: EdgeInsets.zero,
+            icon: Icons.play_arrow_rounded,
+            onPressed: onStart,
+          ),
+        ),
+        const SizedBox(height: 2),
+        TextButton(
+          key: const Key('onboarding-demo-race-skip'),
           onPressed: onSkip,
           child: Text(
             'Skip for now',
@@ -648,14 +931,7 @@ class _EnrolledEmblem extends StatelessWidget {
         child: Container(
           width: size,
           height: size,
-          decoration: BoxDecoration(
-            color: AppColors.of(context).textLight.withValues(alpha: 0.12),
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: AppColors.of(context).textLight.withValues(alpha: 0.30),
-              width: 3,
-            ),
-          ),
+          decoration: onboardingSkyRing(context, shape: BoxShape.circle),
           alignment: Alignment.center,
           child: Icon(
             Icons.check_rounded,
@@ -679,13 +955,11 @@ class _EnrolledChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-      decoration: BoxDecoration(
-        color: AppColors.of(context).textLight.withValues(alpha: 0.12),
+      decoration: onboardingSkyRing(
+        context,
+        shape: BoxShape.rectangle,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: AppColors.of(context).textLight.withValues(alpha: 0.28),
-          width: 1.5,
-        ),
+        borderWidth: 1.5,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

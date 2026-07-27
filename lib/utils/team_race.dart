@@ -133,6 +133,24 @@ abstract final class TeamRace {
         : TeamColors.teamBDarkOf(context);
   }
 
+  /// The colour to paint a team's NAME/TOTAL with when it sits as text on a
+  /// parchment surface (items 3/13).
+  ///
+  /// [colorDark] is a CHROME token — a plaque fill, a border, a shadow. Used as
+  /// a foreground on the night board it resolves to `pillGoldShadow`
+  /// (0xFF241D38) and `roofMid` (0xFF214637) on `parchment` (0xFF1B2A34): 1.09:1
+  /// and 1.40:1, i.e. invisible. This is the rule `team_scoreline.dart` already
+  /// used for the compact scoreline, lifted here so every "team colour as text"
+  /// site shares one answer instead of each rediscovering the bug.
+  ///
+  /// Day is unchanged (the locked TR-802 dark team colours); night swaps to the
+  /// two palette tokens that are already contrast-asserted against parchment.
+  static Color textColorOn(RaceTeam team, BuildContext context) {
+    final colors = AppColors.of(context);
+    if (!colors.isDark) return colorDark(team, context);
+    return team == RaceTeam.teamA ? colors.feedGold : colors.successText;
+  }
+
   /// "2v2" style format label from a per-side size.
   static String formatLabel(int teamSize) => '${teamSize}v$teamSize';
 
@@ -156,6 +174,51 @@ abstract final class TeamRace {
       }
     }
     return total;
+  }
+
+  /// F-16f — the honest team total, or **null** when it cannot be known.
+  ///
+  /// [teamTotal] coerces a member's `totalSteps: null` to 0. The backend sends
+  /// null for a *stealthed* member (their steps are hidden, not zero), so the
+  /// coercion silently undercounts that side. Callers that need a trustworthy
+  /// number use this and fall back to hiding the scoreline rather than showing
+  /// a wrong one.
+  static int? teamTotalOrNull(
+    List<Map<String, dynamic>> participants,
+    RaceTeam team,
+  ) {
+    var total = 0;
+    for (final p in participants) {
+      if (participantTeam(p) != team) continue;
+      final raw = p['totalSteps'];
+      if (raw is! num) return null; // hidden (stealth) — total is unknowable
+      total += raw.toInt();
+    }
+    return total;
+  }
+
+  /// Contract §5 C2 — when the persisted team totals on `GET /races` were last
+  /// written. Additive and nullable: an older backend omits it and the client
+  /// simply hides the staleness affordance.
+  static DateTime? teamsAsOf(Map<String, dynamic> race) {
+    final teams = race['teams'];
+    if (teams is! Map) return null;
+    final raw = teams['asOf'];
+    if (raw is! String || raw.isEmpty) return null;
+    return DateTime.tryParse(raw)?.toUtc();
+  }
+
+  /// "as of 5 min ago" for the list's team scoreline (item 16 — the numbers are
+  /// allowed to lag race detail, they are not allowed to lag *silently*).
+  /// Null whenever `asOf` is absent or unparseable, so nothing renders.
+  static String? teamsAsOfLabel(Map<String, dynamic> race, {DateTime? now}) {
+    final asOf = teamsAsOf(race);
+    if (asOf == null) return null;
+    final delta = (now ?? DateTime.now()).toUtc().difference(asOf);
+    if (delta.isNegative || delta.inMinutes < 1) return 'as of just now';
+    if (delta.inMinutes < 60) return 'as of ${delta.inMinutes} min ago';
+    if (delta.inHours < 24) return 'as of ${delta.inHours} h ago';
+    return 'as of ${delta.inDays} d ago';
   }
 
   /// The side currently ahead, or null on an exact tie.

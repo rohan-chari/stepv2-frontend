@@ -23,11 +23,11 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: StartScreen()));
 
     expect(find.text('Bara'), findsOneWidget);
-    expect(
-      find.text('Race your friends, earn powerups, and climb the leaderboard.'),
-      findsOneWidget,
-    );
-    expect(find.byKey(const Key('start-cape-capybara')), findsOneWidget);
+    expect(find.text('STEP. RACE. WIN.'), findsOneWidget);
+    expect(find.text('RACE\nFRIENDS'), findsOneWidget);
+    expect(find.text('EARN\nPOWERUPS'), findsOneWidget);
+    expect(find.text('CLIMB THE\nLEADERBOARD'), findsOneWidget);
+    expect(find.byKey(const Key('start-hero-capybara')), findsOneWidget);
     expect(find.byKey(const Key('start-sign-in-dock')), findsOneWidget);
     expect(find.text('STEP RACES'), findsNothing);
     expect(find.text('Sign in with Apple'), findsOneWidget);

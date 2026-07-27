@@ -6,6 +6,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'backend_api_service.dart';
+import 'onboarding_state_service.dart';
 
 /// Privacy-bounded activation telemetry. No caller-provided strings are sent:
 /// event names and context values must both come from the allowlists below.
@@ -37,6 +38,26 @@ class ActivationAnalyticsService {
     'invite_flow_opened',
     'invite_flow_sent',
     'race_started',
+    // Onboarding revamp (spec §5.9). The client drops unknown names locally, so
+    // these must be listed here or the events never leave the device. The
+    // backend soft-drops names it doesn't know (§6.4), so a newer client
+    // against an older backend loses only the new events, not the whole batch.
+    'health_result',
+    'health_escaped',
+    'health_probe_inconclusive',
+    'health_recovered',
+    'notif_prompt_shown',
+    'notif_result',
+    'inviter_race_shown',
+    'home_reached',
+    // Demo-race tutorial (spec §5.9 / §6.3). The three actions that are the
+    // point of the exercise. Widening an allowlist can only increase what is
+    // accepted, so no shipped client is affected; and because the backend
+    // soft-drops names it doesn't know, a newer app against an older backend
+    // loses only these three — the reused tutorial_* funnel still works.
+    'demo_box_opened',
+    'demo_powerup_used',
+    'demo_won',
   };
 
   static const allowedContext = <String, Set<String>>{
@@ -44,10 +65,52 @@ class ActivationAnalyticsService {
     'race_state': {'active', 'pending'},
     'result': {'granted', 'denied', 'dismissed', 'unsupported', 'failed'},
     'mode': {'solo', 'team', 'tournament'},
+    // Tutorial per-step drop-off (spec §5.11.8). Headroom to 10 so trimming or
+    // extending the step list again needs no coordinated backend change — the
+    // backend allowlist was widened to the same range.
+    'step': {'1', '2', '3', '4', '5', '6', '7', '8', '9', '10'},
   };
 
   final BackendApiService _api;
   Future<void>? _flushInFlight;
+
+  /// Opens a new onboarding run. Recording this event ALWAYS mints a fresh
+  /// correlation id, so the id a run uses is by construction the id its
+  /// `onboarding_started` carries — which is exactly what the backend's funnel
+  /// anchor requires. Adding a second name here would break that guarantee.
+  static const _runStartEvent = 'onboarding_started';
+
+  /// Closes the run. Recorded under the run's id, after which the id is
+  /// dropped: everything that happens later — most importantly a
+  /// settings-tutorial replay months on — starts a fresh, unanchored id and is
+  /// therefore never counted inside the onboarding funnel.
+  static const _runEndEvent = 'home_reached';
+
+  /// The funnel correlation id, scoped to one onboarding **run**.
+  ///
+  /// It used to be minted once per install and reused forever, which made it
+  /// an install id wearing a session id's name: a replay of the settings
+  /// tutorial carried the original onboarding id and was counted inside the
+  /// onboarding funnel. A run now starts at [_runStartEvent] and ends at
+  /// [_runEndEvent]; the key is also cleared on sign-out with the rest of the
+  /// device-scoped onboarding state, so a second account is a second run.
+  ///
+  /// Events recorded outside a run still get an id (so they correlate with
+  /// each other), it simply is not an anchored one.
+  Future<String> _sessionIdFor(SharedPreferences prefs, String name) async {
+    if (name != _runStartEvent) {
+      final existing = prefs.getString(
+        OnboardingStateService.keyOnboardingSessionId,
+      );
+      if (existing != null && existing.isNotEmpty) return existing;
+    }
+    final minted = _newId();
+    await prefs.setString(
+      OnboardingStateService.keyOnboardingSessionId,
+      minted,
+    );
+    return minted;
+  }
 
   Future<void> record(
     String name, {
@@ -63,6 +126,12 @@ class ActivationAnalyticsService {
     }
 
     final prefs = await SharedPreferences.getInstance();
+    // Callers no longer have to thread the session id through; an explicit
+    // [sessionId] still wins so a caller can correlate a different session.
+    final callerSuppliedSession = sessionId != null && sessionId.isNotEmpty;
+    final resolvedSessionId = callerSuppliedSession
+        ? sessionId
+        : await _sessionIdFor(prefs, name);
     final queue = _readQueue(prefs);
     String version = 'unknown';
     try {
@@ -70,8 +139,7 @@ class ActivationAnalyticsService {
     } catch (_) {}
     queue.add({
       'id': _newId(),
-      if (sessionId != null && sessionId.isNotEmpty)
-        'onboardingSessionId': sessionId,
+      'onboardingSessionId': resolvedSessionId,
       'name': name,
       'context': safeContext,
       'appVersion': version.isEmpty ? 'unknown' : version,
@@ -86,6 +154,12 @@ class ActivationAnalyticsService {
       queue.removeRange(0, queue.length - maxQueuedEvents);
     }
     await _writeQueue(prefs, queue);
+
+    // Close the run only after the terminal event is safely queued under its
+    // id. A caller correlating some other session must not end ours.
+    if (!callerSuppliedSession && name == _runEndEvent) {
+      await prefs.remove(OnboardingStateService.keyOnboardingSessionId);
+    }
   }
 
   Future<void> flush(String? authToken) {

@@ -238,6 +238,10 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
             pageBuilder: (_, _, _) => DailyRewardScreen(
               authService: widget.authService,
               backendApiService: _api,
+              // Deliberately NOT _adController: ours is armed with the
+              // `coins:<date>` SSV custom_data, and the extra-spin flow showing
+              // it would mint coins instead of a spin. Null lets that screen
+              // create its own correctly-armed controller.
               adController: widget.adController,
             ),
             transitionsBuilder: (_, animation, _, child) =>

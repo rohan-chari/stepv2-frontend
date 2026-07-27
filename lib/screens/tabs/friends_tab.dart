@@ -8,6 +8,7 @@ import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
+import '../../widgets/coach_tip.dart';
 import '../../widgets/app_refresh_indicator.dart';
 import '../../utils/at_name.dart';
 import '../../widgets/app_avatar.dart';
@@ -442,6 +443,15 @@ class _FriendsTabState extends State<FriendsTab> {
                 outgoingCount: _outgoingRequests.length,
               ),
               const SizedBox(height: 14),
+              // Friend search is no longer taught by the tutorial (two of its
+              // ten steps were near-duplicates about exactly this); it is
+              // taught here, once, the first time the tab is actually opened.
+              CoachTipHost(
+                tip: CoachTipId.friendsAdd,
+                store: coachTipStore,
+                enabled: widget.authService.onboardingV3Enabled,
+                child: const SizedBox.shrink(),
+              ),
               Material(
                 key: widget.tutorialSearchKey,
                 color: Colors.transparent,

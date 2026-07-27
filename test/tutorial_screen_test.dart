@@ -19,8 +19,7 @@ Future<void> _next(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets(
-      'walks the real home / friends / profile / races / boards screens',
+  testWidgets('walks the real home / races / race-detail screens in five steps',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(600, 1000));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -28,37 +27,32 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: TutorialScreen(onComplete: (_) {})));
     await _settle(tester);
 
-    // Step 1-4 (home): the REAL hero step count + StepMilestonesSection, no goal.
+    // Step 1 (home): the REAL hero step count, no goal editor.
+    expect(find.text('Just walk.'), findsOneWidget);
     expect(find.text('13,420'), findsOneWidget);
-    expect(find.text("Today's coins"), findsOneWidget);
-    expect(find.text('SHOP'), findsWidgets);
     expect(find.text('EDIT GOAL'), findsNothing);
 
-    // Advance through the four home steps (last one spotlights the Friends
-    // tab in the nav bar) to the real Friends screen.
-    await _next(tester); // milestones
-    await _next(tester); // shop
-    await _next(tester); // nav.friends
-    await _next(tester); // -> friends.search
-    expect(find.text('Search by display name'), findsOneWidget);
-    expect(find.text('@Maya Chen'), findsWidgets);
-
-    // Profile (step 6): the referral invite button.
+    // Step 2 (races): real RACES header + seeded active race.
     await _next(tester);
-    expect(find.text('INVITE FRIENDS & EARN COINS'), findsOneWidget);
-
-    // Races (steps 7-8): real RACES header + seeded active race.
-    await _next(tester);
+    expect(find.text('Race your friends.'), findsOneWidget);
     expect(find.text('RACES'), findsWidgets);
     expect(find.text('Weekend 10K'), findsWidgets);
 
-    // Race detail (step 9): powerups & boxes.
-    await _next(tester); // races.pot
-    await _next(tester); // -> raceDetail.powerups
-
-    // Boards (step 10): real leaderboard.
+    // Step 3 (races): the box anchor, which no step used to point at.
     await _next(tester);
-    expect(find.text('LEADERBOARD'), findsWidgets);
+    expect(find.text('Grab mystery boxes.'), findsOneWidget);
+
+    // Step 4 (race detail): powerups.
+    await _next(tester);
+    expect(find.text('Mess with rivals.'), findsOneWidget);
+
+    // Step 5 (home again): the shop, ending on the screen the user lands on.
+    await _next(tester);
+    expect(find.text('Win coins.'), findsOneWidget);
+    expect(find.text('SHOP'), findsWidgets);
+
+    // Four NEXT taps reached the last step.
+    expect(find.text('DONE'), findsOneWidget);
   });
 
   testWidgets('SKIP finishes the tutorial via onComplete', (tester) async {

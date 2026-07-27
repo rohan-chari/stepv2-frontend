@@ -906,7 +906,7 @@ class _RankedTabState extends State<RankedTab> {
         out.add(
           _LineMarker(
             label: 'Top $promote move up to $up',
-            color: const Color(0xFF3E8E4B),
+            color: AppColors.of(context).successText,
             icon: Icons.arrow_upward_rounded,
           ),
         );
@@ -915,7 +915,10 @@ class _RankedTabState extends State<RankedTab> {
         out.add(
           _LineMarker(
             label: 'Bottom $demote drop to $down',
-            color: const Color(0xFFB4503C),
+            // P7 (item 3): the raw clay literal is a LIGHT-mode colour and
+            // measured 2.91:1 as text on the night parchment. The palette
+            // already carries a night-safe `error`.
+            color: AppColors.of(context).error,
             icon: Icons.arrow_downward_rounded,
           ),
         );
@@ -942,8 +945,8 @@ class _RankedTabState extends State<RankedTab> {
     final weeklySteps = (m['weeklySteps'] as num?)?.toInt() ?? 0;
     final zone = m['zone'] as String?;
     final zoneColor = switch (zone) {
-      'PROMOTION' => const Color(0xFF3E8E4B),
-      'DEMOTION' => const Color(0xFFB4503C),
+      'PROMOTION' => AppColors.of(context).successText,
+      'DEMOTION' => AppColors.of(context).error,
       _ => Colors.transparent,
     };
 
@@ -983,7 +986,7 @@ class _RankedTabState extends State<RankedTab> {
             imageUrl: profilePhotoUrl,
             size: 34,
             isUser: isMe,
-            borderColor: isMe ? AppColors.of(context).accent : tier.color,
+            borderColor: isMe ? AppColors.of(context).accent : tier.colorOf(context),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -1305,7 +1308,7 @@ class _RankedTabState extends State<RankedTab> {
                       center: Alignment.topRight,
                       radius: 0.95,
                       colors: [
-                        tier.color.withValues(alpha: 0.28),
+                        tier.colorOf(context).withValues(alpha: 0.28),
                         AppColors.of(context).parchment.withValues(alpha: 0),
                       ],
                     ),
@@ -1317,7 +1320,7 @@ class _RankedTabState extends State<RankedTab> {
                 top: 148,
                 child: Text(
                   tierText,
-                  style: PixelText.title(size: 28, color: tier.color),
+                  style: PixelText.title(size: 28, color: tier.colorOf(context)),
                 ),
               ),
             ],
@@ -1330,7 +1333,7 @@ class _RankedTabState extends State<RankedTab> {
               child: _HeroStat(
                 value: '$points',
                 label: 'RANKED POINTS',
-                color: tier.color,
+                color: tier.colorOf(context),
               ),
             ),
             Expanded(
@@ -1504,7 +1507,7 @@ class _RankedTabState extends State<RankedTab> {
             isUser: row.isMe,
             borderColor: row.isMe
                 ? AppColors.of(context).accent
-                : row.tier.color,
+                : row.tier.colorOf(context),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -1531,7 +1534,7 @@ class _RankedTabState extends State<RankedTab> {
                     backgroundColor: AppColors.of(
                       context,
                     ).parchmentBorder.withValues(alpha: 0.55),
-                    color: row.tier.color,
+                    color: row.tier.colorOf(context),
                   ),
                 ),
               ],
@@ -1541,7 +1544,7 @@ class _RankedTabState extends State<RankedTab> {
           if (!grouped)
             TierBadge(tier: row.tier, division: row.division)
           else if (row.division != null)
-            _DivisionPill(division: row.division!, color: row.tier.color)
+            _DivisionPill(division: row.division!, color: row.tier.colorOf(context))
           else
             const SizedBox(width: 28),
           const SizedBox(width: 8),
@@ -1650,7 +1653,7 @@ class _TierSectionHeader extends StatelessWidget {
           Expanded(
             child: Container(
               height: 2,
-              color: tier.color.withValues(alpha: 0.35),
+              color: tier.colorOf(context).withValues(alpha: 0.35),
             ),
           ),
           if (reward > 0) ...[

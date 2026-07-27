@@ -1115,7 +1115,8 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
                   Icon(
                     Icons.groups_rounded,
                     size: 14,
-                    color: TeamRace.colorDark(RaceTeam.teamA, context),
+                    // P4 (item 3): icon tint on parchment.
+                    color: TeamRace.textColorOn(RaceTeam.teamA, context),
                   ),
                   const SizedBox(width: 5),
                   Flexible(

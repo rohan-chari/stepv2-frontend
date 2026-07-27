@@ -881,6 +881,7 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
           'excluded server-side and are not editable here.',
         ),
         ..._dropPoolRows(),
+        ..._teamOnlyRows(),
       ]),
 
       _section(boardWidth, 'POSITION ODDS', [
@@ -1094,6 +1095,63 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
             ],
           ),
         ),
+    ];
+  }
+
+  /// Read-only view of `teamOnlyTypes` — types that are in the drop pool but
+  /// only roll inside a team race.
+  ///
+  /// Deliberately not editable: this editor's contract is a typed form over
+  /// scalars, and drop-pool membership is written by a reviewed backend script
+  /// so there is exactly one write authority for it.
+  ///
+  /// Renders NOTHING when the key is missing, null, not a list, or carries no
+  /// usable entries. A backend older than this build simply never sends the
+  /// key, and an empty placeholder would read as "the list is configured and
+  /// empty" — which is a different fact.
+  List<Widget> _teamOnlyRows() {
+    final raw = _baseline['teamOnlyTypes'];
+    if (raw is! List) return const [];
+    final types = raw
+        .map((e) => e?.toString().trim() ?? '')
+        .where((e) => e.isNotEmpty)
+        .toList();
+    if (types.isEmpty) return const [];
+
+    final colors = AppColors.of(context);
+    return [
+      const SizedBox(height: 2),
+      Text(
+        'TEAM RACES ONLY',
+        style: PixelText.title(size: 11, color: colors.textDark),
+      ),
+      const SizedBox(height: 4),
+      Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: [
+          for (final type in types)
+            Container(
+              key: Key('bc-teamOnly-$type'),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: colors.parchmentLight,
+                border: Border.all(color: colors.roofMid, width: 2),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                type,
+                style: PixelText.body(size: 10, color: colors.roofDark),
+              ),
+            ),
+        ],
+      ),
+      const SizedBox(height: 6),
+      Text(
+        'In the pool above, but only rolls in a team race. Set by the '
+        'backend; not editable here.',
+        style: PixelText.body(size: 10, color: colors.textMid),
+      ),
     ];
   }
 

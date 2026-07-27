@@ -19,10 +19,10 @@ bool get onboardingSceneInTestEnv {
 }
 
 /// Shared scaffold for every onboarding step, mirroring the title screen's
-/// composition exactly: the [HomeHeroScene] sky/moon/clouds with the walking
-/// capybara standing on the ground strip up top, and a parchment dock (wood
-/// top border + upward shadow) pinned to the bottom carrying the step's copy
-/// and actions. Steps differ only in the headline floating in the sky, an
+/// composition exactly: the [HomeHeroScene] daytime sky/sun/clouds with the
+/// [HeroTreeline] hedge and the walking capybara on the ground strip up top,
+/// and the green arcade-checker dock pinned to the bottom carrying the step's
+/// copy and actions. Steps differ only in the headline floating in the sky, an
 /// optional emblem hovering mid-scene, and the dock contents.
 class OnboardingScene extends StatelessWidget {
   const OnboardingScene({
@@ -67,6 +67,16 @@ class OnboardingScene extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Onboarding is one continuous brand moment with the title screen, so it
+    // pins to the daytime art and the light palette regardless of the
+    // device's dark-mode setting — see StartScreen.build.
+    return Theme(
+      data: AppThemeData.light(),
+      child: Builder(builder: _buildScene),
+    );
+  }
+
+  Widget _buildScene(BuildContext context) {
     final colors = AppColors.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -85,61 +95,69 @@ class OnboardingScene extends StatelessWidget {
               child: HomeHeroScene(
                 groundHeight: groundHeight,
                 skyAlignment: const Alignment(0.6, 1),
-                child: SafeArea(
-                  bottom: false,
-                  child: Stack(
-                    children: [
-                      Positioned(
-                        top: compact ? 14 : 26,
-                        left: 24,
-                        right: 24,
-                        child: Text(
-                          headline,
-                          textAlign: TextAlign.center,
-                          style:
-                              PixelText.title(
-                                size: compact ? 26 : 31,
-                                color: colors.textLight,
-                              ).copyWith(
-                                height: 1.05,
-                                fontWeight: FontWeight.w800,
-                                shadows: const [
-                                  Shadow(
-                                    color: Color(0x40000000),
-                                    blurRadius: 4,
-                                    offset: Offset(0, 1),
+                child: Stack(
+                  children: [
+                    // Same horizon hedge the title screen draws, so stepping
+                    // from it into onboarding doesn't change the world.
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: groundHeight - 8,
+                      height: compact ? 76 : 96,
+                      child: const IgnorePointer(child: HeroTreeline()),
+                    ),
+                    SafeArea(
+                      bottom: false,
+                      child: Stack(
+                        children: [
+                          Positioned(
+                            top: compact ? 14 : 26,
+                            left: 24,
+                            right: 24,
+                            child: Text(
+                              headline,
+                              textAlign: TextAlign.center,
+                              style:
+                                  PixelText.title(
+                                    size: compact ? 26 : 31,
+                                    color: colors.textLight,
+                                  ).copyWith(
+                                    height: 1.05,
+                                    fontWeight: FontWeight.w800,
+                                    shadows: PixelText.skyOutline(2),
                                   ),
+                            ),
+                          ),
+                          if (emblem != null || sceneExtra != null)
+                            Positioned.fill(
+                              top: compact ? 78 : 108,
+                              bottom:
+                                  groundHeight +
+                                  capySize * (compact ? 0.62 : 0.7),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (emblem != null) Flexible(child: emblem!),
+                                  if (sceneExtra != null) ...[
+                                    SizedBox(height: compact ? 12 : 16),
+                                    sceneExtra!,
+                                  ],
                                 ],
                               ),
-                        ),
+                            ),
+                          if (showCapybara)
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              bottom: groundHeight - 4 - capySize * 0.22,
+                              child: Center(
+                                child: OnboardingSceneCapybara(size: capySize),
+                              ),
+                            ),
+                        ],
                       ),
-                      if (emblem != null || sceneExtra != null)
-                        Positioned.fill(
-                          top: compact ? 78 : 108,
-                          bottom:
-                              groundHeight + capySize * (compact ? 0.62 : 0.7),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              if (emblem != null) Flexible(child: emblem!),
-                              if (sceneExtra != null) ...[
-                                SizedBox(height: compact ? 12 : 16),
-                                sceneExtra!,
-                              ],
-                            ],
-                          ),
-                        ),
-                      if (showCapybara)
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          bottom: groundHeight - 4 - capySize * 0.22,
-                          child: Center(
-                            child: OnboardingSceneCapybara(size: capySize),
-                          ),
-                        ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -154,76 +172,112 @@ class OnboardingScene extends StatelessWidget {
           );
         }
 
-        return ColoredBox(color: colors.parchment, child: scene);
+        return ColoredBox(color: colors.roofLight, child: scene);
       },
     );
   }
 
   Widget _buildDock(BuildContext context, {required bool compact}) {
     final colors = AppColors.of(context);
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: colors.parchment,
-        border: Border(top: BorderSide(color: colors.woodDark, width: 3)),
-        boxShadow: [
-          BoxShadow(
-            color: colors.woodShadow.withValues(alpha: 0.28),
-            offset: const Offset(0, -5),
-            blurRadius: 14,
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(24, compact ? 13 : 16, 24, 16),
+    // Matches the title screen's dock, which in turn reuses the home tab's
+    // below-hero surface: green field + arcade checkers, with the soil-shadow
+    // band blending the scene's dirt into the green (StartScreen._buildSignInDock).
+    return ColoredBox(
+      color: colors.roofLight,
+      child: CustomPaint(
+        painter: const ArcadeCheckerPainter(drawBottomStripe: false),
+        child: SafeArea(
+          top: false,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (dockLabel != null) ...[
-                Text(
-                  dockLabel!,
-                  style: PixelText.title(
-                    size: compact ? 15 : 17,
-                    color: colors.textDark,
+              Container(
+                height: 34,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      colors.dirtDark.withValues(alpha: 0.62),
+                      colors.dirtDark.withValues(alpha: 0.26),
+                      colors.dirtDark.withValues(alpha: 0),
+                    ],
+                    stops: const [0, 0.42, 1],
                   ),
-                  textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 4),
-              ],
-              if (dockBody != null)
-                Text(
-                  dockBody!,
-                  style: PixelText.body(
-                    size: compact ? 12.5 : 13.5,
-                    color: colors.textMid,
-                  ),
-                  textAlign: TextAlign.center,
+              ),
+              Padding(
+                padding: EdgeInsets.fromLTRB(24, compact ? 4 : 6, 24, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (dockLabel != null) ...[
+                      Text(
+                        dockLabel!,
+                        style: PixelText.title(
+                          size: compact ? 15 : 17,
+                          color: colors.textLight,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 4),
+                    ],
+                    if (dockBody != null)
+                      Text(
+                        dockBody!,
+                        style: PixelText.body(
+                          size: compact ? 12.5 : 13.5,
+                          color: colors.textLight.withValues(alpha: 0.88),
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    if (dockExtra != null) ...[
+                      SizedBox(height: compact ? 10 : 12),
+                      dockExtra!,
+                    ],
+                    if (error != null) ...[
+                      SizedBox(height: compact ? 8 : 10),
+                      Text(
+                        error!,
+                        style: PixelText.body(
+                          size: 12.5,
+                          color: colors.errorLight,
+                        ).copyWith(fontWeight: FontWeight.w800),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                    SizedBox(height: compact ? 10 : 13),
+                    ...actions,
+                  ],
                 ),
-              if (dockExtra != null) ...[
-                SizedBox(height: compact ? 10 : 12),
-                dockExtra!,
-              ],
-              if (error != null) ...[
-                SizedBox(height: compact ? 8 : 10),
-                Text(
-                  error!,
-                  style: PixelText.body(
-                    size: 12.5,
-                    color: colors.error,
-                  ).copyWith(fontWeight: FontWeight.w800),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-              SizedBox(height: compact ? 10 : 13),
-              ...actions,
+              ),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+/// Ring chrome for the emblems and chips that float in the onboarding sky.
+///
+/// These used to be a cream wash at 12%/30% alpha, which read fine against the
+/// old night sky and disappears completely against the daytime one. The wash
+/// is now dark ink, so the shape holds against bright cyan, and the cream
+/// icon/label on top carries [PixelText.skyOutline] for the same reason.
+BoxDecoration onboardingSkyRing(
+  BuildContext context, {
+  required BoxShape shape,
+  double borderWidth = 3,
+  BorderRadiusGeometry? borderRadius,
+}) {
+  final ink = AppColors.of(context).woodDarker;
+  return BoxDecoration(
+    color: ink.withValues(alpha: 0.30),
+    shape: shape,
+    borderRadius: borderRadius,
+    border: Border.all(color: ink.withValues(alpha: 0.55), width: borderWidth),
+  );
 }
 
 /// Full-scene loading state (fetch/handoff moments): the same sky + ground with
@@ -233,24 +287,33 @@ class OnboardingSceneLoading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
-    Widget scene = HomeHeroScene(
-      groundHeight: 80,
-      skyAlignment: const Alignment(0.6, 1),
-      child: Center(
-        child: CircularProgressIndicator(
-          color: colors.textLight,
-          strokeWidth: 3,
-        ),
+    // Pinned to the light palette for the same reason OnboardingScene is:
+    // this is the handoff frame between two daytime steps.
+    return Theme(
+      data: AppThemeData.light(),
+      child: Builder(
+        builder: (context) {
+          final colors = AppColors.of(context);
+          Widget scene = HomeHeroScene(
+            groundHeight: 80,
+            skyAlignment: const Alignment(0.6, 1),
+            child: Center(
+              child: CircularProgressIndicator(
+                color: colors.textLight,
+                strokeWidth: 3,
+              ),
+            ),
+          );
+          if (onboardingSceneInTestEnv) {
+            scene = MediaQuery(
+              data: MediaQuery.of(context).copyWith(disableAnimations: true),
+              child: scene,
+            );
+          }
+          return ColoredBox(color: colors.roofLight, child: scene);
+        },
       ),
     );
-    if (onboardingSceneInTestEnv) {
-      scene = MediaQuery(
-        data: MediaQuery.of(context).copyWith(disableAnimations: true),
-        child: scene,
-      );
-    }
-    return ColoredBox(color: colors.parchment, child: scene);
   }
 }
 

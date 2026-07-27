@@ -1375,6 +1375,11 @@ class _RacesTabState extends State<RacesTab> {
     final isTeamRace = TeamRace.isTeamRace(race);
     final teamSize = TeamRace.teamSize(race);
     final teamTotals = isTeamRace ? TeamRace.listTeamTotals(race) : null;
+    // Item 16 (contract §5 C2): `GET /races` serves cheap PERSISTED team totals
+    // — deliberately, to protect the perf win on the hottest screen — so they
+    // can lag race detail's live figures. `teams.asOf` says by how much. The
+    // field is additive: an older backend omits it and nothing renders.
+    final teamsAsOfLabel = isTeamRace ? TeamRace.teamsAsOfLabel(race) : null;
 
     String statusLabel;
     Color badgeColor;
@@ -1494,6 +1499,22 @@ class _RacesTabState extends State<RacesTab> {
                             teamBTotal: teamTotals.$2,
                             showRope: false,
                           ),
+                          if (teamsAsOfLabel != null)
+                            Padding(
+                              key: Key('team-totals-as-of-$raceId'),
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text(
+                                teamsAsOfLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: PixelText.body(
+                                  size: 10,
+                                  color: AppColors.of(
+                                    context,
+                                  ).textMid.withValues(alpha: 0.8),
+                                ),
+                              ),
+                            ),
                         ],
                         const SizedBox(height: 4),
                         // Boxes and the buff/debuff badges share one row, split

@@ -306,12 +306,9 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
   }
 
   Widget _buildSummary() {
-    final rarityCounts = <String, int>{};
     var autoActivated = 0;
     var queued = 0;
     for (final r in _results) {
-      final rarity = (r['rarity'] as String? ?? 'COMMON').toUpperCase();
-      rarityCounts[rarity] = (rarityCounts[rarity] ?? 0) + 1;
       if (r['autoActivated'] == true) autoActivated++;
       if (r['queued'] == true) queued++;
     }
@@ -343,10 +340,7 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              [
-                for (final e in rarityCounts.entries)
-                  '${e.value} ${e.key.toLowerCase()}',
-              ].join(' · '),
+              _results.length == 1 ? 'box' : 'boxes',
               textAlign: TextAlign.center,
               style: PixelText.body(
                 size: 13,

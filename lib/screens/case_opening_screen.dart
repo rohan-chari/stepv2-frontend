@@ -141,12 +141,19 @@ class CaseOpeningScreen extends StatefulWidget {
   /// Fanny Pack row deletion) can't appear behind the still-spinning reel.
   final void Function(Map<String, dynamic> result)? onRevealed;
 
+  /// Renders the reel inside the onboarding demo race (spec §5.7c / G8).
+  /// Suppression only: it hides this screen's two `AdBannerSlot`s, which the
+  /// race screen's own banner fix does not reach. Nothing about the reel, the
+  /// odds sheet or the reveal changes.
+  final bool demoMode;
+
   const CaseOpeningScreen({
     super.key,
     required this.openMysteryBox,
     this.onRevealed,
     this.dropOdds,
     this.rarityByType,
+    this.demoMode = false,
   });
 
   @override
@@ -260,11 +267,12 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
               child: Column(
                 children: [
                   if (AdService.remoteDualBoxBannersEnabled) ...[
-                    const AdBannerSlot(
+                    AdBannerSlot(
                       placement: AdBannerPlacement.boxTop,
                       reserveSpaceWhileLoading: true,
+                      hidden: widget.demoMode,
                     ),
-                    if (AdService.boxTopBannerEnabled)
+                    if (AdService.boxTopBannerEnabled && !widget.demoMode)
                       const SizedBox(height: 12),
                   ],
                   Expanded(
@@ -288,8 +296,12 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
                   // Bottom banner, in-flow below the centered card so it reserves
                   // its own space and never covers the Continue button. Collapses
                   // to zero size unless banners are enabled AND an ad loads.
-                  if (AdService.bannersEnabled) const SizedBox(height: 12),
-                  const AdBannerSlot(reserveSpaceWhileLoading: true),
+                  if (AdService.bannersEnabled && !widget.demoMode)
+                    const SizedBox(height: 12),
+                  AdBannerSlot(
+                    reserveSpaceWhileLoading: true,
+                    hidden: widget.demoMode,
+                  ),
                 ],
               ),
             ),
@@ -403,23 +415,6 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
               style: HomeText.display(
                 size: 32,
                 color: AppColors.of(context).ink,
-              ),
-            ),
-            const SizedBox(height: 14),
-            Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: rarityColor,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  _resultRarity.toUpperCase(),
-                  style: PixelText.pill(size: 12, color: Colors.white),
-                ),
               ),
             ),
             const SizedBox(height: 18),

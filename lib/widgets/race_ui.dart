@@ -29,17 +29,24 @@ class Pill extends StatelessWidget {
     super.key,
     required this.label,
     required this.background,
-    this.foreground = AppColors.textDark,
+    this.foreground,
     this.fontSize = 12,
   });
 
   final String label;
   final Color background;
-  final Color foreground;
+
+  /// P5 (item 3): this used to default to the bare `AppColors.textDark`
+  /// CONSTANT, which is the LIGHT value. On the night board that painted the
+  /// daytime near-black on a night pill — the BRACKET pill measured 2.28:1.
+  /// Null now means "resolve the theme's textDark", so every unstyled Pill
+  /// follows the palette.
+  final Color? foreground;
   final double fontSize;
 
   @override
   Widget build(BuildContext context) {
+    final foreground = this.foreground ?? AppColors.of(context).textDark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 4),
       decoration: BoxDecoration(
@@ -170,16 +177,23 @@ class RacerAvatar extends StatelessWidget {
   final double size;
   final Color? ringColor;
 
-  static Color medalColor(int rank) => switch (rank) {
-    1 => AppColors.medalGold,
-    2 => AppColors.medalSilver,
-    3 => AppColors.medalBronze,
-    _ => AppColors.parchmentBorder,
-  };
+  /// P6/item 13: this was a context-free static returning the LIGHT medal
+  /// constants, so medals stayed daytime gold/silver/bronze after the 19:00
+  /// auto-night flip — right next to [PlacementPill], which does resolve
+  /// through the palette. It now takes the context it always needed.
+  static Color medalColor(int rank, BuildContext context) {
+    final colors = AppColors.of(context);
+    return switch (rank) {
+      1 => colors.medalGold,
+      2 => colors.medalSilver,
+      3 => colors.medalBronze,
+      _ => colors.parchmentBorder,
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
-    final color = ringColor ?? medalColor(rank);
+    final color = ringColor ?? medalColor(rank, context);
     return Container(
       width: size,
       height: size,

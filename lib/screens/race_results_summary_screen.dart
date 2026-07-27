@@ -343,7 +343,7 @@ class _ResultCard extends StatelessWidget {
                 Icon(
                   Icons.military_tech_rounded,
                   size: 18,
-                  color: TeamRace.colorDark(winnerTeam, context),
+                  color: TeamRace.textColorOn(winnerTeam, context),
                 ),
                 const SizedBox(width: 6),
                 Text(
@@ -369,7 +369,8 @@ class _ResultCard extends StatelessWidget {
                     textAlign: TextAlign.right,
                     style: PixelText.title(
                       size: 12,
-                      color: TeamRace.colorDark(winnerTeam, context),
+                      // P3 (item 3): team chrome colour used as text.
+                      color: TeamRace.textColorOn(winnerTeam, context),
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,

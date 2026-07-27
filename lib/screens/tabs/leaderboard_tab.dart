@@ -7,6 +7,7 @@ import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
+import '../../widgets/coach_tip.dart';
 import '../../widgets/app_refresh_indicator.dart';
 import '../../utils/at_name.dart';
 import '../../widgets/app_avatar.dart';
@@ -478,6 +479,17 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   // centred in the container, with a compact globe/friends icon toggle pinned
   // to the right.
   Widget _buildScopeHeader() {
+    // The evicted "switch between everyone and just your friends" line from
+    // tutorial step 10, fired where the toggle actually is.
+    return CoachTipHost(
+      tip: CoachTipId.leaderboardScope,
+      store: coachTipStore,
+      enabled: widget.authService.onboardingV3Enabled,
+      child: _buildScopeHeaderRow(),
+    );
+  }
+
+  Widget _buildScopeHeaderRow() {
     return Stack(
       alignment: Alignment.center,
       children: [

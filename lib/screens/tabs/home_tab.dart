@@ -11,8 +11,9 @@ import '../../utils/race_display.dart';
 import '../../utils/team_race.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
+import '../../services/onboarding_state_service.dart';
 import '../../widgets/arcade_fx.dart';
-import '../../widgets/character_power_chip.dart';
+import '../../widgets/coach_tip.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/global_event_banner.dart';
 import '../../widgets/pill_button.dart';
@@ -52,12 +53,6 @@ class HomeTab extends StatelessWidget {
   final List<Map<String, dynamic>> equippedAccessories;
   // Equipped base character assetKey; null = capybara.
   final String? equippedAnimal;
-
-  /// Mirrors the server's `characterPowersEnabled` (contract §4.4). It is a
-  /// KILL SWITCH read per request, so the power chip renders only while this is
-  /// true — an older backend that omits the field, or a flip back to off, hides
-  /// the chip on its own rather than advertising a power that does nothing.
-  final bool characterPowersEnabled;
   final Loadable<Map<String, dynamic>>? shopCatalogState;
   // Retained for backward compatibility with callers (e.g. the tutorial
   // preview) that still pass it. The add-friends hero button that consumed it
@@ -107,7 +102,6 @@ class HomeTab extends StatelessWidget {
     this.friendsStepsState,
     this.equippedAccessories = const [],
     this.equippedAnimal,
-    this.characterPowersEnabled = false,
     this.shopCatalogState,
     this.incomingFriendRequests = 0,
     this.onOpenRacesTab,
@@ -133,9 +127,13 @@ class HomeTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Onboarding (health + notification permission gates) is now rendered by
-    // OnboardingFlow in main_shell; HomeTab is only built once onboarding is
-    // complete, so it always renders the real home below.
+    // HomeTab is only built once onboarding is complete, so it always renders
+    // the real home below — but [healthAuthorized] is no longer decorative.
+    // Under v3 a user can reach this screen with steps disconnected (the
+    // Android escape hatch, or an inconclusive iOS probe), and the shell pins
+    // the persistent reconnect banner above the tab bar for exactly that case.
+    // Home itself stays a normal home: the degraded user's step count is 0,
+    // which is the truth, not an error state.
     final topInset = MediaQuery.of(context).padding.top;
     final bottomInset = MediaQuery.of(context).padding.bottom;
     final tabBarHeight = 77.5 + bottomInset;
@@ -217,25 +215,6 @@ class HomeTab extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            // The equipped character's power, right under the
-                            // hero so it reads as "this is MY capy's power"
-                            // (spec §9). Collapsed until tapped; hidden whenever
-                            // the server's kill switch is off or absent.
-                            if (characterPowersEnabled)
-                              StaggerIn(
-                                index: 0,
-                                child: Padding(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    16,
-                                    14,
-                                    16,
-                                    0,
-                                  ),
-                                  child: CharacterPowerChip(
-                                    animal: equippedAnimal,
-                                  ),
-                                ),
-                              ),
                             // Streak + shop live just under the hero scene so the
                             // world stays clean; they're the first card to bounce in.
                             StaggerIn(
@@ -284,13 +263,25 @@ class HomeTab extends StatelessWidget {
                                 onAddProfilePhoto: onAddProfilePhoto,
                                 onDismissProfilePhotoPrompt:
                                     onDismissProfilePhotoPrompt,
+                                showRenameChip:
+                                    authService.onboardingV3Enabled,
                               ),
                             ),
                             StaggerIn(
                               index: 4,
                               child: KeyedSubtree(
                                 key: tutorialMilestonesKey,
-                                child: StepMilestonesSection(
+                                child: CoachTipHost(
+                                  tip: CoachTipId.milestoneClaim,
+                                  store: coachTipStore,
+                                  // The tutorial no longer teaches milestones;
+                                  // this fires the first time the user actually
+                                  // has one to claim, which is when the sentence
+                                  // is finally useful.
+                                  enabled:
+                                      authService.onboardingV3Enabled &&
+                                      (stepData?.steps ?? 0) >= 5000,
+                                  child: StepMilestonesSection(
                                   key: stepMilestonesKey,
                                   authService: authService,
                                   backendApiService: backendApiService,
@@ -302,6 +293,7 @@ class HomeTab extends StatelessWidget {
                                       raceCard?['stepMilestones']
                                           as Map<String, dynamic>?,
                                   awaitingBatch: raceCardLoading,
+                                  ),
                                 ),
                               ),
                             ),
@@ -837,7 +829,7 @@ class HomeTab extends StatelessWidget {
                 right: 24,
                 bottom: 16,
                 child: Text(
-                  _heroSummary(steps: stepData?.steps ?? 0),
+                  _heroSummary(steps: stepData?.steps),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
@@ -917,7 +909,14 @@ class HomeTab extends StatelessWidget {
     Shadow(color: Color(0x33000000), blurRadius: 10, offset: Offset(0, 2)),
   ];
 
-  String _heroSummary({required int steps}) {
+  /// The pace line under the capy. [steps] is null when today hasn't started —
+  /// either no steps yet, or no `stepData` at all (item 18). Both used to fall
+  /// through to the positive "Clean pace so far" bucket, which read as praise
+  /// for standing still at midnight.
+  String _heroSummary({required int? steps}) {
+    if (steps == null || steps <= 0) {
+      return 'Fresh day. Get moving to hit your first milestone.';
+    }
     if (steps >= 20000) {
       return 'Huge day. You cleared every milestone — go claim those coins.';
     }
@@ -938,6 +937,60 @@ class HomeTab extends StatelessWidget {
   }
 }
 
+/// One-time nudge that the generated racer tag is editable.
+///
+/// Deliberately a chip, not a notice row: the other SETUP entries are things
+/// the user is missing, and a perfectly good name is not a missing thing. It
+/// reads as a label with a pencil on it — an affordance, not a chore — and it
+/// retires itself after one tap or three sightings.
+class _RenameChip extends StatelessWidget {
+  const _RenameChip({required this.displayName, required this.onTap});
+
+  final String displayName;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: const Key('home-rename-chip'),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: BoxDecoration(
+            color: colors.parchmentLight,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: colors.parchmentBorder, width: 2),
+            boxShadow: _homeCardShadow,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'You’re ',
+                style: PixelText.body(size: 13, color: colors.textMid),
+              ),
+              Text(
+                displayName,
+                style: PixelText.title(size: 14, color: colors.textDark),
+              ),
+              Text(
+                ' — tap to change',
+                style: PixelText.body(size: 13, color: colors.textMid),
+              ),
+              const SizedBox(width: 6),
+              Icon(Icons.edit_rounded, size: 15, color: colors.textMid),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _SetupPromptsSection extends StatefulWidget {
   const _SetupPromptsSection({
     required this.displayName,
@@ -946,6 +999,7 @@ class _SetupPromptsSection extends StatefulWidget {
     required this.onDisplayNameChanged,
     this.onAddProfilePhoto,
     this.onDismissProfilePhotoPrompt,
+    this.showRenameChip = false,
   });
 
   final String? displayName;
@@ -955,6 +1009,11 @@ class _SetupPromptsSection extends StatefulWidget {
   final Future<void> Function()? onAddProfilePhoto;
   final Future<bool> Function()? onDismissProfilePhotoPrompt;
 
+  /// Whether to offer the one-time rename chip. Generated names
+  /// (SwiftCapybara07) are good friction-reduction, but users don't know they
+  /// are changeable — and nothing else on Home says so.
+  final bool showRenameChip;
+
   @override
   State<_SetupPromptsSection> createState() => _SetupPromptsSectionState();
 }
@@ -963,6 +1022,33 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
   Timer? _dismissTimer;
   bool _showDismissedConfirmation = false;
   bool _isSavingDismissal = false;
+  final OnboardingStateService _onboardingState = OnboardingStateService();
+  bool _showRenameChip = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolveRenameChip();
+  }
+
+  Future<void> _resolveRenameChip() async {
+    if (!widget.showRenameChip) return;
+    final name = widget.displayName?.trim();
+    if (name == null || name.isEmpty) return;
+    if (!await _onboardingState.shouldShowRenameChip()) return;
+    if (!mounted) return;
+    await _onboardingState.recordRenameChipShown();
+    if (!mounted) return;
+    setState(() => _showRenameChip = true);
+  }
+
+  Future<void> _openRenameFromChip() async {
+    // Tapping is the strongest possible signal that the message landed, so it
+    // retires the chip permanently — whether or not the name actually changes.
+    await _onboardingState.dismissRenameChip();
+    if (mounted) setState(() => _showRenameChip = false);
+    await _openDisplayNameScreen();
+  }
 
   bool get _promptDismissed =>
       widget.authService.profilePhotoPromptDismissedAt != null;
@@ -1038,9 +1124,12 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
         !widget.hasProfilePhoto &&
         _showDismissedConfirmation;
 
+    final showRenameChip = _showRenameChip && widget.displayName != null;
+
     if (!showDisplayNamePrompt &&
         !showProfilePhotoPrompt &&
-        !showDismissedConfirmation) {
+        !showDismissedConfirmation &&
+        !showRenameChip) {
       return const SizedBox.shrink();
     }
 
@@ -1048,6 +1137,17 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const _HomeSectionHeader(title: 'SETUP'),
+        if (showRenameChip)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 4, 14, 4),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _RenameChip(
+                displayName: widget.displayName!,
+                onTap: _openRenameFromChip,
+              ),
+            ),
+          ),
         if (showDisplayNamePrompt)
           _HomeNoticeRow(
             icon: Icons.edit_rounded,

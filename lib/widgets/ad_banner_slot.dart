@@ -33,6 +33,7 @@ class AdBannerSlot extends StatefulWidget {
     this.style = AdBannerStyle.trackside,
     this.placement = AdBannerPlacement.standard,
     this.reserveSpaceWhileLoading = false,
+    this.hidden = false,
   });
 
   /// For hosts whose SafeArea excludes the bottom (race detail): pad the
@@ -50,26 +51,50 @@ class AdBannerSlot extends StatefulWidget {
   final AdBannerPlacement placement;
   final bool reserveSpaceWhileLoading;
 
+  /// Collapse to zero size while keeping any loaded ad alive, for hosts that
+  /// show the slot on some tabs but not others (the shell footer hides it on
+  /// the home tab). Prefer this over unmounting the slot: unmounting disposes
+  /// the BannerAd, so every return trip costs a brand-new ad request. Nothing
+  /// is requested until the slot is first un-hidden.
+  final bool hidden;
+
   @override
   State<AdBannerSlot> createState() => _AdBannerSlotState();
 }
 
 class _AdBannerSlotState extends State<AdBannerSlot> {
-  static const _retryDelay = Duration(seconds: 60);
+  // No-fill retry: exponential backoff, hard-capped. An uncapped 60s retry made
+  // a long-lived screen (race detail, shop) issue a request a minute forever,
+  // which inflates the request count AdMob divides by for match/show rate while
+  // adding no inventory. Three tries covers a transient no-fill; a persistent
+  // one is a supply problem no amount of retrying fixes.
+  static const _retryBaseDelay = Duration(seconds: 60);
+  static const _maxRetries = 3;
 
   BannerAd? _ad;
   bool _loaded = false;
   bool _loadStarted = false;
+  int _retries = 0;
   Timer? _retryTimer;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     // Needs MediaQuery for the adaptive width, so not initState.
-    if (!_loadStarted) {
-      _loadStarted = true;
-      _load();
-    }
+    _maybeStartLoad();
+  }
+
+  @override
+  void didUpdateWidget(AdBannerSlot oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // First un-hide is what arms the slot (see [AdBannerSlot.hidden]).
+    _maybeStartLoad();
+  }
+
+  void _maybeStartLoad() {
+    if (_loadStarted || widget.hidden) return;
+    _loadStarted = true;
+    _load();
   }
 
   Future<void> _load() async {
@@ -96,7 +121,10 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
       listener: BannerAdListener(
         onAdLoaded: (_) {
           if (mounted) {
-            setState(() => _loaded = true);
+            setState(() {
+              _loaded = true;
+              _retries = 0;
+            });
           }
         },
         onAdFailedToLoad: (ad, error) {
@@ -110,8 +138,13 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
               _loaded = false;
             });
             // No-fill is often transient. Retry conservatively instead of
-            // leaving this placement empty for the widget's entire lifetime.
-            _retryTimer = Timer(_retryDelay, _load);
+            // leaving this placement empty for the widget's entire lifetime —
+            // but give up after _maxRetries so we stop burning requests on a
+            // placement that simply has no demand right now.
+            if (_retries < _maxRetries) {
+              _retryTimer = Timer(_retryBaseDelay * (1 << _retries), _load);
+              _retries++;
+            }
           }
         },
       ),
@@ -144,6 +177,7 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.hidden) return const SizedBox.shrink();
     final ad = _ad;
     if (!_loaded || ad == null) {
       if (!widget.reserveSpaceWhileLoading) return const SizedBox.shrink();

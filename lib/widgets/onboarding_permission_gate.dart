@@ -20,6 +20,8 @@ class OnboardingPermissionGate extends StatelessWidget {
     this.error,
     this.isLoading = false,
     this.retryLabel,
+    this.onOpenSettings,
+    this.onEscape,
   });
 
   final String label;
@@ -34,6 +36,20 @@ class OnboardingPermissionGate extends StatelessWidget {
   /// button uses this label instead of "CONTINUE" so the user understands
   /// tapping it retries the request rather than moving on.
   final String? retryLabel;
+
+  /// Non-null once retrying has stopped being useful (the OS has refused
+  /// twice). The primary CTA then launches the platform's health settings
+  /// instead of firing another prompt that will never appear.
+  ///
+  /// The widget stays dumb: it renders what it is given and never decides when
+  /// the ladder advances. That call belongs to the host.
+  final VoidCallback? onOpenSettings;
+
+  /// Non-null once the user is allowed out of the gate into the degraded
+  /// "steps not connected" state. Absent (the default) the gate looks and
+  /// behaves exactly as it does today — which is what keeps the notifications
+  /// gate on v1/v2 visually untouched.
+  final VoidCallback? onEscape;
 
   @override
   Widget build(BuildContext context) {
@@ -60,16 +76,36 @@ class OnboardingPermissionGate extends StatelessWidget {
             width: double.infinity,
             height: 54,
             child: PillButton(
-              label: (error != null && retryLabel != null)
+              label: onOpenSettings != null
+                  ? 'OPEN HEALTH CONNECT SETTINGS'
+                  : (error != null && retryLabel != null)
                   ? retryLabel!
                   : 'CONTINUE',
               variant: PillButtonVariant.secondary,
               fullWidth: true,
               padding: EdgeInsets.zero,
-              icon: icon,
-              onPressed: onContinue,
+              fontSize: onOpenSettings != null ? 13 : 15,
+              icon: onOpenSettings != null ? Icons.settings_rounded : icon,
+              onPressed: onOpenSettings ?? onContinue,
             ),
           ),
+        // The way out. A blocking step with no escape is the exact failure mode
+        // the degraded state exists to fix, so once the OS has stopped
+        // cooperating the user gets a door — quiet, secondary, never the
+        // headline offer.
+        if (onEscape != null && !isLoading) ...[
+          const SizedBox(height: 2),
+          TextButton(
+            onPressed: onEscape,
+            child: Text(
+              'Continue without steps',
+              style: PixelText.body(
+                size: 14,
+                color: colors.textMid,
+              ).copyWith(fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -88,14 +124,7 @@ class _PermissionEmblem extends StatelessWidget {
     return Container(
       width: 108,
       height: 108,
-      decoration: BoxDecoration(
-        color: colors.textLight.withValues(alpha: 0.12),
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: colors.textLight.withValues(alpha: 0.30),
-          width: 3,
-        ),
-      ),
+      decoration: onboardingSkyRing(context, shape: BoxShape.circle),
       alignment: Alignment.center,
       child: Icon(icon, size: 52, color: colors.textLight),
     );

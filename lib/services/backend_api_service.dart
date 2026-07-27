@@ -2095,6 +2095,21 @@ class BackendApiService {
 
   /// Additive v2 activation contract. Callers must treat a 404 as an older
   /// backend and hide the reward surface without blocking the race.
+  /// The inviter's most joinable current race, for the referral-first landing
+  /// (spec §6.3). The contract defines exactly two success shapes:
+  /// `{race, inviter}` and `{race: null, inviter: null}` — a miss is never an
+  /// error. Anything else (notably a 404 from a backend that predates this
+  /// endpoint) throws, and the caller falls back to the Daily intro.
+  Future<Map<String, dynamic>?> fetchInviterRace({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/referrals/inviter-race',
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
   Future<Map<String, dynamic>> fetchStarterReward({
     required String identityToken,
   }) async {

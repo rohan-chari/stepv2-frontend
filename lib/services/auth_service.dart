@@ -9,6 +9,7 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'ad_service.dart';
 import 'backend_api_service.dart';
 import 'health_service.dart';
+import 'onboarding_state_service.dart';
 
 /// The Firebase project's **Web** OAuth client id, passed to GoogleSignIn as
 /// `serverClientId` so the returned ID token's `aud` matches what the backend
@@ -85,6 +86,7 @@ class AuthService extends ChangeNotifier {
   static const _keyDualBoxBannersEnabled = 'auth_dual_box_banners_enabled';
   static const _keyTeamRacesEnabled = 'auth_team_races_enabled';
   static const _keyOnboardingV2Enabled = 'auth_onboarding_v2_enabled';
+  static const _keyOnboardingV3Enabled = 'auth_onboarding_v3_enabled';
   static const _keyStepSampleBucketMinutes = 'auth_step_sample_bucket_minutes';
   static const _keyPendingShareToken = 'auth_pending_share_token';
   static const _keyPendingTournamentShareToken =
@@ -125,6 +127,7 @@ class AuthService extends ChangeNotifier {
   bool _dualBoxBannersEnabled = false;
   bool _teamRacesEnabled = true;
   bool _onboardingV2Enabled = false;
+  bool _onboardingV3Enabled = false;
   int _stepSampleBucketMinutes = 60;
   String? _pendingShareToken;
   String? _pendingTournamentShareToken;
@@ -163,7 +166,17 @@ class AuthService extends ChangeNotifier {
 
   /// Server-controlled activation flow. This deliberately defaults to false:
   /// frozen/older backend payloads must continue through the v1 onboarding.
-  bool get onboardingV2Enabled => _onboardingV2Enabled;
+  ///
+  /// v3 implies v2 (spec §5.1): if the newer flow is on, the older one is on
+  /// too regardless of what is stored for it, so a half-configured pair can
+  /// never produce an undefined flow.
+  bool get onboardingV2Enabled => _onboardingV2Enabled || _onboardingV3Enabled;
+
+  /// Server-controlled onboarding revamp (health-gate rework, degraded state,
+  /// relocated notification ask, referral-first landing, rename chip, the
+  /// five-step tutorial). Defaults false: a v3-capable binary with the flag off
+  /// behaves exactly as v2 does today, which is the rollback path.
+  bool get onboardingV3Enabled => _onboardingV3Enabled;
 
   /// Remotely-configurable step-sample bucket size in minutes (backend
   /// `featureFlags.stepSampleBucketMinutes`). One of {5, 10, 15, 30, 60};
@@ -253,6 +266,7 @@ class AuthService extends ChangeNotifier {
     AdService.remoteDualBoxBannersEnabled = _dualBoxBannersEnabled;
     _teamRacesEnabled = prefs.getBool(_keyTeamRacesEnabled) ?? true;
     _onboardingV2Enabled = prefs.getBool(_keyOnboardingV2Enabled) ?? false;
+    _onboardingV3Enabled = prefs.getBool(_keyOnboardingV3Enabled) ?? false;
     _stepSampleBucketMinutes = prefs.getInt(_keyStepSampleBucketMinutes) ?? 60;
     _pendingShareToken = prefs.getString(_keyPendingShareToken);
     _pendingTournamentShareToken = prefs.getString(
@@ -608,6 +622,12 @@ class AuthService extends ChangeNotifier {
       _onboardingV2Enabled =
           activationFlags is Map &&
           activationFlags['onboardingV2Enabled'] == true;
+      // Same opt-in semantics, same envelope guard: anything but the literal
+      // boolean true (including an older backend that omits the key) is the
+      // compatible v2 path.
+      _onboardingV3Enabled =
+          activationFlags is Map &&
+          activationFlags['onboardingV3Enabled'] == true;
     }
     // Contract §12 names the envelope `appSettings`; accept it too so either
     // backend shape flips the switch. Only an explicit false disables.
@@ -663,6 +683,7 @@ class AuthService extends ChangeNotifier {
     _dualBoxBannersEnabled = false;
     AdService.remoteDualBoxBannersEnabled = false;
     _onboardingV2Enabled = false;
+    _onboardingV3Enabled = false;
     _stepSampleBucketMinutes = 60;
     _pendingShareToken = null;
     _pendingTournamentShareToken = null;
@@ -684,6 +705,7 @@ class AuthService extends ChangeNotifier {
     await prefs.remove(_keyBannerAdsEnabled);
     await prefs.remove(_keyDualBoxBannersEnabled);
     await prefs.remove(_keyOnboardingV2Enabled);
+    await prefs.remove(_keyOnboardingV3Enabled);
     await prefs.remove(_keyStepSampleBucketMinutes);
     await prefs.remove(_keyPendingShareToken);
     await prefs.remove(_keyPendingTournamentShareToken);
@@ -694,6 +716,11 @@ class AuthService extends ChangeNotifier {
     // account deletion, leaving a re-signup on the same device already
     // "authorized" and skipping the onboarding health gate entirely.
     await HealthService.clearPersistedAuthState();
+    // Same reasoning, same place: the health-gate ladder, the degraded-state
+    // flags, the notification-ask counters, the funnel session id and the
+    // coach-tip seen-set are all device-scoped and must not leak across
+    // accounts (spec §7).
+    await OnboardingStateService.clearPersistedState();
     notifyListeners();
   }
 
@@ -845,16 +872,18 @@ class AuthService extends ChangeNotifier {
   /// Claims the one-time 100-coin tutorial-completion reward. The backend is
   /// authoritative and idempotent — it only grants once per account ever, so
   /// replays / reinstalls return granted:false. On a grant, updates the local
-  /// coin balance. Also marks the onboarding step seen locally (completing
-  /// implies seen). Returns whether coins were granted this call.
+  /// coin balance. Returns whether coins were granted this call.
+  ///
+  /// Demo-race spec §5.8 / D8: this deliberately does **not** mark the
+  /// onboarding teaching step seen any more. That flag now means "cleared the
+  /// onboarding teaching step", and only the onboarding host may set it — the
+  /// settings replay of the spotlight tutorial is not an onboarding step, and
+  /// under the demo-race flow a user can reach Settings having skipped it. The
+  /// onboarding launcher calls [markTutorialOnboardingSeen] on return, so the
+  /// onboarding path is unchanged.
   Future<bool> claimTutorialReward() async {
     final token = authToken;
     if (token == null || token.isEmpty) return false;
-    // Completing the tutorial dismisses the onboarding step regardless of
-    // whether coins were granted this time.
-    _tutorialOnboardingSeen = true;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keyTutorialOnboardingSeen, true);
     try {
       final result = await _backendApiService.claimTutorialReward(
         identityToken: token,
@@ -930,6 +959,7 @@ class AuthService extends ChangeNotifier {
     await prefs.setBool(_keyDualBoxBannersEnabled, _dualBoxBannersEnabled);
     await prefs.setBool(_keyTeamRacesEnabled, _teamRacesEnabled);
     await prefs.setBool(_keyOnboardingV2Enabled, _onboardingV2Enabled);
+    await prefs.setBool(_keyOnboardingV3Enabled, _onboardingV3Enabled);
     await prefs.setInt(_keyStepSampleBucketMinutes, _stepSampleBucketMinutes);
   }
 }

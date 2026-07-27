@@ -104,6 +104,15 @@ extension on _PowerupFilter {
     _PowerupFilter.utility => 'UTILITY',
   };
 
+  /// Sentence-case name for the item-1 sheet and the collapsed summary. The
+  /// SHOUTING [label] belonged to the pills that no longer exist.
+  String get title => switch (this) {
+    _PowerupFilter.all => 'All',
+    _PowerupFilter.offense => 'Offense',
+    _PowerupFilter.defense => 'Defense',
+    _PowerupFilter.utility => 'Utility',
+  };
+
   /// The `category` value this filter keeps; null = keep everything.
   String? get category => switch (this) {
     _PowerupFilter.all => null,
@@ -114,14 +123,26 @@ extension on _PowerupFilter {
 }
 
 /// Powerup store sort order (item 9). Default is [nameAsc].
-enum _PowerupSort { nameAsc, priceAsc, priceDesc, rarity }
+enum _PowerupSort { nameAsc, priceAsc, priceDesc }
 
 extension on _PowerupSort {
-  String get label => switch (this) {
-    _PowerupSort.nameAsc => 'Name (A–Z)',
-    _PowerupSort.priceAsc => 'Price: Low→High',
-    _PowerupSort.priceDesc => 'Price: High→Low',
-    _PowerupSort.rarity => 'Rarity',
+  // The long `label` form belonged to the old `Sort: …` pill that item 1
+  // replaced; the sheet and the collapsed summary both use `title`/`detail`.
+
+  /// Short form for the item-1 sheet rows and the collapsed summary, which has
+  /// to survive a 320dp phone alongside the filter name.
+  String get title => switch (this) {
+    _PowerupSort.nameAsc => 'Name A–Z',
+    _PowerupSort.priceAsc => 'Price ↑',
+    _PowerupSort.priceDesc => 'Price ↓',
+  };
+
+  /// The full sentence shown under the short title in the sheet, so "Price ↑"
+  /// never has to be guessed at.
+  String get detail => switch (this) {
+    _PowerupSort.nameAsc => 'Alphabetical',
+    _PowerupSort.priceAsc => 'Cheapest first',
+    _PowerupSort.priceDesc => 'Priciest first',
   };
 }
 
@@ -175,12 +196,6 @@ class _ShopTabState extends State<ShopTab> {
   // (contract §4.3); when it is absent — an older backend — we keep the
   // compiled-in legacy behaviour byte for byte.
   _AdUnlockConfig _adUnlock = _AdUnlockConfig.legacy;
-  static const _rarityOrder = {
-    'COMMON': 0,
-    'RARE': 1,
-    'EPIC': 2,
-    'LEGENDARY': 3,
-  };
 
   @override
   void initState() {
@@ -869,6 +884,73 @@ class _ShopTabState extends State<ShopTab> {
           );
   }
 
+  /// Item 6 — the always-present Capybara tile at the head of Inventory →
+  /// CHARACTERS.
+  ///
+  /// Purely local. "Equipped" means the backend's `equipped['CHARACTER']` is
+  /// null, which is exactly how the backend itself reads capybara
+  /// (`isCapybara` = no CHARACTER row), so this can never disagree with the
+  /// server. EQUIP is the existing `_equip('CHARACTER', null)` clear call — no
+  /// new endpoint, no fake catalog row, safe on every backend version.
+  Widget _capybaraInventoryTile() {
+    final equippedCharacter =
+        (_catalog?['equipped'] as Map?)?['CHARACTER'] as String?;
+    final equipped = equippedCharacter == null;
+    final sprite = animalSpriteFor(kDefaultAnimal);
+    Widget art({double iconSize = 30}) => AccessoryThumbnail(
+      assetKey: kDefaultAnimal,
+      assetPath: sprite.asset,
+      animationFrames: sprite.frameCount,
+      errorBuilder: (context, error, stackTrace) => Icon(
+        Icons.pets_rounded,
+        size: iconSize,
+        color: equipped
+            ? AppColors.of(context).accent
+            : AppColors.of(context).textMid,
+      ),
+    );
+    void doEquip() => _equip('CHARACTER', null);
+
+    return _ShopTile(
+      key: const Key('shop-capybara-tile'),
+      art: art(),
+      name: 'Capybara',
+      badge: equipped ? 'EQUIPPED' : null,
+      highlighted: equipped,
+      // No CLEAR: clearing the capybara has no meaning — it IS the cleared
+      // state. An equipped capybara's strip is inert, like an owned powerup's.
+      stripLabel: equipped ? 'EQUIPPED' : 'EQUIP',
+      stripIcon: Icons.check_rounded,
+      stripEnabled: !equipped && !_saving,
+      onStrip: equipped ? null : doEquip,
+      onTap: () => _showItemSheet(
+        art: art(iconSize: 48),
+        name: 'Capybara',
+        slotLabel: _slotLabels['CHARACTER'],
+        badge: equipped ? 'EQUIPPED' : null,
+        description:
+            'The original. Steady, sociable, and always in your corner — '
+            'capybaras top each other up with bonus steps every day.',
+        actions: [
+          if (!equipped)
+            PillButton(
+              label: 'EQUIP',
+              icon: Icons.check_rounded,
+              variant: PillButtonVariant.primary,
+              fontSize: 14,
+              fullWidth: true,
+              onPressed: _saving
+                  ? null
+                  : () {
+                      Navigator.of(context).pop();
+                      doEquip();
+                    },
+            ),
+        ],
+      ),
+    );
+  }
+
   /// STORE tile for a cosmetic/character: art + name + gold price strip.
   ///
   /// The price strip opens the detail sheet, same as the tile body — a user
@@ -934,6 +1016,8 @@ class _ShopTabState extends State<ShopTab> {
     return _ShopTile(
       art: _cosmeticArt(item),
       name: name,
+      // Item 2: same for cosmetics — the strip's CTA never hides the number.
+      priceBadge: route == _AffordRoute.affordable ? null : price,
       stripLabel: switch (route) {
         _AffordRoute.affordable => '$price',
         _AffordRoute.watchAds => _watchAdsStripLabel(adsNeeded),
@@ -1021,12 +1105,6 @@ class _ShopTabState extends State<ShopTab> {
     return 'utility';
   }
 
-  /// Rarity rank for sorting; unknown/missing rarity sorts last.
-  int _rarityRank(Map<String, dynamic> item) {
-    final r = (item['rarity'] as String?)?.toUpperCase();
-    return _rarityOrder[r] ?? 999;
-  }
-
   int _byName(Map<String, dynamic> a, Map<String, dynamic> b) =>
       (a['name'] as String? ?? '').toLowerCase().compareTo(
         (b['name'] as String? ?? '').toLowerCase(),
@@ -1053,123 +1131,202 @@ class _ShopTabState extends State<ShopTab> {
           final c = price(b).compareTo(price(a));
           return c != 0 ? c : _byName(a, b);
         });
-      case _PowerupSort.rarity:
-        list.sort((a, b) {
-          final c = _rarityRank(a).compareTo(_rarityRank(b));
-          return c != 0 ? c : _byName(a, b);
-        });
     }
     return list;
   }
 
+  // ── Item 1: ONE control for filter + sort ──────────────────────────────
+  //
+  // Four `Expanded` pills plus a `PopupMenuButton` labelled
+  // "Sort: Price: Low→High" could never fit a 320dp phone: the pills clipped to
+  // ellipsis at 10pt and the sort label had no maxLines at all, so its Row
+  // overflowed. Both are now one full-width button opening a single sheet with
+  // a Filter group and a Sort group. Filter/sort SEMANTICS are untouched — same
+  // enums, same `_visiblePowerupStoreItems()`, same All + Name (A–Z) defaults.
+
+  /// The collapsed summary, e.g. "Offense · Price ↑".
+  String get _filterSortSummary =>
+      '${_powerupFilter.title} · ${_powerupSort.title}';
+
   Widget _buildPowerupControls() {
-    // One compact row: the four filter pills share the leading space, the sort
-    // control trails. Lives in the header, which already supplies horizontal
-    // padding.
-    return SizedBox(
-      child: Row(
-        children: [
-          Expanded(
-            child: Row(
+    final colors = AppColors.of(context);
+    return GestureDetector(
+      key: const Key('shop-filter-sort-button'),
+      behavior: HitTestBehavior.opaque,
+      onTap: _showFilterSortSheet,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: colors.parchment,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: colors.parchmentBorder, width: 1.5),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.tune_rounded, size: 15, color: colors.textMid),
+            const SizedBox(width: 7),
+            Expanded(
+              child: Text(
+                _filterSortSummary,
+                key: const Key('shop-filter-sort-label'),
+                // The whole point of the item: this can clip, never overflow.
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: PixelText.body(size: 12.5, color: colors.textDark),
+              ),
+            ),
+            Icon(
+              Icons.keyboard_arrow_down_rounded,
+              size: 18,
+              color: colors.textMid,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showFilterSortSheet() async {
+    final colors = AppColors.of(context);
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: colors.parchment,
+      // Eight options plus two group headers overflow a short viewport (and any
+      // viewport once the OS text scale is turned up), so the sheet is bounded
+      // and scrolls rather than clipping the SORT group off the bottom.
+      isScrollControlled: true,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.85,
+      ),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (sheetContext) {
+        final sheetColors = AppColors.of(sheetContext);
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                for (var i = 0; i < _PowerupFilter.values.length; i++) ...[
-                  if (i > 0) const SizedBox(width: 4),
-                  Expanded(child: _powerupFilterPill(_PowerupFilter.values[i])),
-                ],
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: sheetColors.parchmentBorder,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _sheetGroupLabel(sheetContext, 'FILTER'),
+                for (final filter in _PowerupFilter.values)
+                  _sheetOption(
+                    context: sheetContext,
+                    key: Key('shop-filter-option-${filter.title}'),
+                    title: filter.title,
+                    selected: _powerupFilter == filter,
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                      setState(() => _powerupFilter = filter);
+                    },
+                  ),
+                const SizedBox(height: 12),
+                _sheetGroupLabel(sheetContext, 'SORT'),
+                for (final sort in _PowerupSort.values)
+                  _sheetOption(
+                    context: sheetContext,
+                    key: Key('shop-sort-option-${sort.title}'),
+                    title: sort.title,
+                    detail: sort.detail,
+                    selected: _powerupSort == sort,
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                      setState(() => _powerupSort = sort);
+                    },
+                  ),
               ],
             ),
           ),
-          const SizedBox(width: 8),
-          _buildSortControl(),
-        ],
+        );
+      },
+    );
+  }
+
+  Widget _sheetGroupLabel(BuildContext context, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Text(
+        text,
+        style: PixelText.title(
+          size: 11,
+          color: AppColors.of(context).textMid,
+        ),
       ),
     );
   }
 
-  Widget _powerupFilterPill(_PowerupFilter filter) {
-    final selected = _powerupFilter == filter;
+  Widget _sheetOption({
+    required BuildContext context,
+    required Key key,
+    required String title,
+    required bool selected,
+    required VoidCallback onTap,
+    String? detail,
+  }) {
+    final colors = AppColors.of(context);
     return GestureDetector(
+      key: key,
       behavior: HitTestBehavior.opaque,
-      onTap: () => setState(() => _powerupFilter = filter),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
-        curve: Curves.easeOut,
-        padding: const EdgeInsets.symmetric(vertical: 5),
-        alignment: Alignment.center,
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: selected
-              ? AppColors.of(context).pillGold
-              : Colors.black.withValues(alpha: 0.18),
-          borderRadius: BorderRadius.circular(999),
+              ? colors.pillGold.withValues(alpha: 0.22)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: selected
-                ? AppColors.of(context).pillGoldDark
-                : Colors.black.withValues(alpha: 0.12),
-            width: 1.5,
+            color: selected ? colors.pillGoldDark : colors.parchmentBorder,
+            width: selected ? 1.5 : 1,
           ),
-        ),
-        child: Text(
-          filter.label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: PixelText.title(
-            size: 10,
-            color: selected
-                ? AppColors.of(context).textDark
-                : AppColors.of(context).textLight.withValues(alpha: 0.88),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSortControl() {
-    return PopupMenuButton<_PowerupSort>(
-      initialValue: _powerupSort,
-      tooltip: 'Sort powerups',
-      color: AppColors.of(context).parchment,
-      onSelected: (value) => setState(() => _powerupSort = value),
-      itemBuilder: (context) => [
-        for (final sort in _PowerupSort.values)
-          PopupMenuItem<_PowerupSort>(
-            value: sort,
-            child: Text(
-              sort.label,
-              style: PixelText.body(
-                size: 14,
-                color: AppColors.of(context).textDark,
-              ),
-            ),
-          ),
-      ],
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-        decoration: BoxDecoration(
-          color: AppColors.of(context).parchment,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: AppColors.of(context).parchmentBorder),
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.swap_vert_rounded,
-              size: 16,
-              color: AppColors.of(context).textMid,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              'Sort: ${_powerupSort.label}',
-              style: PixelText.body(
-                size: 12.5,
-                color: AppColors.of(context).textDark,
+            Expanded(
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: PixelText.title(
+                        size: 13,
+                        color: colors.textDark,
+                      ),
+                    ),
+                  ),
+                  if (detail != null) ...[
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        detail,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: PixelText.body(size: 11, color: colors.textMid),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
-            Icon(
-              Icons.arrow_drop_down_rounded,
-              size: 18,
-              color: AppColors.of(context).textMid,
-            ),
+            if (selected)
+              Icon(Icons.check_rounded, size: 17, color: colors.textDark),
           ],
         ),
       ),
@@ -1442,6 +1599,11 @@ class _ShopTabState extends State<ShopTab> {
       art: _powerupArt(type),
       name: name,
       badge: owned > 0 ? 'x$owned' : null,
+      // Item 2: the price is now on the tile whether or not it's affordable.
+      // When the item IS affordable the strip already prints the number, so the
+      // badge only appears where the price would otherwise have vanished —
+      // behind a "Watch 2 ads" / "Get coins" CTA. One price per tile, never two.
+      priceBadge: affordable ? null : price,
       stripLabel: stripLabel,
       stripIcon: stripIcon,
       stripEnabled: !_saving,
@@ -1605,6 +1767,13 @@ class _ShopTabState extends State<ShopTab> {
       ),
       _ShopCategory.characters => _buildCategoryBody(
         [
+          // Item 6 — the capybara is the compiled-in default, not a shop item,
+          // so it is never `owned` and had no tile. The only route back was the
+          // CLEAR strip on whichever character you were wearing, which nobody
+          // found. This synthetic tile is client-side only: no catalog row, no
+          // backend call beyond the equip that already exists, so it works
+          // against every backend version.
+          _capybaraInventoryTile(),
           for (final item in owned.where(_isCharacter))
             _inventoryCosmeticTile(item),
         ],
@@ -1679,17 +1848,27 @@ class _ShopLoadingSkeleton extends StatelessWidget {
           ),
         ],
       ),
+      // Item 7: the skeleton had drifted from the real tile — a 12 clip against
+      // a 14 container, a 0.6-alpha art fill, and a 34dp name band where the
+      // real one is 38. All three now match, so the grid doesn't visibly resettle
+      // when the catalog lands.
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Art box
             Expanded(
-              child: ColoredBox(
-                color: AppColors.of(
-                  context,
-                ).parchmentDark.withValues(alpha: 0.6),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppColors.of(context).parchmentDark,
+                  border: Border(
+                    bottom: BorderSide(
+                      color: AppColors.of(context).parchmentBorder,
+                      width: 1,
+                    ),
+                  ),
+                ),
                 child: const Center(
                   child: SkeletonBox(width: 46, height: 46, radius: 8),
                 ),
@@ -1697,13 +1876,14 @@ class _ShopLoadingSkeleton extends StatelessWidget {
             ),
             // Name
             Container(
-              height: 34,
+              key: const Key('shop-skeleton-name-band'),
+              height: 38,
               alignment: Alignment.center,
               child: const SkeletonLine(width: 52, height: 10),
             ),
             // Price strip
             Container(
-              height: 30,
+              height: 34,
               decoration: BoxDecoration(
                 color: AppColors.of(context).parchmentDark,
                 border: Border(
@@ -1753,6 +1933,7 @@ class _ShopLoadingSkeleton extends StatelessWidget {
 /// detail sheet with the full description.
 class _ShopTile extends StatelessWidget {
   const _ShopTile({
+    super.key,
     required this.art,
     required this.name,
     required this.stripLabel,
@@ -1761,11 +1942,21 @@ class _ShopTile extends StatelessWidget {
     required this.onStrip,
     required this.onTap,
     this.badge,
+    this.priceBadge,
     this.highlighted = false,
   });
 
   final Widget art;
   final String name;
+
+  /// Item 2 — the coin price, ALWAYS shown for a store item.
+  ///
+  /// The strip's label follows the primary action, so an unaffordable item's
+  /// strip reads "Get coins" / "Watch 1 ad" and the number vanished from the
+  /// tile entirely. This chip lives in the art area's top-left (the `xN` owned
+  /// badge is top-right), so it costs the strip no width and can't reintroduce
+  /// item 1's truncation. Null on inventory/owned tiles, which have no price.
+  final int? priceBadge;
   final String stripLabel;
   final IconData stripIcon;
   final bool stripEnabled;
@@ -1800,8 +1991,13 @@ class _ShopTile extends StatelessWidget {
             ),
           ],
         ),
+        // Item 7 — the "weird rectangle". The clip was 12 while the container
+        // was 14, so a 2px ring of the OUTER parchment showed inside the border
+        // and the art box floated free of the frame. Matching the two closes
+        // the ring; the art box below then carries its own fill and edge.
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
+          key: const Key('shop-tile-clip'),
+          borderRadius: BorderRadius.circular(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -1810,16 +2006,64 @@ class _ShopTile extends StatelessWidget {
                 child: Stack(
                   children: [
                     Positioned.fill(
-                      child: ColoredBox(
-                        color: AppColors.of(
-                          context,
-                        ).parchmentDark.withValues(alpha: 0.6),
+                      // Item 7 — was a 0.6-alpha `parchmentDark` overlay
+                      // directly above an unseparated, lighter name band, which
+                      // read as a stray fill rather than an intentional frame.
+                      // Now a solid theme token plus a hairline bottom rule, so
+                      // the art sits in a deliberate inset window. Silhouette,
+                      // shadow and grid metrics are untouched.
+                      child: Container(
+                        key: const Key('shop-tile-art-box'),
+                        decoration: BoxDecoration(
+                          color: AppColors.of(context).parchmentDark,
+                          border: Border(
+                            bottom: BorderSide(
+                              color: AppColors.of(context).parchmentBorder,
+                              width: 1,
+                            ),
+                          ),
+                        ),
                         child: Padding(
                           padding: const EdgeInsets.all(10),
                           child: Center(child: art),
                         ),
                       ),
                     ),
+                    if (priceBadge != null)
+                      Positioned(
+                        top: 4,
+                        left: 4,
+                        child: Container(
+                          padding: const EdgeInsets.fromLTRB(4, 2, 6, 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.of(context).parchmentLight,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: AppColors.of(context).parchmentBorder,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.monetization_on_rounded,
+                                size: 10,
+                                color: AppColors.of(context).pillGoldShadow,
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                '$priceBadge',
+                                key: const Key('shop-price-badge-text'),
+                                maxLines: 1,
+                                style: PixelText.title(
+                                  size: 10,
+                                  color: AppColors.of(context).textDark,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     if (badge != null)
                       Positioned(
                         top: 4,

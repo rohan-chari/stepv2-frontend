@@ -37,6 +37,8 @@ extension RankedTierStyle on RankedTier {
     RankedTier.unranked => 'Unranked',
   };
 
+  /// LIGHT-mode tier colours. Kept for the handful of contexts with no
+  /// BuildContext to hand; every widget must call [colorOf] instead.
   Color get color => switch (this) {
     RankedTier.bronze => AppColors.medalBronze,
     RankedTier.silver => AppColors.medalSilver,
@@ -46,6 +48,27 @@ extension RankedTierStyle on RankedTier {
     RankedTier.legend => const Color(0xFFB05CE6),
     RankedTier.unranked => AppColors.textMid,
   };
+
+  /// P6 (item 3/13): the tier colour resolved through the live palette.
+  ///
+  /// [color] is a context-free getter over bare constants, so tier chips kept
+  /// their daytime medal colours after the automatic 19:00 night flip and
+  /// Unranked (`textMid` light) sat at 3.18:1 on the night parchment. The
+  /// medal + textMid tokens already have night-safe values; the three synthetic
+  /// tier hues (platinum/diamond/legend) are bright enough in both palettes and
+  /// stay as they are.
+  Color colorOf(BuildContext context) {
+    final colors = AppColors.of(context);
+    return switch (this) {
+      RankedTier.bronze => colors.medalBronze,
+      RankedTier.silver => colors.medalSilver,
+      RankedTier.gold => colors.medalGold,
+      RankedTier.unranked => colors.textMid,
+      RankedTier.platinum ||
+      RankedTier.diamond ||
+      RankedTier.legend => color,
+    };
+  }
 }
 
 String romanDivision(int? division) => switch (division) {
@@ -80,9 +103,9 @@ class TierBadge extends StatelessWidget {
         vertical: large ? 8 : 4,
       ),
       decoration: BoxDecoration(
-        color: tier.color.withValues(alpha: 0.18),
+        color: tier.colorOf(context).withValues(alpha: 0.18),
         borderRadius: BorderRadius.circular(large ? 10 : 7),
-        border: Border.all(color: tier.color, width: large ? 2 : 1),
+        border: Border.all(color: tier.colorOf(context), width: large ? 2 : 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -135,7 +158,11 @@ class TierMedal extends StatelessWidget {
   Widget build(BuildContext context) {
     final asset = tierMedalAsset(tier);
     if (asset == null) {
-      return Icon(Icons.military_tech_outlined, size: size, color: tier.color);
+      return Icon(
+        Icons.military_tech_outlined,
+        size: size,
+        color: tier.colorOf(context),
+      );
     }
     // The medal art is smooth, high-detail art (not blocky pixel art), so it must
     // be downscaled with averaging, not nearest-neighbour. Decode it at the

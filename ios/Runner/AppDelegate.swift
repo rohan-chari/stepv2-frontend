@@ -895,6 +895,18 @@ final class HealthKitStepReader: StepReading {
       var samples: [[String: Any]] = []
 
       results.enumerateStatistics(from: startDate, to: endDate) { statistics, _ in
+        // Never emit a bucket that runs past `endDate`. `statistics.startDate` /
+        // `endDate` are the ANCHORED full clock hour, not the clamped query
+        // range, so the bucket at the cutoff still reports 14:00→15:00 even when
+        // `hourlySamplesEnd` floored the query to 14:00 — and `.cumulativeSum`
+        // makes it non-zero whenever a recording chunk straddles the boundary
+        // (the same straddle documented in health_service.dart). A row whose
+        // period_end is in the future is scored as an open bucket (no powerup
+        // credit) AND permanently blocks the Dart 5-min sync for that hour: the
+        // backend reconcile span guard (stepSample.js rule 2) rejects every
+        // finer sample overlapping a stored row the batch doesn't fully span.
+        // 2026-07-26: wedged a live 3x Ghost Pepper / Runner's High hour at 7 steps.
+        guard statistics.endDate <= endDate else { return }
         let steps = Int(statistics.sumQuantity()?.doubleValue(for: HKUnit.count()) ?? 0)
         if steps > 0 {
           samples.append([

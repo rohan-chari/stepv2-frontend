@@ -330,11 +330,15 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Shell footer banner (hoisted single banner)', () {
-    testWidgets('no AdBannerSlot on the home tab', (tester) async {
+    testWidgets('shell banner takes no space on the home tab', (tester) async {
       await _pumpShell(tester);
 
-      // Lands on Home: the shell gates the footer banner off entirely.
-      expect(find.byType(AdBannerSlot), findsNothing);
+      // Lands on Home: the slot stays mounted (so a loaded BannerAd survives
+      // tab round trips instead of costing a fresh request each time) but
+      // collapses to zero size, so Home shows no banner and reserves no space.
+      final slot = find.byType(AdBannerSlot);
+      expect(slot, findsOneWidget);
+      expect(tester.getSize(slot).height, 0);
     });
 
     testWidgets('exactly one shell AdBannerSlot on a non-home tab', (
@@ -370,7 +374,9 @@ void main() {
       tabBar.onTap(0); // back to Home
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      expect(find.byType(AdBannerSlot), findsNothing);
+      // Collapsed, not unmounted — see 'shell banner takes no space'.
+      expect(find.byType(AdBannerSlot), findsOneWidget);
+      expect(tester.getSize(find.byType(AdBannerSlot)).height, 0);
     });
   });
 

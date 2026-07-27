@@ -1,0 +1,274 @@
+import '../services/backend_api_service.dart';
+import 'demo_race_engine.dart';
+
+/// A fake backend for the REAL `RaceDetailScreen` (spec §5.1).
+///
+/// `RaceDetailScreen` routes every read and write through `_api`, and makes
+/// ~25 distinct `_api.*` calls (F1). **Any one of them not overridden here is a
+/// live HTTPS request against prod with a fabricated race id.** The transport
+/// helpers on [BackendApiService] are private, so the base class cannot be
+/// cheaply sealed — which is why `test/demo_race_network_guard_test.dart`
+/// enumerates the call sites from source and fails when a 26th appears.
+///
+/// Every override below either serves the engine or is a deliberate no-op. None
+/// of them touch the network, and none of them can reach real race, powerup or
+/// settlement logic.
+class DemoRaceApiService extends BackendApiService {
+  DemoRaceApiService(this.engine);
+
+  final DemoRaceEngine engine;
+
+  /// The engine owns the clock (and the tests own the engine's), so the served
+  /// `endsAt` and the engine's countdown can never disagree.
+  DateTime get _now => engine.now();
+
+  // -- Reads the screen makes on open ----------------------------------------
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceDetails({
+    required String identityToken,
+    required String raceId,
+  }) async => engine.raceDetails(_now, wallNow: DateTime.now());
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceProgress({
+    required String identityToken,
+    required String raceId,
+  }) async => engine.raceProgress(_now);
+
+  /// Empty global stash: the demo's lesson is the in-race slots, and a stash
+  /// row would offer a "USE" button that spends real coins.
+  @override
+  Future<Map<String, dynamic>> fetchPowerupInventory({
+    required String identityToken,
+  }) async => const {'items': []};
+
+  // -- Powerups ---------------------------------------------------------------
+
+  @override
+  Future<Map<String, dynamic>> usePowerup({
+    required String identityToken,
+    required String raceId,
+    required String powerupId,
+    String? targetUserId,
+    String? targetDirection,
+    String? targetEffectId,
+    int upgradeLevel = 0,
+  }) async {
+    // `upgradeLevel` is ignored on purpose: the upgrade ladders are disabled in
+    // demoMode (§5.7b), and an upgrade would charge coins.
+    return engine.usePowerup(
+      powerupId: powerupId,
+      targetUserId: targetUserId,
+    );
+  }
+
+  /// Quicksand is not in the demo's inventory, so this is unreachable — but it
+  /// must still never leave the device.
+  @override
+  Future<Map<String, dynamic>> useQuicksand({
+    required String identityToken,
+    required String raceId,
+    required String powerupId,
+    required List<String> targetUserIds,
+  }) async => engine.usePowerup(powerupId: powerupId);
+
+  @override
+  Future<Map<String, dynamic>> openMysteryBox({
+    required String identityToken,
+    required String raceId,
+    required String powerupId,
+  }) async => engine.openBox(powerupId);
+
+  /// OPEN ALL is disabled in demoMode (§5.7b); this exists so the call site
+  /// cannot leak if that ever changes.
+  @override
+  Future<Map<String, dynamic>> openMysteryBoxBatch({
+    required String identityToken,
+    required String raceId,
+    required List<String> powerupIds,
+    bool includeQueued = true,
+    int maxCount = 20,
+  }) async {
+    return {
+      'results': [
+        for (final id in powerupIds)
+          {
+            ...engine.openBox(id)['result'] as Map<String, dynamic>,
+            'queued': false,
+          },
+      ],
+    };
+  }
+
+  /// Discard is disabled in demoMode — discarding the Protein Shake would
+  /// dead-end the script with no recovery (§5.7b). No-op, never a network call.
+  @override
+  Future<Map<String, dynamic>> discardPowerup({
+    required String identityToken,
+    required String raceId,
+    required String powerupId,
+  }) async => const {};
+
+  @override
+  Future<Map<String, dynamic>> redeemPowerupToRace({
+    required String identityToken,
+    required String raceId,
+    required String powerupType,
+  }) async => const {'result': {}};
+
+  @override
+  Future<Map<String, dynamic>> fetchSneakySwapTargets({
+    required String identityToken,
+    required String raceId,
+  }) async => const {'targets': []};
+
+  // -- Rewards and wallet (§5.6 / G1) ----------------------------------------
+
+  /// The starter reward is NOT the tutorial reward. Claiming it here would mint
+  /// 100 coins against a fake race, so the demo never sees it as eligible —
+  /// and `demoMode` skips the fetch entirely.
+  @override
+  Future<Map<String, dynamic>> fetchStarterReward({
+    required String identityToken,
+  }) async => const {'eligible': false, 'claimed': false};
+
+  @override
+  Future<Map<String, dynamic>> claimStarterReward({
+    required String identityToken,
+  }) async => const {'granted': false};
+
+  /// `_refreshWallet` writes the result through `authService.updateCoins`.
+  /// `DemoAuthService` no-ops that write, and this reports the real balance
+  /// back unchanged, so the demo cannot move the user's coins.
+  @override
+  Future<Map<String, dynamic>> fetchMe({required String identityToken}) async {
+    return {'coins': null, 'heldCoins': null};
+  }
+
+  // -- Race lifecycle: every one of these is a no-op ---------------------------
+
+  @override
+  Future<Map<String, dynamic>> startRace({
+    required String identityToken,
+    required String raceId,
+  }) async => const {};
+
+  @override
+  Future<Map<String, dynamic>> leaveRace({
+    required String identityToken,
+    required String raceId,
+  }) async => const {};
+
+  @override
+  Future<Map<String, dynamic>> forfeitRace({
+    required String identityToken,
+    required String raceId,
+  }) async => const {};
+
+  @override
+  Future<void> cancelRace({
+    required String identityToken,
+    required String raceId,
+  }) async {}
+
+  @override
+  Future<void> kickRaceParticipant({
+    required String identityToken,
+    required String raceId,
+    required String userId,
+  }) async {}
+
+  @override
+  Future<Map<String, dynamic>> inviteToRace({
+    required String identityToken,
+    required String raceId,
+    required List<String> inviteeIds,
+  }) async => const {};
+
+  @override
+  Future<Map<String, dynamic>> respondToRaceInvite({
+    required String identityToken,
+    required String raceId,
+    required bool accept,
+  }) async => const {};
+
+  @override
+  Future<Map<String, dynamic>> acceptTeamRaceInvite({
+    required String identityToken,
+    required String raceId,
+    required String team,
+  }) async => const {};
+
+  @override
+  Future<Map<String, dynamic>> setRaceTeam({
+    required String identityToken,
+    required String raceId,
+    required String team,
+  }) async => const {};
+
+  /// Never mint a share link for a race that does not exist (§5.6).
+  @override
+  Future<Map<String, dynamic>> createRaceShareLink({
+    required String identityToken,
+    required String raceId,
+  }) async => const {};
+
+  @override
+  Future<Map<String, dynamic>> setRaceChatMute({
+    required String identityToken,
+    required String raceId,
+    required bool muted,
+  }) async => const {};
+
+  @override
+  Future<Map<String, dynamic>> setRacePlacementMute({
+    required String identityToken,
+    required String raceId,
+    required bool muted,
+  }) async => const {};
+
+  // -- Chat / activity feed (RaceChatService + RaceFeedService) --------------
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceMessages({
+    required String identityToken,
+    required String raceId,
+    String? cursor,
+    int? limit,
+    String? kind,
+  }) async => engine.messages(kind);
+
+  @override
+  Future<Map<String, dynamic>> markRaceChatRead({
+    required String identityToken,
+    required String raceId,
+  }) async => const {};
+
+  @override
+  Future<Map<String, dynamic>> sendRaceMessage({
+    required String identityToken,
+    required String raceId,
+    required String body,
+  }) async => const {};
+
+  @override
+  Future<Map<String, dynamic>> deleteRaceMessage({
+    required String identityToken,
+    required String raceId,
+    required String messageId,
+  }) async => const {};
+
+  // -- Telemetry --------------------------------------------------------------
+  //
+  // Activation events for the demo funnel are recorded through a REAL
+  // BackendApiService owned by the host, never through this one: an event
+  // emitted here would carry a fabricated raceId (§5.6). Batching through the
+  // demo service is therefore dropped on the floor.
+
+  @override
+  Future<void> sendActivationEvents({
+    required String identityToken,
+    required List<Map<String, dynamic>> events,
+  }) async {}
+}

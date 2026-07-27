@@ -61,6 +61,7 @@ class AttackOutcomeModal extends StatelessWidget {
     super.key,
     required this.result,
     required this.onDismiss,
+    this.subtitleOverride,
   });
 
   /// The raw use-powerup result (the inner `result` object).
@@ -68,6 +69,15 @@ class AttackOutcomeModal extends StatelessWidget {
 
   /// Called when the user dismisses the modal.
   final VoidCallback onDismiss;
+
+  /// Replaces the subtitle. Additive and defaulted to null, so every shipped
+  /// caller renders exactly what it does today.
+  ///
+  /// The bundled subtitles are written from the ATTACKER's side ("Your attack
+  /// was blocked"), because that is the only side the live screen shows this
+  /// on. The onboarding demo shows the same reveal for an attack that came AT
+  /// the user, where that wording would be simply wrong.
+  final String? subtitleOverride;
 
   AttackOutcome get _outcome => attackOutcomeFromResult(result);
 
@@ -99,6 +109,8 @@ class AttackOutcomeModal extends StatelessWidget {
   }
 
   String get _subtitle {
+    final override = subtitleOverride;
+    if (override != null && override.isNotEmpty) return override;
     switch (_outcome) {
       case AttackOutcome.reflected:
         return 'Your attack was reflected back at you';
@@ -206,8 +218,9 @@ class AttackOutcomeModal extends StatelessWidget {
 /// matching the mystery-box case-opening presentation.
 Future<void> showAttackOutcomeModal(
   BuildContext context,
-  Map<String, dynamic> result,
-) {
+  Map<String, dynamic> result, {
+  String? subtitleOverride,
+}) {
   return showGeneralDialog(
     context: context,
     barrierDismissible: true,
@@ -235,6 +248,7 @@ Future<void> showAttackOutcomeModal(
                     constraints: const BoxConstraints(maxWidth: 460),
                     child: AttackOutcomeModal(
                       result: result,
+                      subtitleOverride: subtitleOverride,
                       onDismiss: () => Navigator.of(dialogContext).pop(),
                     ),
                   ),

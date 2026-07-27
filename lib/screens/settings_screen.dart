@@ -4,7 +4,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config/backend_config.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
+import '../services/health_service.dart';
 import '../services/notification_service.dart';
+import '../services/onboarding_state_service.dart';
 import '../styles.dart';
 import '../theme_controller.dart';
 import '../tutorial/tutorial_screen.dart';
@@ -231,6 +233,12 @@ class _SettingsContentState extends State<_SettingsContent> {
                 },
               ),
               _LeaderboardVisibilityToggle(authService: widget.authService),
+              // Health has never had a re-entry point anywhere in the app —
+              // notifications did, health didn't — so a user who denied or
+              // later revoked step access had no way back in. This is it.
+              // Mirrors _NotificationToggle: it renders nothing at all once
+              // steps are connected.
+              _ConnectHealthRow(authService: widget.authService),
             ],
           ),
           if (themeController != null) ...[
@@ -526,6 +534,80 @@ class _AppearanceChoice extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The permanent way back into step access (spec §5.2). Invisible while steps
+/// are connected, exactly like [_NotificationToggle] is invisible once
+/// notifications are resolved — settings rows that only appear when they have
+/// something to fix.
+///
+/// It re-runs the permission request first and only falls back to the OS
+/// settings deep link if that returns nothing, because a prompt the user can
+/// actually answer is always the shorter path.
+class _ConnectHealthRow extends StatefulWidget {
+  const _ConnectHealthRow({required this.authService, this.healthService});
+
+  final AuthService authService;
+  final HealthService? healthService;
+
+  @override
+  State<_ConnectHealthRow> createState() => _ConnectHealthRowState();
+}
+
+class _ConnectHealthRowState extends State<_ConnectHealthRow> {
+  late final HealthService _health = widget.healthService ?? HealthService();
+  final OnboardingStateService _onboardingState = OnboardingStateService();
+  bool _connected = true;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final authorized = await _health.restoreHealthAuthState();
+    final escaped = await _onboardingState.escapedHealthGate();
+    final inconclusive = await _onboardingState.probeInconclusive();
+    if (!mounted) return;
+    setState(() => _connected = authorized && !escaped && !inconclusive);
+  }
+
+  Future<void> _connect() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final result = await _health.setUpHealthAccess();
+      if (result == HealthSetupResult.authorized) {
+        await _onboardingState.setEscapedHealthGate(false);
+        await _onboardingState.clearProbeInconclusive();
+        if (mounted) setState(() => _connected = true);
+        return;
+      }
+      // Denied, inconclusive, or Health Connect missing: the prompt can't
+      // resolve this, so hand the user to the OS surface that can.
+      await _health.openPlatformHealthSettings();
+    } catch (_) {
+      // Nothing to report beyond the row staying visible.
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_connected) return const SizedBox.shrink();
+    return PillButton(
+      key: const Key('settings-connect-health'),
+      label: _busy ? 'CONNECTING...' : 'CONNECT STEPS',
+      variant: PillButtonVariant.secondary,
+      fontSize: 13,
+      fullWidth: true,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      onPressed: _busy ? null : _connect,
     );
   }
 }

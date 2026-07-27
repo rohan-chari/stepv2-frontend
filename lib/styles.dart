@@ -643,6 +643,41 @@ abstract final class PixelText {
     );
   }
 
+  /// Hard 8-way pixel outline plus one soft drop shadow, for type sitting
+  /// directly on the daytime sky art. Cream-on-cyan alone loses too much
+  /// contrast — especially anywhere near the sun's glare.
+  static List<Shadow> skyOutline(double width) => [
+    for (final dx in [-1.0, 0.0, 1.0])
+      for (final dy in [-1.0, 0.0, 1.0])
+        if (dx != 0 || dy != 0)
+          Shadow(
+            color: const Color(0xFF17231C),
+            offset: Offset(dx * width, dy * width),
+          ),
+    Shadow(
+      color: const Color(0x59000000),
+      blurRadius: 6,
+      offset: Offset(0, width * 1.4),
+    ),
+  ];
+
+  /// True bitmap-pixel display face (Jersey 25), bundled rather than fetched.
+  /// Reserved for the arcade wordmark treatment — the letterforms are stepped
+  /// pixels, so it only reads well large. Body copy stays on [body].
+  static TextStyle display({
+    double size = 64,
+    Color color = AppColors.textLight,
+    double letterSpacing = 0,
+  }) {
+    return TextStyle(
+      fontFamily: 'Jersey25',
+      fontSize: size,
+      color: color,
+      height: 1.0,
+      letterSpacing: letterSpacing,
+    );
+  }
+
   static TextStyle body({
     double size = 17.5,
     Color color = AppColors.textDark,

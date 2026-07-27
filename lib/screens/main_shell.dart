@@ -14,6 +14,10 @@ import '../models/step_data.dart';
 import '../models/step_sample_data.dart';
 import '../services/async_ttl_cache.dart';
 import '../services/activation_analytics_service.dart';
+import '../services/onboarding_state_service.dart';
+import '../utils/onboarding_gate.dart';
+import '../widgets/notification_ask_dialog.dart';
+import '../widgets/steps_disconnected_banner.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../services/background_sync_bootstrap_service.dart';
@@ -34,6 +38,7 @@ import 'race_results_summary_screen.dart';
 import 'ranked_results_summary_screen.dart';
 import 'start_screen.dart';
 import 'onboarding_flow.dart';
+import '../demo/demo_race_host.dart';
 import '../tutorial/tutorial_screen.dart';
 import 'tabs/friends_tab.dart';
 import 'tabs/home_tab.dart';
@@ -93,6 +98,18 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   bool _healthAuthorized = false;
   bool?
   _notificationsState; // null = not prompted, true = granted, false = denied
+
+  // --- onboarding revamp (v3) -----------------------------------------------
+  // All persisted (see OnboardingStateService) so the ladder and the degraded
+  // state survive an app kill mid-onboarding, and all default to the value that
+  // reproduces the pre-v3 behavior when the keys are absent.
+  final OnboardingStateService _onboardingState = OnboardingStateService();
+  int _healthAttempts = 0;
+  bool _escapedHealthGate = false;
+  bool _probeInconclusive = false;
+  int? _probeArmedAtMs;
+  bool _homeReachedRecorded = false;
+  bool _notificationAskShowing = false;
   bool _isLoading = false;
   String? _error;
   StepData? _stepData;
@@ -116,23 +133,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   List<Map<String, dynamic>> _equippedAccessories = const [];
   // Equipped base character assetKey (e.g. 'corgi_puppy'); null = capybara.
   String? _equippedAnimal;
-
-  /// Contract §4.4 — the server's `characterPowersEnabled` kill switch, read
-  /// off whichever payload carries it. It rides additively, so we accept it
-  /// from either the home batch or the shop catalog and default to FALSE when
-  /// no payload mentions it (older backend, or the switch flipped off).
-  bool _characterPowersEnabled = false;
-
-  /// Reads the additive flag defensively: only an explicit `true` turns the
-  /// home power chip on, and a payload that omits the key leaves the current
-  /// value alone rather than silently clearing it.
-  void _applyCharacterPowersFlag(Object? payload) {
-    if (payload is! Map) return;
-    final raw = payload['characterPowersEnabled'];
-    if (raw is! bool) return;
-    if (_characterPowersEnabled == raw) return;
-    if (mounted) setState(() => _characterPowersEnabled = raw);
-  }
   Loadable<Map<String, dynamic>> _shopCatalogState = const Loadable.initial();
   Map<String, dynamic>? _raceCard;
   bool _raceCardLoading = true;
@@ -195,6 +195,153 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   bool _capturingInviterRace = false;
   bool _inviterOfferShowing = false;
 
+  /// The single source of truth for "is this user still onboarding".
+  ///
+  /// This expression used to be inlined in four places, and three of the copies
+  /// had silently dropped the tutorial term — a real bug that let share-link
+  /// drains fire mid-tutorial under v1. It now lives in one pure function
+  /// (`utils/onboarding_gate.dart`) with a structural test guarding against the
+  /// duplication coming back.
+  bool get _isOnboarding => isOnboardingGate(
+    onboardingV3Enabled: widget.authService.onboardingV3Enabled,
+    onboardingV2Enabled: widget.authService.onboardingV2Enabled,
+    healthAuthorized: _healthAuthorized,
+    escapedHealthGate: _escapedHealthGate,
+    notificationsState: _notificationsState,
+    tutorialOnboardingSeen: widget.authService.tutorialOnboardingSeen,
+    firstRaceOnboardingSeen: widget.authService.firstRaceOnboardingSeen,
+  );
+
+  /// Whether the persistent "steps aren't connected" banner should be showing.
+  ///
+  /// Deliberately independent of [_isOnboarding]: a degraded user is NOT
+  /// onboarding, so the tab bar and the ad banner render exactly as they do for
+  /// everyone else. Suppressing them would re-create the dead end this state
+  /// exists to fix.
+  bool get _stepsDisconnected =>
+      OnboardingStateService.degradedBannerVisible(
+        onboardingV3Enabled: widget.authService.onboardingV3Enabled,
+        healthAuthorized: _healthAuthorized,
+        escapedHealthGate: _escapedHealthGate,
+        probeInconclusive: _probeInconclusive,
+        probeArmedAtMs: _probeArmedAtMs,
+      );
+
+  /// Loads the persisted v3 bookkeeping. Runs before anything reads
+  /// [_escapedHealthGate] — notably `_restoreAndFetch`, which would otherwise
+  /// hard-return and leave an escaped user staring at a fully empty app.
+  Future<void> _loadOnboardingState() async {
+    final attempts = await _onboardingState.healthAttemptCount();
+    final escaped = await _onboardingState.escapedHealthGate();
+    final inconclusive = await _onboardingState.probeInconclusive();
+    final armedAt = await _onboardingState.probeArmedAtMs();
+    if (!mounted) return;
+    setState(() {
+      _healthAttempts = attempts;
+      _escapedHealthGate = escaped;
+      _probeInconclusive = inconclusive;
+      _probeArmedAtMs = armedAt;
+    });
+  }
+
+  /// The way out of a health gate the OS has stopped cooperating with.
+  ///
+  /// Both onboarding terms are closed here, not just the first-race one. The
+  /// escape happens BEFORE the tutorial and the race intro, so leaving either
+  /// flag false would drop the user straight back into a gate on the next
+  /// rebuild — the escape would not be an escape.
+  Future<void> _escapeHealthGate() async {
+    await _onboardingState.setEscapedHealthGate(true);
+    unawaited(_activationAnalytics.record('health_escaped'));
+    if (mounted) setState(() => _escapedHealthGate = true);
+    // Local first, network second. The escape must be instant and must not be
+    // hostage to a request that may be slow or failing — this is the path a
+    // user takes precisely because something already isn't working.
+    await widget.authService.markFirstRaceOnboardingSeenLocally();
+    unawaited(_skipFirstRaceOnboarding());
+    unawaited(widget.authService.markTutorialOnboardingSeen());
+    if (!mounted) return;
+    // The degraded user still gets a real app: load every home surface that
+    // does not depend on a local step read.
+    unawaited(_loadHomeAndShowResults());
+  }
+
+  /// The banner's one action. A prompt the user can answer is always the
+  /// shorter path, so retry first and only deep-link once that has stopped
+  /// producing anything.
+  Future<void> _fixDisconnectedSteps() async {
+    if (_healthAttempts >= 2) {
+      final launched = await _healthService.openPlatformHealthSettings();
+      if (launched) return;
+    }
+    await _enableHealthData();
+  }
+
+  /// Re-probes an armed-but-latent (or visible) degraded state. The banner
+  /// clears the moment steps appear, which is what makes the iOS
+  /// false-positive case — a genuinely idle device — self-heal with no user
+  /// action at all.
+  Future<void> _reprobeSteps() async {
+    if (!widget.authService.onboardingV3Enabled) return;
+    if (!_probeInconclusive) return;
+    final steps = await _healthService.probeTrailingSteps();
+    if (steps <= 0 || !mounted) return;
+    await _onboardingState.clearProbeInconclusive();
+    unawaited(_activationAnalytics.record('health_recovered'));
+    if (!mounted) return;
+    setState(() {
+      _probeInconclusive = false;
+      _probeArmedAtMs = null;
+    });
+  }
+
+  /// Fires the relocated notification ask (spec §5.4). Safe to call from any
+  /// trigger: it self-guards on the OS permission state, the per-install cap,
+  /// and whether this particular trigger has already been consumed.
+  Future<void> maybeAskForNotifications(NotificationAskTrigger trigger) async {
+    if (!widget.authService.onboardingV3Enabled) return;
+    if (_notificationAskShowing) return;
+    final ns = widget.notificationService;
+    if (ns == null) return;
+    final permission = await ns.getPermissionState();
+    final should = await _onboardingState.shouldAskForNotifications(
+      trigger: trigger,
+      permissionState: permission,
+    );
+    if (!should || !mounted) return;
+
+    _notificationAskShowing = true;
+    unawaited(_activationAnalytics.record('notif_prompt_shown'));
+    // Recorded before the await that opens the dialog so the context capture
+    // below is the same frame as the mounted check above.
+    final askFuture = NotificationAskDialog.show(context);
+    await _onboardingState.recordNotificationAsk(trigger);
+    try {
+      final accepted = await askFuture;
+      if (!accepted) {
+        // Declining IN-APP leaves the OS permission undetermined, so the
+        // backstop can still fire once. That is the point of the two-ask cap.
+        unawaited(
+          _activationAnalytics.record(
+            'notif_result',
+            context: const {'result': 'dismissed'},
+          ),
+        );
+        return;
+      }
+      final granted = await ns.requestPermission(widget.authService.authToken);
+      unawaited(
+        _activationAnalytics.record(
+          'notif_result',
+          context: {'result': granted ? 'granted' : 'denied'},
+        ),
+      );
+      if (mounted) setState(() => _notificationsState = granted);
+    } finally {
+      _notificationAskShowing = false;
+    }
+  }
+
   void _handleAuthServiceChanged() {
     if (!mounted) return;
     setState(() {});
@@ -226,11 +373,13 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _onNotificationAction,
     );
     _restoreAndFetch();
-    if (widget.authService.onboardingV2Enabled &&
-        !widget.authService.firstRaceOnboardingSeen) {
+    // Extended past v2: the funnel needs a denominator on every flow, not only
+    // the one that happened to be shipping when the event was added.
+    if (!widget.authService.firstRaceOnboardingSeen) {
       unawaited(_activationAnalytics.record('onboarding_started'));
     }
     unawaited(_activationAnalytics.flush(widget.authService.authToken));
+    unawaited(_startAppSession());
   }
 
   @override
@@ -337,13 +486,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     if (token == null || token.isEmpty) return;
 
     // Wait until onboarding is fully complete; joining + navigating over the
-    // onboarding overlay would be wrong. Mirrors build()'s isOnboarding gate.
-    final isOnboarding = widget.authService.onboardingV2Enabled
-        ? !_healthAuthorized || !widget.authService.firstRaceOnboardingSeen
-        : !_healthAuthorized ||
-              _notificationsState == null ||
-              !widget.authService.firstRaceOnboardingSeen;
-    if (isOnboarding) return;
+    // onboarding overlay would be wrong. Shares build()'s gate exactly — this
+    // used to be an inline copy that had drifted, which let a share-link drain
+    // fire while the user was still on the tutorial step.
+    if (_isOnboarding) return;
 
     final identityToken = widget.authService.authToken;
     if (identityToken == null || identityToken.isEmpty) return;
@@ -445,12 +591,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     final token = widget.authService.pendingTournamentShareToken;
     if (token == null || token.isEmpty) return;
 
-    final isOnboarding = widget.authService.onboardingV2Enabled
-        ? !_healthAuthorized || !widget.authService.firstRaceOnboardingSeen
-        : !_healthAuthorized ||
-              _notificationsState == null ||
-              !widget.authService.firstRaceOnboardingSeen;
-    if (isOnboarding) return;
+    if (_isOnboarding) return;
 
     final identityToken = widget.authService.authToken;
     if (identityToken == null || identityToken.isEmpty) return;
@@ -534,12 +675,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     // Share-token flow wins when both are somehow pending.
     if (widget.authService.pendingShareToken != null) return;
 
-    final isOnboarding = widget.authService.onboardingV2Enabled
-        ? !_healthAuthorized || !widget.authService.firstRaceOnboardingSeen
-        : !_healthAuthorized ||
-              _notificationsState == null ||
-              !widget.authService.firstRaceOnboardingSeen;
-    if (isOnboarding) return;
+    if (_isOnboarding) return;
 
     final identityToken = widget.authService.authToken;
     if (identityToken == null || identityToken.isEmpty) return;
@@ -598,8 +734,15 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _healthAuthorized) {
+    // The escaped user has no local health read, but every server-side surface
+    // still needs refreshing on resume — otherwise the degraded app is also a
+    // stale one.
+    if (state == AppLifecycleState.resumed &&
+        (_healthAuthorized || _escapedHealthGate)) {
       unawaited(_activationAnalytics.flush(widget.authService.authToken));
+      // Re-probe on every resume: the banner clears the moment steps appear,
+      // so a genuinely idle device heals itself with no user action.
+      unawaited(_reprobeSteps());
       // Mirror initial load: refresh every home surface, then surface the
       // results modals only once all calls have settled.
       unawaited(_loadHomeAndShowResults());
@@ -627,18 +770,38 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _foregroundPollTimer = null;
   }
 
+  /// Bumps the app-session counter and runs the notification backstop for a
+  /// user who never opens a box. Without this, moving the ask to first-box-open
+  /// would leave a box-less subset never asked at all — a regression against
+  /// today, where everyone is asked during onboarding.
+  Future<void> _startAppSession() async {
+    await _onboardingState.bumpSessionCount();
+    if (!mounted) return;
+    if (_isOnboarding) return;
+    await maybeAskForNotifications(NotificationAskTrigger.session);
+  }
+
   Future<void> _restoreAndFetch() async {
     setState(() {
       _displayName = widget.authService.displayName;
     });
+    // Must land before the health check below, which branches on the escape.
+    await _loadOnboardingState();
+    if (!mounted) return;
 
     final sessionIsValid = await _refreshSessionToken();
     if (!sessionIsValid || !mounted) return;
 
     final wasAuthorized = await _healthService.restoreHealthAuthState();
-    if (!wasAuthorized || !mounted) return;
+    if (!mounted) return;
+    // This used to hard-return whenever health wasn't authorized, which would
+    // have starved the degraded user: tabs present, and not one of them ever
+    // loaded. An escaped user has no local step data but everything else —
+    // races, friends, coins, boxes — is server-side and must still load.
+    if (!wasAuthorized && !_escapedHealthGate) return;
 
-    setState(() => _healthAuthorized = true);
+    if (wasAuthorized) setState(() => _healthAuthorized = true);
+    unawaited(_reprobeSteps());
     await _backgroundSyncBootstrapService.enableHealthKitBackgroundDelivery();
     await _checkNotificationState();
     // Notification initialization can finish before this shell exists on a
@@ -704,7 +867,17 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
     try {
       final result = await _healthService.setUpHealthAccess();
+
+      // Not an attempt, deliberately: this already sent the user to the Play
+      // Store and retrying is exactly what they should do next. Counting it
+      // would hand out the escape hatch to someone who has not yet been asked.
       if (result == HealthSetupResult.needsHealthConnect) {
+        unawaited(
+          _activationAnalytics.record(
+            'health_result',
+            context: const {'result': 'unsupported'},
+          ),
+        );
         setState(() {
           _isLoading = false;
           _error =
@@ -713,16 +886,63 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         });
         return;
       }
+
       if (result == HealthSetupResult.denied) {
+        final attempts = await _onboardingState.bumpHealthAttemptCount();
+        unawaited(
+          _activationAnalytics.record(
+            'health_result',
+            context: const {'result': 'denied'},
+          ),
+        );
+        if (!mounted) return;
         setState(() {
+          _healthAttempts = attempts;
           _isLoading = false;
-          _error =
-              'Steps access wasn’t granted. Tap Try Again to show the '
-              'permission prompt again, then allow Bara to read your steps. '
-              'If the prompt no longer appears, enable Steps for Bara in your '
-              'Health Connect settings.';
+          _error = attempts >= 2
+              ? 'Bara still can’t read your steps. Open Health Connect '
+                    'settings and turn Steps on for Bara — or continue '
+                    'without steps and connect later.'
+              : 'Steps access wasn’t granted. Tap Try Again to show the '
+                    'permission prompt again, then allow Bara to read your '
+                    'steps.';
         });
         return;
+      }
+
+      // Inconclusive is iOS-only and means "we cannot tell a denial from an
+      // idle device". Per the owner's call we do NOT re-block: the user goes
+      // through, and the degraded state arms latently for six hours so a 6am
+      // signup with an empty step history is never told their health is
+      // broken seconds after onboarding.
+      if (result == HealthSetupResult.inconclusive) {
+        await _onboardingState.armProbeInconclusive();
+        final armedAt = await _onboardingState.probeArmedAtMs();
+        unawaited(_activationAnalytics.record('health_probe_inconclusive'));
+        if (!mounted) return;
+        setState(() {
+          _probeInconclusive = true;
+          _probeArmedAtMs = armedAt;
+        });
+      } else {
+        unawaited(
+          _activationAnalytics.record(
+            'health_result',
+            context: const {'result': 'granted'},
+          ),
+        );
+        // A conclusive grant retires any earlier degraded state.
+        if (_probeInconclusive || _escapedHealthGate) {
+          await _onboardingState.clearProbeInconclusive();
+          await _onboardingState.setEscapedHealthGate(false);
+          unawaited(_activationAnalytics.record('health_recovered'));
+          if (!mounted) return;
+          setState(() {
+            _probeInconclusive = false;
+            _probeArmedAtMs = null;
+            _escapedHealthGate = false;
+          });
+        }
       }
 
       setState(() => _healthAuthorized = true);
@@ -731,6 +951,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _fetchRaceCard();
       await _fetchSteps();
     } catch (e) {
+      unawaited(
+        _activationAnalytics.record(
+          'health_result',
+          context: const {'result': 'failed'},
+        ),
+      );
       setState(() {
         _isLoading = false;
         _error = 'Failed to request health access:\n$e';
@@ -1464,7 +1690,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   void _applyShopCatalog(Map<String, dynamic> catalog) {
-    _applyCharacterPowersFlag(catalog);
     final equipped = catalog['equipped'] as Map<String, dynamic>? ?? {};
     // The CHARACTER entry is the base animal, not a wearable — keep it out of
     // the accessory overlay list.
@@ -1587,7 +1812,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           _raceCardLoading = false;
         });
       }
-      _applyCharacterPowersFlag(data);
     } catch (_) {
       // Card is non-critical; ignore fetch errors and keep last value.
       if (mounted) {
@@ -1620,6 +1844,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
               raceId: raceId,
               friends: _friendsSteps,
               notificationService: widget.notificationService,
+              onBoxOpened: () =>
+                  maybeAskForNotifications(NotificationAskTrigger.boxOpen),
             ),
           ),
         )
@@ -1735,6 +1961,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   /// V2 requires proof that this user is already accepted in the active seeded
   /// Daily. Returning null is the safe fallback: no enrollment/reward claims.
   Future<Map<String, dynamic>?> _fetchVerifiedActiveDaily() async {
+    // The daily intro is the step that fetches this, so a fetch IS a view.
+    unawaited(_activationAnalytics.record('daily_intro_viewed'));
     final identityToken = widget.authService.authToken;
     if (identityToken == null || identityToken.isEmpty) return null;
     try {
@@ -1757,6 +1985,62 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   Future<void> _enterVerifiedDaily(String raceId) async {
     unawaited(_activationAnalytics.record('daily_opened'));
+    await _skipFirstRaceOnboarding();
+    unawaited(_fetchRaces());
+    if (!mounted) return;
+    _openRaceFromCard(raceId);
+  }
+
+  Future<void> _openHealthSettings() async {
+    final launched = await _healthService.openPlatformHealthSettings();
+    if (launched || !mounted) return;
+    // Nothing resolved the intent. Say so rather than appearing to do nothing —
+    // an unresponsive button on a blocking gate is the worst possible read.
+    showErrorToast(
+      context,
+      'Couldn’t open settings. Open Health Connect and turn Steps on for Bara.',
+    );
+  }
+
+  /// Resolves the inviter's joinable race for the referral-first landing.
+  /// Returns null on ANY failure — a 404 from a backend that predates the
+  /// endpoint, a timeout, an error body — so the step falls through to the
+  /// Daily intro. This is the single most important degradation path in the
+  /// spec, because the backend and the app deploy independently.
+  Future<Map<String, dynamic>?> _fetchInviterRace() async {
+    final identityToken = widget.authService.authToken;
+    if (identityToken == null || identityToken.isEmpty) return null;
+    try {
+      final payload = await _backendApiService.fetchInviterRace(
+        identityToken: identityToken,
+      );
+      if (payload != null && payload['race'] is Map) {
+        unawaited(_activationAnalytics.record('inviter_race_shown'));
+      }
+      return payload;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Joins the inviter's race, closes the first-race gate, and opens it. A
+  /// failed join still closes the gate: the user has done their part, and
+  /// stranding them on an onboarding step because a race filled up would be a
+  /// worse outcome than landing them on Home.
+  Future<void> _joinInviterRace(String raceId) async {
+    final identityToken = widget.authService.authToken;
+    if (identityToken != null && identityToken.isNotEmpty) {
+      try {
+        await _backendApiService.joinPublicRace(
+          identityToken: identityToken,
+          raceId: raceId,
+          onboarding: true,
+        );
+      } catch (_) {
+        // "Already in this race", full, closed — the race screen renders every
+        // one of those states correctly, so continue to it either way.
+      }
+    }
     await _skipFirstRaceOnboarding();
     unawaited(_fetchRaces());
     if (!mounted) return;
@@ -1795,12 +2079,23 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     final navigator = Navigator.of(context);
     await navigator.push(
       MaterialPageRoute(
-        builder: (_) => TutorialScreen(
-          authService: widget.authService,
-          onComplete: (ctx) => Navigator.of(ctx).pop(),
-        ),
+        builder: (routeContext) => widget.authService.onboardingV3Enabled
+            // Demo-race spec §5.8: under v3 the teaching step is a playable
+            // demo race, not the spotlight walkthrough. The walkthrough is
+            // untouched and still reachable from Profile → Settings.
+            ? DemoRaceHost(
+                authService: widget.authService,
+                backendApiService: _backendApiService,
+                onDone: (_) => Navigator.of(routeContext).pop(),
+              )
+            : TutorialScreen(
+                authService: widget.authService,
+                onComplete: (ctx) => Navigator.of(ctx).pop(),
+              ),
       ),
     );
+    // F8: marked seen on return whether the user finished or bailed — including
+    // the "backgrounded the app and came back" path. Idempotent.
     await widget.authService.markTutorialOnboardingSeen();
   }
 
@@ -2114,12 +2409,14 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final isOnboarding = widget.authService.onboardingV2Enabled
-        ? !_healthAuthorized || !widget.authService.firstRaceOnboardingSeen
-        : !_healthAuthorized ||
-              _notificationsState == null ||
-              !widget.authService.tutorialOnboardingSeen ||
-              !widget.authService.firstRaceOnboardingSeen;
+    // The funnel denominator's other end (§5.9): the first frame this user ever
+    // renders with onboarding behind them. Guarded by a plain bool rather than
+    // persistence because "reached home in this session" is the honest signal —
+    // the session id is what makes it one funnel row, not many.
+    if (!_isOnboarding && !_homeReachedRecorded) {
+      _homeReachedRecorded = true;
+      unawaited(_activationAnalytics.record('home_reached'));
+    }
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
@@ -2127,7 +2424,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         children: [
           Positioned.fill(child: const ArcadePageBackground(showHeader: false)),
 
-          if (isOnboarding)
+          if (_isOnboarding)
             Positioned.fill(
               child: OnboardingFlow(
                 healthAuthorized: _healthAuthorized,
@@ -2143,6 +2440,18 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                 onEnterDaily: _enterDailyRaceOnboarding,
                 onSkipFirstRace: _skipFirstRaceOnboarding,
                 onboardingV2Enabled: widget.authService.onboardingV2Enabled,
+                onboardingV3Enabled: widget.authService.onboardingV3Enabled,
+                healthAttemptCount: _healthAttempts,
+                // The ladder: retrying stops being offered once the OS has
+                // refused twice, because it stops producing a prompt.
+                onOpenHealthSettings: _healthAttempts >= 2
+                    ? _openHealthSettings
+                    : null,
+                onEscapeHealthGate: _healthAttempts >= 2
+                    ? _escapeHealthGate
+                    : null,
+                onFetchInviterRace: _fetchInviterRace,
+                onJoinInviterRace: _joinInviterRace,
                 displayName: _displayName ?? widget.authService.displayName,
                 onFetchActiveDaily: _fetchVerifiedActiveDaily,
                 onEnterVerifiedDaily: _enterVerifiedDaily,
@@ -2151,6 +2460,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     widget.authService.pendingShareToken != null,
                 welcomeReferralCode: widget.authService.welcomeReferralCode,
                 onWelcomeDismissed: () {
+                  unawaited(
+                    _activationAnalytics.record('referral_continued'),
+                  );
                   widget.authService.clearWelcomeReferralCode();
                 },
                 onFetchReferralPreview: (code) =>
@@ -2218,7 +2530,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                           friendsStepsState: _friendsStepsState,
                           equippedAccessories: _equippedAccessories,
                           equippedAnimal: _equippedAnimal,
-                          characterPowersEnabled: _characterPowersEnabled,
                           shopCatalogState: _shopCatalogState,
                           onOpenRacesTab: _openRacesTab,
                           onOpenLeaderboardTab: _openLeaderboardTab,
@@ -2294,9 +2605,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
             ),
 
           // Single shell-level footer banner: loads once, survives tab switches,
-          // and sits directly above the tab bar. Hidden on the home tab (and
+          // and sits directly above the tab bar. Collapsed on the home tab (and
           // while the keyboard is up). Not shown during onboarding.
-          if (!isOnboarding && _currentTab != _homeTabIndex)
+          // The home tab passes `hidden` rather than unmounting the slot —
+          // unmounting disposed the BannerAd, so every home-tab round trip
+          // bought a fresh ad request for an ad we already had.
+          if (!_isOnboarding)
             Positioned(
               left: 0,
               right: 0,
@@ -2308,11 +2622,33 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     _bannerHeight.value = h;
                   }
                 },
-                child: const AdBannerSlot(hideWhenKeyboardOpen: true),
+                child: AdBannerSlot(
+                  hideWhenKeyboardOpen: true,
+                  hidden: _currentTab == _homeTabIndex,
+                ),
               ),
             ),
 
-          if (!isOnboarding)
+          // Degraded state (spec §5.2): pinned directly above the tab bar,
+          // non-dismissible, and NOT gated on onboarding — a user scoring 0
+          // needs to be told so on every screen, forever, until it is fixed.
+          if (!_isOnboarding && _stepsDisconnected)
+            ValueListenableBuilder<double>(
+              valueListenable: _bannerHeight,
+              // Stacked ABOVE the ad slot, not on top of it: both are pinned to
+              // the same tab-bar edge, so the measured ad height is what keeps
+              // them from colliding on the tabs that show one.
+              builder: (context, adHeight, child) => Positioned(
+                left: 0,
+                right: 0,
+                bottom:
+                    77.5 + MediaQuery.of(context).padding.bottom + adHeight,
+                child: child!,
+              ),
+              child: StepsDisconnectedBanner(onFix: _fixDisconnectedSteps),
+            ),
+
+          if (!_isOnboarding)
             Positioned(
               left: 0,
               right: 0,

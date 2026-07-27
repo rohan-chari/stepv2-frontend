@@ -347,7 +347,13 @@ class NotificationService {
       // Team-race pushes (TR-681/683): lead flips and the gentle slacker
       // nudge both open the race. Additive types — older apps fall through
       // to default/null and just show the alert without deep-link routing.
+      // Both spellings route, forever. The backend historically sent
+      // TEAM_LEAD_CHANGED while every shipped client matched the D-less
+      // string, so the alert showed but the tap went nowhere. Accepting both
+      // makes the two deploys order-independent and survives any future
+      // re-flip of the spelling.
       case 'TEAM_LEAD_CHANGE':
+      case 'TEAM_LEAD_CHANGED':
       case 'TEAM_SLACKER_NUDGE':
       case 'TEAM_FINAL_STRETCH':
       // One-time creator nudge when a scheduled team race can't auto-start

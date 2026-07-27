@@ -101,7 +101,17 @@ class OddsBreakdown {
   static int? _readInt(dynamic raw) =>
       raw is num && raw.isFinite ? raw.toInt() : null;
 
-  static String _rarityLabel(String key) => key.toUpperCase();
+  /// Rarity is an internal balance concept, so the player reads the OUTCOME
+  /// instead of the tier name. The map keys are untouched — parsing, the
+  /// sum-to-1.0 guard and [caseRarityColor] all still key off the raw rarity —
+  /// only the words change. An unknown key (a newer backend adding a tier)
+  /// falls back to the key itself rather than being dropped.
+  static String _rarityLabel(String key) => switch (key.toUpperCase()) {
+    'COMMON' => 'Standard reward',
+    'UNCOMMON' => 'Upgraded reward',
+    'RARE' => 'Top reward',
+    final other => other,
+  };
 
   /// A map that must be a real probability distribution: at least one entry,
   /// every value finite and >= 0, summing to 1.0 ± 0.01.
@@ -308,7 +318,7 @@ class _OddsSheet extends StatelessWidget {
                 controller: scrollController,
                 padding: EdgeInsets.zero,
                 children: [
-                  _SectionLabel('BY RARITY'),
+                  _SectionLabel('WHAT YOU GET'),
                   for (final slice in odds.rarity)
                     _OddsBar(
                       label: slice.label,
@@ -317,7 +327,7 @@ class _OddsSheet extends StatelessWidget {
                     ),
                   if (odds.rareMix != null) ...[
                     const SizedBox(height: 14),
-                    _SectionLabel('IF IT ROLLS RARE'),
+                    _SectionLabel('INSIDE THE TOP REWARD'),
                     for (final slice in odds.rareMix!)
                       _OddsBar(
                         label: slice.label,

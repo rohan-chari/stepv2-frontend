@@ -140,6 +140,19 @@
         <intent>
             <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
         </intent>
+        <!--
+          Health Connect settings, for the onboarding gate's recovery path: once
+          the OS has refused the permission prompt twice it stops re-showing it,
+          and the only way forward is the settings screen itself. Without this
+          entry Android 11+ package visibility makes the intent unresolvable, so
+          the button would silently do nothing on exactly the users who need it.
+        -->
+        <intent>
+            <action android:name="androidx.health.connect.action.HEALTH_CONNECT_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.APPLICATION_DETAILS_SETTINGS" />
+        </intent>
         <!-- url_launcher: opening https links (privacy/support) on Android 11+. -->
         <intent>
             <action android:name="android.intent.action.VIEW" />

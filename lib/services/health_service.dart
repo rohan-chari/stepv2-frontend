@@ -3,13 +3,21 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:health/health.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/step_data.dart';
 import '../models/step_sample_data.dart';
 
 /// Outcome of [HealthService.setUpHealthAccess]. [needsHealthConnect] is
 /// Android-only: Health Connect isn't installed/updated, and the user has been
 /// sent to the Play Store — the caller should ask them to retry.
-enum HealthSetupResult { authorized, denied, needsHealthConnect }
+///
+/// [inconclusive] is iOS-only. HealthKit hides read-permission status for
+/// privacy and `requestAuthorization` returns true whatever the user tapped, so
+/// a denial is undetectable at the gate. Instead we read the trailing week: a
+/// zero total means we genuinely cannot tell a denial from a brand-new or idle
+/// device. The caller lets the user through and arms the degraded state, which
+/// self-heals the moment steps appear.
+enum HealthSetupResult { authorized, denied, needsHealthConnect, inconclusive }
 
 class HealthService {
   HealthService({Health? health}) : _health = health ?? Health();
@@ -139,7 +147,61 @@ class HealthService {
       }
     }
     final authorized = await requestAuthorization();
-    return authorized ? HealthSetupResult.authorized : HealthSetupResult.denied;
+    if (!authorized) return HealthSetupResult.denied;
+    // iOS never reports a denial, so probe instead. Android's `authorized` is
+    // truthful, so it never needs the probe and never returns inconclusive.
+    if (!Platform.isAndroid) {
+      final steps = await probeTrailingSteps();
+      if (steps <= 0) return HealthSetupResult.inconclusive;
+    }
+    return HealthSetupResult.authorized;
+  }
+
+  /// Total steps over the trailing [days], used to tell a real grant from an
+  /// undetectable iOS denial. Additive to the existing auth state — it never
+  /// touches [_keyHealthAuthorized]. Returns 0 on a read error, which is the
+  /// conservative answer: it arms the (self-healing, 6h-delayed) degraded
+  /// state rather than silently leaving the user at 0 steps forever.
+  Future<int> probeTrailingSteps({int days = 7}) async {
+    try {
+      final end = DateTime.now();
+      final start = end.subtract(Duration(days: days));
+      final steps = await _stepsInInterval(start, end);
+      return steps ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// Opens the OS surface where the user can grant step access: Health
+  /// Connect's own settings screen on Android, this app's settings page on
+  /// iOS (HealthKit permissions live under Settings → Health → Data Access).
+  /// Returns false when nothing could be launched, so the caller can fall back
+  /// to the plain retry rather than appearing to do nothing.
+  Future<bool> openPlatformHealthSettings() async {
+    final candidates = Platform.isAndroid
+        ? const [
+            // Health Connect (Android 14+ ships it in the OS; older devices
+            // have it as an app, hence the second, package-scoped fallback).
+            'intent:#Intent;action=androidx.health.connect.action.HEALTH_CONNECT_SETTINGS;end',
+            // Last resort: this app's own OS settings page, which is at least a
+            // real destination if Health Connect can't be resolved.
+            'intent:#Intent;action=android.settings.APPLICATION_DETAILS_SETTINGS;'
+                'S.android.provider.extra.APP_PACKAGE=com.rohanchari.steptracker;end',
+          ]
+        : const ['app-settings:'];
+    for (final candidate in candidates) {
+      try {
+        final uri = Uri.parse(candidate);
+        if (await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+          return true;
+        }
+      } catch (_) {
+        // Try the next candidate; an unresolvable intent must not throw into
+        // the onboarding gate.
+      }
+    }
+    return false;
   }
 
   Future<bool> requestAuthorization() async {

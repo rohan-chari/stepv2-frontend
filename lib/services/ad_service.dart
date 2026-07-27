@@ -41,6 +41,9 @@ class AdService implements ExtraSpinAdController {
 
   static const _metaAdsChannel = MethodChannel('com.steptracker/meta_ads');
 
+  /// Ceiling on how long load() blocks its caller waiting for the SDK.
+  static const _loadTimeout = Duration(seconds: 30);
+
   // Ad unit IDs are per-platform in AdMob. iOS uses the original defines;
   // Android uses the parallel `_ANDROID` defines (added so Android can reach
   // full parity without changing the iOS ids). An absent/empty id for a surface
@@ -294,7 +297,14 @@ class AdService implements ExtraSpinAdController {
           },
         ),
       );
-      await completer.future;
+      // Neither callback firing would wedge _loading true forever, and with it
+      // every later load() on this controller (the guard above returns early).
+      // Time out instead: a slow fill that lands after this still populates
+      // _ad via onAdLoaded, it just doesn't block the caller.
+      await completer.future.timeout(
+        _loadTimeout,
+        onTimeout: () => debugPrint('Rewarded ad load timed out'),
+      );
     } finally {
       _loading = false;
     }

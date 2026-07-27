@@ -23,8 +23,13 @@ class TeamH2HBanner extends StatelessWidget {
 
   final String teamAName;
   final String teamBName;
-  final int teamATotal;
-  final int teamBTotal;
+
+  /// F-16f: nullable because a side's total is genuinely UNKNOWABLE when the
+  /// backend omitted the honest `teams` block and a member is stealthed (their
+  /// `totalSteps` is null, not 0). Rendering a confident undercount is worse
+  /// than saying "—".
+  final int? teamATotal;
+  final int? teamBTotal;
 
   String _formatSteps(int n) {
     final s = n.toString();
@@ -66,7 +71,7 @@ class TeamH2HBanner extends StatelessWidget {
     required BuildContext context,
     required RaceTeam team,
     required String name,
-    required int total,
+    required int? total,
   }) {
     final color = TeamRace.color(team, context);
     final colorLight = TeamRace.colorLight(team, context);
@@ -117,8 +122,14 @@ class TeamH2HBanner extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          _formatSteps(total),
-          style: PixelText.number(size: 30, color: colorDark),
+          total == null ? '—' : _formatSteps(total),
+          // P1 (item 3) — the reported bug. `colorDark` is a PLAQUE token; as
+          // text on the night board it rendered at 1.09:1 (team A) / 1.40:1
+          // (team B). TeamRace.textColorOn is the shared rule.
+          style: PixelText.number(
+            size: 30,
+            color: TeamRace.textColorOn(team, context),
+          ),
         ),
         Text(
           'STEPS',

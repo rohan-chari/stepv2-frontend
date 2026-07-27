@@ -1,12 +1,14 @@
 import 'dart:io' show Platform;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart' as apple;
+import 'package:url_launcher/url_launcher.dart';
 
 import 'display_name_screen.dart';
 import 'main_shell.dart';
-import '../config/start_cape_metadata.dart';
+import '../config/backend_config.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
 import '../styles.dart';
@@ -34,9 +36,14 @@ class _StartScreenState extends State<StartScreen> {
   static const Duration _reviewerTapWindow = Duration(seconds: 3);
   final List<DateTime> _reviewerTapTimestamps = [];
 
-  static const _textShadows = [
-    Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
-  ];
+  late final TapGestureRecognizer _privacyTapRecognizer = TapGestureRecognizer()
+    ..onTap = _openPrivacyPolicy;
+
+  @override
+  void dispose() {
+    _privacyTapRecognizer.dispose();
+    super.dispose();
+  }
 
   void _onReviewerTitleTap() {
     final now = DateTime.now();
@@ -146,20 +153,36 @@ class _StartScreenState extends State<StartScreen> {
     showErrorToast(context, errorMessage);
   }
 
+  Future<void> _openPrivacyPolicy() async {
+    final uri = Uri.parse('${BackendConfig.baseUrl}/privacy.html');
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
+    // The title screen is a fixed brand moment, not a themed surface: it
+    // always renders the daytime sky/ground art over the light-mode green
+    // field, whatever the device's dark-mode setting is. Everything below
+    // resolves its colors out of this forced-light Theme.
+    return Theme(
+      data: AppThemeData.light(),
+      child: Builder(
+        builder: (context) => AnnotatedRegion<SystemUiOverlayStyle>(
+          value: const SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness: Brightness.light,
+            statusBarBrightness: Brightness.dark,
+          ),
+          child: Scaffold(
+            backgroundColor: AppColors.of(context).roofLight,
+            body: _buildContent(context),
+          ),
+        ),
       ),
-      child: Scaffold(backgroundColor: colors.parchment, body: _buildContent()),
     );
   }
 
-  Widget _buildContent() {
+  Widget _buildContent(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxHeight < 720;
@@ -170,30 +193,53 @@ class _StartScreenState extends State<StartScreen> {
             Expanded(
               child: HomeHeroScene(
                 groundHeight: groundHeight,
-                skyAlignment: const Alignment(0.6, 1),
-                child: SafeArea(
-                  bottom: false,
-                  child: _buildBrandHero(
-                    compact: compact,
-                    groundHeight: groundHeight,
-                  ),
+                // Crops the sky so its baked-in sun clears the centered
+                // wordmark instead of washing out the tagline behind it.
+                skyAlignment: const Alignment(0.2, 1),
+                child: Stack(
+                  children: [
+                    SafeArea(
+                      bottom: false,
+                      child: _buildBrandHero(
+                        context,
+                        compact: compact,
+                        groundHeight: groundHeight,
+                        heroHeight: constraints.maxHeight,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
-            _buildSignInDock(compact: compact),
+            _buildSignInDock(context, compact: compact),
           ],
         );
       },
     );
   }
 
-  Widget _buildBrandHero({
+  Widget _buildBrandHero(
+    BuildContext context, {
     required bool compact,
     required double groundHeight,
+    required double heroHeight,
   }) {
-    final capySize = compact ? 146.0 : 184.0;
+    final colors = AppColors.of(context);
+    // Tall phones leave a lot of empty sky between the wordmark and the
+    // ground, so the mascot scales up with the available height.
+    final capySize = compact ? 146.0 : (heroHeight > 840 ? 214.0 : 184.0);
+    final treelineHeight = compact ? 76.0 : 96.0;
     return Stack(
       children: [
+        // Horizon hedge, tiled behind the mascot. Title-screen only: the
+        // home tab's hero deliberately keeps its sky empty behind the HUD.
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: groundHeight - 8,
+          height: treelineHeight,
+          child: const IgnorePointer(child: HeroTreeline()),
+        ),
         Positioned(
           top: compact ? 8 : 18,
           left: 20,
@@ -207,15 +253,20 @@ class _StartScreenState extends State<StartScreen> {
                 Text(
                   'Bara',
                   textAlign: TextAlign.center,
-                  style:
-                      PixelText.title(
-                        size: compact ? 58 : 70,
-                        color: AppColors.of(context).textLight,
-                      ).copyWith(
-                        height: 0.92,
-                        fontWeight: FontWeight.w800,
-                        shadows: _textShadows,
-                      ),
+                  style: PixelText.display(
+                    size: compact ? 76 : 92,
+                    color: colors.textLight,
+                  ).copyWith(shadows: PixelText.skyOutline(compact ? 2.4 : 3)),
+                ),
+                SizedBox(height: compact ? 2 : 4),
+                Text(
+                  'STEP. RACE. WIN.',
+                  textAlign: TextAlign.center,
+                  style: PixelText.display(
+                    size: compact ? 24 : 28,
+                    color: AppColors.pillGold,
+                    letterSpacing: 1.6,
+                  ).copyWith(shadows: PixelText.skyOutline(1.4)),
                 ),
               ],
             ),
@@ -225,58 +276,90 @@ class _StartScreenState extends State<StartScreen> {
           left: 0,
           right: 0,
           bottom: groundHeight - 4 - capySize * 0.22,
-          child: Center(child: _CapeCapybara(size: capySize)),
+          child: Center(child: _HeroCapybara(size: capySize)),
         ),
       ],
     );
   }
 
-  Widget _buildSignInDock({required bool compact}) {
+  Widget _buildSignInDock(BuildContext context, {required bool compact}) {
     final colors = AppColors.of(context);
-    return Container(
+    // Same surface the home tab puts below its hero (home_tab.dart): green
+    // field + arcade checkers, with the soft dirt shadow along the top edge
+    // that blends the scene's soil into the green instead of hard-cutting.
+    return ColoredBox(
       key: const Key('start-sign-in-dock'),
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: colors.parchment,
-        border: Border(top: BorderSide(color: colors.woodDark, width: 3)),
-        boxShadow: [
-          BoxShadow(
-            color: colors.woodShadow.withValues(alpha: 0.28),
-            offset: const Offset(0, -5),
-            blurRadius: 14,
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(24, compact ? 13 : 16, 24, 16),
+      color: colors.roofLight,
+      child: CustomPaint(
+        painter: const ArcadeCheckerPainter(drawBottomStripe: false),
+        child: SafeArea(
+          top: false,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                'READY TO RACE?',
-                style: PixelText.title(
-                  size: compact ? 16 : 18,
-                  color: colors.textDark,
+              // Deeper than the home tab's 16px version: brown-to-green is a
+              // hue jump, not just a value jump, so the soil veil needs more
+              // runway here where nothing else covers the boundary.
+              Container(
+                height: 34,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      colors.dirtDark.withValues(alpha: 0.62),
+                      colors.dirtDark.withValues(alpha: 0.26),
+                      colors.dirtDark.withValues(alpha: 0),
+                    ],
+                    stops: const [0, 0.42, 1],
+                  ),
                 ),
-                textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 4),
-              Text(
-                'Race your friends, earn powerups, and climb the leaderboard.',
-                style: PixelText.body(
-                  size: compact ? 12 : 13,
-                  color: colors.textMid,
+              Padding(
+                padding: EdgeInsets.fromLTRB(24, compact ? 10 : 14, 24, 14),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _FeatureRow(compact: compact),
+                    SizedBox(height: compact ? 12 : 16),
+                    _buildSignInButtons(compact: compact),
+                    SizedBox(height: compact ? 8 : 10),
+                    _buildLegalLine(context, compact: compact),
+                  ],
                 ),
-                textAlign: TextAlign.center,
               ),
-              SizedBox(height: compact ? 10 : 13),
-              _buildSignInButtons(compact: compact),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildLegalLine(BuildContext context, {required bool compact}) {
+    final colors = AppColors.of(context);
+    final base = PixelText.body(
+      size: compact ? 12.5 : 13.5,
+      color: colors.textLight.withValues(alpha: 0.86),
+    ).copyWith(fontWeight: FontWeight.w500);
+    return Text.rich(
+      TextSpan(
+        children: [
+          const TextSpan(text: 'By continuing, you agree to our '),
+          TextSpan(
+            text: 'Privacy Policy',
+            style: base.copyWith(
+              color: AppColors.pillGold,
+              fontWeight: FontWeight.w700,
+              decoration: TextDecoration.underline,
+              decorationColor: AppColors.pillGold,
+            ),
+            recognizer: _privacyTapRecognizer,
+          ),
+          const TextSpan(text: '.'),
+        ],
+      ),
+      style: base,
+      textAlign: TextAlign.center,
     );
   }
 
@@ -376,50 +459,78 @@ class _StartScreenState extends State<StartScreen> {
   }
 }
 
-class _CapeCapybara extends StatefulWidget {
-  const _CapeCapybara({required this.size});
+/// The title-screen mascot: the plain walking capybara, no accessories.
+class _HeroCapybara extends StatelessWidget {
+  const _HeroCapybara({required this.size});
 
   final double size;
-
-  @override
-  State<_CapeCapybara> createState() => _CapeCapybaraState();
-}
-
-class _CapeCapybaraState extends State<_CapeCapybara> {
-  // Starts on the compiled prod-tuning snapshot, then swaps to the cached
-  // tuner item (bobble + renderMetadata, saved by the shop-catalog funnel)
-  // once loaded — so this renders exactly what the Accessory Tuner renders,
-  // without a pre-auth network dependency.
-  Map<String, dynamic> _capeItem = StartCapeMetadata.fallback;
-
-  @override
-  void initState() {
-    super.initState();
-    StartCapeMetadata.load().then((item) {
-      if (mounted && !identical(item, StartCapeMetadata.fallback)) {
-        setState(() => _capeItem = item);
-      }
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
       image: true,
-      label: 'Capybara wearing a red racing cape',
+      label: 'Capybara walking',
       child: CapybaraCustomizationPreview(
-        key: const Key('start-cape-capybara'),
-        accessories: [
-          {
-            'assetKey': 'cape',
-            'slot': 'BACK',
-            'bobble': _capeItem['bobble'] == true,
-            'renderMetadata': _capeItem['renderMetadata'],
-          },
-        ],
-        size: widget.size,
+        key: const Key('start-hero-capybara'),
+        accessories: const [],
+        size: size,
         showShadow: false,
       ),
+    );
+  }
+}
+
+/// The three "what this app is" beats, each a generated pixel icon over its
+/// label. Deliberately backgroundless so it floats on the dock's gradient
+/// rather than sitting in a boxed-off band.
+class _FeatureRow extends StatelessWidget {
+  const _FeatureRow({required this.compact});
+
+  final bool compact;
+
+  static const _features = <({String asset, String label})>[
+    (asset: 'assets/images/title_feat_trophy.png', label: 'RACE\nFRIENDS'),
+    (asset: 'assets/images/title_feat_box.png', label: 'EARN\nPOWERUPS'),
+    (
+      asset: 'assets/images/title_feat_board.png',
+      label: 'CLIMB THE\nLEADERBOARD',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final iconSize = compact ? 54.0 : 64.0;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final f in _features)
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.asset(
+                  f.asset,
+                  width: iconSize,
+                  height: iconSize,
+                  filterQuality: FilterQuality.none,
+                  // A missing icon must not blank the title screen: an old
+                  // build that somehow lacks the asset just shows the label.
+                  errorBuilder: (_, _, _) => SizedBox(height: iconSize),
+                ),
+                SizedBox(height: compact ? 5 : 7),
+                Text(
+                  f.label,
+                  textAlign: TextAlign.center,
+                  style: PixelText.title(
+                    size: compact ? 10 : 11,
+                    color: colors.textLight,
+                  ).copyWith(height: 1.22, letterSpacing: 0.4),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

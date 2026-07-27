@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 
+import '../services/activation_analytics_service.dart';
 import '../services/auth_service.dart';
 import '../styles.dart';
 import '../widgets/game_container.dart';
@@ -32,9 +33,28 @@ class TutorialStep {
   final String body;
 }
 
-/// Builds the walkthrough. The health-source name is device-aware (Apple
-/// Health on iOS, Health Connect on Android) so the very first line is never
-/// wrong for the platform the user is actually on.
+/// Builds the walkthrough — five steps, ~15–20 seconds, four taps.
+///
+/// This is deliberately a *reinstatement*, not a trim. Turning the v2 flow on
+/// deletes the tutorial from onboarding outright (the flow early-returns before
+/// the tutorial check), so the only surviving path to it is Profile → Settings
+/// → View Tutorial. V3 puts a much smaller one back in the critical path.
+///
+/// The ten-step version taught seventeen concepts — shop, inventory, referral
+/// links, prize-pool funding, leaderboard filters — before the user had walked
+/// a single step, and steps 4 and 5 were near-duplicates about finding friends.
+/// What survives is the spine: walk → race → boxes → rivals → coins. Everything
+/// evicted becomes a just-in-time tip fired when the user actually reaches the
+/// surface (see `widgets/coach_tip.dart`).
+///
+/// Titles are declarative sentences, not noun phrases: "Just walk." is an
+/// instruction, "Track today" was a feature name. Bodies are ≤14 words.
+///
+/// The health-source name stays device-aware (Apple Health on iOS, Health
+/// Connect on Android) so the very first line is never wrong for the platform
+/// the user is actually on. Every spotlight anchor below is already wired —
+/// `races.box` in particular has existed as an anchor with no step pointing at
+/// it, and step 3 finally uses it.
 List<TutorialStep> _buildSteps() {
   final healthSource = Platform.isAndroid ? 'Health Connect' : 'Apple Health';
 
@@ -42,88 +62,47 @@ List<TutorialStep> _buildSteps() {
     TutorialStep(
       page: TutorialMockPage.home,
       targetKey: 'home.steps',
-      title: 'Track today',
+      title: 'Just walk.',
       body:
-          'Bara reads your steps from $healthSource and keeps today’s '
-          'progress front and center.',
+          'Bara counts your steps from $healthSource automatically. '
+          'Nothing to start, nothing to log.',
     ),
-    TutorialStep(
-      page: TutorialMockPage.home,
-      targetKey: 'home.milestones',
-      title: 'Earn coins',
-      body:
-          'Walk to hit 5k, 10k, 15k and 20k steps, then tap each milestone to '
-          'claim its coins. Races and the daily reward pay out too.',
-    ),
-    TutorialStep(
-      page: TutorialMockPage.home,
-      targetKey: 'home.shop',
-      title: 'Dress up your capy',
-      body:
-          'Spend coins in the shop on outfits for your capybara — buy an item, '
-          'then equip it from your Inventory.',
-    ),
-    TutorialStep(
-      page: TutorialMockPage.home,
-      targetKey: 'nav.friends',
-      title: 'Find friends',
-      body:
-          'Friends live in their own tab. Add people here to race and rank '
-          'against each other.',
-    ),
-    TutorialStep(
-      page: TutorialMockPage.friends,
-      targetKey: 'friends.search',
-      title: 'Add friends',
-      body:
-          'Search by display name to send a request. Once they accept, you can '
-          'race and rank against each other.',
-    ),
-    TutorialStep(
-      page: TutorialMockPage.friends,
-      targetKey: 'profile.invite',
-      title: 'Invite friends, earn coins',
-      body:
-          'Tap Invite Friends to share your link — when a friend joins Bara '
-          'with it, you BOTH earn coins.',
-    ),
-    TutorialStep(
+    const TutorialStep(
       page: TutorialMockPage.races,
       targetKey: 'races.card',
-      title: 'Join a race',
-      body:
-          'Race friends over a set number of days. Every synced step moves you '
-          'up the board — most steps when the clock runs out wins.',
+      title: 'Race your friends.',
+      body: 'Most steps when the clock runs out wins.',
     ),
-    TutorialStep(
+    const TutorialStep(
       page: TutorialMockPage.races,
-      targetKey: 'races.pot',
-      title: 'Race for the prize pool',
-      body:
-          'Every race is free to enter and pays real coins: Bara funds the '
-          'prize pool, and it grows with every runner who joins.',
+      targetKey: 'races.box',
+      title: 'Grab mystery boxes.',
+      body: 'Walking earns boxes full of powerups.',
     ),
-    TutorialStep(
+    const TutorialStep(
       page: TutorialMockPage.raceDetail,
       targetKey: 'raceDetail.powerups',
-      title: 'Powerups & boxes',
-      body:
-          'Walking earns mystery boxes of powerups — boosts and shields, plus '
-          'attacks that freeze or steal steps from rivals.',
+      title: 'Mess with rivals.',
+      body: 'Boosts and shields for you. Freezes and steals for them.',
     ),
-    TutorialStep(
-      page: TutorialMockPage.leaderboard,
-      targetKey: 'leaderboard.rank',
-      title: 'Top the boards',
-      body:
-          'See how your steps and race wins stack up — switch between everyone '
-          'and just your friends.',
+    // Ending back on home is intentional: the tutorial finishes on the screen
+    // the user is about to be dropped into.
+    const TutorialStep(
+      page: TutorialMockPage.home,
+      targetKey: 'home.shop',
+      title: 'Win coins.',
+      body: 'Every race pays out. Spend coins on gear for your capy.',
     ),
   ];
 }
 
 class TutorialScreen extends StatefulWidget {
-  const TutorialScreen({super.key, this.onComplete, this.authService});
+  const TutorialScreen({
+    super.key,
+    this.onComplete,
+    this.authService,
+    this.analytics,
+  });
 
   /// Called when the user finishes or skips the tutorial, with the tutorial's
   /// own (still-mounted) [BuildContext] so the callback can navigate forward.
@@ -139,6 +118,10 @@ class TutorialScreen extends StatefulWidget {
   /// and replay paths) and shows a brief reveal. Null disables the reward (e.g.
   /// in tests or previews).
   final AuthService? authService;
+
+  /// Activation telemetry sink. Defaults to a real service; injectable so the
+  /// tutorial's own funnel events are assertable.
+  final ActivationAnalyticsService? analytics;
 
   @override
   State<TutorialScreen> createState() => _TutorialScreenState();
@@ -156,6 +139,9 @@ class _TutorialScreenState extends State<TutorialScreen> {
   late final TutorialPreviewBackendApiService _api =
       TutorialPreviewBackendApiService();
 
+  late final ActivationAnalyticsService _analytics =
+      widget.analytics ?? ActivationAnalyticsService();
+
   @override
   void initState() {
     super.initState();
@@ -164,6 +150,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
         _keys.putIfAbsent(step.targetKey!, () => GlobalKey());
       }
     }
+    unawaited(_analytics.record('tutorial_opened'));
     _settleTarget(_epoch);
   }
 
@@ -269,6 +256,21 @@ class _TutorialScreenState extends State<TutorialScreen> {
     if (_finishing) return;
     _finishing = true;
 
+    // Per-step drop-off: a skip reports the 1-indexed step the user was on when
+    // they bailed, which turns into the histogram that says whether five steps
+    // is still too many. Completion carries no step — it is by definition the
+    // last one. Best-effort and never awaited: the queue is bounded and
+    // offline-tolerant, so a telemetry failure can neither surface to the user
+    // nor hold up onboarding.
+    unawaited(
+      _analytics.record(
+        completed ? 'tutorial_completed' : 'tutorial_skipped',
+        context: completed
+            ? const {'source': 'onboarding'}
+            : {'source': 'onboarding', 'step': '${_index + 1}'},
+      ),
+    );
+
     if (completed && widget.authService != null) {
       final granted = await widget.authService!.claimTutorialReward();
       if (!mounted) return;
@@ -351,33 +353,56 @@ class _TutorialScreenState extends State<TutorialScreen> {
   Widget build(BuildContext context) {
     final step = _steps[_index];
 
-    return Scaffold(
-      backgroundColor: AppColors.of(context).parchment,
-      body: SafeArea(
-        child: Stack(
-          key: _stageKey,
-          children: [
-            Positioned.fill(
-              child: TutorialRealHost(
-                page: step.page,
-                keys: _keys,
-                authService: _authService,
-                api: _api,
+    // The abandonment hole: with no PopScope an OS back-swipe popped the route
+    // without ever calling _finish — no reward, no analytics — while the
+    // onboarding host marked the step seen anyway on the await return. That was
+    // tolerable when the tutorial was optional. It gates the app under v3, so a
+    // back-gesture now routes through exactly the same path as SKIP.
+    // The tutorial is part of the onboarding brand moment, so it pins to the
+    // light palette like StartScreen and OnboardingScene — the spotlighted
+    // host page underneath renders in day colors regardless of device theme.
+    return Theme(
+      data: AppThemeData.light(),
+      child: Builder(builder: (context) => _buildTutorial(context, step)),
+    );
+  }
+
+  Widget _buildTutorial(BuildContext context, TutorialStep step) {
+    return PopScope(
+      key: const Key('tutorial-pop-scope'),
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _skip();
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.of(context).parchment,
+        body: SafeArea(
+          child: Stack(
+            key: _stageKey,
+            children: [
+              Positioned.fill(
+                child: TutorialRealHost(
+                  page: step.page,
+                  keys: _keys,
+                  authService: _authService,
+                  api: _api,
+                ),
               ),
-            ),
-            Positioned.fill(
-              child: SpotlightOverlay(
-                targetRect: _targetRect,
-                title: step.title,
-                body: step.body,
-                stepIndex: _index,
-                stepCount: _steps.length,
-                onNext: _next,
-                onBack: _index == 0 ? null : _back,
-                onSkip: _skip,
+              Positioned.fill(
+                child: SpotlightOverlay(
+                  targetRect: _targetRect,
+                  title: step.title,
+                  body: step.body,
+                  stepIndex: _index,
+                  stepCount: _steps.length,
+                  onNext: _next,
+                  onBack: _index == 0 ? null : _back,
+                  onSkip: _skip,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

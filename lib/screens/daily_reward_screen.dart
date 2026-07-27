@@ -28,8 +28,11 @@ class DailyRewardScreen extends StatefulWidget {
   final AuthService authService;
   final BackendApiService backendApiService;
   final VoidCallback? onClaimed;
-  // Rewarded-ad extra spin. Null (or an unsupported platform) hides the offer
-  // entirely — the screen works exactly as before ads existed.
+  // Rewarded-ad extra spin. Hosts that keep a controller alive across visits
+  // (StreakChip) inject theirs so a preloaded ad survives reopening; hosts
+  // that don't pass null and the screen creates+owns one. On an unsupported
+  // platform the offer stays hidden either way — the screen works exactly as
+  // before ads existed.
   final ExtraSpinAdController? adController;
 
   const DailyRewardScreen({
@@ -60,10 +63,27 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
   bool _adFlowBusy = false;
   bool _extraSpinDone = false;
 
+  /// The extra-spin controller: the host's if it injected one, otherwise ours.
+  ///
+  /// Never borrow a controller a *different* flow armed. The SSV custom_data is
+  /// baked in at load() time, so showing GetCoinsScreen's `coins:<date>` ad here
+  /// would mint a coin grant instead of an extra spin.
+  late final ExtraSpinAdController _adCtrl;
+  late final bool _ownsAdCtrl;
+
   @override
   void initState() {
     super.initState();
+    final provided = widget.adController;
+    _ownsAdCtrl = provided == null;
+    _adCtrl = provided ?? AdService();
     _load();
+  }
+
+  @override
+  void dispose() {
+    if (_ownsAdCtrl) _adCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -121,8 +141,8 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
   // verified-but-unredeemed watch already exists (claim needs no new ad).
   Future<void> _maybePrepareExtraSpin() async {
     final extra = _adExtraSpin;
-    final ctrl = widget.adController;
-    if (extra == null || ctrl == null || !ctrl.isSupported) return;
+    final ctrl = _adCtrl;
+    if (extra == null || !ctrl.isSupported) return;
     if (extra['used'] == true || extra['pendingGrant'] == true) return;
     final userId = widget.authService.userId;
     if (userId == null || userId.isEmpty) return;
@@ -214,7 +234,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
     if (_adFlowBusy || _isClaiming) return;
     final token = widget.authService.authToken;
     if (token == null || token.isEmpty) return;
-    final ctrl = widget.adController;
+    final ctrl = _adCtrl;
     final pending = _adExtraSpin?['pendingGrant'] == true;
 
     setState(() => _adFlowBusy = true);
@@ -225,7 +245,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
     final priorOpening = _opening;
     try {
       if (!pending) {
-        if (ctrl == null || !ctrl.isReady) return;
+        if (!ctrl.isReady) return;
         setState(() => _adReady = false);
         final earned = await ctrl.showAndAwaitReward();
         if (!earned || !mounted) return;
@@ -605,12 +625,10 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
   /// ads.
   bool get _extraSpinOffered {
     final extra = _adExtraSpin;
-    final ctrl = widget.adController;
     return extra != null &&
         extra['used'] != true &&
         !_extraSpinDone &&
-        ctrl != null &&
-        ctrl.isSupported;
+        _adCtrl.isSupported;
   }
 
   // Reel screen — same chrome as the race mystery box (CaseOpeningScreen):
@@ -875,9 +893,9 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
               const SizedBox(height: 10),
               Text(
                 'Open a mystery box every day to build your streak. '
-                'The longer your streak, the better your odds of rare '
-                'rewards — more coins and rarer accessories you don\'t '
-                'own yet. Miss a day and your streak resets!',
+                'The longer your streak, the better your odds of the top '
+                'rewards — more coins and accessories you don\'t own yet. '
+                'Miss a day and your streak resets!',
                 style: HomeText.body(
                   size: 13,
                   color: AppColors.of(context).muted,
@@ -885,22 +903,25 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
                 ),
               ),
               const SizedBox(height: 14),
+              // Outcome language, not tier names — the rarity keys still drive
+              // the percentages and the row colour, they just aren't spelled
+              // out to the player.
               _OddsRow(
-                label: 'COMMON',
+                label: 'STANDARD',
                 detail: 'a few coins',
                 pct: pct('COMMON'),
                 color: _rarityColor('COMMON'),
               ),
               const SizedBox(height: 6),
               _OddsRow(
-                label: 'UNCOMMON',
+                label: 'UPGRADED',
                 detail: 'more coins',
                 pct: pct('UNCOMMON'),
                 color: _rarityColor('UNCOMMON'),
               ),
               const SizedBox(height: 6),
               _OddsRow(
-                label: 'RARE',
+                label: 'TOP REWARD',
                 detail: rareDetail,
                 pct: pct('RARE'),
                 color: _rarityColor('RARE'),
@@ -1343,25 +1364,6 @@ class _RewardRevealState extends State<_RewardReveal> {
                 color: AppColors.of(context).ink,
               ),
             ),
-            if (rarity != null) ...[
-              const SizedBox(height: 6),
-              Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: rarityColor!, width: 2),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Text(
-                    rarity.toUpperCase(),
-                    style: PixelText.title(size: 13, color: rarityColor),
-                  ),
-                ),
-              ),
-            ],
             const SizedBox(height: 16),
             if (isPowerup) ...[
               Center(

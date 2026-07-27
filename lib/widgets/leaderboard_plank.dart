@@ -1,10 +1,8 @@
-import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
 import 'app_avatar.dart';
-import 'fire_aura.dart';
 import '../styles.dart';
 import '../utils/at_name.dart';
 import '../utils/race_participant_display.dart';
@@ -24,8 +22,8 @@ class LeaderboardPlank extends StatelessWidget {
 
   /// The participant's current (stacked, global-event-inclusive) step
   /// multiplier from the backend. Nullable/absent on older backends → no badge
-  /// and no fire (safe degradation). Semantics: >1 buffed (fire + "Nx" badge),
-  /// 1 neutral (nothing), 0 frozen (frost chip), <0 reversed (reversed chip).
+  /// (safe degradation). Semantics: >1 buffed ("Nx" badge), 1 neutral
+  /// (nothing), 0 frozen (frost chip), <0 reversed (reversed chip).
   final double? currentMultiplier;
 
   // Issue 1: team races render larger, more legible rows. These default to the
@@ -68,18 +66,8 @@ class LeaderboardPlank extends StatelessWidget {
     }
   }
 
-  /// The avatar, optionally wrapped in a fire aura when the multiplier is >1.
-  /// A stealthed runner never shows fire (its own multiplier is hidden).
-  ///
-  /// The flame is drawn IN FRONT of the avatar and anchored to its BASE so it
-  /// rises upward, which is the only direction it can grow freely: planks are
-  /// Column siblings painted top-to-bottom over an opaque background, so
-  /// downward bleed is painted over by the next plank (the bug that once made a
-  /// 10x aura vanish) while upward bleed paints over the row above. Anchoring
-  /// the growth upward is what lets the flame be genuinely bigger than the
-  /// avatar instead of a thin rim clipped to the row's padding budget.
   Widget _buildAvatar(BuildContext context) {
-    final avatar = AppAvatar(
+    return AppAvatar(
       // The raw name, not displayName: the " (you)" suffix would turn the
       // fallback initials into "M(".
       name: isStealthed ? '???' : name,
@@ -88,53 +76,6 @@ class LeaderboardPlank extends StatelessWidget {
       isUser: isUser,
       isStealthed: isStealthed,
       borderColor: isUser ? AppColors.of(context).accent : Colors.white,
-    );
-
-    final m = currentMultiplier;
-    if (isStealthed || m == null || m <= 1.001) return avatar;
-
-    final tier = m.floor();
-
-    // Size is FIXED at 2x the avatar for every tier. The ring's hole is a fixed
-    // fraction of the sprite, so "bigger flame" and "bigger hole" are the same
-    // knob — ramping size per tier changes how much of the avatar the ring
-    // covers, which is what read as low tiers being misaligned. Tier intensity
-    // is carried by FireAura instead (flicker speed, colour grade, pulse,
-    // bloom), which is also what an 11x should look like: hotter, not chunkier.
-    final fireSize = avatarSize * 2.0;
-
-    // Land the ring's HOLE on the avatar's centre. The hole is not the frame's
-    // centre — it sits low in the frame (0.63) because the flames lick upward,
-    // so aligning frame-centre-to-avatar-centre would sink the ring.
-    final hole = FireAura.holeCenter(fireSize);
-    final avatarCenter = Offset(avatarSize / 2, avatarSize / 2);
-    final left = avatarCenter.dx - hole.dx;
-    // Below the avatar box, the flame may only use the row's own padding: any
-    // further and the next plank's opaque background slices its base off.
-    final bottomOverhang = math.min(
-      verticalPadding,
-      fireSize - hole.dy - avatarSize / 2,
-    );
-
-    return SizedBox(
-      width: avatarSize,
-      height: avatarSize,
-      child: Stack(
-        clipBehavior: Clip.none,
-        alignment: Alignment.center,
-        children: [
-          avatar,
-          Positioned(
-            left: left,
-            bottom: -bottomOverhang,
-            child: SizedBox(
-              width: fireSize,
-              height: fireSize,
-              child: FireAura(size: fireSize, tier: tier),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -163,12 +104,13 @@ class LeaderboardPlank extends StatelessWidget {
       );
     }
     if (m > 1.001) {
-      // Buffed — warm ember chip to match the fire aura.
+      // Buffed — warm ember chip, number only (no flame).
       return _chip(
         context,
-        icon: Icons.local_fire_department_rounded,
         label: '${_fmtMult(m)}x',
-        bg: const Color(0xFFE8622A),
+        // Item 13: was a bare light-mode ember literal; the palette's feedFire
+        // equivalent is `pillTerra`, which flips for the night board.
+        bg: AppColors.of(context).pillTerra,
       );
     }
     return null;
@@ -176,7 +118,7 @@ class LeaderboardPlank extends StatelessWidget {
 
   Widget _chip(
     BuildContext context, {
-    required IconData icon,
+    IconData? icon,
     required String label,
     required Color bg,
   }) {
@@ -190,8 +132,10 @@ class LeaderboardPlank extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 11, color: bg),
-          const SizedBox(width: 3),
+          if (icon != null) ...[
+            Icon(icon, size: 11, color: bg),
+            const SizedBox(width: 3),
+          ],
           Text(label, style: PixelText.title(size: 10, color: bg)),
         ],
       ),
@@ -256,6 +200,11 @@ class LeaderboardPlank extends StatelessWidget {
                 painter: _MedalPainter(
                   rank: rank,
                   color: medalColor ?? AppColors.of(context).woodMid,
+                  // Item 13: a CustomPainter has no BuildContext, so the
+                  // fallback border colour has to be resolved here and passed
+                  // in — and compared in shouldRepaint — or the medal keeps its
+                  // daytime edge through the 19:00 auto-night flip.
+                  borderFallback: AppColors.of(context).woodShadow,
                 ),
               ),
             ),
@@ -371,7 +320,15 @@ class _MedalPainter extends CustomPainter {
   final int rank;
   final Color color;
 
-  _MedalPainter({required this.rank, required this.color});
+  /// Theme-resolved stand-in for the old bare `AppColors.woodShadow`
+  /// constant (item 13). Painters cannot read the palette themselves.
+  final Color borderFallback;
+
+  _MedalPainter({
+    required this.rank,
+    required this.color,
+    required this.borderFallback,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -395,7 +352,7 @@ class _MedalPainter extends CustomPainter {
     // Dark border
     final borderPaint = Paint()
       ..color = color.withValues(alpha: 0.6) == color
-          ? AppColors.woodShadow
+          ? borderFallback
           : Color.lerp(color, Colors.black, 0.4)!
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
@@ -452,5 +409,7 @@ class _MedalPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _MedalPainter oldDelegate) =>
-      oldDelegate.rank != rank || oldDelegate.color != color;
+      oldDelegate.rank != rank ||
+      oldDelegate.color != color ||
+      oldDelegate.borderFallback != borderFallback;
 }
