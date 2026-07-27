@@ -244,9 +244,6 @@ class _ProfileTabState extends State<ProfileTab> {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: AppColors.of(context).roofLight,
-        border: Border(
-          bottom: BorderSide(color: AppColors.of(context).roofDark, width: 1),
-        ),
       ),
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
