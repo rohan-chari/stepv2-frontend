@@ -27,7 +27,6 @@ import '../widgets/ad_banner_slot.dart';
 import '../widgets/arcade_fx.dart';
 import '../widgets/arcade_tab_selector.dart';
 import '../widgets/app_avatar.dart';
-import '../widgets/capped_scroll_list.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/global_event_banner.dart';
 import '../widgets/goal_track.dart';
@@ -303,6 +302,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   // Activity tab (system/powerup events).
   RaceFeedService? _feed;
   bool _feedInitialized = false;
+
+  /// Whether the user opened up the full standings board. Held on the State so
+  /// the 5s progress poll can't collapse a board the user deliberately opened.
+  bool _standingsExpanded = false;
 
   String get _myUserId => widget.authService.userId ?? '';
   BackendApiService get _api => widget.backendApiService;
@@ -4180,7 +4183,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                           _buildTeamTwoColumns(participants),
                         ],
                       )
-                    : _standingsList(_buildLeaderboardRows(participants)),
+                    : _standingsList(participants),
               ),
             ],
           ),
@@ -5743,7 +5746,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: _buildTeamGroupedRows(participants),
                       )
-                    : _standingsList(_buildLeaderboardRows(participants)),
+                    : _standingsList(participants),
               ),
             ],
           ),
@@ -6756,30 +6759,114 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     );
   }
 
-  /// Above this many runners the standings stop growing the page and scroll
-  /// inside a fixed window instead. At or below it the list renders exactly as
-  /// it always has, so small races are untouched.
-  static const int _kStandingsScrollThreshold = 10;
+  /// How many planks a collapsed standings board shows.
+  static const int _kStandingsCollapsedRows = 8;
 
-  /// The standings window height: about ten planks (~48px for the first, ~52px
-  /// for each after), also clamped against the viewport so the section can't
-  /// swallow a short screen.
-  double _standingsWindowHeight() =>
-      math.min(520.0, MediaQuery.of(context).size.height * 0.55);
+  /// Only collapse when there is meaningfully more roster than the collapsed
+  /// view. A 9-runner race offering "show all 9" would be noise.
+  static const int _kStandingsCollapseAbove = 10;
 
-  /// Wraps [rows] so a long roster scrolls within the card rather than pushing
-  /// POWERUPS and ACTIVITY far down the page.
-  Widget _standingsList(List<Widget> rows) {
-    if (rows.length <= _kStandingsScrollThreshold) {
+  /// Builds the solo standings board.
+  ///
+  /// A long roster collapses to [_kStandingsCollapsedRows] planks behind a
+  /// "show all" row rather than scrolling inside a fixed window. The window
+  /// version was worse UX: an inner scrollable wins the entire drag gesture, so
+  /// reaching the last runner did NOT carry on into POWERUPS — the user had to
+  /// lift off and re-drag outside the card. Collapsing keeps the page a single
+  /// scroll surface and makes the long board opt-in.
+  ///
+  /// When the viewer's own plank falls below the cut it is pinned beneath the
+  /// visible rows, because their own placement is the number they opened the
+  /// race for.
+  Widget _standingsList(List<Map<String, dynamic>> participants) {
+    final rows = _buildLeaderboardRows(participants);
+    final collapsible = rows.length > _kStandingsCollapseAbove;
+
+    if (!collapsible || _standingsExpanded) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: rows,
+        children: [...rows, if (collapsible) _standingsToggle(hiddenCount: 0)],
       );
     }
-    return CappedScrollList(
-      maxHeight: _standingsWindowHeight(),
-      fadeColor: AppColors.of(context).parchment,
-      children: rows,
+
+    final myIndex = participants.indexWhere(
+      (p) => (p['userId'] as String?) == _myUserId,
+    );
+    final selfIsHidden = myIndex >= _kStandingsCollapsedRows;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ...rows.take(_kStandingsCollapsedRows),
+        if (selfIsHidden) ...[_standingsGapMarker(), rows[myIndex]],
+        _standingsToggle(
+          hiddenCount:
+              rows.length - _kStandingsCollapsedRows - (selfIsHidden ? 1 : 0),
+        ),
+      ],
+    );
+  }
+
+  /// Marks the ranks skipped between the visible rows and the pinned self row,
+  /// so the pinned plank doesn't read as though it follows 8th place.
+  Widget _standingsGapMarker() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Center(
+        child: Text(
+          '• • •',
+          style: PixelText.body(
+            size: 13,
+            color: AppColors.of(context).textDark.withValues(alpha: 0.45),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The show-all / show-less control at the foot of a collapsible board.
+  Widget _standingsToggle({required int hiddenCount}) {
+    final colors = AppColors.of(context);
+    final expanded = _standingsExpanded;
+    final label = expanded ? 'SHOW LESS' : 'SHOW $hiddenCount MORE';
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: GestureDetector(
+        key: const Key('standings-toggle'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () => setState(() => _standingsExpanded = !expanded),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: colors.parchmentDark.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: colors.parchmentBorder.withValues(alpha: 0.3),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                label,
+                style: PixelText.body(
+                  size: 14,
+                  color: colors.textDark.withValues(alpha: 0.8),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(
+                expanded
+                    ? Icons.keyboard_arrow_up_rounded
+                    : Icons.keyboard_arrow_down_rounded,
+                size: 20,
+                color: colors.textDark.withValues(alpha: 0.8),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

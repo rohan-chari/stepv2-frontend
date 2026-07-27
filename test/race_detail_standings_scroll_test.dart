@@ -4,20 +4,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/race_detail_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
-import 'package:step_tracker/widgets/capped_scroll_list.dart';
+import 'package:step_tracker/widgets/leaderboard_plank.dart';
 
-// A big race must not turn the detail page into an endless scroll of planks.
-// Above ten runners the STANDINGS card stops growing and scrolls internally,
-// so POWERUPS and ACTIVITY stay reachable. At or below ten it renders exactly
-// as it always did.
+// A big race must not turn the detail page into an endless wall of planks, and
+// it must not trap the drag inside an inner scroller either. Past ten runners
+// the board collapses to eight planks behind a "show all" row, keeping the page
+// a single scroll surface. A viewer who ranks below the cut still sees their
+// own plank, pinned under the visible rows.
 
 List<Map<String, dynamic>> _participants(int count) => [
   for (int i = 1; i <= count; i++)
-    {
-      'userId': 'user-$i',
-      'displayName': 'Runner $i',
-      'status': 'ACCEPTED',
-    },
+    {'userId': 'user-$i', 'displayName': 'Runner $i', 'status': 'ACCEPTED'},
 ];
 
 List<Map<String, dynamic>> _progress(int count) => [
@@ -25,7 +22,7 @@ List<Map<String, dynamic>> _progress(int count) => [
     {
       'userId': 'user-$i',
       'displayName': 'Runner $i',
-      // Descending so Runner 1 is first and Runner N is last on the board.
+      // Descending so Runner 1 leads and Runner N is last on the board.
       'totalSteps': (20000 - i * 100).toDouble(),
       'finishedAt': null,
     },
@@ -86,13 +83,13 @@ class _StubApi extends BackendApiService {
       const {'coins': 0, 'heldCoins': 0};
 }
 
-Future<AuthService> _authService() async {
+Future<AuthService> _authService({required String myUserId}) async {
   SharedPreferences.setMockInitialValues({
     'auth_identity_token': 'apple-token',
     'auth_user_identifier': 'apple-user-123',
     'auth_session_token': 'session-token',
-    'auth_backend_user_id': 'user-1',
-    'auth_display_name': 'Runner 1',
+    'auth_backend_user_id': myUserId,
+    'auth_display_name': 'Runner',
     'auth_coins': 0,
     'auth_held_coins': 0,
   });
@@ -101,8 +98,12 @@ Future<AuthService> _authService() async {
   return authService;
 }
 
-Future<void> _pump(WidgetTester tester, int count) async {
-  final authService = await _authService();
+Future<void> _pump(
+  WidgetTester tester,
+  int count, {
+  String myUserId = 'user-1',
+}) async {
+  final authService = await _authService(myUserId: myUserId);
   await tester.pumpWidget(
     MaterialApp(
       home: RaceDetailScreen(
@@ -124,81 +125,79 @@ Future<void> _teardown(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+Finder get _toggle => find.byKey(const Key('standings-toggle'));
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('a ten-runner race still renders the standings uncapped', (
+  testWidgets('a ten-runner race shows every plank and no toggle', (
     tester,
   ) async {
     await _pump(tester, 10);
 
-    expect(find.byType(CappedScrollList), findsNothing);
+    expect(find.byType(LeaderboardPlank), findsNWidgets(10));
+    expect(_toggle, findsNothing);
 
     await _teardown(tester);
   });
 
-  testWidgets('past ten runners the standings get a fixed-height window', (
+  testWidgets('past ten runners the board collapses to eight planks', (
     tester,
   ) async {
     await _pump(tester, 16);
 
-    final window = find.byType(CappedScrollList);
-    expect(window, findsOneWidget);
-
-    // The window is bounded: it must be shorter than the 16 planks it holds
-    // (~52px each) and no taller than the cap.
-    final height = tester.getSize(window).height;
-    expect(height, lessThanOrEqualTo(520.0));
-    expect(height, lessThan(16 * 52.0));
+    expect(find.byType(LeaderboardPlank), findsNWidgets(8));
+    expect(_toggle, findsOneWidget);
+    // 16 runners, 8 shown, viewer is Runner 1 and already visible.
+    expect(find.text('SHOW 8 MORE'), findsOneWidget);
 
     await _teardown(tester);
   });
 
-  testWidgets('scrolling the standings window moves rows, not the page', (
+  testWidgets('the toggle expands the full board and collapses it again', (
     tester,
   ) async {
     await _pump(tester, 16);
 
-    final window = find.byType(CappedScrollList);
-    final header = find.text('STANDINGS');
-    expect(header, findsOneWidget);
-
-    // The standings sit well down the page, so bring the card on-screen before
-    // touching it — otherwise the drag lands outside the test viewport.
-    await tester.ensureVisible(window);
+    // The board sits well down the page, so bring the control on-screen before
+    // tapping — otherwise the hit lands outside the test viewport.
+    await tester.ensureVisible(_toggle);
+    await tester.pump();
+    await tester.tap(_toggle);
     await tester.pump();
 
-    final inner = tester.state<ScrollableState>(
-      find.descendant(of: window, matching: find.byType(Scrollable)).first,
-    );
-    // There is genuinely more roster than window.
-    expect(inner.position.maxScrollExtent, greaterThan(0));
-    expect(inner.position.pixels, 0);
+    expect(find.byType(LeaderboardPlank), findsNWidgets(16));
+    expect(find.text('SHOW LESS'), findsOneWidget);
 
-    final headerBefore = tester.getTopLeft(header);
-
-    // Drag from a point that is definitely inside the window's visible area.
-    final rect = tester.getRect(window);
-    await tester.dragFrom(
-      Offset(rect.center.dx, rect.top + 24),
-      const Offset(0, -160),
-    );
+    await tester.ensureVisible(_toggle);
+    await tester.pump();
+    await tester.tap(_toggle);
     await tester.pump();
 
-    // The roster scrolled inside its own window...
-    expect(inner.position.pixels, greaterThan(0));
+    expect(find.byType(LeaderboardPlank), findsNWidgets(8));
 
-    // ...while the page underneath stayed exactly where it was, so the section
-    // header did not travel with the drag.
-    expect(tester.getTopLeft(header), headerBefore);
+    await _teardown(tester);
+  });
 
-    // And the runners at the bottom of a 16-strong board are reachable.
-    inner.position.jumpTo(inner.position.maxScrollExtent);
-    await tester.pump();
+  testWidgets('a viewer below the cut keeps their own plank pinned', (
+    tester,
+  ) async {
+    // Runner 14 sits 14th, well outside the visible eight.
+    await _pump(tester, 16, myUserId: 'user-14');
+
+    // Eight visible rows plus the pinned self row.
+    expect(find.byType(LeaderboardPlank), findsNWidgets(9));
     expect(
-      find.descendant(of: window, matching: find.text('@Runner 16')),
+      find.descendant(
+        of: find.byType(LeaderboardPlank),
+        matching: find.text('@Runner 14 (you)'),
+      ),
       findsOneWidget,
     );
+    // The skipped ranks are marked, so the pinned plank doesn't read as 9th.
+    expect(find.text('• • •'), findsOneWidget);
+    // The pinned row is not double-counted in the hidden total.
+    expect(find.text('SHOW 7 MORE'), findsOneWidget);
 
     await _teardown(tester);
   });
