@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 import '../styles.dart';
 
@@ -13,6 +14,10 @@ import '../styles.dart';
 /// only painted element is the pair of drifting clouds (explicitly
 /// user-approved), kept below the step-count HUD so they never cross it.
 ///
+/// When [groundScrollSpeed] is non-zero the ground slides left (the mascot
+/// walks in place) and the clouds drift the opposite way, so the two layers
+/// read as parallax rather than one flat sheet.
+///
 /// Honors `MediaQuery.disableAnimations` by freezing the drift instead of
 /// running the ambient ticker.
 class HomeHeroScene extends StatefulWidget {
@@ -21,12 +26,19 @@ class HomeHeroScene extends StatefulWidget {
     required this.child,
     this.groundHeight = 86,
     this.skyAlignment = Alignment.bottomCenter,
+    this.groundScrollSpeed = 0,
   });
 
   final Widget child;
 
   /// Height of the grass + dirt strip at the bottom of the scene.
   final double groundHeight;
+
+  /// Logical pixels/second the ground strip slides to the LEFT, which reads as
+  /// the (stationary) capybara walking forward. 0 freezes it. The strip is
+  /// seam-tiled, so the scroll wraps every tile width with no visible jump.
+  /// Also frozen when `MediaQuery.disableAnimations` is set.
+  final double groundScrollSpeed;
 
   /// Controls how the wide sky artwork crops in unusually tall scenes.
   final AlignmentGeometry skyAlignment;
@@ -41,8 +53,14 @@ class HomeHeroScene extends StatefulWidget {
 }
 
 class _HomeHeroSceneState extends State<HomeHeroScene>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final AnimationController _ambient;
+
+  /// Monotonic seconds since the scene mounted, driving the ground scroll.
+  /// A raw ticker (rather than a repeating controller) keeps the phase
+  /// continuous, so the wrap point never has to line up with a fixed period.
+  final ValueNotifier<double> _groundPhase = ValueNotifier<double>(0);
+  late final Ticker _groundTicker;
 
   @override
   void initState() {
@@ -51,6 +69,9 @@ class _HomeHeroSceneState extends State<HomeHeroScene>
       vsync: this,
       duration: const Duration(seconds: 60),
     );
+    _groundTicker = createTicker((elapsed) {
+      _groundPhase.value = elapsed.inMicroseconds / 1e6;
+    });
   }
 
   @override
@@ -65,13 +86,39 @@ class _HomeHeroSceneState extends State<HomeHeroScene>
     if (MediaQuery.of(context).disableAnimations) {
       _ambient.stop();
       _ambient.value = 0.35;
-    } else if (!_ambient.isAnimating) {
-      _ambient.repeat();
+      _groundTicker.stop();
+    } else {
+      if (!_ambient.isAnimating) {
+        _ambient.repeat();
+      }
+      _syncGroundTicker();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant HomeHeroScene oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.groundScrollSpeed != oldWidget.groundScrollSpeed) {
+      _syncGroundTicker();
+    }
+  }
+
+  void _syncGroundTicker() {
+    if (!mounted) return;
+    final wanted =
+        widget.groundScrollSpeed != 0 &&
+        !MediaQuery.of(context).disableAnimations;
+    if (wanted && !_groundTicker.isActive) {
+      _groundTicker.start();
+    } else if (!wanted && _groundTicker.isActive) {
+      _groundTicker.stop();
     }
   }
 
   @override
   void dispose() {
+    _groundTicker.dispose();
+    _groundPhase.dispose();
     _ambient.dispose();
     super.dispose();
   }
@@ -155,10 +202,15 @@ class _HomeHeroSceneState extends State<HomeHeroScene>
                     HomeHeroScene._groundSrcWidth *
                     widget.groundHeight /
                     HomeHeroScene._groundSrcHeight;
-                final tiles = (constraints.maxWidth / tileW).ceil();
+                final scrolls = widget.groundScrollSpeed != 0;
+                // One spare tile so the strip stays covered while it slides
+                // left by up to a full tile width.
+                final tiles =
+                    (constraints.maxWidth / tileW).ceil() + (scrolls ? 1 : 0);
                 // OverflowBox: the last tile intentionally runs past the
                 // right edge (ClipRect trims it) without a flex overflow.
-                return OverflowBox(
+                final strip = OverflowBox(
+                  key: const Key('hero-ground-strip'),
                   maxWidth: double.infinity,
                   alignment: Alignment.centerLeft,
                   child: Row(
@@ -175,6 +227,20 @@ class _HomeHeroSceneState extends State<HomeHeroScene>
                         ),
                     ],
                   ),
+                );
+                if (!scrolls) return strip;
+                return ValueListenableBuilder<double>(
+                  valueListenable: _groundPhase,
+                  child: strip,
+                  builder: (context, seconds, child) {
+                    // Wrap on the tile width: the crop is seam-aligned, so
+                    // resetting by exactly one tile is invisible.
+                    final dx = -((seconds * widget.groundScrollSpeed) % tileW);
+                    return Transform.translate(
+                      offset: Offset(dx, 0),
+                      child: child,
+                    );
+                  },
                 );
               },
             ),
@@ -222,7 +288,10 @@ class _CloudInstance extends StatelessWidget {
   Widget build(BuildContext context) {
     final cloudSize = 112.0 * config.scale;
     const span = 1.35;
-    final wrapped = ((config.phase - t * config.cycles) % span + span) % span;
+    // Clouds drift RIGHT while the ground slides LEFT — opposing directions
+    // read as depth (parallax) behind the walking mascot, where matching
+    // directions made the whole scene look like one flat sliding layer.
+    final wrapped = ((config.phase + t * config.cycles) % span + span) % span;
     final x = (wrapped - 0.18) * fieldSize.width;
     final y = fieldSize.height * config.y;
     return Positioned(

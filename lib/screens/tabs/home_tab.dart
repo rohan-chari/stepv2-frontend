@@ -263,8 +263,7 @@ class HomeTab extends StatelessWidget {
                                 onAddProfilePhoto: onAddProfilePhoto,
                                 onDismissProfilePhotoPrompt:
                                     onDismissProfilePhotoPrompt,
-                                showRenameChip:
-                                    authService.onboardingV3Enabled,
+                                showRenameChip: authService.onboardingV3Enabled,
                               ),
                             ),
                             StaggerIn(
@@ -282,17 +281,17 @@ class HomeTab extends StatelessWidget {
                                       authService.onboardingV3Enabled &&
                                       (stepData?.steps ?? 0) >= 5000,
                                   child: StepMilestonesSection(
-                                  key: stepMilestonesKey,
-                                  authService: authService,
-                                  backendApiService: backendApiService,
-                                  currentSteps: stepData?.steps,
-                                  // Fed by the home batch so the claim card lands
-                                  // with everything else; falls back to its own
-                                  // fetch on old backends.
-                                  initialData:
-                                      raceCard?['stepMilestones']
-                                          as Map<String, dynamic>?,
-                                  awaitingBatch: raceCardLoading,
+                                    key: stepMilestonesKey,
+                                    authService: authService,
+                                    backendApiService: backendApiService,
+                                    currentSteps: stepData?.steps,
+                                    // Fed by the home batch so the claim card lands
+                                    // with everything else; falls back to its own
+                                    // fetch on old backends.
+                                    initialData:
+                                        raceCard?['stepMilestones']
+                                            as Map<String, dynamic>?,
+                                    awaitingBatch: raceCardLoading,
                                   ),
                                 ),
                               ),
@@ -777,6 +776,11 @@ class HomeTab extends StatelessWidget {
       height: heroHeight,
       child: HomeHeroScene(
         groundHeight: groundHeight,
+        // Slide the ground left so the walking capybara reads as moving
+        // forward instead of jogging in place. Tuned against the 6-frame /
+        // 480ms walk cycle — fast enough to sell the motion, slow enough that
+        // it doesn't pull the eye off the step count.
+        groundScrollSpeed: 26,
         child: Stack(
           children: [
             Positioned(

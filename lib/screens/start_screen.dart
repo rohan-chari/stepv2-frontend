@@ -193,6 +193,9 @@ class _StartScreenState extends State<StartScreen> {
             Expanded(
               child: HomeHeroScene(
                 groundHeight: groundHeight,
+                // Same forward-motion trick as the home hero: the mascot walks
+                // in place, so the ground slides under it.
+                groundScrollSpeed: 26,
                 // Crops the sky so its baked-in sun clears the centered
                 // wordmark instead of washing out the tagline behind it.
                 skyAlignment: const Alignment(0.2, 1),
