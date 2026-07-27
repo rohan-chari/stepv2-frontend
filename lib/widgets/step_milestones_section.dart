@@ -172,7 +172,12 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
+      // Asymmetric on purpose. The quick-actions row above ends with zero
+      // bottom padding, so this top value IS the whole gap under the EXTRA
+      // SPIN / SHOP buttons — 6 read as the header colliding with them. The
+      // bottom is deliberately tighter than the top so the RACES header that
+      // follows sits close to this card instead of floating between sections.
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [_buildHeader(), const SizedBox(height: 12), _buildCard()],

@@ -1471,7 +1471,10 @@ class _HomeRaceHeader extends StatelessWidget {
       padding: EdgeInsets.zero,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 9),
+        // Top is half the section default: this header follows the Today's
+        // coins card, and 16 here stacked on that card's own bottom padding
+        // left the RACES label stranded midway between the two sections.
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 9),
         child: Row(
           children: [
             const _SectionTick(),
