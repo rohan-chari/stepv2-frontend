@@ -642,7 +642,7 @@ class _StatsSectionState extends State<_StatsSection> {
         ),
         _buildStatRow('All Time', _formatSteps(_allTime), 3),
         _buildStatRow(
-          'Goal Streak',
+          'Streak',
           '$_streak day${_streak == 1 ? '' : 's'}',
           4,
         ),

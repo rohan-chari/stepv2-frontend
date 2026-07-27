@@ -402,7 +402,7 @@ class _AdminPowerupShopScreenState extends State<AdminPowerupShopScreen> {
                   style: PixelText.pill(
                     size: 11,
                     color: canSave
-                        ? AppColors.of(context).roofMid
+                        ? AppColors.of(context).successText
                         : AppColors.of(context).textMid,
                   ),
                 ),

@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Adaptive launcher icon (API 26+). The foreground mipmaps are the full
-     Bara scene, band-extended to the 108dp canvas and scaled/positioned so
-     the capybara sits inside the ~66% safe zone of any launcher mask shape
-     (circle, squircle, rounded square). Generated from the iOS 1024px app
-     icon; the background color is only visible if a launcher's mask peeks
-     past the full-bleed foreground (it matches the art's sky). Legacy
-     ic_launcher.png mipmaps remain for pre-26 devices. -->
+<!-- Adaptive launcher icon (API 26+). The foreground mipmaps are the close-crop
+     Bara portrait (head fills the frame, neck runs off the bottom) laid out so
+     that framing lands in the 72dp visible region of the 108dp canvas — the
+     head still fits inside the 66dp safe zone, so no mask shape (circle,
+     squircle, rounded square) clips the ears or snout. The extra ring of art
+     outside 72dp is scene bleed for launchers that show more than the circle.
+     Generated from the same source as the iOS 1024px app icon; the background
+     color is only visible if a mask peeks past the full-bleed foreground (it
+     matches the art's sky). Legacy ic_launcher.png mipmaps carry the tight
+     iOS framing for pre-26 devices. -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@color/ic_launcher_background" />
     <foreground android:drawable="@mipmap/ic_launcher_foreground" />

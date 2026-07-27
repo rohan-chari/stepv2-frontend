@@ -121,7 +121,6 @@ abstract final class AppColors {
   // Deep "game felt" panel surfaces (home below-the-fold; reusable by other
   // tabs adopting the arcade look). Light cards pop hard against these.
   static const felt = Color(0xFF1A2B20);
-  static const feltLine = Color(0x1FFFFFFF);
 
   // Pill button palette (3 colors)
   // Primary – forest green
@@ -207,7 +206,6 @@ enum _AppColorToken {
   coinDark,
   coinEdge,
   felt,
-  feltLine,
   pillGreen,
   pillGreenDark,
   pillGreenShadow,
@@ -308,7 +306,6 @@ class AppPalette extends ThemeExtension<AppPalette> {
     _AppColorToken.coinDark: AppColors.coinDark,
     _AppColorToken.coinEdge: AppColors.coinEdge,
     _AppColorToken.felt: AppColors.felt,
-    _AppColorToken.feltLine: AppColors.feltLine,
     _AppColorToken.pillGreen: AppColors.pillGreen,
     _AppColorToken.pillGreenDark: AppColors.pillGreenDark,
     _AppColorToken.pillGreenShadow: AppColors.pillGreenShadow,
@@ -483,7 +480,6 @@ class AppPalette extends ThemeExtension<AppPalette> {
   Color get coinDark => _get(_AppColorToken.coinDark);
   Color get coinEdge => _get(_AppColorToken.coinEdge);
   Color get felt => _get(_AppColorToken.felt);
-  Color get feltLine => _get(_AppColorToken.feltLine);
   Color get pillGreen => _get(_AppColorToken.pillGreen);
   Color get pillGreenDark => _get(_AppColorToken.pillGreenDark);
   Color get pillGreenShadow => _get(_AppColorToken.pillGreenShadow);

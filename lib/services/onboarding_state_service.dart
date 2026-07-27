@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Which moment is asking for notification permission.
@@ -196,6 +197,28 @@ class OnboardingStateService {
 
   Future<void> dismissRenameChip() async =>
       (await _prefs).setBool(keyRenameChipDismissed, true);
+
+  /// Whether this app session has already counted a rename-chip impression.
+  ///
+  /// Deliberately in-memory and static, NOT a SharedPreferences key: the home
+  /// tab lives in a `PageView` without keep-alive, so swiping to Races and back
+  /// re-runs `initState` and used to burn one of the three allowed impressions
+  /// per swipe. "Resets on process death" is exactly the session we want — and
+  /// a pref would land in [allKeys] and be wiped by the sign-out clear that the
+  /// server-side chip state exists to work around.
+  static bool _renameChipCountedThisSession = false;
+
+  static bool get renameChipCountedThisSession => _renameChipCountedThisSession;
+
+  static void markRenameChipCountedThisSession() {
+    _renameChipCountedThisSession = true;
+  }
+
+  /// Test-only: restores the fresh-launch state between test cases.
+  @visibleForTesting
+  static void debugResetRenameChipSession() {
+    _renameChipCountedThisSession = false;
+  }
 
   // -- sign-out -------------------------------------------------------------
 

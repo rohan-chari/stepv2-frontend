@@ -32,7 +32,8 @@ void main() {
         expect(
           points,
           greaterThanOrEqualTo(previous),
-          reason: 'a $days-day race must not pay fewer points than a '
+          reason:
+              'a $days-day race must not pay fewer points than a '
               '${days - 1}-day race',
         );
         previous = points;
@@ -53,6 +54,13 @@ void main() {
       expect(computePrizePool(playerCount: 20, durationDays: 14), 3200);
     });
 
+    // Batch 2026-07-27 item 7: the ceiling is the largest pool the formula can
+    // produce at the legal field cap (validateMaxParticipants tops out at 100),
+    // so a user-created race is never clamped.
+    test('100 players / 14 days = 16,000 (the full field, uncapped)', () {
+      expect(computePrizePool(playerCount: 100, durationDays: 14), 16000);
+    });
+
     test('2 players / 1 day = 40', () {
       expect(computePrizePool(playerCount: 2, durationDays: 1), 40);
     });
@@ -67,8 +75,10 @@ void main() {
     });
 
     test('clamps to the race maximum', () {
-      expect(computePrizePool(playerCount: 100, durationDays: 14), 3200);
-      expect(kPrizePoolMaxCoins, 3200);
+      // Seeded challenges are the only field that can exceed 100 players, and
+      // they still clamp — 300 x 4 points x 20 = 24,000 -> 16,000.
+      expect(computePrizePool(playerCount: 300, durationDays: 7), 16000);
+      expect(kPrizePoolMaxCoins, 16000);
       expect(kPrizeCoinUnit, 20);
     });
 

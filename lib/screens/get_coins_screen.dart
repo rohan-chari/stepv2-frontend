@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../services/ad_service.dart';
@@ -56,6 +58,11 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
   bool _ownsAdController = false;
 
   Map<String, dynamic>? _status;
+  // Configured referral rewards, off the wire (batch 2026-07-27 §4.3). Null
+  // whenever the backend is older than the fields or the lookup failed — the
+  // invite row then states no figure rather than a guess.
+  int? _referrerCoins;
+  int? _refereeCoins;
   bool _adReady = false;
   bool _adLoading = false;
   bool _adFlowBusy = false;
@@ -79,6 +86,7 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
   Future<void> _load() async {
     final token = widget.authService.authToken;
     if (token == null || token.isEmpty) return;
+    unawaited(_loadReferralRewards(token));
     try {
       final res = await _api.fetchDailyRewardStatus(
         identityToken: token,
@@ -91,6 +99,23 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
       // Status is progressive enhancement here: without it the hub still
       // shows the referral and daily-spin entries.
       if (mounted) setState(() => _status = const {});
+    }
+  }
+
+  /// Best-effort lookup of the configured referral rewards so the invite row
+  /// can state a figure. Entirely optional: a 404 from an older backend, a
+  /// dropped connection, or a response without the fields all leave both null
+  /// and the row keeps its number-free wording. Never blocks the hub's paint.
+  Future<void> _loadReferralRewards(String token) async {
+    try {
+      final res = await _api.fetchReferralStatus(identityToken: token);
+      if (!mounted) return;
+      setState(() {
+        _referrerCoins = (res['referrerCoins'] as num?)?.toInt();
+        _refereeCoins = (res['refereeCoins'] as num?)?.toInt();
+      });
+    } catch (_) {
+      // Number-free copy is the correct outcome here, not an error state.
     }
   }
 
@@ -448,7 +473,10 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
     return _buildCard(
       icon: Icons.group_add_rounded,
       title: 'INVITE FRIENDS',
-      subtitle: 'You both earn coins when a friend joins with your link.',
+      subtitle: referralInviteRowCopy(
+        referrerCoins: _referrerCoins,
+        refereeCoins: _refereeCoins,
+      ),
       action: PillButton(
         label: 'SHARE INVITE LINK',
         variant: PillButtonVariant.primary,

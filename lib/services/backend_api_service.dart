@@ -877,6 +877,52 @@ class BackendApiService {
     return user;
   }
 
+  /// POST /auth/me/rename-chip/shown — records one impression of the home
+  /// rename chip on the user row. Additive endpoint (backend >= July 2026);
+  /// older backends 404 here, so every caller must swallow the failure rather
+  /// than surface it. Returns the updated `user` map.
+  Future<Map<String, dynamic>> recordRenameChipShown({
+    required String identityToken,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/auth/me/rename-chip/shown',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+
+    final payload = await _decodeJsonResponse(response);
+    final user = payload['user'];
+    if (user is! Map<String, dynamic>) {
+      throw const ApiException('Something went wrong. Please try again.');
+    }
+
+    return user;
+  }
+
+  /// POST /auth/me/rename-chip/dismiss — retires the home rename chip for this
+  /// account. Idempotent server-side (a second call returns the original
+  /// timestamp). Additive endpoint; older backends 404, so callers swallow the
+  /// failure and keep the local dismissal. Returns the updated `user` map.
+  Future<Map<String, dynamic>> dismissRenameChip({
+    required String identityToken,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/auth/me/rename-chip/dismiss',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+
+    final payload = await _decodeJsonResponse(response);
+    final user = payload['user'];
+    if (user is! Map<String, dynamic>) {
+      throw const ApiException('Something went wrong. Please try again.');
+    }
+
+    return user;
+  }
+
   Future<void> uploadProfilePhotoBytes({
     required String uploadUrl,
     required Uint8List bytes,

@@ -3,19 +3,34 @@ import 'package:flutter/material.dart';
 import '../styles.dart';
 import '../utils/at_name.dart';
 import '../widgets/arcade_page.dart';
+import '../widgets/friend_search_field.dart';
 import '../widgets/retro_card.dart';
 
-class FriendPickerScreen extends StatelessWidget {
+class FriendPickerScreen extends StatefulWidget {
   final List<Map<String, dynamic>> friends;
 
   const FriendPickerScreen({super.key, required this.friends});
 
+  @override
+  State<FriendPickerScreen> createState() => _FriendPickerScreenState();
+}
+
+class _FriendPickerScreenState extends State<FriendPickerScreen> {
   static const _textShadows = [
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
 
+  String _query = '';
+
+  /// The field only earns its space on a list long enough to be slow to scan.
+  bool get _searchable => widget.friends.length > kFriendSearchThreshold;
+
   @override
   Widget build(BuildContext context) {
+    final visible = _searchable
+        ? filterFriends(widget.friends, _query)
+        : widget.friends;
+    final noMatch = visible.isEmpty && _query.trim().isNotEmpty;
     final topInset = MediaQuery.of(context).padding.top;
     final headerBottom = topInset + const ArcadePageBackground().headerHeight;
 
@@ -51,7 +66,7 @@ class FriendPickerScreen extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'CHALLENGE A FRIEND',
+                            'PICK YOUR RIVAL',
                             style: PixelText.title(
                               size: 22,
                               color: AppColors.of(context).textLight,
@@ -59,7 +74,7 @@ class FriendPickerScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Pick someone to battle this week',
+                            'Tap a friend and the race is on.',
                             style: PixelText.body(
                               size: 13,
                               color: AppColors.of(context).textLight,
@@ -76,11 +91,26 @@ class FriendPickerScreen extends StatelessWidget {
               top: headerBottom,
               child: SafeArea(
                 top: false,
-                child: ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  itemCount: friends.length,
-                  itemBuilder: (context, index) =>
-                      _buildFriendCard(context, friends[index]),
+                child: Column(
+                  children: [
+                    if (_searchable)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                        child: FriendSearchField(
+                          onChanged: (v) => setState(() => _query = v),
+                        ),
+                      ),
+                    Expanded(
+                      child: noMatch
+                          ? FriendSearchNoMatch(query: _query)
+                          : ListView.builder(
+                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                              itemCount: visible.length,
+                              itemBuilder: (context, index) =>
+                                  _buildFriendCard(context, visible[index]),
+                            ),
+                    ),
+                  ],
                 ),
               ),
             ),

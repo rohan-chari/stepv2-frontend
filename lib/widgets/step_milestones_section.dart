@@ -263,7 +263,7 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
     } else {
       body = Column(
         children: [
-          _buildCards(),
+          _buildTrack(),
           const SizedBox(height: 16),
           Container(
             height: 1,
@@ -290,74 +290,66 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
     );
   }
 
-  /// The four milestones as discrete parchment tiles laid out in a 2×2 grid
-  /// (owner-requested cards instead of the old connected node track). Each tile
-  /// carries its own locked / claimable / claimed state and claim tap.
-  Widget _buildCards() {
-    final rows = <Widget>[];
-    for (var i = 0; i < _tiles.length; i += 2) {
-      rows.add(
-        Padding(
-          padding: EdgeInsets.only(top: i == 0 ? 0 : 10),
-          // IntrinsicHeight bounds the row's height so the two side-by-side
-          // cards can stretch to a shared height inside the scroll view.
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(child: _milestoneCard(_tiles[i])),
-                const SizedBox(width: 10),
-                if (i + 1 < _tiles.length)
-                  Expanded(child: _milestoneCard(_tiles[i + 1]))
-                else
-                  const Expanded(child: SizedBox()),
-              ],
-            ),
+  /// The four milestones as one chronological run: 5k → 10k → 15k → 20k, node
+  /// then connector, left to right. The connector behind a node is filled once
+  /// the milestone before it is claimed, so the track reads as progress along
+  /// the day rather than four unrelated tiles.
+  Widget _buildTrack() {
+    final nodes = <Widget>[];
+    for (var i = 0; i < _tiles.length; i++) {
+      if (i > 0) {
+        nodes.add(
+          Expanded(
+            child: _connector(index: i - 1, filled: _tiles[i - 1].claimed),
           ),
-        ),
-      );
+        );
+      }
+      nodes.add(_node(_tiles[i]));
     }
-    return Column(mainAxisSize: MainAxisSize.min, children: rows);
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: nodes);
   }
 
-  Widget _milestoneCard(_MilestoneTile tile) {
+  Widget _connector({required int index, required bool filled}) {
+    return Padding(
+      // Align with the vertical center of the 56px node circle.
+      padding: const EdgeInsets.only(top: 26.5),
+      child: Container(
+        key: Key('milestone-connector-$index'),
+        height: 3,
+        // `milestoneCollected`, not `success`: at night `success` is the muddy
+        // grassDark that the dark-mode batch replaced everywhere a claimed
+        // milestone is drawn.
+        color: filled
+            ? AppColors.of(context).milestoneCollected
+            : AppColors.of(context).parchmentBorder.withValues(alpha: 0.6),
+      ),
+    );
+  }
+
+  Widget _node(_MilestoneTile tile) {
     final isClaimed = tile.claimed;
     final isClaimable = tile.claimable;
     final isBusy = _claimingThreshold == '${tile.threshold}';
+    // `milestoneCollected` (not the pre-a4e4153 `success`) keeps the claimed
+    // node legible on the night parchment.
     final color = isClaimed
         ? AppColors.of(context).milestoneCollected
         : isClaimable
         ? AppColors.of(context).gold
         : AppColors.of(context).muted;
 
-    final icon = isClaimed
-        ? Icon(Icons.check_rounded, size: 26, color: color)
-        : isClaimable
-        ? (isBusy
-              ? SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: color,
-                  ),
-                )
-              : const SpinningCoin(size: 32))
-        : Icon(
-            Icons.lock_rounded,
-            size: 22,
-            color: AppColors.of(context).textMid,
-          );
-
-    final card = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+    final circle = Container(
+      key: Key('milestone-node-${tile.threshold}'),
+      width: 56,
+      height: 56,
+      alignment: Alignment.center,
       decoration: BoxDecoration(
         color: isClaimed
             ? color.withValues(alpha: 0.16)
             : isClaimable
             ? color.withValues(alpha: 0.22)
             : AppColors.of(context).parchmentDark.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(12),
+        shape: BoxShape.circle,
         border: Border.all(
           color: isClaimable
               ? color
@@ -374,47 +366,61 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
               ]
             : null,
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(height: 34, child: Center(child: icon)),
-          const SizedBox(height: 8),
+      child: isClaimed
+          ? Icon(Icons.check_rounded, size: 26, color: color)
+          : isClaimable
+          ? (isBusy
+                ? SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: color,
+                    ),
+                  )
+                : const SpinningCoin(size: 34))
+          : Icon(
+              Icons.lock_rounded,
+              size: 20,
+              color: AppColors.of(context).textMid,
+            ),
+    );
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GestureDetector(
+          onTap: isClaimable && !isBusy ? () => _claim(tile.threshold) : null,
+          behavior: HitTestBehavior.opaque,
+          child: circle,
+        ),
+        const SizedBox(height: 7),
+        Text(
+          _formatCompact(tile.threshold),
+          style: PixelText.title(
+            size: 15,
+            color: isClaimed || isClaimable
+                ? AppColors.of(context).textDark
+                : AppColors.of(context).textMid,
+          ),
+        ),
+        const SizedBox(height: 1),
+        if (isClaimable)
           Text(
-            _formatCompact(tile.threshold),
-            style: PixelText.title(
-              size: 16,
-              color: isClaimed || isClaimable
-                  ? AppColors.of(context).textDark
+            'TAP!',
+            style: PixelText.title(size: 11, color: AppColors.of(context).gold),
+          )
+        else
+          Text(
+            '+${tile.coins}',
+            style: PixelText.body(
+              size: 12,
+              color: isClaimed
+                  ? AppColors.of(context).milestoneCollected
                   : AppColors.of(context).textMid,
             ),
           ),
-          const SizedBox(height: 2),
-          if (isClaimable)
-            Text(
-              'TAP!',
-              style: PixelText.title(
-                size: 11,
-                color: AppColors.of(context).gold,
-              ),
-            )
-          else
-            Text(
-              '+${tile.coins}',
-              style: PixelText.body(
-                size: 12,
-                color: isClaimed
-                    ? AppColors.of(context).milestoneCollected
-                    : AppColors.of(context).textMid,
-              ),
-            ),
-        ],
-      ),
-    );
-
-    return GestureDetector(
-      onTap: isClaimable && !isBusy ? () => _claim(tile.threshold) : null,
-      behavior: HitTestBehavior.opaque,
-      child: card,
+      ],
     );
   }
 

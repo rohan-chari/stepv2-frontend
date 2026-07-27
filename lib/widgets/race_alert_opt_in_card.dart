@@ -1,10 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../styles.dart';
-import 'pill_button.dart';
-import 'retro_card.dart';
+import 'notification_ask_dialog.dart';
 
+/// The in-race notification ask.
+///
+/// Batch 2026-07-27 item 19 turned this from an inline `RetroCard` — which sat
+/// in the race-detail scroll view and pushed the race itself down the page —
+/// into an **overlay** presented over race detail after the first frame. It
+/// renders nothing in the page; the host keeps mounting it exactly where it
+/// mounted the card, and the presentation happens off to the side.
+///
+/// It reuses [NotificationAskDialog] rather than adding a third
+/// notification-prompt surface. Only the copy differs: this ask fires mid-race,
+/// so it leads with the finish rather than a generic "stay in the race".
+///
+/// **The dismissal contract is load-bearing and unchanged.** The prompt is
+/// ONE-SHOT per device under [storageKey]. It is marked dismissed on NOT NOW,
+/// on a barrier dismissal, and on any enable attempt — granted *or* denied. A
+/// denial must not nag again inside the race (Profile stays the recovery path,
+/// and iOS requires a trip to Settings after a denial anyway). An overlay that
+/// reappeared on every race-detail open would be far worse than the card it
+/// replaced.
+///
+/// The class name is deliberately unchanged: `demo_race_demo_mode_test.dart`
+/// asserts by type that the demo race never mounts this widget.
 class RaceAlertOptInCard extends StatefulWidget {
   const RaceAlertOptInCard({
     super.key,
@@ -12,7 +32,7 @@ class RaceAlertOptInCard extends StatefulWidget {
     this.storageKey = 'race_alert_card_dismissed_v1',
   });
 
-  /// Null means the host cannot request permission; render nothing.
+  /// Null means the host cannot request permission; ask nothing.
   final Future<bool> Function()? onEnable;
   final String storageKey;
 
@@ -21,110 +41,38 @@ class RaceAlertOptInCard extends StatefulWidget {
 }
 
 class _RaceAlertOptInCardState extends State<RaceAlertOptInCard> {
-  bool _loading = true;
-  bool _hidden = false;
-  bool _enabling = false;
+  bool _presented = false;
 
   @override
   void initState() {
     super.initState();
-    _restore();
+    // After the first frame — never during build, which a modal route forbids.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _present());
   }
 
-  Future<void> _restore() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    setState(() {
-      _hidden = prefs.getBool(widget.storageKey) ?? false;
-      _loading = false;
-    });
-  }
-
-  Future<void> _dismiss() async {
-    setState(() => _hidden = true);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(widget.storageKey, true);
-  }
-
-  Future<void> _enable() async {
+  Future<void> _present() async {
     final callback = widget.onEnable;
-    if (callback == null || _enabling) return;
-    setState(() => _enabling = true);
-    final granted = await callback();
-    if (!mounted) return;
-    setState(() {
-      _enabling = false;
-      // A denial should not nag again inside the race. Profile remains the
-      // recovery path and iOS may require Settings after a denial.
-      _hidden = true;
-    });
+    if (callback == null || _presented || !mounted) return;
+
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted || _presented) return;
+    if (prefs.getBool(widget.storageKey) ?? false) return;
+    _presented = true;
+
+    final wantsAlerts = await NotificationAskDialog.show(
+      context,
+      title: 'Don’t miss the finish',
+      body: 'Get race invites and important match updates.',
+      enableLabel: 'ENABLE NOTIFICATIONS',
+    );
+
+    // One-shot: whatever the answer, this device does not get asked again here.
     await prefs.setBool(widget.storageKey, true);
-    if (!granted) return;
+    if (!wantsAlerts) return;
+
+    await callback();
   }
 
   @override
-  Widget build(BuildContext context) {
-    if (_loading || _hidden || widget.onEnable == null) {
-      return const SizedBox.shrink();
-    }
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-      child: RetroCard(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.notifications_active_rounded,
-                  color: AppColors.of(context).pillGoldDark,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'DON’T MISS THE FINISH',
-                    style: PixelText.title(
-                      size: 13,
-                      color: AppColors.of(context).textDark,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 7),
-            Text(
-              'Get race invites and important match updates. Bara won’t ask the system until you tap below.',
-              style: PixelText.body(
-                size: 12.5,
-                color: AppColors.of(context).textMid,
-              ),
-            ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: TextButton(
-                    key: const Key('race-alerts-not-now'),
-                    onPressed: _dismiss,
-                    child: const Text('Not now'),
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: PillButton(
-                    key: const Key('enable-race-alerts'),
-                    label: _enabling ? 'ENABLING...' : 'ENABLE RACE ALERTS',
-                    fontSize: 10,
-                    onPressed: _enabling ? null : _enable,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }

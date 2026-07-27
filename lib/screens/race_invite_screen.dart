@@ -4,6 +4,7 @@ import '../styles.dart';
 import '../utils/at_name.dart';
 import '../widgets/app_avatar.dart';
 import '../widgets/arcade_page.dart';
+import '../widgets/friend_search_field.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/retro_card.dart';
 
@@ -30,7 +31,10 @@ class RaceInviteScreen extends StatefulWidget {
 }
 
 class _RaceInviteScreenState extends State<RaceInviteScreen> {
+  // Selection is keyed by id and lives outside the filtered view, so hiding a
+  // row with a query never drops the person you already picked.
   final Set<String> _selectedIds = {};
+  String _query = '';
 
   static const _textShadows = [
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
@@ -48,6 +52,9 @@ class _RaceInviteScreenState extends State<RaceInviteScreen> {
   @override
   Widget build(BuildContext context) {
     final friends = _availableFriends;
+    final searchable = friends.length > kFriendSearchThreshold;
+    final visible = searchable ? filterFriends(friends, _query) : friends;
+    final noMatch = visible.isEmpty && _query.trim().isNotEmpty;
     final topInset = MediaQuery.of(context).padding.top;
     final headerBottom = topInset + const ArcadePageBackground().headerHeight;
 
@@ -91,7 +98,7 @@ class _RaceInviteScreenState extends State<RaceInviteScreen> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Select friends to race against',
+                            'Tap everyone you want in this race.',
                             style: PixelText.body(
                               size: 13,
                               color: AppColors.of(context).textLight,
@@ -110,22 +117,31 @@ class _RaceInviteScreenState extends State<RaceInviteScreen> {
                 top: false,
                 child: Column(
                   children: [
+                    if (searchable)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                        child: FriendSearchField(
+                          onChanged: (v) => setState(() => _query = v),
+                        ),
+                      ),
                     Expanded(
                       child: friends.isEmpty
                           ? Center(
                               child: Text(
-                                'No friends available to invite',
+                                'Nobody left to invite right now.',
                                 style: PixelText.body(
                                   size: 14,
-                                  color: AppColors.of(context).textMid,
+                                  color: AppColors.of(context).textLight,
                                 ),
                               ),
                             )
+                          : noMatch
+                          ? FriendSearchNoMatch(query: _query)
                           : ListView.builder(
                               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                              itemCount: friends.length,
+                              itemCount: visible.length,
                               itemBuilder: (context, index) =>
-                                  _buildFriendCard(friends[index]),
+                                  _buildFriendCard(visible[index]),
                             ),
                     ),
                     if (_selectedIds.isNotEmpty)

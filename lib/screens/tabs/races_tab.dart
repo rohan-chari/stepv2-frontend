@@ -703,21 +703,19 @@ class _RacesTabState extends State<RacesTab> {
 
     if (state.isError && !state.hasData) {
       return [
+        // Full-bleed: race blocks run edge to edge (batch 2026-07-27 #17).
         SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: LoadErrorPanel(
-              title: 'Couldn’t load races',
-              message: state.error ?? 'Check your connection and try again.',
-              onRetry: () {
-                final refresh = widget.onRefresh;
-                if (refresh != null) {
-                  refresh();
-                } else {
-                  widget.onRacesChanged();
-                }
-              },
-            ),
+          child: LoadErrorPanel(
+            title: 'Couldn’t load races',
+            message: state.error ?? 'Check your connection and try again.',
+            onRetry: () {
+              final refresh = widget.onRefresh;
+              if (refresh != null) {
+                refresh();
+              } else {
+                widget.onRacesChanged();
+              }
+            },
           ),
         ),
       ];
@@ -756,37 +754,34 @@ class _RacesTabState extends State<RacesTab> {
       key: const Key('invites-strip-header'),
       child: StaggerIn(
         index: 0,
-        child: Padding(
-          padding: const EdgeInsets.only(left: 10, right: 10),
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(2, 12, 2, 8),
-            child: Row(
-              children: [
-                Container(
-                  width: 6,
-                  height: 18,
-                  decoration: BoxDecoration(
-                    color: AppColors.of(context).pillGold,
-                    borderRadius: BorderRadius.circular(3),
-                    border: Border.all(
-                      color: AppColors.of(context).pillGoldDark,
-                    ),
-                  ),
+        // The strip's CARD runs full-bleed (batch 2026-07-27 #17); its section
+        // header keeps a text inset — a label flush against the screen edge
+        // reads as broken, not edge-to-edge. The 12pt here replaces the 10pt
+        // outer inset + 2pt inner one, so the label does not move.
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+          child: Row(
+            children: [
+              Container(
+                width: 6,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: AppColors.of(context).pillGold,
+                  borderRadius: BorderRadius.circular(3),
+                  border: Border.all(color: AppColors.of(context).pillGoldDark),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  'INVITES',
-                  style: PixelText.title(
-                    size: 20,
-                    color: AppColors.of(context).textLight,
-                  ).copyWith(shadows: _textShadows),
-                ),
-                const SizedBox(width: 6),
-                _CountBadge(
-                  count: raceInvites.length + tournamentInvites.length,
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'INVITES',
+                style: PixelText.title(
+                  size: 20,
+                  color: AppColors.of(context).textLight,
+                ).copyWith(shadows: _textShadows),
+              ),
+              const SizedBox(width: 6),
+              _CountBadge(count: raceInvites.length + tournamentInvites.length),
+            ],
           ),
         ),
       ),
@@ -824,7 +819,7 @@ class _RacesTabState extends State<RacesTab> {
     return [
       header,
       SliverPadding(
-        padding: const EdgeInsets.only(left: 10, right: 10, bottom: 8),
+        padding: const EdgeInsets.only(bottom: 8),
         sliver: DecoratedSliver(
           decoration: BoxDecoration(
             color: AppColors.of(context).parchment,
@@ -988,32 +983,31 @@ class _RacesTabState extends State<RacesTab> {
           key: Key('personal-state-empty-${_selectedState.name}'),
           child: hasNothingAtAll
               ? _buildEmptyState()
-              : Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 28,
-                      horizontal: 18,
+              // Full-bleed, like every other card in the list (#17).
+              : Container(
+                  key: const Key('personal-state-empty-card'),
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 28,
+                    horizontal: 18,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.of(context).parchment,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: AppColors.of(
+                        context,
+                      ).roofDark.withValues(alpha: 0.55),
+                      width: 2,
                     ),
-                    decoration: BoxDecoration(
-                      color: AppColors.of(context).parchment,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: AppColors.of(
-                          context,
-                        ).roofDark.withValues(alpha: 0.55),
-                        width: 2,
-                      ),
-                      boxShadow: _raceCardShadow,
-                    ),
-                    child: Text(
-                      _selectedState.emptyMessage,
-                      textAlign: TextAlign.center,
-                      style: PixelText.body(
-                        size: 14,
-                        color: AppColors.of(context).textMid,
-                      ),
+                    boxShadow: _raceCardShadow,
+                  ),
+                  child: Text(
+                    _selectedState.emptyMessage,
+                    textAlign: TextAlign.center,
+                    style: PixelText.body(
+                      size: 14,
+                      color: AppColors.of(context).textMid,
                     ),
                   ),
                 ),
@@ -1051,7 +1045,7 @@ class _RacesTabState extends State<RacesTab> {
 
     return [
       SliverPadding(
-        padding: const EdgeInsets.only(left: 10, right: 10, bottom: 8),
+        padding: const EdgeInsets.only(bottom: 8),
         sliver: DecoratedSliver(
           decoration: BoxDecoration(
             color: AppColors.of(context).parchment,
@@ -1070,8 +1064,8 @@ class _RacesTabState extends State<RacesTab> {
 
   Widget _buildEmptyState() {
     return Container(
+      key: const Key('races-empty-state-card'),
       width: double.infinity,
-      margin: const EdgeInsets.symmetric(horizontal: 10),
       padding: const EdgeInsets.fromLTRB(18, 34, 18, 36),
       decoration: BoxDecoration(
         color: AppColors.of(context).parchment,
@@ -1087,7 +1081,7 @@ class _RacesTabState extends State<RacesTab> {
           Icon(
             Icons.directions_run_rounded,
             size: 48,
-            color: AppColors.of(context).roofMid.withValues(alpha: 0.78),
+            color: AppColors.of(context).successText.withValues(alpha: 0.78),
           ),
           const SizedBox(height: 12),
           Text(
@@ -1896,7 +1890,7 @@ class _RacesLoadingSkeleton extends StatelessWidget {
     required bool withCrate,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(left: 10, right: 10, bottom: 8),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Column(
         children: [
           _header(context, showPill: showPill),

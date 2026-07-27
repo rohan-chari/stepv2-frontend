@@ -2888,6 +2888,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         widget.authService.onboardingV2Enabled &&
         _alertPermissionUndetermined;
     if (showAlerts) {
+      // Item 19 (batch 2026-07-27): the ask is an OVERLAY now — this widget
+      // renders nothing and presents itself over the screen after the first
+      // frame. It stays mounted here (and only here) so the demo race, which
+      // never satisfies `showAlerts`, provably never asks.
       return Column(
         children: [
           RaceAlertOptInCard(
@@ -3153,14 +3157,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                     color: AppColors.of(ctx).textMid,
                   ),
                 ),
-                if (pool != null) ...[
+                // Item 8 (batch 2026-07-27): the "Funded by Bara — free to
+                // enter" lead-in is gone. What survives is the part that tells
+                // the runner something they can act on — that the pool is still
+                // moving. A settled pool has nothing left to say, so it says
+                // nothing rather than leaving an empty line.
+                if (pool != null && pool.projected) ...[
                   const SizedBox(height: 6),
                   Text(
-                    pool.projected
-                        ? 'Funded by Bara — free to enter. The pool grows as '
-                              'more runners join, and settles on who actually '
-                              'walked.'
-                        : 'Funded by Bara — free to enter.',
+                    'The pool grows as more runners join, and settles on who '
+                    'actually walked.',
                     textAlign: TextAlign.center,
                     style: PixelText.body(
                       size: 12,
@@ -3170,15 +3176,27 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 ],
                 if (payoutTiers.isNotEmpty) ...[
                   const SizedBox(height: 16),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: _buildPayoutBreakdown(
+                  // An even-split preset (TOP_HALF, ALL_BUT_LAST) can pay 150
+                  // identical places on a seeded Daily. Listing them is
+                  // useless; four lines that answer "what do I get, and am I
+                  // getting it?" are not. Uneven presets keep the podium row.
+                  if (_isEvenSplitPayout(payoutTiers))
+                    _buildPayoutSummary(
                       payoutTiers,
-                      key: const Key('race-prize-pool-summary'),
+                      key: const Key('race-prize-pool-payout-summary'),
                       labelColor: AppColors.of(ctx).textMid,
                       amountColor: AppColors.of(ctx).coinDark,
+                    )
+                  else
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: _buildPayoutBreakdown(
+                        payoutTiers,
+                        key: const Key('race-prize-pool-summary'),
+                        labelColor: AppColors.of(ctx).textMid,
+                        amountColor: AppColors.of(ctx).coinDark,
+                      ),
                     ),
-                  ),
                 ],
               ],
             ),
@@ -3327,13 +3345,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             ],
           ],
         ),
-        if (pool != null && pool.coins > 0) ...[
+        // Item 8 (batch 2026-07-27): "Funded by Bara — free to enter" is gone.
+        // The maxed-out fact is the only part worth a line here, so the line
+        // exists only when there is something to say.
+        if (pool != null && pool.coins > 0 && pool.atMax) ...[
           const SizedBox(height: 8),
           Text(
             key: const Key('race-prize-pool-funded-copy'),
-            pool.atMax
-                ? 'Funded by Bara — free to enter. This pool is maxed out.'
-                : 'Funded by Bara — free to enter.',
+            'This pool is maxed out.',
             textAlign: TextAlign.center,
             style: PixelText.body(
               size: 11.5,
@@ -3343,10 +3362,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         ],
         if (_hasPrizeDisplay && payoutTiers.isNotEmpty) ...[
           const SizedBox(height: 10),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: _buildPayoutBreakdown(payoutTiers),
-          ),
+          if (_isEvenSplitPayout(payoutTiers))
+            _buildPayoutSummary(
+              payoutTiers,
+              key: const Key('race-payout-summary'),
+            )
+          else
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: _buildPayoutBreakdown(payoutTiers),
+            ),
         ],
       ],
     );
@@ -5745,6 +5770,171 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     );
   }
 
+  // -- Even-split payout summary (batch 2026-07-27, item 9) -----------------
+  //
+  // Seeded daily/weekly challenges are TOP_HALF, so a 300-runner field pays 150
+  // identical places. The podium row ("1ST / 2ND / 3RD / +147 MORE") answered
+  // none of the questions a runner in 62nd actually has, and 150 rows in a card
+  // is unreadable. This block answers them in four lines and keeps the full
+  // list one tap away.
+  //
+  // EVERY figure is read off `payoutTiers` — the server owns the payout math.
+
+  /// True when every paid place wins the same amount, i.e. the pool is split
+  /// evenly (TOP_HALF, ALL_BUT_LAST). A single-tier race (winner takes all) is
+  /// deliberately excluded: "the top 1 split it evenly" is nonsense, and the
+  /// existing podium row already says it better.
+  bool _isEvenSplitPayout(List<PayoutTier> tiers) =>
+      tiers.length >= 2 && tiers.every((t) => t.amount == tiers.first.amount);
+
+  /// The preset in plain words. Falls back to a preset-agnostic sentence so an
+  /// unknown/absent `payoutPreset` (a newer backend, a frozen client) still
+  /// reads correctly rather than rendering a blank headline.
+  String _evenSplitHeadline(int paidPlaces) {
+    switch (_race?['payoutPreset']) {
+      case 'TOP_HALF':
+        return 'Top half splits the pool evenly';
+      case 'ALL_BUT_LAST':
+        return 'Everyone but last splits the pool evenly';
+      default:
+        return 'The top $paidPlaces split the pool evenly';
+    }
+  }
+
+  /// How many runners are actually in the race. Read defensively: a payload
+  /// without a usable participant list yields 0, and the cut line then drops
+  /// the "of N" half rather than printing "of 0".
+  int get _acceptedFieldSize {
+    final raw = _race?['participants'];
+    if (raw is! List) return 0;
+    return raw.where((p) => p is Map && p['status'] == 'ACCEPTED').length;
+  }
+
+  /// The viewer's current rank, preferring the SERVER's placement (contract §5
+  /// C1) so this line agrees with home, the races list and the standings. Null
+  /// when the viewer isn't running or there's nothing to rank yet — the "you"
+  /// line is then omitted entirely.
+  int? get _myViewerPlacement {
+    final raw = (_progressState.data ?? _progress)?['participants'];
+    if (raw is! List) return null;
+    final rows = raw
+        .whereType<Map>()
+        .map((e) => e.cast<String, dynamic>())
+        .toList();
+    if (rows.isEmpty) return null;
+    final ordered = orderRaceParticipantsForDisplay(rows);
+    final index = ordered.indexWhere(
+      (p) => (p['userId'] as String?) == _myUserId,
+    );
+    if (index < 0) return null;
+    return serverPlacementOf(ordered[index]) ?? index + 1;
+  }
+
+  Widget _buildPayoutSummary(
+    List<PayoutTier> tiers, {
+    required Key key,
+    Color? labelColor,
+    Color? amountColor,
+  }) {
+    final colors = AppColors.of(context);
+    final label = labelColor ?? colors.textMid;
+    final amount = amountColor ?? colors.coinDark;
+    final paidPlaces = tiers.length;
+    final perHead = tiers.first.amount;
+    final fieldSize = _acceptedFieldSize;
+    final placement = _myViewerPlacement;
+    final inTheMoney = placement != null && placement <= paidPlaces;
+
+    return Column(
+      key: key,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          _evenSplitHeadline(paidPlaces),
+          textAlign: TextAlign.center,
+          style: PixelText.body(size: 12.5, color: label),
+        ),
+        const SizedBox(height: 8),
+        // The one number a runner is here for.
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              '~${formatPrizeCoins(perHead)}',
+              style: PixelText.number(size: 26, color: amount),
+            ),
+            const SizedBox(width: 6),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 3),
+              child: Text(
+                'coins each',
+                style: PixelText.body(size: 12, color: label),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          fieldSize > 0
+              ? 'Top $paidPlaces of $fieldSize get paid'
+              : 'Top $paidPlaces get paid',
+          textAlign: TextAlign.center,
+          style: PixelText.body(size: 12, color: label),
+        ),
+        if (placement != null) ...[
+          const SizedBox(height: 10),
+          // Where the viewer stands relative to the cut — gold when the money
+          // is theirs, quiet when it isn't. Both states derive from the same
+          // tokens, so the night palette follows automatically.
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: (inTheMoney ? amount : label).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: (inTheMoney ? amount : label).withValues(alpha: 0.4),
+              ),
+            ),
+            child: Text(
+              inTheMoney
+                  ? 'You’re ${_lowerOrdinal(placement)} — in the money'
+                  : 'You’re ${_lowerOrdinal(placement)} — '
+                        '${placement - paidPlaces} '
+                        '${placement - paidPlaces == 1 ? 'place' : 'places'} '
+                        'from the cut',
+              textAlign: TextAlign.center,
+              style: PixelText.body(
+                size: 12,
+                color: inTheMoney ? amount : label,
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 10),
+        GestureDetector(
+          key: const Key('race-payout-see-all'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _showPayoutBreakdownSheet(tiers),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'See all payouts',
+                style: PixelText.title(size: 11, color: label),
+              ),
+              Icon(Icons.chevron_right, size: 14, color: label),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// "62nd", not "62ND" — this line is a sentence, not a scoreboard label.
+  String _lowerOrdinal(int value) => formatOrdinal(value).toLowerCase();
+
   Widget _buildPayoutBreakdown(
     List<PayoutTier> tiers, {
     Key? key,
@@ -5813,34 +6003,38 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 ),
                 const SizedBox(height: 12),
                 Flexible(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      children: [
-                        for (final tier in tiers)
-                          Padding(
-                            padding: EdgeInsets.symmetric(vertical: 5),
-                            child: Row(
-                              children: [
-                                Text(
-                                  payoutPlacementLabel(tier.placement),
-                                  style: PixelText.title(
-                                    size: 12,
-                                    color: AppColors.of(context).textMid,
-                                  ),
-                                ),
-                                Spacer(),
-                                Text(
-                                  '${tier.amount}',
-                                  style: PixelText.number(
-                                    size: 14,
-                                    color: AppColors.of(context).coinDark,
-                                  ),
-                                ),
-                              ],
+                  // A TOP_HALF Daily can pay 150 places. Build the rows lazily
+                  // so the long case costs only what is on screen; short lists
+                  // still wrap tightly instead of stretching the sheet.
+                  child: ListView.builder(
+                    shrinkWrap: tiers.length <= 12,
+                    itemCount: tiers.length,
+                    padding: EdgeInsets.zero,
+                    itemBuilder: (context, index) {
+                      final tier = tiers[index];
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 5),
+                        child: Row(
+                          children: [
+                            Text(
+                              payoutPlacementLabel(tier.placement),
+                              style: PixelText.title(
+                                size: 12,
+                                color: AppColors.of(context).textMid,
+                              ),
                             ),
-                          ),
-                      ],
-                    ),
+                            const Spacer(),
+                            Text(
+                              '${tier.amount}',
+                              style: PixelText.number(
+                                size: 14,
+                                color: AppColors.of(context).coinDark,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                 ),
               ],

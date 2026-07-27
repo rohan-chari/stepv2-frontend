@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../styles.dart';
 import '../utils/race_display.dart';
 import 'arcade_fx.dart';
+import 'coin_glyph.dart';
 import 'pill_button.dart';
 import 'race_ui.dart';
 
@@ -147,11 +148,9 @@ class FeaturedRaceCard extends StatelessWidget {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        Icons.monetization_on_rounded,
-                        size: 16,
-                        color: AppColors.of(context).coinDark,
-                      ),
+                      // The paw coin, not Material's dollar sign — a soft
+                      // currency must not look like real money (item 3).
+                      const CoinGlyph(size: 16),
                       const SizedBox(width: 5),
                       Flexible(
                         child: Text(

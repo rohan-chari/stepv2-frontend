@@ -7,7 +7,7 @@ enum AppThemePreference { automatic, light, dark }
 
 typedef AppClock = DateTime Function();
 
-/// Owns the user's appearance preference and the local 7 PM–7 AM schedule.
+/// Owns the user's appearance preference and the local 9 PM–7 AM schedule.
 /// This is deliberately device-only: theme selection never depends on the API.
 class AppThemeController extends ChangeNotifier with WidgetsBindingObserver {
   AppThemeController({
@@ -21,7 +21,7 @@ class AppThemeController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   static const preferenceKey = 'app_theme_preference';
-  static const nightStartHour = 19;
+  static const nightStartHour = 21;
   static const dayStartHour = 7;
 
   final AppClock _clock;
@@ -80,7 +80,7 @@ class AppThemeController extends ChangeNotifier with WidgetsBindingObserver {
     if (_preference != AppThemePreference.automatic) return;
     final now = _clock();
     final todayAtSeven = DateTime(now.year, now.month, now.day, dayStartHour);
-    final todayAtNineteen = DateTime(
+    final todayAtNightStart = DateTime(
       now.year,
       now.month,
       now.day,
@@ -88,8 +88,8 @@ class AppThemeController extends ChangeNotifier with WidgetsBindingObserver {
     );
     final next = now.isBefore(todayAtSeven)
         ? todayAtSeven
-        : now.isBefore(todayAtNineteen)
-        ? todayAtNineteen
+        : now.isBefore(todayAtNightStart)
+        ? todayAtNightStart
         : DateTime(now.year, now.month, now.day + 1, dayStartHour);
     _boundaryTimer = Timer(next.difference(now), _recalculate);
   }

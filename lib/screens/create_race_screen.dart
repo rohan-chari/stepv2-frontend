@@ -36,7 +36,10 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
   final _nameController = TextEditingController();
   int _selectedDuration = 3;
   bool _isCreating = false;
-  bool _powerupsEnabled = false;
+  // Powerups are the point of a race, so they start ON. A creator who never
+  // opens the customize section still sends powerupsEnabled: true plus the
+  // fixed 2,000-step interval (both create paths already send them explicitly).
+  bool _powerupsEnabled = true;
   String _payoutPreset = 'WINNER_TAKES_ALL';
   bool _isPublic = false;
   // Participant cap. Required selection: the user must pick a preset number or
@@ -228,7 +231,9 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
     required int coins,
     required bool atMax,
     required String derivation,
-    required String footnote,
+    // Optional trailing line. Nothing on this screen sets it any more, but the
+    // plaque keeps the slot for callers that still want one.
+    String? footnote,
     Key? key,
     Key? coinsKey,
     Key? derivationKey,
@@ -323,11 +328,13 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
             key: derivationKey,
             style: PixelText.body(size: 11, color: palette.textMid),
           ),
-          const SizedBox(height: 2),
-          Text(
-            footnote,
-            style: PixelText.body(size: 10, color: palette.textMid),
-          ),
+          if (footnote != null && footnote.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              footnote,
+              style: PixelText.body(size: 10, color: palette.textMid),
+            ),
+          ],
         ],
       ),
     );
@@ -348,7 +355,6 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
         coins: coins,
         atMax: coins >= kPrizePoolMaxCoins,
         derivation: _projectedPrizeDerivation,
-        footnote: 'FUNDED BY BARA · FREE TO ENTER',
       ),
     );
   }
@@ -875,6 +881,67 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
     );
   }
 
+  /// Who can join. This used to be one switch whose label flipped between
+  /// PRIVATE RACE and PUBLIC RACE — with the switch off, "PRIVATE RACE" read
+  /// as "private is the setting that's turned off", so people flipped it to
+  /// get a private race and got a public one. Both options are now named at
+  /// once on the same carved bar as RACE FORMAT, so the selection is the only
+  /// thing that changes and the subcopy only ever describes what's picked.
+  Widget _buildVisibilityPicker() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'WHO CAN JOIN',
+          style: PixelText.title(
+            size: 13,
+            color: AppColors.of(context).textMid,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: AppColors.of(context).parchmentDark,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: AppColors.of(context).parchmentBorder,
+              width: 2,
+            ),
+          ),
+          child: Row(
+            children: [
+              _formatSegment(
+                key: const Key('race-visibility-private'),
+                label: 'PRIVATE',
+                icon: Icons.lock_rounded,
+                selected: !_isPublic,
+                onTap: () => setState(() => _isPublic = false),
+              ),
+              const SizedBox(width: 4),
+              _formatSegment(
+                key: const Key('race-visibility-public'),
+                label: 'PUBLIC',
+                icon: Icons.public_rounded,
+                selected: _isPublic,
+                onTap: () => setState(() => _isPublic = true),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          _isPublic ? 'ANYONE CAN JOIN' : 'INVITE ONLY',
+          key: const Key('race-visibility-subcopy'),
+          style: PixelText.body(
+            size: 11,
+            color: AppColors.of(context).textMid,
+          ),
+        ),
+      ],
+    );
+  }
+
   /// The tournament reveal: bracket-size picker (4/8/16) + matchup-duration
   /// chips (1/2/3 days). Buy-in / powerups / public are the shared cards below.
   Widget _buildTournamentReveal() {
@@ -979,7 +1046,6 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
           coins: _tournamentPrizePool,
           atMax: _tournamentPrizePool >= kTournamentPrizePoolMaxCoins,
           derivation: '$_bracketSize PLAYERS × $_tournamentTotalDays DAYS',
-          footnote: 'FREE TO ENTER · CHAMPION TAKES ALL',
         ),
       ],
     );
@@ -1698,54 +1764,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          _isPublic
-                                              ? 'PUBLIC RACE'
-                                              : 'PRIVATE RACE',
-                                          style: PixelText.title(
-                                            size: 13,
-                                            color: AppColors.of(
-                                              context,
-                                            ).textMid,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          _isPublic
-                                              ? 'ANYONE CAN JOIN'
-                                              : 'INVITE ONLY',
-                                          style: PixelText.body(
-                                            size: 11,
-                                            color: _isPublic
-                                                ? AppColors.of(
-                                                    context,
-                                                  ).pillGreenDark
-                                                : AppColors.of(context).textMid,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    SizedBox(
-                                      height: 28,
-                                      child: Switch.adaptive(
-                                        value: _isPublic,
-                                        activeTrackColor: AppColors.of(
-                                          context,
-                                        ).pillGreenDark,
-                                        onChanged: (v) =>
-                                            setState(() => _isPublic = v),
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                _buildVisibilityPicker(),
                                 // TR-101: a team race's field cap is fixed at
                                 // 2 x teamSize — no free-form runner cap.
                                 if (_isTournament) ...[

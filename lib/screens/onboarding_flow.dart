@@ -590,6 +590,10 @@ class _OnboardingReferralWelcomeStepState
   String? _inviterName;
   String? _inviterAvatar;
   int? _rewardCoins;
+  // Additive per batch 2026-07-27 §4.3. Absent on an older backend, in which
+  // case the body states no figure at all rather than a hardcoded one.
+  int? _referrerCoins;
+  int? _refereeCoins;
 
   @override
   void initState() {
@@ -610,6 +614,8 @@ class _OnboardingReferralWelcomeStepState
         _inviterName = preview['inviterName'] as String?;
         _inviterAvatar = preview['inviterAvatar'] as String?;
         _rewardCoins = (preview['rewardCoins'] as num?)?.toInt();
+        _referrerCoins = (preview['referrerCoins'] as num?)?.toInt();
+        _refereeCoins = (preview['refereeCoins'] as num?)?.toInt();
         _loading = false;
       });
     } catch (_) {
@@ -623,11 +629,20 @@ class _OnboardingReferralWelcomeStepState
     final headline = inviter != null && inviter.isNotEmpty
         ? '${atName(inviter)} invited you to Bara'
         : 'A friend invited you to Bara';
-    final reward = _rewardCoins;
-    final body = reward != null && reward > 0
-        ? 'Finish your first race and you’ll both earn coins — '
-              '$reward to get you started.'
-        : 'Finish your first race and you’ll both earn coins.';
+    // The referee's figure: prefer the explicit field, fall back to the older
+    // `rewardCoins` key, and accept that both may be missing.
+    final mine = _refereeCoins ?? _rewardCoins;
+    final theirs = _referrerCoins;
+    final String body;
+    if (mine == null || mine <= 0) {
+      body = 'Finish your first race and the coins start landing.';
+    } else if (theirs != null && theirs == mine) {
+      body =
+          'Finish your first race and you each pocket $mine coins — '
+          'yours to spend right away.';
+    } else {
+      body = 'Finish your first race and $mine coins are yours.';
+    }
 
     if (_loading) {
       return const OnboardingSceneLoading();
@@ -873,7 +888,7 @@ class _OnboardingAutoEnrolledStepState extends State<OnboardingAutoEnrolledStep>
     }
 
     return OnboardingScene(
-      headline: 'Entered in the Daily & Weekly challenge',
+      headline: 'The Daily and Weekly are yours to win',
       emblem: _EnrolledEmblem(animation: _intro, size: 108),
       sceneExtra: const Wrap(
         alignment: WrapAlignment.center,
@@ -887,9 +902,9 @@ class _OnboardingAutoEnrolledStepState extends State<OnboardingAutoEnrolledStep>
       ),
       dockLabel: "YOU'RE IN",
       dockBody:
-          'We saved you a spot in both races and dropped '
-          '3 mystery boxes in your bag. You can turn '
-          'auto-join off anytime on the Races page.',
+          'We saved you a spot in both and dropped 3 mystery '
+          'boxes in your bag. Turn auto-join off anytime on '
+          'the Races page.',
       actions: [
         SizedBox(
           width: double.infinity,

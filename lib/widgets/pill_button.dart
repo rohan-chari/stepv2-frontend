@@ -11,7 +11,26 @@ class PillButton extends StatefulWidget {
   final EdgeInsets padding;
   final bool fullWidth;
   final IconData? icon;
+
+  /// A custom leading widget, sized to the same box the [icon] occupies.
+  /// Takes precedence over [icon] when both are given — how a price button
+  /// swaps Material's dollar-sign glyph for the app's paw coin without every
+  /// other call site changing.
+  final Widget? leading;
   final Widget? trailing;
+
+  /// The side/vertical padding a button carries unless the caller overrides it.
+  static const defaultPadding = EdgeInsets.symmetric(
+    horizontal: 32,
+    vertical: 14,
+  );
+
+  /// A full-width button is already centred by its parent, so 32pt of side
+  /// padding buys nothing and costs the label ~24pt of room.
+  static const fullWidthPadding = EdgeInsets.symmetric(
+    horizontal: 20,
+    vertical: 14,
+  );
 
   const PillButton({
     super.key,
@@ -19,9 +38,10 @@ class PillButton extends StatefulWidget {
     required this.onPressed,
     this.variant = PillButtonVariant.primary,
     this.fontSize = 15,
-    this.padding = const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+    this.padding = defaultPadding,
     this.fullWidth = false,
     this.icon,
+    this.leading,
     this.trailing,
   });
 
@@ -55,6 +75,40 @@ class _PillButtonState extends State<PillButton> {
           AppColors.of(context).pillTerraShadow,
         );
     }
+  }
+
+  /// Full-width buttons trade the default 32pt side padding for 20pt. An
+  /// explicit padding from the caller always wins.
+  EdgeInsets get _effectivePadding =>
+      widget.fullWidth && widget.padding == PillButton.defaultPadding
+      ? PillButton.fullWidthPadding
+      : widget.padding;
+
+  /// A full-width button is as wide as it will ever be, so a label that
+  /// doesn't fit has nowhere else to go — it used to silently ellipsize
+  /// ("EXTRA SPIN" → "EXTRA SP…"), which is why the bug shipped. Scaling the
+  /// whole row down keeps the word intact. Auto-width buttons size themselves
+  /// to their label, so they never need it.
+  Widget _fit(Widget row) => widget.fullWidth
+      ? FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.center,
+          child: row,
+        )
+      : row;
+
+  /// `maxLines: 1` + ellipsis stay on as the last-resort backstop for the
+  /// auto-width case, where the label is still laid out under real
+  /// constraints.
+  Widget _label(Color textColor) {
+    final text = Text(
+      widget.label,
+      textAlign: TextAlign.center,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: PixelText.pill(size: widget.fontSize, color: textColor),
+    );
+    return widget.fullWidth ? text : Flexible(child: text);
   }
 
   @override
@@ -102,30 +156,34 @@ class _PillButtonState extends State<PillButton> {
                   ),
                 ],
         ),
-        padding: widget.padding,
+        padding: _effectivePadding,
         alignment: Alignment.center,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (widget.icon != null) ...[
-              Icon(widget.icon, size: widget.fontSize + 2, color: textColor),
-              const SizedBox(width: 8),
+        child: _fit(
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (widget.leading != null) ...[
+                SizedBox(
+                  width: widget.fontSize + 2,
+                  height: widget.fontSize + 2,
+                  child: Center(child: widget.leading),
+                ),
+                const SizedBox(width: 8),
+              ] else if (widget.icon != null) ...[
+                Icon(widget.icon, size: widget.fontSize + 2, color: textColor),
+                const SizedBox(width: 8),
+              ],
+              // Inside the FittedBox the Row is measured unconstrained, and a
+              // flex child under unbounded width is an error — so the label is
+              // laid out at its natural size there and scaled to fit instead.
+              _label(textColor),
+              if (widget.trailing != null) ...[
+                const SizedBox(width: 8),
+                widget.trailing!,
+              ],
             ],
-            Flexible(
-              child: Text(
-                widget.label,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: PixelText.pill(size: widget.fontSize, color: textColor),
-              ),
-            ),
-            if (widget.trailing != null) ...[
-              const SizedBox(width: 8),
-              widget.trailing!,
-            ],
-          ],
+          ),
         ),
       ),
     );

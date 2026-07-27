@@ -24,7 +24,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('automatic appearance schedule', () {
-    test('night runs from 7 PM through 6:59 AM local time', () {
+    // Batch 2026-07-27 item 14: night now starts at 9 PM, not 7 PM. Day still
+    // starts at 7 AM.
+    test('night runs from 9 PM through 6:59 AM local time', () {
       expect(
         AppThemeController.resolve(
           AppThemePreference.automatic,
@@ -46,13 +48,56 @@ void main() {
         ),
         ThemeMode.light,
       );
+      // 7 PM and 8 PM are daytime now.
       expect(
         AppThemeController.resolve(
           AppThemePreference.automatic,
           DateTime(2026, 7, 21, 19),
         ),
+        ThemeMode.light,
+      );
+      expect(
+        AppThemeController.resolve(
+          AppThemePreference.automatic,
+          DateTime(2026, 7, 21, 20, 59),
+        ),
+        ThemeMode.light,
+      );
+      expect(
+        AppThemeController.resolve(
+          AppThemePreference.automatic,
+          DateTime(2026, 7, 21, 21),
+        ),
         ThemeMode.dark,
       );
+      expect(AppThemeController.nightStartHour, 21);
+      expect(AppThemeController.dayStartHour, 7);
+    });
+
+    test('the boundary timer fires at the next 9 PM / 7 AM edge', () {
+      // 8 PM -> the next flip is tonight at 9 PM (one hour away).
+      final evening = AppThemeController(
+        preference: AppThemePreference.automatic,
+        clock: () => DateTime(2026, 7, 21, 20),
+      );
+      addTearDown(evening.dispose);
+      expect(evening.resolvedMode, ThemeMode.light);
+
+      // 9:00 PM exactly resolves dark.
+      final night = AppThemeController(
+        preference: AppThemePreference.automatic,
+        clock: () => DateTime(2026, 7, 21, 21),
+      );
+      addTearDown(night.dispose);
+      expect(night.resolvedMode, ThemeMode.dark);
+
+      // Past midnight is still night until 7 AM.
+      final small = AppThemeController(
+        preference: AppThemePreference.automatic,
+        clock: () => DateTime(2026, 7, 22, 3),
+      );
+      addTearDown(small.dispose);
+      expect(small.resolvedMode, ThemeMode.dark);
     });
 
     test('explicit choices ignore the clock', () {

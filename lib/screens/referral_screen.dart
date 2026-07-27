@@ -53,6 +53,13 @@ class _ReferralScreenState extends State<ReferralScreen> {
   int _referredCount = 0;
   int _completedCount = 0;
   int _coinsEarned = 0;
+  // Configured per-referral rewards, served on the wire (additive, batch
+  // 2026-07-27 §4.3). NEVER defaulted to a constant: a build that guessed
+  // would keep promising a stale figure after the economy is retuned, and the
+  // prod backend may not serve them at all yet. Null on both = number-free
+  // copy everywhere.
+  int? _referrerCoins;
+  int? _refereeCoins;
   List<Map<String, dynamic>> _friends = const [];
 
   @override
@@ -88,6 +95,8 @@ class _ReferralScreenState extends State<ReferralScreen> {
         _referredCount = (data['referredCount'] as num?)?.toInt() ?? 0;
         _completedCount = (data['completedCount'] as num?)?.toInt() ?? 0;
         _coinsEarned = (data['coinsEarned'] as num?)?.toInt() ?? 0;
+        _referrerCoins = (data['referrerCoins'] as num?)?.toInt();
+        _refereeCoins = (data['refereeCoins'] as num?)?.toInt();
         final friends = data['friends'];
         _friends = friends is List
             ? friends
@@ -111,7 +120,13 @@ class _ReferralScreenState extends State<ReferralScreen> {
     final url = _url;
     final code = _code;
     if (url == null || code == null) return;
-    await shareReferral(context, code: code, url: url);
+    await shareReferral(
+      context,
+      code: code,
+      url: url,
+      referrerCoins: _referrerCoins,
+      refereeCoins: _refereeCoins,
+    );
   }
 
   Future<void> _enterCode() async {
@@ -138,7 +153,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
       );
       success = result['attributed'] == true;
       message = success
-          ? "You're in! Finish your first race to earn coins."
+          ? referralRedeemedCopy(refereeCoins: _refereeCoins)
           : _reasonMessage(result['reason'] as String?);
     } catch (_) {
       message = "Couldn't apply that code. Please try again.";
@@ -244,8 +259,10 @@ class _ReferralScreenState extends State<ReferralScreen> {
               ),
               const SizedBox(height: 5),
               Text(
-                'Share your link. When a friend finishes their first race, '
-                'you BOTH earn coins.',
+                referralHeadlineCopy(
+                  referrerCoins: _referrerCoins,
+                  refereeCoins: _refereeCoins,
+                ),
                 style: PixelText.body(
                   size: 14,
                   color: AppColors.of(
@@ -528,15 +545,114 @@ class _ReferralScreenState extends State<ReferralScreen> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Invite copy (items 12 + 16, batch 2026-07-27)
+//
+// Every string below takes the reward figures as NULLABLE arguments read off
+// the API response, and every one has a number-free form for when they are
+// absent. Two rules the builders enforce so no caller can get it wrong:
+//
+//   1. A figure is printed only when BOTH sides are known. Knowing one half of
+//      a two-sided deal is not enough to describe it, and stating one side's
+//      number while hand-waving the other reads worse than stating neither.
+//   2. Nothing here falls back to a literal. If the backend stops sending the
+//      figures — or is simply older than this build — the copy quietly loses
+//      its numbers instead of promising an amount the server may not pay.
+// ---------------------------------------------------------------------------
+
+/// True when both figures are present and payable, i.e. safe to state.
+bool _statable(int? referrerCoins, int? refereeCoins) =>
+    referrerCoins != null &&
+    refereeCoins != null &&
+    referrerCoins > 0 &&
+    refereeCoins > 0;
+
+/// The referral screen's headline blurb.
+String referralHeadlineCopy({int? referrerCoins, int? refereeCoins}) {
+  if (!_statable(referrerCoins, refereeCoins)) {
+    return 'Send your link. Coins land in both bags when your friend '
+        'finishes their first race.';
+  }
+  if (referrerCoins == refereeCoins) {
+    return 'Send your link. When your friend finishes their first race, you '
+        'each pocket ${formatCoinsWithCommas(referrerCoins!)} coins.';
+  }
+  return 'Send your link. When your friend finishes their first race, you '
+      'pocket ${formatCoinsWithCommas(referrerCoins!)} coins and they get '
+      '${formatCoinsWithCommas(refereeCoins!)}.';
+}
+
+/// The Get Coins hub's invite row. Names the qualifying action — the old line
+/// said coins arrive "when a friend joins with your link", which they don't.
+String referralInviteRowCopy({int? referrerCoins, int? refereeCoins}) {
+  if (!_statable(referrerCoins, refereeCoins)) {
+    return 'Coins land in both bags when a friend finishes their first race.';
+  }
+  if (referrerCoins == refereeCoins) {
+    return 'You each pocket ${formatCoinsWithCommas(referrerCoins!)} coins '
+        'when a friend finishes their first race.';
+  }
+  return 'Pocket ${formatCoinsWithCommas(referrerCoins!)} coins when a friend '
+      'finishes their first race. They get '
+      '${formatCoinsWithCommas(refereeCoins!)}.';
+}
+
+/// Toast after a code is redeemed. Speaks only for the referee's side, so the
+/// referee figure alone is enough here.
+String referralRedeemedCopy({int? refereeCoins}) {
+  if (refereeCoins == null || refereeCoins <= 0) {
+    return "You're in. Finish your first race and the coins are yours.";
+  }
+  return "You're in. Finish your first race and "
+      '${formatCoinsWithCommas(refereeCoins)} coins are yours.';
+}
+
+/// The outbound share message. Opens with a taunt (this is a competitive app
+/// and the recipient is being challenged, not marketed to), then the code, the
+/// reward, and the link. [steps] is today's live count when Health answered in
+/// time; null swaps in the countless taunt.
+String referralShareText({
+  required String code,
+  required String url,
+  int? steps,
+  int? referrerCoins,
+  int? refereeCoins,
+}) {
+  final opener = steps != null && steps > 0
+      ? "I'm at ${formatCoinsWithCommas(steps)} steps today. Think you can "
+            'beat that?'
+      : "Bet you can't out-step me.";
+
+  final String reward;
+  if (!_statable(referrerCoins, refereeCoins)) {
+    reward = "there's a coin drop in it for both of us";
+  } else if (referrerCoins == refereeCoins) {
+    reward = "we'll each pocket ${formatCoinsWithCommas(referrerCoins!)} coins";
+  } else {
+    reward =
+        "I'll pocket ${formatCoinsWithCommas(referrerCoins!)} coins and "
+        "you'll get ${formatCoinsWithCommas(refereeCoins!)}";
+  }
+
+  return '$opener Race me on Bara with code $code — $reward once you finish '
+      'your first race: $url';
+}
+
 /// Challenge-framed share copy: a personal taunt with today's live step count
 /// beats a generic referral blurb for open rates. Embeds both the raw code and
 /// the link so a friend who lands on the App Store can still type the code
 /// manually if the deferred match misses. Public so other entry points (home
 /// empty-state) reuse it.
+///
+/// [referrerCoins]/[referreeCoins] are optional so an older call site that
+/// never learned the figures still compiles — and still produces correct,
+/// number-free copy.
 Future<void> shareReferral(
   BuildContext context, {
   required String code,
   required String url,
+  int? referrerCoins,
+  int? refereeCoins,
 }) async {
   // Best-effort live step count for the taunt; ~2s budget, silent fallback to
   // the countless copy (share must never hang or fail on a Health hiccup).
@@ -549,18 +665,25 @@ Future<void> shareReferral(
   } catch (_) {}
   if (!context.mounted) return;
 
-  final text = steps != null && steps > 0
-      ? "I'm at ${formatStepsWithCommas(steps)} steps today — think you can "
-            "beat me? Race me on Bara with code $code and we'll both earn "
-            "coins when you finish your first race: $url"
-      : "Bet you can't out-step me. Race me on Bara with code $code and "
-            "we'll both earn coins when you finish your first race: $url";
-  return shareText(context, text);
+  return shareText(
+    context,
+    referralShareText(
+      code: code,
+      url: url,
+      steps: steps,
+      referrerCoins: referrerCoins,
+      refereeCoins: refereeCoins,
+    ),
+  );
 }
 
 /// 8432 -> "8,432". Local helper (shared with the race-detail share copy).
-String formatStepsWithCommas(int steps) {
-  final digits = steps.toString();
+String formatStepsWithCommas(int steps) => formatCoinsWithCommas(steps);
+
+/// 1000 -> "1,000". Same grouping as [formatStepsWithCommas]; named for the
+/// reward figures so the call sites read honestly.
+String formatCoinsWithCommas(int value) {
+  final digits = value.toString();
   final buffer = StringBuffer();
   for (var i = 0; i < digits.length; i++) {
     if (i > 0 && (digits.length - i) % 3 == 0) buffer.write(',');

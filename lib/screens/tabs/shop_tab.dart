@@ -12,6 +12,7 @@ import '../../widgets/app_refresh_indicator.dart';
 import '../../widgets/accessory_thumbnail.dart';
 import '../../widgets/arcade_fx.dart';
 import '../../widgets/coin_balance_badge.dart';
+import '../../widgets/coin_glyph.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/info_toast.dart';
 import '../../widgets/loading_skeleton.dart';
@@ -80,6 +81,9 @@ class _AdUnlockConfig {
 enum _AffordRoute { affordable, watchAds, getCoins }
 
 enum _ShopSection { store, inventory }
+
+/// Where a [_ShopTile]'s chip sits over the art.
+enum _TileBadgeAlignment { right, center }
 
 enum _ShopCategory { powerups, characters, accessories }
 
@@ -932,6 +936,7 @@ class _ShopTabState extends State<ShopTab> {
       art: art(),
       name: 'Capybara',
       badge: equipped ? 'EQUIPPED' : null,
+      badgeAlignment: _TileBadgeAlignment.center,
       highlighted: equipped,
       // No CLEAR: clearing the capybara has no meaning — it IS the cleared
       // state. An equipped capybara's strip is inert, like an owned powerup's.
@@ -989,7 +994,7 @@ class _ShopTabState extends State<ShopTab> {
           switch (route) {
             _AffordRoute.affordable => PillButton(
                 label: 'BUY · $price',
-                icon: Icons.monetization_on_rounded,
+                leading: const CoinGlyph(size: 16),
                 variant: PillButtonVariant.secondary,
                 fontSize: 14,
                 fullWidth: true,
@@ -1032,18 +1037,13 @@ class _ShopTabState extends State<ShopTab> {
     return _ShopTile(
       art: _cosmeticArt(item),
       name: name,
-      // Item 2: same for cosmetics — the strip's CTA never hides the number.
-      priceBadge: route == _AffordRoute.affordable ? null : price,
-      stripLabel: switch (route) {
-        _AffordRoute.affordable => '$price',
-        _AffordRoute.watchAds => _watchAdsStripLabel(adsNeeded),
-        _AffordRoute.getCoins => 'Get coins',
-      },
-      stripIcon: switch (route) {
-        _AffordRoute.affordable => Icons.monetization_on_rounded,
-        _AffordRoute.watchAds => Icons.smart_display_rounded,
-        _AffordRoute.getCoins => Icons.add_circle_rounded,
-      },
+      // Item 23 — the strip is the PRICE, in every affordability state. It
+      // stopped advertising the action ("Get coins" / "Watch 2 ads"), which is
+      // what pushed the number off the tile and needed a second price chip
+      // over the art to put it back. One number, one place. The sheet still
+      // carries the route-specific CTA, and the tile opens it either way.
+      stripLabel: '$price',
+      stripLeading: const CoinGlyph(),
       stripEnabled: !_saving,
       onStrip: openSheet,
       onTap: openSheet,
@@ -1062,6 +1062,7 @@ class _ShopTabState extends State<ShopTab> {
       art: _cosmeticArt(item),
       name: name,
       badge: equipped ? 'EQUIPPED' : null,
+      badgeAlignment: _TileBadgeAlignment.center,
       highlighted: equipped,
       stripLabel: equipped ? 'CLEAR' : 'EQUIP',
       stripIcon: equipped ? Icons.close_rounded : Icons.check_rounded,
@@ -1371,9 +1372,6 @@ class _ShopTabState extends State<ShopTab> {
     );
   }
 
-  String _watchAdsStripLabel(int adsNeeded) =>
-      adsNeeded == 1 ? 'Watch 1 ad' : 'Watch $adsNeeded ads';
-
   /// A one-line explanation for the detail sheet when the ONLY reason the ad
   /// route is missing is that today's unlock is already spent. Without it the
   /// sheet silently looks like the item is simply too expensive.
@@ -1596,32 +1594,13 @@ class _ShopTabState extends State<ShopTab> {
       ],
     );
 
-    // Strip label reflects the primary action; the tap always opens the sheet
-    // where the matching button lives (so a coin-zeroing unlock is explicit).
-    final String stripLabel;
-    final IconData stripIcon;
-    if (affordable) {
-      stripLabel = '$price';
-      stripIcon = Icons.monetization_on_rounded;
-    } else if (canAdUnlock) {
-      stripLabel = _watchAdsStripLabel(adsNeeded);
-      stripIcon = Icons.smart_display_rounded;
-    } else {
-      stripLabel = 'Get coins';
-      stripIcon = Icons.add_circle_rounded;
-    }
-
     return _ShopTile(
       art: _powerupArt(type),
       name: name,
       badge: owned > 0 ? 'x$owned' : null,
-      // Item 2: the price is now on the tile whether or not it's affordable.
-      // When the item IS affordable the strip already prints the number, so the
-      // badge only appears where the price would otherwise have vanished —
-      // behind a "Watch 2 ads" / "Get coins" CTA. One price per tile, never two.
-      priceBadge: affordable ? null : price,
-      stripLabel: stripLabel,
-      stripIcon: stripIcon,
+      // Item 23 — the strip is the PRICE, always. See _storeCosmeticTile.
+      stripLabel: '$price',
+      stripLeading: const CoinGlyph(),
       stripEnabled: !_saving,
       onStrip: openSheet,
       onTap: openSheet,
@@ -1640,7 +1619,7 @@ class _ShopTabState extends State<ShopTab> {
     if (affordable) {
       return PillButton(
         label: 'BUY · $price',
-        icon: Icons.monetization_on_rounded,
+        leading: const CoinGlyph(size: 16),
         variant: PillButtonVariant.secondary,
         fontSize: 14,
         fullWidth: true,
@@ -1953,34 +1932,69 @@ class _ShopTile extends StatelessWidget {
     required this.art,
     required this.name,
     required this.stripLabel,
-    required this.stripIcon,
     required this.stripEnabled,
     required this.onStrip,
     required this.onTap,
+    this.stripIcon,
+    this.stripLeading,
     this.badge,
-    this.priceBadge,
+    this.badgeAlignment = _TileBadgeAlignment.right,
     this.highlighted = false,
-  });
+  }) : assert(
+         stripIcon != null || stripLeading != null,
+         'the strip needs a glyph',
+       );
 
   final Widget art;
   final String name;
 
-  /// Item 2 — the coin price, ALWAYS shown for a store item.
-  ///
-  /// The strip's label follows the primary action, so an unaffordable item's
-  /// strip reads "Get coins" / "Watch 1 ad" and the number vanished from the
-  /// tile entirely. This chip lives in the art area's top-left (the `xN` owned
-  /// badge is top-right), so it costs the strip no width and can't reintroduce
-  /// item 1's truncation. Null on inventory/owned tiles, which have no price.
-  final int? priceBadge;
   final String stripLabel;
-  final IconData stripIcon;
+
+  /// The strip's glyph. [stripLeading] wins when both are given — how a price
+  /// strip shows the paw coin while EQUIP/CLEAR/xN keep their Material icons.
+  final IconData? stripIcon;
+  final Widget? stripLeading;
   final bool stripEnabled;
   final VoidCallback? onStrip;
   final VoidCallback onTap;
 
   /// Small chip over the art (EQUIPPED / xN).
   final String? badge;
+
+  /// Where that chip sits. `xN` is a corner marker and stays top-right;
+  /// EQUIPPED is a statement about the whole tile, so it is centred over the
+  /// art rather than tucked into a corner.
+  final _TileBadgeAlignment badgeAlignment;
+
+  Widget _badgeChip(BuildContext context) => Container(
+    key: const Key('shop-tile-badge'),
+    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+    decoration: BoxDecoration(
+      color: highlighted
+          ? AppColors.of(context).pillGold
+          : AppColors.of(context).roofMid,
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(
+        color: highlighted
+            ? AppColors.of(context).pillGoldDark
+            : AppColors.of(context).roofDark,
+      ),
+    ),
+    child: Text(
+      badge!,
+      // `textLight`, NOT `parchment` (spec §6). `parchment` is a SURFACE
+      // token — cream by day, near-black navy at night — so using it as a
+      // text color painted near-black on the dark-green `roofMid` pill.
+      // `textLight` is cream in both palettes, which is what the day design
+      // intended. The `highlighted` branch is already correct.
+      style: PixelText.title(
+        size: 10,
+        color: highlighted
+            ? AppColors.of(context).textDark
+            : AppColors.of(context).textLight,
+      ),
+    ),
+  );
 
   /// Gold frame for equipped items.
   final bool highlighted;
@@ -2045,79 +2059,23 @@ class _ShopTile extends StatelessWidget {
                         ),
                       ),
                     ),
-                    if (priceBadge != null)
-                      Positioned(
-                        top: 4,
-                        left: 4,
-                        child: Container(
-                          padding: const EdgeInsets.fromLTRB(4, 2, 6, 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.of(context).parchmentLight,
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(
-                              color: AppColors.of(context).parchmentBorder,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.monetization_on_rounded,
-                                size: 10,
-                                color: AppColors.of(context).pillGoldShadow,
-                              ),
-                              const SizedBox(width: 3),
-                              Text(
-                                '$priceBadge',
-                                key: const Key('shop-price-badge-text'),
-                                maxLines: 1,
-                                style: PixelText.title(
-                                  size: 10,
-                                  color: AppColors.of(context).textDark,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
                     if (badge != null)
-                      Positioned(
-                        top: 4,
-                        right: 4,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: highlighted
-                                ? AppColors.of(context).pillGold
-                                : AppColors.of(context).roofMid,
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(
-                              color: highlighted
-                                  ? AppColors.of(context).pillGoldDark
-                                  : AppColors.of(context).roofDark,
+                      // Item 22 — EQUIPPED is a statement about the whole
+                      // tile, so it reads centred over the art. Pinning both
+                      // edges gives the Center a full-width box; the xN
+                      // quantity marker keeps its original top-right inset.
+                      badgeAlignment == _TileBadgeAlignment.center
+                          ? Positioned(
+                              top: 4,
+                              left: 0,
+                              right: 0,
+                              child: Center(child: _badgeChip(context)),
+                            )
+                          : Positioned(
+                              top: 4,
+                              right: 4,
+                              child: _badgeChip(context),
                             ),
-                          ),
-                          child: Text(
-                            badge!,
-                            // `textLight`, NOT `parchment` (spec §6).
-                            // `parchment` is a SURFACE token — cream by day,
-                            // near-black navy at night — so using it as a text
-                            // color painted near-black on the dark-green
-                            // `roofMid` pill. `textLight` is cream in both
-                            // palettes, which is what the day design intended.
-                            // The `highlighted` branch is already correct.
-                            style: PixelText.title(
-                              size: 10,
-                              color: highlighted
-                                  ? AppColors.of(context).textDark
-                                  : AppColors.of(context).textLight,
-                            ),
-                          ),
-                        ),
-                      ),
                   ],
                 ),
               ),
@@ -2164,13 +2122,14 @@ class _ShopTile extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        stripIcon,
-                        size: 13,
-                        color: onStrip == null
-                            ? AppColors.of(context).textMid
-                            : AppColors.of(context).pillGoldShadow,
-                      ),
+                      stripLeading ??
+                          Icon(
+                            stripIcon,
+                            size: 13,
+                            color: onStrip == null
+                                ? AppColors.of(context).textMid
+                                : AppColors.of(context).pillGoldShadow,
+                          ),
                       const SizedBox(width: 4),
                       Flexible(
                         child: Text(

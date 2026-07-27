@@ -435,7 +435,7 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
               'SAVE',
               style: PixelText.pill(
                 size: 12,
-                color: AppColors.of(context).roofMid,
+                color: AppColors.of(context).successText,
               ),
             ),
           ),
@@ -525,7 +525,7 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
               'REVIEW AGAIN',
               style: PixelText.pill(
                 size: 12,
-                color: AppColors.of(context).roofMid,
+                color: AppColors.of(context).successText,
               ),
             ),
           ),
@@ -859,7 +859,7 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
                 size: 11,
                 color: changed == 0
                     ? AppColors.of(context).textMid
-                    : AppColors.of(context).roofMid,
+                    : AppColors.of(context).successText,
               ),
             ),
           ],
@@ -1141,7 +1141,7 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
               ),
               child: Text(
                 type,
-                style: PixelText.body(size: 10, color: colors.roofDark),
+                style: PixelText.body(size: 10, color: colors.successText),
               ),
             ),
         ],
@@ -1436,7 +1436,7 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
                           'ACTIVE',
                           style: PixelText.pill(
                             size: 9,
-                            color: AppColors.of(context).roofMid,
+                            color: AppColors.of(context).successText,
                           ),
                         ),
                       ],
@@ -1559,7 +1559,7 @@ class _DiffTile extends StatelessWidget {
               '${row.before} → ${row.after}',
               style: PixelText.number(
                 size: 13,
-                color: AppColors.of(context).roofMid,
+                color: AppColors.of(context).successText,
               ),
             ),
           ],

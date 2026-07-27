@@ -182,6 +182,140 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
     );
   }
 
+  /// Who can join — the same two-segment control the create screen uses. The
+  /// old single switch flipped its own label (PRIVATE RACE / PUBLIC RACE), so
+  /// an off switch next to the word "PRIVATE" read as "private is off" and
+  /// people set the opposite of what they meant. Both options are named at
+  /// once; only the selection moves.
+  Widget _buildVisibilityPicker() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'WHO CAN JOIN',
+          style: PixelText.title(
+            size: 13,
+            color: AppColors.of(context).textMid,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: AppColors.of(context).parchmentDark,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: AppColors.of(context).parchmentBorder,
+              width: 2,
+            ),
+          ),
+          child: Row(
+            children: [
+              _visibilitySegment(
+                key: const Key('race-visibility-private'),
+                label: 'PRIVATE',
+                icon: Icons.lock_rounded,
+                selected: !_isPublic,
+                onTap: () => setState(() => _isPublic = false),
+              ),
+              const SizedBox(width: 4),
+              _visibilitySegment(
+                key: const Key('race-visibility-public'),
+                label: 'PUBLIC',
+                icon: Icons.public_rounded,
+                selected: _isPublic,
+                onTap: () => setState(() => _isPublic = true),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          _isPublic ? 'ANYONE CAN JOIN' : 'INVITE ONLY',
+          key: const Key('race-visibility-subcopy'),
+          style: PixelText.body(
+            size: 11,
+            color: AppColors.of(context).textMid,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// One carved segment, matching the create screen's RACE FORMAT signpost.
+  Widget _visibilitySegment({
+    required Key key,
+    required String label,
+    required IconData icon,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        key: key,
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            gradient: selected
+                ? LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      AppColors.of(context).roofLight,
+                      AppColors.of(context).roofMid,
+                    ],
+                  )
+                : null,
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(
+              color: selected
+                  ? AppColors.of(context).roofDark
+                  : Colors.transparent,
+              width: 2,
+            ),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: AppColors.of(context).roofDark,
+                      offset: const Offset(0, 2),
+                      blurRadius: 0,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 15,
+                color: selected ? Colors.white : AppColors.of(context).textMid,
+              ),
+              const SizedBox(width: 5),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.fade,
+                  style: PixelText.title(
+                    size: 11.5,
+                    color: selected
+                        ? Colors.white
+                        : AppColors.of(context).textMid,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   /// TR-105: the PENDING team-race editor — the two team-name plaques and
   /// the carved size stepper, matching the create flow's signpost language.
   Widget _buildTeamCard() {
@@ -882,52 +1016,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        _isPublic
-                                            ? 'PUBLIC RACE'
-                                            : 'PRIVATE RACE',
-                                        style: PixelText.title(
-                                          size: 13,
-                                          color: AppColors.of(context).textMid,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        _isPublic
-                                            ? 'ANYONE CAN JOIN'
-                                            : 'INVITE ONLY',
-                                        style: PixelText.body(
-                                          size: 11,
-                                          color: _isPublic
-                                              ? AppColors.of(
-                                                  context,
-                                                ).pillGreenDark
-                                              : AppColors.of(context).textMid,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  SizedBox(
-                                    height: 28,
-                                    child: Switch.adaptive(
-                                      value: _isPublic,
-                                      activeTrackColor: AppColors.of(
-                                        context,
-                                      ).pillGreenDark,
-                                      onChanged: (v) =>
-                                          setState(() => _isPublic = v),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              _buildVisibilityPicker(),
                               // TR-101/105: a team race's field cap is derived
                               // (2 x teamSize) — the runner-cap chips don't
                               // apply; the size stepper above owns it.

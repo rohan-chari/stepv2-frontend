@@ -16,6 +16,7 @@ import '../../widgets/arcade_fx.dart';
 import '../../widgets/coach_tip.dart';
 import '../../widgets/coin_balance_badge.dart';
 import '../../widgets/global_event_banner.dart';
+import '../../widgets/hero_pace_sign.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/step_milestones_section.dart';
 import '../../widgets/streak_chip.dart' show StreakChip, StreakChipState;
@@ -246,15 +247,16 @@ class HomeTab extends StatelessWidget {
                                   child: banner,
                                 ),
                               ),
-                            if (raceCard != null)
-                              StaggerIn(index: 2, child: _buildRaceSection())
-                            else if (raceCardLoading)
-                              StaggerIn(
-                                index: 2,
-                                child: _buildRaceSkeletonSection(),
-                              ),
+                            // SETUP sits directly above the races: finishing
+                            // setup is a prerequisite for everything below it,
+                            // and a user with no name or photo is worse off in
+                            // every race they join. It collapses to a zero-
+                            // height SizedBox.shrink when there's nothing to
+                            // do, so a finished user sees no gap here. The
+                            // stagger indices below must stay in visual order
+                            // or the bounce-in cascade plays out of sequence.
                             StaggerIn(
-                              index: 3,
+                              index: 2,
                               child: _SetupPromptsSection(
                                 displayName: displayName,
                                 hasProfilePhoto: hasProfilePhoto,
@@ -266,6 +268,13 @@ class HomeTab extends StatelessWidget {
                                 showRenameChip: authService.onboardingV3Enabled,
                               ),
                             ),
+                            if (raceCard != null)
+                              StaggerIn(index: 3, child: _buildRaceSection())
+                            else if (raceCardLoading)
+                              StaggerIn(
+                                index: 3,
+                                child: _buildRaceSkeletonSection(),
+                              ),
                             StaggerIn(
                               index: 4,
                               child: KeyedSubtree(
@@ -825,22 +834,21 @@ class HomeTab extends StatelessWidget {
               top: topInset + (compact ? 52 : 72),
               child: hud,
             ),
-            // Pace summary sits on the dirt strip below the capybara's feet,
-            // like signage in the game world.
+            // The pace line stands on a wooden trail sign planted in the dirt
+            // strip, rather than floating on the scrolling brick texture with
+            // only a drop shadow holding it up (item 18). The sign is 40pt
+            // tall so its top edge clears the capybara's feet, which land at
+            // roughly `groundHeight - 4 - capySize * 0.22`.
             if (!(isLoading && stepData == null) && error == null)
               Positioned(
-                left: 24,
-                right: 24,
-                bottom: 16,
-                child: Text(
-                  _heroSummary(steps: stepData?.steps),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: PixelText.body(
-                    size: 13,
-                    color: AppColors.of(context).textLight,
-                  ).copyWith(shadows: _heroShadows),
+                left: 16,
+                right: 16,
+                bottom: 8,
+                child: Center(
+                  child: SizedBox(
+                    height: 40,
+                    child: HeroPaceSign(text: _heroSummary(steps: stepData?.steps)),
+                  ),
                 ),
               ),
             // The capybara stands on the grass line. The walk sprite has
@@ -1035,21 +1043,68 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
     _resolveRenameChip();
   }
 
+  /// Decides whether to offer the rename chip, from the server ledger when the
+  /// backend provides one and from the device-local ledger otherwise.
+  ///
+  /// The server path exists because "this account knows its generated name is
+  /// changeable" is a property of the account, not the handset — the local keys
+  /// are wiped by `signOut()`, which is why the chip used to come back after
+  /// every sign-out/sign-in cycle.
   Future<void> _resolveRenameChip() async {
     if (!widget.showRenameChip) return;
     final name = widget.displayName?.trim();
     if (name == null || name.isEmpty) return;
+
+    final auth = widget.authService;
+    if (auth.hasServerRenameChipState) {
+      if (auth.renameChipDismissedAt != null) return;
+      if ((auth.renameChipShownCount ?? 0) >=
+          OnboardingStateService.maxRenameChipShows) {
+        return;
+      }
+      if (!mounted) return;
+      setState(() => _showRenameChip = true);
+      _countOneImpression(auth: auth);
+      return;
+    }
+
+    // Older backend: neither field ever arrived, so fall back to the device-
+    // local ledger. Absent fields must never read as "0 / never dismissed".
     if (!await _onboardingState.shouldShowRenameChip()) return;
     if (!mounted) return;
-    await _onboardingState.recordRenameChipShown();
+    await _countOneImpression(auth: null);
     if (!mounted) return;
     setState(() => _showRenameChip = true);
+  }
+
+  /// Records at most one chip impression per app session, whichever ledger is
+  /// in play. Home lives in a `PageView` with no keep-alive, so
+  /// [_resolveRenameChip] re-runs on every tab swipe — uncounted, the
+  /// three-show budget burns out in three swipes. That defect is independent of
+  /// where the state is stored, so the guard covers the local path too.
+  ///
+  /// [auth] non-null selects the server ledger; null selects the local one.
+  Future<void> _countOneImpression({required AuthService? auth}) async {
+    if (OnboardingStateService.renameChipCountedThisSession) return;
+    OnboardingStateService.markRenameChipCountedThisSession();
+    if (auth != null) {
+      // Fire-and-forget: an older backend 404s this and must never toast.
+      unawaited(auth.recordRenameChipShown());
+      return;
+    }
+    await _onboardingState.recordRenameChipShown();
   }
 
   Future<void> _openRenameFromChip() async {
     // Tapping is the strongest possible signal that the message landed, so it
     // retires the chip permanently — whether or not the name actually changes.
-    await _onboardingState.dismissRenameChip();
+    // The write is optimistic and never reverts: a failed POST must not
+    // resurrect a nudge the user explicitly retired.
+    if (widget.authService.hasServerRenameChipState) {
+      unawaited(widget.authService.dismissRenameChip());
+    } else {
+      await _onboardingState.dismissRenameChip();
+    }
     if (mounted) setState(() => _showRenameChip = false);
     await _openDisplayNameScreen();
   }
@@ -1351,15 +1406,15 @@ class _HomeRaceHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dividerColor = AppColors.of(context).feltLine;
+    // No top rule. The old 12%-alpha white `feltLine` hairline belonged to the
+    // retired felt-table look; against the current card borders and the
+    // _SectionTick marker it read as a stray white line across the page — in
+    // both palettes, since the token had no night override.
     return Padding(
       padding: EdgeInsets.zero,
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 9),
-        decoration: BoxDecoration(
-          border: Border(top: BorderSide(color: dividerColor)),
-        ),
         child: Row(
           children: [
             const _SectionTick(),
@@ -1701,7 +1756,13 @@ class _HomeRaceActionRow extends StatelessWidget {
                     label,
                     style: PixelText.title(
                       size: 10,
-                      color: AppColors.of(context).roofMid,
+                      // `successText`, not `roofMid`: roofMid is a SURFACE
+                      // green, and at night (#214637 on the #1B2A34 parchment
+                      // card) the eyebrow — INVITE / ACTIVE / LIVE / FINISHED
+                      // / PUBLIC / OPEN — vanished at ~1.2:1. successText is
+                      // the text-role token: identical to roofMid by day, and
+                      // a legible #8CC6A8 at night.
+                      color: AppColors.of(context).successText,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -1792,15 +1853,22 @@ class _SmallRaceButton extends StatelessWidget {
               width: 1.5,
             ),
           ),
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: PixelText.title(
-              size: 10,
-              color: muted
-                  ? AppColors.of(context).textMid
-                  : AppColors.of(context).textDark,
+          // The box is a fixed 78pt, so the longest label it is ever handed
+          // ("CHALLENGE") ellipsized at every screen width — the same silent
+          // truncation as PillButton's "EXTRA SPIN" (item 4). Shrink to fit
+          // instead; ellipsis stays as the last-resort backstop.
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: PixelText.title(
+                size: 10,
+                color: muted
+                    ? AppColors.of(context).textMid
+                    : AppColors.of(context).textDark,
+              ),
             ),
           ),
         ),
@@ -1820,12 +1888,10 @@ class _HomeSectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // See _HomeRaceHeader: the `feltLine` top rule is gone from both headers.
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 9),
-      decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: AppColors.of(context).feltLine)),
-      ),
       child: Row(
         children: [
           const _SectionTick(),

@@ -17,23 +17,45 @@ import 'pill_button.dart';
 /// anything box- or powerup-shaped here would be a lie the app cannot keep, so
 /// the framing stays vague and race-oriented. A test asserts the rendered copy
 /// contains neither word.
+/// The copy is overridable (batch 2026-07-27, item 19) so the in-race alert
+/// prompt can share this one surface instead of standing up a third
+/// notification-ask widget. Overrides are subject to the same constraint: no
+/// box- or powerup-shaped promise, because neither push exists.
 class NotificationAskDialog extends StatelessWidget {
   const NotificationAskDialog({
     super.key,
     required this.onEnable,
     required this.onNotNow,
+    this.title = defaultTitle,
+    this.body = defaultBody,
+    this.enableLabel = 'ENABLE',
   });
+
+  static const String defaultTitle = 'Stay in the race';
+  static const String defaultBody =
+      'Get notified about what’s happening in your races.';
 
   final VoidCallback onEnable;
   final VoidCallback onNotNow;
+  final String title;
+  final String body;
+  final String enableLabel;
 
   /// Shows the ask over [context]. Resolves to true when the user tapped
   /// ENABLE, false for NOT NOW or a barrier dismissal.
-  static Future<bool> show(BuildContext context) async {
+  static Future<bool> show(
+    BuildContext context, {
+    String title = defaultTitle,
+    String body = defaultBody,
+    String enableLabel = 'ENABLE',
+  }) async {
     final result = await showDialog<bool>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.62),
       builder: (dialogContext) => NotificationAskDialog(
+        title: title,
+        body: body,
+        enableLabel: enableLabel,
         onEnable: () => Navigator.of(dialogContext).pop(true),
         onNotNow: () => Navigator.of(dialogContext).pop(false),
       ),
@@ -77,19 +99,19 @@ class NotificationAskDialog extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              'Stay in the race',
+              title,
               textAlign: TextAlign.center,
               style: PixelText.title(size: 22, color: colors.textDark),
             ),
             const SizedBox(height: 8),
             Text(
-              'Get notified about what’s happening in your races.',
+              body,
               textAlign: TextAlign.center,
               style: PixelText.body(size: 14, color: colors.textMid),
             ),
             const SizedBox(height: 20),
             PillButton(
-              label: 'ENABLE',
+              label: enableLabel,
               variant: PillButtonVariant.primary,
               fullWidth: true,
               onPressed: onEnable,

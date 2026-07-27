@@ -20,7 +20,7 @@ class ReferralRulesScreen extends StatelessWidget {
       'How it works',
       'Share your personal invite link with a friend who is new to Bara. When '
           'they install Bara, sign in, and finish their first qualifying race, '
-          'you both earn coins.',
+          'you each earn coins.',
     ),
     (
       "What's a qualifying race",

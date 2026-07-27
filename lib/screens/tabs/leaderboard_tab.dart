@@ -16,10 +16,8 @@ import '../../widgets/game_container.dart';
 import '../../widgets/friend_request_sheet.dart';
 import '../../widgets/home_course_track.dart'
     show AnimatedCapybaraWithAccessories;
+import '../../widgets/leaderboard_visibility_toggle.dart';
 import '../../widgets/loading_skeleton.dart';
-import '../../widgets/pill_button.dart';
-
-enum _LeaderboardType { steps, races }
 
 enum _LeaderboardScope { global, friends }
 
@@ -55,68 +53,15 @@ extension on _LeaderboardScope {
   }
 }
 
-_LeaderboardType _leaderboardTypeFromApi(String apiValue) {
-  switch (apiValue) {
-    case 'races':
-      return _LeaderboardType.races;
-    case 'steps':
-    default:
-      return _LeaderboardType.steps;
-  }
-}
-
-extension on _LeaderboardType {
-  String get apiValue {
-    switch (this) {
-      case _LeaderboardType.steps:
-        return 'steps';
-      case _LeaderboardType.races:
-        return 'races';
-    }
-  }
-
-  String get label {
-    switch (this) {
-      case _LeaderboardType.steps:
-        return 'STEPS';
-      case _LeaderboardType.races:
-        return 'RACES';
-    }
-  }
-
-  String get emptyTitle {
-    switch (this) {
-      case _LeaderboardType.steps:
-        return 'No steps yet - get walking!';
-      case _LeaderboardType.races:
-        return 'No race records yet';
-    }
-  }
-
-  String? get emptySubtitle {
-    switch (this) {
-      case _LeaderboardType.steps:
-        return null;
-      case _LeaderboardType.races:
-        return 'Complete races to start building a podium record.';
-    }
-  }
-
-  IconData get emptyIcon {
-    switch (this) {
-      case _LeaderboardType.steps:
-        return Icons.directions_walk;
-      case _LeaderboardType.races:
-        return Icons.flag_rounded;
-    }
-  }
-}
-
 class LeaderboardTab extends StatefulWidget {
   final AuthService authService;
   final BackendApiService? backendApiService;
   final StepData? stepData;
   final String? displayName;
+
+  /// Ignored since batch 2026-07-27 item 1: the board is steps-only and the
+  /// races leaderboard is no longer reachable from the app. Kept so callers
+  /// (and frozen call sites) still compile; the tab always requests `steps`.
   final String requestedType;
   final String requestedPeriod;
   final int selectionNonce;
@@ -145,7 +90,6 @@ class LeaderboardTab extends StatefulWidget {
 
 class _LeaderboardTabState extends State<LeaderboardTab> {
   late final BackendApiService _api;
-  _LeaderboardType _selectedType = _LeaderboardType.steps;
   String _selectedPeriod = 'today';
   _LeaderboardScope _selectedScope = _LeaderboardScope.global;
   bool _isLoading = true;
@@ -170,10 +114,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   void initState() {
     super.initState();
     _api = widget.backendApiService ?? BackendApiService();
-    _selectedType = _leaderboardTypeFromApi(widget.requestedType);
-    _selectedPeriod = _selectedType == _LeaderboardType.steps
-        ? widget.requestedPeriod
-        : 'allTime';
+    _selectedPeriod = widget.requestedPeriod;
     _loadLeaderboard();
   }
 
@@ -182,19 +123,11 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     super.didUpdateWidget(oldWidget);
     if (widget.selectionNonce == oldWidget.selectionNonce) return;
 
-    final requestedType = _leaderboardTypeFromApi(widget.requestedType);
-    final requestedPeriod = requestedType == _LeaderboardType.steps
-        ? widget.requestedPeriod
-        : 'allTime';
+    // requestedType is ignored: the board is steps-only.
+    final requestedPeriod = widget.requestedPeriod;
+    if (requestedPeriod == _selectedPeriod) return;
 
-    if (requestedType == _selectedType && requestedPeriod == _selectedPeriod) {
-      return;
-    }
-
-    setState(() {
-      _selectedType = requestedType;
-      _selectedPeriod = requestedPeriod;
-    });
+    setState(() => _selectedPeriod = requestedPeriod);
     _loadLeaderboard();
   }
 
@@ -223,27 +156,22 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
       return;
     }
 
-    final requestType = _selectedType;
-    final requestPeriod = requestType == _LeaderboardType.steps
-        ? _selectedPeriod
-        : 'allTime';
+    final requestPeriod = _selectedPeriod;
     final requestScope = _selectedScope;
 
     try {
       final data = await _api.fetchLeaderboard(
         identityToken: token,
-        type: requestType.apiValue,
+        // Steps-only since batch 2026-07-27 item 1. The endpoint still accepts
+        // `races`; the app just never asks for it.
+        type: 'steps',
         period: requestPeriod,
         scope: requestScope.apiValue,
       );
 
       if (!mounted ||
-          requestType != _selectedType ||
           requestScope != _selectedScope ||
-          requestPeriod !=
-              (_selectedType == _LeaderboardType.steps
-                  ? _selectedPeriod
-                  : 'allTime')) {
+          requestPeriod != _selectedPeriod) {
         return;
       }
 
@@ -273,12 +201,6 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     _loadLeaderboard();
   }
 
-  void _selectType(_LeaderboardType type) {
-    if (type == _selectedType) return;
-    setState(() => _selectedType = type);
-    _loadLeaderboard();
-  }
-
   void _selectScope(_LeaderboardScope scope) {
     if (scope == _selectedScope) return;
     setState(() => _selectedScope = scope);
@@ -293,37 +215,19 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   }
 
   String _displayValue(Map<String, dynamic> entry) {
-    switch (_selectedType) {
-      case _LeaderboardType.steps:
-        return _formatSteps((entry['totalSteps'] as num?)?.toInt() ?? 0);
-      case _LeaderboardType.races:
-        final firsts = entry['firsts'] as int? ?? 0;
-        final seconds = entry['seconds'] as int? ?? 0;
-        final thirds = entry['thirds'] as int? ?? 0;
-        return '1ST $firsts  2ND $seconds  3RD $thirds';
-    }
+    return _formatSteps((entry['totalSteps'] as num?)?.toInt() ?? 0);
   }
 
   Widget _buildValueContent(_LeaderboardRow row) {
-    if (_selectedType != _LeaderboardType.races) {
-      return Text(
-        row.valueLabel,
-        style: PixelText.title(
-          size: _selectedType == _LeaderboardType.races ? 12 : 16,
-          color: row.isMe
-              ? AppColors.of(context).accent
-              : AppColors.of(context).textDark,
-        ),
-        textAlign: TextAlign.right,
-      );
-    }
-
-    return _RacePodiumBadges(
-      key: Key('leaderboard-race-podiums-${row.displayName}'),
-      firsts: row.firsts ?? 0,
-      seconds: row.seconds ?? 0,
-      thirds: row.thirds ?? 0,
-      isMe: row.isMe,
+    return Text(
+      row.valueLabel,
+      style: PixelText.title(
+        size: 16,
+        color: row.isMe
+            ? AppColors.of(context).accent
+            : AppColors.of(context).textDark,
+      ),
+      textAlign: TextAlign.right,
     );
   }
 
@@ -369,7 +273,32 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
           padding: const EdgeInsets.fromLTRB(10, 12, 10, 8),
           child: _buildLeaderboardState(),
         ),
+        _buildVisibilityFooter(),
       ],
+    );
+  }
+
+  /// The board's own privacy control, moved here from Settings (batch
+  /// 2026-07-27 item 1): the setting now sits under the thing it governs.
+  Widget _buildVisibilityFooter() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 6, 10, 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 6),
+            child: Text(
+              'PRIVACY',
+              style: PixelText.title(
+                size: 13,
+                color: AppColors.of(context).textLight,
+              ).copyWith(shadows: _textShadows),
+            ),
+          ),
+          LeaderboardVisibilityToggle(authService: widget.authService),
+        ],
+      ),
     );
   }
 
@@ -451,30 +380,6 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     );
   }
 
-  Widget _buildTypeTabs() {
-    final types = _LeaderboardType.values;
-
-    return Row(
-      children: [
-        for (int i = 0; i < types.length; i++) ...[
-          if (i > 0) const SizedBox(width: 8),
-          Expanded(
-            child: PillButton(
-              label: types[i].label,
-              onPressed: () => _selectType(types[i]),
-              variant: types[i] == _selectedType
-                  ? PillButtonVariant.secondary
-                  : PillButtonVariant.accent,
-              fontSize: 11,
-              fullWidth: true,
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
   // The scope section header for the podium / board: the active scope's title
   // centred in the container, with a compact globe/friends icon toggle pinned
   // to the right.
@@ -538,18 +443,14 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                   ),
                 ),
               ),
-              const SizedBox(height: 14),
-              _buildTypeTabs(),
-              if (_selectedType == _LeaderboardType.steps) ...[
-                const SizedBox(height: 10),
-                FilterDropdown<String>(
-                  value: _selectedPeriod,
-                  options: [for (final (val, label) in _periods) (val, label)],
-                  onChanged: (val) {
-                    if (val != null) _selectPeriod(val);
-                  },
-                ),
-              ],
+              const SizedBox(height: 12),
+              FilterDropdown<String>(
+                value: _selectedPeriod,
+                options: [for (final (val, label) in _periods) (val, label)],
+                onChanged: (val) {
+                  if (val != null) _selectPeriod(val);
+                },
+              ),
             ],
           ),
         ),
@@ -557,14 +458,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     );
   }
 
-  double get _valueColumnWidth {
-    switch (_selectedType) {
-      case _LeaderboardType.steps:
-        return 74;
-      case _LeaderboardType.races:
-        return 140;
-    }
-  }
+  static const double _valueColumnWidth = 74;
 
   Widget _buildEmptyState() {
     // On the friends scope an empty board means "no friends to compete with"
@@ -572,13 +466,10 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     final bool friendsScope = _selectedScope == _LeaderboardScope.friends;
     final IconData emptyIcon = friendsScope
         ? Icons.group_add_rounded
-        : _selectedType.emptyIcon;
+        : Icons.directions_walk;
     final String emptyTitle = friendsScope
         ? 'No friends on the board yet. Add some to compete!'
-        : _selectedType.emptyTitle;
-    final String? emptySubtitle = friendsScope
-        ? null
-        : _selectedType.emptySubtitle;
+        : 'No steps yet - get walking!';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 28),
@@ -598,17 +489,6 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
             ).copyWith(shadows: _textShadows),
             textAlign: TextAlign.center,
           ),
-          if (emptySubtitle != null) ...[
-            const SizedBox(height: 6),
-            Text(
-              emptySubtitle,
-              style: PixelText.body(
-                size: 14,
-                color: AppColors.of(context).textMid,
-              ).copyWith(shadows: _textShadows),
-              textAlign: TextAlign.center,
-            ),
-          ],
         ],
       ),
     );
@@ -853,10 +733,6 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   }
 
   Widget _buildPodiumValue(_LeaderboardRow row, {required double valueSize}) {
-    if (_selectedType == _LeaderboardType.races) {
-      return FittedBox(fit: BoxFit.scaleDown, child: _buildValueContent(row));
-    }
-
     return Text(
       row.valueLabel,
       maxLines: 1,
@@ -1313,95 +1189,6 @@ class _SkeletonPodiumTile extends StatelessWidget {
           color: AppColors.of(context).parchmentBorder,
           width: 1,
         ),
-      ),
-    );
-  }
-}
-
-class _RacePodiumBadges extends StatelessWidget {
-  const _RacePodiumBadges({
-    super.key,
-    required this.firsts,
-    required this.seconds,
-    required this.thirds,
-    required this.isMe,
-  });
-
-  final int firsts;
-  final int seconds;
-  final int thirds;
-  final bool isMe;
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 4,
-      runSpacing: 4,
-      alignment: WrapAlignment.end,
-      children: [
-        _RacePodiumBadge(
-          label: '1ST',
-          count: firsts,
-          fill: AppColors.of(context).medalGold.withValues(alpha: 0.18),
-          border: AppColors.of(context).medalGold,
-          textColor: isMe
-              ? AppColors.of(context).accent
-              : AppColors.of(context).textDark,
-        ),
-        _RacePodiumBadge(
-          label: '2ND',
-          count: seconds,
-          fill: AppColors.of(context).medalSilver.withValues(alpha: 0.2),
-          border: AppColors.of(context).medalSilver.withValues(alpha: 0.9),
-          textColor: isMe
-              ? AppColors.of(context).accent
-              : AppColors.of(context).textDark,
-        ),
-        _RacePodiumBadge(
-          label: '3RD',
-          count: thirds,
-          fill: AppColors.of(context).medalBronze.withValues(alpha: 0.2),
-          border: AppColors.of(context).medalBronze.withValues(alpha: 0.9),
-          textColor: isMe
-              ? AppColors.of(context).accent
-              : AppColors.of(context).textDark,
-        ),
-      ],
-    );
-  }
-}
-
-class _RacePodiumBadge extends StatelessWidget {
-  const _RacePodiumBadge({
-    required this.label,
-    required this.count,
-    required this.fill,
-    required this.border,
-    required this.textColor,
-  });
-
-  final String label;
-  final int count;
-  final Color fill;
-  final Color border;
-  final Color textColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      decoration: BoxDecoration(
-        color: fill,
-        borderRadius: BorderRadius.circular(7),
-        border: Border.all(color: border, width: 1),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(label, style: PixelText.title(size: 8.5, color: textColor)),
-          const SizedBox(width: 4),
-          Text('$count', style: PixelText.number(size: 11, color: textColor)),
-        ],
       ),
     );
   }

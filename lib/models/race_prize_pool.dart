@@ -21,7 +21,13 @@ library;
 const int kPrizeCoinUnit = 20;
 
 /// Per-race ceiling (`PRIZE_POOL_MAX_COINS`).
-const int kPrizePoolMaxCoins = 3200;
+///
+/// 16,000 is the largest pool the formula can produce at the legal field cap:
+/// 100 players x 8 duration points x 20 coins. `validateMaxParticipants` tops a
+/// user-created race out at 100, so the ceiling is non-binding for every race a
+/// user can build. It still bounds seeded challenges, whose field comes from the
+/// seed row and can exceed 100.
+const int kPrizePoolMaxCoins = 16000;
 
 /// Per-bracket ceiling — tournaments keep their tighter existing cap
 /// (`MAX_CHAMPION_PRIZE`), not the race cap (spec §4.4 / D9).

@@ -74,6 +74,13 @@ class AuthService extends ChangeNotifier {
   static const _keyProfilePhotoUrl = 'auth_profile_photo_url';
   static const _keyProfilePhotoPromptDismissedAt =
       'auth_profile_photo_prompt_dismissed_at';
+  // Server-backed home rename-chip ledger. These cache a property of the
+  // ACCOUNT (the server is the source of truth and refills them on the next
+  // sign-in), which is why they live under the `auth_*` prefix and are cleared
+  // by signOut — unlike the device-scoped `rename_chip_*` keys in
+  // OnboardingStateService, which are the old-backend fallback.
+  static const _keyRenameChipShownCount = 'auth_rename_chip_shown_count';
+  static const _keyRenameChipDismissedAt = 'auth_rename_chip_dismissed_at';
   static const _keySessionToken = 'auth_session_token';
   static const _keyIsAdmin = 'auth_is_admin';
   static const _keyCoins = 'auth_coins';
@@ -115,6 +122,9 @@ class AuthService extends ChangeNotifier {
   String? _displayName;
   String? _profilePhotoUrl;
   String? _profilePhotoPromptDismissedAt;
+  int? _renameChipShownCount;
+  String? _renameChipDismissedAt;
+  bool _hasServerRenameChipState = false;
   String? _sessionToken;
   bool _isAdmin = false;
   int _coins = 0;
@@ -144,6 +154,23 @@ class AuthService extends ChangeNotifier {
   String? get displayName => _displayName;
   String? get profilePhotoUrl => _profilePhotoUrl;
   String? get profilePhotoPromptDismissedAt => _profilePhotoPromptDismissedAt;
+
+  /// How many times this ACCOUNT has been shown the home rename chip, per the
+  /// backend. Null when the backend never sent the field — read it together
+  /// with [hasServerRenameChipState], never on its own.
+  int? get renameChipShownCount => _renameChipShownCount;
+
+  /// When this account retired the home rename chip (ISO-8601), or null.
+  String? get renameChipDismissedAt => _renameChipDismissedAt;
+
+  /// Whether the backend speaks the rename-chip contract — true once either
+  /// field has arrived in a payload (or is cached from one).
+  ///
+  /// False is NOT "count 0, never dismissed": it means an older backend, and
+  /// the caller must fall back to the device-local `OnboardingStateService`
+  /// ledger. Treating it as zero would re-show the chip to everyone pointed at
+  /// a stale backend.
+  bool get hasServerRenameChipState => _hasServerRenameChipState;
   bool get isAdmin => _isAdmin;
   int get coins => _coins;
   int get heldCoins => _heldCoins;
@@ -250,6 +277,13 @@ class AuthService extends ChangeNotifier {
     _profilePhotoPromptDismissedAt = prefs.getString(
       _keyProfilePhotoPromptDismissedAt,
     );
+    // A cached value can only have come from a backend that sends the fields,
+    // so its presence is what re-selects the server path on a cold start —
+    // before /auth/me has answered. Absent on both = older backend.
+    _renameChipShownCount = prefs.getInt(_keyRenameChipShownCount);
+    _renameChipDismissedAt = prefs.getString(_keyRenameChipDismissedAt);
+    _hasServerRenameChipState =
+        _renameChipShownCount != null || _renameChipDismissedAt != null;
     _sessionToken = prefs.getString(_keySessionToken);
     _isAdmin = prefs.getBool(_keyIsAdmin) ?? false;
     _coins = prefs.getInt(_keyCoins) ?? 0;
@@ -486,6 +520,54 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Records one home rename-chip impression on the user row.
+  ///
+  /// Fire-and-forget by contract: an older backend 404s the route, and that
+  /// must never toast or block the chip. The caller guarantees at-most-once per
+  /// app session, so there is no retry and no local pre-increment — an
+  /// unreachable backend just means one extra impression later.
+  Future<void> recordRenameChipShown() async {
+    final token = authToken;
+    if (token == null || token.isEmpty) return;
+    try {
+      final user = await _backendApiService.recordRenameChipShown(
+        identityToken: token,
+      );
+      await syncFromBackendUser(user);
+    } catch (_) {
+      // Deliberately silent.
+    }
+  }
+
+  /// Retires the home rename chip for this account.
+  ///
+  /// Optimistic and — unlike [updateLeaderboardVisibility] — deliberately
+  /// NON-reverting: the user explicitly retired the nudge, so a network blip
+  /// must not un-dismiss it. A failed POST costs at most a re-show on a later
+  /// launch, which the next successful dismiss fixes.
+  Future<void> dismissRenameChip() async {
+    final stamp = DateTime.now().toUtc().toIso8601String();
+    _renameChipDismissedAt ??= stamp;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyRenameChipDismissedAt, _renameChipDismissedAt!);
+    notifyListeners();
+
+    final token = authToken;
+    if (token == null || token.isEmpty) return;
+    try {
+      final user = await _backendApiService.dismissRenameChip(
+        identityToken: token,
+      );
+      applyBackendUser(user);
+      // Never let a null from an unexpected payload shape undo the dismissal.
+      _renameChipDismissedAt ??= stamp;
+      await prefs.setString(_keyRenameChipDismissedAt, _renameChipDismissedAt!);
+      notifyListeners();
+    } catch (_) {
+      // Deliberately silent, and deliberately not reverted.
+    }
+  }
+
   /// Sets whether the user is hidden from the global leaderboard. Updates local
   /// state + persists + notifies optimistically so the toggle reflects the
   /// change immediately, then pushes to the backend. On failure (e.g. an older
@@ -559,6 +641,21 @@ class AuthService extends ChangeNotifier {
     if (backendUser.containsKey('profilePhotoPromptDismissedAt')) {
       _profilePhotoPromptDismissedAt =
           backendUser['profilePhotoPromptDismissedAt'] as String?;
+    }
+    // Additive rename-chip ledger. Same containsKey guard as everything above:
+    // an older backend omits both keys, which must leave the client on the
+    // legacy local path rather than reading as "0 / never dismissed". A garbled
+    // type (`as int?` / `as String?` yielding null on a wrong shape) leaves the
+    // previous value, but still marks the contract as spoken.
+    if (backendUser.containsKey('renameChipShownCount')) {
+      _hasServerRenameChipState = true;
+      final raw = backendUser['renameChipShownCount'];
+      if (raw is int) _renameChipShownCount = raw;
+    }
+    if (backendUser.containsKey('renameChipDismissedAt')) {
+      _hasServerRenameChipState = true;
+      final raw = backendUser['renameChipDismissedAt'];
+      if (raw is String || raw == null) _renameChipDismissedAt = raw as String?;
     }
     if (backendUser.containsKey('isAdmin')) {
       _isAdmin = backendUser['isAdmin'] as bool? ?? false;
@@ -670,6 +767,9 @@ class AuthService extends ChangeNotifier {
     _displayName = null;
     _profilePhotoUrl = null;
     _profilePhotoPromptDismissedAt = null;
+    _renameChipShownCount = null;
+    _renameChipDismissedAt = null;
+    _hasServerRenameChipState = false;
     _sessionToken = null;
     _coins = 0;
     _heldCoins = 0;
@@ -695,6 +795,11 @@ class AuthService extends ChangeNotifier {
     await prefs.remove(_keyDisplayName);
     await prefs.remove(_keyProfilePhotoUrl);
     await prefs.remove(_keyProfilePhotoPromptDismissedAt);
+    // Correct to clear: these cache server state, and the next sign-in refills
+    // them from the user row — which is the whole point of moving the ledger
+    // off the device.
+    await prefs.remove(_keyRenameChipShownCount);
+    await prefs.remove(_keyRenameChipDismissedAt);
     await prefs.remove(_keySessionToken);
     await prefs.remove(_keyIsAdmin);
     await prefs.remove(_keyHeldCoins);
@@ -945,6 +1050,12 @@ class AuthService extends ChangeNotifier {
         _keyProfilePhotoPromptDismissedAt,
         _profilePhotoPromptDismissedAt!,
       );
+    }
+    if (_renameChipShownCount != null) {
+      await prefs.setInt(_keyRenameChipShownCount, _renameChipShownCount!);
+    }
+    if (_renameChipDismissedAt != null) {
+      await prefs.setString(_keyRenameChipDismissedAt, _renameChipDismissedAt!);
     }
     if (_sessionToken != null) {
       await prefs.setString(_keySessionToken, _sessionToken!);
