@@ -231,18 +231,10 @@ class _StartScreenState extends State<StartScreen> {
     // Tall phones leave a lot of empty sky between the wordmark and the
     // ground, so the mascot scales up with the available height.
     final capySize = compact ? 146.0 : (heroHeight > 840 ? 214.0 : 184.0);
-    final treelineHeight = compact ? 76.0 : 96.0;
     return Stack(
       children: [
-        // Horizon hedge, tiled behind the mascot. Title-screen only: the
-        // home tab's hero deliberately keeps its sky empty behind the HUD.
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: groundHeight - 8,
-          height: treelineHeight,
-          child: const IgnorePointer(child: HeroTreeline()),
-        ),
+        // No horizon hedge here: the title screen shows the same bare
+        // sky + ground scene the home tab's hero uses.
         Positioned(
           top: compact ? 8 : 18,
           left: 20,
