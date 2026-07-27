@@ -27,6 +27,7 @@ import '../widgets/ad_banner_slot.dart';
 import '../widgets/arcade_fx.dart';
 import '../widgets/arcade_tab_selector.dart';
 import '../widgets/app_avatar.dart';
+import '../widgets/capped_scroll_list.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/global_event_banner.dart';
 import '../widgets/goal_track.dart';
@@ -4179,10 +4180,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                           _buildTeamTwoColumns(participants),
                         ],
                       )
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [..._buildLeaderboardRows(participants)],
-                      ),
+                    : _standingsList(_buildLeaderboardRows(participants)),
               ),
             ],
           ),
@@ -5740,12 +5738,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               _checkerSectionHeader('FINAL STANDINGS'),
               _sectionCard(
                 padding: const EdgeInsets.all(8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: isTeamRace
-                      ? _buildTeamGroupedRows(participants)
-                      : _buildLeaderboardRows(participants),
-                ),
+                child: isTeamRace
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: _buildTeamGroupedRows(participants),
+                      )
+                    : _standingsList(_buildLeaderboardRows(participants)),
               ),
             ],
           ),
@@ -6755,6 +6753,33 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         profilePhotoUrl: p['profilePhotoUrl'] as String?,
       ),
       child: cell,
+    );
+  }
+
+  /// Above this many runners the standings stop growing the page and scroll
+  /// inside a fixed window instead. At or below it the list renders exactly as
+  /// it always has, so small races are untouched.
+  static const int _kStandingsScrollThreshold = 10;
+
+  /// The standings window height: about ten planks (~48px for the first, ~52px
+  /// for each after), also clamped against the viewport so the section can't
+  /// swallow a short screen.
+  double _standingsWindowHeight() =>
+      math.min(520.0, MediaQuery.of(context).size.height * 0.55);
+
+  /// Wraps [rows] so a long roster scrolls within the card rather than pushing
+  /// POWERUPS and ACTIVITY far down the page.
+  Widget _standingsList(List<Widget> rows) {
+    if (rows.length <= _kStandingsScrollThreshold) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: rows,
+      );
+    }
+    return CappedScrollList(
+      maxHeight: _standingsWindowHeight(),
+      fadeColor: AppColors.of(context).parchment,
+      children: rows,
     );
   }
 

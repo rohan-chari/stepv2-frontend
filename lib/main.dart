@@ -23,6 +23,14 @@ import 'utils/app_version_gate.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Portrait-only on both platforms. Every screen is laid out for a portrait
+  // phone (the hero scene, the race track and the pixel-art chrome all size off
+  // height), and landscape has never been designed for. Locking here covers
+  // Android too; the iOS side is additionally pinned in Info.plist so the app
+  // cannot rotate before Flutter boots.
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+
   await BackgroundSyncBootstrapService().persistBackendBaseUrl();
 
   // FCM/Firebase is Android-only. iOS push stays on the native APNs bridge and

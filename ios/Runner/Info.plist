@@ -70,8 +70,12 @@
 	<string>Bara uses the camera so you can take a profile photo.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>This app needs access to your step count data to display your daily steps.</string>
+	<!-- Bara never writes to Health. This key exists only because the HealthKit
+	     entitlement declares it; the app requests READ access to step count and
+	     nothing else. Keep the wording read-only so it matches the App Store
+	     description and the "Health = App Functionality only" privacy label. -->
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>This app needs access to update your health data.</string>
+	<string>Bara does not write to Health. This permission is requested only so your step count can be read.</string>
 	<!-- AdMob app ID (rewarded extra daily spin). Real "Bara - Step Challenges
 	     (iOS)" AdMob app; one AdMob iOS app covers prod + staging since both
 	     share this bundle id. The SDK crashes on launch if this key is missing.
@@ -717,18 +721,13 @@
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
+	<!-- Portrait only. Every screen is designed for a portrait phone; landscape
+	     was never laid out. The ~ipad variant is gone along with iPad support
+	     (TARGETED_DEVICE_FAMILY = 1). Mirrored in main.dart via
+	     SystemChrome.setPreferredOrientations so Android matches. -->
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
-	<key>UISupportedInterfaceOrientations~ipad</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationPortraitUpsideDown</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 </dict>
 </plist>
