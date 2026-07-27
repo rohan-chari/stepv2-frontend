@@ -84,7 +84,10 @@ void main() {
       myUserId: auth.userId!,
       myDisplayName: auth.displayName!,
       clock: clock.call,
-    );
+      // These tests are about the RACE. The create + invite prologue that now
+      // opens the demo has its own suite (demo_race_prologue_test.dart); every
+      // beat number below is the race's, not the prologue's.
+    )..skipPrologue();
     return (
       auth: auth,
       engine: engine,
@@ -137,10 +140,7 @@ void main() {
     expect(find.text(kDemoBeatCopy[DemoBeat.intro]!.title), findsOneWidget);
     // The real standings, with the real user in 2nd behind the scripted leader.
     expect(find.textContaining('Sam Rivera'), findsWidgets);
-    expect(
-      find.textContaining('${ctx.auth.displayName} (you)'),
-      findsWidgets,
-    );
+    expect(find.textContaining('${ctx.auth.displayName} (you)'), findsWidgets);
     expect(ctx.engine.myPlacement, 2);
     // The real countdown chip, near two minutes.
     final shown = renderedCountdown();
@@ -158,7 +158,9 @@ void main() {
     await tapCoach(tester);
 
     expect(find.text(kDemoBeatCopy[DemoBeat.openBox]!.title), findsOneWidget);
-    expect(boxSlots(), findsNWidgets(2));
+    // Three boxes and nothing pre-owned: the Shortcut is what box 3 rolls.
+    expect(boxSlots(), findsNWidgets(3));
+    expect(heldSlots(), findsNothing);
 
     await tester.tap(boxSlots().first);
     await settleDemo(tester);
@@ -166,9 +168,36 @@ void main() {
 
     await openABoxTail(tester);
 
-    // One box left, and the boost is now a held slot on the real screen.
-    expect(boxSlots(), findsNWidgets(1));
-    expect(heldSlots(), findsNWidgets(2));
+    // Two boxes left, and the boost is now a held slot on the real screen.
+    expect(boxSlots(), findsNWidgets(2));
+    expect(heldSlots(), findsNWidgets(1));
+    expect(find.text(kDemoBeatCopy[DemoBeat.useBoost]!.title), findsOneWidget);
+  });
+
+  testWidgets('the coach stays quiet behind the unbox reveal', (tester) async {
+    // The engine commits the roll BEFORE the reel finishes, so the next beat's
+    // copy used to render behind the UNBOXED card — the coach said "A Shortcut.
+    // Now take the lead." while the card was still telling the user what they
+    // had just found.
+    final ctx = build();
+    await pumpHost(tester, ctx);
+    await tapCoach(tester);
+
+    await tester.tap(boxSlots().first);
+    await settleDemo(tester);
+
+    expect(find.byType(CaseOpeningScreen), findsOneWidget);
+    expect(
+      find.byKey(const Key('demo-coach-card')),
+      findsNothing,
+      reason: 'nothing coaches the next beat over the reveal of this one',
+    );
+    expect(find.byKey(const Key('demo-skip')), findsNothing);
+
+    await openABoxTail(tester);
+
+    // Dismissed: the coach is back, on the beat the roll unlocked.
+    expect(find.byKey(const Key('demo-coach-card')), findsOneWidget);
     expect(find.text(kDemoBeatCopy[DemoBeat.useBoost]!.title), findsOneWidget);
   });
 
@@ -218,6 +247,38 @@ void main() {
   });
 
   // -- 7 / 8 / 16d -----------------------------------------------------------
+
+  testWidgets('the picker refuses a rival the coach did not name', (
+    tester,
+  ) async {
+    // "Tap it and pick Sam" has to be enforced, or it is a suggestion: every
+    // row in the REAL picker is live, so the targeting beat could be finished
+    // by ignoring the only instruction it gives.
+    final ctx = build();
+    await pumpHost(tester, ctx);
+    await runToShortcutBeat(tester, ctx);
+
+    await tester.tap(heldSlots().first);
+    await settleDemo(tester);
+    await tester.tap(find.text('USE'));
+    await settleDemo(tester);
+
+    await tester.tap(find.textContaining('Priya N.').last);
+    await settleDemo(tester);
+
+    // Sheet still open, nothing spent, beat unmoved.
+    expect(find.text('CHOOSE A TARGET'), findsOneWidget);
+    expect(ctx.engine.beat, DemoBeat.useShortcut);
+    expect(ctx.engine.stepsFor('demo-priya'), greaterThan(0));
+
+    // And the coach is still on screen to carry the shake.
+    expect(find.byKey(const Key('demo-coach-card')), findsOneWidget);
+
+    // Sam is accepted.
+    await tester.tap(find.textContaining('Sam Rivera').last);
+    await settleDemo(tester);
+    expect(ctx.engine.myPlacement, 1);
+  });
 
   testWidgets('7/8/16d — the REAL target picker excludes the user and lists '
       'three rivals; picking Sam takes 1st in the REAL standings', (
@@ -284,7 +345,7 @@ void main() {
   testWidgets('11 — skip works at every beat, grants no coins, never crashes', (
     tester,
   ) async {
-    for (final stopAfter in [0, 1, 2, 3, 4, 5, 6]) {
+    for (final stopAfter in [0, 1, 2, 3, 4, 5, 6, 7]) {
       final ctx = build();
       await pumpHost(tester, ctx);
       await advanceBeats(tester, ctx, stopAfter);
@@ -293,12 +354,10 @@ void main() {
       await tester.tap(find.byKey(const Key('demo-skip')));
       await settleDemo(tester);
 
-      expect(ctx.completions, [false], reason: 'skipped after $stopAfter beats');
-      expect(
-        ctx.auth.coins,
-        1840,
-        reason: 'a skip grants no coins (D4)',
-      );
+      expect(ctx.completions, [
+        false,
+      ], reason: 'skipped after $stopAfter beats');
+      expect(ctx.auth.coins, 1840, reason: 'a skip grants no coins (D4)');
     }
   });
 
@@ -326,6 +385,7 @@ void main() {
     await useHeldPowerup(tester, 'COMPRESSION_SOCKS');
     await settleDemo(tester, frames: 40);
     await dismissBlockedModal(tester);
+    await openABox(tester);
     await useShortcutOn(tester, 'Sam Rivera');
     ctx.clock.advance(DemoRaceEngine.finalCountdown);
     await settleDemo(tester, frames: 100);
@@ -385,11 +445,7 @@ void main() {
       await settleDemo(tester, frames: 60);
       final now = renderedCountdown();
       expect(now, isNotNull);
-      expect(
-        now! <= last!,
-        isTrue,
-        reason: 'countdown went up: $last -> $now',
-      );
+      expect(now! <= last!, isTrue, reason: 'countdown went up: $last -> $now');
       last = now;
     }
   });
@@ -490,11 +546,9 @@ void main() {
     await tester.binding.handlePopRoute();
     await settleDemo(tester);
 
-    expect(
-      ctx.completions,
-      [false],
-      reason: 'back is the skip affordance, not a silent exit',
-    );
+    expect(ctx.completions, [
+      false,
+    ], reason: 'back is the skip affordance, not a silent exit');
   });
 
   // -- 18 --------------------------------------------------------------------
@@ -507,10 +561,7 @@ void main() {
     await settleDemo(tester);
 
     var events = await queuedEvents();
-    expect(
-      events.where((e) => e['name'] == 'tutorial_opened').length,
-      1,
-    );
+    expect(events.where((e) => e['name'] == 'tutorial_opened').length, 1);
     expect(
       (events.firstWhere((e) => e['name'] == 'tutorial_opened')['context']
           as Map)['source'],
@@ -528,7 +579,9 @@ void main() {
       isA<String>(),
       reason: 'the wire type for step is a decimal string (F7)',
     );
-    expect((skipped['context'] as Map)['step'], '2');
+    // The live beat, not a hardcoded index: the coach was asking for the
+    // first box when the user skipped.
+    expect((skipped['context'] as Map)['step'], DemoBeat.openBox.stepValue);
   });
 
   testWidgets('18b — the demo action events are recorded', (tester) async {
@@ -571,9 +624,7 @@ Future<void> openABox(WidgetTester tester) async {
 
 Finder heldSlotOfType(String type) => find.byWidgetPredicate(
   (w) =>
-      w is ItemSlot &&
-      w.state == ItemSlotState.held &&
-      w.powerupType == type,
+      w is ItemSlot && w.state == ItemSlotState.held && w.powerupType == type,
 );
 
 /// Uses the held powerup of [type] through the real sheet's USE button.
@@ -586,7 +637,8 @@ Future<void> useHeldPowerup(WidgetTester tester, String type) async {
   await settleDemo(tester);
 }
 
-/// Plays beats 1-6 so the Shortcut beat is live.
+/// Plays beats 1-7 so the Shortcut beat is live. The Shortcut is not pre-owned:
+/// beat 7 is the third box, and opening it is what puts it on the tray.
 Future<void> runToShortcutBeat(WidgetTester tester, dynamic ctx) async {
   await tapCoach(tester);
   await openABox(tester);
@@ -595,6 +647,7 @@ Future<void> runToShortcutBeat(WidgetTester tester, dynamic ctx) async {
   await useHeldPowerup(tester, 'COMPRESSION_SOCKS');
   await settleDemo(tester, frames: 40);
   await dismissBlockedModal(tester);
+  await openABox(tester);
 }
 
 /// Plays the first [count] user-driven beats, for the skip-at-every-beat sweep.
@@ -617,6 +670,8 @@ Future<void> advanceBeats(WidgetTester tester, dynamic ctx, int count) async {
       await settleDemo(tester);
     }
   }
+  // Beat 7: the third box, which rolls the Shortcut.
+  if (count >= 7) await openABox(tester);
 }
 
 Future<void> openABoxTail(WidgetTester tester) async {

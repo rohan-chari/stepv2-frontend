@@ -443,7 +443,7 @@ void main() {
       expect(find.text('NOTIFICATIONS'), findsNothing);
       // v3 puts the teaching step back in the critical path, before the race
       // intro. Under the demo-race spec that step is the playable demo race.
-      expect(find.text('START THE RACE'), findsOneWidget);
+      expect(find.text('START THE TUTORIAL'), findsOneWidget);
     });
 
     // 3. first denial -> error + TRY AGAIN, no escape.

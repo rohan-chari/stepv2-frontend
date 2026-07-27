@@ -57,10 +57,7 @@ class DemoRaceApiService extends BackendApiService {
   }) async {
     // `upgradeLevel` is ignored on purpose: the upgrade ladders are disabled in
     // demoMode (§5.7b), and an upgrade would charge coins.
-    return engine.usePowerup(
-      powerupId: powerupId,
-      targetUserId: targetUserId,
-    );
+    return engine.usePowerup(powerupId: powerupId, targetUserId: targetUserId);
   }
 
   /// Quicksand is not in the demo's inventory, so this is unreachable — but it
@@ -145,6 +142,75 @@ class DemoRaceApiService extends BackendApiService {
   Future<Map<String, dynamic>> fetchMe({required String identityToken}) async {
     return {'coins': null, 'heldCoins': null};
   }
+
+  // -- Race creation (the prologue, §5.1) -------------------------------------
+  //
+  // The demo opens on the REAL CreateRaceScreen, so every create path that
+  // screen can take has to land here. None of them post anything: they mark the
+  // engine's prologue beat and hand back the demo race the tutorial is about to
+  // run. A missing override here would create a REAL race on the user's
+  // account before they have finished onboarding.
+
+  @override
+  Future<Map<String, dynamic>> createRace({
+    required String identityToken,
+    required String name,
+    int buyInAmount = 0,
+    int maxDurationDays = 3,
+    bool powerupsEnabled = true,
+    int? powerupStepInterval,
+    String payoutPreset = 'WINNER_TAKES_ALL',
+    bool isPublic = false,
+    int? maxParticipants,
+    DateTime? scheduledStartAt,
+  }) async {
+    engine.markRaceCreated(durationDays: maxDurationDays);
+    return {'race': engine.raceDetails(_now, wallNow: DateTime.now())};
+  }
+
+  /// Teams are hidden in the demo's create screen, but the call site exists —
+  /// and an unoverridden one is a real team race on a real account.
+  @override
+  Future<Map<String, dynamic>> createTeamRace({
+    required String identityToken,
+    required String name,
+    required int teamSize,
+    int buyInAmount = 0,
+    int maxDurationDays = 3,
+    bool powerupsEnabled = true,
+    int? powerupStepInterval,
+    bool isPublic = false,
+    DateTime? scheduledStartAt,
+    String? teamAName,
+    String? teamBName,
+    String? creatorTeam,
+  }) async {
+    engine.markRaceCreated(durationDays: maxDurationDays);
+    return {'race': engine.raceDetails(_now, wallNow: DateTime.now())};
+  }
+
+  @override
+  Future<Map<String, dynamic>> createTournament({
+    required String identityToken,
+    required String name,
+    required int bracketSize,
+    required int matchupDurationDays,
+    int buyInAmount = 0,
+    bool powerupsEnabled = true,
+    int? powerupStepInterval,
+    bool isPublic = false,
+    List<String> inviteeIds = const [],
+  }) async {
+    engine.markRaceCreated();
+    return const {'tournament': null};
+  }
+
+  /// Cosmetic name pairs for the (hidden) teams mode. Served locally so the
+  /// screen never reaches for the pool.
+  @override
+  Future<(String, String)?> fetchTeamNameSuggestion({
+    required String identityToken,
+  }) async => null;
 
   // -- Race lifecycle: every one of these is a no-op ---------------------------
 

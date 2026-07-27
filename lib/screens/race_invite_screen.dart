@@ -19,11 +19,19 @@ class RaceInviteScreen extends StatefulWidget {
   /// hard-blocks at invite time (TR-707).
   final bool teamRaceMode;
 
+  /// Onboarding-demo send gate. Returns false to REFUSE the send, leaving the
+  /// screen open with the current selection intact. The demo asks for all
+  /// three rivals; without this the user could send one invite and land in a
+  /// race whose standings show four people. Null (the shipped app) always
+  /// sends.
+  final bool Function(List<String> selectedIds)? demoSendGate;
+
   const RaceInviteScreen({
     super.key,
     required this.friends,
     this.existingParticipantIds = const {},
     this.teamRaceMode = false,
+    this.demoSendGate,
   });
 
   @override
@@ -160,8 +168,13 @@ class _RaceInviteScreenState extends State<RaceInviteScreen> {
                             horizontal: 24,
                             vertical: 14,
                           ),
-                          onPressed: () =>
-                              Navigator.of(context).pop(_selectedIds.toList()),
+                          onPressed: () {
+                            final ids = _selectedIds.toList();
+                            if (!(widget.demoSendGate?.call(ids) ?? true)) {
+                              return;
+                            }
+                            Navigator.of(context).pop(ids);
+                          },
                         ),
                       ),
                   ],

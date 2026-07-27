@@ -3,7 +3,9 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../screens/create_race_screen.dart';
 import '../screens/race_detail_screen.dart';
+import '../screens/race_invite_screen.dart';
 import '../services/activation_analytics_service.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
@@ -81,6 +83,8 @@ class _DemoRaceHostState extends State<DemoRaceHost>
   final GlobalKey _stageKey = GlobalKey();
   final GlobalKey _powerupsKey = GlobalKey();
   final GlobalKey _clockKey = GlobalKey();
+  final GlobalKey _createKey = GlobalKey();
+  final GlobalKey _durationKey = GlobalKey();
 
   Rect? _anchorRect;
   late final AnimationController _nudge;
@@ -138,6 +142,28 @@ class _DemoRaceHostState extends State<DemoRaceHost>
     return false;
   }
 
+  /// Refuses an off-script target in the REAL picker and shakes the coach.
+  ///
+  /// "Tap it and pick Sam" was an instruction the app did not enforce: every
+  /// rival in the sheet was live, so the one beat that teaches targeting could
+  /// be completed by ignoring it. Same treatment as an off-script tray tap.
+  bool _gateTarget(String userId) {
+    if (_engine.beat != DemoBeat.useShortcut) return true;
+    if (userId == DemoRaceEngine.rivalLeaderUserId) return true;
+    _nudge.forward(from: 0);
+    unawaited(_analytics.record('tutorial_offscript_tap'));
+    return false;
+  }
+
+  /// Refuses a partial invite list and shakes the coach. The script asks for
+  /// all three; sending one would seat a race the standings do not match.
+  bool _gateInviteSend(List<String> selectedIds) {
+    if (selectedIds.length >= DemoRaceEngine.demoFriends.length) return true;
+    _nudge.forward(from: 0);
+    unawaited(_analytics.record('tutorial_offscript_tap'));
+    return false;
+  }
+
   @override
   void dispose() {
     _nudge.dispose();
@@ -177,6 +203,7 @@ class _DemoRaceHostState extends State<DemoRaceHost>
   GlobalKey? _anchorKey() => switch (kDemoBeatAnchor[_engine.beat]) {
     DemoAnchor.powerups => _powerupsKey,
     DemoAnchor.clock => _clockKey,
+    DemoAnchor.createButton => _createKey,
     _ => null,
   };
 
@@ -194,7 +221,20 @@ class _DemoRaceHostState extends State<DemoRaceHost>
     if (box == null || !box.attached || stage == null || !stage.attached) {
       return;
     }
-    final rect = box.localToGlobal(Offset.zero, ancestor: stage) & box.size;
+    var rect = box.localToGlobal(Offset.zero, ancestor: stage) & box.size;
+
+    // The create beat asks for two things — pick a duration, then press CREATE
+    // — so the mark has to hold both. Marking the button alone would leave the
+    // control the user is being told to touch sitting under the scrim.
+    if (_engine.beat == DemoBeat.createRace) {
+      final second = _durationKey.currentContext?.findRenderObject();
+      if (second is RenderBox && second.attached) {
+        rect = rect.expandToInclude(
+          second.localToGlobal(Offset.zero, ancestor: stage) & second.size,
+        );
+      }
+    }
+
     if (rect != _anchorRect) setState(() => _anchorRect = rect);
   }
 
@@ -313,11 +353,127 @@ class _DemoRaceHostState extends State<DemoRaceHost>
 
   // -- Build ------------------------------------------------------------------
 
+  /// The real screen this beat is taught on.
+  Widget _buildStage(DemoBeat beat) {
+    switch (beat) {
+      case DemoBeat.createRace:
+        // A nested Navigator, because CreateRaceScreen ends with
+        // `Navigator.pop(race)`. Without one, that pop would unwind the
+        // onboarding route the demo is sitting on. Here it pops a route inside
+        // the host, which the beat flip has already replaced.
+        return Navigator(
+          // A key per phase is load-bearing: without it Flutter reuses the
+          // Navigator element across the beat flip and quietly keeps serving
+          // the route it already built — the create screen would still be on
+          // screen after the race was created.
+          key: const ValueKey('demo-create-nav'),
+          onGenerateRoute: (settings) => MaterialPageRoute<void>(
+            settings: settings,
+            builder: (_) => CreateRaceScreen(
+              authService: _demoAuth,
+              backendApiService: _demoApi,
+              // Naming is not the lesson; the decision is how long it runs.
+              initialName: DemoRaceEngine.raceName,
+              demoMode: true,
+              tutorialDurationKey: _durationKey,
+              tutorialCreateKey: _createKey,
+            ),
+          ),
+        );
+      case DemoBeat.inviteFriends:
+        // The shipped invite screen. It takes a friends list and pops the
+        // selected ids — no API of its own, so there is nothing to fake.
+        //
+        // Its "INVITE N FRIENDS" button is docked at the bottom, exactly where
+        // the coach post sits. Rather than move the coach (every other beat
+        // speaks from the bottom edge), inflate the bottom inset: the screen's
+        // own SafeArea then lifts its button — and the tail of the friend list
+        // — clear of the post. A coach card covering the control it is asking
+        // you to press is the one failure this layout can have.
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            padding: MediaQuery.of(context).padding.copyWith(
+              bottom: MediaQuery.of(context).padding.bottom + _coachReserve,
+            ),
+          ),
+          child: _buildInviteNavigator(),
+        );
+      default:
+        return _buildRaceStage();
+    }
+  }
+
+  /// Height reserved under the invite screen for the coach post. The copy on
+  /// that beat is fixed (eyebrow + title + one line, no CTA), so the post's
+  /// height is deterministic.
+  static const double _coachReserve = 170;
+
+  Widget _buildInviteNavigator() {
+    return Navigator(
+      key: const ValueKey('demo-invite-nav'),
+      onGenerateRoute: (settings) {
+        final route = MaterialPageRoute<List<String>>(
+          settings: settings,
+          builder: (_) => RaceInviteScreen(
+            key: const Key('demo-invite-screen'),
+            friends: DemoRaceEngine.demoFriends,
+            demoSendGate: _gateInviteSend,
+          ),
+        );
+        // The screen reports through its pop result — both the "INVITE 3
+        // FRIENDS" button and the back arrow land here.
+        route.popped.then((value) {
+          _onInvitesSent(value is List<String> ? value : null);
+        });
+        return route;
+      },
+    );
+  }
+
+  Widget _buildRaceStage() {
+    return RaceDetailScreen(
+      authService: _demoAuth,
+      raceId: DemoRaceEngine.raceId,
+      backendApiService: _demoApi,
+      demoMode: true,
+      // notificationService and onBoxOpened are BOTH withheld: no OS
+      // prompt can fire over a fake race, and a demo box can never
+      // burn the real first-box notification trigger (G3).
+      tutorialPowerupsKey: _powerupsKey,
+      tutorialClockKey: _clockKey,
+      demoTapGate: _gateTap,
+      demoTargetGate: _gateTarget,
+    );
+  }
+
+  /// The invite screen popped. [selected] is null when the user backed out —
+  /// the beat advances either way (§5.7b: never strand anyone).
+  void _onInvitesSent(List<String>? selected) {
+    if (!mounted) return;
+    _engine.markFriendsInvited(selected ?? const []);
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = AppColors.of(context);
     final beat = _engine.beat;
     final copy = kDemoBeatCopy[beat]!;
+
+    // Whether the demo is the frontmost route. The box reel and the blocked-
+    // attack reveal are pushed on top of it, and the engine commits the roll
+    // BEFORE the reel finishes — so without this the coach was already saying
+    // "A Shortcut. Now take the lead." behind the UNBOXED card that was still
+    // telling the user what they had just rolled. Hiding the whole overlay
+    // while something is on top means the next beat lands only after the user
+    // has seen what they got. `ModalRoute.of` rebuilds on this changing, so
+    // the coach re-enters with its own intro animation on dismissal.
+    final isFrontmost = ModalRoute.of(context)?.isCurrent ?? true;
+
+    // …with one exception. On the Shortcut beat the thing on top is the target
+    // picker, and the instruction the user needs ("pick Sam") lives on the
+    // coach — as does the shake that answers a wrong pick. Hiding it there
+    // would leave a refused tap with no feedback at all.
+    final showCoach = isFrontmost || beat == DemoBeat.useShortcut;
 
     return PopScope(
       // §5.7b/D3: back and swipe-back are the skip affordance, never a silent
@@ -335,109 +491,116 @@ class _DemoRaceHostState extends State<DemoRaceHost>
           _measureAnchor();
           return false; // never swallow — the real screen still owns the scroll
         },
-        child: Stack(
-          key: _stageKey,
-          children: [
-            Positioned.fill(
-              child: RaceDetailScreen(
-                authService: _demoAuth,
-                raceId: DemoRaceEngine.raceId,
-                backendApiService: _demoApi,
-                demoMode: true,
-                // notificationService and onBoxOpened are BOTH withheld: no OS
-                // prompt can fire over a fake race, and a demo box can never
-                // burn the real first-box notification trigger (G3).
-                tutorialPowerupsKey: _powerupsKey,
-                tutorialClockKey: _clockKey,
-                demoTapGate: _gateTap,
-              ),
-            ),
+        // The coach post, the skip chip and the countdown are Stack siblings of
+        // RaceDetailScreen, so they sit OUTSIDE that screen's Scaffold — i.e.
+        // with no Material ancestor of their own. Text painted there falls back
+        // to the framework's untyped default, which is what drew the yellow
+        // double underline under every line of coach copy. A transparent
+        // Material hands the whole overlay the theme's text style without
+        // painting a surface.
+        child: Material(
+          type: MaterialType.transparency,
+          child: Stack(
+            key: _stageKey,
+            children: [
+              // The stage. Beats 1-2 are the prologue — the REAL create screen
+              // and the REAL invite screen — and everything after them is the
+              // race. Each is the shipped widget against the demo backend; none
+              // of the three is a mock-up of a screen.
+              Positioned.fill(child: _buildStage(beat)),
 
-            // Focus scrim. The demo shows the WHOLE race screen — leaderboard,
-            // powerup tray, activity/chat — so without this every region competes
-            // at equal weight and nothing says "look here". It dims everything
-            // except the anchor, which is what makes the coach post read as an
-            // instruction rather than one more panel.
-            //
-            // IgnorePointer is load-bearing: unlike the spotlight tutorial's
-            // opaque scrim, this must never swallow a tap. The highlighted
-            // control stays live, and so does the rest of the screen.
-            if (beat != DemoBeat.win)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: _FocusScrim(hole: _anchorRect, beat: beat),
-                ),
-              ),
-
-            // The mark. Behind an IgnorePointer so the highlighted control stays
-            // tappable — this is the central difference from the spotlight
-            // tutorial, whose opaque scrim swallows every tap.
-            if (_anchorRect != null && beat != DemoBeat.win)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: _CoachRing(
-                    rect: _anchorRect!,
-                    color: palette.pillGold,
+              // Focus scrim. The demo shows the WHOLE race screen — leaderboard,
+              // powerup tray, activity/chat — so without this every region competes
+              // at equal weight and nothing says "look here". It dims everything
+              // except the anchor, which is what makes the coach post read as an
+              // instruction rather than one more panel.
+              //
+              // IgnorePointer is load-bearing: unlike the spotlight tutorial's
+              // opaque scrim, this must never swallow a tap. The highlighted
+              // control stays live, and so does the rest of the screen.
+              // Not on the invite beat. There the ENTIRE screen is the lesson —
+              // three rows to tap and one button to press — and a full-screen
+              // dim with no hole made every one of them read as disabled. A
+              // scrim is only honest when something is actually excluded.
+              if (isFrontmost &&
+                  beat != DemoBeat.win &&
+                  beat != DemoBeat.inviteFriends)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: _FocusScrim(hole: _anchorRect, beat: beat),
                   ),
                 ),
-              ),
 
-            if (beat != DemoBeat.win)
-              Positioned(
-                right: 12,
-                top: MediaQuery.of(context).padding.top + 10,
-                child: _SkipChip(onTap: () => _finish(completed: false)),
-              ),
-
-            if (beat != DemoBeat.win)
-              Positioned(
-                left: 12,
-                right: 12,
-                bottom: MediaQuery.of(context).padding.bottom + 14,
-                child: _NudgeShake(
-                  controller: _nudge,
-                  child: _CoachPost(
-                    key: ValueKey(beat),
-                    beat: beat,
-                    title: copy.title,
-                    body: copy.body,
-                    cta: copy.cta,
-                    pointsUp: _anchorRect != null,
-                    onCta: switch (beat) {
-                      DemoBeat.intro => _engine.acknowledgeIntro,
-                      DemoBeat.blockedAttack => _engine.acknowledgeAttack,
-                      _ => null,
-                    },
+              // The mark. Behind an IgnorePointer so the highlighted control stays
+              // tappable — this is the central difference from the spotlight
+              // tutorial, whose opaque scrim swallows every tap.
+              if (isFrontmost && _anchorRect != null && beat != DemoBeat.win)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: _CoachRing(
+                      rect: _anchorRect!,
+                      color: palette.pillGold,
+                    ),
                   ),
                 ),
-              ),
 
-            // Beat 8's lesson IS the clock, so the clock has to be the loudest
-            // thing on screen. The hero chip renders it at 15px in white —
-            // right for a race you are already in, far too quiet for the moment
-            // you are being taught what running out feels like. This restates
-            // it directly under the marked chip rather than restyling the
-            // shared hero, which real races also render.
-            if (beat == DemoBeat.finish && _anchorRect != null)
-              Positioned(
-                left: 0,
-                right: 0,
-                top: _anchorRect!.bottom + 16,
-                child: IgnorePointer(
-                  child: _FinalCountdown(
-                    remaining: () => _engine.remainingAt(_engine.now()),
+              if (isFrontmost && beat != DemoBeat.win)
+                Positioned(
+                  right: 12,
+                  top: MediaQuery.of(context).padding.top + 10,
+                  child: _SkipChip(onTap: () => _finish(completed: false)),
+                ),
+
+              if (showCoach && beat != DemoBeat.win)
+                Positioned(
+                  left: 12,
+                  right: 12,
+                  bottom: MediaQuery.of(context).padding.bottom + 14,
+                  child: _NudgeShake(
+                    controller: _nudge,
+                    child: _CoachPost(
+                      key: ValueKey(beat),
+                      beat: beat,
+                      title: copy.title,
+                      body: copy.body,
+                      cta: copy.cta,
+                      pointsUp: _anchorRect != null,
+                      onCta: switch (beat) {
+                        DemoBeat.intro => _engine.acknowledgeIntro,
+                        DemoBeat.blockedAttack => _engine.acknowledgeAttack,
+                        _ => null,
+                      },
+                    ),
                   ),
                 ),
-              ),
 
-            if (beat == DemoBeat.win)
-              Positioned.fill(
-                child: _WinCard(
-                  displayName: _engine.myDisplayName,
-                  onContinue: () => _finish(completed: true),
+              // Beat 8's lesson IS the clock, so the clock has to be the loudest
+              // thing on screen. The hero chip renders it at 15px in white —
+              // right for a race you are already in, far too quiet for the moment
+              // you are being taught what running out feels like. This restates
+              // it directly under the marked chip rather than restyling the
+              // shared hero, which real races also render.
+              if (isFrontmost && beat == DemoBeat.finish && _anchorRect != null)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: _anchorRect!.bottom + 16,
+                  child: IgnorePointer(
+                    child: _FinalCountdown(
+                      remaining: () => _engine.remainingAt(_engine.now()),
+                    ),
+                  ),
                 ),
-              ),
-          ],
+
+              if (beat == DemoBeat.win)
+                Positioned.fill(
+                  child: _WinCard(
+                    displayName: _engine.myDisplayName,
+                    onContinue: () => _finish(completed: true),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -786,7 +949,7 @@ class _CoachPost extends StatelessWidget {
                 // design system that the board read as caption text on a screen
                 // full of louder elements.
                 Text(
-                  'STEP ${beat.number} OF 9',
+                  'STEP ${beat.number} OF $kDemoBeatCount',
                   style: PixelText.body(
                     size: 12,
                     color: palette.textMid,

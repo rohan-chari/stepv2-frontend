@@ -2180,6 +2180,14 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     );
   }
 
+  void _openFriendsTab() {
+    _pageController.animateToPage(
+      _friendsTabIndex,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   void _openRacesTab() {
     _pageController.animateToPage(
       _racesTabIndex,
@@ -2533,6 +2541,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                           shopCatalogState: _shopCatalogState,
                           onOpenRacesTab: _openRacesTab,
                           onOpenLeaderboardTab: _openLeaderboardTab,
+                          onOpenFriendsTab: _openFriendsTab,
                           onOpenShop: _openShop,
                           onAddProfilePhoto: _addOrChangeProfilePhoto,
                           onDismissProfilePhotoPrompt:

@@ -45,8 +45,23 @@ class DemoRaceEngine {
   static const String raceName = 'Demo Dash';
   static const String rivalLeaderUserId = 'demo-sam';
   static const String rivalLeaderName = 'Sam Rivera';
-  static const String shortcutPowerupId = 'demo-pw-shortcut';
-  static const List<String> mysteryBoxIds = ['demo-pw-box-1', 'demo-pw-box-2'];
+
+  /// The Shortcut is no longer handed to the user pre-owned — it is what the
+  /// THIRD box rolls. Rows keep their id when a box becomes a powerup, so this
+  /// is the third box's id both before and after it is opened.
+  static const String shortcutPowerupId = 'demo-pw-box-3';
+  static const List<String> mysteryBoxIds = [
+    'demo-pw-box-1',
+    'demo-pw-box-2',
+    shortcutPowerupId,
+  ];
+
+  /// What each box rolls, by **open order** (never by slot id).
+  static const List<String> boxRollOrder = [
+    'PROTEIN_SHAKE',
+    'COMPRESSION_SOCKS',
+    'SHORTCUT',
+  ];
 
   // -- Clock (§5.5 / D1) ------------------------------------------------------
 
@@ -99,6 +114,15 @@ class DemoRaceEngine {
 
   late final Map<String, int> _steps;
 
+  // Prologue (the create + invite beats). The demo opens on the REAL create
+  // screen, because "make a race and get your friends in it" is the loop the
+  // app lives or dies on — a user who only ever learns to open boxes in a race
+  // somebody else made never starts one.
+  bool _raceCreated = false;
+  bool _friendsInvited = false;
+  int _durationDays = 3;
+  final List<String> _invitedUserIds = [];
+
   bool _introAcknowledged = false;
   int _boxesOpened = 0;
   bool _boostUsed = false;
@@ -112,14 +136,7 @@ class DemoRaceEngine {
   /// Slot rows, in render order. Row ids are stable across the whole demo: a
   /// box row *becomes* the powerup it rolled, exactly as the server's does.
   late final List<Map<String, dynamic>> _inventory = [
-    {
-      'id': shortcutPowerupId,
-      'type': 'SHORTCUT',
-      'rarity': 'COMMON',
-      'status': 'HELD',
-    },
-    {'id': mysteryBoxIds[0], 'status': 'MYSTERY_BOX'},
-    {'id': mysteryBoxIds[1], 'status': 'MYSTERY_BOX'},
+    for (final id in mysteryBoxIds) {'id': id, 'status': 'MYSTERY_BOX'},
   ];
 
   final List<Map<String, dynamic>> _activity = [];
@@ -138,6 +155,54 @@ class DemoRaceEngine {
   bool get isCompleted => _completed;
   bool get shieldArmed => _shieldArmed;
   bool get attackResolved => _attackResolved;
+  bool get raceCreated => _raceCreated;
+  bool get friendsInvited => _friendsInvited;
+  int get durationDays => _durationDays;
+  List<String> get invitedUserIds => List.unmodifiable(_invitedUserIds);
+
+  /// The three rivals, in the shape `RaceInviteScreen` reads (`id` /
+  /// `displayName` / `profilePhotoUrl`). They are presented as friends the user
+  /// already has, so the prologue teaches the invite step without also having
+  /// to teach friending.
+  static const List<Map<String, dynamic>> demoFriends = [
+    {
+      'id': rivalLeaderUserId,
+      'displayName': rivalLeaderName,
+      'profilePhotoUrl': null,
+    },
+    {'id': 'demo-jordan', 'displayName': 'Jordan Lee', 'profilePhotoUrl': null},
+    {'id': 'demo-priya', 'displayName': 'Priya N.', 'profilePhotoUrl': null},
+  ];
+
+  /// Beat 1 is satisfied: the user created the race. [durationDays] is whatever
+  /// they picked and is echoed back in the coach copy — the demo race itself is
+  /// always the scripted two minutes.
+  void markRaceCreated({int? durationDays}) {
+    if (_raceCreated) return;
+    _raceCreated = true;
+    if (durationDays != null) _durationDays = durationDays;
+    _notify();
+  }
+
+  /// Beat 2 is satisfied: invites went out. Selecting nobody still advances —
+  /// the lesson landed, and stranding a user on a screen they've decided to
+  /// leave is worse than a slightly weaker demo.
+  void markFriendsInvited(List<String> userIds) {
+    if (_friendsInvited) return;
+    _friendsInvited = true;
+    _invitedUserIds
+      ..clear()
+      ..addAll(userIds);
+    _notify();
+  }
+
+  /// Jumps straight to the race. Used by the tests that are about the race
+  /// itself, and by any caller that has already run the prologue.
+  void skipPrologue() {
+    _raceCreated = true;
+    _friendsInvited = true;
+    _notify();
+  }
 
   // -- Beats (state-driven, §5.7b) --------------------------------------------
 
@@ -146,12 +211,15 @@ class DemoRaceEngine {
   /// wanders — or who satisfies a later goal early — never dead-ends.
   DemoBeat get beat {
     if (_completed) return DemoBeat.win;
+    if (!_raceCreated) return DemoBeat.createRace;
+    if (!_friendsInvited) return DemoBeat.inviteFriends;
     if (!_introAcknowledged) return DemoBeat.intro;
     if (_boxesOpened < 1) return DemoBeat.openBox;
     if (!_boostUsed) return DemoBeat.useBoost;
     if (_boxesOpened < 2) return DemoBeat.openSecondBox;
     if (!_shieldUsed) return DemoBeat.useShield;
     if (!_attackResolved || !_attackAcknowledged) return DemoBeat.blockedAttack;
+    if (_boxesOpened < 3) return DemoBeat.openThirdBox;
     if (!_shortcutUsed) return DemoBeat.useShortcut;
     return DemoBeat.finish;
   }
@@ -170,10 +238,15 @@ class DemoRaceEngine {
   /// always carries a CTA, so blocking cannot strand anyone.
   bool isOnScriptTap({required bool isMysteryBox, String? type}) =>
       switch (beat) {
-        DemoBeat.openBox || DemoBeat.openSecondBox => isMysteryBox,
+        DemoBeat.openBox ||
+        DemoBeat.openSecondBox ||
+        DemoBeat.openThirdBox => isMysteryBox,
         DemoBeat.useBoost => !isMysteryBox && type == 'PROTEIN_SHAKE',
         DemoBeat.useShield => !isMysteryBox && type == 'COMPRESSION_SOCKS',
         DemoBeat.useShortcut => !isMysteryBox && type == 'SHORTCUT',
+        // The prologue beats do not render the tray at all.
+        DemoBeat.createRace ||
+        DemoBeat.inviteFriends ||
         DemoBeat.intro ||
         DemoBeat.blockedAttack ||
         DemoBeat.finish ||
@@ -215,7 +288,7 @@ class DemoRaceEngine {
   /// who taps the second box first still gets the boost first.
   Map<String, dynamic> openBox(String powerupId) {
     final row = _rowFor(powerupId);
-    final type = _boxesOpened == 0 ? 'PROTEIN_SHAKE' : 'COMPRESSION_SOCKS';
+    final type = boxRollOrder[_boxesOpened.clamp(0, boxRollOrder.length - 1)];
     if (row != null && row['status'] == 'MYSTERY_BOX') {
       row['type'] = type;
       row['rarity'] = 'COMMON';
@@ -228,8 +301,7 @@ class DemoRaceEngine {
         'kind': 'SYSTEM',
         'eventType': 'MYSTERY_BOX_OPENED',
         'powerupType': type,
-        'body': 'You opened a mystery box and found a '
-            '${type == 'PROTEIN_SHAKE' ? 'Protein Shake' : 'pair of Compression Socks'}!',
+        'body': 'You opened a mystery box and found ${_articleFor(type)}!',
         'actorUserId': myUserId,
         'createdAt': DateTime.now().toIso8601String(),
       });
@@ -286,7 +358,7 @@ class DemoRaceEngine {
             'POWERUP_USED',
             type!,
             'You took a Shortcut and stole '
-            '${_formatSteps(stepsStolen)} steps.',
+                '${_formatSteps(stepsStolen)} steps.',
           );
       }
       if (type != null) onDemoEvent?.call('demo_powerup_used');
@@ -319,7 +391,8 @@ class DemoRaceEngine {
         'kind': 'SYSTEM',
         'eventType': 'POWERUP_USED',
         'powerupType': 'SHORTCUT',
-        'body': '$rivalLeaderName tried to steal 1,000 steps from you — '
+        'body':
+            '$rivalLeaderName tried to steal 1,000 steps from you — '
             'blocked!',
         'actorUserId': rivalLeaderUserId,
         'targetUserId': myUserId,
@@ -399,9 +472,13 @@ class DemoRaceEngine {
       'name': raceName,
       'status': _completed ? 'COMPLETED' : 'ACTIVE',
       'myStatus': 'ACCEPTED',
+      // Deliberately NOT the creator, even though the prologue had the user
+      // create it: `isCreator` unlocks cancel / kick / edit-settings on the
+      // real screen, and every one of those is a way to delete the race the
+      // tutorial is standing in.
       'isCreator': false,
       'tournamentId': null,
-      'maxDurationDays': 1,
+      'maxDurationDays': _durationDays,
       'buyInAmount': 0,
       'startedAt': _startedAt.toIso8601String(),
       'endsAt': (wallNow ?? now).add(remainingAt(now)).toIso8601String(),
@@ -475,6 +552,14 @@ class DemoRaceEngine {
       'demo-priya': 'Priya N.',
     }[userId]!;
   }
+
+  /// Reads out a rolled powerup in the activity feed's voice.
+  static String _articleFor(String type) => switch (type) {
+    'PROTEIN_SHAKE' => 'a Protein Shake',
+    'COMPRESSION_SOCKS' => 'a pair of Compression Socks',
+    'SHORTCUT' => 'a Shortcut',
+    _ => 'a powerup',
+  };
 
   void _pushActivity(String eventType, String powerupType, String body) {
     _activity.insert(0, {

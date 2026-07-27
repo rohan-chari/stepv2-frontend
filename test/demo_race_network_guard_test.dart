@@ -19,7 +19,9 @@ import 'package:flutter_test/flutter_test.dart';
 /// If this test fails: add the missing `@override` to
 /// `lib/demo/demo_race_api_service.dart`. Do not delete the assertion.
 void main() {
-  final demoSource = File('lib/demo/demo_race_api_service.dart').readAsStringSync();
+  final demoSource = File(
+    'lib/demo/demo_race_api_service.dart',
+  ).readAsStringSync();
 
   /// Every `<receiver>.<method>(` name called on an injected api handle in
   /// [path], for the given receiver names.
@@ -28,10 +30,7 @@ void main() {
     final pattern = RegExp(
       '(?:${receivers.map(RegExp.escape).join('|')})\\.([a-zA-Z0-9_]+)\\(',
     );
-    return pattern
-        .allMatches(source)
-        .map((m) => m.group(1)!)
-        .toSet();
+    return pattern.allMatches(source).map((m) => m.group(1)!).toSet();
   }
 
   bool overridesMethod(String name) =>
@@ -60,6 +59,46 @@ void main() {
     );
   });
 
+  test('DemoRaceApiService overrides every api call CreateRaceScreen makes', () {
+    // The demo's prologue renders the REAL create screen against the demo
+    // service. An unoverridden call here is worse than a leak on the race
+    // screen: `createRace` / `createTeamRace` / `createTournament` would put a
+    // REAL race on the account of a user who is still inside onboarding.
+    final calls = apiCallsIn('lib/screens/create_race_screen.dart', [
+      'widget.backendApiService',
+    ]);
+
+    expect(
+      calls,
+      contains('createRace'),
+      reason: 'the regex must still be matching the create call itself',
+    );
+
+    final missing = calls.where((m) => !overridesMethod(m)).toList()..sort();
+    expect(
+      missing,
+      isEmpty,
+      reason:
+          'CreateRaceScreen calls these on the injected api but '
+          'DemoRaceApiService does not override them: $missing',
+    );
+  });
+
+  test('RaceInviteScreen stays API-free', () {
+    // The invite beat renders it directly with a local friends list. A
+    // BackendApiService reference here would be an un-fakeable call site.
+    final source = File(
+      'lib/screens/race_invite_screen.dart',
+    ).readAsStringSync();
+    expect(
+      RegExp(r'BackendApiService').hasMatch(source),
+      isFalse,
+      reason:
+          'RaceInviteScreen must stay a pure picker; an api handle here would '
+          'bypass DemoRaceApiService entirely',
+    );
+  });
+
   test('DemoRaceApiService overrides every api call the chat/feed make', () {
     // The race screen hands `widget.backendApiService` to RaceChatService and
     // RaceFeedService, so their calls ride the same injection.
@@ -69,15 +108,20 @@ void main() {
     };
 
     final missing = calls.where((m) => !overridesMethod(m)).toList()..sort();
-    expect(missing, isEmpty, reason: 'unoverridden chat/feed api calls: $missing');
+    expect(
+      missing,
+      isEmpty,
+      reason: 'unoverridden chat/feed api calls: $missing',
+    );
   });
 
   test('DemoRaceApiService overrides every api call CaseOpeningScreen makes', () {
     // The reel takes an `openMysteryBox` CALLBACK, not a service, and the
     // callback closes over `_api.openMysteryBox` — covered above. This asserts
     // the screen has not since grown a service of its own.
-    final source =
-        File('lib/screens/case_opening_screen.dart').readAsStringSync();
+    final source = File(
+      'lib/screens/case_opening_screen.dart',
+    ).readAsStringSync();
     expect(
       RegExp(r'BackendApiService').hasMatch(source),
       isFalse,

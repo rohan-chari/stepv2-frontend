@@ -62,6 +62,9 @@ class HomeTab extends StatelessWidget {
   final int incomingFriendRequests;
   final VoidCallback? onOpenRacesTab;
   final VoidCallback? onOpenLeaderboardTab;
+
+  /// Jumps to the Friends tab — the SETUP board's "add your first friend" row.
+  final VoidCallback? onOpenFriendsTab;
   final VoidCallback? onOpenShop;
   final Future<void> Function()? onAddProfilePhoto;
   final Future<bool> Function()? onDismissProfilePhotoPrompt;
@@ -107,6 +110,7 @@ class HomeTab extends StatelessWidget {
     this.incomingFriendRequests = 0,
     this.onOpenRacesTab,
     this.onOpenLeaderboardTab,
+    this.onOpenFriendsTab,
     this.onOpenShop,
     this.onAddProfilePhoto,
     this.onDismissProfilePhotoPrompt,
@@ -266,6 +270,15 @@ class HomeTab extends StatelessWidget {
                                 onDismissProfilePhotoPrompt:
                                     onDismissProfilePhotoPrompt,
                                 showRenameChip: authService.onboardingV3Enabled,
+                                // Only an actually-loaded, actually-empty
+                                // friends list counts. A null state (tutorial
+                                // preview) or an in-flight/failed fetch must
+                                // never accuse a user with friends of having
+                                // none.
+                                hasNoFriends:
+                                    friendsStepsState?.isSuccess == true &&
+                                    friendsSteps.isEmpty,
+                                onFindFriends: onOpenFriendsTab,
                               ),
                             ),
                             if (raceCard != null)
@@ -956,55 +969,126 @@ class HomeTab extends StatelessWidget {
   }
 }
 
-/// One-time nudge that the generated racer tag is editable.
+/// The SETUP board: one parchment panel carrying every outstanding setup ask,
+/// stacked and separated by a hairline rule.
 ///
-/// Deliberately a chip, not a notice row: the other SETUP entries are things
-/// the user is missing, and a perfectly good name is not a missing thing. It
-/// reads as a label with a pencil on it — an affordance, not a chore — and it
-/// retires itself after one tap or three sightings.
-class _RenameChip extends StatelessWidget {
-  const _RenameChip({required this.displayName, required this.onTap});
+/// One board, not one card per prompt. These are all the same kind of thing —
+/// a short question with two answers — and a user with a name prompt AND a
+/// photo prompt used to see two competing panels with a gap between them.
+class _SetupBoard extends StatelessWidget {
+  const _SetupBoard({required this.entries});
 
-  final String displayName;
-  final VoidCallback onTap;
+  final List<_SetupEntry> entries;
 
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        key: const Key('home-rename-chip'),
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(999),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-          decoration: BoxDecoration(
-            color: colors.parchmentLight,
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: colors.parchmentBorder, width: 2),
-            boxShadow: _homeCardShadow,
+    final rows = <Widget>[];
+    for (var i = 0; i < entries.length; i++) {
+      if (i > 0) {
+        rows.add(
+          Divider(
+            height: 1,
+            thickness: 2,
+            color: colors.parchmentBorder.withValues(alpha: 0.55),
+            indent: 16,
+            endIndent: 16,
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
+        );
+      }
+      rows.add(entries[i]);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.parchment,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: colors.roofDark.withValues(alpha: 0.4),
+            width: 2,
+          ),
+          boxShadow: _homeCardShadow,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: rows,
+        ),
+      ),
+    );
+  }
+}
+
+/// One ask inside [_SetupBoard]: a chunky icon in a tinted well, the question
+/// and its reason, then the answers.
+class _SetupEntry extends StatelessWidget {
+  const _SetupEntry({
+    required this.icon,
+    this.iconKey,
+    required this.title,
+    required this.subtitle,
+    required this.actions,
+  });
+
+  final IconData icon;
+  final Key? iconKey;
+  final String title;
+  final String subtitle;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'You’re ',
-                style: PixelText.body(size: 13, color: colors.textMid),
+              // The well is what keeps a 24px glyph from floating loose beside
+              // 20px display type — it gives the icon a footprint the title
+              // can sit against.
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: colors.parchmentLight,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: colors.parchmentBorder, width: 2),
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  icon,
+                  key: iconKey,
+                  size: 22,
+                  color: colors.isDark ? colors.accentLight : colors.roofMid,
+                ),
               ),
-              Text(
-                displayName,
-                style: PixelText.title(size: 14, color: colors.textDark),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: PixelText.title(size: 19, color: colors.textDark),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: PixelText.body(size: 13, color: colors.textMid),
+                    ),
+                  ],
+                ),
               ),
-              Text(
-                ' — tap to change',
-                style: PixelText.body(size: 13, color: colors.textMid),
-              ),
-              const SizedBox(width: 6),
-              Icon(Icons.edit_rounded, size: 15, color: colors.textMid),
             ],
           ),
-        ),
+          const SizedBox(height: 12),
+          Row(children: actions),
+        ],
       ),
     );
   }
@@ -1019,6 +1103,8 @@ class _SetupPromptsSection extends StatefulWidget {
     this.onAddProfilePhoto,
     this.onDismissProfilePhotoPrompt,
     this.showRenameChip = false,
+    this.hasNoFriends = false,
+    this.onFindFriends,
   });
 
   final String? displayName;
@@ -1027,6 +1113,14 @@ class _SetupPromptsSection extends StatefulWidget {
   final VoidCallback onDisplayNameChanged;
   final Future<void> Function()? onAddProfilePhoto;
   final Future<bool> Function()? onDismissProfilePhotoPrompt;
+
+  /// The friends list came back and it was empty. Racing alone is the single
+  /// biggest reason a new account goes quiet, so an empty roster is setup work
+  /// exactly like a missing photo is.
+  final bool hasNoFriends;
+
+  /// Opens the Friends tab. Null hides the row (nowhere to send them).
+  final VoidCallback? onFindFriends;
 
   /// Whether to offer the one-time rename chip. Generated names
   /// (SwiftCapybara07) are good friction-reduction, but users don't know they
@@ -1116,6 +1210,18 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
     await _openDisplayNameScreen();
   }
 
+  /// "KEEP MY NAME" — the same permanent retirement, minus the trip to the
+  /// rename screen. A prompt with only one answer is a chore; giving the happy
+  /// path an explicit button is what makes this a question.
+  Future<void> _keepGeneratedName() async {
+    if (widget.authService.hasServerRenameChipState) {
+      unawaited(widget.authService.dismissRenameChip());
+    } else {
+      await _onboardingState.dismissRenameChip();
+    }
+    if (mounted) setState(() => _showRenameChip = false);
+  }
+
   bool get _promptDismissed =>
       widget.authService.profilePhotoPromptDismissedAt != null;
 
@@ -1191,83 +1297,140 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
         _showDismissedConfirmation;
 
     final showRenameChip = _showRenameChip && widget.displayName != null;
+    final showFriendPrompt =
+        widget.hasNoFriends && widget.onFindFriends != null;
 
     if (!showDisplayNamePrompt &&
         !showProfilePhotoPrompt &&
         !showDismissedConfirmation &&
+        !showFriendPrompt &&
         !showRenameChip) {
       return const SizedBox.shrink();
     }
+
+    final colors = AppColors.of(context);
+
+    // Every SETUP ask is the same shape — icon, question, two answers — so they
+    // share one board instead of each floating in its own card. The old mix of
+    // a bare pill chip next to a full card read as two unrelated features that
+    // happened to land under the same header.
+    final entries = <_SetupEntry>[
+      if (showRenameChip)
+        _SetupEntry(
+          icon: Icons.badge_rounded,
+          title: 'Want a different name?',
+          subtitle:
+              'We picked @${widget.displayName} for you. It is what friends '
+              'look for in a race — keep it, or make it yours.',
+          actions: [
+            Expanded(
+              child: PillButton(
+                key: const Key('home-rename-chip'),
+                label: 'CHANGE IT',
+                icon: Icons.edit_rounded,
+                variant: PillButtonVariant.primary,
+                fontSize: 13,
+                fullWidth: true,
+                onPressed: _openRenameFromChip,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: PillButton(
+                key: const Key('home-keep-name'),
+                label: 'KEEP IT',
+                icon: Icons.check_rounded,
+                variant: PillButtonVariant.secondary,
+                fontSize: 13,
+                fullWidth: true,
+                onPressed: _keepGeneratedName,
+              ),
+            ),
+          ],
+        ),
+      if (showDisplayNamePrompt)
+        _SetupEntry(
+          icon: Icons.edit_rounded,
+          title: 'Add your display name',
+          subtitle:
+              'Your friends need something better than a blank avatar to look for.',
+          actions: [
+            Expanded(
+              child: PillButton(
+                label: 'SET DISPLAY NAME',
+                icon: Icons.edit_rounded,
+                variant: PillButtonVariant.primary,
+                fontSize: 13,
+                fullWidth: true,
+                onPressed: _openDisplayNameScreen,
+              ),
+            ),
+          ],
+        ),
+      if (showProfilePhotoPrompt)
+        _SetupEntry(
+          icon: Icons.add_a_photo_rounded,
+          iconKey: const Key('home-profile-photo-prompt-icon'),
+          title: 'Add a profile photo?',
+          subtitle:
+              'Make it easier for friends to spot you in races and leaderboards.',
+          actions: [
+            Expanded(
+              child: PillButton(
+                label: 'ADD PHOTO',
+                icon: Icons.add_a_photo_rounded,
+                variant: colors.isDark
+                    ? PillButtonVariant.accent
+                    : PillButtonVariant.primary,
+                fontSize: 13,
+                fullWidth: true,
+                onPressed: _isSavingDismissal
+                    ? null
+                    : () => widget.onAddProfilePhoto?.call(),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: PillButton(
+                label: 'NO THANKS',
+                icon: Icons.close_rounded,
+                variant: PillButtonVariant.secondary,
+                fontSize: 13,
+                fullWidth: true,
+                onPressed: _dismissProfilePhotoPrompt,
+              ),
+            ),
+          ],
+        ),
+      if (showFriendPrompt)
+        _SetupEntry(
+          icon: Icons.group_add_rounded,
+          iconKey: const Key('home-add-friend-prompt-icon'),
+          title: 'Add your first friend',
+          subtitle:
+              'Races are better with someone to beat. Add a friend and you can '
+              'invite them straight into one.',
+          actions: [
+            Expanded(
+              child: PillButton(
+                key: const Key('home-add-friend-cta'),
+                label: 'FIND FRIENDS',
+                icon: Icons.person_add_alt_1_rounded,
+                variant: PillButtonVariant.primary,
+                fontSize: 13,
+                fullWidth: true,
+                onPressed: widget.onFindFriends,
+              ),
+            ),
+          ],
+        ),
+    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const _HomeSectionHeader(title: 'SETUP'),
-        if (showRenameChip)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 4, 14, 4),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: _RenameChip(
-                displayName: widget.displayName!,
-                onTap: _openRenameFromChip,
-              ),
-            ),
-          ),
-        if (showDisplayNamePrompt)
-          _HomeNoticeRow(
-            icon: Icons.edit_rounded,
-            title: 'Add your display name',
-            subtitle:
-                'Your friends need something better than a blank avatar to look for.',
-            actions: [
-              Expanded(
-                child: PillButton(
-                  label: 'SET DISPLAY NAME',
-                  icon: Icons.edit_rounded,
-                  variant: PillButtonVariant.primary,
-                  fontSize: 13,
-                  fullWidth: true,
-                  onPressed: _openDisplayNameScreen,
-                ),
-              ),
-            ],
-          ),
-        if (showProfilePhotoPrompt)
-          _HomeNoticeRow(
-            icon: Icons.add_a_photo_rounded,
-            iconKey: const Key('home-profile-photo-prompt-icon'),
-            title: 'Add a profile photo?',
-            subtitle:
-                'Make it easier for friends to spot you in races and leaderboards.',
-            actions: [
-              Expanded(
-                child: PillButton(
-                  label: 'ADD PHOTO',
-                  icon: Icons.add_a_photo_rounded,
-                  variant: AppColors.of(context).isDark
-                      ? PillButtonVariant.accent
-                      : PillButtonVariant.primary,
-                  fontSize: 13,
-                  fullWidth: true,
-                  onPressed: _isSavingDismissal
-                      ? null
-                      : () => widget.onAddProfilePhoto?.call(),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: PillButton(
-                  label: 'NO THANKS',
-                  icon: Icons.close_rounded,
-                  variant: PillButtonVariant.secondary,
-                  fontSize: 13,
-                  fullWidth: true,
-                  onPressed: _dismissProfilePhotoPrompt,
-                ),
-              ),
-            ],
-          ),
+        if (entries.isNotEmpty) _SetupBoard(entries: entries),
         if (showDismissedConfirmation)
           Padding(
             key: const Key('profile-photo-dismissed-confirmation'),
@@ -1282,85 +1445,6 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
             ),
           ),
       ],
-    );
-  }
-}
-
-class _HomeNoticeRow extends StatelessWidget {
-  const _HomeNoticeRow({
-    required this.icon,
-    this.iconKey,
-    required this.title,
-    required this.subtitle,
-    required this.actions,
-  });
-
-  final IconData icon;
-  final Key? iconKey;
-  final String title;
-  final String subtitle;
-  final List<Widget> actions;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: AppColors.of(context).parchment,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: AppColors.of(context).roofDark.withValues(alpha: 0.4),
-            width: 2,
-          ),
-          boxShadow: _homeCardShadow,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    icon,
-                    key: iconKey,
-                    size: 24,
-                    color: AppColors.of(context).isDark
-                        ? AppColors.of(context).accentLight
-                        : AppColors.of(context).roofMid,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          style: PixelText.title(
-                            size: 20,
-                            color: AppColors.of(context).textDark,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          subtitle,
-                          style: PixelText.body(
-                            size: 13,
-                            color: AppColors.of(context).textMid,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(children: actions),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

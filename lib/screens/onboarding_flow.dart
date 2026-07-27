@@ -296,18 +296,6 @@ class _OnboardingDailyIntroStepState extends State<OnboardingDailyIntroStep> {
     }
   }
 
-  String get _timeRemaining {
-    final raw = _daily?['endsAt'];
-    final end = raw is String ? DateTime.tryParse(raw) : null;
-    if (end == null) return 'Ends today';
-    final remaining = end.difference(DateTime.now());
-    if (remaining.isNegative) return 'Ending soon';
-    if (remaining.inHours > 0) {
-      return '${remaining.inHours}h ${remaining.inMinutes.remainder(60)}m left';
-    }
-    return '${remaining.inMinutes.clamp(1, 59)}m left';
-  }
-
   Future<void> _enter() async {
     final raceId = (_daily?['raceId'] ?? _daily?['id']) as String?;
     if (raceId == null || raceId.isEmpty || _entering) return;
@@ -335,20 +323,14 @@ class _OnboardingDailyIntroStepState extends State<OnboardingDailyIntroStep> {
 
     return OnboardingScene(
       headline: title,
-      emblem: Container(
-        width: 104,
-        height: 104,
-        decoration: onboardingSkyRing(context, shape: BoxShape.circle),
-        alignment: Alignment.center,
-        child: Icon(
-          Icons.emoji_events_rounded,
-          size: 54,
-          color: colors.pillGold,
-        ),
-      ),
+      // No trophy emblem: the race name IS the centerpiece here, and a generic
+      // cup in a ring only pushed it up into the corner of the sky.
       dockLabel: verified ? 'TODAY’S RACE' : 'READY TO RACE',
+      // The one thing worth saying here, and the only thing the demo could not
+      // teach: the next race is not a script. The countdown-plus-rules line
+      // this replaced was a third voice explaining mechanics they just played.
       dockBody: verified
-          ? '$_timeRemaining · Move at your own pace. Most steps at the finish wins.'
+          ? 'Your first real race, against real people walking right now.'
           : 'We couldn’t confirm a Daily spot right now. You can still enter Bara and find a race.',
       dockExtra: verified
           ? Container(
@@ -730,10 +712,20 @@ class OnboardingTutorialStep extends StatelessWidget {
           onPressed: onSkip,
           child: Text(
             'Skip for now',
-            style: PixelText.body(
-              size: 14,
-              color: colors.textMid,
-            ).copyWith(fontWeight: FontWeight.w800),
+            // textMid is a dark ink meant for parchment; on the dock's green
+            // checkers it was near-invisible. Cream + the same sky outline the
+            // headline uses makes it legible without turning a deliberately
+            // quiet escape hatch into a second button.
+            style:
+                PixelText.body(
+                  size: 15,
+                  color: colors.textLight.withValues(alpha: 0.92),
+                ).copyWith(
+                  fontWeight: FontWeight.w800,
+                  decoration: TextDecoration.underline,
+                  decorationColor: colors.textLight.withValues(alpha: 0.55),
+                  shadows: PixelText.skyOutline(1.4),
+                ),
           ),
         ),
       ],
@@ -765,13 +757,10 @@ class OnboardingDemoRaceStep extends StatelessWidget {
       // people skipping it. A practice run against bots asks for 90 seconds of
       // curiosity instead of a commitment to compete.
       headline: 'Learn how to race',
-      emblem: Container(
-        width: 112,
-        height: 112,
-        decoration: onboardingSkyRing(context, shape: BoxShape.circle),
-        alignment: Alignment.center,
-        child: Icon(Icons.flag_rounded, size: 52, color: colors.textLight),
-      ),
+      // No emblem. A flag in a ring said nothing the headline and the dock
+      // don't already say, and it cut the sky in half. Without it the scene is
+      // the wordmark, the capybara and the sky — the title screen's own
+      // composition.
       dockLabel: '90 SECONDS · 100 COINS',
       // One line. The label above already carries "90 SECONDS · 100 COINS", so
       // repeating the duration or the payout here just adds words to skim past.
@@ -782,7 +771,10 @@ class OnboardingDemoRaceStep extends StatelessWidget {
           height: 54,
           child: PillButton(
             key: const Key('onboarding-demo-race-start'),
-            label: 'START THE RACE',
+            // "START THE RACE" over-promised: what opens is a guided practice
+            // run, and a user who taps expecting their real race reads the
+            // coach marks as an interruption.
+            label: 'START THE TUTORIAL',
             variant: PillButtonVariant.secondary,
             fullWidth: true,
             padding: EdgeInsets.zero,
@@ -796,10 +788,20 @@ class OnboardingDemoRaceStep extends StatelessWidget {
           onPressed: onSkip,
           child: Text(
             'Skip for now',
-            style: PixelText.body(
-              size: 14,
-              color: colors.textMid,
-            ).copyWith(fontWeight: FontWeight.w800),
+            // textMid is a dark ink meant for parchment; on the dock's green
+            // checkers it was near-invisible. Cream + the same sky outline the
+            // headline uses makes it legible without turning a deliberately
+            // quiet escape hatch into a second button.
+            style:
+                PixelText.body(
+                  size: 15,
+                  color: colors.textLight.withValues(alpha: 0.92),
+                ).copyWith(
+                  fontWeight: FontWeight.w800,
+                  decoration: TextDecoration.underline,
+                  decorationColor: colors.textLight.withValues(alpha: 0.55),
+                  shadows: PixelText.skyOutline(1.4),
+                ),
           ),
         ),
       ],

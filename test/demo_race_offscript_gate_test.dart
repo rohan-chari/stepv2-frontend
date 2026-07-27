@@ -85,20 +85,21 @@ void main() {
     final engine = DemoRaceEngine(
       myUserId: 'usr_real_1',
       myDisplayName: 'Wandering Otter42',
-    );
+    )..skipPrologue();
     await pumpHost(tester, engine);
     await reachUseBoost(tester);
 
     expect(engine.beat, DemoBeat.useBoost);
-    expect(boxSlots(), findsNWidgets(1));
+    // Two boxes still unopened: the Shortcut is the third box's roll.
+    expect(boxSlots(), findsNWidgets(2));
 
-    // The off-script tap: the remaining box, while the lesson is the boost.
+    // The off-script tap: a remaining box, while the lesson is the boost.
     await tester.tap(boxSlots().first);
     await settleDemo(tester);
 
     // No reel was pushed, the box was not consumed, and the beat did not move.
     expect(find.byType(CaseOpeningScreen), findsNothing);
-    expect(boxSlots(), findsNWidgets(1));
+    expect(boxSlots(), findsNWidgets(2));
     expect(engine.beat, DemoBeat.useBoost);
     // The coach is still asking for the same thing, not a skipped-ahead step.
     expect(
@@ -113,7 +114,7 @@ void main() {
     final engine = DemoRaceEngine(
       myUserId: 'usr_real_1',
       myDisplayName: 'Wandering Otter42',
-    );
+    )..skipPrologue();
     await pumpHost(tester, engine);
     await reachUseBoost(tester);
 
@@ -132,7 +133,7 @@ void main() {
     final engine = DemoRaceEngine(
       myUserId: 'usr_real_1',
       myDisplayName: 'Wandering Otter42',
-    );
+    )..skipPrologue();
 
     // Intro: card-driven, so the tray is not the lesson.
     expect(engine.isOnScriptTap(isMysteryBox: true), isFalse);

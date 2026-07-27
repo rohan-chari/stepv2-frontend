@@ -20,12 +20,33 @@ class CreateRaceScreen extends StatefulWidget {
   final List<String> presetInviteeIds;
   final bool initialCustomizeExpanded;
 
+  /// Seeds the name field. The onboarding demo uses it so the tutorial's first
+  /// beat is a decision (how long?) rather than a keyboard.
+  final String? initialName;
+
+  /// Onboarding-demo chrome only (spec §5.1, same shape as
+  /// `RaceDetailScreen.demoMode`): hides the back arrow and the CUSTOMIZE
+  /// section. Teams, tournaments, visibility, payout presets and scheduled
+  /// starts are all reachable from there, and every one of them is a way to
+  /// dead-end a scripted tutorial. It changes **nothing** about what gets sent.
+  final bool demoMode;
+
+  /// Optional coach-mark anchors. Null in the shipped app (the wrapping
+  /// KeyedSubtrees are then transparent); the demo passes keys so its overlay
+  /// can measure these elements on the real screen.
+  final GlobalKey? tutorialDurationKey;
+  final GlobalKey? tutorialCreateKey;
+
   CreateRaceScreen({
     super.key,
     required this.authService,
     BackendApiService? backendApiService,
     this.presetInviteeIds = const [],
     this.initialCustomizeExpanded = false,
+    this.initialName,
+    this.demoMode = false,
+    this.tutorialDurationKey,
+    this.tutorialCreateKey,
   }) : backendApiService = backendApiService ?? BackendApiService();
 
   @override
@@ -77,6 +98,8 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
   void initState() {
     super.initState();
     _customizeExpanded = widget.initialCustomizeExpanded;
+    final seed = widget.initialName?.trim();
+    if (seed != null && seed.isNotEmpty) _nameController.text = seed;
     // Seed synchronously from the local pool so the plaques are never blank,
     // then upgrade to the real backend pool in the background.
     final pair = randomTeamNamePair();
@@ -933,10 +956,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
         Text(
           _isPublic ? 'ANYONE CAN JOIN' : 'INVITE ONLY',
           key: const Key('race-visibility-subcopy'),
-          style: PixelText.body(
-            size: 11,
-            color: AppColors.of(context).textMid,
-          ),
+          style: PixelText.body(size: 11, color: AppColors.of(context).textMid),
         ),
       ],
     );
@@ -1308,17 +1328,21 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                   ),
                   child: Row(
                     children: [
-                      GestureDetector(
-                        onTap: () => Navigator.of(context).pop(),
-                        child: Padding(
-                          padding: EdgeInsets.all(8),
-                          child: Icon(
-                            Icons.arrow_back,
-                            color: AppColors.of(context).textLight,
-                            size: 24,
+                      // The demo owns its own exit (the coach's SKIP chip); a
+                      // back arrow here would drop the user out of onboarding
+                      // into a half-built race.
+                      if (!widget.demoMode)
+                        GestureDetector(
+                          onTap: () => Navigator.of(context).pop(),
+                          child: Padding(
+                            padding: EdgeInsets.all(8),
+                            child: Icon(
+                              Icons.arrow_back,
+                              color: AppColors.of(context).textLight,
+                              size: 24,
+                            ),
                           ),
                         ),
-                      ),
                       const SizedBox(width: 8),
                       Text(
                         'NEW RACE',
@@ -1384,6 +1408,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                         // Race format — wooden signpost (TR-801). Hidden
                         // entirely when the remote kill switch is off (TR-107).
                         if (_customizeExpanded &&
+                            !widget.demoMode &&
                             widget.authService.teamRacesEnabled) ...[
                           _buildFormatCard(),
                           const SizedBox(height: 12),
@@ -1394,65 +1419,68 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                         // tournaments never schedule-auto-start (spec §9).
                         if (!_isTournament) ...[
                           // Duration
-                          RetroCard(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'DURATION',
-                                  style: PixelText.title(
-                                    size: 13,
-                                    color: AppColors.of(context).textMid,
+                          KeyedSubtree(
+                            key: widget.tutorialDurationKey,
+                            child: RetroCard(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'DURATION',
+                                    style: PixelText.title(
+                                      size: 13,
+                                      color: AppColors.of(context).textMid,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 10),
-                                Row(
-                                  children: _durationOptions.map((days) {
-                                    final selected = _selectedDuration == days;
-                                    return Expanded(
-                                      child: GestureDetector(
-                                        key: Key('duration-option-$days'),
-                                        onTap: () => setState(
-                                          () => _selectedDuration = days,
-                                        ),
-                                        child: Container(
-                                          margin: const EdgeInsets.symmetric(
-                                            horizontal: 3,
+                                  const SizedBox(height: 10),
+                                  Row(
+                                    children: _durationOptions.map((days) {
+                                      final selected =
+                                          _selectedDuration == days;
+                                      return Expanded(
+                                        child: GestureDetector(
+                                          key: Key('duration-option-$days'),
+                                          onTap: () => setState(
+                                            () => _selectedDuration = days,
                                           ),
-                                          padding: const EdgeInsets.symmetric(
-                                            vertical: 10,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: selected
-                                                ? AppColors.of(
-                                                    context,
-                                                  ).pillGreenDark
-                                                : AppColors.of(
-                                                    context,
-                                                  ).parchmentDark,
-                                            borderRadius: BorderRadius.circular(
-                                              8,
+                                          child: Container(
+                                            margin: const EdgeInsets.symmetric(
+                                              horizontal: 3,
                                             ),
-                                          ),
-                                          alignment: Alignment.center,
-                                          child: Text(
-                                            '${days}d',
-                                            style: PixelText.title(
-                                              size: 15,
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 10,
+                                            ),
+                                            decoration: BoxDecoration(
                                               color: selected
-                                                  ? Colors.white
+                                                  ? AppColors.of(
+                                                      context,
+                                                    ).pillGreenDark
                                                   : AppColors.of(
                                                       context,
-                                                    ).textDark,
+                                                    ).parchmentDark,
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                            ),
+                                            alignment: Alignment.center,
+                                            child: Text(
+                                              '${days}d',
+                                              style: PixelText.title(
+                                                size: 15,
+                                                color: selected
+                                                    ? Colors.white
+                                                    : AppColors.of(
+                                                        context,
+                                                      ).textDark,
+                                              ),
                                             ),
                                           ),
                                         ),
-                                      ),
-                                    );
-                                  }).toList(),
-                                ),
-                              ],
+                                      );
+                                    }).toList(),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                           const SizedBox(height: 12),
@@ -1463,55 +1491,60 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                           _buildPrizePoolPreview(),
                           const SizedBox(height: 12),
 
-                          GestureDetector(
-                            key: const Key('customize-race-toggle'),
-                            onTap: () => setState(
-                              () => _customizeExpanded = !_customizeExpanded,
-                            ),
-                            child: Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 14,
+                          if (!widget.demoMode)
+                            GestureDetector(
+                              key: const Key('customize-race-toggle'),
+                              onTap: () => setState(
+                                () => _customizeExpanded = !_customizeExpanded,
                               ),
-                              decoration: BoxDecoration(
-                                color: AppColors.of(context).roofDark,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: AppColors.of(context).parchmentBorder,
-                                  width: 2,
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 14,
                                 ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.tune_rounded,
-                                    color: AppColors.of(context).textLight,
+                                decoration: BoxDecoration(
+                                  color: AppColors.of(context).roofDark,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: AppColors.of(
+                                      context,
+                                    ).parchmentBorder,
+                                    width: 2,
                                   ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(
-                                      'CUSTOMIZE RACE',
-                                      style: PixelText.title(
-                                        size: 13,
-                                        color: AppColors.of(context).textLight,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.tune_rounded,
+                                      color: AppColors.of(context).textLight,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        'CUSTOMIZE RACE',
+                                        style: PixelText.title(
+                                          size: 13,
+                                          color: AppColors.of(
+                                            context,
+                                          ).textLight,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  Icon(
-                                    _customizeExpanded
-                                        ? Icons.expand_less_rounded
-                                        : Icons.expand_more_rounded,
-                                    color: AppColors.of(context).textLight,
-                                  ),
-                                ],
+                                    Icon(
+                                      _customizeExpanded
+                                          ? Icons.expand_less_rounded
+                                          : Icons.expand_more_rounded,
+                                      color: AppColors.of(context).textLight,
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 12),
+                          if (!widget.demoMode) const SizedBox(height: 12),
 
                           // Scheduled start (optional auto-start)
-                          if (_customizeExpanded)
+                          if (_customizeExpanded && !widget.demoMode)
                             RetroCard(
                               padding: const EdgeInsets.all(16),
                               child: Column(
@@ -1846,16 +1879,19 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                         const SizedBox(height: 24),
 
                         // Create button
-                        PillButton(
-                          label: _isCreating ? 'CREATING...' : 'CREATE RACE',
-                          variant: PillButtonVariant.primary,
-                          fontSize: 15,
-                          fullWidth: true,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 14,
+                        KeyedSubtree(
+                          key: widget.tutorialCreateKey,
+                          child: PillButton(
+                            label: _isCreating ? 'CREATING...' : 'CREATE RACE',
+                            variant: PillButtonVariant.primary,
+                            fontSize: 15,
+                            fullWidth: true,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 14,
+                            ),
+                            onPressed: _isCreating ? null : _create,
                           ),
-                          onPressed: _isCreating ? null : _create,
                         ),
                         const SizedBox(height: 24),
                       ],

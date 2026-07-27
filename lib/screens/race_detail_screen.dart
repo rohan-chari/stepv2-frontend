@@ -94,6 +94,13 @@ class RaceDetailScreen extends StatefulWidget {
   /// toward the control the current beat is actually asking for.
   final bool Function(Map<String, dynamic> item)? demoTapGate;
 
+  /// Onboarding-demo target gate. Returns false to REFUSE a tap on a row of
+  /// the target picker, leaving the sheet open. The demo's script names the
+  /// rival to hit ("pick Sam"), and without this the user could hit anyone —
+  /// an instruction the app does not enforce reads as a suggestion. Null (the
+  /// shipped app) allows every target.
+  final bool Function(String userId)? demoTargetGate;
+
   /// Renders this screen as the onboarding **demo race** (spec §5.7).
   ///
   /// Suppression only: it hides ads, the notification opt-in card, the starter
@@ -115,6 +122,7 @@ class RaceDetailScreen extends StatefulWidget {
     this.tutorialPowerupsKey,
     this.tutorialClockKey,
     this.demoTapGate,
+    this.demoTargetGate,
     this.demoMode = false,
   }) : backendApiService = backendApiService ?? BackendApiService();
 
@@ -1940,8 +1948,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                   itemBuilder: (_, i) {
                     final t = targets[i];
                     return GestureDetector(
-                      onTap: () =>
-                          Navigator.of(ctx).pop(t['userId'] as String?),
+                      onTap: () {
+                        final id = t['userId'] as String?;
+                        // Refused (demo, off-script target): keep the sheet
+                        // open so the coach's nudge is what answers the tap.
+                        if (id != null &&
+                            !(widget.demoTargetGate?.call(id) ?? true)) {
+                          return;
+                        }
+                        Navigator.of(ctx).pop(id);
+                      },
                       child: Container(
                         width: double.infinity,
                         margin: const EdgeInsets.only(bottom: 8),
@@ -3045,10 +3061,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         color: AppColors.of(context).coinDark,
         borderRadius: BorderRadius.circular(4),
       ),
-      child: Text(
-        label,
-        style: PixelText.title(size: 8, color: Colors.white),
-      ),
+      child: Text(label, style: PixelText.title(size: 8, color: Colors.white)),
     );
   }
 
@@ -4700,8 +4713,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             effects: boosts,
             isBoost: true,
           ),
-        if (boosts.isNotEmpty && debuffs.isNotEmpty)
-          const SizedBox(height: 10),
+        if (boosts.isNotEmpty && debuffs.isNotEmpty) const SizedBox(height: 10),
         if (debuffs.isNotEmpty)
           _effectGroup(
             label: 'DEBUFFS',
@@ -4830,7 +4842,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     // (an older backend, or a kill-switched snapshot) falls through to the
     // static copy unchanged — the field and every subfield are read defensively
     // and parsed num-safely, since JSON numbers aren't guaranteed to be `int`.
-    final desc = _piggyBankSubtitle(e) ?? PowerupCopy.effectRailSubtitleFor(type);
+    final desc =
+        _piggyBankSubtitle(e) ?? PowerupCopy.effectRailSubtitleFor(type);
     // A debuff leads with who did it — the attacker matters more than the
     // mechanic, and leading keeps the name safe from end-ellipsis.
     final attacker = isBoost

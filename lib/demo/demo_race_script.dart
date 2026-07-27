@@ -11,33 +11,49 @@ library;
 /// who wanders — or who opens both boxes at once — still lands on a reachable
 /// beat instead of dead-ending the script.
 enum DemoBeat {
-  /// 1 — orientation. Waits for a tap on the coach card.
+  /// 1 — make the race, on the REAL create screen. Waits for CREATE RACE.
+  createRace,
+
+  /// 2 — invite the three rivals, through the REAL invite screen.
+  inviteFriends,
+
+  /// 3 — orientation. Waits for a tap on the coach card.
   intro,
 
-  /// 2 — open the first mystery box.
+  /// 4 — open the first mystery box.
   openBox,
 
-  /// 3 — use the Protein Shake that box rolled.
+  /// 5 — use the Protein Shake that box rolled.
   useBoost,
 
-  /// 4 — open the second mystery box.
+  /// 6 — open the second mystery box.
   openSecondBox,
 
-  /// 5 — use the Compression Socks (shield) before the attack lands.
+  /// 7 — use the Compression Socks (shield) before the attack lands.
   useShield,
 
-  /// 6 — no tap: the scripted rival Shortcut resolves as `blocked`.
+  /// 8 — no tap: the scripted rival Shortcut resolves as `blocked`.
   blockedAttack,
 
-  /// 7 — use the Shortcut on a rival through the REAL target picker.
+  /// 9 — open the third mystery box, which rolls the Shortcut.
+  ///
+  /// The Shortcut used to start in the tray pre-owned, which quietly taught the
+  /// wrong lesson: the attack powerup a user actually cares about is something
+  /// you *find*, and finding it is the loop the demo exists to sell.
+  openThirdBox,
+
+  /// 10 — use the Shortcut on a rival through the REAL target picker.
   useShortcut,
 
-  /// 8 — the clock runs out.
+  /// 11 — the clock runs out.
   finish,
 
-  /// 9 — the win card.
+  /// 12 — the win card.
   win,
 }
+
+/// How many beats the coach counts through ("STEP 3 OF 10").
+final int kDemoBeatCount = DemoBeat.values.length;
 
 extension DemoBeatX on DemoBeat {
   /// 1-indexed beat number. Doubles as the activation-telemetry `step` value,
@@ -47,47 +63,71 @@ extension DemoBeatX on DemoBeat {
   String get stepValue => '$number';
 }
 
-/// Coach-mark copy, keyed by beat. Beat 8 has no card (the clock is the beat)
-/// and beat 9 is the win card, which the host renders itself.
-const Map<DemoBeat, ({String title, String body, String? cta})> kDemoBeatCopy = {
-  DemoBeat.intro: (
-    title: '2 minutes left.',
-    body: "You're in 2nd. Let's fix that.",
-    cta: "LET'S GO",
-  ),
-  DemoBeat.openBox: (
-    title: 'Walking earns mystery boxes.',
-    body: 'Tap a box to open it.',
-    cta: null,
-  ),
-  DemoBeat.useBoost: (
-    title: 'Boosts add steps.',
-    body: 'Tap your Protein Shake, then USE.',
-    cta: null,
-  ),
-  DemoBeat.openSecondBox: (
-    title: 'One box left.',
-    body: 'Open it.',
-    cta: null,
-  ),
-  DemoBeat.useShield: (
-    title: "Sam's coming for you.",
-    body: 'Shield up — tap the Compression Socks.',
-    cta: null,
-  ),
-  DemoBeat.blockedAttack: (
-    title: 'Blocked!',
-    body: 'Sam tried to steal 1,000 steps. Your shield ate it.',
-    cta: 'NICE',
-  ),
-  DemoBeat.useShortcut: (
-    title: 'Now take the lead.',
-    body: 'Tap your Shortcut and pick Sam.',
-    cta: null,
-  ),
-  DemoBeat.finish: (title: 'Hang on…', body: 'The clock is running out.', cta: null),
-  DemoBeat.win: (title: 'YOU WIN', body: 'That is the whole game.', cta: 'CONTINUE'),
-};
+/// Coach-mark copy, keyed by beat. The last beat is the win card, which the
+/// host renders itself.
+const Map<DemoBeat, ({String title, String body, String? cta})> kDemoBeatCopy =
+    {
+      DemoBeat.createRace: (
+        title: 'Every race starts here.',
+        body: 'Pick how long yours runs, then hit CREATE RACE.',
+        cta: null,
+      ),
+      DemoBeat.inviteFriends: (
+        title: 'A race needs rivals.',
+        body: 'Tap all three friends, then send the invites.',
+        cta: null,
+      ),
+      DemoBeat.intro: (
+        title: '2 minutes left.',
+        body: "You're in 2nd. Let's fix that.",
+        cta: "LET'S GO",
+      ),
+      DemoBeat.openBox: (
+        title: 'Walking earns mystery boxes.',
+        body: 'Tap a box to open it.',
+        cta: null,
+      ),
+      DemoBeat.useBoost: (
+        title: 'Boosts add steps.',
+        body: 'Tap your Protein Shake, then USE.',
+        cta: null,
+      ),
+      DemoBeat.openSecondBox: (
+        title: 'Two boxes left.',
+        body: 'Open the next one.',
+        cta: null,
+      ),
+      DemoBeat.useShield: (
+        title: "Sam's coming for you.",
+        body: 'Shield up — tap the Compression Socks.',
+        cta: null,
+      ),
+      DemoBeat.blockedAttack: (
+        title: 'Blocked!',
+        body: 'Sam tried to steal 1,000 steps. Your shield blocked it.',
+        cta: 'NICE',
+      ),
+      DemoBeat.openThirdBox: (
+        title: 'One box left.',
+        body: 'Open it — walking keeps them coming.',
+        cta: null,
+      ),
+      DemoBeat.useShortcut: (
+        title: 'A Shortcut. Now take the lead.',
+        body: 'Tap it and pick Sam — it steals his steps.',
+        cta: null,
+      ),
+      DemoBeat.finish: (
+        title: 'Hang on…',
+        body: 'The clock is running out.',
+        cta: null,
+      ),
+      DemoBeat.win: (
+        title: 'YOU WIN',
+        body: 'That is the whole game.',
+        cta: 'CONTINUE',
+      ),
+    };
 
 /// Which part of the real screen the coach mark points at for a given beat.
 /// Anchored to **stable layout containers** (spec §8.5 option 1), never to an
@@ -100,6 +140,11 @@ enum DemoAnchor {
   /// the held powerups. It does not move while the demo runs.
   powerups,
 
+  /// The CREATE RACE button on the real create screen. The duration row sits
+  /// directly above it, so marking the button alone keeps both in view without
+  /// two rings competing on one screen.
+  createButton,
+
   /// The countdown chip in the race hero header. Beat 8's whole lesson is that
   /// the clock is the thing that ends a race, so that beat scrolls back to the
   /// top and puts the mark on the timer rather than leaving the user staring at
@@ -108,12 +153,15 @@ enum DemoAnchor {
 }
 
 const Map<DemoBeat, DemoAnchor> kDemoBeatAnchor = {
+  DemoBeat.createRace: DemoAnchor.createButton,
+  DemoBeat.inviteFriends: DemoAnchor.none,
   DemoBeat.intro: DemoAnchor.none,
   DemoBeat.openBox: DemoAnchor.powerups,
   DemoBeat.useBoost: DemoAnchor.powerups,
   DemoBeat.openSecondBox: DemoAnchor.powerups,
   DemoBeat.useShield: DemoAnchor.powerups,
   DemoBeat.blockedAttack: DemoAnchor.none,
+  DemoBeat.openThirdBox: DemoAnchor.powerups,
   DemoBeat.useShortcut: DemoAnchor.powerups,
   DemoBeat.finish: DemoAnchor.clock,
   DemoBeat.win: DemoAnchor.none,

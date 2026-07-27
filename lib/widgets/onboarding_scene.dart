@@ -83,6 +83,7 @@ class OnboardingScene extends StatelessWidget {
         final compact = constraints.maxHeight < 720;
         final groundHeight = compact ? 72.0 : 88.0;
         final capySize = compact ? 118.0 : 148.0;
+        final hasCenterpiece = emblem != null || sceneExtra != null;
 
         // Under `flutter test`, route the scene through its own reduced-motion
         // path (disableAnimations) so the ambient drift never blocks a
@@ -110,27 +111,54 @@ class OnboardingScene extends StatelessWidget {
                       bottom: false,
                       child: Stack(
                         children: [
+                          // Same wordmark treatment the title screen gives
+                          // "Bara" (PixelText.display + sky outline), so the
+                          // headline reads as part of the same sign-painted
+                          // world rather than as UI copy dropped on the sky.
+                          //
+                          // With no emblem to hold the middle of the scene, the
+                          // headline drops down to fill that blue instead of
+                          // leaving a hole between it and the capybara.
                           Positioned(
-                            top: compact ? 14 : 26,
+                            // Clear of the sun. It sits high and to the right
+                            // (skyAlignment 0.6,1), and a headline pinned to
+                            // the top edge ran straight through its glare —
+                            // the outline holds the letters, but the two
+                            // shapes fight. Everything drops far enough that
+                            // the wordmark reads against flat sky.
+                            top: compact ? (hasCenterpiece ? 44 : 60) : 104,
                             left: 24,
                             right: 24,
                             child: Text(
                               headline,
                               textAlign: TextAlign.center,
+                              // Jersey25 is a bitmap face with a small x-height,
+                              // so it reads a size smaller than it measures —
+                              // these numbers sit above the Space Grotesk sizes
+                              // they replace on purpose. A step with no emblem
+                              // has the whole sky to itself and goes larger
+                              // still.
                               style:
-                                  PixelText.title(
-                                    size: compact ? 26 : 31,
+                                  PixelText.display(
+                                    size: hasCenterpiece
+                                        ? (compact ? 30 : 34)
+                                        : (compact ? 36 : 44),
                                     color: colors.textLight,
                                   ).copyWith(
                                     height: 1.05,
-                                    fontWeight: FontWeight.w800,
-                                    shadows: PixelText.skyOutline(2),
+                                    shadows: PixelText.skyOutline(
+                                      compact ? 2 : 2.4,
+                                    ),
                                   ),
                             ),
                           ),
-                          if (emblem != null || sceneExtra != null)
+                          if (hasCenterpiece)
                             Positioned.fill(
-                              top: compact ? 78 : 108,
+                              // Tracks the headline down, so the gap between
+                              // the two stays what it was. The emblem is
+                              // Flexible, so a short scene squeezes it rather
+                              // than overflowing.
+                              top: compact ? 108 : 204,
                               bottom:
                                   groundHeight +
                                   capySize * (compact ? 0.62 : 0.7),

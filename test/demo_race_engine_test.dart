@@ -6,7 +6,13 @@ import 'package:step_tracker/demo/demo_race_script.dart';
 /// structurally cannot express, because they are about the *engine's* internal
 /// arithmetic across time, not about anything the screen renders.
 
-DemoRaceEngine _engine({DateTime? startedAt}) => DemoRaceEngine(
+/// The engine mid-demo: the create + invite prologue already done, which is
+/// where every assertion below about the RACE starts from. The prologue itself
+/// has its own group at the bottom of this file.
+DemoRaceEngine _engine({DateTime? startedAt}) =>
+    _rawEngine(startedAt: startedAt)..skipPrologue();
+
+DemoRaceEngine _rawEngine({DateTime? startedAt}) => DemoRaceEngine(
   myUserId: 'real-user-1',
   myDisplayName: 'Rohan',
   startedAt: startedAt ?? DateTime(2026, 7, 26, 12),
@@ -23,6 +29,8 @@ List<Map<String, dynamic>> _playFullScript(DemoRaceEngine e) {
   e.usePowerup(powerupId: boxes[1]);
   e.resolveScriptedAttack();
   e.acknowledgeAttack();
+  // The Shortcut is what the third box rolls; it is never pre-owned.
+  e.openBox(boxes[2]);
   e.usePowerup(
     powerupId: DemoRaceEngine.shortcutPowerupId,
     targetUserId: DemoRaceEngine.rivalLeaderUserId,
@@ -51,6 +59,7 @@ void main() {
         final boxes = DemoRaceEngine.mysteryBoxIds;
         expect(e.openBox(boxes[0])['result']['type'], 'PROTEIN_SHAKE');
         expect(e.openBox(boxes[1])['result']['type'], 'COMPRESSION_SOCKS');
+        expect(e.openBox(boxes[2])['result']['type'], 'SHORTCUT');
       }
     });
 
@@ -59,8 +68,9 @@ void main() {
       // the script stays reachable (spec §5.7b).
       final e = _engine();
       final boxes = DemoRaceEngine.mysteryBoxIds;
-      expect(e.openBox(boxes[1])['result']['type'], 'PROTEIN_SHAKE');
+      expect(e.openBox(boxes[2])['result']['type'], 'PROTEIN_SHAKE');
       expect(e.openBox(boxes[0])['result']['type'], 'COMPRESSION_SOCKS');
+      expect(e.openBox(boxes[1])['result']['type'], 'SHORTCUT');
     });
   });
 
@@ -162,6 +172,7 @@ void main() {
       e.usePowerup(powerupId: boxes[1]);
       e.resolveScriptedAttack();
       e.acknowledgeAttack();
+      e.openBox(boxes[2]);
 
       final leaderBefore = e.stepsFor(DemoRaceEngine.rivalLeaderUserId);
       final meBefore = e.stepsFor(e.myUserId);
@@ -188,6 +199,7 @@ void main() {
       e.usePowerup(powerupId: boxes[1]);
       e.resolveScriptedAttack();
       e.acknowledgeAttack();
+      e.openBox(boxes[2]);
 
       e.usePowerup(
         powerupId: DemoRaceEngine.shortcutPowerupId,
@@ -206,7 +218,7 @@ void main() {
       for (final id in boxes) {
         expect(e.openBox(id)['result']['coinsSpent'], 0);
       }
-      for (final id in [...boxes, DemoRaceEngine.shortcutPowerupId]) {
+      for (final id in boxes) {
         final r = e.usePowerup(
           powerupId: id,
           targetUserId: DemoRaceEngine.rivalLeaderUserId,
@@ -234,6 +246,8 @@ void main() {
       expect(e.beat, DemoBeat.blockedAttack);
       e.resolveScriptedAttack();
       e.acknowledgeAttack();
+      expect(e.beat, DemoBeat.openThirdBox);
+      e.openBox(boxes[2]);
       expect(e.beat, DemoBeat.useShortcut);
       e.usePowerup(
         powerupId: DemoRaceEngine.shortcutPowerupId,
@@ -256,18 +270,23 @@ void main() {
     });
 
     test('using the Shortcut early never dead-ends the script', () {
+      // Opening all three boxes up front rolls the Shortcut into the tray
+      // before the coach ever asks for it. Firing it there must not strand the
+      // script — the beat is derived from state, so it simply drops through to
+      // the next unsatisfied goal.
       final e = _engine();
       e.acknowledgeIntro();
+      final boxes = DemoRaceEngine.mysteryBoxIds;
+      for (final id in boxes) {
+        e.openBox(id);
+      }
       e.usePowerup(
         powerupId: DemoRaceEngine.shortcutPowerupId,
         targetUserId: DemoRaceEngine.rivalLeaderUserId,
       );
-      // Still asks for the boxes; the script remains reachable.
-      expect(e.beat, DemoBeat.openBox);
-      final boxes = DemoRaceEngine.mysteryBoxIds;
-      e.openBox(boxes[0]);
+      // Still asks for the boost; the script remains reachable.
+      expect(e.beat, DemoBeat.useBoost);
       e.usePowerup(powerupId: boxes[0]);
-      e.openBox(boxes[1]);
       e.usePowerup(powerupId: boxes[1]);
       e.resolveScriptedAttack();
       e.acknowledgeAttack();
@@ -282,7 +301,7 @@ void main() {
       final e = DemoRaceEngine(
         myUserId: 'usr_abc123',
         myDisplayName: 'Wandering Otter42',
-      );
+      )..skipPrologue();
       final me = e.participants.firstWhere((p) => p['userId'] == 'usr_abc123');
       expect(me['displayName'], 'Wandering Otter42');
       expect(e.myUserId, 'usr_abc123');
@@ -305,14 +324,13 @@ void main() {
       final inventory = (powerupData['inventory'] as List)
           .cast<Map<String, dynamic>>();
       expect(inventory.length, 3);
+      // Nothing is pre-owned: every slot starts as an unopened box, and the
+      // Shortcut only exists once the third one is opened.
       expect(
         inventory.where((p) => p['status'] == 'MYSTERY_BOX').length,
-        2,
+        3,
       );
-      expect(
-        inventory.firstWhere((p) => p['status'] == 'HELD')['type'],
-        'SHORTCUT',
-      );
+      expect(inventory.where((p) => p['status'] == 'HELD'), isEmpty);
     });
 
     test('details carry an ACTIVE, ACCEPTED, zero-buy-in race', () {
@@ -334,6 +352,70 @@ void main() {
         (details['winner'] as Map<String, dynamic>)['userId'],
         e.myUserId,
       );
+    });
+  });
+
+  group('the create + invite prologue', () {
+    test('a fresh engine opens on the create beat', () {
+      final e = _rawEngine();
+      expect(e.beat, DemoBeat.createRace);
+      expect(e.raceCreated, isFalse);
+      expect(e.friendsInvited, isFalse);
+    });
+
+    test('creating carries the chosen duration into the race details', () {
+      final e = _rawEngine();
+      e.markRaceCreated(durationDays: 7);
+
+      expect(e.beat, DemoBeat.inviteFriends);
+      expect(e.durationDays, 7);
+      expect(
+        e.raceDetails(DateTime(2026, 7, 26, 12))['maxDurationDays'],
+        7,
+        reason: 'the race the user lands in is the one they just configured',
+      );
+    });
+
+    test('inviting records the picks and hands off to the race', () {
+      final e = _rawEngine();
+      e.markRaceCreated();
+      e.markFriendsInvited(const ['demo-sam', 'demo-jordan', 'demo-priya']);
+
+      expect(e.beat, DemoBeat.intro);
+      expect(e.invitedUserIds, hasLength(3));
+    });
+
+    test('inviting nobody still advances — the demo never strands anyone', () {
+      final e = _rawEngine();
+      e.markRaceCreated();
+      e.markFriendsInvited(const []);
+
+      expect(e.beat, DemoBeat.intro);
+      expect(e.invitedUserIds, isEmpty);
+    });
+
+    test('the three demo friends are the three rivals in the standings', () {
+      final e = _rawEngine();
+      final rosterIds = e.participants
+          .map((p) => p['userId'] as String)
+          .where((id) => id != e.myUserId)
+          .toSet();
+      expect(
+        DemoRaceEngine.demoFriends.map((f) => f['id']).toSet(),
+        rosterIds,
+        reason: 'you race exactly the people you just invited',
+      );
+    });
+
+    test('the prologue is never re-entered once done', () {
+      final e = _rawEngine();
+      e.markRaceCreated(durationDays: 1);
+      e.markFriendsInvited(const ['demo-sam']);
+      // A second create (a stray double-tap on CREATE RACE) must not reset the
+      // duration or bounce the user back a beat.
+      e.markRaceCreated(durationDays: 14);
+      expect(e.durationDays, 1);
+      expect(e.beat, DemoBeat.intro);
     });
   });
 }

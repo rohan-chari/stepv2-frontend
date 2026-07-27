@@ -122,7 +122,7 @@ void main() {
     final engine = DemoRaceEngine(
       myUserId: real.userId!,
       myDisplayName: real.displayName!,
-    );
+    )..skipPrologue();
     final api = _StarterRewardSpyApi(engine);
     final notifications = _CountingNotificationService();
 
@@ -190,7 +190,7 @@ void main() {
     final boxes = find.byWidgetPredicate(
       (w) => w is ItemSlot && w.state == ItemSlotState.mysteryBox,
     );
-    expect(boxes, findsNWidgets(2));
+    expect(boxes, findsNWidgets(3));
     await tester.tap(boxes.first);
     await settleDemo(tester);
 
@@ -208,14 +208,24 @@ void main() {
   ) async {
     final ctx = await pumpDemoScreen(tester);
 
-    // OPEN ALL: two boxes are openable, which is exactly when the real screen
+    // OPEN ALL: three boxes are openable, which is exactly when the real screen
     // shows the button. It must be absent in demoMode.
     expect(find.text('OPEN ALL'), findsNothing);
     expect(ctx.api.batchOpens, 0);
 
+    // Nothing is pre-owned any more, so roll the boxes through the engine to
+    // reach the state this test is about: a held, upgradeable Shortcut.
+    for (final id in DemoRaceEngine.mysteryBoxIds) {
+      ctx.engine.openBox(id);
+    }
+    await settleDemo(tester, frames: 20);
+
     // Open the powerup sheet on the held Shortcut.
     final held = find.byWidgetPredicate(
-      (w) => w is ItemSlot && w.state == ItemSlotState.held,
+      (w) =>
+          w is ItemSlot &&
+          w.state == ItemSlotState.held &&
+          w.powerupType == 'SHORTCUT',
     );
     expect(held, findsOneWidget);
     await tester.tap(held);
