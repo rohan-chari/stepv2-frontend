@@ -884,6 +884,24 @@ class _ShopTabState extends State<ShopTab> {
           );
   }
 
+  /// The equipped CHARACTER's assetKey, or null for the default capybara.
+  ///
+  /// The backend serializes `equipped[slot]` as an OBJECT
+  /// (`shopCosmetics.js` `serializeEquippedAccessory`), never a String. Reading
+  /// it as `String?` threw a `TypeError` during build and blanked the
+  /// CHARACTERS inventory page the moment a corgi/turtle was equipped
+  /// (batch 2026-07-27 item 21).
+  ///
+  /// Deliberately total: any shape the backend might send — a future scalar, a
+  /// malformed row, an absent key — resolves to "no character equipped" rather
+  /// than throwing. The backend may be a different version than this build.
+  String? _equippedCharacterAssetKey() {
+    final row = (_catalog?['equipped'] as Map?)?['CHARACTER'];
+    if (row is Map) return row['assetKey'] as String?;
+    if (row is String) return row; // defensive: never emitted today
+    return null;
+  }
+
   /// Item 6 — the always-present Capybara tile at the head of Inventory →
   /// CHARACTERS.
   ///
@@ -893,9 +911,7 @@ class _ShopTabState extends State<ShopTab> {
   /// server. EQUIP is the existing `_equip('CHARACTER', null)` clear call — no
   /// new endpoint, no fake catalog row, safe on every backend version.
   Widget _capybaraInventoryTile() {
-    final equippedCharacter =
-        (_catalog?['equipped'] as Map?)?['CHARACTER'] as String?;
-    final equipped = equippedCharacter == null;
+    final equipped = _equippedCharacterAssetKey() == null;
     final sprite = animalSpriteFor(kDefaultAnimal);
     Widget art({double iconSize = 30}) => AccessoryThumbnail(
       assetKey: kDefaultAnimal,
