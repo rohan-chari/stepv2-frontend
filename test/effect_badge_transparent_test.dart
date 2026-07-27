@@ -5,19 +5,20 @@ import 'package:step_tracker/screens/race_detail_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/styles.dart';
+import 'package:step_tracker/widgets/powerup_icon.dart';
 
-/// Item 15 — the active-effect badge painted a near-white `textLight` plate
-/// behind every PowerupIcon, in BOTH themes. Coin Flip exposed it worst (a
-/// small round coin with a big transparent margin) but the plate is
-/// type-agnostic.
+/// The active-effect badge in the standings has now had three backgrounds: a
+/// near-white plate, then a polarity-tinted plate inside a `woodDark` frame —
+/// which on a cream standings row read as a dark green chip glued to the
+/// sprite — and now nothing at all.
 ///
-/// Item 15's fix was a polarity-tinted low-alpha fill inside a `woodDark`
-/// frame. That frame read as a dark green chip glued to the sprite on a cream
-/// standings row, so the badge now paints NO plate at all — the sprites carry
-/// their own black keylines. These tests keep their original job (the plate
-/// must never come back) with the target moved from "the tint" to "nothing";
-/// night-mode legibility is now a halo shaped like the art, covered in
-/// effect_badge_transparent_test.dart.
+/// The sprite carries its own black keylines, so a cream row needs no help.
+/// Night mode does: on the night parchment (#1B2A34) the darkest sprites sit
+/// near 1:1 against the background, so they get a halo shaped like the art
+/// instead of a box.
+///
+/// Pumped through the real race screen rather than the badge widget, because
+/// the defect was about what the badge looks like *on the row it sits on*.
 
 class _EffectsApi extends BackendApiService {
   _EffectsApi({required this.activeEffects});
@@ -117,6 +118,19 @@ Future<void> _pump(
   await tester.pump(const Duration(milliseconds: 300));
 }
 
+/// The darkest sprite in the catalogue — 1.04:1 against the night parchment,
+/// so it is the one that proves the halo is doing real work.
+_EffectsApi _darkSpriteApi() => _EffectsApi(
+  activeEffects: const [
+    {
+      'type': 'POWER_OUTAGE',
+      'targetUserId': 'u2',
+      'sourceUserId': 'u1',
+      'onSelf': true,
+    },
+  ],
+);
+
 BoxDecoration _plateDecoration(WidgetTester tester) {
   final container = tester.widget<Container>(
     find.byKey(const Key('effect-badge-plate')).first,
@@ -127,63 +141,54 @@ BoxDecoration _plateDecoration(WidgetTester tester) {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('a self-cast effect gets no plate, and never the white one', (
+  testWidgets('the badge paints no plate behind the sprite in day mode', (
     tester,
   ) async {
-    final api = _EffectsApi(
-      activeEffects: const [
-        {
-          'type': 'COIN_FLIP',
-          'targetUserId': 'u2',
-          'sourceUserId': 'u2',
-          'onSelf': true,
-        },
-      ],
-    );
-    await _pump(tester, api, night: false);
+    await _pump(tester, _darkSpriteApi(), night: false);
 
-    final palette = AppColors.of(
-      tester.element(find.byKey(const Key('effect-badge-plate')).first),
-    );
     final decoration = _plateDecoration(tester);
-    expect(decoration.color, isNot(palette.textLight));
     expect(decoration.color, Colors.transparent);
+    // The `woodDark` frame that made it read as a green chip is gone too.
+    expect(decoration.border, isNull);
+    expect(decoration.borderRadius, isNull);
   });
 
-  testWidgets('a rival-cast effect gets no plate either', (tester) async {
-    final api = _EffectsApi(
-      activeEffects: const [
-        {
-          'type': 'LEG_CRAMP',
-          'targetUserId': 'u2',
-          'sourceUserId': 'u1',
-          'onSelf': true,
-        },
-      ],
-    );
-    await _pump(tester, api, night: false);
+  testWidgets('night mode paints no plate either', (tester) async {
+    await _pump(tester, _darkSpriteApi(), night: true);
 
-    final palette = AppColors.of(
-      tester.element(find.byKey(const Key('effect-badge-plate')).first),
-    );
-    expect(_plateDecoration(tester).color, isNot(palette.textLight));
     expect(_plateDecoration(tester).color, Colors.transparent);
+    expect(_plateDecoration(tester).border, isNull);
   });
 
-  testWidgets('night mode also drops the near-white plate', (tester) async {
-    final api = _EffectsApi(
-      activeEffects: const [
-        {
-          'type': 'COIN_FLIP',
-          'targetUserId': 'u2',
-          'sourceUserId': 'u2',
-          'onSelf': true,
-        },
-      ],
-    );
-    await _pump(tester, api, night: true);
+  testWidgets('a near-invisible sprite gets a halo at night, not a box', (
+    tester,
+  ) async {
+    await _pump(tester, _darkSpriteApi(), night: true);
 
-    expect(_plateDecoration(tester).color, isNot(AppPalette.night.textLight));
-    expect(_plateDecoration(tester).color, Colors.transparent);
+    final plate = find.byKey(const Key('effect-badge-plate')).first;
+    // The halo is the sprite itself, flooded and blurred, painted under the
+    // real one — so the badge draws the same art more than once.
+    expect(
+      find.descendant(of: plate, matching: find.byType(PowerupIcon)),
+      findsNWidgets(3),
+    );
+    expect(
+      find.descendant(of: plate, matching: find.byType(ImageFiltered)),
+      findsNWidgets(2),
+    );
+  });
+
+  testWidgets('day mode draws the sprite once, with no halo', (tester) async {
+    await _pump(tester, _darkSpriteApi(), night: false);
+
+    final plate = find.byKey(const Key('effect-badge-plate')).first;
+    expect(
+      find.descendant(of: plate, matching: find.byType(PowerupIcon)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: plate, matching: find.byType(ImageFiltered)),
+      findsNothing,
+    );
   });
 }

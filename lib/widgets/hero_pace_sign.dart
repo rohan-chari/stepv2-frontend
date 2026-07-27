@@ -33,13 +33,44 @@ class HeroPaceSign extends StatelessWidget {
   /// near-black of the house outline style and clears 4.5:1 on [plankWood].
   static const inkOnWood = Color(0xFF1A0E04);
 
+  /// A one-pixel warm highlight under each glyph, as if the line were routed
+  /// into the board and catching light on its lower lip.
+  ///
+  /// Fixed colours for the same reason [inkOnWood] is: the plank art does not
+  /// change between palettes, so nothing painted on it may either. Its job is
+  /// legibility — the wood grain runs horizontally straight through the text,
+  /// and the highlight separates the glyph edges from it in both modes.
+  static const _carveHighlight = <Shadow>[
+    Shadow(color: Color(0x80FFD9A6), offset: Offset(0, 1)),
+  ];
+
   /// The asset's own aspect ratio, so the plank never distorts.
-  static const _plankAspect = 449 / 93;
+  static const plankAspect = 449 / 93;
+
+  /// Board height for the home hero.
+  ///
+  /// The first version stood 40pt tall, which left a ~131×27pt text window —
+  /// far too small for a two-sentence pace line, so the [FittedBox] below
+  /// shrank the copy to roughly 7pt and it read as illegible scribble on the
+  /// wood. The board is now sized from the copy instead of the other way
+  /// round: tall enough to seat three full lines of [textSize] copy without
+  /// the [FittedBox] having to shrink anything. Top edge still clears the
+  /// mascot's feet (they land ~80pt above the scene bottom; see home_tab's
+  /// capybara placement), which is what caps this at 70.
+  static double heightFor({required bool compact}) => compact ? 62 : 70;
+
+  /// Base size of the pace line. The board is sized around it, not the other
+  /// way round — see [heightFor].
+  static const textSize = 14.0;
+
+  /// Fraction of the board's height given to the text window. The board's top
+  /// and bottom edges are clean art, so this is deliberately tight.
+  static const _verticalInsetFraction = 0.08;
 
   @override
   Widget build(BuildContext context) {
     return AspectRatio(
-      aspectRatio: _plankAspect,
+      aspectRatio: plankAspect,
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -52,17 +83,22 @@ class HeroPaceSign extends StatelessWidget {
             // A missing asset must not take the whole hero down with it.
             errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
           ),
-          // The knots and nail pegs live in the outer ~18% of the board, so the
-          // text is inset past them onto the clean centre face.
+          // The knots and nail pegs live in the outer ~15% of the board (the
+          // left knot sits at ~8% and the right at ~88% of the width), so the
+          // text is inset past them onto the clean centre face. The vertical
+          // inset is deliberately tighter than the horizontal one: the board's
+          // top and bottom edges are clean, and every point given back here is
+          // a point of type size.
           LayoutBuilder(
             builder: (context, constraints) {
-              final inset = constraints.maxWidth * 0.16;
+              final inset = constraints.maxWidth * 0.15;
               return Padding(
                 padding: EdgeInsets.symmetric(
                   horizontal: inset,
-                  vertical: constraints.maxHeight * 0.16,
+                  vertical: constraints.maxHeight * _verticalInsetFraction,
                 ),
                 child: Center(
+                  key: const Key('hero-pace-sign-window'),
                   // Shrink rather than ellipsize — the same defect class as
                   // item 4's PillButton truncation. A clipped pace line is a
                   // silent failure; a slightly smaller one is not.
@@ -78,7 +114,8 @@ class HeroPaceSign extends StatelessWidget {
                         text,
                         key: const Key('hero-pace-sign-text'),
                         textAlign: TextAlign.center,
-                        style: PixelText.body(size: 12, color: inkOnWood),
+                        style: PixelText.body(size: textSize, color: inkOnWood)
+                            .copyWith(shadows: _carveHighlight),
                       ),
                     ),
                   ),

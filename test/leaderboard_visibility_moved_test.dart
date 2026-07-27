@@ -194,7 +194,7 @@ void main() {
     expect(api.leaderboardCalls.last.scope, 'friends');
   });
 
-  testWidgets('the visibility toggle renders below the standings', (
+  testWidgets('the visibility toggle renders above the standings', (
     tester,
   ) async {
     final api = _FakeApi();
@@ -208,10 +208,12 @@ void main() {
     expect(switchFinder, findsOneWidget);
     expect(tester.widget<PixelSwitch>(switchFinder).value, isTrue);
 
-    // Below the standings: under the last ranked row.
+    // Above the standings: over the first ranked row. It shipped below the
+    // board, where a 100-row list buried it — "am I listed here?" is a
+    // question you ask before reading the board, not after scrolling it.
     expect(
-      tester.getTopLeft(label).dy,
-      greaterThan(tester.getBottomLeft(find.text('@FourthWalker')).dy),
+      tester.getBottomLeft(label).dy,
+      lessThan(tester.getTopLeft(find.text('@AceWinner')).dy),
     );
   });
 

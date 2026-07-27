@@ -446,10 +446,15 @@ class _FriendsTabState extends State<FriendsTab> {
               // Friend search is no longer taught by the tutorial (two of its
               // ten steps were near-duplicates about exactly this); it is
               // taught here, once, the first time the tab is actually opened.
+              // This column already supplies the tab's gutters, so the tip must
+              // not add its own — otherwise the card sits inset from the search
+              // field it is pointing at. The bottom margin is the real gap to
+              // the field below (it used to be 4, so the two touched).
               CoachTipHost(
                 tip: CoachTipId.friendsAdd,
                 store: coachTipStore,
                 enabled: widget.authService.onboardingV3Enabled,
+                margin: const EdgeInsets.only(bottom: 12),
                 child: const SizedBox.shrink(),
               ),
               Material(

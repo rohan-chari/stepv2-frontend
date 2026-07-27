@@ -7,7 +7,6 @@ import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
 import '../../styles.dart';
-import '../../widgets/coach_tip.dart';
 import '../../widgets/app_refresh_indicator.dart';
 import '../../utils/at_name.dart';
 import '../../widgets/app_avatar.dart';
@@ -269,20 +268,23 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     return Column(
       children: [
         _buildRankingControls(),
+        _buildVisibilityControl(),
         Padding(
-          padding: const EdgeInsets.fromLTRB(10, 12, 10, 8),
+          padding: const EdgeInsets.fromLTRB(10, 4, 10, 18),
           child: _buildLeaderboardState(),
         ),
-        _buildVisibilityFooter(),
       ],
     );
   }
 
   /// The board's own privacy control, moved here from Settings (batch
-  /// 2026-07-27 item 1): the setting now sits under the thing it governs.
-  Widget _buildVisibilityFooter() {
+  /// 2026-07-27 item 1). It now sits *above* the standings rather than under
+  /// them: buried under a 100-row board it was effectively undiscoverable, and
+  /// "am I listed here?" is a question you ask before reading the board, not
+  /// after scrolling it.
+  Widget _buildVisibilityControl() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 6, 10, 18),
+      padding: const EdgeInsets.fromLTRB(10, 4, 10, 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -383,15 +385,14 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   // The scope section header for the podium / board: the active scope's title
   // centred in the container, with a compact globe/friends icon toggle pinned
   // to the right.
+  //
+  // No coach tip here. The globe/friends toggle is self-evident, and a card
+  // that pushed the whole board down on first visit cost more than the one
+  // sentence was worth. `CoachTipId.leaderboardScope` and its copy stay
+  // defined — the enum is a persisted seen-set, so dropping a value would
+  // change what stored ids mean.
   Widget _buildScopeHeader() {
-    // The evicted "switch between everyone and just your friends" line from
-    // tutorial step 10, fired where the toggle actually is.
-    return CoachTipHost(
-      tip: CoachTipId.leaderboardScope,
-      store: coachTipStore,
-      enabled: widget.authService.onboardingV3Enabled,
-      child: _buildScopeHeaderRow(),
-    );
+    return _buildScopeHeaderRow();
   }
 
   Widget _buildScopeHeaderRow() {

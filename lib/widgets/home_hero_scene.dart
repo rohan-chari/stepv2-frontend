@@ -15,8 +15,8 @@ import '../styles.dart';
 /// user-approved), kept below the step-count HUD so they never cross it.
 ///
 /// When [groundScrollSpeed] is non-zero the ground slides left (the mascot
-/// walks in place) and the clouds drift the opposite way, so the two layers
-/// read as parallax rather than one flat sheet.
+/// walks in place) and the clouds drift the same way but much slower, so the
+/// two layers read as parallax rather than one flat sheet.
 ///
 /// Honors `MediaQuery.disableAnimations` by freezing the drift instead of
 /// running the ambient ticker.
@@ -260,6 +260,16 @@ typedef _CloudConfig = ({
   int atlasIndex,
 });
 
+/// How much of a cloud's nominal drift actually reaches the screen.
+///
+/// The raw `cycles` values (1–3 crossings per 60s ambient period) put the
+/// fastest cloud at ~26 logical px/s on a phone-width scene — the exact speed
+/// of the ground strip. A background layer moving as fast as the foreground is
+/// not parallax; it flattens the scene. Scaling the whole set down leaves the
+/// far layer at roughly an eighth to a third of the ground's speed, which is
+/// the depth cue, while keeping the five clouds' relative spread.
+const double _cloudDriftFactor = 0.35;
+
 const List<_CloudConfig> _clouds = [
   (y: 0.42, scale: 0.74, cycles: 1, phase: 0.12, atlasIndex: 0),
   (y: 0.56, scale: 0.54, cycles: 2, phase: 0.38, atlasIndex: 1),
@@ -288,10 +298,15 @@ class _CloudInstance extends StatelessWidget {
   Widget build(BuildContext context) {
     final cloudSize = 112.0 * config.scale;
     const span = 1.35;
-    // Clouds drift RIGHT while the ground slides LEFT — opposing directions
-    // read as depth (parallax) behind the walking mascot, where matching
-    // directions made the whole scene look like one flat sliding layer.
-    final wrapped = ((config.phase + t * config.cycles) % span + span) % span;
+    // Clouds drift LEFT, the SAME way the ground slides — that is what
+    // parallax is. The mascot walks right, so the whole world moves left past
+    // the camera; depth comes from the far layer moving *slower*, not from it
+    // moving the other way. The previous version sent the clouds right, which
+    // gave them a higher apparent speed than the ground and read as clouds
+    // racing forwards in front of the capybara.
+    final wrapped =
+        ((config.phase - t * config.cycles * _cloudDriftFactor) % span + span) %
+        span;
     final x = (wrapped - 0.18) * fieldSize.width;
     final y = fieldSize.height * config.y;
     return Positioned(

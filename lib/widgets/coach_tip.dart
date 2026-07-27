@@ -79,11 +79,21 @@ class CoachTipHost extends StatefulWidget {
     required this.store,
     this.enabled = true,
     this.onShown,
+    this.margin = const EdgeInsets.fromLTRB(16, 8, 16, 4),
   });
 
   final CoachTipId tip;
   final Widget child;
   final CoachTipStore store;
+
+  /// Space around the tip card.
+  ///
+  /// The default matches a surface that supplies its own 16pt gutters (the
+  /// home tab's milestone section). A host that is *already* inside a padded
+  /// column must pass zero horizontal margin, or the card ends up inset twice
+  /// and visibly narrower than the control it explains — which is exactly how
+  /// it shipped on the Friends tab.
+  final EdgeInsets margin;
 
   /// The trigger condition — "the user actually reached this surface". False
   /// keeps the tip latent without consuming it.
@@ -170,31 +180,40 @@ class _CoachTipHostState extends State<CoachTipHost>
               end: Offset.zero,
             ).animate(curve),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              padding: widget.margin,
+              // Same parchment game-piece language as every other card in the
+              // app (races/leaderboard `_boardCardDecoration`): 14pt radius, a
+              // roofDark keyline, and the hard 4pt drop with no blur. The
+              // earlier accent-bordered, 12pt-radius, 3pt-shadow card was the
+              // only surface using those values and read as a foreign toast.
               child: DecoratedBox(
+                key: const Key('coach-tip-card'),
                 decoration: BoxDecoration(
-                  color: colors.parchmentLight,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: colors.accent, width: 2),
+                  color: colors.parchment,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: colors.roofDark.withValues(alpha: 0.55),
+                    width: 2,
+                  ),
                   boxShadow: const [
                     BoxShadow(
-                      color: Color(0x55000000),
-                      offset: Offset(0, 3),
+                      color: Color(0x66000000),
+                      offset: Offset(0, 4),
                       blurRadius: 0,
                     ),
                   ],
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 10, 8, 8),
+                  padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
                   child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Icon(
                         Icons.lightbulb_rounded,
                         size: 18,
-                        color: colors.accent,
+                        color: colors.pillGoldDark,
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           coachTipCopy(widget.tip),
@@ -204,18 +223,29 @@ class _CoachTipHostState extends State<CoachTipHost>
                           ),
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      TextButton(
-                        onPressed: _dismiss,
-                        style: TextButton.styleFrom(
-                          minimumSize: const Size(0, 32),
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                        ),
-                        child: Text(
-                          'GOT IT',
-                          style: PixelText.title(
-                            size: 11,
-                            color: colors.textMid,
+                      const SizedBox(width: 10),
+                      // A gold pill, not a bare text button: dismissal is the
+                      // one action on this card, and the rest of the app spells
+                      // actions as pills.
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _dismiss,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 7,
+                          ),
+                          decoration: BoxDecoration(
+                            color: colors.pillGold,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: colors.pillGoldDark),
+                          ),
+                          child: Text(
+                            'GOT IT',
+                            style: PixelText.title(
+                              size: 11,
+                              color: colors.textDark,
+                            ),
                           ),
                         ),
                       ),

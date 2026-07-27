@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 
@@ -7579,29 +7580,32 @@ class _EffectIconWithTooltipState extends State<_EffectIconWithTooltip> {
   Widget build(BuildContext context) {
     final name = PowerupCopy.nameFor(widget.type);
     final palette = AppColors.of(context);
-    final tint = widget.isBoost ? palette.feedBoost : palette.feedAttack;
+    // No plate and no frame: the sprite sits straight on the standings row.
+    //
+    // This badge went white plate (invisible Coin Flip) → item 15's tinted
+    // plate inside a `woodDark` frame, which on a parchment row read as a dark
+    // green chip stuck to the sprite. Both were attempts to guarantee contrast
+    // behind transparent pixel art, and both were more conspicuous than the
+    // art itself. The sprites already carry their own black keylines, which is
+    // all the separation a cream row needs.
+    //
+    // Night mode is the real constraint and the reason this isn't simply a
+    // deletion: on the night parchment (#1B2A34) the darkest sprites are
+    // effectively invisible — Power Outage sits at 1.04:1 and Stealth Mode at
+    // 1.10:1 against it. So at night, and only at night, the sprite gets a
+    // soft light halo shaped like the art (see [_EffectBadgeGlyph]) instead of
+    // a box. Same silhouette, no chip.
     final icon = Container(
-      decoration: BoxDecoration(
-        color: AppColors.of(context).woodDark,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppColors.of(context).woodShadow, width: 0.5),
-      ),
-      padding: const EdgeInsets.all(1.5),
-      child: Container(
-        key: const Key('effect-badge-plate'),
-        padding: const EdgeInsets.all(3),
-        // Item 15: this was `textLight` — 0xFFFFFBF5 by day and 0xFFF7F1E7 at
-        // night, i.e. a near-white plate in BOTH themes, and the only site in
-        // the app that put white behind a PowerupIcon. Coin Flip (a small round
-        // coin with a wide transparent margin) exposed it worst, but the plate
-        // was type-agnostic. Now the same low-alpha polarity tint the races tab
-        // uses, which reads against the wood frame in either palette.
-        decoration: BoxDecoration(
-          color: tint.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(4.5),
-          border: Border.all(color: tint.withValues(alpha: 0.35), width: 1),
-        ),
-        child: PowerupIcon(type: widget.type, size: 18),
+      key: const Key('effect-badge-plate'),
+      padding: const EdgeInsets.all(3),
+      // Explicitly transparent rather than decoration-less: this node is the
+      // regression guard for "never a plate behind the sprite", so it stays
+      // addressable and stays declared.
+      decoration: const BoxDecoration(color: Colors.transparent),
+      child: _EffectBadgeGlyph(
+        type: widget.type,
+        size: 18,
+        haloed: palette.isDark,
       ),
     );
 
@@ -7627,6 +7631,58 @@ class _EffectIconWithTooltipState extends State<_EffectIconWithTooltip> {
                 )
               : icon,
         ),
+      ),
+    );
+  }
+}
+
+/// A powerup sprite on a bare row, with an optional light halo behind it.
+///
+/// The halo is how the badge stays legible in night mode without putting a box
+/// behind the art. It is the sprite itself, flooded to a warm off-white and
+/// blurred, painted underneath the real sprite — so it hugs the silhouette and
+/// reads as a glow rather than a chip. Two stacked copies because one blurred
+/// pass is too faint to lift a near-black sprite (Power Outage, Stealth Mode)
+/// off the night parchment.
+///
+/// Day mode skips it entirely: every sprite already clears 5.7:1 on the cream
+/// row, and a halo there would only muddy the pixel keylines.
+class _EffectBadgeGlyph extends StatelessWidget {
+  const _EffectBadgeGlyph({
+    required this.type,
+    required this.size,
+    required this.haloed,
+  });
+
+  final String type;
+  final double size;
+  final bool haloed;
+
+  /// Warm off-white so the glow belongs to the parchment palette rather than
+  /// reading as a blue-white screen glare.
+  static const _haloColor = Color(0xFFF7F1E7);
+
+  @override
+  Widget build(BuildContext context) {
+    final sprite = PowerupIcon(type: type, size: size);
+    if (!haloed) return sprite;
+
+    final halo = IgnorePointer(
+      child: ImageFiltered(
+        imageFilter: ImageFilter.blur(sigmaX: 2.2, sigmaY: 2.2),
+        child: ColorFiltered(
+          colorFilter: const ColorFilter.mode(_haloColor, BlendMode.srcATop),
+          child: PowerupIcon(type: type, size: size),
+        ),
+      ),
+    );
+
+    return SizedBox.square(
+      dimension: size,
+      child: Stack(
+        alignment: Alignment.center,
+        clipBehavior: Clip.none,
+        children: [halo, halo, sprite],
       ),
     );
   }

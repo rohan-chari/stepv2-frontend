@@ -836,18 +836,23 @@ class HomeTab extends StatelessWidget {
             ),
             // The pace line stands on a wooden trail sign planted in the dirt
             // strip, rather than floating on the scrolling brick texture with
-            // only a drop shadow holding it up (item 18). The sign is 40pt
-            // tall so its top edge clears the capybara's feet, which land at
-            // roughly `groundHeight - 4 - capySize * 0.22`.
+            // only a drop shadow holding it up (item 18). The board is sized
+            // from the copy (HeroPaceSign.heightFor) — at the original 40pt it
+            // shrank the two-sentence line to ~7pt and was unreadable. Its top
+            // edge still clears the capybara's feet, which land at roughly
+            // `groundHeight - 4 - capySize * 0.22` + the sprite's 22% padding,
+            // i.e. ~80pt above the scene bottom.
             if (!(isLoading && stepData == null) && error == null)
               Positioned(
-                left: 16,
-                right: 16,
-                bottom: 8,
+                left: 12,
+                right: 12,
+                bottom: 6,
                 child: Center(
-                  child: SizedBox(
-                    height: 40,
-                    child: HeroPaceSign(text: _heroSummary(steps: stepData?.steps)),
+                  child: _PaceSignFrame(
+                    height: HeroPaceSign.heightFor(compact: compact),
+                    child: HeroPaceSign(
+                      text: _heroSummary(steps: stepData?.steps),
+                    ),
                   ),
                 ),
               ),
@@ -1904,6 +1909,36 @@ class _HomeSectionHeader extends StatelessWidget {
             ).copyWith(shadows: _textShadows),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Gives the trail sign its intended height, and scales the whole board down
+/// proportionally on phones too narrow to seat it.
+///
+/// A bare `SizedBox(height:)` around the sign's [AspectRatio] would overflow
+/// horizontally below ~340pt of usable width instead of shrinking, so the
+/// board is laid out at its natural size and fitted into whatever is actually
+/// available. Scaling the plank and its type together keeps the wood grain and
+/// the pace line in the same proportion at every width.
+class _PaceSignFrame extends StatelessWidget {
+  const _PaceSignFrame({required this.height, required this.child});
+
+  final double height;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: height,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: SizedBox(
+          height: height,
+          width: height * HeroPaceSign.plankAspect,
+          child: child,
+        ),
       ),
     );
   }
