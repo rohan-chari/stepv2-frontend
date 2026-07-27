@@ -65,36 +65,57 @@ void main() {
       await tester.pump();
     }
 
-    // The text window must seat three whole lines at the base size, because
-    // that is how many the longest copy takes on a phone — at the shipped 40pt
-    // board the window held 1.7 lines, so the FittedBox scaled the whole block
-    // to ~7pt to make it fit.
+    // The text window has to seat the copy at close to its natural size — at
+    // the shipped 40pt board it held 1.7 lines, so the FittedBox scaled the
+    // whole block to ~7pt to make it fit. Two and a half lines is the floor:
+    // the longest copy runs to two lines on a phone, and the board cannot grow
+    // past that without its top edge climbing into the grass fringe.
     //
     // Asserted as geometry rather than as a measured font size on purpose:
     // widget tests substitute a monospaced test font whose glyphs are a full em
     // wide, so any assertion that depends on advance widths measures the test
     // font, not DM Sans. Line *height* is exact in both.
-    testWidgets('the text window seats three full lines at the base size', (
+    testWidgets('the text window seats the copy near its natural size', (
       tester,
     ) async {
       await pumpAtHomeSize(tester, compact: false, text: 'x');
 
-      const lineHeight = HeroPaceSign.textSize * 1.35; // PixelText.body height
+      const lineHeight = HeroPaceSign.textSize * 1.35; // PixelText.body
       final window = tester.getSize(
         find.byKey(const Key('hero-pace-sign-window')),
       );
-      expect(window.height, greaterThanOrEqualTo(lineHeight * 3));
+      expect(window.height, greaterThanOrEqualTo(lineHeight * 2.5));
       expect(window.width, greaterThanOrEqualTo(200));
     });
 
     testWidgets('short phones still seat more than two lines', (tester) async {
       await pumpAtHomeSize(tester, compact: true, text: 'x');
 
-      const lineHeight = HeroPaceSign.textSize * 1.35;
       final window = tester.getSize(
         find.byKey(const Key('hero-pace-sign-window')),
       );
-      expect(window.height, greaterThan(lineHeight * 2.5));
+      expect(window.height, greaterThan(HeroPaceSign.textSize * 1.35 * 2));
+    });
+
+    // The board is planted in the dirt strip and must not ride up into the
+    // grass fringe at the top of it, which is what clipped the mascot's feet.
+    testWidgets('the board clears the grass fringe at its home placement', (
+      tester,
+    ) async {
+      // home_tab: groundHeight 84, the grass band is the top ~12 of it, and
+      // the sign is positioned 4 above the scene bottom.
+      const groundHeight = 84.0;
+      const grassBand = 12.0;
+      const bottomInset = 4.0;
+
+      for (final compact in [false, true]) {
+        final top = bottomInset + HeroPaceSign.heightFor(compact: compact);
+        expect(
+          top,
+          lessThan(groundHeight - grassBand),
+          reason: 'the board must stay below the grass line (compact: $compact)',
+        );
+      }
     });
 
     testWidgets('a line that fits is painted at full size, never shrunk', (

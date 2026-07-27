@@ -53,11 +53,15 @@ class HeroPaceSign extends StatelessWidget {
   /// far too small for a two-sentence pace line, so the [FittedBox] below
   /// shrank the copy to roughly 7pt and it read as illegible scribble on the
   /// wood. The board is now sized from the copy instead of the other way
-  /// round: tall enough to seat three full lines of [textSize] copy without
-  /// the [FittedBox] having to shrink anything. Top edge still clears the
-  /// mascot's feet (they land ~80pt above the scene bottom; see home_tab's
-  /// capybara placement), which is what caps this at 70.
-  static double heightFor({required bool compact}) => compact ? 62 : 70;
+  /// round: big enough that the pace line reads at something close to its
+  /// natural size, rather than the ~7pt the original 40pt board forced.
+  ///
+  /// The ceiling is the scene, not the copy. The board is planted in the dirt
+  /// strip, so its top edge has to stay below the grass fringe at the top of
+  /// that strip (`groundHeight` is 84 in home_tab, and the grass band is the
+  /// top ~12 of it) — at 70 the board rose into the grass and clipped the
+  /// mascot's feet. 62 leaves the fringe clear.
+  static double heightFor({required bool compact}) => compact ? 56 : 62;
 
   /// Base size of the pace line. The board is sized around it, not the other
   /// way round — see [heightFor].

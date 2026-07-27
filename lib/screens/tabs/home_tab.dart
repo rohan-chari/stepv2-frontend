@@ -846,7 +846,9 @@ class HomeTab extends StatelessWidget {
               Positioned(
                 left: 12,
                 right: 12,
-                bottom: 6,
+                // Sits low in the dirt: bottom + the board's height must stay
+                // under the grass fringe at the top of the ground strip.
+                bottom: 4,
                 child: Center(
                   child: _PaceSignFrame(
                     height: HeroPaceSign.heightFor(compact: compact),
