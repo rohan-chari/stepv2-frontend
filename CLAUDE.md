@@ -191,7 +191,7 @@ specifically the art-generation workflow.
 - Aseprite binary: `/Users/rohan/repos/aesprite/build/bin/aseprite`
 - Art sources + scripts: `/Users/rohan/repos/aesprite/art/aseprite/`, `.../art/scripts/`
 - Frontend PNGs: `assets/images/accessories/<assetKey>.png` (globbed in `pubspec.yaml`)
-- Backend catalog: `/Users/rohan/repos/stepv2-backend/data/cosmetics.json`
+- Backend catalog: the `shop_items` table (DB is the source of truth, peer-mirrored prod ↔ staging; see `docs/adding-cosmetic-items.md`)
 - Capybara base: `assets/images/capybara_walk_right.png` — 384×64 sheet, 6 frames of 64×64, 80ms/frame.
 
 ### The house art style (there is NO written style guide — derived from assets)
@@ -263,14 +263,15 @@ From `lib/widgets/home_course_track.dart` `_rectForSlot(slot, S)` where `S` = fr
 
 ### 4. Install
 1. Copy approved PNG → `assets/images/accessories/<assetKey>.png`.
-2. Add a `cosmetics.json` entry: `sku,name,description,slot,priceCoins,assetKey,
-   active:true, testOnly:true, earnOnly:false, bobble, sortOrder, renderMetadata`
-   (`renderLayer:"behind"` for BACK items). **Ship `testOnly:true`** — flip to
-   `false` only after an App Store build carrying the PNG has rolled out (frozen
-   old clients don't bundle the new PNG).
-3. Placement: ship a rough `renderMetadata`; fine-tune in **Admin → Accessory
-   Tuner**, then `npm run cosmetics:pull`. Apply to DB with `npm run cosmetics:apply`
-   against **local/staging only — never prod**.
+2. Create the catalog row via `POST /admin/shop/items` (staging; mirrors to the
+   peer DB by sku): `sku,name,description,slot,priceCoins,assetKey, bobble,
+   sortOrder, renderMetadata` (`renderLayer:"behind"` for BACK items). The DB is
+   the source of truth — there is no cosmetics.json. **`testOnly` defaults to
+   `true`; keep it** — flip to `false` only after an App Store build carrying
+   the PNG has rolled out (frozen old clients don't bundle the new PNG).
+3. Placement: create with a rough `renderMetadata`; fine-tune in **Admin →
+   Accessory Tuner** (saves mirror prod ↔ staging automatically). Drift safety
+   net: `npm run cosmetics:sync-peer` (backend repo; `-- --repair` to fix).
 
 ### 5. Aseprite integration (source of truth for art edits)
 - Create editable hi-res source:
@@ -290,6 +291,6 @@ From `lib/widgets/home_course_track.dart` `_rectForSlot(slot, S)` where `S` = fr
 
 ### Guardrails
 - Everything `testOnly:true` until the carrying App Store build has rolled out.
-- Never point `cosmetics:apply` or integration tests at the **prod DB**.
+- Never point `cosmetics:clone` or integration tests at the **prod DB**.
 - Generate into scratch first; copy into the repo only after critique passes.
 - The release that ships new art must still build **iOS + Android in lockstep**.

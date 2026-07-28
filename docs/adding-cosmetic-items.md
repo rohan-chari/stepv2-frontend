@@ -3,10 +3,12 @@
 How to add a new wearable accessory (hat, glasses, backpack, shoes, …) that
 shows up on the capybara and in the shop.
 
-Cosmetics are **defined in the backend**, in **`data/cosmetics.json`** (in the
-`stepv2-backend` repo). The frontend is slot-agnostic: it reads each item's
+Cosmetics live in the backend's **`shop_items` table — the DB is the single
+source of truth** (the old `data/cosmetics.json` is gone). Prod and staging stay
+in lockstep automatically: every admin create/edit is mirrored to the peer DB by
+sku (`PEER_DATABASE_URL`). The frontend is slot-agnostic: it reads each item's
 `slot` + `renderMetadata` and renders the PNG. So a new item is normally **one
-PNG asset (frontend) + one JSON entry (backend)** — no Dart code change
+PNG asset (frontend) + one admin API create (backend)** — no Dart code change
 required.
 
 ## ⚠️ Read this first: old-app compatibility
@@ -29,18 +31,18 @@ clients (which have the new asset) can see and tune it. Once the App Store build
 that bundles the PNG is live and rolled out, flip it to `testOnly: false`. See
 "Step 4".
 
-## The fields (one entry in `data/cosmetics.json`)
+## The fields (body of `POST /admin/shop/items`)
 
 ```jsonc
 {
-  "sku": "backpack",          // stable unique key; the apply script upserts on this
+  "sku": "backpack",          // stable unique key; the peer mirror upserts on this
   "name": "Backpack",         // shop display name
   "description": "Gear up for the long haul.",
   "slot": "BACK",             // HEAD | FACE | NECK | BACK | FEET
   "priceCoins": 1000,         // 0 = free
   "assetKey": "backpack",     // PNG filename WITHOUT .png, in assets/images/accessories/
-  "active": true,             // visible in shop
-  "testOnly": true,           // TestFlight/dev-only gate — keep true for new items (see above)
+  "active": true,             // visible in shop (default true)
+  "testOnly": true,           // TestFlight/dev-only gate — DEFAULTS to true on create (see above)
   "earnOnly": false,          // true = not purchasable, granted only (e.g. ranked rewards)
   "sortOrder": 90,            // shop ordering, ascending
   "renderMetadata": { "offsetX": 0, "offsetY": 0, "rotation": 0, "scale": 1 }
@@ -81,41 +83,35 @@ Drop `assets/images/accessories/<assetKey>.png` into the frontend repo. The
 `assets/images/accessories/` directory is already globbed in `pubspec.yaml`, so
 no pubspec edit is needed — the file bundles automatically on the next build.
 
-### 2. Add the entry + apply (backend)
-Add the object above to the `items` array in `data/cosmetics.json`, then apply
-it to a database. The apply script (`scripts/cosmetics-apply.js`, run via
-`npm run cosmetics:apply`) **upserts by `sku`** against whatever `DATABASE_URL`
-points at, so it's safe to re-run.
+### 2. Create the catalog row (backend admin API)
+`POST /admin/shop/items` with the body above (admin session token required).
+This is the only birth channel for new items. The create writes the environment
+you point it at **and mirrors to the peer DB by sku**, so staging + prod get the
+row together — safe because `testOnly` defaults to `true`.
 
 ```bash
-# staging (from your laptop; needs STAGING_DATABASE_URL in backend .env):
-DATABASE_URL="$(grep -E '^STAGING_DATABASE_URL=' .env | cut -d= -f2- | tr -d '"')" \
-  npm run cosmetics:apply
+curl -X POST https://staging.steptracker-api.org/admin/shop/items \
+  -H "Authorization: Bearer <admin session token>" -H "Content-Type: application/json" \
+  -d '{"sku":"backpack","name":"Backpack","slot":"BACK","priceCoins":1000,"assetKey":"backpack"}'
 ```
 
-On a prod deploy, `prisma/seed.js` calls `applyCosmetics()` automatically (see
-the deploy runbook), so committing the JSON change to `main` is what ships it to
-prod — no manual prod step. NOTE: migrations are the *old* way cosmetics were
-added (only `cowboy_hat`/`baseball_cap`); everything since lives in
-`cosmetics.json`. Don't add a new item via migration — you'd create a second
-source of truth that the JSON-driven upsert fights with.
+The response includes a `mirror` status — if `mirror.ok` is false, reconcile
+with `npm run cosmetics:sync-peer -- --repair` (backend repo). Don't add items
+via Prisma migration — that's the pre-JSON-era method and creates a second
+source of truth.
 
 ### 3. Tune placement (admin tuner)
 In a dev/TestFlight build, open **Admin → Accessory Tuner**
 (`lib/screens/admin_accessory_tuner_screen.dart`). Select the item, drag the
 offset/rotation/scale sliders against a live capybara, then "SAVE TO ALL USERS"
 — this PATCHes `/admin/shop/items/{id}` (`updateAdminShopItem`) and writes
-`renderMetadata` straight to the DB.
-
-> **⚠️ Write the tuned values back into `cosmetics.json`**, or the next deploy's
-> `applyCosmetics()` will overwrite your tuning with the stale JSON values.
-> `npm run cosmetics:pull` (`scripts/cosmetics-pull.js`) pulls the live DB values
-> back into `cosmetics.json` — run it after tuning, then commit. (This is why
-> the existing entries have those long tuned floats.)
+`renderMetadata` straight to the DB (and mirrors it to the peer DB). Nothing to
+write back anywhere — the DB is the source of truth and deploys never touch
+cosmetics.
 
 ### 4. Go prod
-After the App Store build that bundles the PNG is live and rolled out, set the
-item's `testOnly` to `false` in `cosmetics.json`, re-apply, and commit — so prod
+After the App Store build that bundles the PNG is live and rolled out, flip the
+item's `testOnly` to `false` in the admin tuner (mirrors to both DBs) — so prod
 users see it on themselves and on others.
 
 ## Where the code lives (frontend)
@@ -126,10 +122,11 @@ users see it on themselves and on others.
 - `lib/tutorial/tutorial_preview_data.dart` — `tutorialPreviewAccessories`: a worked example of the item shape.
 
 ## Where the code lives (backend)
-- `data/cosmetics.json` — **the catalog source of truth.**
-- `scripts/cosmetics-apply.js` (`npm run cosmetics:apply`) — upserts JSON → DB.
-- `scripts/cosmetics-pull.js` (`npm run cosmetics:pull`) — pulls DB → JSON (after tuning).
-- `prisma/seed.js` — calls `applyCosmetics()` on deploy.
-- `src/utils/shopCosmetics.js` — slots, serialization, `buildAccessoriesList` (the `testOnly` strip for others' avatars).
+- `shop_items` table — **the catalog source of truth** (per environment, peer-mirrored).
+- `src/modules/admin/routes.js` — `POST /admin/shop/items` (create) + `PATCH /admin/shop/items/:id` (tuner).
+- `src/modules/cosmetics/mirrorShopItem.js` — the prod ↔ staging peer mirror.
+- `scripts/cosmetics-sync-peer.js` (`npm run cosmetics:sync-peer`) — drift report / `--repair`.
+- `scripts/cosmetics-clone.js` (`npm run cosmetics:clone`) — bootstrap a fresh/local DB from staging.
+- `src/modules/cosmetics/shopCosmetics.js` — slots, serialization, `buildAccessoriesList` (the `testOnly` strip for others' avatars).
 - `src/queries/getShopCatalog.js`, `src/commands/equipAccessory.js`, `src/commands/purchaseShopItem.js`.
 - `prisma/schema.prisma` — `ShopItem`, `AccessorySlot` enum.
