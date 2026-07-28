@@ -34,10 +34,30 @@ class _RailApi extends BackendApiService {
     'powerupsEnabled': true,
     'endsAt': '2026-12-10T12:00:00.000Z',
     'participants': const [
-      {'userId': 'user-1', 'displayName': 'Me Myself', 'status': 'ACCEPTED', 'team': 'TEAM_A'},
-      {'userId': 'ally-1', 'displayName': 'Ally Alice', 'status': 'ACCEPTED', 'team': 'TEAM_A'},
-      {'userId': 'enemy-1', 'displayName': 'Enemy Eve', 'status': 'ACCEPTED', 'team': 'TEAM_B'},
-      {'userId': 'enemy-2', 'displayName': 'Enemy Ed', 'status': 'ACCEPTED', 'team': 'TEAM_B'},
+      {
+        'userId': 'user-1',
+        'displayName': 'Me Myself',
+        'status': 'ACCEPTED',
+        'team': 'TEAM_A',
+      },
+      {
+        'userId': 'ally-1',
+        'displayName': 'Ally Alice',
+        'status': 'ACCEPTED',
+        'team': 'TEAM_A',
+      },
+      {
+        'userId': 'enemy-1',
+        'displayName': 'Enemy Eve',
+        'status': 'ACCEPTED',
+        'team': 'TEAM_B',
+      },
+      {
+        'userId': 'enemy-2',
+        'displayName': 'Enemy Ed',
+        'status': 'ACCEPTED',
+        'team': 'TEAM_B',
+      },
     ],
   };
 
@@ -48,10 +68,34 @@ class _RailApi extends BackendApiService {
   }) async => {
     'status': 'ACTIVE',
     'participants': [
-      {'userId': 'user-1', 'displayName': 'Me Myself', 'team': 'TEAM_A', 'totalSteps': 6200, 'finishedAt': null},
-      {'userId': 'ally-1', 'displayName': 'Ally Alice', 'team': 'TEAM_A', 'totalSteps': 6100, 'finishedAt': null},
-      {'userId': 'enemy-1', 'displayName': 'Enemy Eve', 'team': 'TEAM_B', 'totalSteps': 5900, 'finishedAt': null},
-      {'userId': 'enemy-2', 'displayName': 'Enemy Ed', 'team': 'TEAM_B', 'totalSteps': 5000, 'finishedAt': null},
+      {
+        'userId': 'user-1',
+        'displayName': 'Me Myself',
+        'team': 'TEAM_A',
+        'totalSteps': 6200,
+        'finishedAt': null,
+      },
+      {
+        'userId': 'ally-1',
+        'displayName': 'Ally Alice',
+        'team': 'TEAM_A',
+        'totalSteps': 6100,
+        'finishedAt': null,
+      },
+      {
+        'userId': 'enemy-1',
+        'displayName': 'Enemy Eve',
+        'team': 'TEAM_B',
+        'totalSteps': 5900,
+        'finishedAt': null,
+      },
+      {
+        'userId': 'enemy-2',
+        'displayName': 'Enemy Ed',
+        'team': 'TEAM_B',
+        'totalSteps': 5000,
+        'finishedAt': null,
+      },
     ],
     'powerupData': {
       'enabled': true,
@@ -62,15 +106,39 @@ class _RailApi extends BackendApiService {
       'stepsUntilNextPowerup': 1000,
       'activeEffects': [
         // enemy-1: five effects → overflow into a +N chip.
-        {'type': 'RAINSTORM', 'targetUserId': 'enemy-1', 'sourceUserId': 'user-1'},
-        {'type': 'LEG_CRAMP', 'targetUserId': 'enemy-1', 'sourceUserId': 'user-1'},
-        {'type': 'WRONG_TURN', 'targetUserId': 'enemy-1', 'sourceUserId': 'user-1'},
-        {'type': 'DETOUR_SIGN', 'targetUserId': 'enemy-1', 'sourceUserId': 'user-1'},
-        {'type': 'SIGNAL_JAMMER', 'targetUserId': 'enemy-1', 'sourceUserId': 'user-1'},
+        {
+          'type': 'RAINSTORM',
+          'targetUserId': 'enemy-1',
+          'sourceUserId': 'user-1',
+        },
+        {
+          'type': 'LEG_CRAMP',
+          'targetUserId': 'enemy-1',
+          'sourceUserId': 'user-1',
+        },
+        {
+          'type': 'WRONG_TURN',
+          'targetUserId': 'enemy-1',
+          'sourceUserId': 'user-1',
+        },
+        {
+          'type': 'DETOUR_SIGN',
+          'targetUserId': 'enemy-1',
+          'sourceUserId': 'user-1',
+        },
+        {
+          'type': 'SIGNAL_JAMMER',
+          'targetUserId': 'enemy-1',
+          'sourceUserId': 'user-1',
+        },
         // ally-1: zero effects (the empty-but-reserved rail baseline).
         // enemy-2 (right column, right edge): one tappable effect for the
         // tooltip-clamping check.
-        {'type': 'RED_CARD', 'targetUserId': 'enemy-2', 'sourceUserId': 'user-1'},
+        {
+          'type': 'RED_CARD',
+          'targetUserId': 'enemy-2',
+          'sourceUserId': 'user-1',
+        },
       ],
     },
   };
@@ -83,9 +151,8 @@ class _RailApi extends BackendApiService {
   }) async => const {'events': []};
 
   @override
-  Future<Map<String, dynamic>> fetchMe({
-    required String identityToken,
-  }) async => const {'coins': 320, 'heldCoins': 0};
+  Future<Map<String, dynamic>> fetchMe({required String identityToken}) async =>
+      const {'coins': 320, 'heldCoins': 0};
 }
 
 Future<AuthService> _auth() async {
@@ -126,8 +193,9 @@ double _cellHeight(WidgetTester tester, String userId) =>
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('opposing cells stay equal height with 0, 1, and 5 effects',
-      (tester) async {
+  testWidgets('opposing cells stay equal height with 0, 1, and 5 effects', (
+    tester,
+  ) async {
     await _pump(tester);
 
     // Compare cells with the same (non-"me") border so the only variable is the
@@ -149,8 +217,26 @@ void main() {
     expect(find.text('+3'), findsOneWidget);
   });
 
-  testWidgets('a right-edge effect icon shows its tooltip fully on-screen',
-      (tester) async {
+  testWidgets('team-rail sprites use framed polarity boxes', (tester) async {
+    await _pump(tester);
+
+    final cell = find.byKey(const ValueKey('team-cell-enemy-2'));
+    final plate = find.descendant(
+      of: cell,
+      matching: find.byKey(const Key('team-effect-plate-debuff')),
+    );
+    expect(plate, findsOneWidget);
+
+    final decoration =
+        tester.widget<Container>(plate).decoration as BoxDecoration;
+    expect(decoration.color, isNot(Colors.transparent));
+    expect(decoration.border, isNotNull);
+    expect(decoration.borderRadius, isNotNull);
+  });
+
+  testWidgets('a right-edge effect icon shows its tooltip fully on-screen', (
+    tester,
+  ) async {
     await _pump(tester);
 
     final cell = find.byKey(const ValueKey('team-cell-enemy-2'));

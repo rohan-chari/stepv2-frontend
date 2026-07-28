@@ -13,7 +13,7 @@ import 'package:step_tracker/widgets/featured_race_card.dart';
 // reaching past the widget. Includes the tests ported from
 // races_tab_featured_tournament_test / races_tab_no_upcoming_card_test when
 // the strip moved here (2026-07-23), re-targeted at this screen's
-// ALL / FEATURED / TOURNEYS / RACES filter.
+// FEATURED / TOURNEYS / RACES filter (FEATURED is the default; ALL was removed).
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -69,7 +69,9 @@ void main() {
     await pumpScreen(tester, _FakeApi(featuredThrows: true));
 
     expect(find.byType(FeaturedRaceCard), findsNothing);
-    // The rest of the screen still renders (the public race list).
+    // The rest of the screen still renders (the public race list under RACES).
+    await tester.tap(find.byKey(const Key('public-filter-races')));
+    await pumpFrames(tester);
     expect(find.text('TRAIL LOOP'), findsOneWidget);
   });
 
@@ -139,18 +141,10 @@ void main() {
       ),
     );
 
-    // ALL (default): every group renders — the strip, the seeded bracket, the
-    // user bracket, and the public race.
-    expect(find.byKey(const Key('public-filter-all')), findsOneWidget);
-    expect(find.byType(FeaturedRaceCard), findsOneWidget);
-    expect(
-        find.byKey(const Key('featured-tournament-join-ft1')), findsOneWidget);
-    expect(find.byKey(const Key('user-tournament-join-ut1')), findsOneWidget);
-    expect(find.text('TRAIL LOOP'), findsOneWidget);
+    // No ALL pill anymore — FEATURED is the default selection.
+    expect(find.byKey(const Key('public-filter-all')), findsNothing);
 
-    // FEATURED: only the featured group — strip + seeded bracket.
-    await tester.tap(find.byKey(const Key('public-filter-featured')));
-    await pumpFrames(tester);
+    // FEATURED (default): only the featured group — strip + seeded bracket.
     expect(find.byType(FeaturedRaceCard), findsOneWidget);
     expect(
         find.byKey(const Key('featured-tournament-join-ft1')), findsOneWidget);

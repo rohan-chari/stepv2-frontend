@@ -93,6 +93,9 @@ void main() {
       ),
     );
     await tester.pump();
+    // Public races live under the RACES pill (FEATURED is the default tab).
+    await tester.tap(find.byKey(const Key('public-filter-races')));
+    await tester.pump();
 
     expect(find.text('Gold Sprint'.toUpperCase()), findsOneWidget);
     await tester.tap(find.text('JOIN'));
@@ -119,6 +122,9 @@ void main() {
           ),
         ),
       );
+      await tester.pump();
+      // Public races live under the RACES pill (FEATURED is the default tab).
+      await tester.tap(find.byKey(const Key('public-filter-races')));
       await tester.pump();
 
       await tester.tap(find.text('JOIN'));

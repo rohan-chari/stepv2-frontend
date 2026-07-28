@@ -7,15 +7,9 @@ import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/styles.dart';
 import 'package:step_tracker/widgets/powerup_icon.dart';
 
-/// The active-effect badge in the standings has now had three backgrounds: a
-/// near-white plate, then a polarity-tinted plate inside a `woodDark` frame —
-/// which on a cream standings row read as a dark green chip glued to the
-/// sprite — and now nothing at all.
-///
-/// The sprite carries its own black keylines, so a cream row needs no help.
-/// Night mode does: on the night parchment (#1B2A34) the darkest sprites sit
-/// near 1:1 against the background, so they get a halo shaped like the art
-/// instead of a box.
+/// Active effects in solo standings use readable polarity-tinted plates. The
+/// entire cluster is a single tap target that opens the participant status
+/// sheet; this keeps an eight-effect racer from widening the row indefinitely.
 ///
 /// Pumped through the real race screen rather than the badge widget, because
 /// the defect was about what the badge looks like *on the row it sits on*.
@@ -102,7 +96,9 @@ Future<void> _pump(
   BackendApiService api, {
   required bool night,
 }) async {
-  await tester.binding.setSurfaceSize(const Size(500, 1400));
+  // Common compact-phone width: the second-line tray must not compete with
+  // the participant name or step total even in the eight-effect state.
+  await tester.binding.setSurfaceSize(const Size(390, 1400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(
     MaterialApp(
@@ -131,9 +127,22 @@ _EffectsApi _darkSpriteApi() => _EffectsApi(
   ],
 );
 
+_EffectsApi _overflowApi() => _EffectsApi(
+  activeEffects: const [
+    {'type': 'RUNNERS_HIGH', 'targetUserId': 'u2', 'sourceUserId': 'u2'},
+    {'type': 'UPRISING', 'targetUserId': 'u2', 'sourceUserId': 'u1'},
+    {'type': 'LEG_CRAMP', 'targetUserId': 'u2', 'sourceUserId': 'u1'},
+    {'type': 'RAINSTORM', 'targetUserId': 'u2', 'sourceUserId': 'u1'},
+    {'type': 'WRONG_TURN', 'targetUserId': 'u2', 'sourceUserId': 'u1'},
+    {'type': 'POWER_OUTAGE', 'targetUserId': 'u2', 'sourceUserId': 'u1'},
+    {'type': 'LEECH', 'targetUserId': 'u2', 'sourceUserId': 'u1'},
+    {'type': 'SIGNAL_JAMMER', 'targetUserId': 'u2', 'sourceUserId': 'u1'},
+  ],
+);
+
 BoxDecoration _plateDecoration(WidgetTester tester) {
   final container = tester.widget<Container>(
-    find.byKey(const Key('effect-badge-plate')).first,
+    find.byKey(const Key('participant-effect-plate-debuff')).first,
   );
   return container.decoration as BoxDecoration;
 }
@@ -141,54 +150,89 @@ BoxDecoration _plateDecoration(WidgetTester tester) {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('the badge paints no plate behind the sprite in day mode', (
+  testWidgets('the badge paints a framed polarity plate in day mode', (
     tester,
   ) async {
     await _pump(tester, _darkSpriteApi(), night: false);
 
     final decoration = _plateDecoration(tester);
-    expect(decoration.color, Colors.transparent);
-    // The `woodDark` frame that made it read as a green chip is gone too.
-    expect(decoration.border, isNull);
-    expect(decoration.borderRadius, isNull);
+    expect(decoration.color, isNot(Colors.transparent));
+    expect(decoration.border, isNotNull);
+    expect(decoration.borderRadius, isNotNull);
   });
 
-  testWidgets('night mode paints no plate either', (tester) async {
+  testWidgets('night mode keeps the contrast plate', (tester) async {
     await _pump(tester, _darkSpriteApi(), night: true);
 
-    expect(_plateDecoration(tester).color, Colors.transparent);
-    expect(_plateDecoration(tester).border, isNull);
+    expect(_plateDecoration(tester).color, isNot(Colors.transparent));
+    expect(_plateDecoration(tester).border, isNotNull);
   });
 
-  testWidgets('a near-invisible sprite gets a halo at night, not a box', (
-    tester,
-  ) async {
+  testWidgets('the framed tray draws one crisp sprite', (tester) async {
     await _pump(tester, _darkSpriteApi(), night: true);
 
-    final plate = find.byKey(const Key('effect-badge-plate')).first;
-    // The halo is the sprite itself, flooded and blurred, painted under the
-    // real one — so the badge draws the same art more than once.
-    expect(
-      find.descendant(of: plate, matching: find.byType(PowerupIcon)),
-      findsNWidgets(3),
-    );
-    expect(
-      find.descendant(of: plate, matching: find.byType(ImageFiltered)),
-      findsNWidgets(2),
-    );
-  });
-
-  testWidgets('day mode draws the sprite once, with no halo', (tester) async {
-    await _pump(tester, _darkSpriteApi(), night: false);
-
-    final plate = find.byKey(const Key('effect-badge-plate')).first;
+    final plate = find
+        .byKey(const Key('participant-effect-plate-debuff'))
+        .first;
     expect(
       find.descendant(of: plate, matching: find.byType(PowerupIcon)),
       findsOneWidget,
     );
-    expect(
-      find.descendant(of: plate, matching: find.byType(ImageFiltered)),
-      findsNothing,
-    );
   });
+
+  testWidgets('tapping the tray opens the participant status sheet', (
+    tester,
+  ) async {
+    await _pump(tester, _darkSpriteApi(), night: false);
+
+    await tester.tap(find.byKey(const Key('participant-effect-tray')).first);
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.text('@Bob STATUS'), findsOneWidget);
+    expect(find.text('1 active effect'), findsOneWidget);
+    expect(find.text('Power Outage'), findsWidgets);
+    expect(find.text('DEBUFFS'), findsWidgets);
+  });
+
+  testWidgets(
+    'eight effects stay beside the name, swipe horizontally, and open in sheet',
+    (tester) async {
+      await _pump(tester, _overflowApi(), night: false);
+
+      final tray = find.byKey(const Key('participant-effect-tray')).first;
+      final list = find.descendant(
+        of: tray,
+        matching: find.byKey(const Key('participant-effect-scroll')),
+      );
+      expect(list, findsOneWidget);
+      expect(tester.widget<ListView>(list).scrollDirection, Axis.horizontal);
+      expect(
+        find.descendant(
+          of: tray,
+          matching: find.byKey(const Key('participant-effect-overflow')),
+        ),
+        findsNothing,
+      );
+
+      final scrollable = find.descendant(
+        of: tray,
+        matching: find.byType(Scrollable),
+      );
+      final before = tester.state<ScrollableState>(scrollable).position.pixels;
+      await tester.drag(tray, const Offset(-90, 0));
+      await tester.pump();
+      final after = tester.state<ScrollableState>(scrollable).position.pixels;
+      expect(after, greaterThan(before));
+
+      expect(tester.getSize(list).width, lessThanOrEqualTo(103));
+
+      await tester.tap(tray);
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.text('8 active effects'), findsOneWidget);
+      expect(find.text('Signal Jammer'), findsWidgets);
+      expect(find.text('BOOSTS'), findsWidgets);
+      expect(find.text('DEBUFFS'), findsWidgets);
+    },
+  );
 }

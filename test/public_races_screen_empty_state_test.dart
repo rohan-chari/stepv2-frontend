@@ -161,6 +161,9 @@ void main() {
 
     expect(find.text('NO PUBLIC RACES'), findsNothing);
     expect(find.text('CREATE A RACE'), findsNothing);
+    // Public races live under the RACES pill (FEATURED is the default tab).
+    await tester.tap(find.byKey(const Key('public-filter-races')));
+    await tester.pumpAndSettle();
     expect(find.text('Gold Sprint'.toUpperCase()), findsOneWidget);
   });
 }

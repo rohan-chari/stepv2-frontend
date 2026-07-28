@@ -179,7 +179,7 @@ Future<void> _teardown(WidgetTester tester) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('a funded race shows a PROJECTED prize pool and the funder line', (
+  testWidgets('a funded race shows a PROJECTED prize pool, no funder line', (
     tester,
   ) async {
     await _pump(tester, _StubApi(_fundedRace(status: 'PENDING')));
@@ -192,10 +192,9 @@ void main() {
     );
     // A pre-settlement pool is a projection, never a promise.
     expect(find.byKey(const Key('race-prize-pool-projected')), findsOneWidget);
-    expect(
-      find.byKey(const Key('race-prize-pool-funded-copy')),
-      findsOneWidget,
-    );
+    // Item 8 (batch 2026-07-27): the "Funded by Bara — free to enter" lead-in
+    // was removed on purpose; only actionable copy survives.
+    expect(find.byKey(const Key('race-prize-pool-funded-copy')), findsNothing);
     // No buy-in / pot language survives on a funded race.
     expect(find.text('BUY-IN'), findsNothing);
     expect(find.text('POT'), findsNothing);
@@ -227,6 +226,61 @@ void main() {
       find.byKey(const Key('race-prize-pool-sheet-projected')),
       findsOneWidget,
     );
+
+    await _teardown(tester);
+  });
+
+  testWidgets(
+      'a funded TEAM race sheet says the winning team splits the pool '
+      'and drops the 1ST tier row', (tester) async {
+    final race = _fundedRace(coins: 800)
+      ..['isTeamRace'] = true
+      ..['teamSize'] = 2
+      ..['payoutTiers'] = const [
+        {'placement': 1, 'amount': 800},
+      ]
+      ..['participants'] = const [
+        {
+          'userId': 'user-1',
+          'displayName': 'Trail Walker',
+          'status': 'ACCEPTED',
+          'team': 'TEAM_A',
+        },
+        {
+          'userId': 'user-2',
+          'displayName': 'Hill Climber',
+          'status': 'ACCEPTED',
+          'team': 'TEAM_B',
+        },
+      ];
+    await _pump(tester, _StubApi(race));
+
+    final board = find.byKey(const Key('race-prize-pool-board'));
+    expect(board, findsOneWidget);
+    await tester.tap(board);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    // The sheet must say how a team pool pays out — split evenly across the
+    // winning team, matching backend settlement (completeRace TR-502/503/504).
+    // One short line only: the solo growth note is dropped for team races.
+    expect(
+      find.byKey(const Key('race-prize-pool-team-split')),
+      findsOneWidget,
+    );
+    expect(
+      find.text('The winning team splits the whole pool evenly.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('The pool grows'), findsNothing);
+    // The individual-race "1ST <full pool>" row would read as per-runner —
+    // it must not render for a team race.
+    expect(find.byKey(const Key('race-prize-pool-summary')), findsNothing);
+    expect(
+      find.byKey(const Key('race-prize-pool-payout-summary')),
+      findsNothing,
+    );
+    expect(find.text('1ST'), findsNothing);
 
     await _teardown(tester);
   });

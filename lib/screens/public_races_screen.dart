@@ -40,16 +40,16 @@ class PublicRacesScreen extends StatefulWidget {
   State<PublicRacesScreen> createState() => _PublicRacesScreenState();
 }
 
-/// Top-level content switch for the Public Races screen: ALL shows every group;
-/// the others narrow to a single group. Same convention as the races-tab pill.
-enum _PublicFilter { all, featured, tournaments, races }
+/// Top-level content switch for the Public Races screen: each pill narrows to a
+/// single group (FEATURED is the default). Same convention as the races-tab pill.
+enum _PublicFilter { featured, tournaments, races }
 
 class _PublicRacesScreenState extends State<PublicRacesScreen> {
   static const _textShadows = [
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
 
-  _PublicFilter _filter = _PublicFilter.all;
+  _PublicFilter _filter = _PublicFilter.featured;
 
   bool _loading = true;
   String? _joiningRaceId;
@@ -577,8 +577,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
         _featuredTournaments.isNotEmpty || _userTournaments.isNotEmpty;
 
     if (races.isEmpty && !hasTournaments && _featuredRaces.isEmpty) {
-      final showFeaturedControls =
-          _filter == _PublicFilter.all || _filter == _PublicFilter.featured;
+      final showFeaturedControls = _filter == _PublicFilter.featured;
       return LayoutBuilder(
         builder: (context, constraints) {
           return SingleChildScrollView(
@@ -635,13 +634,10 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
         },
       );
     }
-    // The pinned pill selects which group(s) show; ALL shows all three.
-    final showFeatured =
-        _filter == _PublicFilter.all || _filter == _PublicFilter.featured;
-    final showTournaments =
-        _filter == _PublicFilter.all || _filter == _PublicFilter.tournaments;
-    final showRaces =
-        _filter == _PublicFilter.all || _filter == _PublicFilter.races;
+    // The pinned pill selects which single group shows.
+    final showFeatured = _filter == _PublicFilter.featured;
+    final showTournaments = _filter == _PublicFilter.tournaments;
+    final showRaces = _filter == _PublicFilter.races;
 
     final featuredVisible =
         showFeatured &&
@@ -666,14 +662,11 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
         for (final t in _featuredTournaments) _buildFeaturedTournamentCard(t),
       ],
       if (userVisible) ...[
-        _sectionLabel('TOURNAMENTS'),
+        _sectionLabel('TOURNEYS'),
         for (final t in _userTournaments) _buildUserTournamentCard(t),
       ],
       if (racesVisible) ...[
-        // Under ALL, only label RACES when a group sits above it; under the
-        // RACES filter the header still labels the group.
-        if (_filter == _PublicFilter.races || featuredVisible || userVisible)
-          _sectionLabel('RACES'),
+        _sectionLabel('RACES'),
         for (final race in races) _buildRaceCard(race),
       ],
     ];
@@ -702,8 +695,6 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
         return 'No public tournaments right now.';
       case _PublicFilter.races:
         return 'No public races right now.';
-      case _PublicFilter.all:
-        return 'Nothing here yet.';
     }
   }
 
@@ -733,7 +724,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
         _userTournaments.isNotEmpty;
   }
 
-  /// The ALL / FEATURED / TOURNAMENTS / RACES segmented control — the same dark
+  /// The FEATURED / TOURNEYS / RACES segmented control — the same dark
   /// ink pill (gold-selected) built for the races tab.
   Widget _buildContentFilterPills() {
     Widget seg(String label, _PublicFilter value, Key key) {
@@ -774,7 +765,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
                   : null,
             ),
             alignment: Alignment.center,
-            // FittedBox so the four labels (incl. the long "TOURNAMENTS") always
+            // FittedBox so the three labels always
             // show in full, scaling down a touch on the narrowest phones rather
             // than truncating.
             child: FittedBox(
@@ -806,8 +797,6 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
         ),
         child: Row(
           children: [
-            seg('ALL', _PublicFilter.all, const Key('public-filter-all')),
-            const SizedBox(width: 4),
             seg(
               'FEATURED',
               _PublicFilter.featured,
@@ -900,7 +889,9 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
   /// rendered on the Races tab.
   Widget _buildFeaturedRacesStrip() {
     return SizedBox(
-      height: 232,
+      // Just enough for the card content + CTA; extra height turns into dead
+      // space above the pinned-bottom VIEW/JOIN button (spaceBetween column).
+      height: 220,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
@@ -1278,10 +1269,7 @@ class _FeaturedAutoJoinToggleState extends State<_FeaturedAutoJoinToggle> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Automatically enters you into each new daily and weekly '
-                  'challenge, starting with the next one. Turning this off '
-                  'stops future auto-joins but keeps races you already '
-                  'entered.',
+                  'Auto-enters you into each new challenge.',
                   style: PixelText.body(
                     size: 11,
                     color: AppColors.of(context).textMid,

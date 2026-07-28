@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 
@@ -3114,6 +3113,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final potCoins = _prizeCoins;
     final pool = _prizePool;
     final payoutTiers = parsePayoutTiers(_race);
+    final isTeamRace = TeamRace.isTeamRace(_race ?? const {});
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.of(context).parchmentLight,
@@ -3180,11 +3180,22 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 // the runner something they can act on — that the pool is still
                 // moving. A settled pool has nothing left to say, so it says
                 // nothing rather than leaving an empty line.
-                if (pool != null && pool.projected) ...[
+                // One short explainer line. Team races state only the split
+                // rule — settlement divides the whole pool evenly across the
+                // winning team's non-forfeited runners (backend
+                // TR-502/503/504), which is also why the "1ST <full pool>"
+                // tier row is suppressed below: it would read as per-runner.
+                // Solo races keep the growth note while still projected.
+                if ((pool != null && pool.projected) || isTeamRace) ...[
                   const SizedBox(height: 6),
                   Text(
-                    'The pool grows as more runners join, and settles on who '
-                    'actually walked.',
+                    key: isTeamRace
+                        ? const Key('race-prize-pool-team-split')
+                        : null,
+                    isTeamRace
+                        ? 'The winning team splits the whole pool evenly.'
+                        : 'The pool grows as more runners join, and settles '
+                              'on who actually walked.',
                     textAlign: TextAlign.center,
                     style: PixelText.body(
                       size: 12,
@@ -3192,7 +3203,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                     ),
                   ),
                 ],
-                if (payoutTiers.isNotEmpty) ...[
+                if (!isTeamRace && payoutTiers.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   // An even-split preset (TOP_HALF, ALL_BUT_LAST) can pay 150
                   // identical places on a seeded Daily. Listing them is
@@ -4853,20 +4864,25 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final subtitle = attacker == null
         ? desc
         : (desc.isEmpty ? 'from @$attacker' : 'from @$attacker · $desc');
-    final expiresAtStr = e['expiresAt'] as String?;
+    final expiresAtValue = e['expiresAt'];
+    final expiresAtStr = expiresAtValue is String ? expiresAtValue : null;
 
     String timeLabel;
     if (expiresAtStr != null) {
-      final expiresAt = DateTime.parse(expiresAtStr);
-      final remaining = expiresAt.difference(_countdownNow);
-      if (remaining.isNegative) {
-        timeLabel = 'Expiring...';
-      } else if (remaining.inHours > 0) {
-        timeLabel = '${remaining.inHours}h ${remaining.inMinutes % 60}m';
-      } else if (remaining.inMinutes > 0) {
-        timeLabel = '${remaining.inMinutes}m ${remaining.inSeconds % 60}s';
+      final expiresAt = DateTime.tryParse(expiresAtStr);
+      if (expiresAt == null) {
+        timeLabel = 'Until used';
       } else {
-        timeLabel = '${remaining.inSeconds}s';
+        final remaining = expiresAt.difference(_countdownNow);
+        if (remaining.isNegative) {
+          timeLabel = 'Expiring...';
+        } else if (remaining.inHours > 0) {
+          timeLabel = '${remaining.inHours}h ${remaining.inMinutes % 60}m';
+        } else if (remaining.inMinutes > 0) {
+          timeLabel = '${remaining.inMinutes}m ${remaining.inSeconds % 60}s';
+        } else {
+          timeLabel = '${remaining.inSeconds}s';
+        }
       }
     } else {
       timeLabel = 'Until used';
@@ -7114,18 +7130,118 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     return '${diff.inDays}d';
   }
 
-  /// Builds the active-effect badge widgets targeting [userId] — the shared
-  /// filter+render used by both the solo leaderboard plank and the team-race
-  /// cell (#6), so opponents show rainstorm/leech/etc. badges identically in
-  /// both layouts. Leech badges resolve their attacker's name for the tooltip.
+  /// Builds the compact status tray shown beside a solo standings name. The
+  /// tray shows up to three framed sprites at once and scrolls horizontally
+  /// when there are more; tapping opens the full participant status sheet.
   List<Widget> _effectIconsFor(String userId) {
+    final effects = _effectDataFor(userId);
+    if (effects.isEmpty) return const [];
     return [
-      for (final d in _effectDataFor(userId))
-        _EffectIconWithTooltip(
-          type: d.type,
-          attackerName: d.attackerName,
-          isBoost: d.isBoost,
-        ),
+      _ParticipantEffectTray(
+        effects: effects,
+        onTap: () => _showParticipantEffectsSheet(userId),
+      ),
+    ];
+  }
+
+  Future<void> _showParticipantEffectsSheet(String userId) async {
+    final effects = _rawEffectsFor(userId);
+    if (effects.isEmpty || !mounted) return;
+    final classifier = _effectIsBoostForTarget(userId);
+    final boosts = effects.where(classifier).toList();
+    final debuffs = effects.where((e) => !classifier(e)).toList();
+    final name = _displayNameForUser(userId) ?? 'Racer';
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.of(context).parchment,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      isScrollControlled: true,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.72,
+      ),
+      builder: (sheetContext) {
+        final palette = AppColors.of(sheetContext);
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 42,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: palette.woodMid.withValues(alpha: 0.65),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  '${atName(name)} STATUS',
+                  textAlign: TextAlign.center,
+                  style: PixelText.title(size: 19, color: palette.textDark),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${effects.length} active '
+                  '${effects.length == 1 ? 'effect' : 'effects'}',
+                  textAlign: TextAlign.center,
+                  style: PixelText.body(size: 12, color: palette.textMid),
+                ),
+                const SizedBox(height: 18),
+                if (boosts.isNotEmpty)
+                  _effectGroup(
+                    label: 'BOOSTS',
+                    icon: Icons.arrow_upward_rounded,
+                    tint: palette.feedBoost,
+                    effects: boosts,
+                    isBoost: true,
+                  ),
+                if (boosts.isNotEmpty && debuffs.isNotEmpty)
+                  const SizedBox(height: 12),
+                if (debuffs.isNotEmpty)
+                  _effectGroup(
+                    label: 'DEBUFFS',
+                    icon: Icons.arrow_downward_rounded,
+                    tint: palette.feedAttack,
+                    effects: debuffs,
+                    isBoost: false,
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  bool Function(Map<String, dynamic>) _effectIsBoostForTarget(
+    String targetUserId,
+  ) {
+    return (effect) => effectIsBoost(
+      type: effect['type'] is String ? effect['type'] as String : null,
+      sourceUserId: effect['sourceUserId'] is String
+          ? effect['sourceUserId'] as String
+          : null,
+      myUserId: targetUserId,
+    );
+  }
+
+  /// Reads a mixed-version backend payload without assuming the list or any
+  /// entry has the shape this build knows about.
+  List<Map<String, dynamic>> _rawEffectsFor(String userId) {
+    final raw = _powerupData?['activeEffects'];
+    if (raw is! List) return const [];
+    return [
+      for (final effect in raw)
+        if (effect is Map<String, dynamic> && effect['targetUserId'] == userId)
+          effect,
     ];
   }
 
@@ -7136,22 +7252,21 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   List<({String type, String? attackerName, bool isBoost})> _effectDataFor(
     String userId,
   ) {
-    final effects =
-        (_powerupData?['activeEffects'] as List?)
-            ?.cast<Map<String, dynamic>>()
-            .where((e) => e['targetUserId'] == userId)
-            .toList() ??
-        const [];
+    final effects = _rawEffectsFor(userId);
     return [
       for (final e in effects)
         (
-          type: e['type'] as String? ?? '',
-          attackerName: _displayNameForUser(e['sourceUserId'] as String?),
+          type: e['type'] is String ? e['type'] as String : '',
+          attackerName: _displayNameForUser(
+            e['sourceUserId'] is String ? e['sourceUserId'] as String : null,
+          ),
           // Item 15 — same classifier the races tab uses, so the two surfaces
           // can never disagree about what counts as a buff.
           isBoost: effectIsBoost(
-            type: e['type'] as String?,
-            sourceUserId: e['sourceUserId'] as String?,
+            type: e['type'] is String ? e['type'] as String : null,
+            sourceUserId: e['sourceUserId'] is String
+                ? e['sourceUserId'] as String
+                : null,
             myUserId: userId,
           ),
         ),
@@ -7636,6 +7751,101 @@ OverlayEntry _buildClampedEffectTooltip({
   );
 }
 
+/// A standings-row status tray beside the racer's name. Three readable,
+/// polarity-framed sprites fit at once; additional effects continue in a
+/// horizontal list. A narrow peek at the fourth tile advertises the swipe.
+/// The tray remains one tap target for the full status sheet.
+class _ParticipantEffectTray extends StatefulWidget {
+  final List<({String type, String? attackerName, bool isBoost})> effects;
+  final VoidCallback onTap;
+
+  const _ParticipantEffectTray({required this.effects, required this.onTap});
+
+  @override
+  State<_ParticipantEffectTray> createState() => _ParticipantEffectTrayState();
+}
+
+class _ParticipantEffectTrayState extends State<_ParticipantEffectTray> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isScrollable = widget.effects.length > 3;
+    final visibleCount = math.min(widget.effects.length, 3);
+    final trayWidth = isScrollable ? 103.0 : (visibleCount * 33.0) - 3;
+    final names = widget.effects
+        .map((e) => PowerupCopy.nameFor(e.type))
+        .join(', ');
+
+    return Semantics(
+      key: const Key('participant-effect-tray'),
+      label:
+          '$names. ${isScrollable ? 'Swipe for more effects. ' : ''}'
+          'Tap to view status.',
+      button: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTap: widget.onTap,
+        child: AnimatedScale(
+          scale: _pressed ? 0.96 : 1,
+          duration: const Duration(milliseconds: 90),
+          curve: Curves.easeOut,
+          child: SizedBox(
+            width: trayWidth,
+            height: 30,
+            child: ListView.separated(
+              key: const Key('participant-effect-scroll'),
+              primary: false,
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              itemCount: widget.effects.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 3),
+              itemBuilder: (context, index) =>
+                  _EffectTrayPlate(effect: widget.effects[index]),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EffectTrayPlate extends StatelessWidget {
+  final ({String type, String? attackerName, bool isBoost}) effect;
+
+  const _EffectTrayPlate({required this.effect});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppColors.of(context);
+    final tint = effect.isBoost ? palette.feedBoost : palette.feedAttack;
+    return Container(
+      key: Key(
+        'participant-effect-plate-${effect.isBoost ? 'boost' : 'debuff'}',
+      ),
+      width: 30,
+      height: 30,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: tint.withValues(alpha: palette.isDark ? 0.25 : 0.14),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: tint.withValues(alpha: 0.72), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: tint.withValues(alpha: 0.16),
+            offset: const Offset(0, 1),
+            blurRadius: 2,
+          ),
+        ],
+      ),
+      child: PowerupIcon(type: effect.type, size: 22),
+    );
+  }
+}
+
 class _EffectIconWithTooltip extends StatefulWidget {
   final String type;
 
@@ -7705,33 +7915,25 @@ class _EffectIconWithTooltipState extends State<_EffectIconWithTooltip> {
   Widget build(BuildContext context) {
     final name = PowerupCopy.nameFor(widget.type);
     final palette = AppColors.of(context);
-    // No plate and no frame: the sprite sits straight on the standings row.
-    //
-    // This badge went white plate (invisible Coin Flip) → item 15's tinted
-    // plate inside a `woodDark` frame, which on a parchment row read as a dark
-    // green chip stuck to the sprite. Both were attempts to guarantee contrast
-    // behind transparent pixel art, and both were more conspicuous than the
-    // art itself. The sprites already carry their own black keylines, which is
-    // all the separation a cream row needs.
-    //
-    // Night mode is the real constraint and the reason this isn't simply a
-    // deletion: on the night parchment (#1B2A34) the darkest sprites are
-    // effectively invisible — Power Outage sits at 1.04:1 and Stealth Mode at
-    // 1.10:1 against it. So at night, and only at night, the sprite gets a
-    // soft light halo shaped like the art (see [_EffectBadgeGlyph]) instead of
-    // a box. Same silhouette, no chip.
+    final tint = widget.isBoost ? palette.feedBoost : palette.feedAttack;
     final icon = Container(
-      key: const Key('effect-badge-plate'),
-      padding: const EdgeInsets.all(3),
-      // Explicitly transparent rather than decoration-less: this node is the
-      // regression guard for "never a plate behind the sprite", so it stays
-      // addressable and stays declared.
-      decoration: const BoxDecoration(color: Colors.transparent),
-      child: _EffectBadgeGlyph(
-        type: widget.type,
-        size: 18,
-        haloed: palette.isDark,
+      key: Key('team-effect-plate-${widget.isBoost ? 'boost' : 'debuff'}'),
+      width: 28,
+      height: 28,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: tint.withValues(alpha: palette.isDark ? 0.25 : 0.14),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: tint.withValues(alpha: 0.72), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: tint.withValues(alpha: 0.16),
+            offset: const Offset(0, 1),
+            blurRadius: 2,
+          ),
+        ],
       ),
+      child: PowerupIcon(type: widget.type, size: 20),
     );
 
     return Semantics(
@@ -7756,58 +7958,6 @@ class _EffectIconWithTooltipState extends State<_EffectIconWithTooltip> {
                 )
               : icon,
         ),
-      ),
-    );
-  }
-}
-
-/// A powerup sprite on a bare row, with an optional light halo behind it.
-///
-/// The halo is how the badge stays legible in night mode without putting a box
-/// behind the art. It is the sprite itself, flooded to a warm off-white and
-/// blurred, painted underneath the real sprite — so it hugs the silhouette and
-/// reads as a glow rather than a chip. Two stacked copies because one blurred
-/// pass is too faint to lift a near-black sprite (Power Outage, Stealth Mode)
-/// off the night parchment.
-///
-/// Day mode skips it entirely: every sprite already clears 5.7:1 on the cream
-/// row, and a halo there would only muddy the pixel keylines.
-class _EffectBadgeGlyph extends StatelessWidget {
-  const _EffectBadgeGlyph({
-    required this.type,
-    required this.size,
-    required this.haloed,
-  });
-
-  final String type;
-  final double size;
-  final bool haloed;
-
-  /// Warm off-white so the glow belongs to the parchment palette rather than
-  /// reading as a blue-white screen glare.
-  static const _haloColor = Color(0xFFF7F1E7);
-
-  @override
-  Widget build(BuildContext context) {
-    final sprite = PowerupIcon(type: type, size: size);
-    if (!haloed) return sprite;
-
-    final halo = IgnorePointer(
-      child: ImageFiltered(
-        imageFilter: ImageFilter.blur(sigmaX: 2.2, sigmaY: 2.2),
-        child: ColorFiltered(
-          colorFilter: const ColorFilter.mode(_haloColor, BlendMode.srcATop),
-          child: PowerupIcon(type: type, size: size),
-        ),
-      ),
-    );
-
-    return SizedBox.square(
-      dimension: size,
-      child: Stack(
-        alignment: Alignment.center,
-        clipBehavior: Clip.none,
-        children: [halo, halo, sprite],
       ),
     );
   }

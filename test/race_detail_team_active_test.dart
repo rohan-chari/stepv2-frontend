@@ -176,11 +176,15 @@ void main() {
     expect(find.text('11,900'), findsOneWidget);
   });
 
-  testWidgets('TR-803: planks are grouped under team headers', (tester) async {
+  testWidgets('TR-803: rosters render as two team columns (grouped-plank '
+      'headers retired)', (tester) async {
     await _pump(tester, _ActiveTeamRaceApi());
 
-    expect(find.byKey(const Key('team-group-A')), findsOneWidget);
-    expect(find.byKey(const Key('team-group-B')), findsOneWidget);
+    // The SCOREBOARD redesign replaced the stacked team-header plank groups
+    // with side-by-side color-matched roster columns; the old team-group
+    // banners no longer render on an ACTIVE race. Every member still shows.
+    expect(find.byKey(const Key('team-group-A')), findsNothing);
+    expect(find.byKey(const Key('team-group-B')), findsNothing);
     expect(find.textContaining('Trail Walker'), findsWidgets);
     expect(find.textContaining('Marsh Mellow'), findsWidgets);
   });
@@ -200,9 +204,19 @@ void main() {
     await _pump(tester, _ActiveTeamRaceApi());
 
     final track = tester.widget<HomeCourseTrack>(find.byType(HomeCourseTrack));
+    final ctx = tester.element(find.byType(HomeCourseTrack));
     final colors = track.runners.map((r) => r.teamColor).toList();
-    expect(colors.where((c) => c == TeamRace.color(RaceTeam.teamA)).length, 2);
-    expect(colors.where((c) => c == TeamRace.color(RaceTeam.teamB)).length, 2);
+    // Only each team's LEADER runs the course now (one capy per side), still
+    // carrying its team color for the glow chrome.
+    expect(track.runners.length, 2);
+    expect(
+      colors.where((c) => c == TeamRace.color(RaceTeam.teamA, ctx)).length,
+      1,
+    );
+    expect(
+      colors.where((c) => c == TeamRace.color(RaceTeam.teamB, ctx)).length,
+      1,
+    );
   });
 
   testWidgets('TR-705: individual ACTIVE race shows no H2H banner and no '

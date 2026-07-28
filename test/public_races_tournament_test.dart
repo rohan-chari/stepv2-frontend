@@ -111,8 +111,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 60));
     await tester.pump(const Duration(milliseconds: 60));
 
+    // FEATURED is the default (selected) pill, so its label is dark-on-gold;
+    // the legibility concern is the UNSELECTED pills on the dark track.
     for (final key in const [
-      Key('public-filter-featured'),
       Key('public-filter-tournaments'),
       Key('public-filter-races'),
     ]) {
@@ -212,7 +213,12 @@ void main() {
         ],
       ),
     );
-    expect(find.text('TOURNAMENTS'), findsOneWidget);
+    // User-created brackets live under the TOURNEYS pill now that each pill
+    // shows a single group.
+    await tester.tap(find.byKey(const Key('public-filter-tournaments')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(find.text('TOURNEYS'), findsWidgets);
     final btn = tester.widget<PillButton>(
       find.byKey(const Key('user-tournament-join-u1')),
     );

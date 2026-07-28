@@ -95,11 +95,12 @@ class LeaderboardPlank extends StatelessWidget {
       );
     }
     if (m < 0.5) {
-      // Frozen (e.g. Leg Cramp) — no forward progress.
+      // Frozen (e.g. Leg Cramp) — the snowflake is enough visually; retain
+      // the word for screen readers.
       return _chip(
         context,
         icon: Icons.ac_unit_rounded,
-        label: 'FROZEN',
+        semanticsLabel: 'Frozen',
         bg: AppColors.of(context).feedShield,
       );
     }
@@ -119,11 +120,16 @@ class LeaderboardPlank extends StatelessWidget {
   Widget _chip(
     BuildContext context, {
     IconData? icon,
-    required String label,
+    String? label,
+    String? semanticsLabel,
     required Color bg,
   }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+    final iconOnly = icon != null && label == null;
+    final chip = Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: iconOnly ? 5 : 6,
+        vertical: iconOnly ? 4 : 3,
+      ),
       decoration: BoxDecoration(
         color: bg.withValues(alpha: 0.16),
         borderRadius: BorderRadius.circular(7),
@@ -133,12 +139,18 @@ class LeaderboardPlank extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 11, color: bg),
-            const SizedBox(width: 3),
+            Icon(icon, size: iconOnly ? 13 : 11, color: bg),
+            if (label != null) const SizedBox(width: 3),
           ],
-          Text(label, style: PixelText.title(size: 10, color: bg)),
+          if (label != null)
+            Text(label, style: PixelText.title(size: 10, color: bg)),
         ],
       ),
+    );
+    if (semanticsLabel == null) return chip;
+    return Semantics(
+      label: semanticsLabel,
+      child: ExcludeSemantics(child: chip),
     );
   }
 
@@ -211,7 +223,7 @@ class LeaderboardPlank extends StatelessWidget {
             const SizedBox(width: 8),
             _buildAvatar(context),
             const SizedBox(width: 8),
-            // Name + effects
+            // Name + horizontally swipeable status tray.
             Expanded(
               child: Row(
                 children: [
@@ -238,8 +250,11 @@ class LeaderboardPlank extends StatelessWidget {
                         : [const SizedBox(width: 6), chip];
                   }(),
                   if (effectIcons.isNotEmpty) ...[
-                    const SizedBox(width: 4),
-                    ...effectIcons,
+                    const SizedBox(width: 5),
+                    // Flexible so a full tray shrinks (it scrolls internally)
+                    // instead of overflowing when a wide step count + a
+                    // multiplier chip squeeze the middle on narrow phones.
+                    for (final icon in effectIcons) Flexible(child: icon),
                   ],
                   if (isFinished && !isStealthed) ...[
                     const SizedBox(width: 6),

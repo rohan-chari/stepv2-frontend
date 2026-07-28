@@ -119,7 +119,16 @@ Future<void> _pump(
 
 BoxDecoration _plateDecoration(WidgetTester tester) {
   final container = tester.widget<Container>(
-    find.byKey(const Key('effect-badge-plate')).first,
+    find
+        .byKey(
+          find
+                  .byKey(const Key('participant-effect-plate-boost'))
+                  .evaluate()
+                  .isNotEmpty
+              ? const Key('participant-effect-plate-boost')
+              : const Key('participant-effect-plate-debuff'),
+        )
+        .first,
   );
   return container.decoration as BoxDecoration;
 }
@@ -127,9 +136,7 @@ BoxDecoration _plateDecoration(WidgetTester tester) {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('a self-cast effect gets no plate, and never the white one', (
-    tester,
-  ) async {
+  testWidgets('a self-cast effect gets a boost-tinted plate', (tester) async {
     final api = _EffectsApi(
       activeEffects: const [
         {
@@ -143,14 +150,17 @@ void main() {
     await _pump(tester, api, night: false);
 
     final palette = AppColors.of(
-      tester.element(find.byKey(const Key('effect-badge-plate')).first),
+      tester.element(
+        find.byKey(const Key('participant-effect-plate-boost')).first,
+      ),
     );
     final decoration = _plateDecoration(tester);
     expect(decoration.color, isNot(palette.textLight));
-    expect(decoration.color, Colors.transparent);
+    expect(decoration.color, isNot(Colors.transparent));
+    expect(decoration.border, isNotNull);
   });
 
-  testWidgets('a rival-cast effect gets no plate either', (tester) async {
+  testWidgets('a rival-cast effect gets a debuff-tinted plate', (tester) async {
     final api = _EffectsApi(
       activeEffects: const [
         {
@@ -164,13 +174,18 @@ void main() {
     await _pump(tester, api, night: false);
 
     final palette = AppColors.of(
-      tester.element(find.byKey(const Key('effect-badge-plate')).first),
+      tester.element(
+        find.byKey(const Key('participant-effect-plate-debuff')).first,
+      ),
     );
     expect(_plateDecoration(tester).color, isNot(palette.textLight));
-    expect(_plateDecoration(tester).color, Colors.transparent);
+    expect(_plateDecoration(tester).color, isNot(Colors.transparent));
+    expect(_plateDecoration(tester).border, isNotNull);
   });
 
-  testWidgets('night mode also drops the near-white plate', (tester) async {
+  testWidgets('night mode uses a tinted plate, never near-white', (
+    tester,
+  ) async {
     final api = _EffectsApi(
       activeEffects: const [
         {
@@ -184,6 +199,6 @@ void main() {
     await _pump(tester, api, night: true);
 
     expect(_plateDecoration(tester).color, isNot(AppPalette.night.textLight));
-    expect(_plateDecoration(tester).color, Colors.transparent);
+    expect(_plateDecoration(tester).color, isNot(Colors.transparent));
   });
 }

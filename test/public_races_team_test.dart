@@ -98,6 +98,9 @@ Future<void> _pump(WidgetTester tester, _PublicTeamRacesApi api) async {
   );
   await tester.pump();
   await tester.pump();
+  // Public races live under the RACES pill (FEATURED is the default tab).
+  await tester.tap(find.byKey(const Key('public-filter-races')));
+  await tester.pump();
 }
 
 void main() {

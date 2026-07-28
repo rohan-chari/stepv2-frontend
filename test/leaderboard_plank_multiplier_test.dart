@@ -36,12 +36,20 @@ void main() {
     expect(find.byIcon(Icons.local_fire_department_rounded), findsNothing);
   });
 
-  testWidgets('frozen (0) shows a frost chip', (tester) async {
+  testWidgets('frozen (0) shows only a snowflake, with an a11y label', (
+    tester,
+  ) async {
     await tester.pumpWidget(_wrap(0));
     await tester.pump();
 
-    expect(find.text('FROZEN'), findsOneWidget);
+    expect(find.text('FROZEN'), findsNothing);
     expect(find.byIcon(Icons.ac_unit_rounded), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is Semantics && widget.properties.label == 'Frozen',
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('reversed (<0) shows a reversed chip', (tester) async {

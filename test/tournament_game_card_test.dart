@@ -98,10 +98,15 @@ void main() {
       await tester.pump(const Duration(milliseconds: 60));
       await tester.pump(const Duration(milliseconds: 60));
 
-      final label = tester.widget<Text>(find.text('FEATURED'));
-      expect(label.style?.color, AppColors.textDark);
-      // Must not be the near-white ghost color that caused the bug.
-      expect(label.style?.color, isNot(AppColors.parchmentLight));
+      // 'FEATURED' appears twice — the (selected, dark-on-gold) filter pill and
+      // the section header. Both must use the readable dark color.
+      final labels = tester.widgetList<Text>(find.text('FEATURED'));
+      expect(labels, isNotEmpty);
+      for (final label in labels) {
+        expect(label.style?.color, AppColors.textDark);
+        // Must not be the near-white ghost color that caused the bug.
+        expect(label.style?.color, isNot(AppColors.parchmentLight));
+      }
     });
   });
 }
