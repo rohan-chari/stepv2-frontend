@@ -413,7 +413,7 @@ abstract final class PowerupCopy {
 
   static const _bundledDescriptions = {
     'LEG_CRAMP': "Freeze a rival's steps for 2 hours",
-    'RED_CARD': "Remove 5% of the leader's steps",
+    'RED_CARD': "Remove 10% of the leader's steps",
     'SHORTCUT': 'Steal 1,000 steps from a rival',
     'COMPRESSION_SOCKS': 'Shield against the next attack',
     'PROTEIN_SHAKE': '+1,500 bonus steps instantly',
