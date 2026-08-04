@@ -1,3 +1,7 @@
+import 'dart:io';
+
+import '../services/remote_asset_cache.dart';
+
 /// Playable base characters ("animals").
 ///
 /// The backend identifies a purchased character by its shop-item `assetKey`
@@ -11,11 +15,17 @@ class AnimalSprite {
     required this.asset,
     required this.frameCount,
     this.baselineOffset = 0,
+    this.file,
   });
 
   /// Horizontal walk-cycle sheet, frames laid out left-to-right.
   final String asset;
   final int frameCount;
+
+  /// Set only for a CDN-served character whose sheet is already on disk; the
+  /// renderer draws this file instead of [asset]. Null for every bundled
+  /// animal, which keeps them on the plain `Image.asset` path.
+  final File? file;
 
   /// Vertical nudge applied to the WHOLE character (body + accessories) so
   /// every animal's feet land on the same ground line, expressed as a fraction
@@ -54,8 +64,53 @@ const Map<String, AnimalSprite> kAnimalSprites = {
   ),
 };
 
+/// Resolves a base character to the sheet that should be drawn.
+///
+/// Bundled animals win outright (unchanged behavior). A character this binary
+/// doesn't bundle is looked up in the CDN registry: once its sheet is cached
+/// on disk it renders with the manifest's own `animationFrames` /
+/// `baselineOffset`. Until then — and for anything the manifest doesn't know —
+/// the capybara stands in, exactly as before; the difference is that the
+/// fallback is now transient rather than permanent.
 AnimalSprite animalSpriteFor(String? animal) {
-  return kAnimalSprites[animal] ?? kAnimalSprites[kDefaultAnimal]!;
+  final bundled = kAnimalSprites[animal];
+  if (bundled != null) return bundled;
+  if (animal != null && animal.isNotEmpty) {
+    final remote = remoteAnimalSprite(animal);
+    if (remote != null) return remote;
+  }
+  return kAnimalSprites[kDefaultAnimal]!;
+}
+
+/// The CDN-served sprite for [animal], or null when the manifest doesn't list
+/// it or its sheet isn't downloaded yet.
+AnimalSprite? remoteAnimalSprite(String animal) {
+  final cache = RemoteAssetCache.instance;
+  final entry = cache.entry(RemoteAssetKind.characters, animal);
+  if (entry == null) return null;
+  final file = cache.cachedFile(RemoteAssetKind.characters, animal);
+  if (file == null) return null;
+  final frames = entry.animationFrames;
+  return AnimalSprite(
+    asset: entry.url,
+    file: file,
+    // A wiped/absent frame count must not render the whole sheet squashed into
+    // one frame box — fall back to the capybara's six.
+    frameCount: frames == null || frames < 1 ? 6 : frames,
+    baselineOffset: entry.baselineOffset ?? 0,
+  );
+}
+
+/// Every base character this build can offer: the bundled ones plus whatever
+/// the CDN manifest adds. Used by the admin tuner's animal picker.
+List<String> availableAnimals() {
+  final keys = <String>[...kAnimalSprites.keys];
+  for (final key in RemoteAssetCache.instance.keysOf(
+    RemoteAssetKind.characters,
+  )) {
+    if (!keys.contains(key)) keys.add(key);
+  }
+  return keys;
 }
 
 /// Parses the `animal` field from a backend payload map. Defensive: anything

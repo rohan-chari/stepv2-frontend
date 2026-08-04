@@ -17,6 +17,7 @@ import 'services/background_sync_bootstrap_service.dart';
 import 'services/deep_link_service.dart';
 import 'services/install_attribution_service.dart';
 import 'services/notification_service.dart';
+import 'services/remote_asset_cache.dart';
 import 'styles.dart';
 import 'theme_controller.dart';
 import 'utils/app_version_gate.dart';
@@ -58,6 +59,12 @@ Future<void> main() async {
   await InstallAttributionService(
     authService: authService,
   ).resolveOnFirstLaunch();
+
+  // Loads the compiled asset manifest + the on-disk CDN art cache before the
+  // first frame, so bundled art keeps its synchronous Image.asset path and a
+  // warm remote cache renders without a flicker. Never throws: on failure the
+  // registry stays empty and everything reads as bundled — today's behavior.
+  await RemoteAssetCache.instance.init();
 
   final themePreference = await AppThemeController.loadPreference();
   final themeController = AppThemeController(preference: themePreference);

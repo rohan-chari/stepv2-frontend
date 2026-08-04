@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../services/remote_asset_cache.dart';
+import 'remote_or_bundled_accessory_image.dart';
+
 /// Static thumbnail for an accessory PNG (shop rows, reward tiles, spinners).
 ///
 /// Animated accessories are horizontal frame sheets
@@ -13,11 +16,16 @@ class AccessoryThumbnail extends StatelessWidget {
     this.animationFrames = 1,
     this.errorBuilder,
     this.assetPath,
+    this.remoteKind = RemoteAssetKind.accessories,
   });
 
   final String assetKey;
   final int animationFrames;
   final ImageErrorWidgetBuilder? errorBuilder;
+
+  /// Which CDN manifest section [assetKey] belongs to when the art isn't
+  /// bundled. Character tiles pass [RemoteAssetKind.characters].
+  final RemoteAssetKind remoteKind;
 
   /// Full asset path override for sheets that don't live under
   /// assets/images/accessories/ (e.g. base-character walk cycles).
@@ -39,6 +47,14 @@ class AccessoryThumbnail extends StatelessWidget {
     final assetPath =
         this.assetPath ?? 'assets/images/accessories/$assetKey.png';
     final frames = animationFrames < 1 ? 1 : animationFrames;
+
+    // CDN-served art ships no bundled `_thumb.png` to try, so skip straight to
+    // the resolver (an Image.asset miss here would just cost a frame and log a
+    // bundle error). Everything bundled keeps the thumb-first path below.
+    if (!RemoteOrBundledAccessoryImage.isBundledPath(assetPath)) {
+      if (frames == 1) return _remoteImage(assetPath, fit: BoxFit.contain);
+      return _frameZeroCrop(assetPath, frames);
+    }
 
     // A bundled `<name>_thumb.png` — the art content-cropped out of its
     // canvas (frame 0 for animation sheets) — always wins when present. It
@@ -62,6 +78,17 @@ class AccessoryThumbnail extends StatelessWidget {
     );
   }
 
+  /// The art itself — bundled `Image.asset` or CDN-served cached file.
+  Widget _remoteImage(String assetPath, {BoxFit? fit}) {
+    return RemoteOrBundledAccessoryImage(
+      assetPath: assetPath,
+      remoteKey: assetKey,
+      kind: remoteKind,
+      fit: fit,
+      errorBuilder: errorBuilder,
+    );
+  }
+
   /// Crops a horizontal frame sheet down to frame 0 and centers it.
   ///
   /// The sheet is laid out at its INTRINSIC size and clipped to its first
@@ -82,11 +109,7 @@ class AccessoryThumbnail extends StatelessWidget {
           child: Align(
             alignment: Alignment.centerLeft,
             widthFactor: 1 / frames,
-            child: Image.asset(
-              assetPath,
-              filterQuality: FilterQuality.none,
-              errorBuilder: errorBuilder,
-            ),
+            child: _remoteImage(assetPath),
           ),
         ),
       ),

@@ -123,9 +123,14 @@ class BackendApiService {
   // binaries omit it, so the gated catalog never offers them, the backend
   // downcasts/withholds their active effects, and the app can't crash on the
   // unknown enum values. Must appear in BOTH branches of the ternary.
+  // `remote_assets` tells the backend this build can resolve CDN-served art
+  // (accessory/character/powerup PNGs fetched from /assets/... and disk-cached)
+  // via the /assets/manifest registry. Old binaries omit it, so the backend
+  // hides catalog rows whose art is remote-only — they'd render as a grey
+  // placeholder, and worse, be purchasable. Must appear in BOTH branches.
   static final String clientFeaturesHeader = _adsSupported
-      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps'
-      : 'characters,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps';
+      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets'
+      : 'characters,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets';
   final HttpClient _httpClient;
   String? _cachedTimeZone;
   String? _cachedReleaseChannel;
@@ -241,6 +246,11 @@ class BackendApiService {
   // 'testflight'; App Store builds — and any platform where detection fails or
   // isn't implemented — report 'prod', the safe default. Resolved once, then
   // cached for the life of the service.
+  /// The build's release channel, for callers outside the transport helpers
+  /// (RemoteAssetCache sends it on `/assets/manifest` so testOnly art is
+  /// filtered exactly like the catalog).
+  Future<String> getReleaseChannel() => _getReleaseChannel();
+
   Future<String> _getReleaseChannel() async {
     if (_cachedReleaseChannel != null) return _cachedReleaseChannel!;
     try {

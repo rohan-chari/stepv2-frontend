@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../config/animals.dart';
+import '../services/remote_asset_cache.dart';
 import '../styles.dart';
+import 'remote_or_bundled_accessory_image.dart';
 import 'spinning_face.dart';
 
 class PowerupIcon extends StatelessWidget {
@@ -106,16 +108,27 @@ class PowerupIcon extends StatelessWidget {
         child: SpinningFace(duration: spinDuration, child: icon),
       );
     }
+    // A type this build has no bundled art for may still be renderable: the
+    // CDN manifest carries icons for powerups shipped after this binary. When
+    // it doesn't (older backend, offline, or a genuinely unknown type), the
+    // existing fallback tile is unchanged.
+    final remoteIcon =
+        assetName == null &&
+        RemoteAssetCache.instance.entry(RemoteAssetKind.powerups, key) != null;
+
     final icon = SizedBox.square(
       dimension: size,
-      child: assetName == null
+      child: assetName == null && !remoteIcon
           ? _PowerupFallbackIcon(size: size, glyph: glyph)
-          : Image.asset(
-              'assets/images/powerups/$assetName.png',
+          : RemoteOrBundledAccessoryImage(
+              assetPath: assetName == null
+                  ? null
+                  : 'assets/images/powerups/$assetName.png',
+              remoteKey: key,
+              kind: RemoteAssetKind.powerups,
               width: size,
               height: size,
               fit: BoxFit.contain,
-              filterQuality: FilterQuality.none,
               errorBuilder: (context, error, stackTrace) =>
                   _PowerupFallbackIcon(size: size, glyph: glyph),
             ),
@@ -153,11 +166,11 @@ class _TurtleShellIcon extends StatelessWidget {
       child: OverflowBox(
         maxWidth: double.infinity,
         alignment: Alignment.topLeft,
-        child: Image.asset(
-          sprite.asset,
+        child: animalSpriteImage(
+          asset: sprite.asset,
+          file: sprite.file,
           width: size * sprite.frameCount,
           height: size,
-          filterQuality: FilterQuality.none,
           fit: BoxFit.contain,
           errorBuilder: (context, error, stackTrace) =>
               SizedBox.square(

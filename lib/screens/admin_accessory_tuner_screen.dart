@@ -564,7 +564,9 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
         labelText: 'Tune placement on',
         border: OutlineInputBorder(),
       ),
-      items: kAnimalSprites.keys
+      // Bundled animals plus any CDN-served character the manifest adds, so a
+      // character shipped without an app release is still tunable.
+      items: availableAnimals()
           .map(
             (animal) => DropdownMenuItem<String>(
               value: animal,

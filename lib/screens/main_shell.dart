@@ -20,6 +20,7 @@ import '../widgets/notification_ask_dialog.dart';
 import '../widgets/steps_disconnected_banner.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
+import '../services/remote_asset_cache.dart';
 import '../services/background_sync_bootstrap_service.dart';
 import '../services/health_service.dart';
 import '../services/notification_service.dart';
@@ -1689,7 +1690,23 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
   }
 
+  /// Pulls the CDN art registry and warms the disk cache. Best-effort and
+  /// never awaited by UI: an older backend with no `/assets/manifest` simply
+  /// leaves every item on its bundled art.
+  Future<void> _refreshRemoteAssetManifest() async {
+    try {
+      await RemoteAssetCache.instance.refreshManifest(
+        releaseChannel: await _backendApiService.getReleaseChannel(),
+      );
+      if (mounted) setState(() {});
+    } catch (_) {}
+  }
+
   void _applyShopCatalog(Map<String, dynamic> catalog) {
+    // The catalog funnel is the app's "cosmetics may have changed" event, so
+    // it's also where a newly-shipped remote item's art gets picked up.
+    unawaited(_refreshRemoteAssetManifest());
+
     final equipped = catalog['equipped'] as Map<String, dynamic>? ?? {};
     // The CHARACTER entry is the base animal, not a wearable — keep it out of
     // the accessory overlay list.
@@ -2385,6 +2402,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       if (userId != null && userId.isNotEmpty) {
         _backendApiService.onAuthenticatedUser(userId);
       }
+      unawaited(_refreshRemoteAssetManifest());
       final incoming = user['incomingFriendRequests'] as int? ?? 0;
       final displayName = user['displayName'] as String?;
       final email = user['email'] as String?;

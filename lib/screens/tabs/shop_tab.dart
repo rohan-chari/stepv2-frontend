@@ -7,6 +7,7 @@ import '../../models/loadable.dart';
 import '../../services/ad_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
+import '../../services/remote_asset_cache.dart';
 import '../../styles.dart';
 import '../../widgets/app_refresh_indicator.dart';
 import '../../widgets/accessory_thumbnail.dart';
@@ -864,6 +865,9 @@ class _ShopTabState extends State<ShopTab> {
             assetKey: assetKey,
             assetPath: animalSpriteFor(assetKey).asset,
             animationFrames: animalSpriteFor(assetKey).frameCount,
+            // A CHARACTER the binary doesn't bundle resolves from the CDN
+            // manifest's `characters` section, not `accessories`.
+            remoteKind: RemoteAssetKind.characters,
             errorBuilder: (context, error, stackTrace) => Icon(
               Icons.pets_rounded,
               size: iconSize,

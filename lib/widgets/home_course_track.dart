@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../styles.dart';
 import 'goal_track.dart';
 import 'home_chrome.dart';
+import 'remote_or_bundled_accessory_image.dart';
 import '../config/animals.dart';
 import '../utils/at_name.dart';
 
@@ -697,11 +698,11 @@ class CapybaraSpriteWithAccessories extends StatelessWidget {
                   -bodyFrame * capybaraSize,
                   sprite.baselineOffset * capybaraSize,
                 ),
-                child: Image.asset(
-                  sprite.asset,
+                child: animalSpriteImage(
+                  asset: sprite.asset,
+                  file: sprite.file,
                   width: capybaraSize * sprite.frameCount,
                   height: capybaraSize,
-                  filterQuality: FilterQuality.none,
                   fit: BoxFit.contain,
                 ),
               ),
@@ -1074,10 +1075,10 @@ class _AccessoryImage extends StatelessWidget {
     final safeFrameCount = frameCount < 1 ? 1 : frameCount;
 
     if (safeFrameCount == 1) {
-      return Image.asset(
-        assetPath,
+      return RemoteOrBundledAccessoryImage(
+        assetPath: assetPath,
+        remoteKey: assetKey,
         fit: BoxFit.contain,
-        filterQuality: FilterQuality.none,
         errorBuilder: (context, error, stackTrace) => CustomPaint(
           painter: _AccessoryPainter(slot: slot, assetKey: assetKey),
         ),
@@ -1096,12 +1097,12 @@ class _AccessoryImage extends StatelessWidget {
             alignment: Alignment.topLeft,
             child: Transform.translate(
               offset: Offset(-frame * frameWidth, 0),
-              child: Image.asset(
-                assetPath,
+              child: RemoteOrBundledAccessoryImage(
+                assetPath: assetPath,
+                remoteKey: assetKey,
                 width: frameWidth * safeFrameCount,
                 height: frameHeight,
                 fit: BoxFit.contain,
-                filterQuality: FilterQuality.none,
                 errorBuilder: (context, error, stackTrace) => CustomPaint(
                   painter: _AccessoryPainter(slot: slot, assetKey: assetKey),
                 ),
@@ -1195,10 +1196,10 @@ class _FeetAccessoryOverlay extends StatelessWidget {
               child: Transform.rotate(
                 angle: rotation + placement.rotation,
                 alignment: Alignment.center,
-                child: Image.asset(
-                  'assets/images/accessories/$assetKey.png',
+                child: RemoteOrBundledAccessoryImage(
+                  assetPath: 'assets/images/accessories/$assetKey.png',
+                  remoteKey: assetKey,
                   fit: BoxFit.contain,
-                  filterQuality: FilterQuality.none,
                   errorBuilder: (context, error, stackTrace) => CustomPaint(
                     painter: _AccessoryPainter(
                       slot: 'FEET',
