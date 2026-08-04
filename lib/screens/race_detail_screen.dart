@@ -1590,8 +1590,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         await _showDefenseScanSheet(scan);
       } else if (outcome == AttackOutcome.blocked ||
           outcome == AttackOutcome.reflected ||
-          outcome == AttackOutcome.redirected) {
-        // Blocked / Reflected / Decoy-redirected all get the reveal modal.
+          outcome == AttackOutcome.redirected ||
+          outcome == AttackOutcome.reflectedBlocked) {
+        // Blocked / Reflected / Decoy-redirected / reflected-then-blocked all
+        // get the reveal modal.
         await showAttackOutcomeModal(context, res ?? const {});
       } else if (type == 'COIN_FLIP') {
         // Server-rolled 2x/0.5x. A missing `flip` (older backend) degrades to

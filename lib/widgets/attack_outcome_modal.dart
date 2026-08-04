@@ -13,7 +13,11 @@ import '../constants/powerup_copy.dart';
 ///
 /// `redirected` is the powerups5 Decoy outcome: a single-target attack aimed at
 /// a Decoy holder is bounced onto a third racer.
-enum AttackOutcome { applied, blocked, reflected, redirected }
+///
+/// `reflectedBlocked` is the combined outcome: the target's Mirror bounced the
+/// attack back, and the attacker's own Compression Socks then blocked the
+/// bounce (both `reflected` and `blocked` are true on the result).
+enum AttackOutcome { applied, blocked, reflected, redirected, reflectedBlocked }
 
 /// Friendly display names for the powerups that can intercept an attack.
 
@@ -25,6 +29,13 @@ enum AttackOutcome { applied, blocked, reflected, redirected }
 /// on missing/null fields.
 AttackOutcome attackOutcomeFromResult(Map<String, dynamic>? result) {
   if (result == null) return AttackOutcome.applied;
+
+  // Combined discriminator (newer backend): a Mirror reflected the attack and
+  // the attacker's own Compression Socks blocked the bounce. Both flags ride
+  // on the same result, so this must win over the plain outcome switch.
+  if (result['reflected'] == true && result['blocked'] == true) {
+    return AttackOutcome.reflectedBlocked;
+  }
 
   final outcome = result['outcome'];
   if (outcome is String) {
@@ -81,6 +92,26 @@ class AttackOutcomeModal extends StatelessWidget {
 
   AttackOutcome get _outcome => attackOutcomeFromResult(result);
 
+  Widget _iconBox(
+    BuildContext context, {
+    required String type,
+    required Color borderColor,
+    required double size,
+    required double iconSize,
+  }) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: AppColors.of(context).parchmentDark,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: borderColor, width: 2),
+      ),
+      alignment: Alignment.center,
+      child: PowerupIcon(type: type, size: iconSize, spinning: true),
+    );
+  }
+
   String get _interceptorType {
     switch (_outcome) {
       case AttackOutcome.reflected:
@@ -90,6 +121,7 @@ class AttackOutcomeModal extends StatelessWidget {
         final by = result['redirectedBy'];
         return by is String && by.isNotEmpty ? by : 'DECOY';
       case AttackOutcome.blocked:
+      case AttackOutcome.reflectedBlocked:
       case AttackOutcome.applied:
         final by = result['blockedBy'];
         return by is String && by.isNotEmpty ? by : 'COMPRESSION_SOCKS';
@@ -102,6 +134,8 @@ class AttackOutcomeModal extends StatelessWidget {
         return 'REFLECTED!';
       case AttackOutcome.redirected:
         return 'REDIRECTED!';
+      case AttackOutcome.reflectedBlocked:
+        return 'BOUNCED & BLOCKED!';
       case AttackOutcome.blocked:
       case AttackOutcome.applied:
         return 'BLOCKED!';
@@ -116,6 +150,8 @@ class AttackOutcomeModal extends StatelessWidget {
         return 'Your attack was reflected back at you';
       case AttackOutcome.redirected:
         return 'A decoy bounced your attack onto another racer';
+      case AttackOutcome.reflectedBlocked:
+        return 'Their Mirror bounced your attack back — but your Compression Socks blocked it!';
       case AttackOutcome.blocked:
       case AttackOutcome.applied:
         return 'Your attack was blocked';
@@ -131,6 +167,8 @@ class AttackOutcomeModal extends StatelessWidget {
       case AttackOutcome.reflected:
         accent = AppColors.of(context).coinDark;
       case AttackOutcome.redirected:
+      // Your own shield saved you — shield color, not the "you got hit" red.
+      case AttackOutcome.reflectedBlocked:
         accent = AppColors.of(context).feedShield;
       case AttackOutcome.blocked:
       case AttackOutcome.applied:
@@ -165,23 +203,48 @@ class AttackOutcomeModal extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 14),
-            Center(
-              child: Container(
-                width: 112,
-                height: 112,
-                decoration: BoxDecoration(
-                  color: AppColors.of(context).parchmentDark,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: accent, width: 2),
-                ),
-                alignment: Alignment.center,
-                child: PowerupIcon(
+            if (_outcome == AttackOutcome.reflectedBlocked)
+              // Two-beat story: their Mirror bounced it → your Socks caught it.
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _iconBox(
+                    context,
+                    type: result['reflectedBy'] is String &&
+                            (result['reflectedBy'] as String).isNotEmpty
+                        ? result['reflectedBy'] as String
+                        : 'MIRROR',
+                    borderColor: AppColors.of(context).coinDark,
+                    size: 88,
+                    iconSize: 62,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Icon(
+                      Icons.arrow_forward_rounded,
+                      size: 28,
+                      color: AppColors.of(context).textMid,
+                    ),
+                  ),
+                  _iconBox(
+                    context,
+                    type: interceptorType,
+                    borderColor: accent,
+                    size: 88,
+                    iconSize: 62,
+                  ),
+                ],
+              )
+            else
+              Center(
+                child: _iconBox(
+                  context,
                   type: interceptorType,
-                  size: 82,
-                  spinning: true,
+                  borderColor: accent,
+                  size: 112,
+                  iconSize: 82,
                 ),
               ),
-            ),
             const SizedBox(height: 16),
             Text(
               interceptorName,
