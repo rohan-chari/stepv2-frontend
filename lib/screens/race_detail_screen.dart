@@ -45,6 +45,8 @@ import '../widgets/spinning_crate.dart';
 import '../widgets/game_container.dart';
 import '../widgets/friend_request_sheet.dart';
 import '../widgets/leaderboard_plank.dart';
+import '../widgets/multiplier_chip.dart';
+import '../widgets/race_podium.dart';
 import '../widgets/team_h2h_banner.dart';
 import '../widgets/team_lobby_board.dart';
 import '../widgets/loading_skeleton.dart';
@@ -5773,6 +5775,18 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         const <Map<String, dynamic>>[];
     final winnerAnimal = animalFromJson(winnerEntry['animal']);
 
+    // Item 4 — the solo podium. Null whenever a podium can't be drawn (team
+    // race, or fewer than two finishers), in which case the original winner
+    // card renders untouched. Payout amounts come from the race's own tiers,
+    // so an unfunded race simply shows no coin lines.
+    final podiumFinishers = (!isTeamRace && RacePodium.canRender(participants.length))
+        ? RacePodium.finishersFromParticipants(
+            participants,
+            payoutTiers: parsePayoutTiers(_race),
+            viewerUserId: _myUserId,
+          )
+        : null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -5826,13 +5840,27 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           index: 0,
           child: Column(
             children: [
-              _checkerSectionHeader(isTeamRace ? 'WINNING TEAM' : 'WINNER'),
+              _checkerSectionHeader(
+                isTeamRace
+                    ? 'WINNING TEAM'
+                    : (podiumFinishers != null ? 'PODIUM' : 'WINNER'),
+              ),
               _sectionCard(
                 padding: const EdgeInsets.all(18),
                 child: Column(
                   children: [
                     if (isTeamRace)
                       _buildTeamWinnerBoard(winnerTeam, participants)
+                    // Item 4: solo races end on a podium. Team races keep the
+                    // winning-team board; a race with a single finisher keeps
+                    // the old winner card (one plinth reads as broken).
+                    else if (podiumFinishers != null)
+                      RacePodium(
+                        finishers: podiumFinishers,
+                        // The results popup fires the shared confetti at
+                        // screen level; here the podium owns it.
+                        showConfetti: !widget.demoMode,
+                      )
                     else if (winner != null) ...[
                       RacerAvatar(
                         rank: 1,
@@ -6954,6 +6982,24 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         : (p['accessories'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
     final animal = isStealthed ? null : animalFromJson(p['animal']);
 
+    // Item 18: the team cell had NO server-placement override at all — it
+    // painted `overallRank + 1`, the caller's array index. With a stealthed
+    // team-mate pinned to the top of the ordering that produced the same
+    // "1 2 1 2" collision the solo planks had. Prefer the server placement,
+    // and show "?" when the backend masked it.
+    final serverPlacement = serverPlacementOf(p);
+    final rankLabel = (isStealthed && serverPlacement == null)
+        ? '?'
+        : '${serverPlacement ?? (overallRank + 1)}';
+
+    // Item 19: the multiplier chip existed only on the solo plank, so a
+    // buffed/frozen/reversed racer looked untouched in the team scoreboard.
+    // Same shared widget, same suppression rules; absent field → no chip.
+    final multiplierChip = MultiplierChip.maybe(
+      currentMultiplier: MultiplierChip.multiplierOf(p),
+      isStealthed: isStealthed,
+    );
+
     // Rank/avatar + name + steps, centered in the space left of the rail.
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -6987,7 +7033,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                     border: Border.all(color: Colors.white, width: 1.5),
                   ),
                   child: Text(
-                    '${overallRank + 1}',
+                    rankLabel,
                     style: PixelText.number(size: 11, color: Colors.white),
                   ),
                 ),
@@ -6996,15 +7042,30 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           ),
         ),
         const SizedBox(height: 7),
-        Text(
-          isMe ? '${atName(name)} (you)' : atName(name),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-          style: PixelText.body(
-            size: 15,
-            color: AppColors.of(context).textDark,
-          ),
+        // Name, with the multiplier chip beside it. The cell is only about
+        // half the screen wide, so the name flexes and the chip keeps its
+        // intrinsic width rather than the other way round.
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Flexible(
+              child: Text(
+                isMe ? '${atName(name)} (you)' : atName(name),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: PixelText.body(
+                  size: 15,
+                  color: AppColors.of(context).textDark,
+                ),
+              ),
+            ),
+            if (multiplierChip != null) ...[
+              const SizedBox(width: 5),
+              multiplierChip,
+            ],
+          ],
         ),
         const SizedBox(height: 1),
         Text(
@@ -7653,6 +7714,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final isMe = userId == _myUserId;
     final isStealthed = p['stealthed'] == true;
     final isFinished = p['finishedAt'] != null;
+    // Item 18: a stealthed row has no server placement (the backend masks it),
+    // so the array index behind `rank` is meaningless for it. Show "?" rather
+    // than a number that would collide with the visible rows' real ranks.
+    final rankHidden = isStealthed && serverPlacement == null;
     // Additive backend field (item 6). Absent/null on older backends → no
     // multiplier badge.
     final currentMultiplier = (p['currentMultiplier'] as num?)?.toDouble();
@@ -7667,6 +7732,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       isStealthed: isStealthed,
       isFinished: isFinished,
       finishPlace: finishPlace,
+      rankHidden: rankHidden,
       // Issue 1: team standings rows are larger for legibility; solo/ranked
       // keep the defaults.
       avatarSize: large ? 40 : 32,

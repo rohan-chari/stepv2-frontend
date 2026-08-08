@@ -93,5 +93,17 @@ before considering a build/release change done. See `DEPLOYMENT.md`.
   `accessory-art` skill. NEVER hand-draw shippable art (no CustomPainter
   scenes, no SVG art, no PIL sprites). Hand-coding is fine for UI chrome only
   (buttons, cards, shadows, text, layout, motion).
+- **Any UI-placement change** (adding, moving, or removing anything a user
+  sees on a screen — whether a full feature or a standalone tweak): run the
+  `ui-test-planner` agent and give me its manual checklist before the work is
+  presented as done. Many screens are mirrored (demo race tutorial and tab
+  tutorial render the real screens; some chrome is hand-forked) — the
+  checklist exists so I verify every mirror, e.g. moving the mystery boxes on
+  the race detail screen must also be checked inside the tutorial demo.
+- **Any odds / game-balance / economy discussion or change** (drop rates, spin
+  weights, prices, payout curves, coin sources/sinks, multipliers, scoring
+  rules): run the `game-analyst` agent for an EV + exploit analysis before
+  numbers are committed to code or seeds. It maintains `docs/economy.md` and
+  may read prod SELECT-only; it never edits code or config.
 - **After any non-trivial implementation**: run the `code-reviewer` agent
   before presenting the work as done.

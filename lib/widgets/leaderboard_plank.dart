@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import 'app_avatar.dart';
+import 'multiplier_chip.dart';
 import '../styles.dart';
 import '../utils/at_name.dart';
 import '../utils/race_participant_display.dart';
@@ -26,6 +27,14 @@ class LeaderboardPlank extends StatelessWidget {
   /// (nothing), 0 frozen (frost chip), <0 reversed (reversed chip).
   final double? currentMultiplier;
 
+  /// Item 18 (batch 2026-08-08): the backend masks `placement` on a stealthed
+  /// row, so there is no rank to show. The shield then paints "?" instead of a
+  /// number — deriving one from the row's array position is exactly the
+  /// "1 2 1 2" bug, where two stealthed rows showed 1 and 2 above visible rows
+  /// also showing 1, 2, 3. Defaults false, so every existing caller is
+  /// unchanged.
+  final bool rankHidden;
+
   // Issue 1: team races render larger, more legible rows. These default to the
   // solo/ranked values so those layouts are UNCHANGED; the team-grouped
   // standings pass bumped sizes.
@@ -47,13 +56,21 @@ class LeaderboardPlank extends StatelessWidget {
     this.effectIcons = const [],
     this.profilePhotoUrl,
     this.currentMultiplier,
+    this.rankHidden = false,
     this.avatarSize = 32,
     this.nameSize = 15,
     this.stepsSize = 16,
     this.verticalPadding = 8,
   });
 
+  /// What the shield paints. Exposed so a widget test can assert the masked
+  /// rank without reaching into a CustomPainter's canvas.
+  String get rankLabel => rankHidden ? '?' : '${rank + 1}';
+
   Color? _medalColor(BuildContext context) {
+    // A masked row has no rank, so it must not wear a medal either — a gold
+    // shield on a "?" would read as "the hidden runner is winning".
+    if (rankHidden) return null;
     switch (rank) {
       case 0:
         return AppColors.of(context).medalGold;
@@ -79,85 +96,15 @@ class LeaderboardPlank extends StatelessWidget {
     );
   }
 
-  /// The name-row chip reflecting the multiplier: "Nx" for a buff, a frost chip
-  /// when frozen (0), a reversed chip when negative. Null (no chip) at exactly
-  /// 1x, a mild sub-1 debuff, absent multiplier, or for a stealthed runner.
+  /// The name-row chip reflecting the multiplier. Item 19 moved the body into
+  /// the shared [MultiplierChip] so the team scoreboard renders the identical
+  /// chip under the identical suppression rules; this stays as the plank's
+  /// null-or-widget adapter.
   Widget? _multiplierChip(BuildContext context) {
-    final m = currentMultiplier;
-    if (isStealthed || m == null) return null;
-    if (m <= -0.001) {
-      // Reversed (e.g. Wrong Turn) — steps counting backward.
-      return _chip(
-        context,
-        icon: Icons.u_turn_left_rounded,
-        label: '${_fmtMult(m.abs())}x',
-        bg: AppColors.of(context).feedAttack,
-      );
-    }
-    if (m < 0.5) {
-      // Frozen (e.g. Leg Cramp) — the snowflake is enough visually; retain
-      // the word for screen readers.
-      return _chip(
-        context,
-        icon: Icons.ac_unit_rounded,
-        semanticsLabel: 'Frozen',
-        bg: AppColors.of(context).feedShield,
-      );
-    }
-    if (m > 1.001) {
-      // Buffed — warm ember chip, number only (no flame).
-      return _chip(
-        context,
-        label: '${_fmtMult(m)}x',
-        // Item 13: was a bare light-mode ember literal; the palette's feedFire
-        // equivalent is `pillTerra`, which flips for the night board.
-        bg: AppColors.of(context).pillTerra,
-      );
-    }
-    return null;
-  }
-
-  Widget _chip(
-    BuildContext context, {
-    IconData? icon,
-    String? label,
-    String? semanticsLabel,
-    required Color bg,
-  }) {
-    final iconOnly = icon != null && label == null;
-    final chip = Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: iconOnly ? 5 : 6,
-        vertical: iconOnly ? 4 : 3,
-      ),
-      decoration: BoxDecoration(
-        color: bg.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(7),
-        border: Border.all(color: bg.withValues(alpha: 0.85), width: 1),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: iconOnly ? 13 : 11, color: bg),
-            if (label != null) const SizedBox(width: 3),
-          ],
-          if (label != null)
-            Text(label, style: PixelText.title(size: 10, color: bg)),
-        ],
-      ),
+    return MultiplierChip.maybe(
+      currentMultiplier: currentMultiplier,
+      isStealthed: isStealthed,
     );
-    if (semanticsLabel == null) return chip;
-    return Semantics(
-      label: semanticsLabel,
-      child: ExcludeSemantics(child: chip),
-    );
-  }
-
-  static String _fmtMult(double v) {
-    final rounded = v.roundToDouble();
-    if ((v - rounded).abs() < 0.05) return rounded.toInt().toString();
-    return v.toStringAsFixed(1);
   }
 
   @override
@@ -210,7 +157,7 @@ class LeaderboardPlank extends StatelessWidget {
               height: 30,
               child: CustomPaint(
                 painter: _MedalPainter(
-                  rank: rank,
+                  label: rankLabel,
                   color: medalColor ?? AppColors.of(context).woodMid,
                   // Item 13: a CustomPainter has no BuildContext, so the
                   // fallback border colour has to be resolved here and passed
@@ -332,7 +279,9 @@ class LeaderboardPlank extends StatelessWidget {
 
 /// Draws a shield/medallion shape with the rank number inside.
 class _MedalPainter extends CustomPainter {
-  final int rank;
+  /// The glyph inside the shield — a 1-based rank, or "?" for a row whose
+  /// placement the backend deliberately masked (item 18).
+  final String label;
   final Color color;
 
   /// Theme-resolved stand-in for the old bare `AppColors.woodShadow`
@@ -340,7 +289,7 @@ class _MedalPainter extends CustomPainter {
   final Color borderFallback;
 
   _MedalPainter({
-    required this.rank,
+    required this.label,
     required this.color,
     required this.borderFallback,
   });
@@ -385,10 +334,6 @@ class _MedalPainter extends CustomPainter {
     final highlightPaint = Paint()..color = Colors.white.withValues(alpha: 0.2);
     canvas.drawPath(highlightPath, highlightPaint);
 
-    // Rank text
-    final labels = ['1', '2', '3'];
-    final label = rank < 3 ? labels[rank] : '${rank + 1}';
-
     final paragraphBuilder =
         ui.ParagraphBuilder(
             ui.ParagraphStyle(
@@ -424,7 +369,7 @@ class _MedalPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _MedalPainter oldDelegate) =>
-      oldDelegate.rank != rank ||
+      oldDelegate.label != label ||
       oldDelegate.color != color ||
       oldDelegate.borderFallback != borderFallback;
 }

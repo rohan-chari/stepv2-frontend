@@ -133,6 +133,13 @@ void main() {
       );
     });
 
+    // NOTE (batch 2026-08-08 item 18): the blanket "all-or-nothing" rule this
+    // test was written for is GONE — a partially-placed payload (the stealth
+    // case) now keeps server placement for the rows that carry one. This
+    // expectation still holds for THIS payload because a placed row sorts
+    // ahead of an unplaced one either way, so the assertion is left exactly as
+    // it was. The new partial/Detour-Sign rules are covered in
+    // test/batch_2026_08_08_stealth_ordering_test.dart.
     test('a partially-placed payload also falls back (all-or-nothing)', () {
       final raw = [
         {'userId': 'u1', 'totalSteps': 10, 'placement': 2},

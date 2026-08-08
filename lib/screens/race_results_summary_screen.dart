@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../models/race_payouts.dart';
 import '../styles.dart';
 import '../utils/at_name.dart';
 import '../utils/race_participant_display.dart';
@@ -11,6 +12,7 @@ import '../widgets/celebration_confetti.dart';
 import '../widgets/game_container.dart';
 import '../widgets/home_chrome.dart';
 import '../widgets/pill_button.dart';
+import '../widgets/race_podium.dart';
 import '../widgets/spinning_coin.dart';
 
 /// Blurred-backdrop popup summarizing races that finished since the user last
@@ -124,6 +126,23 @@ class _ResultCard extends StatelessWidget {
 
   final Map<String, dynamic> race;
 
+  /// Top-3 finishers for the podium, or null when this payload can't feed one
+  /// (no participants array, or fewer than two finishers). Never throws on a
+  /// shape it doesn't recognise.
+  List<PodiumFinisher>? _podiumFinishers() {
+    final raw = race['participants'];
+    if (raw is! List) return null;
+    final rows = raw
+        .whereType<Map>()
+        .map((e) => e.cast<String, dynamic>())
+        .toList();
+    if (!RacePodium.canRender(rows.length)) return null;
+    return RacePodium.finishersFromParticipants(
+      orderRaceParticipantsForDisplay(rows),
+      payoutTiers: parsePayoutTiers(race),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final name = race['name'] as String? ?? 'Race';
@@ -149,6 +168,17 @@ class _ResultCard extends StatelessWidget {
         ? '${formatOrdinal(myPlacement)} of $participantCount'
         : formatOrdinal(myPlacement);
 
+    // Item 4 — the podium, when this payload can feed one.
+    //
+    // IMPORTANT: the completed-bucket race map served by `GET /races` does NOT
+    // currently carry a `participants` array (it carries `winner`,
+    // `myPlacement`, `participantCount` and `payoutTiers`). So on today's
+    // backend this stays null and the card renders exactly as it always has.
+    // It lights up automatically if/when the list payload starts including
+    // participants — no client release needed, and no field is assumed to
+    // exist. Everything below is read defensively.
+    final podiumFinishers = _podiumFinishers();
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
@@ -168,6 +198,12 @@ class _ResultCard extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
+          if (podiumFinishers != null) ...[
+            const SizedBox(height: 10),
+            // The screen already fires the shared confetti for a top-3 finish,
+            // so the podium must not fire a second burst on top of it.
+            RacePodium(finishers: podiumFinishers),
+          ],
           const SizedBox(height: 8),
           Row(
             children: [

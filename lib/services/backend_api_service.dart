@@ -787,6 +787,100 @@ class BackendApiService {
     return value is bool ? value : enabled;
   }
 
+  /// GET /notifications/preferences, returning the RAW payload.
+  ///
+  /// [fetchDailyRewardRemindersEnabled] collapses "absent" and "false" into a
+  /// default, which is fine for a toggle that has always existed. Newer
+  /// toggles have to distinguish the two: a backend that predates a preference
+  /// must hide that toggle entirely rather than render a switch whose PATCH
+  /// the server would drop on the floor. Callers inspect key presence with
+  /// `payload.containsKey(...)`.
+  ///
+  /// Returns an empty map (rather than throwing) when the backend is too old
+  /// to serve the endpoint at all, so every new toggle simply stays hidden.
+  Future<Map<String, dynamic>> fetchNotificationPreferences({
+    required String identityToken,
+  }) async {
+    try {
+      final response = await _sendGetRequest(
+        path: '/notifications/preferences',
+        identityToken: identityToken,
+      );
+      final payload = await _decodeJsonResponse(response);
+      return payload;
+    } on ApiException {
+      return const <String, dynamic>{};
+    }
+  }
+
+  /// PATCH /notifications/preferences for the step-milestone reminder opt-in
+  /// (feature batch 2026-08-08, Item 3). Additive field: a backend that does
+  /// not know it ignores it, and the response then omits it — in which case we
+  /// echo the requested value back so the switch does not flap.
+  Future<bool> updateStepMilestoneRemindersEnabled({
+    required String identityToken,
+    required bool enabled,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'PATCH',
+      path: '/notifications/preferences',
+      body: {'stepMilestoneRemindersEnabled': enabled},
+      identityToken: identityToken,
+    );
+    final payload = await _decodeJsonResponse(response);
+    final value = payload['stepMilestoneRemindersEnabled'];
+    return value is bool ? value : enabled;
+  }
+
+  /// POST /feedback/suggestions (feature batch 2026-08-08, Item 7).
+  /// New endpoint — an older backend 404s, which surfaces as an
+  /// [ApiException] the sheet turns into a retryable error state.
+  Future<void> submitSuggestion({
+    required String identityToken,
+    required String text,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/feedback/suggestions',
+      body: {'text': text},
+      identityToken: identityToken,
+    );
+    await _decodeJsonResponse(response);
+  }
+
+  /// GET /admin/feedback/suggestions (admin-gated). Returns the raw payload;
+  /// the admin screen reads `suggestions` defensively.
+  Future<Map<String, dynamic>> fetchAdminSuggestions({
+    required String identityToken,
+    int limit = 50,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/admin/feedback/suggestions?limit=$limit',
+      identityToken: identityToken,
+    );
+    return await _decodeJsonResponse(response);
+  }
+
+  /// POST /races/:raceId/powerups/:powerupId/reroll (feature batch 2026-08-08,
+  /// Item 11). Returns the rerolled powerup `{ id, type, rarity, rerolled }`.
+  /// Throws [ApiException] carrying the server `code` for ALREADY_REROLLED /
+  /// AD_NOT_VERIFIED / NOT_HELD so the caller can run the verification retry
+  /// loop.
+  Future<Map<String, dynamic>> rerollPowerup({
+    required String identityToken,
+    required String raceId,
+    required String powerupId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races/$raceId/powerups/$powerupId/reroll',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
   Future<Map<String, dynamic>> checkDisplayName({
     required String identityToken,
     required String name,
