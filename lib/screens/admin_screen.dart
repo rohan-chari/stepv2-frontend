@@ -870,6 +870,23 @@ class _AdminStatsCardState extends State<AdminStatsCard> {
     final onboardingFunnel = stats?['onboardingFunnel'] is Map<String, dynamic>
         ? stats!['onboardingFunnel'] as Map<String, dynamic>
         : null;
+    // Item 9 — users-per-app-version and the private/public race split. Both
+    // additive; read defensively so an older backend simply omits the
+    // sections. `versions` rows can carry a null version, which the backend
+    // buckets as "unknown".
+    final rawVersions = stats?['versions'];
+    final versions = rawVersions is List
+        ? rawVersions
+              .whereType<Map>()
+              .map((e) => e.cast<String, dynamic>())
+              .toList()
+        : null;
+    final versionsSince = stats?['versionsSince'] is String
+        ? stats!['versionsSince'] as String
+        : null;
+    final races = stats?['races'] is Map<String, dynamic>
+        ? stats!['races'] as Map<String, dynamic>
+        : null;
 
     return ContentBoard(
       width: widget.width,
@@ -939,6 +956,31 @@ class _AdminStatsCardState extends State<AdminStatsCard> {
               'Avg box openers/day',
               '${activity?['avgUniqueBoxOpenersPerDay'] ?? '—'}',
             ),
+            // Item 9 (batch 2026-08-08) — additive sections. Both HIDE
+            // entirely when the backend doesn't send them, rather than
+            // rendering an empty shell of em-dashes.
+            if (versions != null && versions.isNotEmpty) ...[
+              _section('VERSIONS'),
+              if (versionsSince != null)
+                _row('Seen since', versionsSince),
+              for (final bucket in versions)
+                _row(
+                  '${bucket['version'] ?? 'unknown'}'
+                      '${bucket['platform'] != null ? ' (${bucket['platform']})' : ''}',
+                  '${bucket['users'] ?? 0}',
+                ),
+            ],
+            if (races != null) ...[
+              _section('RACES'),
+              _row(
+                'Private (total / active)',
+                '${races['privateTotal'] ?? '—'} / ${races['privateActive'] ?? '—'}',
+              ),
+              _row(
+                'Public (total / active)',
+                '${races['publicTotal'] ?? '—'} / ${races['publicActive'] ?? '—'}',
+              ),
+            ],
             _section('FRIENDS PER USER'),
             _row(
               '0 / 1 / 2 / 3-5 / 6+',

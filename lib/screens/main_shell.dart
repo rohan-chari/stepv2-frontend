@@ -34,7 +34,11 @@ import '../widgets/info_toast.dart';
 import '../widgets/team_side_picker.dart';
 import '../widgets/step_milestones_section.dart';
 import '../widgets/streak_chip.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+
+import '../widgets/whats_new_sheet.dart';
 import '../widgets/wooden_tab_bar.dart';
+import '../content/whats_new.dart';
 import 'race_results_summary_screen.dart';
 import 'ranked_results_summary_screen.dart';
 import 'start_screen.dart';
@@ -177,6 +181,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   // (markRaceResultsSeen) is the durable source of truth across sessions.
   final Set<String> _raceResultsShownThisSession = {};
   bool _raceResultsPopupOpen = false;
+
+  /// Item 8 — a results modal (race or ranked) took the screen this session,
+  /// so the What's New sheet waits for the next launch rather than stacking.
+  bool _resultsModalShownThisSession = false;
+  bool _whatsNewShownThisSession = false;
   // Settled ranked weeks whose summary popup we've surfaced this session, keyed
   // by week index. The server ack (markRankedResultsSeen) is the durable source
   // of truth across sessions; this just prevents a re-fetch re-interrupting.
@@ -259,6 +268,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     // hostage to a request that may be slow or failing — this is the path a
     // user takes precisely because something already isn't working.
     await widget.authService.markFirstRaceOnboardingSeenLocally();
+    // Item 8: a fresh install has just finished onboarding — record the
+    // current version as seen so the changelog does not greet them for a
+    // build they have never used. They meet it on session two.
+    await markWhatsNewSeenForOnboarding();
     unawaited(_skipFirstRaceOnboarding());
     unawaited(widget.authService.markTutorialOnboardingSeen());
     if (!mounted) return;
@@ -1391,8 +1404,72 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
 
     if (!mounted) return;
-    _maybeShowRaceResults();
-    _maybeShowRankedResults();
+    // Item 8 — ordering is load-bearing. Results modals win; What's New only
+    // gets the screen when neither of them took it, and it must run AFTER
+    // both have had their chance (hence the awaits, which previously were
+    // fire-and-forget). The share-race drain happens later in
+    // `_restoreAndFetch`, so this stays ahead of it.
+    await _maybeShowRaceResults();
+    if (!mounted) return;
+    await _maybeShowRankedResults();
+    if (!mounted) return;
+    await _maybeShowWhatsNew();
+  }
+
+  /// Item 8 — the "What's New" sheet, at most once per version per device.
+  ///
+  /// Three suppression rules, all deliberate:
+  ///  * NEVER stack on a results modal. If one showed this session the sheet
+  ///    is deferred to the next launch — two modals over a cold start is a
+  ///    wall, not a welcome.
+  ///  * NEVER during the onboarding session. A fresh install is marked as
+  ///    having seen the current version when onboarding completes
+  ///    ([markWhatsNewSeenForOnboarding]), so fresh installs meet the sheet on
+  ///    their SECOND session and updaters meet it immediately.
+  ///  * Nothing at all when this build has no bundled changelog entry.
+  Future<void> _maybeShowWhatsNew() async {
+    if (!mounted) return;
+    if (_whatsNewShownThisSession) return;
+    if (_resultsModalShownThisSession) return;
+    if (_isOnboarding) return;
+
+    // Don't open over whatever else is on top of the shell.
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) return;
+
+    final version = (await PackageInfo.fromPlatform()).version;
+    final entry = whatsNewEntryFor(version);
+    final lastSeen = await _onboardingState.lastSeenWhatsNewVersion();
+    if (!OnboardingStateService.shouldShowWhatsNew(
+      currentVersion: version,
+      lastSeenVersion: lastSeen,
+      hasEntryForVersion: entry != null,
+    )) {
+      return;
+    }
+    if (!mounted) return;
+
+    _whatsNewShownThisSession = true;
+    // Mark BEFORE showing: a user who force-quits mid-sheet has still been
+    // told, and re-showing on every launch until they tap the button would be
+    // worse than missing it once.
+    await _onboardingState.setLastSeenWhatsNewVersion(version);
+    if (!mounted) return;
+    await WhatsNewSheet.show(context, entry!);
+  }
+
+  /// Records the current version as seen WITHOUT showing the sheet — called
+  /// when onboarding completes so a fresh install isn't greeted by a changelog
+  /// for a build it has never used.
+  Future<void> markWhatsNewSeenForOnboarding() async {
+    try {
+      final version = (await PackageInfo.fromPlatform()).version;
+      if (version.isEmpty) return;
+      await _onboardingState.setLastSeenWhatsNewVersion(version);
+      _whatsNewShownThisSession = true;
+    } catch (_) {
+      // Never let changelog bookkeeping break onboarding completion.
+    }
   }
 
   Future<void> _fetchFeaturedRaces() async {
@@ -1482,6 +1559,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _raceResultsShownThisSession.addAll(shownIds);
 
     _raceResultsPopupOpen = true;
+    // Item 8: a results modal showed, so What's New defers to the next launch.
+    _resultsModalShownThisSession = true;
     await Navigator.of(context).push<void>(
       PageRouteBuilder(
         opaque: false,
@@ -1572,6 +1651,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
     _rankedResultsShownThisSession.add(weekIndex);
     _rankedResultsPopupOpen = true;
+    // Item 8: same deferral as the race-results modal.
+    _resultsModalShownThisSession = true;
     await Navigator.of(context).push<void>(
       PageRouteBuilder(
         opaque: false,
@@ -2111,6 +2192,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       }
     }
     await widget.authService.markFirstRaceOnboardingSeenLocally();
+    // Item 8: a fresh install has just finished onboarding — record the
+    // current version as seen so the changelog does not greet them for a
+    // build they have never used. They meet it on session two.
+    await markWhatsNewSeenForOnboarding();
   }
 
   /// Launches the tutorial from the onboarding step. TutorialScreen claims the
@@ -2139,6 +2224,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     // F8: marked seen on return whether the user finished or bailed — including
     // the "backgrounded the app and came back" path. Idempotent.
     await widget.authService.markTutorialOnboardingSeen();
+    await markWhatsNewSeenForOnboarding();
   }
 
   /// Skips the tutorial onboarding step: marks it seen (backend + locally) with
@@ -2146,6 +2232,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   /// replay of the tutorial.
   Future<void> _skipTutorialOnboarding() async {
     await widget.authService.markTutorialOnboardingSeen();
+    await markWhatsNewSeenForOnboarding();
   }
 
   Future<void> _acceptRaceInviteFromCard(String raceId) async {

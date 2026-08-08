@@ -104,6 +104,39 @@ class _SettingsContentState extends State<_SettingsContent> {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
+  /// Item 10 — absolute-URL variant of [_openUrl]. The social links point at
+  /// third-party sites, so they must NOT be prefixed with the backend base URL
+  /// the way `/support.html` is.
+  Future<void> _openAbsoluteUrl(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      // A device with no browser/app to handle the link must not crash
+      // Settings.
+      if (mounted) showErrorToast(context, "Couldn't open that link.");
+    }
+  }
+
+  /// Item 7 — the suggestion box.
+  Future<void> _openFeedbackSheet() async {
+    final api = widget.backendApiService;
+    if (api == null) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.of(context).parchment,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => _FeedbackSheet(
+        authService: widget.authService,
+        backendApiService: api,
+      ),
+    );
+  }
+
   Future<void> _confirmDeleteAccount() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -265,12 +298,20 @@ class _SettingsContentState extends State<_SettingsContent> {
                   notificationService: widget.notificationService!,
                   authToken: widget.authService.authToken,
                 ),
-                if (widget.backendApiService != null)
+                if (widget.backendApiService != null) ...[
                   _DailyRewardReminderToggle(
                     authService: widget.authService,
                     notificationService: widget.notificationService!,
                     backendApiService: widget.backendApiService!,
                   ),
+                  // Item 3 (client half): hides itself entirely when the
+                  // backend doesn't know the preference.
+                  _StepMilestoneReminderToggle(
+                    authService: widget.authService,
+                    notificationService: widget.notificationService!,
+                    backendApiService: widget.backendApiService!,
+                  ),
+                ],
               ],
             ),
           ],
@@ -327,6 +368,21 @@ class _SettingsContentState extends State<_SettingsContent> {
                   );
                 },
               ),
+              // Item 7: above SUPPORT — catch the feedback before it becomes
+              // a one-star review. Needs the API service to post anywhere.
+              if (widget.backendApiService != null)
+                PillButton(
+                  key: const Key('settings-send-feedback'),
+                  label: 'SEND FEEDBACK',
+                  variant: PillButtonVariant.secondary,
+                  fontSize: 13,
+                  fullWidth: true,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
+                  onPressed: _openFeedbackSheet,
+                ),
               PillButton(
                 label: 'SUPPORT',
                 variant: PillButtonVariant.secondary,
@@ -348,6 +404,32 @@ class _SettingsContentState extends State<_SettingsContent> {
                   vertical: 12,
                 ),
                 onPressed: () => _openUrl('/privacy.html'),
+              ),
+            ],
+          ),
+          // Item 10 — COMMUNITY, between HELP & LEGAL and ACCOUNT. TikTok is
+          // deferred until the account exists; the layout takes a third row
+          // without changes.
+          const SizedBox(height: 24),
+          _SettingsSection(
+            sectionKey: const Key('settings-section-community'),
+            title: 'COMMUNITY',
+            icon: Icons.favorite_rounded,
+            children: [
+              _SocialRow(
+                rowKey: const Key('settings-social-instagram'),
+                glyph: 'IG',
+                platform: 'Instagram',
+                handle: '@bara.steps',
+                onTap: () =>
+                    _openAbsoluteUrl('https://instagram.com/bara.steps'),
+              ),
+              _SocialRow(
+                rowKey: const Key('settings-social-x'),
+                glyph: 'X',
+                platform: 'X',
+                handle: '@barastepz',
+                onTap: () => _openAbsoluteUrl('https://x.com/barastepz'),
               ),
             ],
           ),
@@ -380,6 +462,402 @@ class _SettingsContentState extends State<_SettingsContent> {
                 onPressed: _confirmDeleteAccount,
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Item 10 — one social-platform row: glyph, platform name, handle, chevron.
+///
+/// GLYPH NOTE: the spec calls for the official monochrome brand glyphs as
+/// bundled PNGs. Those assets are not in the repo, and brand marks must not be
+/// hand-drawn or pixel-restyled (they are trademarks, not capybara art). Until
+/// the official PNGs are dropped in, the glyph is a short monogram set in the
+/// app's own pixel type — no trademark reproduced. Swapping in an image is a
+/// one-line change here.
+///
+/// Every colour resolves through [AppColors.of] so the row flips correctly at
+/// night (the 07-23 ink trap: a hardcoded light-mode ink is invisible on the
+/// dark parchment).
+class _SocialRow extends StatelessWidget {
+  const _SocialRow({
+    required this.rowKey,
+    required this.glyph,
+    required this.platform,
+    required this.handle,
+    required this.onTap,
+  });
+
+  final Key rowKey;
+  final String glyph;
+  final String platform;
+  final String handle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Semantics(
+      button: true,
+      label: '$platform, $handle',
+      child: InkWell(
+        key: rowKey,
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          decoration: BoxDecoration(
+            color: colors.parchmentLight,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: colors.parchmentBorder, width: 1.5),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: colors.ink.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(7),
+                  border: Border.all(
+                    color: colors.ink.withValues(alpha: 0.35),
+                    width: 1.5,
+                  ),
+                ),
+                child: Text(
+                  glyph,
+                  style: PixelText.title(size: 12, color: colors.ink),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      platform,
+                      style: PixelText.body(size: 13, color: colors.textDark),
+                    ),
+                    Text(
+                      handle,
+                      style: PixelText.body(size: 11, color: colors.textMid),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.open_in_new_rounded,
+                size: 15,
+                color: colors.textMid,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Item 7 — the suggestion sheet. Offline keeps the text and offers a retry;
+/// the user never loses what they typed.
+class _FeedbackSheet extends StatefulWidget {
+  const _FeedbackSheet({
+    required this.authService,
+    required this.backendApiService,
+  });
+
+  final AuthService authService;
+  final BackendApiService backendApiService;
+
+  @override
+  State<_FeedbackSheet> createState() => _FeedbackSheetState();
+}
+
+class _FeedbackSheetState extends State<_FeedbackSheet> {
+  static const int _maxChars = 2000;
+
+  final TextEditingController _controller = TextEditingController();
+  bool _sending = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty || _sending) return;
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) return;
+
+    setState(() {
+      _sending = true;
+      _error = null;
+    });
+    try {
+      await widget.backendApiService.submitSuggestion(
+        identityToken: token,
+        text: text,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      // The toast belongs to the screen underneath, which outlives the sheet.
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _sending = false;
+        // Keep the text. The retry button re-posts exactly what they wrote.
+        _error = e.statusCode == 429
+            ? "That's plenty for today — thanks! Try again tomorrow."
+            : "Couldn't send that. Check your connection and try again.";
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _sending = false;
+        _error = "Couldn't send that. Check your connection and try again.";
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final length = _controller.text.characters.length;
+    final tooLong = length > _maxChars;
+    final canSend = _controller.text.trim().isNotEmpty && !tooLong && !_sending;
+
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: SafeArea(
+        key: const Key('feedback-sheet'),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'SEND FEEDBACK',
+                textAlign: TextAlign.center,
+                style: PixelText.title(size: 17, color: colors.textDark),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Ideas, bugs, gripes — we read every one.',
+                textAlign: TextAlign.center,
+                style: PixelText.body(size: 12, color: colors.textMid),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('feedback-input'),
+                controller: _controller,
+                autofocus: true,
+                maxLines: 5,
+                minLines: 3,
+                enabled: !_sending,
+                textCapitalization: TextCapitalization.sentences,
+                style: PixelText.body(size: 14, color: colors.textDark),
+                decoration: InputDecoration(
+                  hintText: 'What would make Bara better?',
+                  hintStyle: PixelText.body(size: 13, color: colors.textMid),
+                  filled: true,
+                  fillColor: colors.parchmentLight,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(
+                      color: colors.parchmentBorder,
+                      width: 1.5,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  '$length / $_maxChars',
+                  style: PixelText.body(
+                    size: 11,
+                    color: tooLong ? colors.error : colors.textMid,
+                  ),
+                ),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  _error!,
+                  key: const Key('feedback-error'),
+                  style: PixelText.body(size: 12, color: colors.error),
+                ),
+              ],
+              const SizedBox(height: 10),
+              PillButton(
+                key: const Key('feedback-submit'),
+                // The label becomes RETRY once a send has failed, so the
+                // button says what it will do rather than repeating itself.
+                label: _error == null ? 'SUBMIT' : 'RETRY',
+                variant: PillButtonVariant.primary,
+                fullWidth: true,
+                loading: _sending,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                onPressed: canSend ? _submit : null,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Item 3 (client half) — the evening milestone-coin reminder toggle.
+///
+/// Mirrors [_DailyRewardReminderToggle] but with one critical difference: it
+/// HIDES ITSELF when the backend's preferences payload doesn't carry
+/// `stepMilestoneRemindersEnabled`. A switch whose PATCH the server silently
+/// drops is worse than no switch, and the backend rolls out independently of
+/// this build.
+class _StepMilestoneReminderToggle extends StatefulWidget {
+  const _StepMilestoneReminderToggle({
+    required this.authService,
+    required this.notificationService,
+    required this.backendApiService,
+  });
+
+  final AuthService authService;
+  final NotificationService notificationService;
+  final BackendApiService backendApiService;
+
+  @override
+  State<_StepMilestoneReminderToggle> createState() =>
+      _StepMilestoneReminderToggleState();
+}
+
+class _StepMilestoneReminderToggleState
+    extends State<_StepMilestoneReminderToggle> {
+  bool? _osGranted;
+  bool _enabled = true;
+  bool _supported = false;
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final granted = await widget.notificationService.getPermissionState();
+    var supported = false;
+    var enabled = true;
+
+    final token = widget.authService.authToken;
+    if (token != null && token.isNotEmpty) {
+      try {
+        final prefs = await widget.backendApiService
+            .fetchNotificationPreferences(identityToken: token);
+        // Presence, not truthiness — that's the whole point.
+        supported = prefs.containsKey('stepMilestoneRemindersEnabled');
+        final value = prefs['stepMilestoneRemindersEnabled'];
+        enabled = value is bool ? value : true;
+      } catch (_) {
+        supported = false;
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _osGranted = granted;
+        _enabled = enabled;
+        _supported = supported;
+        _ready = true;
+      });
+    }
+  }
+
+  Future<void> _toggle(bool value) async {
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) return;
+
+    final previous = _enabled;
+    setState(() => _enabled = value); // optimistic
+    try {
+      final persisted = await widget.backendApiService
+          .updateStepMilestoneRemindersEnabled(
+            identityToken: token,
+            enabled: value,
+          );
+      if (mounted) setState(() => _enabled = persisted);
+    } catch (_) {
+      if (mounted) setState(() => _enabled = previous); // revert on failure
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_ready || !_supported) return const SizedBox.shrink();
+    final granted = _osGranted == true;
+
+    return Container(
+      key: const Key('settings-milestone-reminder-toggle'),
+      padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+      decoration: BoxDecoration(
+        color: AppColors.of(context).parchmentLight,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: AppColors.of(context).parchmentBorder,
+          width: 1.5,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Remind me to collect step milestone coins',
+                  style: PixelText.body(
+                    size: 13,
+                    color: AppColors.of(context).textDark,
+                  ),
+                ),
+                if (!granted) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Turn on notifications to get reminders',
+                    style: PixelText.body(
+                      size: 11,
+                      color: AppColors.of(context).textMid,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          PixelSwitch(
+            value: granted && _enabled,
+            onChanged: granted ? _toggle : null,
           ),
         ],
       ),

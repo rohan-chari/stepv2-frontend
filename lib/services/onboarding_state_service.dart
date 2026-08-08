@@ -32,6 +32,20 @@ class OnboardingStateService {
   static const keyRenameChipDismissed = 'rename_chip_dismissed';
   static const keyCoachTipsSeen = 'coach_tips_seen';
 
+  /// The app version whose "What's New" sheet this device has already seen
+  /// (batch 2026-08-08, item 8).
+  ///
+  /// DELIBERATELY ABSENT FROM [allKeys] — do not "fix" that.
+  ///
+  /// [allKeys] is the sign-out wipe set. This key is a property of the DEVICE
+  /// and the INSTALLED BINARY, not of the account: signing out and back in does
+  /// not un-read a changelog. If it were wiped on sign-out the sheet would
+  /// re-show after every sign-out, which is the same trap the rename chip hit.
+  /// `test/batch_2026_08_08_whats_new_test.dart` asserts its absence, because
+  /// an exclusion enforced by omission is exactly the kind of thing the next
+  /// person adding a key deletes by accident.
+  static const keyLastSeenWhatsNewVersion = 'last_seen_whats_new_version';
+
   static const allKeys = <String>[
     keyHealthAttemptCount,
     keyHealthEscapedGate,
@@ -218,6 +232,33 @@ class OnboardingStateService {
   @visibleForTesting
   static void debugResetRenameChipSession() {
     _renameChipCountedThisSession = false;
+  }
+
+  // -- what's new (item 8) ---------------------------------------------------
+
+  /// The version whose changelog this device has already seen. Null on a fresh
+  /// install, which is exactly why a fresh install qualifies to be shown one.
+  Future<String?> lastSeenWhatsNewVersion() async =>
+      (await _prefs).getString(keyLastSeenWhatsNewVersion);
+
+  Future<void> setLastSeenWhatsNewVersion(String version) async =>
+      (await _prefs).setString(keyLastSeenWhatsNewVersion, version);
+
+  /// Whether the sheet is due for [currentVersion].
+  ///
+  /// Pure and static so the decision is testable without a widget tree. The
+  /// caller is still responsible for the two suppression rules that need
+  /// runtime context: never stack over a results modal, and never show during
+  /// the onboarding session.
+  static bool shouldShowWhatsNew({
+    required String? currentVersion,
+    required String? lastSeenVersion,
+    required bool hasEntryForVersion,
+  }) {
+    if (currentVersion == null || currentVersion.isEmpty) return false;
+    // No bundled entry for this build → nothing to say, stay silent.
+    if (!hasEntryForVersion) return false;
+    return lastSeenVersion != currentVersion;
   }
 
   // -- sign-out -------------------------------------------------------------
