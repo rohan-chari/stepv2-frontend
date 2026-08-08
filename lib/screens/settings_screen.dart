@@ -602,14 +602,32 @@ class _ConnectHealthRowState extends State<_ConnectHealthRow> {
   @override
   Widget build(BuildContext context) {
     if (_connected) return const SizedBox.shrink();
-    return PillButton(
-      key: const Key('settings-connect-health'),
-      label: _busy ? 'CONNECTING...' : 'CONNECT STEPS',
-      variant: PillButtonVariant.secondary,
-      fontSize: 13,
-      fullWidth: true,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-      onPressed: _busy ? null : _connect,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        PillButton(
+          key: const Key('settings-connect-health'),
+          label: _busy ? 'CONNECTING...' : 'CONNECT STEPS',
+          variant: PillButtonVariant.secondary,
+          fontSize: 13,
+          fullWidth: true,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          onPressed: _busy ? null : _connect,
+        ),
+        const SizedBox(height: 7),
+        // Item 6 (batch 2026-08-08): this row used to be a bare button asking
+        // for health access with no explanation of what we'd do with it. Same
+        // copy as the onboarding gate, and just as truthful — we DO store step
+        // counts server-side, so it never claims we collect nothing.
+        Text(
+          key: const Key('settings-health-privacy-copy'),
+          'Bara only reads your step count — never your routes, workouts, '
+          'heart rate, or location. Your steps are used for races and nothing '
+          'else, and we never sell your data.',
+          style: PixelText.body(size: 11, color: AppColors.of(context).textMid),
+        ),
+      ],
     );
   }
 }

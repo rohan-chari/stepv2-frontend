@@ -643,6 +643,17 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
   /// TR-801: the "Free-for-all / Teams" wooden signpost plus, in Teams mode,
   /// the carved 1v1..5v5 stepper, the two team-name plaques (dice-reroll +
   /// tap-to-edit) and the creator's side pick (TR-104).
+  /// Item 13 — the one-line explanation of the selected race format.
+  String get _formatDescription {
+    if (_isTournament) {
+      return 'Advance through head-to-head rounds until one winner remains.';
+    }
+    if (_isTeamRace) {
+      return 'Two teams compete for the highest combined step total.';
+    }
+    return 'Every player competes individually. Invite friends or let anyone join.';
+  }
+
   Widget _buildFormatCard() {
     return RetroCard(
       padding: const EdgeInsets.all(16),
@@ -671,8 +682,12 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
             child: Row(
               children: [
                 _formatSegment(
+                  // Item 13 (batch 2026-08-08): the LABEL is now CLASSIC, but
+                  // the key stays `race-format-ffa` and the analytics value
+                  // stays `solo` — renaming either would break existing tests
+                  // and split every dashboard series in half.
                   key: const Key('race-format-ffa'),
-                  label: 'SOLO',
+                  label: 'CLASSIC',
                   icon: Icons.emoji_events_rounded,
                   selected: !_isTeamRace && !_isTournament,
                   onTap: () => setState(() {
@@ -713,6 +728,17 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                   }),
                 ),
               ],
+            ),
+          ),
+          // Item 13: one shared description line under the signpost, swapping
+          // with the selection. Per-segment copy won't fit a third-width pill.
+          const SizedBox(height: 8),
+          Text(
+            key: const Key('race-format-description'),
+            _formatDescription,
+            style: PixelText.body(
+              size: 11.5,
+              color: AppColors.of(context).textMid,
             ),
           ),
           // Tournament reveal — bracket size + matchup duration pickers.

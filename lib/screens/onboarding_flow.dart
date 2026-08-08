@@ -150,8 +150,14 @@ class OnboardingFlow extends StatelessWidget {
       return OnboardingPermissionGate(
         label: 'HEALTH DATA',
         headline: 'Connect steps to start racing',
+        // Item 6 (batch 2026-08-08): the privacy pitch, expanded. It must stay
+        // TRUTHFUL — we DO store step counts and a display name server-side, so
+        // this never claims "we collect nothing"; it is specific about what we
+        // do not read and what we never do with it.
         body:
-            'Bara uses your step count to run fair races. We do not read routes, workouts, or location.',
+            'Bara only reads your step count — never your routes, workouts, '
+            'heart rate, or location. Your steps are used for races and '
+            'nothing else, and we never sell your data.',
         icon: Icons.favorite_rounded,
         onContinue: onEnableHealth,
         error: error,

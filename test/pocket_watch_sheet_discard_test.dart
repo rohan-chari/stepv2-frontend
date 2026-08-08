@@ -189,6 +189,14 @@ void main() {
       await tester.tap(discard);
       await _pumpFrames(tester);
 
+      // Batch 2026-08-08 item 1: discarding now pays coins, so the pocket-watch
+      // path routes through the same confirmation dialog as the generic sheet.
+      // Nothing is discarded until it is confirmed.
+      expect(find.byKey(const Key('discard-confirm-dialog')), findsOneWidget);
+      expect(api.discardCalls, 0);
+      await tester.tap(find.byKey(const Key('discard-confirm-yes')));
+      await _pumpFrames(tester);
+
       expect(api.discardCalls, 1);
       expect(api.lastDiscardedPowerupId, 'pw-watch-1');
 
