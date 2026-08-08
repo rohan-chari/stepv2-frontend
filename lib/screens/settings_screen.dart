@@ -637,7 +637,9 @@ class _NotificationToggleState extends State<_NotificationToggle> {
   }
 
   Future<void> _load() async {
-    final state = await widget.notificationService.getPermissionState();
+    // OS truth, not the cached flag — the cache can say "granted" long after
+    // a reinstall/denial has silently killed pushes.
+    final state = await widget.notificationService.getSystemPermissionState();
     if (mounted) setState(() => _granted = state ?? false);
   }
 

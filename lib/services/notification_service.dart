@@ -55,6 +55,7 @@ class NotificationService {
   static const _channel = MethodChannel('com.steptracker/notifications');
   static const _keyDeviceToken = 'notif_device_token';
   static const _keyPermissionGranted = 'notif_permission_granted';
+  static const _keyLastRegisterError = 'notif_last_register_error';
 
   // Android-only foreground display channel for FCM. Mirrors a typical
   // high-importance channel; ignored on iOS.
@@ -166,6 +167,17 @@ class NotificationService {
         final token = call.arguments as String;
         await _onDeviceToken(token, _pendingAuthToken);
         break;
+      case 'onDeviceTokenError':
+        // APNs registration failed natively. Persist the reason so the next
+        // ensureTokenRegistered() can surface it to analytics instead of the
+        // failure staying invisible (this is how a user silently loses ALL
+        // pushes for months).
+        final message = call.arguments is String
+            ? call.arguments as String
+            : 'unknown';
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_keyLastRegisterError, message);
+        break;
       case 'onNotificationTap':
         final payload = Map<String, dynamic>.from(call.arguments as Map);
         _onNotificationTap(payload);
@@ -213,15 +225,112 @@ class NotificationService {
   }
 
   /// Returns null if never prompted, true if granted, false if denied.
+  ///
+  /// This is the CACHED (SharedPreferences) answer, kept for opt-in-screen
+  /// gating. It can be stale — wiped by sign-out or a reinstall while the OS
+  /// permission lives on, or `true` from a previous install whose OS
+  /// permission no longer exists. For anything that decides whether pushes
+  /// actually work, use [getSystemPermissionState].
   Future<bool?> getPermissionState() async {
     final prefs = await SharedPreferences.getInstance();
     if (!prefs.containsKey(_keyPermissionGranted)) return null;
     return prefs.getBool(_keyPermissionGranted);
   }
 
+  /// The REAL OS-level permission: true if authorized (incl. provisional),
+  /// false if denied, null if never determined. Falls back to the cached
+  /// value if the platform query fails.
+  Future<bool?> getSystemPermissionState() async {
+    try {
+      if (Platform.isAndroid) {
+        final settings = await FirebaseMessaging.instance
+            .getNotificationSettings();
+        switch (settings.authorizationStatus) {
+          case AuthorizationStatus.authorized:
+          case AuthorizationStatus.provisional:
+            return true;
+          case AuthorizationStatus.denied:
+            return false;
+          case AuthorizationStatus.notDetermined:
+            return null;
+        }
+      }
+      final status = await _channel.invokeMethod<String>(
+        'getPermissionStatus',
+      );
+      switch (status) {
+        case 'authorized':
+        case 'provisional':
+        case 'ephemeral':
+          return true;
+        case 'denied':
+          return false;
+        case 'notDetermined':
+          return null;
+      }
+    } catch (_) {
+      // Fall through to the cached answer.
+    }
+    return getPermissionState();
+  }
+
+  /// Drops the cached permission flag (NOT the OS permission). Called when the
+  /// cache is provably stale — e.g. it says granted but the OS says the user
+  /// was never even asked (reinstall) — so the opt-in flow can run again.
+  Future<void> clearCachedPermission() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_keyPermissionGranted);
+  }
+
+  /// Re-registers the push token with the backend. Call every session when the
+  /// OS permission is granted: tokens rotate (reinstall, restore, new phone)
+  /// and a registration that failed once used to fail silently forever.
+  ///
+  /// iOS: asks the OS to re-deliver the APNs token (lands async in
+  /// [_onDeviceToken]) AND re-posts the last known token immediately as a
+  /// backstop for sessions where the async callback never fires.
+  /// Android: fetches the FCM token and posts it directly.
+  ///
+  /// Returns a short outcome label for activation analytics.
+  Future<String> ensureTokenRegistered(String? authToken) async {
+    _pendingAuthToken = authToken;
+    if (authToken == null || authToken.isEmpty) return 'no_auth';
+    final prefs = await SharedPreferences.getInstance();
+    // The OS said granted — keep the cached flag in agreement so the settings
+    // toggle and opt-in gating don't contradict reality.
+    await prefs.setBool(_keyPermissionGranted, true);
+    try {
+      if (Platform.isAndroid) {
+        final token = await FirebaseMessaging.instance.getToken();
+        if (token == null || token.isEmpty) return 'no_token';
+        await _onDeviceToken(token, authToken);
+        return 'registered';
+      }
+      // Fire-and-forget: the fresh token arrives via onDeviceToken.
+      await _channel.invokeMethod('registerForRemoteNotifications');
+      final cached = prefs.getString(_keyDeviceToken);
+      if (cached == null || cached.isEmpty) {
+        final lastError = prefs.getString(_keyLastRegisterError);
+        return lastError == null
+            ? 'no_cached_token'
+            : 'register_failed:$lastError';
+      }
+      await _backendApiService.registerDeviceToken(
+        identityToken: authToken,
+        deviceToken: cached,
+        platform: 'ios',
+      );
+      return 'registered_cached';
+    } catch (e) {
+      return 'failed:${e.runtimeType}';
+    }
+  }
+
   Future<void> _onDeviceToken(String token, String? authToken) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyDeviceToken, token);
+    // The OS handed us a token, so any stored registration error is stale.
+    await prefs.remove(_keyLastRegisterError);
 
     if (authToken == null || authToken.isEmpty) return;
 

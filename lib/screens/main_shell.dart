@@ -974,19 +974,38 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       return;
     }
 
-    final state = await ns.getPermissionState();
+    // Decide off the REAL OS permission, not the SharedPreferences cache. The
+    // cache goes stale (sign-out wipes it; a denied-once flag used to block
+    // re-registration forever) and a user can sit for months with permission
+    // granted but every push going to a dead token.
+    final osState = await ns.getSystemPermissionState();
     if (!mounted) return;
 
-    if (state == true) {
-      // Already granted — silently re-register token for this session
-      ns.requestPermission(widget.authService.authToken);
+    if (osState == true) {
+      // OS-granted — always re-register the token this session (tokens rotate
+      // across reinstall/restore/new phone). Outcome goes to analytics so the
+      // next silent failure is diagnosable from the backend.
       setState(() => _notificationsState = true);
-    } else if (state == false) {
-      // Previously denied — don't nag
+      final outcome = await ns.ensureTokenRegistered(
+        widget.authService.authToken,
+      );
+      unawaited(
+        _activationAnalytics.record(
+          'push_token_sync',
+          context: {'result': outcome},
+        ),
+      );
+    } else if (osState == false) {
+      // Denied at the OS level — don't nag
       setState(() => _notificationsState = false);
     } else {
-      // Never prompted — show the opt-in screen
-      setState(() => _notificationsState = null);
+      // OS says never determined. A cached "granted" is provably stale here
+      // (reinstall) — clear it so the opt-in can run again instead of the app
+      // pretending notifications work.
+      final cached = await ns.getPermissionState();
+      if (cached == true) await ns.clearCachedPermission();
+      if (!mounted) return;
+      setState(() => _notificationsState = cached == false ? false : null);
     }
   }
 
@@ -1854,8 +1873,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     if (_openingRaceDetail) return;
     _openingRaceDetail = true;
     Navigator.of(context)
-        .push(
-          MaterialPageRoute(
+        .push<bool>(
+          MaterialPageRoute<bool>(
             builder: (_) => RaceDetailScreen(
               authService: widget.authService,
               raceId: raceId,
@@ -1866,6 +1885,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
             ),
           ),
         )
+        .then((result) {
+          // The detail screen pops `true` from its not-a-participant state's
+          // "Find it on Races" button. This entry point (a push tap or a card
+          // on the home tab) is the one that can be sitting on another tab.
+          if (mounted && result == true) _openRacesTab();
+        })
         .whenComplete(() => _openingRaceDetail = false);
   }
 

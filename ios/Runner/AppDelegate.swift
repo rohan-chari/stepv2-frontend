@@ -76,9 +76,14 @@ import google_mobile_ads
     )
 
     notificationChannel?.setMethodCallHandler { [weak self] call, result in
-      if call.method == "requestPermission" {
+      switch call.method {
+      case "requestPermission":
         self?.requestNotificationPermission(result: result)
-      } else {
+      case "getPermissionStatus":
+        self?.getNotificationPermissionStatus(result: result)
+      case "registerForRemoteNotifications":
+        self?.registerForRemoteNotificationsIfAuthorized(result: result)
+      default:
         result(FlutterMethodNotImplemented)
       }
     }
@@ -191,6 +196,42 @@ import google_mobile_ads
     #endif
   }
 
+  /// The REAL permission state, so Dart never has to trust a cached flag.
+  private func getNotificationPermissionStatus(result: @escaping FlutterResult) {
+    UNUserNotificationCenter.current().getNotificationSettings { settings in
+      let status: String
+      switch settings.authorizationStatus {
+      case .authorized: status = "authorized"
+      case .provisional: status = "provisional"
+      case .ephemeral: status = "ephemeral"
+      case .denied: status = "denied"
+      case .notDetermined: status = "notDetermined"
+      @unknown default: status = "notDetermined"
+      }
+      DispatchQueue.main.async { result(status) }
+    }
+  }
+
+  /// Re-registers with APNs WITHOUT prompting — tokens rotate across
+  /// reinstall/restore/new-device, so this must run every session for users
+  /// who already granted permission. Returns whether registration was kicked
+  /// off (the token itself arrives async via didRegisterForRemoteNotifications).
+  private func registerForRemoteNotificationsIfAuthorized(
+    result: @escaping FlutterResult
+  ) {
+    UNUserNotificationCenter.current().getNotificationSettings { settings in
+      DispatchQueue.main.async {
+        switch settings.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+          UIApplication.shared.registerForRemoteNotifications()
+          result(true)
+        default:
+          result(false)
+        }
+      }
+    }
+  }
+
   private func requestNotificationPermission(result: @escaping FlutterResult) {
     UNUserNotificationCenter.current().requestAuthorization(
       options: [.alert, .badge, .sound]
@@ -217,6 +258,13 @@ import google_mobile_ads
     didFailToRegisterForRemoteNotificationsWithError error: Error
   ) {
     print("Failed to register for remote notifications: \(error.localizedDescription)")
+    // Forward to Dart: without this, an APNs registration failure is invisible
+    // — the user thinks notifications are on while the backend keeps pushing
+    // to stale tokens.
+    notificationChannel?.invokeMethod(
+      "onDeviceTokenError",
+      arguments: error.localizedDescription
+    )
   }
 
   override func application(

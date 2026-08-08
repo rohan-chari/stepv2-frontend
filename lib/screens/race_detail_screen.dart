@@ -258,6 +258,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   Map<String, int> _globalPowerupInventory = const {};
   bool _isLoading = true;
   bool _isActing = false;
+  // The viewer is not (or is no longer) a participant: `GET /races/:id/details`
+  // answered 403. Reached two ways — opening a stale link, or being pruned from
+  // a seeded challenge while the screen is open. Terminal for this screen: once
+  // set, every poller is stopped and the board is replaced by one honest state
+  // rather than a repeating error toast over stale data.
+  bool _notAParticipant = false;
   Timer? _pollTimer;
   Timer? _countdownTimer;
   // Whether this screen wants to be polling progress (true only for an ACTIVE
@@ -718,12 +724,40 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           _startCountdown();
         }
       }
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      // 403 is the backend's "you are not a participant in this race". It is a
+      // state, not a failure — say so once instead of toasting the raw message
+      // over an empty board.
+      if (e.statusCode == 403) {
+        _enterNotAParticipant();
+        return;
+      }
+      setState(() => _isLoading = false);
+      showErrorToast(context, e.message);
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
         showErrorToast(context, e.toString());
       }
     }
+  }
+
+  /// Switch the screen to the not-a-participant state and shut every poller
+  /// down. Called from the details load and from the 30s progress poll, so a
+  /// mid-session prune stops the loop instead of erroring every 30s forever.
+  void _enterNotAParticipant() {
+    _pollingActive = false;
+    _countdownActive = false;
+    _pollTimer?.cancel();
+    _countdownTimer?.cancel();
+    _chat?.stopPolling();
+    _feed?.stopPolling();
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      _notAParticipant = true;
+    });
   }
 
   Future<void> _loadProgress({
@@ -823,6 +857,19 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         _pollTimer?.cancel();
         _countdownTimer?.cancel();
         _loadDetails();
+      }
+    } on ApiException catch (e) {
+      // A stale request's failure must not clobber a newer request's result.
+      if (!mounted || fetchSeq != _progressFetchSeq) return;
+      if (e.statusCode == 403) {
+        _enterNotAParticipant();
+        return;
+      }
+      setState(() {
+        _progressState = Loadable.error(e.message, data: previous);
+      });
+      if (previous != null) {
+        showErrorToast(context, 'Couldn’t refresh race progress.');
       }
     } catch (e) {
       // A stale request's failure must not clobber a newer request's result.
@@ -2819,7 +2866,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 ),
 
                 Expanded(
-                  child: _isLoading
+                  // Checked before loading/empty: a mid-session prune leaves a
+                  // fully-loaded `_race` behind, and a stale link leaves none.
+                  // Both land here.
+                  child: _notAParticipant
+                      ? _buildNotAParticipantState()
+                      : _isLoading
                       ? Center(
                           child: CircularProgressIndicator(
                             color: AppColors.of(context).accent,
@@ -2859,6 +2911,56 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// The one state a 403 deserves. Same parchment game-piece card as every
+  /// other board section, so it reads as part of the app rather than an error
+  /// screen — and both palettes resolve from the same tokens.
+  Widget _buildNotAParticipantState() {
+    final colors = AppColors.of(context);
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+        child: Container(
+          key: const Key('race-not-a-participant'),
+          padding: const EdgeInsets.fromLTRB(20, 28, 20, 22),
+          decoration: raceCardDecoration(context),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.person_off_outlined,
+                size: 44,
+                color: colors.textMid.withValues(alpha: 0.8),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'You’re not in this race',
+                style: PixelText.title(size: 18, color: colors.textDark),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Only runners can open a race board. Find it on Races to join.',
+                style: PixelText.body(size: 13, color: colors.textMid),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 18),
+              PillButton(
+                key: const Key('race-not-a-participant-cta'),
+                label: 'Find it on Races',
+                fullWidth: true,
+                padding: PillButton.fullWidthPadding,
+                // Pops with `true` so the shell (the only entry point that can
+                // be sitting on another tab) swings over to Races. Every other
+                // push site is already in the races area, and ignores it.
+                onPressed: () => Navigator.of(context).maybePop(true),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -3218,6 +3320,18 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                       labelColor: AppColors.of(ctx).textMid,
                       amountColor: AppColors.of(ctx).coinDark,
                     )
+                  // A graded preset paying a DECAYING curve (a seeded challenge
+                  // stamped GEOMETRIC): lead with 1st place, not a per-head
+                  // share that no longer exists.
+                  else if (_isGradedCurvePayout(payoutTiers))
+                    _buildGradedPayoutSummary(
+                      payoutTiers,
+                      key: const Key(
+                        'race-prize-pool-graded-payout-summary',
+                      ),
+                      labelColor: AppColors.of(ctx).textMid,
+                      amountColor: AppColors.of(ctx).coinDark,
+                    )
                   else
                     FittedBox(
                       fit: BoxFit.scaleDown,
@@ -3397,6 +3511,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             _buildPayoutSummary(
               payoutTiers,
               key: const Key('race-payout-summary'),
+            )
+          else if (_isGradedCurvePayout(payoutTiers))
+            _buildGradedPayoutSummary(
+              payoutTiers,
+              key: const Key('race-graded-payout-summary'),
             )
           else
             FittedBox(
@@ -5834,6 +5953,59 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     }
   }
 
+  // -- Top-heavy (graded-curve) payout summary ------------------------------
+  //
+  // A seeded challenge stamped `payoutCurve: "GEOMETRIC"` still serves a graded
+  // preset, but its tiers DECAY instead of being identical: 1st takes ~30% of
+  // the pool. The even-split card would be a lie, and the podium row buries the
+  // one fact that changed — winning is now worth chasing.
+  //
+  // `payoutCurve` is deliberately NOT serialized to clients, so the tier
+  // amounts are the only signal. Gating is therefore preset + unequal amounts,
+  // never "the tiers descend": legacy buy-in and TOP3 races have always served
+  // descending tiers and must keep the podium row they render today. An older
+  // backend that omits `payoutPreset` or `payoutTiers` also falls through to
+  // exactly today's rendering.
+
+  /// Presets that pay a large slice of the field, where a decaying curve is
+  /// worth a headline. TOP3/WINNER_TAKES_ALL already read fine as a podium.
+  static const _gradedPayoutPresets = {'TOP_HALF', 'ALL_BUT_LAST'};
+
+  /// Gated once, so both call sites (the prize-pool sheet and the inline
+  /// race-info card) inherit the identical rule.
+  ///
+  /// Three conditions, all required:
+  ///  1. a graded preset — TOP_HALF / ALL_BUT_LAST;
+  ///  2. at least two tiers that are NOT all equal (an even split has its own
+  ///     card, and a lone tier is a podium);
+  ///  3. the race is APP-FUNDED — a `prizePool` object with `funded != false`.
+  ///     Only funded seeded challenges are ever stamped with a curve. A legacy
+  ///     buy-in race splits a real pot and can serve unequal graded tiers of
+  ///     its own; those keep the podium row they have always rendered. An
+  ///     absent or malformed `prizePool` (older backend, legacy race) reads as
+  ///     not-funded via [RacePrizePool.fromRace]'s null, which is also the
+  ///     safe degradation.
+  bool _isGradedCurvePayout(List<PayoutTier> tiers) {
+    if (tiers.length < 2) return false;
+    if (!_gradedPayoutPresets.contains(_race?['payoutPreset'])) return false;
+    if (_prizePool?.funded != true) return false;
+    return tiers.any((t) => t.amount != tiers.first.amount);
+  }
+
+  /// The preset in plain words, mirroring [_evenSplitHeadline] — including its
+  /// preset-agnostic fallback, so a future graded preset still reads correctly
+  /// instead of rendering a blank headline.
+  String _gradedHeadline(int paidPlaces) {
+    switch (_race?['payoutPreset']) {
+      case 'TOP_HALF':
+        return 'Top half wins — bigger prizes up top';
+      case 'ALL_BUT_LAST':
+        return 'Everyone but last wins — bigger prizes up top';
+      default:
+        return 'The top $paidPlaces win — bigger prizes up top';
+    }
+  }
+
   /// How many runners are actually in the race. Read defensively: a payload
   /// without a usable participant list yields 0, and the cut line then drops
   /// the "of N" half rather than printing "of 0".
@@ -5948,6 +6120,135 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         const SizedBox(height: 10),
         GestureDetector(
           key: const Key('race-payout-see-all'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _showPayoutBreakdownSheet(tiers),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'See all payouts',
+                style: PixelText.title(size: 11, color: label),
+              ),
+              Icon(Icons.chevron_right, size: 14, color: label),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// The graded twin of [_buildPayoutSummary]: same four beats, same tokens,
+  /// but the headline figure is 1st place rather than a per-head share.
+  ///
+  /// Every number is read off `payoutTiers` — the server owns the math. The
+  /// 1st-place figure is explicitly labelled projected: the live projection
+  /// sizes the pool from everyone accepted, settlement pays only walkers, and
+  /// under a decaying curve that gap lands concentrated on the top spots.
+  Widget _buildGradedPayoutSummary(
+    List<PayoutTier> tiers, {
+    required Key key,
+    Color? labelColor,
+    Color? amountColor,
+  }) {
+    final colors = AppColors.of(context);
+    final label = labelColor ?? colors.textMid;
+    final amount = amountColor ?? colors.coinDark;
+    final paidPlaces = tiers.length;
+    final topPrize = tiers.first.amount;
+    final fieldSize = _acceptedFieldSize;
+    final placement = _myViewerPlacement;
+    final inTheMoney = placement != null && placement <= paidPlaces;
+
+    // Match by placement rather than index: parsePayoutTiers drops zero-amount
+    // tiers, so the list is not guaranteed to be a contiguous 1..N.
+    int? myAmount;
+    if (placement != null) {
+      for (final tier in tiers) {
+        if (tier.placement == placement) {
+          myAmount = tier.amount;
+          break;
+        }
+      }
+    }
+
+    return Column(
+      key: key,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          _gradedHeadline(paidPlaces),
+          textAlign: TextAlign.center,
+          style: PixelText.body(size: 12.5, color: label),
+        ),
+        const SizedBox(height: 8),
+        // The number worth chasing.
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              formatPrizeCoins(topPrize),
+              style: PixelText.number(size: 26, color: amount),
+            ),
+            const SizedBox(width: 6),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 3),
+              child: Text(
+                'coins for 1st',
+                style: PixelText.body(size: 12, color: label),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Projected — final payouts settle on who walked.',
+          textAlign: TextAlign.center,
+          style: PixelText.body(size: 11.5, color: label),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          fieldSize > 0
+              ? 'Top $paidPlaces of $fieldSize get paid'
+              : 'Top $paidPlaces get paid',
+          textAlign: TextAlign.center,
+          style: PixelText.body(size: 12, color: label),
+        ),
+        if (placement != null) ...[
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: (inTheMoney ? amount : label).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: (inTheMoney ? amount : label).withValues(alpha: 0.4),
+              ),
+            ),
+            child: Text(
+              !inTheMoney
+                  ? 'You’re ${_lowerOrdinal(placement)} — '
+                        '${placement - paidPlaces} '
+                        '${placement - paidPlaces == 1 ? 'place' : 'places'} '
+                        'from the cut'
+                  : myAmount != null
+                  // What this rank is worth right now — the whole point of a
+                  // curve is that the answer changes as you climb.
+                  ? 'You’re ${_lowerOrdinal(placement)} — '
+                        '${formatPrizeCoins(myAmount)} coins projected'
+                  : 'You’re ${_lowerOrdinal(placement)} — in the money',
+              textAlign: TextAlign.center,
+              style: PixelText.body(
+                size: 12,
+                color: inTheMoney ? amount : label,
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 10),
+        GestureDetector(
+          key: const Key('race-graded-payout-see-all'),
           behavior: HitTestBehavior.opaque,
           onTap: () => _showPayoutBreakdownSheet(tiers),
           child: Row(

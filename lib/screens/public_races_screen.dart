@@ -1269,7 +1269,11 @@ class _FeaturedAutoJoinToggleState extends State<_FeaturedAutoJoinToggle> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Auto-enters you into each new challenge.',
+                  // Auto-enrollment is conditional server-side: a user with no
+                  // steps on either of the last two days is skipped (and
+                  // pruned at race start), so the toggle must not promise an
+                  // unconditional entry.
+                  'Auto-enters you into each new challenge while you’re active.',
                   style: PixelText.body(
                     size: 11,
                     color: AppColors.of(context).textMid,

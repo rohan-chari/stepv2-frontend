@@ -75,3 +75,6 @@ tmp/
 # macOS
 *.xcuserdatad
 .claude/
+
+# Machine-specific Claude config
+CLAUDE.local.md

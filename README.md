@@ -153,6 +153,7 @@ flutter run -d 00008150-000171DE2638401C --device-connection=attached --debug \
   --dart-define=BACKEND_BASE_URL=https://staging.steptracker-api.org \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
   --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
+  --dart-define=ADMOB_BOX_TOP_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/3019108638 \
   --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \
   --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com
 ```
@@ -168,6 +169,7 @@ flutter run -d 19CCB48E-62CA-4AA1-8E55-B3F287E9BB0D \
     --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
     --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
     --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
+    --dart-define=ADMOB_BOX_TOP_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/3019108638 \
     --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \
     --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com
 ```
@@ -185,6 +187,7 @@ flutter build ipa --release \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
   --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
+  --dart-define=ADMOB_BOX_TOP_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/3019108638 \
   --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \
   --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com
 ```
