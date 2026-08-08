@@ -99,10 +99,16 @@ void main() {
 
     expect(find.byType(HomeCourseTrack), findsOneWidget);
     expect(find.byKey(const Key('home-course-track-scroll')), findsOneWidget);
+    // Batch 2026-08-08 item 16: the participant legend below the course was
+    // REMOVED (redundant with the on-track name tags). Kept as a negative
+    // assertion rather than deleted, so a future change can't quietly
+    // reintroduce a second roster row under the art.
     expect(
       find.byKey(const Key('home-course-track-legend-scroll')),
-      findsOneWidget,
+      findsNothing,
     );
+    // The on-track name tag still labels the viewer — unaffected by the
+    // legend removal.
     expect(find.text('You'), findsWidgets);
     expect(
       find.byWidgetPredicate((widget) {

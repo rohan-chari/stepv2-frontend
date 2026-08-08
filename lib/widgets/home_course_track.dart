@@ -119,8 +119,6 @@ class _HomeCourseTrackState extends State<HomeCourseTrack>
 
   @override
   Widget build(BuildContext context) {
-    final runners = widget.runners;
-
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -223,10 +221,12 @@ class _HomeCourseTrackState extends State<HomeCourseTrack>
             },
           ),
         ),
-        if (runners.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          _LegendRow(runners: runners),
-        ],
+        // Batch 2026-08-08 item 16: the participant legend (a horizontally
+        // scrolling row of coloured-dot + @name pills) used to sit here,
+        // between the course art and STANDINGS. Removed — the on-track name
+        // tags above each runner already say who is who, so the legend was a
+        // second, redundant roster taking vertical space on the busiest
+        // screen in the app. The on-track tags and the tap tooltips stay.
       ],
     );
   }
@@ -1494,73 +1494,6 @@ class _RunnerShadow extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: SizedBox(width: size.width, height: size.height),
-    );
-  }
-}
-
-class _LegendRow extends StatelessWidget {
-  const _LegendRow({required this.runners});
-
-  final List<GoalTrackRunner> runners;
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      key: const Key('home-course-track-legend-scroll'),
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          for (var i = 0; i < runners.length; i++) ...[
-            if (i > 0) const SizedBox(width: 10),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: AppColors.of(context).surfaceMuted,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: AppColors.of(context).line.withValues(alpha: 0.10),
-                  width: 2,
-                ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 7,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: runners[i].teamColor ?? runners[i].color,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      runners[i].label ??
-                          (runners[i].isStealthed
-                              ? '???'
-                              : (runners[i].isUser
-                                    ? 'You'
-                                    : atName(runners[i].name))),
-                      // `inkSoft` is a muted green that all but vanishes on the
-                      // night surfaceMuted pill — night mode uses full ink.
-                      style: HomeText.body(
-                        size: 12,
-                        color: AppColors.of(context).isDark
-                            ? AppColors.of(context).ink
-                            : AppColors.of(context).inkSoft,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
     );
   }
 }
