@@ -37,7 +37,9 @@ abstract class ExtraSpinAdController {
 /// TEST units — real per-flavor IDs are injected with --dart-define like
 /// BACKEND_BASE_URL (see DEPLOYMENT.md).
 class AdService implements ExtraSpinAdController {
-  AdService({String? adUnitId}) : _adUnitIdOverride = adUnitId;
+  AdService({String? adUnitId, String? customDataPrefix})
+    : _adUnitIdOverride = adUnitId,
+      _customDataPrefix = customDataPrefix;
 
   static const _metaAdsChannel = MethodChannel('com.steptracker/meta_ads');
 
@@ -68,6 +70,21 @@ class AdService implements ExtraSpinAdController {
   );
   static const _envPowerupUnlockAdUnitIdAndroid = String.fromEnvironment(
     'ADMOB_POWERUP_UNLOCK_AD_UNIT_ID_ANDROID',
+  );
+
+  // Rewarded unit for the mystery-box reroll (batch 2026-08-08, item 11).
+  // Same shape as the powerup-unlock unit: a dedicated define per platform,
+  // falling back to the extra-spin real unit and finally Google's test unit,
+  // so the feature is never blocked on the AdMob unit existing yet.
+  //
+  // PROD-ONLY by convention — staging builds omit the define (see
+  // DEPLOYMENT.md). Reroll therefore ships iOS-first, exactly like the
+  // extra-spin ad, because that is where the prod defines live today.
+  static const _envBoxRerollAdUnitId = String.fromEnvironment(
+    'ADMOB_BOX_REROLL_AD_UNIT_ID',
+  );
+  static const _envBoxRerollAdUnitIdAndroid = String.fromEnvironment(
+    'ADMOB_BOX_REROLL_AD_UNIT_ID_ANDROID',
   );
 
   // Banner placements (shop, race mystery-box overlay) are display-only: no
@@ -122,6 +139,17 @@ class AdService implements ExtraSpinAdController {
         ? _envPowerupUnlockAdUnitId
         : Platform.isAndroid
         ? _envPowerupUnlockAdUnitIdAndroid
+        : '';
+    return id.isNotEmpty ? id : _platformExtraSpinUnitId;
+  }
+
+  /// Resolved rewarded unit for the mystery-box reroll (item 11).
+  static String get boxRerollAdUnitId {
+    if (kIsWeb) return '';
+    final id = Platform.isIOS
+        ? _envBoxRerollAdUnitId
+        : Platform.isAndroid
+        ? _envBoxRerollAdUnitIdAndroid
         : '';
     return id.isNotEmpty ? id : _platformExtraSpinUnitId;
   }
@@ -246,6 +274,16 @@ class AdService implements ExtraSpinAdController {
   }
 
   final String? _adUnitIdOverride;
+
+  /// Namespaces this controller's SSV `customData` (batch 2026-08-08, item 11).
+  ///
+  /// The backend maps customData PREFIXES to reward kinds and falls back to
+  /// `extra_daily_spin` for a bare date. So a new rewarded surface that sent a
+  /// bare date would mint extra-spin grants, and the two features would eat
+  /// each other's credits. With a prefix set, customData becomes
+  /// `<prefix>:<userId>:<localDate>` (e.g. `box_reroll:u123:2026-08-08`),
+  /// which the backend matches with its own regex + kind.
+  final String? _customDataPrefix;
   RewardedAd? _ad;
   bool _loading = false;
   static bool _sdkInitialized = false;
@@ -285,7 +323,7 @@ class AdService implements ExtraSpinAdController {
             await ad.setServerSideOptions(
               ServerSideVerificationOptions(
                 userId: userId,
-                customData: localDate,
+                customData: _customDataFor(userId, localDate),
               ),
             );
             _ad = ad;
@@ -308,6 +346,14 @@ class AdService implements ExtraSpinAdController {
     } finally {
       _loading = false;
     }
+  }
+
+  /// Bare date for the extra spin (unchanged wire format for the existing
+  /// surface); `<prefix>:<userId>:<localDate>` for any namespaced surface.
+  String _customDataFor(String userId, String localDate) {
+    final prefix = _customDataPrefix;
+    if (prefix == null || prefix.isEmpty) return localDate;
+    return '$prefix:$userId:$localDate';
   }
 
   @override

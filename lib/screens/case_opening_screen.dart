@@ -141,6 +141,19 @@ class CaseOpeningScreen extends StatefulWidget {
   /// Fanny Pack row deletion) can't appear behind the still-spinning reel.
   final void Function(Map<String, dynamic> result)? onRevealed;
 
+  /// Item 11 (batch 2026-08-08) — the rewarded-ad reroll.
+  ///
+  /// Non-null ONLY when the host wants the button: the race detail screen
+  /// passes it when the backend advertised `powerupData.boxReroll == true`
+  /// (which itself requires the server kill switch ON and this client
+  /// declaring `ads`). Null everywhere else, which is how
+  /// [MultiCaseOpeningScreen] (OPEN ALL), the hand-forked daily-reward reel
+  /// and demo mode all stay free of it without knowing this feature exists.
+  ///
+  /// Given the revealed powerup's id, performs ad + reroll and resolves the
+  /// NEW `{type, rarity}` — or null if the user backed out or it failed.
+  final Future<Map<String, dynamic>?> Function(String powerupId)? onReroll;
+
   /// Renders the reel inside the onboarding demo race (spec §5.7c / G8).
   /// Suppression only: it hides this screen's two `AdBannerSlot`s, which the
   /// race screen's own banner fix does not reach. Nothing about the reel, the
@@ -153,6 +166,7 @@ class CaseOpeningScreen extends StatefulWidget {
     this.onRevealed,
     this.dropOdds,
     this.rarityByType,
+    this.onReroll,
     this.demoMode = false,
   });
 
@@ -171,6 +185,71 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
   String _resultRarity = 'COMMON';
   bool _autoActivated = false;
   Map<String, dynamic>? _result;
+
+  // Item 11 — reroll state. `_rerollUsed` is client-side belt-and-braces; the
+  // server is the authority (409 ALREADY_REROLLED) because `rerolledAt` is
+  // stamped on the row.
+  bool _rerollUsed = false;
+  bool _rerolling = false;
+
+  /// The revealed powerup's id, or null when the payload didn't carry one —
+  /// in which case there is nothing to reroll and the button stays hidden.
+  String? get _revealedPowerupId {
+    final result = _result;
+    if (result == null) return null;
+    final openResult = result['result'] as Map<String, dynamic>? ?? result;
+    final id = openResult['id'];
+    return id is String && id.isNotEmpty ? id : null;
+  }
+
+  /// Whether to offer the reroll: the host wired it, we're not in the demo,
+  /// the reveal has landed, this box hasn't already been rerolled, and we know
+  /// which powerup to reroll.
+  bool get _canReroll =>
+      widget.onReroll != null &&
+      !widget.demoMode &&
+      _revealed &&
+      !_rerollUsed &&
+      _revealedPowerupId != null;
+
+  Future<void> _handleReroll() async {
+    final powerupId = _revealedPowerupId;
+    final reroll = widget.onReroll;
+    if (powerupId == null || reroll == null || _rerolling) return;
+
+    setState(() => _rerolling = true);
+    try {
+      final rerolled = await reroll(powerupId);
+      if (!mounted) return;
+      if (rerolled == null) {
+        // Backed out of the ad, or the reroll failed. The host has already
+        // surfaced any error; leave the original result standing.
+        setState(() => _rerolling = false);
+        return;
+      }
+
+      // Re-spin the reel to the new result: drop back to the ARMED,
+      // pre-reveal state with the new outcome already resolved. The user
+      // swipes once more and the strip lands on the new powerup — no second
+      // server roll (`_resultReady` is already true, so the swipe gate spins
+      // straight to it), and they get to watch the reroll rather than having
+      // the answer swapped under them.
+      setState(() {
+        _rerollUsed = true;
+        _rerolling = false;
+        _resultType = rerolled['type'] as String? ?? _resultType;
+        _resultRarity = rerolled['rarity'] as String? ?? _resultRarity;
+        // The reroll never auto-activates (it rerolls an already-HELD powerup).
+        _autoActivated = false;
+        _revealed = false;
+        _resultReady = true;
+        // Armed, not spinning: the strip shows its swipe gate again.
+        _spinning = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _rerolling = false);
+    }
+  }
 
   // Whether the overlay can currently be dismissed: before the roll starts
   // (nothing consumed) or after the reveal has landed. Never mid-spin.
@@ -462,11 +541,34 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
                 textAlign: TextAlign.center,
               ),
             ],
-            const SizedBox(height: 22),
+            if (_canReroll) ...[
+              const SizedBox(height: 18),
+              PillButton(
+                key: const Key('case-reroll-button'),
+                label: 'REROLL · WATCH AD',
+                icon: Icons.ondemand_video_rounded,
+                variant: PillButtonVariant.secondary,
+                fontSize: 13,
+                fullWidth: true,
+                loading: _rerolling,
+                onPressed: _rerolling ? null : _handleReroll,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'One reroll per box. The new roll is final.',
+                style: PixelText.body(
+                  size: 11,
+                  color: AppColors.of(context).textMid,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 10),
+            ] else
+              const SizedBox(height: 22),
             PillButton(
               label: 'Continue',
               icon: Icons.check_rounded,
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: _rerolling ? null : () => Navigator.of(context).pop(),
               fullWidth: true,
             ),
           ],

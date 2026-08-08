@@ -45,6 +45,7 @@ import '../widgets/spinning_crate.dart';
 import '../widgets/game_container.dart';
 import '../widgets/friend_request_sheet.dart';
 import '../widgets/leaderboard_plank.dart';
+import '../services/ad_service.dart';
 import '../widgets/multiplier_chip.dart';
 import '../widgets/race_podium.dart';
 import '../widgets/team_h2h_banner.dart';
@@ -112,6 +113,11 @@ class RaceDetailScreen extends StatefulWidget {
   /// whole premise collapses.
   final bool demoMode;
 
+  /// Item 11 — injectable rewarded-ad controller for the box reroll, so widget
+  /// tests never touch google_mobile_ads. Null in production, where the screen
+  /// builds a real [AdService] on its own dedicated ad unit.
+  final ExtraSpinAdController? boxRerollAdController;
+
   RaceDetailScreen({
     super.key,
     required this.authService,
@@ -125,6 +131,7 @@ class RaceDetailScreen extends StatefulWidget {
     this.demoTapGate,
     this.demoTargetGate,
     this.demoMode = false,
+    this.boxRerollAdController,
   }) : backendApiService = backendApiService ?? BackendApiService();
 
   @override
@@ -617,6 +624,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    // Only dispose a controller we created; an injected one belongs to the
+    // caller (tests).
+    if (widget.boxRerollAdController == null) _rerollAdCtrl?.dispose();
     _pollTimer?.cancel();
     _countdownTimer?.cancel();
     _messageInput.dispose();
@@ -4883,6 +4893,114 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     return out;
   }
 
+  /// Item 11 — whether the backend is advertising the box-reroll feature.
+  ///
+  /// STRICTLY additive and read defensively: the flag only exists on a backend
+  /// with `ADS_BOX_REROLL_ENABLED` on that also saw this client declare `ads`
+  /// in `X-Client-Features`. Anything other than a literal `true` (absent,
+  /// null, a string, an older backend, the demo service) hides the button.
+  /// Demo mode never shows it regardless of what the payload says.
+  bool get _boxRerollEnabled {
+    if (widget.demoMode) return false;
+    return _powerupData?['boxReroll'] == true;
+  }
+
+  /// Lazily-built rewarded-ad controller for the reroll. Its own AdMob unit
+  /// and its own SSV customData prefix, so its grants can never be consumed by
+  /// the daily-spinner extra spin (and vice versa).
+  ExtraSpinAdController? _rerollAdCtrl;
+
+  ExtraSpinAdController get _rerollAd =>
+      _rerollAdCtrl ??=
+          widget.boxRerollAdController ??
+          AdService(
+            adUnitId: AdService.boxRerollAdUnitId,
+            customDataPrefix: 'box_reroll',
+          );
+
+  static String _todayLocalDate() {
+    final now = DateTime.now();
+    final m = now.month.toString().padLeft(2, '0');
+    final d = now.day.toString().padLeft(2, '0');
+    return '${now.year}-$m-$d';
+  }
+
+  /// Shows the rewarded ad, then rerolls. Returns the new `{type, rarity}` or
+  /// null when the user backed out / it failed (the reel then keeps its
+  /// original result).
+  Future<Map<String, dynamic>?> _rerollBoxPowerup(String powerupId) async {
+    final token = widget.authService.authToken;
+    final userId = _myUserId;
+    if (token == null || token.isEmpty || userId.isEmpty) {
+      return null;
+    }
+
+    final localDate = _todayLocalDate();
+    try {
+      if (!_rerollAd.isSupported) return null;
+      if (!_rerollAd.isReady) {
+        await _rerollAd.load(userId: userId, localDate: localDate);
+      }
+      if (!_rerollAd.isReady) {
+        if (mounted) {
+          showInfoToast(context, 'No ad available right now. Try again later.');
+        }
+        return null;
+      }
+
+      final earned = await _rerollAd.showAndAwaitReward();
+      // Closed early: no grant was minted, so there is nothing to consume.
+      if (!earned) return null;
+
+      final result = await _rerollWithRetry(token, powerupId);
+      // Warm the next one up for a second box this session.
+      unawaited(_rerollAd.load(userId: userId, localDate: localDate));
+      _loadProgress();
+      return result;
+    } on ApiException catch (e) {
+      if (mounted) {
+        showErrorToast(
+          context,
+          e.code == 'ALREADY_REROLLED'
+              ? 'That box has already been rerolled.'
+              : "Couldn't reroll that box.",
+        );
+      }
+      return null;
+    } catch (_) {
+      if (mounted) showErrorToast(context, "Couldn't reroll that box.");
+      return null;
+    }
+  }
+
+  /// AdMob's server-side verification can land a few seconds after the ad
+  /// closes on-device; until it does the backend answers 409 AD_NOT_VERIFIED.
+  /// Same bounded retry the daily-spinner extra spin uses. If it never lands,
+  /// the grant stays UNCONSUMED server-side — the next reroll attempt redeems
+  /// it without a second ad.
+  Future<Map<String, dynamic>> _rerollWithRetry(
+    String token,
+    String powerupId,
+  ) async {
+    const maxAttempts = 5;
+    for (var attempt = 0; ; attempt++) {
+      try {
+        return await _api.rerollPowerup(
+          identityToken: token,
+          raceId: widget.raceId,
+          powerupId: powerupId,
+        );
+      } on ApiException catch (e) {
+        final ssvLag =
+            e.statusCode == 409 &&
+            (e.code == 'AD_NOT_VERIFIED' ||
+                e.message.toLowerCase().contains('not verified'));
+        if (!ssvLag || attempt >= maxAttempts - 1) rethrow;
+        await Future<void>.delayed(const Duration(seconds: 2));
+      }
+    }
+  }
+
   Future<void> _openMysteryBox(String boxId) async {
     if (_isActing) return;
 
@@ -4911,6 +5029,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               raceId: widget.raceId,
               powerupId: boxId,
             ),
+            // Item 11 — the rewarded-ad reroll. Null (button hidden) unless
+            // the backend advertised the feature AND we're not in the demo.
+            onReroll: _boxRerollEnabled ? _rerollBoxPowerup : null,
             onRevealed: (result) {
               // The overlay is non-opaque, so the inventory row stays visible
               // behind the reel. Mirror the server's state transition locally

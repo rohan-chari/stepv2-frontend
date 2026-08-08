@@ -82,6 +82,13 @@ When you have something worth testing on a real phone:
 # No ADMOB_EXTRA_SPIN_AD_UNIT_ID here: the ad unit's SSV callback points at
 # PROD, so a staging-backend build can't verify rewards — omitting the define
 # keeps the extra-spin offer out of staging builds entirely.
+# ADMOB_BOX_REROLL_AD_UNIT_ID (batch 2026-08-08, item 11) bakes in the
+# rewarded ad unit for the mystery-box REROLL. PROD ONLY — staging omits it.
+# Optional: without it the reroll falls back to the extra-spin rewarded unit,
+# which works but muddies that unit's reporting, so a prod release should
+# carry its own. The button itself only appears when the BACKEND also sends
+# powerupData.boxReroll (ADS_BOX_REROLL_ENABLED on), so shipping the define
+# early is harmless.
 # GOOGLE_IOS_CLIENT_ID enables the "Sign in with Google" button on iOS
 # (STAGING iOS OAuth client — the one registered for the .staging bundle id).
 # Omitting it is safe: the button is hidden and sign-in stays Apple-only.
@@ -121,6 +128,12 @@ version: 1.1.5+1
 ```
 
 Commit that to `main`.
+
+**Also update `lib/content/whats_new.dart`** (batch 2026-08-08, item 8): add a
+`WhatsNewEntry` whose `version` EXACTLY matches the version name you just set
+(no build number). The What's New sheet matches on exact version — a release
+with no matching entry shows no sheet at all, which is a safe but silent
+outcome, so it is easy to forget. Keep the list newest-first.
 
 ### 3. Deploy backend to prod first
 
@@ -162,6 +175,7 @@ flutter build ipa --release \
   --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
   --dart-define=ADMOB_BOX_TOP_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/3019108638 \
   --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \
+  --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID=<create in AdMob; omit to reuse the extra-spin unit> \
   --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com
 ```
 
@@ -241,6 +255,7 @@ flutter build appbundle --release --flavor prod \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/4587493133 \
   --dart-define=ADMOB_BANNER_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/8844513901 \
   --dart-define=ADMOB_NATIVE_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/4905268896 \
+  --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID_ANDROID=<create in AdMob; omit to reuse the extra-spin unit> \
   --build-number=<versionCode>
 ```
 
