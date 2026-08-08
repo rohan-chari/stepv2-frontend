@@ -260,6 +260,39 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   Map<String, int> _globalPowerupInventory = const {};
   bool _isLoading = true;
   bool _isActing = false;
+
+  /// WHICH action is in flight (batch 2026-08-08, item 12).
+  ///
+  /// [_isActing] stays as the global "one action at a time" guard; this id only
+  /// decides which single button shows a spinner, so tapping USE on one stash
+  /// row no longer greys out every button on the screen with no explanation.
+  ///
+  /// Ids: a HELD powerup's `id`, or `stash:<TYPE>` for a global-stash row, or
+  /// [_openAllActionId] for the batch open.
+  ///
+  /// MUST be cleared in a `finally`: the demo's `DemoRaceApiService` resolves
+  /// synchronously, and a spinner that outlives the response freezes a
+  /// tutorial button mid-script (ui-test-planner risk 6).
+  String? _actingPowerupId;
+
+  static const String _openAllActionId = '__open_all__';
+
+  /// Sets/clears the per-action busy id alongside the global guard.
+  void _beginAction(String? actionId) {
+    if (!mounted) return;
+    setState(() {
+      _isActing = true;
+      _actingPowerupId = actionId;
+    });
+  }
+
+  void _endAction() {
+    if (!mounted) return;
+    setState(() {
+      _isActing = false;
+      _actingPowerupId = null;
+    });
+  }
   // The viewer is not (or is no longer) a participant: `GET /races/:id/details`
   // answered 403. Reached two ways — opening a stale link, or being pruned from
   // a seeded challenge while the screen is open. Terminal for this screen: once
@@ -1815,7 +1848,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final token = widget.authService.authToken;
     if (token == null || token.isEmpty) return;
 
-    setState(() => _isActing = true);
+    // Item 12: the stash row for THIS type is the button that spins.
+    _beginAction('stash:$powerupType');
     Map<String, dynamic>? redeemedPowerup;
     try {
       final result = await _api.redeemPowerupToRace(
@@ -1840,11 +1874,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       // RAINSTORM_ACTIVE / NO_ELIGIBLE_TARGETS) BEFORE inventory is spent, so
       // the item stays in the global stash. Friendly copy, server fallback.
       if (mounted) showErrorToast(context, powerupUseErrorCopy(e));
-      if (mounted) setState(() => _isActing = false);
+      _endAction();
       return;
     } finally {
       // Release the acting lock before _usePowerup re-acquires it.
-      if (mounted) setState(() => _isActing = false);
+      _endAction();
     }
 
     if (redeemedPowerup == null) {
@@ -1863,29 +1897,108 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     );
   }
 
+  /// Coins a discard is expected to pay, by rarity (batch 2026-08-08, item 1).
+  ///
+  /// Used ONLY to word the confirmation dialog before the call — the amount
+  /// actually credited is whatever the server puts in `coinsAwarded`, which is
+  /// what the success toast reports. A stash-redeemed powerup has
+  /// `rarity: null` and the backend floors it to the COMMON price, so we show
+  /// the same floor here.
+  static const Map<String, int> _discardPrices = {
+    'COMMON': 2,
+    'UNCOMMON': 5,
+    'RARE': 10,
+  };
+
+  int _discardPriceFor(Map<String, dynamic> powerup) {
+    final rarity = powerup['rarity'];
+    if (rarity is! String) return _discardPrices['COMMON']!;
+    return _discardPrices[rarity] ?? _discardPrices['COMMON']!;
+  }
+
+  /// The daily discard-bonus headroom last reported by the backend, or null if
+  /// it has never told us (older backend → we simply don't mention the cap).
+  int? _discardCapRemaining;
+
+  /// Item 1: discarding is destructive AND now pays coins, so it gets an
+  /// explicit confirmation naming the price. Returns true when the user
+  /// confirmed. The dialog holds itself open with an in-button spinner while
+  /// the request runs (item 12) so a slow network can't be double-tapped.
+  Future<void> _confirmAndDiscardPowerup(Map<String, dynamic> powerup) async {
+    final isUnopenedBox = (powerup['status'] as String?) == 'MYSTERY_BOX';
+    final price = _discardPriceFor(powerup);
+    final capReached = _discardCapRemaining == 0;
+    final name = PowerupCopy.nameFor(powerup['type'] as String?);
+
+    final String body;
+    if (isUnopenedBox) {
+      // An unopened box pays nothing — otherwise never opening one would
+      // dominate every other play.
+      body = "Discard this mystery box? You won't get coins for unopened boxes.";
+    } else if (capReached) {
+      body = "Daily discard bonus reached — you'll get 0 coins.";
+    } else {
+      body = 'Discard $name for $price coins?';
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => _DiscardConfirmDialog(
+        title: isUnopenedBox ? 'DISCARD BOX?' : 'DISCARD?',
+        body: body,
+      ),
+    );
+
+    if (confirmed != true) return;
+    await _discardPowerup(powerup);
+  }
+
   Future<void> _discardPowerup(Map<String, dynamic> powerup) async {
-    setState(() => _isActing = true);
+    _beginAction(powerup['id'] as String?);
     try {
       final token = widget.authService.authToken;
       if (token == null || token.isEmpty) return;
 
-      await _api.discardPowerup(
+      final result = await _api.discardPowerup(
         identityToken: token,
         raceId: widget.raceId,
         powerupId: powerup['id'] as String,
       );
 
-      if (mounted) {
-        showInfoToast(
-          context,
-          '${PowerupCopy.nameFor(powerup['type'] as String?)} discarded',
+      // Item 1 — all three fields are ADDITIVE. A backend that predates them
+      // returns none, and we fall back to exactly the old "X discarded" toast.
+      final coinsAwarded = result['coinsAwarded'];
+      final newBalance = result['coins'];
+      final capRemaining = result['capRemaining'];
+      if (capRemaining is num) {
+        _discardCapRemaining = capRemaining.toInt();
+      }
+
+      // Optimistic coin badge bump. Prefer the server's authoritative balance;
+      // fall back to adding the award onto what we hold locally.
+      if (newBalance is num) {
+        await widget.authService.updateCoins(newBalance.toInt());
+      } else if (coinsAwarded is num && coinsAwarded > 0) {
+        await widget.authService.updateCoins(
+          widget.authService.coins + coinsAwarded.toInt(),
         );
+      }
+
+      if (mounted) {
+        final name = PowerupCopy.nameFor(powerup['type'] as String?);
+        if (coinsAwarded is num && coinsAwarded > 0) {
+          showInfoToast(context, '$name discarded — +${coinsAwarded.toInt()} coins');
+        } else {
+          // Covers an older backend (no field), an unopened box (always 0) and
+          // a user who has hit the daily cap.
+          showInfoToast(context, '$name discarded');
+        }
         _loadProgress();
       }
     } catch (e) {
       if (mounted) showErrorToast(context, e.toString());
     } finally {
-      if (mounted) setState(() => _isActing = false);
+      _endAction();
     }
   }
 
@@ -2414,6 +2527,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       return;
     }
 
+    // Owned by the sheet route, not the screen: it must survive the parent
+    // rebuilding underneath and die with the sheet.
+    var sheetBusy = false;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.of(context).parchment,
@@ -2474,35 +2591,64 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                   ),
                 ],
                 const SizedBox(height: 12),
-                PillButton(
-                  key: const Key('stash-confirm-use'),
-                  label: 'USE',
-                  variant: PillButtonVariant.primary,
-                  fontSize: 14,
-                  fullWidth: true,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 12,
-                  ),
-                  onPressed: _isActing
-                      ? null
-                      : () {
-                          Navigator.of(ctx).pop();
-                          _redeemAndUsePowerup(type);
-                        },
-                ),
-                const SizedBox(height: 8),
-                PillButton(
-                  key: const Key('stash-confirm-cancel'),
-                  label: 'CANCEL',
-                  variant: PillButtonVariant.secondary,
-                  fontSize: 13,
-                  fullWidth: true,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 10,
-                  ),
-                  onPressed: () => Navigator.of(ctx).pop(),
+                // Item 12: this sheet is the ONE action sheet that stays open
+                // through its own request. It owns a two-round-trip chain
+                // (redeem → use), and popping first would leave the user
+                // staring at an unchanged screen for both legs with nothing
+                // spinning. StatefulBuilder gives the sheet its own busy flag
+                // — the parent screen's setState cannot rebuild a route that
+                // is already on top of it.
+                StatefulBuilder(
+                  builder: (ctx2, setSheetState) {
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        PillButton(
+                          key: const Key('stash-confirm-use'),
+                          label: 'USE',
+                          variant: PillButtonVariant.primary,
+                          fontSize: 14,
+                          fullWidth: true,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                          loading: sheetBusy,
+                          onPressed: (_isActing || sheetBusy)
+                              ? null
+                              : () async {
+                                  setSheetState(() => sheetBusy = true);
+                                  try {
+                                    await _redeemAndUsePowerup(type);
+                                  } finally {
+                                    // The demo service resolves synchronously,
+                                    // so this must clear even on the instant
+                                    // path or the tutorial button freezes.
+                                    if (ctx2.mounted) {
+                                      setSheetState(() => sheetBusy = false);
+                                    }
+                                  }
+                                  if (ctx.mounted) Navigator.of(ctx).pop();
+                                },
+                        ),
+                        const SizedBox(height: 8),
+                        PillButton(
+                          key: const Key('stash-confirm-cancel'),
+                          label: 'CANCEL',
+                          variant: PillButtonVariant.secondary,
+                          fontSize: 13,
+                          fullWidth: true,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 10,
+                          ),
+                          onPressed: sheetBusy
+                              ? null
+                              : () => Navigator.of(ctx).pop(),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),
@@ -2532,7 +2678,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           upgradeLevel: level,
           targetEffectId: targetEffectId,
         ),
-        onDiscard: () => _discardPowerup(powerup),
+        onDiscard: () => _confirmAndDiscardPowerup(powerup),
       );
       return;
     }
@@ -2643,7 +2789,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                         ? null
                         : () {
                             Navigator.of(ctx).pop();
-                            _discardPowerup(powerup);
+                            _confirmAndDiscardPowerup(powerup);
                           },
                   ),
                 ],
@@ -4627,7 +4773,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       mainAxisSize: MainAxisSize.min,
       children: [
         if (showOpenAll) ...[
-          _OpenAllButton(onTap: _isActing ? null : _openAllBoxes),
+          _OpenAllButton(
+            onTap: _isActing ? null : _openAllBoxes,
+            loading: _actingPowerupId == _openAllActionId,
+          ),
           if (chip != null) const SizedBox(width: 6),
         ],
         ?chip,
@@ -4647,7 +4796,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final total = (slotIds.length + queued).clamp(0, 20);
     if (total < 1) return;
 
-    setState(() => _isActing = true);
+    _beginAction(_openAllActionId);
     try {
       await Navigator.of(context).push(
         PageRouteBuilder(
@@ -4671,8 +4820,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         ),
       );
     } finally {
+      _endAction();
       if (mounted) {
-        setState(() => _isActing = false);
         _loadProgress();
         unawaited(widget.onBoxOpened?.call());
       }
@@ -5196,6 +5345,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                   horizontal: 14,
                   vertical: 8,
                 ),
+                // Item 12: only the row actually redeeming spins.
+                loading: _actingPowerupId == 'stash:${e.key}',
                 // Confirm first — a stash item cost coins, so it never gets
                 // spent on a single tap the way a free box drop does.
                 onPressed: _isActing
@@ -7979,20 +8130,85 @@ class _RaceProgressSkeleton extends StatelessWidget {
 
 /// Compact gold "Open All" pill for the POWERUPS header (item #1). Disabled
 /// (greyed, non-tappable) while another powerup action is in flight.
-class _OpenAllButton extends StatelessWidget {
-  const _OpenAllButton({required this.onTap});
+/// Item 1 — the discard confirmation. Same wooden-sign chrome as the
+/// delete-account confirm in Settings, so a destructive-with-payout action
+/// looks like the other destructive action in the app.
+class _DiscardConfirmDialog extends StatelessWidget {
+  const _DiscardConfirmDialog({required this.title, required this.body});
 
-  final VoidCallback? onTap;
+  final String title;
+  final String body;
 
   @override
   Widget build(BuildContext context) {
-    final enabled = onTap != null;
+    return Dialog(
+      key: const Key('discard-confirm-dialog'),
+      backgroundColor: Colors.transparent,
+      child: TrailSign(
+        width: 320,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              title,
+              style: PixelText.title(
+                size: 18,
+                color: AppColors.of(context).textDark,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              body,
+              style: PixelText.body(
+                size: 14,
+                color: AppColors.of(context).textMid,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            PillButton(
+              key: const Key('discard-confirm-yes'),
+              label: 'DISCARD',
+              variant: PillButtonVariant.accent,
+              fullWidth: true,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              onPressed: () => Navigator.of(context).pop(true),
+            ),
+            const SizedBox(height: 10),
+            PillButton(
+              key: const Key('discard-confirm-cancel'),
+              label: 'CANCEL',
+              variant: PillButtonVariant.secondary,
+              fullWidth: true,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              onPressed: () => Navigator.of(context).pop(false),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OpenAllButton extends StatelessWidget {
+  const _OpenAllButton({required this.onTap, this.loading = false});
+
+  final VoidCallback? onTap;
+
+  /// Item 12: the batch open is the slowest powerup action there is (one
+  /// round trip plus the queued→inventory move), so it says so.
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null && !loading;
     return Opacity(
       opacity: enabled ? 1.0 : 0.5,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: onTap,
+          onTap: enabled ? onTap : null,
           borderRadius: BorderRadius.circular(8),
           child: Ink(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -8014,14 +8230,20 @@ class _OpenAllButton extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  Icons.auto_awesome_rounded,
-                  size: 14,
-                  color: AppColors.of(context).textDark,
-                ),
+                if (loading)
+                  PillButtonSpinner(
+                    size: 14,
+                    color: AppColors.of(context).textDark,
+                  )
+                else
+                  Icon(
+                    Icons.auto_awesome_rounded,
+                    size: 14,
+                    color: AppColors.of(context).textDark,
+                  ),
                 const SizedBox(width: 4),
                 Text(
-                  'OPEN ALL',
+                  loading ? 'OPENING…' : 'OPEN ALL',
                   style: PixelText.pill(
                     size: 11,
                     color: AppColors.of(context).textDark,
