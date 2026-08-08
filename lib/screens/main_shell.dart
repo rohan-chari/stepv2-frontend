@@ -241,10 +241,20 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   /// [_escapedHealthGate] — notably `_restoreAndFetch`, which would otherwise
   /// hard-return and leave an escaped user staring at a fully empty app.
   Future<void> _loadOnboardingState() async {
-    final attempts = await _onboardingState.healthAttemptCount();
-    final escaped = await _onboardingState.escapedHealthGate();
-    final inconclusive = await _onboardingState.probeInconclusive();
-    final armedAt = await _onboardingState.probeArmedAtMs();
+    // Item 20 (batch 2026-08-08): four INDEPENDENT SharedPreferences reads that
+    // used to await one at a time on the cold-start critical path. They read
+    // four different keys and none feeds another, so they go out together.
+    // Same values, same setState, one round of latency instead of four.
+    final values = await Future.wait([
+      _onboardingState.healthAttemptCount(),
+      _onboardingState.escapedHealthGate(),
+      _onboardingState.probeInconclusive(),
+      _onboardingState.probeArmedAtMs(),
+    ]);
+    final attempts = values[0] as int;
+    final escaped = values[1] as bool;
+    final inconclusive = values[2] as bool;
+    final armedAt = values[3] as int?;
     if (!mounted) return;
     setState(() {
       _healthAttempts = attempts;
@@ -816,8 +826,15 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
     if (wasAuthorized) setState(() => _healthAuthorized = true);
     unawaited(_reprobeSteps());
-    await _backgroundSyncBootstrapService.enableHealthKitBackgroundDelivery();
-    await _checkNotificationState();
+    // Item 20: two INDEPENDENT platform-channel round trips (a HealthKit
+    // background-delivery registration and an OS notification-permission
+    // read). Neither reads the other's result, so they overlap. Both are
+    // still awaited before the post-frame notification drain below, which is
+    // the only thing downstream that cares.
+    await Future.wait([
+      _backgroundSyncBootstrapService.enableHealthKitBackgroundDelivery(),
+      _checkNotificationState(),
+    ]);
     // Notification initialization can finish before this shell exists on a
     // cold start. ValueNotifier retains that launch action but does not replay
     // it to listeners, so drain it once the authenticated shell can navigate.

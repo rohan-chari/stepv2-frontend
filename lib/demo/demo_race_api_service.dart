@@ -325,6 +325,21 @@ class DemoRaceApiService extends BackendApiService {
     required String messageId,
   }) async => const {};
 
+  /// Batch 2026-08-08 item 11 — the rewarded-ad box reroll.
+  ///
+  /// UNREACHABLE in the demo by design: the reroll button is gated on
+  /// `powerupData.boxReroll == true` AND `!demoMode`, and this service's
+  /// progress payload never carries the flag. The override exists so the
+  /// §8.4 network-leak guard stays honest — an un-overridden call site is a
+  /// live HTTPS request against prod with a fabricated race id, whether or not
+  /// today's UI can reach it.
+  @override
+  Future<Map<String, dynamic>> rerollPowerup({
+    required String identityToken,
+    required String raceId,
+    required String powerupId,
+  }) async => const {};
+
   // -- Telemetry --------------------------------------------------------------
   //
   // Activation events for the demo funnel are recorded through a REAL

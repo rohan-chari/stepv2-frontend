@@ -32,7 +32,28 @@ Future<void> main() async {
   // cannot rotate before Flutter boots.
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
-  await BackgroundSyncBootstrapService().persistBackendBaseUrl();
+  // Item 20 (batch 2026-08-08) — the SAFE parallel batch.
+  //
+  // Three independent disk/prefs reads that used to run strictly one after the
+  // other at three separate points in this function. None of them touches the
+  // others' state, none of them depends on Firebase, notifications, auth or
+  // deep links, and none has an observable side effect beyond its own store:
+  //   * persistBackendBaseUrl  — writes one SharedPreferences key for the
+  //     native background-sync sidecar.
+  //   * RemoteAssetCache.init  — reads the compiled asset manifest + the
+  //     on-disk CDN cache. Documented never to throw.
+  //   * loadPreference         — reads one SharedPreferences key.
+  //
+  // Everything BELOW this point is left in its original order on purpose:
+  // Firebase must precede notification init on Android, the deep-link capture
+  // needs the shared AuthService, and install attribution must run after the
+  // deep-link capture so a link-captured referral code wins. Those are real
+  // dependencies, not incidental sequencing.
+  final prefsBatch = Future.wait([
+    BackgroundSyncBootstrapService().persistBackendBaseUrl(),
+    RemoteAssetCache.instance.init(),
+    AppThemeController.loadPreference(),
+  ]);
 
   // FCM/Firebase is Android-only. iOS push stays on the native APNs bridge and
   // has no Firebase config, so never initialize Firebase there.
@@ -60,13 +81,13 @@ Future<void> main() async {
     authService: authService,
   ).resolveOnFirstLaunch();
 
-  // Loads the compiled asset manifest + the on-disk CDN art cache before the
-  // first frame, so bundled art keeps its synchronous Image.asset path and a
-  // warm remote cache renders without a flicker. Never throws: on failure the
-  // registry stays empty and everything reads as bundled — today's behavior.
-  await RemoteAssetCache.instance.init();
-
-  final themePreference = await AppThemeController.loadPreference();
+  // Join the batch started at the top. Both members still complete BEFORE the
+  // first frame, so behaviour is identical: the asset registry is warm (bundled
+  // art keeps its synchronous Image.asset path, a warm CDN cache renders with
+  // no flicker) and the theme is resolved before runApp — they simply overlap
+  // the Firebase/notification/deep-link work instead of queueing behind it.
+  final results = await prefsBatch;
+  final themePreference = results[2] as AppThemePreference;
   final themeController = AppThemeController(preference: themePreference);
 
   runApp(
