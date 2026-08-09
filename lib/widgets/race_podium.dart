@@ -85,11 +85,22 @@ class RacePodium extends StatefulWidget {
   }
 
   static bool _isOccupant(Map<String, dynamic> p) {
+    // A row we KNOW scored nothing never gets a plinth, however it placed —
+    // placement is just "least bad" among non-finishers once everyone above
+    // them is exhausted, so a 3-person race with a straggler who never took a
+    // step must draw two plinths, not three.
+    //
+    // An ABSENT or unparseable steps field is UNKNOWN, not zero: the spec's
+    // degradation rule says render the row and omit the steps line. Treating
+    // missing-as-zero here would blank the podium against a payload that
+    // simply doesn't carry step totals.
     final steps = p['totalSteps'];
-    if (steps is! num || steps <= 0) return false;
+    if (steps is num && steps <= 0) return false;
+
+    // A settled placement outside the top 3 is never on the podium. No
+    // placement (live/unsettled ordering) still counts — the caller only
+    // builds a podium for a completed race.
     final placement = serverPlacementOf(p);
-    // No placement yet (live/unsettled ordering) still counts — the caller
-    // only builds a podium for a completed race.
     return placement == null || placement <= 3;
   }
 

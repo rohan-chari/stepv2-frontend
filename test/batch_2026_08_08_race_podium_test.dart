@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:step_tracker/models/race_payouts.dart';
+import 'package:step_tracker/screens/race_results_summary_screen.dart';
 import 'package:step_tracker/utils/race_participant_display.dart';
 import 'package:step_tracker/widgets/race_podium.dart';
 
@@ -113,12 +114,72 @@ void main() {
     });
   });
 
-  group('canRender', () {
-    test('needs at least two finishers', () {
+  group('canRender / occupantCount', () {
+    test('needs at least two occupants', () {
       expect(RacePodium.canRender(0), isFalse);
       expect(RacePodium.canRender(1), isFalse);
       expect(RacePodium.canRender(2), isTrue);
       expect(RacePodium.canRender(3), isTrue);
+    });
+
+    test('counts racers who actually scored', () {
+      expect(
+        RacePodium.occupantCount([
+          _p('Ada', placement: 1, steps: 30000),
+          _p('Bo', placement: 2, steps: 20000),
+          _p('Cy', placement: 3, steps: 10000),
+        ]),
+        3,
+      );
+    });
+
+    // The review catch: a 3-person race with a straggler who never took a
+    // step must NOT draw a 0-step bronze plinth.
+    test('a 0-step straggler is not an occupant', () {
+      final participants = [
+        _p('Ada', placement: 1, steps: 30000),
+        _p('Bo', placement: 2, steps: 20000),
+        _p('Straggler', placement: 3, steps: 0),
+      ];
+
+      expect(RacePodium.occupantCount(participants), 2);
+      expect(RacePodium.canRender(RacePodium.occupantCount(participants)), isTrue);
+
+      final finishers = RacePodium.finishersFromParticipants(participants);
+      expect(finishers, hasLength(2));
+      expect(finishers.map((f) => f.displayName), ['Ada', 'Bo']);
+    });
+
+    test('a whole race of 0-step entrants renders no podium', () {
+      final participants = [
+        _p('Ada', placement: 1, steps: 0),
+        _p('Bo', placement: 2, steps: 0),
+      ];
+      expect(RacePodium.occupantCount(participants), 0);
+      expect(
+        RacePodium.canRender(RacePodium.occupantCount(participants)),
+        isFalse,
+      );
+    });
+
+    test('a settled placement outside the top 3 is not an occupant', () {
+      expect(
+        RacePodium.occupantCount([
+          _p('Ada', placement: 1, steps: 300),
+          _p('Bo', placement: 2, steps: 200),
+          _p('Cy', placement: 3, steps: 100),
+          _p('Dee', placement: 4, steps: 50),
+        ]),
+        3,
+      );
+    });
+
+    // Degradation contract: ABSENT steps is UNKNOWN, not zero. A payload that
+    // simply doesn't carry step totals must still draw a podium.
+    test('an absent steps field still counts as an occupant', () {
+      final participants = [_p('Ada', placement: 1), _p('Bo', placement: 2)];
+      expect(RacePodium.occupantCount(participants), 2);
+      expect(RacePodium.finishersFromParticipants(participants), hasLength(2));
     });
   });
 
@@ -230,4 +291,74 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
+  group('the results popup reads the `podium` key', () {
+    Map<String, dynamic> completedRace({Object? podium}) => {
+      'id': 'race-1',
+      'name': 'Trail Blazers',
+      'status': 'COMPLETED',
+      'participantCount': 3,
+      'myPlacement': 2,
+      'myPayoutCoins': 40,
+      'winner': {'displayName': 'Ada'},
+      if (podium != null) 'podium': podium,
+    };
+
+    Future<void> pumpPopup(WidgetTester tester, Map<String, dynamic> race) async {
+      tester.view.physicalSize = const Size(1170, 2532);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(home: RaceResultsSummaryScreen(races: [race])),
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+
+    testWidgets('renders a podium from `podium`', (tester) async {
+      await pumpPopup(
+        tester,
+        completedRace(
+          podium: [
+            _p('Ada', placement: 1, steps: 30000),
+            _p('Bo', placement: 2, steps: 20000),
+            _p('Cy', placement: 3, steps: 10000),
+          ],
+        ),
+      );
+
+      expect(find.text('1ST'), findsOneWidget);
+      expect(find.text('2ND'), findsOneWidget);
+      expect(find.text('3RD'), findsOneWidget);
+    });
+
+    testWidgets('a backend without `podium` renders the card unchanged', (
+      tester,
+    ) async {
+      await pumpPopup(tester, completedRace());
+
+      expect(find.text('1ST'), findsNothing);
+      // The pre-existing card content is untouched.
+      expect(find.text('YOU PLACED'), findsOneWidget);
+      expect(find.text('WINNER'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the OLD `participants` key is deliberately ignored', (
+      tester,
+    ) async {
+      // The field was renamed before any client shipped reading it; a payload
+      // still carrying the old name must not half-render a podium.
+      await pumpPopup(
+        tester,
+        completedRace()..['participants'] = [
+          _p('Ada', placement: 1, steps: 30000),
+          _p('Bo', placement: 2, steps: 20000),
+        ],
+      );
+
+      expect(find.text('1ST'), findsNothing);
+      expect(find.text('YOU PLACED'), findsOneWidget);
+    });
+  });
+
 }
