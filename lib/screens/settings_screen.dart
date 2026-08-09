@@ -442,7 +442,7 @@ class _SettingsContentState extends State<_SettingsContent> {
             children: [
               _SocialRow(
                 rowKey: const Key('settings-social-instagram'),
-                glyph: 'IG',
+                asset: 'assets/images/social_instagram.png',
                 platform: 'Instagram',
                 handle: '@bara.steps',
                 onTap: () =>
@@ -450,7 +450,7 @@ class _SettingsContentState extends State<_SettingsContent> {
               ),
               _SocialRow(
                 rowKey: const Key('settings-social-x'),
-                glyph: 'X',
+                asset: 'assets/images/social_x.png',
                 platform: 'X',
                 handle: '@barastepz',
                 onTap: () => _openAbsoluteUrl('https://x.com/barastepz'),
@@ -495,12 +495,10 @@ class _SettingsContentState extends State<_SettingsContent> {
 
 /// Item 10 — one social-platform row: glyph, platform name, handle, chevron.
 ///
-/// GLYPH NOTE: the spec calls for the official monochrome brand glyphs as
-/// bundled PNGs. Those assets are not in the repo, and brand marks must not be
-/// hand-drawn or pixel-restyled (they are trademarks, not capybara art). Until
-/// the official PNGs are dropped in, the glyph is a short monogram set in the
-/// app's own pixel type — no trademark reproduced. Swapping in an image is a
-/// one-line change here.
+/// GLYPH NOTE: the glyphs are the official monochrome brand marks (Simple
+/// Icons render of each brand's published logo), bundled as black-on-
+/// transparent PNGs and tinted at draw time — never pixel-restyled (they are
+/// trademarks, not capybara art).
 ///
 /// Every colour resolves through [AppColors.of] so the row flips correctly at
 /// night (the 07-23 ink trap: a hardcoded light-mode ink is invisible on the
@@ -508,14 +506,14 @@ class _SettingsContentState extends State<_SettingsContent> {
 class _SocialRow extends StatelessWidget {
   const _SocialRow({
     required this.rowKey,
-    required this.glyph,
+    required this.asset,
     required this.platform,
     required this.handle,
     required this.onTap,
   });
 
   final Key rowKey;
-  final String glyph;
+  final String asset;
   final String platform;
   final String handle;
   final VoidCallback onTap;
@@ -551,9 +549,12 @@ class _SocialRow extends StatelessWidget {
                     width: 1.5,
                   ),
                 ),
-                child: Text(
-                  glyph,
-                  style: PixelText.title(size: 12, color: colors.ink),
+                child: Image.asset(
+                  asset,
+                  width: 15,
+                  height: 15,
+                  color: colors.ink,
+                  filterQuality: FilterQuality.medium,
                 ),
               ),
               const SizedBox(width: 10),
