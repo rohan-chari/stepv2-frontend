@@ -43,7 +43,15 @@ Map<String, dynamic> _race() => {
 };
 
 class _StubApi extends BackendApiService {
-  _StubApi({this.discardResponse = const {'ok': true}, this.discardDelay});
+  _StubApi({
+    this.discardResponse = const {'ok': true},
+    this.discardDelay,
+    this.serverDiscardPrices,
+  });
+
+  /// `powerupData.discardPrices` from the backend. Null = an older backend
+  /// that doesn't send them, which must fall back to the bundled table.
+  final Map<String, dynamic>? serverDiscardPrices;
 
   /// What POST .../discard returns. Defaults to the OLD shape (no new fields)
   /// so the degradation path is the default, not the exception.
@@ -78,12 +86,13 @@ class _StubApi extends BackendApiService {
         'finishedAt': null,
       },
     ],
-    'powerupData': const {
+    'powerupData': {
       'enabled': true,
-      'inventory': [_heldPowerup],
+      'inventory': const [_heldPowerup],
       'powerupSlots': 3,
       'queuedBoxCount': 0,
-      'activeEffects': [],
+      'activeEffects': const [],
+      if (serverDiscardPrices != null) 'discardPrices': serverDiscardPrices,
     },
   };
 
@@ -264,6 +273,78 @@ void main() {
         await _teardown(tester);
       },
     );
+  });
+
+  group('Item 1 — discard prices come from the server when it sends them', () {
+    // Review fix 2: prices live in balance config so they can be retuned
+    // without an App Store release. The bundled 2/5/10 map is only a fallback.
+    Future<void> openDiscardDialog(WidgetTester tester) async {
+      await _openPowerupSheet(tester);
+      await tester.tap(find.text('DISCARD'));
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+
+    testWidgets('server prices win over the bundled table', (tester) async {
+      // The held powerup is RARE. Bundled says 10; the server says 25.
+      await _pump(
+        tester,
+        _StubApi(
+          serverDiscardPrices: const {
+            'COMMON': 4,
+            'UNCOMMON': 9,
+            'RARE': 25,
+          },
+        ),
+      );
+      await openDiscardDialog(tester);
+
+      expect(find.textContaining('for 25 coins'), findsOneWidget);
+      expect(find.textContaining('for 10 coins'), findsNothing);
+      await _teardown(tester);
+    });
+
+    testWidgets('an older backend falls back to the bundled 2/5/10', (
+      tester,
+    ) async {
+      await _pump(tester, _StubApi());
+      await openDiscardDialog(tester);
+
+      expect(find.textContaining('for 10 coins'), findsOneWidget);
+      await _teardown(tester);
+    });
+
+    testWidgets('a malformed discardPrices falls back rather than quoting 0', (
+      tester,
+    ) async {
+      // A non-map, or a map with no usable numeric entries, must not be
+      // treated as "everything is free".
+      await _pump(
+        tester,
+        _StubApi(serverDiscardPrices: const {'RARE': 'lots'}),
+      );
+      await openDiscardDialog(tester);
+
+      // NB 'for 0 coins', not '0 coins' — the latter is a substring of
+      // '10 coins' and would pass vacuously.
+      expect(find.textContaining('for 0 coins'), findsNothing);
+      expect(find.textContaining('for 10 coins'), findsOneWidget);
+      await _teardown(tester);
+    });
+
+    testWidgets('a rarity the server omits uses its COMMON floor', (
+      tester,
+    ) async {
+      // RARE is missing from the server table -> fall back to the server's
+      // own COMMON price (4), not the bundled RARE price (10).
+      await _pump(
+        tester,
+        _StubApi(serverDiscardPrices: const {'COMMON': 4}),
+      );
+      await openDiscardDialog(tester);
+
+      expect(find.textContaining('for 4 coins'), findsOneWidget);
+      await _teardown(tester);
+    });
   });
 
   group('Item 12 — PillButton loading', () {

@@ -15,6 +15,7 @@ import 'package:step_tracker/screens/settings_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/services/notification_service.dart';
+import 'package:step_tracker/widgets/pixel_switch.dart';
 
 class _PrefsApi extends BackendApiService {
   _PrefsApi({required this.prefsPayload, this.throwOnSubmit = false});
@@ -25,15 +26,26 @@ class _PrefsApi extends BackendApiService {
   int submitCalls = 0;
   String? lastSubmittedText;
 
+  /// Review fix 6: both toggles used to fetch preferences independently, so
+  /// opening Settings fired this twice.
+  int prefsFetches = 0;
+  int legacyDailyRewardFetches = 0;
+
   @override
   Future<Map<String, dynamic>> fetchNotificationPreferences({
     required String identityToken,
-  }) async => prefsPayload;
+  }) async {
+    prefsFetches++;
+    return prefsPayload;
+  }
 
   @override
   Future<bool> fetchDailyRewardRemindersEnabled({
     required String identityToken,
-  }) async => true;
+  }) async {
+    legacyDailyRewardFetches++;
+    return true;
+  }
 
   @override
   Future<void> submitSuggestion({
@@ -164,6 +176,50 @@ void main() {
         find.byKey(const Key('settings-milestone-reminder-toggle')),
         findsNothing,
       );
+    });
+  });
+
+  group('review fix 6 — one preferences round trip per Settings open', () {
+    testWidgets('both toggles share a single GET', (tester) async {
+      final api = _PrefsApi(
+        prefsPayload: const {
+          'dailyRewardRemindersEnabled': true,
+          'stepMilestoneRemindersEnabled': true,
+        },
+      );
+      await _pumpSettings(tester, api);
+
+      // Both toggles rendered...
+      expect(find.text('Remind me to open my daily box'), findsOneWidget);
+      expect(
+        find.byKey(const Key('settings-milestone-reminder-toggle')),
+        findsOneWidget,
+      );
+      // ...off exactly one request, and none through the old per-field helper.
+      expect(api.prefsFetches, 1);
+      expect(api.legacyDailyRewardFetches, 0);
+    });
+
+    testWidgets('the daily-reward toggle still reads its own field', (
+      tester,
+    ) async {
+      // Sharing the fetch must not change what the toggle displays: an
+      // explicit false stays false.
+      final api = _PrefsApi(
+        prefsPayload: const {
+          'dailyRewardRemindersEnabled': false,
+          'stepMilestoneRemindersEnabled': true,
+        },
+      );
+      await _pumpSettings(tester, api);
+
+      final switches = tester
+          .widgetList<PixelSwitch>(find.byType(PixelSwitch))
+          .toList();
+      expect(switches, hasLength(2));
+      expect(switches[0].value, isFalse); // daily reward
+      expect(switches[1].value, isTrue); // milestone
+      expect(api.prefsFetches, 1);
     });
   });
 

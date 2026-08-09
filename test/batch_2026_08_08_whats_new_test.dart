@@ -1,4 +1,6 @@
 // Feature batch 2026-08-08 — Item 8: the What's New sheet.
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -51,6 +53,29 @@ void main() {
       // changelog on a hotfix build.
       expect(whatsNewEntryFor('2.2', entries: _entries), isNull);
       expect(whatsNewEntryFor('2.2.1', entries: _entries), isNull);
+    });
+
+    // Review fix 7: the sheet matches PackageInfo.version EXACTLY, so a
+    // release whose pubspec version has no entry shows nothing — silently.
+    // This ties the two together so the drift is caught at test time rather
+    // than by nobody noticing the sheet never appeared.
+    test('STRUCTURAL: pubspec version has a matching changelog entry', () {
+      final pubspec = File('pubspec.yaml').readAsStringSync();
+      final match = RegExp(
+        r'^version:\s*([0-9]+\.[0-9]+\.[0-9]+)',
+        multiLine: true,
+      ).firstMatch(pubspec);
+      expect(match, isNotNull, reason: 'could not parse version from pubspec');
+      final version = match!.group(1)!;
+
+      expect(
+        whatsNewEntryFor(version),
+        isNotNull,
+        reason:
+            'pubspec version $version has no WhatsNewEntry in '
+            'lib/content/whats_new.dart, so this build would show no '
+            "What's New sheet at all. Add an entry (see DEPLOYMENT.md step 2).",
+      );
     });
 
     test('the shipped changelog is well-formed', () {

@@ -522,6 +522,56 @@ void main() {
     });
   });
 
+  group('review fix 5 — the reroll ad unit has NO fallback', () {
+    test('an absent define disables the surface instead of borrowing', () {
+      // This suite runs with no --dart-define, which is exactly the staging /
+      // dev configuration. The reroll unit must resolve EMPTY and report
+      // unsupported — never silently fall through to the extra-spin unit,
+      // which would blend two placements into one AdMob reporting line and
+      // put the feature on builds the spec says should not have it.
+      expect(AdService.boxRerollAdUnitId, isEmpty);
+      expect(AdService.boxRerollSupported, isFalse);
+    });
+
+    test('the powerup-unlock unit DOES still fall back (unchanged)', () {
+      // Guards against someone "fixing" both getters the same way: only the
+      // reroll unit is meant to be strict.
+      expect(AdService.powerupUnlockAdUnitId, isNotNull);
+    });
+
+    testWidgets(
+      'with no define and no injected controller, the button stays hidden '
+      'even when the backend advertises boxReroll',
+      (tester) async {
+        final api = _RerollStubApi();
+        tester.view.physicalSize = const Size(1170, 2532);
+        tester.view.devicePixelRatio = 3;
+        addTearDown(tester.view.reset);
+
+        api.boxReroll = true;
+        final auth = await _rerollAuth();
+        await tester.pumpWidget(
+          MaterialApp(
+            home: RaceDetailScreen(
+              authService: auth,
+              raceId: 'race-1',
+              backendApiService: api,
+              // No boxRerollAdController -> production path -> needs the define.
+            ),
+          ),
+        );
+        for (var i = 0; i < 4; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+        await _openBoxAndReveal(tester);
+
+        expect(_rerollButton, findsNothing);
+        expect(api.rerollCalls, 0);
+        await _teardownRace(tester);
+      },
+    );
+  });
+
 }
 
 String _readSource(String relativePath) {
