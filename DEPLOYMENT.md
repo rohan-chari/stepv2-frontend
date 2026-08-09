@@ -84,11 +84,12 @@ When you have something worth testing on a real phone:
 # keeps the extra-spin offer out of staging builds entirely.
 # ADMOB_BOX_REROLL_AD_UNIT_ID (batch 2026-08-08, item 11) bakes in the
 # rewarded ad unit for the mystery-box REROLL. PROD ONLY — staging omits it.
-# Optional: without it the reroll falls back to the extra-spin rewarded unit,
-# which works but muddies that unit's reporting, so a prod release should
-# carry its own. The button itself only appears when the BACKEND also sends
-# powerupData.boxReroll (ADS_BOX_REROLL_ENABLED on), so shipping the define
-# early is harmless.
+# REQUIRED for the feature: there is NO fallback to another rewarded unit.
+# Without this define the REROLL button never appears at all, whatever the
+# backend says — which is how staging stays free of the feature and how the
+# placement keeps its own AdMob reporting line. The button additionally needs
+# the BACKEND to send powerupData.boxReroll (ADS_BOX_REROLL_ENABLED on), so
+# shipping the define ahead of the switch is harmless.
 # GOOGLE_IOS_CLIENT_ID enables the "Sign in with Google" button on iOS
 # (STAGING iOS OAuth client — the one registered for the .staging bundle id).
 # Omitting it is safe: the button is hidden and sign-in stays Apple-only.
@@ -175,7 +176,7 @@ flutter build ipa --release \
   --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
   --dart-define=ADMOB_BOX_TOP_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/3019108638 \
   --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \
-  --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID=<create in AdMob; omit to reuse the extra-spin unit> \
+  --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID=<create in AdMob; omitting DISABLES box reroll> \
   --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com
 ```
 
@@ -255,7 +256,7 @@ flutter build appbundle --release --flavor prod \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/4587493133 \
   --dart-define=ADMOB_BANNER_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/8844513901 \
   --dart-define=ADMOB_NATIVE_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/4905268896 \
-  --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID_ANDROID=<create in AdMob; omit to reuse the extra-spin unit> \
+  --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID_ANDROID=<create in AdMob; omitting DISABLES box reroll> \
   --build-number=<versionCode>
 ```
 

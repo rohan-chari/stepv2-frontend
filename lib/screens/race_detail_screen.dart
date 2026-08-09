@@ -1920,10 +1920,33 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     'RARE': 10,
   };
 
+  /// The server's live discard prices from `powerupData.discardPrices`
+  /// (same shape as `upgradeCosts`: rarity -> coins), or null on a backend
+  /// that doesn't send them. Parsed defensively: a non-map, or a map with no
+  /// usable numeric entries, reads as absent so we fall back to the bundled
+  /// table rather than quoting 0 coins.
+  Map<String, int>? get _serverDiscardPrices {
+    final raw = _powerupData?['discardPrices'];
+    if (raw is! Map) return null;
+    final parsed = <String, int>{};
+    raw.forEach((key, value) {
+      if (key is String && value is num) parsed[key] = value.toInt();
+    });
+    return parsed.isEmpty ? null : parsed;
+  }
+
+  /// Prefers the server's table so prices can be retuned in balance config
+  /// without an App Store release; falls back to the bundled 2/5/10 map for an
+  /// older backend. Either way this only WORDS the dialog — `coinsAwarded` in
+  /// the response is what actually gets credited.
   int _discardPriceFor(Map<String, dynamic> powerup) {
+    final table = _serverDiscardPrices ?? _discardPrices;
+    // Stash-redeemed powerups have rarity null; the backend floors those to
+    // the COMMON price, so quote the same floor.
+    final fallback = table['COMMON'] ?? _discardPrices['COMMON']!;
     final rarity = powerup['rarity'];
-    if (rarity is! String) return _discardPrices['COMMON']!;
-    return _discardPrices[rarity] ?? _discardPrices['COMMON']!;
+    if (rarity is! String) return fallback;
+    return table[rarity] ?? fallback;
   }
 
   /// The daily discard-bonus headroom last reported by the backend, or null if
@@ -4902,7 +4925,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// Demo mode never shows it regardless of what the payload says.
   bool get _boxRerollEnabled {
     if (widget.demoMode) return false;
-    return _powerupData?['boxReroll'] == true;
+    if (_powerupData?['boxReroll'] != true) return false;
+    // No dedicated ad unit baked into this build => no button. Passing an
+    // empty adUnitId to AdService would fall through to the EXTRA-SPIN unit
+    // (see AdService._adUnitId), which is exactly the borrowing we removed.
+    // An injected controller (widget tests) bypasses the define entirely.
+    return widget.boxRerollAdController != null || AdService.boxRerollSupported;
   }
 
   /// Lazily-built rewarded-ad controller for the reroll. Its own AdMob unit
@@ -4952,7 +4980,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       // Closed early: no grant was minted, so there is nothing to consume.
       if (!earned) return null;
 
-      final result = await _rerollWithRetry(token, powerupId);
+      // Pass the SAME localDate the ad grant was minted with — never
+      // recompute it inside the retry loop, which can span local midnight.
+      final result = await _rerollWithRetry(token, powerupId, localDate);
       // Warm the next one up for a second box this session.
       unawaited(_rerollAd.load(userId: userId, localDate: localDate));
       _loadProgress();
@@ -4981,6 +5011,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   Future<Map<String, dynamic>> _rerollWithRetry(
     String token,
     String powerupId,
+    String localDate,
   ) async {
     const maxAttempts = 5;
     for (var attempt = 0; ; attempt++) {
@@ -4989,6 +5020,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           identityToken: token,
           raceId: widget.raceId,
           powerupId: powerupId,
+          localDate: localDate,
         );
       } on ApiException catch (e) {
         final ssvLag =
@@ -6051,7 +6083,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     // race, or fewer than two finishers), in which case the original winner
     // card renders untouched. Payout amounts come from the race's own tiers,
     // so an unfunded race simply shows no coin lines.
-    final podiumFinishers = (!isTeamRace && RacePodium.canRender(participants.length))
+    final podiumFinishers =
+        (!isTeamRace &&
+            RacePodium.canRender(RacePodium.occupantCount(participants)))
         ? RacePodium.finishersFromParticipants(
             participants,
             payoutTiers: parsePayoutTiers(_race),

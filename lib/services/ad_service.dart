@@ -144,15 +144,26 @@ class AdService implements ExtraSpinAdController {
   }
 
   /// Resolved rewarded unit for the mystery-box reroll (item 11).
+  ///
+  /// NO FALLBACK, deliberately — unlike [powerupUnlockAdUnitId]. When this
+  /// platform has no dedicated box-reroll define baked in, this returns '' and
+  /// [boxRerollSupported] is false, so the controller never loads and the
+  /// REROLL button never appears. Two reasons:
+  ///  * it enforces the spec's platform stance (the define is PROD-only, so
+  ///    reroll is iOS-first and staging simply doesn't have the feature)
+  ///    rather than silently borrowing another surface's unit;
+  ///  * borrowing the extra-spin unit would blend two placements' impressions
+  ///    and eCPM into one line of AdMob reporting.
   static String get boxRerollAdUnitId {
     if (kIsWeb) return '';
-    final id = Platform.isIOS
-        ? _envBoxRerollAdUnitId
-        : Platform.isAndroid
-        ? _envBoxRerollAdUnitIdAndroid
-        : '';
-    return id.isNotEmpty ? id : _platformExtraSpinUnitId;
+    if (Platform.isIOS) return _envBoxRerollAdUnitId;
+    if (Platform.isAndroid) return _envBoxRerollAdUnitIdAndroid;
+    return '';
   }
+
+  /// Whether this build can show the box-reroll ad at all. False without the
+  /// define — the caller must not offer the button.
+  static bool get boxRerollSupported => boxRerollAdUnitId.isNotEmpty;
 
   static String get _platformBannerUnitId {
     if (kIsWeb) return '';

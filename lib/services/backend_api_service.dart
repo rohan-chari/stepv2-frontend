@@ -866,15 +866,23 @@ class BackendApiService {
   /// Throws [ApiException] carrying the server `code` for ALREADY_REROLLED /
   /// AD_NOT_VERIFIED / NOT_HELD so the caller can run the verification retry
   /// loop.
+  ///
+  /// [localDate] MUST be the same `YYYY-MM-DD` string the ad grant's SSV
+  /// customData carried (`box_reroll:<userId>:<localDate>`). The backend
+  /// consumes the grant by matching on it — with a ±1-day window, because the
+  /// device can cross local midnight between watching the ad and the reroll
+  /// landing. Sending a different string (or none) means the grant is never
+  /// found and the user watched an ad for nothing.
   Future<Map<String, dynamic>> rerollPowerup({
     required String identityToken,
     required String raceId,
     required String powerupId,
+    required String localDate,
   }) async {
     final response = await _sendJsonRequest(
       method: 'POST',
       path: '/races/$raceId/powerups/$powerupId/reroll',
-      body: const <String, dynamic>{},
+      body: <String, dynamic>{'localDate': localDate},
       identityToken: identityToken,
     );
 

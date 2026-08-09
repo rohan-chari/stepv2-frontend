@@ -99,6 +99,28 @@ class _SettingsContent extends StatefulWidget {
 }
 
 class _SettingsContentState extends State<_SettingsContent> {
+  /// The ONE `GET /notifications/preferences` round trip for this screen
+  /// (review fix, batch 2026-08-08). Both toggles used to fetch it
+  /// independently, so opening Settings fired the same request twice. Held as
+  /// a Future rather than a resolved value so the toggles can render their
+  /// own not-ready state without this widget rebuilding the whole page.
+  ///
+  /// Null when there is no API service or no auth token — the toggles then
+  /// fall back to their documented defaults.
+  Future<Map<String, dynamic>>? _notificationPrefs;
+
+  @override
+  void initState() {
+    super.initState();
+    final api = widget.backendApiService;
+    final token = widget.authService.authToken;
+    if (api != null && token != null && token.isNotEmpty) {
+      _notificationPrefs = api.fetchNotificationPreferences(
+        identityToken: token,
+      );
+    }
+  }
+
   Future<void> _openUrl(String path) async {
     final uri = Uri.parse('${BackendConfig.baseUrl}$path');
     await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -303,6 +325,7 @@ class _SettingsContentState extends State<_SettingsContent> {
                     authService: widget.authService,
                     notificationService: widget.notificationService!,
                     backendApiService: widget.backendApiService!,
+                    preferences: _notificationPrefs,
                   ),
                   // Item 3 (client half): hides itself entirely when the
                   // backend doesn't know the preference.
@@ -310,6 +333,7 @@ class _SettingsContentState extends State<_SettingsContent> {
                     authService: widget.authService,
                     notificationService: widget.notificationService!,
                     backendApiService: widget.backendApiService!,
+                    preferences: _notificationPrefs,
                   ),
                 ],
               ],
@@ -740,7 +764,12 @@ class _StepMilestoneReminderToggle extends StatefulWidget {
     required this.authService,
     required this.notificationService,
     required this.backendApiService,
+    required this.preferences,
   });
+
+  /// The screen's single shared preferences fetch. Null when unavailable —
+  /// which, like a failed fetch, hides this toggle.
+  final Future<Map<String, dynamic>>? preferences;
 
   final AuthService authService;
   final NotificationService notificationService;
@@ -769,18 +798,15 @@ class _StepMilestoneReminderToggleState
     var supported = false;
     var enabled = true;
 
-    final token = widget.authService.authToken;
-    if (token != null && token.isNotEmpty) {
-      try {
-        final prefs = await widget.backendApiService
-            .fetchNotificationPreferences(identityToken: token);
-        // Presence, not truthiness — that's the whole point.
-        supported = prefs.containsKey('stepMilestoneRemindersEnabled');
-        final value = prefs['stepMilestoneRemindersEnabled'];
-        enabled = value is bool ? value : true;
-      } catch (_) {
-        supported = false;
-      }
+    try {
+      final prefs = await widget.preferences;
+      // Presence, not truthiness — that's the whole point.
+      supported =
+          prefs != null && prefs.containsKey('stepMilestoneRemindersEnabled');
+      final value = prefs?['stepMilestoneRemindersEnabled'];
+      enabled = value is bool ? value : true;
+    } catch (_) {
+      supported = false;
     }
 
     if (mounted) {
@@ -1179,7 +1205,11 @@ class _DailyRewardReminderToggle extends StatefulWidget {
     required this.authService,
     required this.notificationService,
     required this.backendApiService,
+    required this.preferences,
   });
+
+  /// The screen's single shared preferences fetch. Null when unavailable.
+  final Future<Map<String, dynamic>>? preferences;
 
   @override
   State<_DailyRewardReminderToggle> createState() =>
@@ -1204,16 +1234,18 @@ class _DailyRewardReminderToggleState
     // Only consult the backend preference when OS notifications are on — a
     // denied user can't receive these regardless, so we show the row off.
     if (granted == true) {
-      final token = widget.authService.authToken;
-      if (token != null && token.isNotEmpty) {
-        try {
-          enabled = await widget.backendApiService
-              .fetchDailyRewardRemindersEnabled(identityToken: token);
-        } catch (_) {
-          // Old backend / offline: default ON (the documented default) rather
-          // than crashing or silently flipping the displayed value.
-          enabled = true;
-        }
+      // Shared fetch (review fix): this used to call
+      // fetchDailyRewardRemindersEnabled, duplicating the milestone toggle's
+      // request. Same semantics — an absent/non-boolean field reads as the
+      // documented default of ON.
+      try {
+        final prefs = await widget.preferences;
+        final value = prefs?['dailyRewardRemindersEnabled'];
+        enabled = value is bool ? value : true;
+      } catch (_) {
+        // Old backend / offline: default ON rather than crashing or silently
+        // flipping the displayed value.
+        enabled = true;
       }
     }
     if (mounted) {

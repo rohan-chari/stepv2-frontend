@@ -62,7 +62,36 @@ class RacePodium extends StatefulWidget {
 
   /// A podium needs at least a 1st and a 2nd to read as a podium. A single
   /// finisher keeps the existing winner card — one lonely plinth looks broken.
-  static bool canRender(int finisherCount) => finisherCount >= 2;
+  ///
+  /// Pass the count of ACTUAL OCCUPANTS, not the participant count — see
+  /// [occupantCount]. A 3-person race where one entrant never took a step has
+  /// two occupants, and drawing them a 0-step bronze plinth would celebrate
+  /// someone who didn't race.
+  static bool canRender(int occupantCount) => occupantCount >= 2;
+
+  /// How many of [participants] actually belong on a podium.
+  ///
+  /// A row counts when it has steps on the board, or when the server settled
+  /// it into a top-3 placement AND it has steps. A 0-step row never counts,
+  /// however it placed: placement is just "least bad" among non-finishers once
+  /// everyone above them is exhausted.
+  static int occupantCount(List<Map<String, dynamic>> participants) {
+    var count = 0;
+    for (final p in participants) {
+      if (_isOccupant(p)) count++;
+      if (count == 3) break;
+    }
+    return count;
+  }
+
+  static bool _isOccupant(Map<String, dynamic> p) {
+    final steps = p['totalSteps'];
+    if (steps is! num || steps <= 0) return false;
+    final placement = serverPlacementOf(p);
+    // No placement yet (live/unsettled ordering) still counts — the caller
+    // only builds a podium for a completed race.
+    return placement == null || placement <= 3;
+  }
 
   /// Builds the top-3 finishers from a race's participant rows.
   ///
@@ -77,8 +106,11 @@ class RacePodium extends StatefulWidget {
     String? viewerUserId,
   }) {
     final finishers = <PodiumFinisher>[];
-    for (var i = 0; i < participants.length && i < 3; i++) {
-      final p = participants[i];
+    // Skip non-occupants entirely rather than handing them a plinth, and
+    // renumber from the occupants that remain so a podium is never gappy.
+    final occupants = participants.where(_isOccupant).take(3).toList();
+    for (var i = 0; i < occupants.length; i++) {
+      final p = occupants[i];
       final placement = serverPlacementOf(p) ?? (i + 1);
       final name = p['displayName'];
       final steps = p['totalSteps'];

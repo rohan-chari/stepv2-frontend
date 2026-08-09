@@ -338,6 +338,7 @@ class DemoRaceApiService extends BackendApiService {
     required String identityToken,
     required String raceId,
     required String powerupId,
+    required String localDate,
   }) async => const {};
 
   // -- Telemetry --------------------------------------------------------------

@@ -127,16 +127,16 @@ class _ResultCard extends StatelessWidget {
   final Map<String, dynamic> race;
 
   /// Top-3 finishers for the podium, or null when this payload can't feed one
-  /// (no participants array, or fewer than two finishers). Never throws on a
-  /// shape it doesn't recognise.
+  /// (no `podium` array, or fewer than two actual finishers). Never throws on
+  /// a shape it doesn't recognise.
   List<PodiumFinisher>? _podiumFinishers() {
-    final raw = race['participants'];
+    final raw = race['podium'];
     if (raw is! List) return null;
     final rows = raw
         .whereType<Map>()
         .map((e) => e.cast<String, dynamic>())
         .toList();
-    if (!RacePodium.canRender(rows.length)) return null;
+    if (!RacePodium.canRender(RacePodium.occupantCount(rows))) return null;
     return RacePodium.finishersFromParticipants(
       orderRaceParticipantsForDisplay(rows),
       payoutTiers: parsePayoutTiers(race),
@@ -170,13 +170,12 @@ class _ResultCard extends StatelessWidget {
 
     // Item 4 — the podium, when this payload can feed one.
     //
-    // IMPORTANT: the completed-bucket race map served by `GET /races` does NOT
-    // currently carry a `participants` array (it carries `winner`,
-    // `myPlacement`, `participantCount` and `payoutTiers`). So on today's
-    // backend this stays null and the card renders exactly as it always has.
-    // It lights up automatically if/when the list payload starts including
-    // participants — no client release needed, and no field is assumed to
-    // exist. Everything below is read defensively.
+    // The completed-bucket race map served by `GET /races` is gaining a
+    // `podium` array (top finishers with displayName/totalSteps/accessories);
+    // it previously carried only `winner`, `myPlacement`, `participantCount`
+    // and `payoutTiers`. Read defensively: against a backend that predates the
+    // field this stays null and the card renders exactly as it always has, so
+    // there is no ordering dependency between the two deploys.
     final podiumFinishers = _podiumFinishers();
 
     return Container(
