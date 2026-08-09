@@ -12,6 +12,12 @@ import 'package:step_tracker/demo/demo_race_engine.dart';
 import 'package:step_tracker/screens/case_opening_screen.dart';
 import 'package:step_tracker/screens/multi_case_opening_screen.dart';
 import 'package:step_tracker/tutorial/tutorial_preview_data.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:step_tracker/screens/race_detail_screen.dart';
+import 'package:step_tracker/services/ad_service.dart';
+import 'package:step_tracker/services/auth_service.dart';
+import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/widgets/item_slot.dart';
 import 'package:step_tracker/widgets/pill_button.dart';
 
 Map<String, dynamic> _openResult({String type = 'PROTEIN_SHAKE'}) => {
@@ -54,6 +60,215 @@ Future<void> _pumpCase(
       ),
     ),
   );
+  await tester.pump(const Duration(milliseconds: 100));
+}
+
+
+// ── Fix-1 harness: the real RaceDetailScreen -> AdService -> API chain ──────
+
+class _FakeAdController implements ExtraSpinAdController {
+  _FakeAdController({this.earn = true});
+
+  final bool earn;
+  String? lastLocalDate;
+  String? lastUserId;
+  bool _loaded = false;
+
+  @override
+  bool get isSupported => true;
+
+  @override
+  bool get isReady => _loaded;
+
+  @override
+  Future<void> load({
+    required String userId,
+    required String localDate,
+  }) async {
+    lastUserId = userId;
+    lastLocalDate = localDate;
+    _loaded = true;
+  }
+
+  @override
+  Future<bool> showAndAwaitReward() async {
+    _loaded = false;
+    return earn;
+  }
+
+  @override
+  void dispose() {}
+}
+
+class _RerollStubApi extends BackendApiService {
+  _RerollStubApi({this.failFirst = 0});
+
+  /// How many leading attempts answer 409 AD_NOT_VERIFIED (SSV lag).
+  final int failFirst;
+
+  /// Whether the progress payload advertises the feature; set by the pump
+  /// helper before the screen loads.
+  bool boxReroll = true;
+
+  int rerollCalls = 0;
+  final List<String> localDates = [];
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceDetails({
+    required String identityToken,
+    required String raceId,
+  }) async => {
+    'id': 'race-1',
+    'name': 'Trail Blazers',
+    'status': 'ACTIVE',
+    'maxDurationDays': 3,
+    'buyInAmount': 0,
+    'potCoins': 0,
+    'heldPotCoins': 0,
+    'projectedPotCoins': 0,
+    'myStatus': 'ACCEPTED',
+    'isCreator': false,
+    'powerupsEnabled': true,
+    'endsAt': '2126-04-10T12:00:00.000Z',
+    'participants': const [
+      {'userId': 'user-1', 'displayName': 'Runner 1', 'status': 'ACCEPTED'},
+    ],
+  };
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceProgress({
+    required String identityToken,
+    required String raceId,
+  }) async => {
+    'status': 'ACTIVE',
+    'participants': const [
+      {
+        'userId': 'user-1',
+        'displayName': 'Runner 1',
+        'totalSteps': 9000,
+        'finishedAt': null,
+      },
+    ],
+    'powerupData': {
+      'enabled': true,
+      'inventory': const [
+        {'id': 'box-1', 'type': 'MYSTERY_BOX', 'status': 'MYSTERY_BOX'},
+      ],
+      'powerupSlots': 3,
+      'queuedBoxCount': 0,
+      'activeEffects': const [],
+      if (boxReroll) 'boxReroll': true,
+    },
+  };
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceFeed({
+    String? cursor,
+    required String identityToken,
+    required String raceId,
+  }) async => const {'events': []};
+
+  @override
+  Future<Map<String, dynamic>> fetchMe({required String identityToken}) async =>
+      const {'coins': 100, 'heldCoins': 0};
+
+  @override
+  Future<Map<String, dynamic>> openMysteryBox({
+    required String identityToken,
+    required String raceId,
+    required String powerupId,
+  }) async => const {
+    'result': {
+      'id': 'pu-1',
+      'type': 'PROTEIN_SHAKE',
+      'rarity': 'COMMON',
+      'autoActivated': false,
+    },
+  };
+
+  @override
+  Future<Map<String, dynamic>> rerollPowerup({
+    required String identityToken,
+    required String raceId,
+    required String powerupId,
+    required String localDate,
+  }) async {
+    rerollCalls++;
+    localDates.add(localDate);
+    if (rerollCalls <= failFirst) {
+      throw const ApiException(
+        'not verified',
+        statusCode: 409,
+        code: 'AD_NOT_VERIFIED',
+      );
+    }
+    return const {
+      'id': 'pu-1',
+      'type': 'ENERGY_GEL',
+      'rarity': 'RARE',
+      'rerolled': true,
+    };
+  }
+}
+
+Future<AuthService> _rerollAuth() async {
+  SharedPreferences.setMockInitialValues({
+    'auth_identity_token': 'apple-token',
+    'auth_user_identifier': 'apple-user-123',
+    'auth_session_token': 'session-token',
+    'auth_backend_user_id': 'user-1',
+    'auth_display_name': 'Runner',
+    'auth_coins': 100,
+    'auth_held_coins': 0,
+  });
+  final auth = AuthService();
+  await auth.restoreSession();
+  return auth;
+}
+
+Future<void> _pumpRaceDetail(
+  WidgetTester tester, {
+  required _RerollStubApi api,
+  required _FakeAdController ad,
+  required bool boxReroll,
+}) async {
+  tester.view.physicalSize = const Size(1170, 2532);
+  tester.view.devicePixelRatio = 3;
+  addTearDown(tester.view.reset);
+
+  api.boxReroll = boxReroll;
+  final auth = await _rerollAuth();
+  await tester.pumpWidget(
+    MaterialApp(
+      home: RaceDetailScreen(
+        authService: auth,
+        raceId: 'race-1',
+        backendApiService: api,
+        boxRerollAdController: ad,
+      ),
+    ),
+  );
+  for (var i = 0; i < 4; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+}
+
+/// Taps the mystery-box slot and drives its reel to the reveal.
+Future<void> _openBoxAndReveal(WidgetTester tester) async {
+  final boxSlot = find.byWidgetPredicate(
+    (w) => w is ItemSlot && w.state == ItemSlotState.mysteryBox,
+  );
+  await tester.ensureVisible(boxSlot);
+  await tester.pump(const Duration(milliseconds: 100));
+  await tester.tap(boxSlot);
+  for (var i = 0; i < 6; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  await _spinToReveal(tester);
+}
+
+Future<void> _teardownRace(WidgetTester tester) async {
+  await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
   await tester.pump(const Duration(milliseconds: 100));
 }
 
@@ -239,6 +454,74 @@ void main() {
       expect(detail.toString().contains('boxReroll'), isFalse);
     });
   });
+  group('the reroll request carries localDate (fix 1)', () {
+    testWidgets(
+      'the SAME localDate as the ad grant is posted, and is stable across '
+      'AD_NOT_VERIFIED retries',
+      (tester) async {
+        final api = _RerollStubApi(failFirst: 2);
+        final ad = _FakeAdController();
+
+        await _pumpRaceDetail(tester, api: api, ad: ad, boxReroll: true);
+        await _openBoxAndReveal(tester);
+
+        expect(_rerollButton, findsOneWidget);
+        await tester.tap(_rerollButton);
+        for (var i = 0; i < 12; i++) {
+          await tester.pump(const Duration(seconds: 1));
+        }
+
+        // Three attempts: two AD_NOT_VERIFIED, then success.
+        expect(api.rerollCalls, 3);
+        expect(api.localDates, hasLength(3));
+        // Non-empty, YYYY-MM-DD, and identical on every retry — a retry loop
+        // that recomputed the date could cross local midnight and orphan the
+        // grant.
+        for (final d in api.localDates) {
+          expect(RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(d), isTrue);
+        }
+        expect(api.localDates.toSet(), hasLength(1));
+        // And it matches the date the ad grant was minted with.
+        expect(api.localDates.first, ad.lastLocalDate);
+
+        await _teardownRace(tester);
+      },
+    );
+
+    testWidgets('no ad reward earned => no reroll request at all', (
+      tester,
+    ) async {
+      final api = _RerollStubApi();
+      final ad = _FakeAdController(earn: false);
+
+      await _pumpRaceDetail(tester, api: api, ad: ad, boxReroll: true);
+      await _openBoxAndReveal(tester);
+      await tester.tap(_rerollButton);
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+
+      expect(api.rerollCalls, 0);
+      await _teardownRace(tester);
+    });
+
+    testWidgets('the button is hidden when the backend omits boxReroll', (
+      tester,
+    ) async {
+      final api = _RerollStubApi();
+      await _pumpRaceDetail(
+        tester,
+        api: api,
+        ad: _FakeAdController(),
+        boxReroll: false,
+      );
+      await _openBoxAndReveal(tester);
+
+      expect(_rerollButton, findsNothing);
+      await _teardownRace(tester);
+    });
+  });
+
 }
 
 String _readSource(String relativePath) {
