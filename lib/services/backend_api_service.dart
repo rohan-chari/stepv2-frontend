@@ -1311,11 +1311,21 @@ class BackendApiService {
   }
 
   /// GET /admin/stats -> `{stats: {...}}` product-health snapshot.
+  /// Admin dashboard aggregates.
+  ///
+  /// [sections] is the batch 2026-08-09 item 10 opt-in: with NO sections the
+  /// request is byte-identical to what shipped builds send, and the backend
+  /// runs exactly today's query set. Each requested section adds one bounded
+  /// aggregate block to the response (`economy` -> `coinEconomy`,
+  /// `ads` -> `adRevenue`), so the sectioned admin hub only pays for the
+  /// blocks it is actually about to render.
   Future<Map<String, dynamic>> fetchAdminStats({
     required String identityToken,
+    List<String> sections = const [],
   }) async {
+    final query = sections.isEmpty ? '' : '?sections=${sections.join(',')}';
     final response = await _sendGetRequest(
-      path: '/admin/stats',
+      path: '/admin/stats$query',
       identityToken: identityToken,
     );
     final body = await _decodeJsonResponse(response);
@@ -2928,10 +2938,7 @@ class BackendApiService {
     String? localDate,
   }) async {
     if (_shopAdUnlockSupport == EndpointSupport.unsupported) {
-      throw ApiException(
-        'Ad unlocks aren’t available yet.',
-        statusCode: 404,
-      );
+      throw ApiException('Ad unlocks aren’t available yet.', statusCode: 404);
     }
 
     final response = await _sendJsonRequest(
