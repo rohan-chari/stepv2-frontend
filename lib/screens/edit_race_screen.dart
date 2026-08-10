@@ -233,10 +233,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
         Text(
           _isPublic ? 'ANYONE CAN JOIN' : 'INVITE ONLY',
           key: const Key('race-visibility-subcopy'),
-          style: PixelText.body(
-            size: 11,
-            color: AppColors.of(context).textMid,
-          ),
+          style: PixelText.body(size: 11, color: AppColors.of(context).textMid),
         ),
       ],
     );

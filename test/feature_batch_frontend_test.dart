@@ -8,7 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/constants/powerup_copy.dart';
 import 'package:step_tracker/screens/case_opening_screen.dart';
-import 'package:step_tracker/screens/admin_screen.dart';
+import 'package:step_tracker/screens/admin_sections.dart';
 import 'package:step_tracker/screens/daily_reward_screen.dart';
 import 'package:step_tracker/screens/multi_case_opening_screen.dart';
 import 'package:step_tracker/services/ad_service.dart';
@@ -83,27 +83,6 @@ class _DailyApi extends BackendApiService {
     'claimedToday': true,
     'ladder': [],
   };
-}
-
-class _StatsApi extends BackendApiService {
-  _StatsApi(this.stats);
-  final Map<String, dynamic> stats;
-
-  @override
-  Future<Map<String, dynamic>> fetchAdminStats({
-    required String identityToken,
-  }) async => stats;
-}
-
-Future<AuthService> _auth() async {
-  SharedPreferences.setMockInitialValues({
-    'auth_identity_token': 'token',
-    'auth_user_identifier': 'user',
-    'auth_session_token': 'session',
-  });
-  final auth = AuthService();
-  await auth.restoreSession();
-  return auth;
 }
 
 void main() {
@@ -256,17 +235,15 @@ void main() {
   testWidgets('admin rewarded-ad rows render complete and malformed payloads', (
     tester,
   ) async {
-    final auth = await _auth();
     Future<void> pump(Map<String, dynamic> stats) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
             body: SingleChildScrollView(
-              child: AdminStatsCard(
-                width: 430,
-                authService: auth,
-                backendApiService: _StatsApi(stats),
-              ),
+              // Batch 2026-08-09 item 10 moved the rewarded-ad rows out of the
+              // flat stats card into the hub's REVENUE section. Mechanical
+              // retarget — both assertions below are unchanged.
+              child: AdminRevenueBody(stats: stats),
             ),
           ),
         ),

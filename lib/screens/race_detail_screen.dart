@@ -300,6 +300,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       _actingPowerupId = null;
     });
   }
+
   // The viewer is not (or is no longer) a participant: `GET /races/:id/details`
   // answered 403. Reached two ways — opening a stale link, or being pruned from
   // a seeded challenge while the screen is open. Terminal for this screen: once
@@ -1967,7 +1968,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     if (isUnopenedBox) {
       // An unopened box pays nothing — otherwise never opening one would
       // dominate every other play.
-      body = "Discard this mystery box? You won't get coins for unopened boxes.";
+      body =
+          "Discard this mystery box? You won't get coins for unopened boxes.";
     } else if (capReached) {
       body = "Daily discard bonus reached — you'll get 0 coins.";
     } else {
@@ -2020,7 +2022,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       if (mounted) {
         final name = PowerupCopy.nameFor(powerup['type'] as String?);
         if (coinsAwarded is num && coinsAwarded > 0) {
-          showInfoToast(context, '$name discarded — +${coinsAwarded.toInt()} coins');
+          showInfoToast(
+            context,
+            '$name discarded — +${coinsAwarded.toInt()} coins',
+          );
         } else {
           // Covers an older backend (no field), an unopened box (always 0) and
           // a user who has hit the daily cap.
@@ -3507,9 +3512,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                   else if (_isGradedCurvePayout(payoutTiers))
                     _buildGradedPayoutSummary(
                       payoutTiers,
-                      key: const Key(
-                        'race-prize-pool-graded-payout-summary',
-                      ),
+                      key: const Key('race-prize-pool-graded-payout-summary'),
                       labelColor: AppColors.of(ctx).textMid,
                       amountColor: AppColors.of(ctx).coinDark,
                     )
@@ -4938,13 +4941,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// the daily-spinner extra spin (and vice versa).
   ExtraSpinAdController? _rerollAdCtrl;
 
-  ExtraSpinAdController get _rerollAd =>
-      _rerollAdCtrl ??=
-          widget.boxRerollAdController ??
-          AdService(
-            adUnitId: AdService.boxRerollAdUnitId,
-            customDataPrefix: 'box_reroll',
-          );
+  ExtraSpinAdController get _rerollAd => _rerollAdCtrl ??=
+      widget.boxRerollAdController ??
+      AdService(
+        adUnitId: AdService.boxRerollAdUnitId,
+        customDataPrefix: 'box_reroll',
+      );
 
   static String _todayLocalDate() {
     final now = DateTime.now();

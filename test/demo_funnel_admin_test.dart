@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:step_tracker/screens/admin_onboarding_funnel.dart';
 import 'package:step_tracker/screens/admin_screen.dart';
 
 /// The admin onboarding funnel renders the demo-race stages the backend added

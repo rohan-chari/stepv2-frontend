@@ -10,7 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:step_tracker/screens/admin_screen.dart';
+import 'package:step_tracker/screens/admin_sections.dart';
 import 'package:step_tracker/screens/settings_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
@@ -66,17 +66,6 @@ class _GrantedNotificationService extends NotificationService {
 
   @override
   Future<bool?> getSystemPermissionState() async => true;
-}
-
-class _StatsApi extends BackendApiService {
-  _StatsApi(this.stats);
-
-  final Map<String, dynamic> stats;
-
-  @override
-  Future<Map<String, dynamic>> fetchAdminStats({
-    required String identityToken,
-  }) async => stats;
 }
 
 Future<AuthService> _authService() async {
@@ -352,20 +341,28 @@ void main() {
   });
 
   group('Item 9 — admin VERSIONS + RACES', () {
-    Future<void> pumpAdmin(WidgetTester tester, Map<String, dynamic> stats) async {
+    Future<void> pumpAdmin(
+      WidgetTester tester,
+      Map<String, dynamic> stats,
+    ) async {
       tester.view.physicalSize = const Size(1170, 2532);
       tester.view.devicePixelRatio = 3;
       addTearDown(tester.view.reset);
 
-      final auth = await _authService();
+      // Batch 2026-08-09 item 10 split the flat AdminStatsCard into the hub's
+      // per-section bodies: VERSIONS moved to GROWTH and RACES to ENGAGEMENT.
+      // Mechanical retarget only — every assertion below is unchanged, and
+      // both bodies are pumped together so this still covers the whole payload
+      // the single card used to render.
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
             body: SingleChildScrollView(
-              child: AdminStatsCard(
-                width: 380,
-                authService: auth,
-                backendApiService: _StatsApi(stats),
+              child: Column(
+                children: [
+                  AdminGrowthStatsBody(stats: stats),
+                  AdminEngagementStatsBody(stats: stats),
+                ],
               ),
             ),
           ),

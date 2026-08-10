@@ -385,9 +385,7 @@ class _FriendsTabState extends State<FriendsTab> {
         : BorderRadius.circular(8);
 
     return DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.of(context).roofLight,
-      ),
+      decoration: BoxDecoration(color: AppColors.of(context).roofLight),
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
         child: Padding(

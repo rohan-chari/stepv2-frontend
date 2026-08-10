@@ -388,9 +388,7 @@ class _DisplayNameScreenState extends State<DisplayNameScreen> {
 
   Widget _buildHeader({required bool canPop}) {
     return DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.of(context).roofLight,
-      ),
+      decoration: BoxDecoration(color: AppColors.of(context).roofLight),
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
         child: Padding(
