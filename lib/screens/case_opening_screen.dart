@@ -241,6 +241,22 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
         _resultRarity = rerolled['rarity'] as String? ?? _resultRarity;
         // The reroll never auto-activates (it rerolls an already-HELD powerup).
         _autoActivated = false;
+        // Rebuild `_result` around the rerolled outcome (keeping `id`): the
+        // second reveal fires onRevealed with `_result`, and the host feeds it
+        // to _optimisticallyApplyBoxOpen — a stale copy here would rewrite the
+        // inventory row back to the PRE-reroll type behind the reel.
+        final prev =
+            (_result?['result'] as Map<String, dynamic>?) ??
+            _result ??
+            const <String, dynamic>{};
+        _result = <String, dynamic>{
+          'result': <String, dynamic>{
+            ...prev,
+            'type': _resultType,
+            'rarity': _resultRarity,
+            'autoActivated': false,
+          },
+        };
         _revealed = false;
         _resultReady = true;
         // Armed, not spinning: the strip shows its swipe gate again.
@@ -280,6 +296,14 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
   // open. Backing out with the X before swiping leaves the box unopened in
   // the inventory. Returns false (re-arming the reel) if the roll fails.
   Future<bool> _rollResult() async {
+    // Re-armed with the outcome already resolved (the post-reroll swipe): spin
+    // straight to it. Without this gate the fresh strip's swipe fires a SECOND
+    // POST /open for a box that is no longer a box — a 400 and a bogus
+    // "Failed to open mystery box" toast over a perfectly good reroll.
+    if (_resultReady) {
+      setState(() => _spinning = true);
+      return true;
+    }
     setState(() => _spinning = true);
     try {
       final result = await widget.openMysteryBox();

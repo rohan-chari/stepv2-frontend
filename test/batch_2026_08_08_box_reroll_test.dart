@@ -45,6 +45,7 @@ Future<void> _spinToReveal(WidgetTester tester) async {
 Future<void> _pumpCase(
   WidgetTester tester, {
   Future<Map<String, dynamic>?> Function(String)? onReroll,
+  Future<Map<String, dynamic>> Function()? openMysteryBox,
   bool demoMode = false,
 }) async {
   tester.view.physicalSize = const Size(1170, 2532);
@@ -54,7 +55,7 @@ Future<void> _pumpCase(
   await tester.pumpWidget(
     MaterialApp(
       home: CaseOpeningScreen(
-        openMysteryBox: () async => _openResult(),
+        openMysteryBox: openMysteryBox ?? () async => _openResult(),
         onReroll: onReroll,
         demoMode: demoMode,
       ),
@@ -353,6 +354,57 @@ void main() {
       expect(calls, 1);
       // One reroll per box: the button is gone for good.
       expect(_rerollButton, findsNothing);
+    });
+
+    // 2026-08-10: the post-reroll swipe used to go back through _rollResult and
+    // fire a SECOND POST /open for a powerup that is no longer a box — in prod
+    // a 400 and a bogus "Failed to open mystery box" toast over a good reroll.
+    testWidgets('the post-reroll swipe spins to the reroll without a second '
+        'server open', (tester) async {
+      var opens = 0;
+      final revealed = <Map<String, dynamic>>[];
+      tester.view.physicalSize = const Size(1170, 2532);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CaseOpeningScreen(
+            openMysteryBox: () async {
+              opens++;
+              return _openResult();
+            },
+            onReroll: (id) async =>
+                {'id': id, 'type': 'COMPRESSION_SOCKS', 'rarity': 'RARE'},
+            onRevealed: revealed.add,
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      await _spinToReveal(tester);
+      expect(opens, 1);
+
+      await tester.tap(_rerollButton);
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      await _spinToReveal(tester);
+
+      // Landed on the REROLLED type — no second roll request went out, so the
+      // original type cannot have been re-fetched over it.
+      expect(opens, 1);
+      expect(find.text('UNBOXED'), findsOneWidget);
+      expect(find.text('Compression Socks'), findsOneWidget);
+      expect(find.text('Protein Shake'), findsNothing);
+
+      // And the host's inventory hook got the POST-reroll outcome (same row
+      // id) — not a stale copy of the original roll.
+      expect(revealed.length, 2);
+      final second =
+          (revealed.last['result'] as Map<String, dynamic>?) ?? revealed.last;
+      expect(second['id'], 'pu-1');
+      expect(second['type'], 'COMPRESSION_SOCKS');
+      expect(second['rarity'], 'RARE');
+      expect(second['autoActivated'], false);
     });
 
     testWidgets('backing out of the ad keeps the original result', (
