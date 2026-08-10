@@ -62,6 +62,10 @@ void main() {
       'SNEAKY_SWAP': 'UNCOMMON',
       'CLEANSE': 'UNCOMMON',
       'MIRROR': 'UNCOMMON',
+      // Batch 2026-08-09 item 6 added POWER_OUTAGE to the rare decoy pool.
+      // Without it here the tile would fall through to the bundled RARE and
+      // this test would fail intermittently, depending on the random draw.
+      'POWER_OUTAGE': 'UNCOMMON',
     };
 
     await _pumpStrip(tester, rarityByType: allUncommon);
@@ -71,23 +75,22 @@ void main() {
     expect(rarities.every((r) => r == 'UNCOMMON'), isTrue);
   });
 
-  testWidgets('server map absent -> bundled fallback used, reel still renders', (
-    WidgetTester tester,
-  ) async {
-    await _pumpStrip(tester);
+  testWidgets(
+    'server map absent -> bundled fallback used, reel still renders',
+    (WidgetTester tester) async {
+      await _pumpStrip(tester);
 
-    final rarities = _tileRarities(tester);
-    expect(rarities, isNotEmpty);
-    // The bundled table assigns COMMON to half the pool, so an all-UNCOMMON
-    // reel here would mean the fallback was dropped.
-    expect(rarities.any((r) => r == 'COMMON'), isTrue);
-    expect(
-      rarities.every(
-        (r) => const {'COMMON', 'UNCOMMON', 'RARE'}.contains(r),
-      ),
-      isTrue,
-    );
-  });
+      final rarities = _tileRarities(tester);
+      expect(rarities, isNotEmpty);
+      // The bundled table assigns COMMON to half the pool, so an all-UNCOMMON
+      // reel here would mean the fallback was dropped.
+      expect(rarities.any((r) => r == 'COMMON'), isTrue);
+      expect(
+        rarities.every((r) => const {'COMMON', 'UNCOMMON', 'RARE'}.contains(r)),
+        isTrue,
+      );
+    },
+  );
 
   testWidgets('a partial server map only overrides the types it names', (
     WidgetTester tester,
