@@ -467,9 +467,7 @@ class _ShopTabState extends State<ShopTab> {
 
   Widget _buildHeader({required bool showBackButton}) {
     return DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.of(context).roofLight,
-      ),
+      decoration: BoxDecoration(color: AppColors.of(context).roofLight),
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
         child: Padding(
@@ -537,7 +535,9 @@ class _ShopTabState extends State<ShopTab> {
               // don't disturb the body's stagger-in tile list.
               if (_section == _ShopSection.store &&
                   _activeCategory == _ShopCategory.powerups) ...[
-                const SizedBox(height: 2),
+                // Batch 2026-08-09 item 3: was 2px — visibly cramped against
+                // the 8px gap above the pills. The two header gaps now match.
+                const SizedBox(height: 8),
                 _buildPowerupControls(),
               ],
             ],
@@ -577,6 +577,7 @@ class _ShopTabState extends State<ShopTab> {
     }
 
     return Container(
+      key: const Key('shop-segment-control'),
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.18),
@@ -613,6 +614,7 @@ class _ShopTabState extends State<ShopTab> {
     final active = _activeCategory;
 
     return Row(
+      key: const Key('shop-category-pills'),
       children: [
         for (var i = 0; i < visible.length; i++) ...[
           if (i > 0) const SizedBox(width: 6),
@@ -624,6 +626,7 @@ class _ShopTabState extends State<ShopTab> {
 
   Widget _categoryPill(_ShopCategory category, bool selected) {
     return GestureDetector(
+      key: Key('shop-category-${category.label}'),
       behavior: HitTestBehavior.opaque,
       onTap: () => setState(() => _category = category),
       child: AnimatedContainer(
@@ -986,55 +989,55 @@ class _ShopTabState extends State<ShopTab> {
     final route = _routeFor(price);
     final adsNeeded = _adsNeededFor(price);
     void openSheet() => _showItemSheet(
-        art: _cosmeticArt(item, iconSize: 48),
-        name: name,
-        slotLabel: _slotLabels[item['slot']],
-        description: item['description'] as String? ?? '',
-        actions: [
-          ?_adUnlockCapNotice(price),
-          switch (route) {
-            _AffordRoute.affordable => PillButton(
-                label: 'BUY · $price',
-                leading: const CoinGlyph(size: 16),
-                variant: PillButtonVariant.secondary,
-                fontSize: 14,
-                fullWidth: true,
-                onPressed: _saving
-                    ? null
-                    : () {
-                        Navigator.of(context).pop();
-                        _purchase(item);
-                      },
-              ),
-            _AffordRoute.watchAds => PillButton(
-                label: adsNeeded == 1
-                    ? 'WATCH 1 AD TO UNLOCK'
-                    : 'WATCH $adsNeeded ADS TO UNLOCK',
-                icon: Icons.smart_display_rounded,
-                variant: PillButtonVariant.secondary,
-                fontSize: 13,
-                fullWidth: true,
-                onPressed: _saving
-                    ? null
-                    : () {
-                        Navigator.of(context).pop();
-                        _unlockCosmeticWithAds(item, adsNeeded);
-                      },
-              ),
-            _AffordRoute.getCoins => PillButton(
-                label: 'GET MORE COINS',
-                icon: Icons.add_circle_rounded,
-                variant: PillButtonVariant.secondary,
-                fontSize: 14,
-                fullWidth: true,
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  _openGetCoins();
-                },
-              ),
-          },
-        ],
-      );
+      art: _cosmeticArt(item, iconSize: 48),
+      name: name,
+      slotLabel: _slotLabels[item['slot']],
+      description: item['description'] as String? ?? '',
+      actions: [
+        ?_adUnlockCapNotice(price),
+        switch (route) {
+          _AffordRoute.affordable => PillButton(
+            label: 'BUY · $price',
+            leading: const CoinGlyph(size: 16),
+            variant: PillButtonVariant.secondary,
+            fontSize: 14,
+            fullWidth: true,
+            onPressed: _saving
+                ? null
+                : () {
+                    Navigator.of(context).pop();
+                    _purchase(item);
+                  },
+          ),
+          _AffordRoute.watchAds => PillButton(
+            label: adsNeeded == 1
+                ? 'WATCH 1 AD TO UNLOCK'
+                : 'WATCH $adsNeeded ADS TO UNLOCK',
+            icon: Icons.smart_display_rounded,
+            variant: PillButtonVariant.secondary,
+            fontSize: 13,
+            fullWidth: true,
+            onPressed: _saving
+                ? null
+                : () {
+                    Navigator.of(context).pop();
+                    _unlockCosmeticWithAds(item, adsNeeded);
+                  },
+          ),
+          _AffordRoute.getCoins => PillButton(
+            label: 'GET MORE COINS',
+            icon: Icons.add_circle_rounded,
+            variant: PillButtonVariant.secondary,
+            fontSize: 14,
+            fullWidth: true,
+            onPressed: () {
+              Navigator.of(context).pop();
+              _openGetCoins();
+            },
+          ),
+        },
+      ],
+    );
     return _ShopTile(
       art: _cosmeticArt(item),
       name: name,
@@ -1135,7 +1138,8 @@ class _ShopTabState extends State<ShopTab> {
     final list = _powerupStoreItems
         .where((i) => wanted == null || _powerupCategoryOf(i) == wanted)
         .toList();
-    int price(Map<String, dynamic> m) => (m['priceCoins'] as num?)?.toInt() ?? 0;
+    int price(Map<String, dynamic> m) =>
+        (m['priceCoins'] as num?)?.toInt() ?? 0;
     switch (_powerupSort) {
       case _PowerupSort.nameAsc:
         list.sort(_byName);
@@ -1279,10 +1283,7 @@ class _ShopTabState extends State<ShopTab> {
       padding: const EdgeInsets.only(bottom: 4),
       child: Text(
         text,
-        style: PixelText.title(
-          size: 11,
-          color: AppColors.of(context).textMid,
-        ),
+        style: PixelText.title(size: 11, color: AppColors.of(context).textMid),
       ),
     );
   }
@@ -1323,10 +1324,7 @@ class _ShopTabState extends State<ShopTab> {
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: PixelText.title(
-                        size: 13,
-                        color: colors.textDark,
-                      ),
+                      style: PixelText.title(size: 13, color: colors.textDark),
                     ),
                   ),
                   if (detail != null) ...[
@@ -1385,10 +1383,7 @@ class _ShopTabState extends State<ShopTab> {
       child: Text(
         'You’ve used today’s ad unlock. Come back tomorrow.',
         textAlign: TextAlign.center,
-        style: PixelText.body(
-          size: 13,
-          color: AppColors.of(context).textMid,
-        ),
+        style: PixelText.body(size: 13, color: AppColors.of(context).textMid),
       ),
     );
   }
@@ -1471,7 +1466,10 @@ class _ShopTabState extends State<ShopTab> {
       if (mounted) showErrorToast(context, error.message);
     } catch (_) {
       if (mounted) {
-        showErrorToast(context, 'Couldn’t unlock this powerup. Please try again.');
+        showErrorToast(
+          context,
+          'Couldn’t unlock this powerup. Please try again.',
+        );
       }
     } finally {
       controller.dispose();
@@ -2183,14 +2181,18 @@ class _FittedTileName extends StatelessWidget {
         var chosen = _sizes.last;
         for (final size in _sizes) {
           final painter = TextPainter(
-            text: TextSpan(text: name, style: PixelText.title(size: size)),
+            text: TextSpan(
+              text: name,
+              style: PixelText.title(size: size),
+            ),
             maxLines: 2,
             textAlign: TextAlign.center,
             textDirection: direction,
             textScaler: textScaler,
           )..layout(maxWidth: constraints.maxWidth);
           final fits =
-              !painter.didExceedMaxLines && painter.height <= constraints.maxHeight;
+              !painter.didExceedMaxLines &&
+              painter.height <= constraints.maxHeight;
           painter.dispose();
           if (fits) {
             chosen = size;
