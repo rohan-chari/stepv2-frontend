@@ -121,9 +121,12 @@ flutter pub get
 # Ad defines make the banner (shop + race mystery-box) and the rewarded extra
 # spin appear; omit them and those ad slots simply don't render. Run this in an
 # interactive terminal so `r` = hot reload and `R` = hot restart work.
-# NOTE: the rewarded extra-spin flow can't complete against staging — the ad
-# unit's SSV callback points at prod, so the grant lands in prod's DB while the
-# claim hits staging. Banners work fine on staging; test extra spin against prod.
+# NOTE: the rewarded extra-spin and box-reroll flows can't complete against
+# staging — those ad units' SSV callbacks point at prod, so the grant lands in
+# prod's DB while the claim hits staging. Banners work fine on staging; test
+# extra spin / reroll against prod. The reroll define still makes the reroll
+# UI appear (there is NO test-ad fallback for it — omit it and the reroll
+# button is compiled out entirely).
 # GOOGLE_IOS_CLIENT_ID enables the "Sign in with Google" button (iOS). This is
 # the STAGING iOS OAuth client — it must match the backend the build talks to,
 # since each env's GOOGLE_AUTH_CLIENT_ID allowlist only accepts its own client.
@@ -133,6 +136,7 @@ flutter run -d 00008150-000171DE2638401C --device-connection=attached \
   --dart-define=BACKEND_BASE_URL=https://staging.steptracker-api.org \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
   --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
+  --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID=ca-app-pub-4538901002392200/9184830227 \
   --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-m1bdl17qk10afve110og6m7adte1q9n0.apps.googleusercontent.com
 ```
 
@@ -155,6 +159,7 @@ flutter run -d 00008150-000171DE2638401C --device-connection=attached --debug \
   --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
   --dart-define=ADMOB_BOX_TOP_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/3019108638 \
   --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \
+  --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID=ca-app-pub-4538901002392200/9184830227 \
   --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com
 ```
 
@@ -171,6 +176,7 @@ flutter run -d 19CCB48E-62CA-4AA1-8E55-B3F287E9BB0D \
     --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
     --dart-define=ADMOB_BOX_TOP_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/3019108638 \
     --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \
+    --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID=ca-app-pub-4538901002392200/9184830227 \
     --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com
 ```
 
@@ -183,12 +189,16 @@ flutter run -d 19CCB48E-62CA-4AA1-8E55-B3F287E9BB0D \
 # or the release ships without the Google sign-in button. See DEPLOYMENT.md.
 # ADMOB_NATIVE_AD_UNIT_ID is the races-tab in-feed NATIVE ad unit — omitting
 # it serves Google's TEST native ad in that slot (do not ship that).
+# ADMOB_BOX_REROLL_AD_UNIT_ID is the rewarded box-reroll unit (batch 08-08
+# item 11) — it has NO test-ad fallback: omit it and the reroll button is
+# compiled out of the release entirely.
 flutter build ipa --release \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
   --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
   --dart-define=ADMOB_BOX_TOP_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/3019108638 \
   --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \
+  --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID=ca-app-pub-4538901002392200/9184830227 \
   --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com
 ```
 

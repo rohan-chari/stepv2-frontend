@@ -21,15 +21,18 @@ The same `--dart-define=BACKEND_BASE_URL=…` value is baked at build time; a bu
 
 ## Local dev (Xcode debug build, fastest iteration)
 
-Full staging run command (iPhone over cable; ad units fall back to Google's
-test ads in debug, and GOOGLE_IOS_CLIENT_ID enables the Google sign-in button
-— use the STAGING client since this hits the staging backend):
+Full staging run command (iPhone over cable; banner/native units fall back to
+Google's test ads in debug — the box-reroll unit does NOT (no fallback; omit
+its define and the reroll button is compiled out). GOOGLE_IOS_CLIENT_ID
+enables the Google sign-in button — use the STAGING client since this hits
+the staging backend):
 
 ```bash
 flutter run -d 00008150-000171DE2638401C --device-connection=attached --debug \
   --dart-define=BACKEND_BASE_URL=https://staging.steptracker-api.org \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
   --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
+  --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID=ca-app-pub-4538901002392200/9184830227 \
   --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-m1bdl17qk10afve110og6m7adte1q9n0.apps.googleusercontent.com
 ```
 

@@ -73,9 +73,10 @@ class AdService implements ExtraSpinAdController {
   );
 
   // Rewarded unit for the mystery-box reroll (batch 2026-08-08, item 11).
-  // Same shape as the powerup-unlock unit: a dedicated define per platform,
-  // falling back to the extra-spin real unit and finally Google's test unit,
-  // so the feature is never blocked on the AdMob unit existing yet.
+  // A dedicated define per platform with NO fallback (review fix 5): the
+  // extra-spin unit's SSV rewards a spin, not a reroll, so borrowing it would
+  // grant the wrong thing. Absent the define, [boxRerollSupported] is false
+  // and the reroll button is compiled out.
   //
   // PROD-ONLY by convention — staging builds omit the define (see
   // DEPLOYMENT.md). Reroll therefore ships iOS-first, exactly like the
