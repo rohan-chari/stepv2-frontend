@@ -1953,6 +1953,26 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// it has never told us (older backend → we simply don't mention the cap).
   int? _discardCapRemaining;
 
+  /// Trailing "+N 🪙" price tag for a DISCARD button, in the same shape as the
+  /// tier buttons' cost tag. Null (no tag) for an unopened box (pays nothing)
+  /// and once the daily discard bonus is exhausted — the confirm dialog spells
+  /// out both cases, so the button must not promise coins it won't pay.
+  Widget? _discardPriceTrailing(Map<String, dynamic> powerup) {
+    final isUnopenedBox = (powerup['status'] as String?) == 'MYSTERY_BOX';
+    if (isUnopenedBox || _discardCapRemaining == 0) return null;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '+${_discardPriceFor(powerup)}',
+          style: PixelText.pill(size: 12, color: Colors.white),
+        ),
+        const SizedBox(width: 4),
+        const SpinningCoin(size: 14),
+      ],
+    );
+  }
+
   /// Item 1: discarding is destructive AND now pays coins, so it gets an
   /// explicit confirmation naming the price. Returns true when the user
   /// confirmed. The dialog holds itself open with an in-button spinner while
@@ -2487,6 +2507,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     required int myCoins,
     required void Function(int level, String? targetEffectId) onConfirm,
     VoidCallback? onDiscard,
+    int? discardPriceCoins,
   }) {
     showModalBottomSheet(
       context: context,
@@ -2527,6 +2548,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                     Navigator.of(ctx).pop();
                     onDiscard();
                   },
+            discardPriceCoins: discardPriceCoins,
           ),
         );
       },
@@ -2712,6 +2734,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           targetEffectId: targetEffectId,
         ),
         onDiscard: () => _confirmAndDiscardPowerup(powerup),
+        discardPriceCoins: _discardCapRemaining == 0
+            ? null
+            : _discardPriceFor(powerup),
       );
       return;
     }
@@ -2818,6 +2843,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                       horizontal: 24,
                       vertical: 10,
                     ),
+                    trailing: _discardPriceTrailing(powerup),
                     onPressed: _isActing
                         ? null
                         : () {

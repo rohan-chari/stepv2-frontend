@@ -211,6 +211,16 @@ void main() {
       await _openPowerupSheet(tester);
 
       expect(find.text('DISCARD'), findsOneWidget);
+      // The DISCARD pill itself advertises the payout: "+10" and a coin glyph
+      // as its trailing tag (RARE = 10), same shape as the tier-price tags.
+      final discardPill = find.ancestor(
+        of: find.text('DISCARD'),
+        matching: find.byType(PillButton),
+      );
+      expect(
+        find.descendant(of: discardPill, matching: find.text('+10')),
+        findsOneWidget,
+      );
       await tester.tap(find.text('DISCARD'));
       await tester.pump(const Duration(milliseconds: 300));
 

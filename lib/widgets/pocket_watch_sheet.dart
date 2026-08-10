@@ -152,6 +152,7 @@ class PocketWatchSheet extends StatefulWidget {
     required this.costForLevel,
     required this.onConfirm,
     this.onDiscard,
+    this.discardPriceCoins,
     this.participants = const [],
     this.now,
   });
@@ -167,6 +168,11 @@ class PocketWatchSheet extends StatefulWidget {
   /// (visual parity with the generic powerup sheet) so a Pocket Watch can be
   /// thrown away like any other powerup. Null hides the button entirely.
   final VoidCallback? onDiscard;
+
+  /// Coins the discard pays, shown as a "+N 🪙" tag on the DISCARD button —
+  /// same shape as the generic sheet's. Null shows a plain DISCARD (daily
+  /// discard bonus exhausted).
+  final int? discardPriceCoins;
 
   /// Race participants, used to put a name and avatar on each rival. Purely
   /// cosmetic — a missing entry degrades to a neutral label.
@@ -286,6 +292,19 @@ class _PocketWatchSheetState extends State<PocketWatchSheet> {
                   horizontal: 24,
                   vertical: 10,
                 ),
+                trailing: widget.discardPriceCoins == null
+                    ? null
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '+${widget.discardPriceCoins}',
+                            style: PixelText.pill(size: 12, color: Colors.white),
+                          ),
+                          const SizedBox(width: 4),
+                          const SpinningCoin(size: 14),
+                        ],
+                      ),
                 onPressed: widget.onDiscard,
               ),
             ],

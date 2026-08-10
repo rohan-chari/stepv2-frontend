@@ -182,9 +182,14 @@ void main() {
       await tester.tap(heldSlot);
       await _pumpFrames(tester);
 
-      // The Pocket Watch sheet is up, and it now carries a DISCARD control.
+      // The Pocket Watch sheet is up, and it now carries a DISCARD control
+      // advertising the payout as its trailing "+10" tag (RARE = 10).
       final discard = find.byKey(const Key('pocket-watch-discard'));
       expect(discard, findsOneWidget);
+      expect(
+        find.descendant(of: discard, matching: find.text('+10')),
+        findsOneWidget,
+      );
 
       await tester.tap(discard);
       await _pumpFrames(tester);
