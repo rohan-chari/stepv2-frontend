@@ -68,7 +68,10 @@ class _NoAdController implements ExtraSpinAdController {
   @override
   bool get isReady => false;
   @override
-  Future<void> load({required String userId, required String localDate}) async {}
+  Future<void> load({
+    required String userId,
+    required String localDate,
+  }) async {}
   @override
   Future<bool> showAndAwaitReward() async => false;
   @override
@@ -233,8 +236,12 @@ void main() {
 
       expect(find.text('INVITE FRIENDS'), findsOneWidget);
       expect(find.textContaining('500'), findsNothing);
+      // Batch 2026-08-09 item 2 renamed the qualifying action: a seeded daily
+      // is "their first race" but no longer completes a referral. The property
+      // this test guards — the number-free row still names the action — is
+      // unchanged.
       expect(
-        find.textContaining('finishes their first race'),
+        find.textContaining('finishes a race against another real player'),
         findsOneWidget,
       );
     });
@@ -270,10 +277,7 @@ void main() {
         ),
       );
 
-      expect(
-        find.text('Tap everyone you want in this race.'),
-        findsOneWidget,
-      );
+      expect(find.text('Tap everyone you want in this race.'), findsOneWidget);
     });
 
     testWidgets('race invite empty state is an invitation to act', (

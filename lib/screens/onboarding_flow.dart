@@ -6,6 +6,9 @@ import '../widgets/onboarding_scene.dart';
 import '../widgets/pill_button.dart';
 import '../styles.dart';
 import '../utils/at_name.dart';
+// One shared definition of the qualifying race, so the referred-install scene
+// can't drift from the referral screen / Get Coins copy.
+import 'referral_screen.dart' show kQualifyingRaceShortPhrase;
 
 /// Standalone onboarding flow shown after sign-in until the user has granted
 /// health access, answered the notification prompt, and seen the
@@ -625,14 +628,17 @@ class _OnboardingReferralWelcomeStepState
     final mine = _refereeCoins ?? _rewardCoins;
     final theirs = _referrerCoins;
     final String body;
+    // Batch 2026-08-09 item 2: an auto-enrolled daily challenge is a "first
+    // race" but no longer completes the referral, so the qualifying action is
+    // named explicitly here too.
     if (mine == null || mine <= 0) {
-      body = 'Finish your first race and the coins start landing.';
+      body = 'Finish $kQualifyingRaceShortPhrase and the coins start landing.';
     } else if (theirs != null && theirs == mine) {
       body =
-          'Finish your first race and you each pocket $mine coins — '
-          'yours to spend right away.';
+          'Finish $kQualifyingRaceShortPhrase and you each pocket $mine '
+          'coins — yours to spend right away.';
     } else {
-      body = 'Finish your first race and $mine coins are yours.';
+      body = 'Finish $kQualifyingRaceShortPhrase and $mine coins are yours.';
     }
 
     if (_loading) {

@@ -81,7 +81,12 @@ void main() {
     expect(find.byType(SnackBar), findsNothing);
     expect(find.byKey(const Key('info-toast-shell')), findsOneWidget);
     expect(
-      find.text("You're in! Finish your first race to earn coins."),
+      // The literal was stale long before batch 2026-08-09 (the copy moved
+      // into `referralRedeemedCopy`, and item 2 then renamed the qualifying
+      // action). Asserted through the builder so it tracks the shipped string
+      // instead of drifting again — the property under test is "an info toast
+      // carrying the redeem message", not the wording.
+      find.text(referralRedeemedCopy()),
       findsOneWidget,
     );
 
@@ -109,10 +114,7 @@ void main() {
 
     expect(find.byType(SnackBar), findsNothing);
     expect(find.byKey(const Key('error-toast-shell')), findsOneWidget);
-    expect(
-      find.text("You can't use your own invite code."),
-      findsOneWidget,
-    );
+    expect(find.text("You can't use your own invite code."), findsOneWidget);
 
     await _flushToast(tester);
   });
