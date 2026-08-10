@@ -23,6 +23,7 @@ import '../services/backend_api_service.dart';
 import '../services/remote_asset_cache.dart';
 import '../services/background_sync_bootstrap_service.dart';
 import '../services/health_service.dart';
+import '../services/install_attribution_service.dart';
 import '../services/notification_service.dart';
 import '../services/review_prompt_service.dart';
 import '../utils/team_race.dart';
@@ -114,6 +115,17 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   bool _probeInconclusive = false;
   int? _probeArmedAtMs;
   bool _homeReachedRecorded = false;
+  // --- invite-code step ------------------------------------------------------
+  // Null until the device-local done-flag has been read: "unknown" must never
+  // render as "not done", or a returning user flashes a step they already
+  // answered.
+  bool? _inviteCodeStepDone;
+  bool _inviteCodeShownRecorded = false;
+  // Part C: a probable invite URL was detected on the iOS pasteboard at launch
+  // but could not be read. Only in that state does the step offer the
+  // consented paste button.
+  bool _canPasteInviteLink = false;
+  late final InstallAttributionService _installAttribution;
   bool _notificationAskShowing = false;
   bool _isLoading = false;
   String? _error;
@@ -222,20 +234,106 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     firstRaceOnboardingSeen: widget.authService.firstRaceOnboardingSeen,
   );
 
+  /// Whether the onboarding invite-code step is still owed.
+  ///
+  /// Every term must hold, and each one exists for a reason:
+  ///  * v3 — the step lives only inside the v3 branch of the flow.
+  ///  * the `onboardingInviteCodeEnabled` kill switch is not explicitly false
+  ///    (fail-open: an older backend that never heard of it keeps the step).
+  ///  * `authPayloadApplied` — the NO-FLASH rule. Until a user envelope has
+  ///    been applied, `referredByCode == null` means "unknown", not
+  ///    "unattributed", and rendering on a guess flashes the step at a
+  ///    just-attributed user and then yanks it away.
+  ///  * `referredByCode == null` — server truth for "attributed by ANY path"
+  ///    (provision body, IP fallback, an earlier redeem, an ops repair).
+  ///    Deliberately NOT `welcomeReferralCode`: that slot is stashed on
+  ///    provision SUCCESS, not attribution success, so a body code the backend
+  ///    silently rejected would set it while leaving the account unattributed
+  ///    — exactly the user this step exists to catch.
+  ///  * the device-local done-flag is read (non-null) and false.
+  bool get _showInviteCodeStep =>
+      widget.authService.onboardingV3Enabled &&
+      widget.authService.onboardingInviteCodeEnabled &&
+      widget.authService.authPayloadApplied &&
+      widget.authService.referredByCode == null &&
+      _inviteCodeStepDone == false;
+
+  /// Redeems a manually-entered invite code. Returns the raw
+  /// `{attributed, reason?}` body (always HTTP 200 by contract) so the step can
+  /// render the exact reason; throws only on transport failure, which the step
+  /// renders as a retryable error with the skip still live.
+  Future<Map<String, dynamic>> _applyInviteCode(String code) async {
+    final identityToken = widget.authService.authToken;
+    if (identityToken == null || identityToken.isEmpty) {
+      throw const ApiException('Not signed in.');
+    }
+    return _backendApiService.redeemReferralCode(
+      identityToken: identityToken,
+      code: code,
+    );
+  }
+
+  /// The step's one FINAL answer: applied, terminally rejected, or skipped.
+  ///
+  /// Writes the device-scoped done-flag (never on a transient failure — the
+  /// step simply doesn't call this then), and on a successful apply re-fetches
+  /// the inviter race: `_fetchInviterRace` last ran before this user was
+  /// attributed, so its answer was empty by construction. Then setState, which
+  /// drops `_showInviteCodeStep` and lets the early-return chain fall through
+  /// to the demo race.
+  Future<void> _onInviteCodeResolved({
+    required bool attributed,
+    bool skipped = false,
+  }) async {
+    if (attributed) {
+      unawaited(_activationAnalytics.record('invite_code_applied'));
+    } else if (skipped) {
+      unawaited(_activationAnalytics.record('invite_code_skipped'));
+    }
+    await _onboardingState.markInviteCodeStepDone();
+    if (mounted) setState(() => _inviteCodeStepDone = true);
+    if (attributed) {
+      // Fire the re-fetch so the inviter-race step downstream sees the new
+      // attribution. Its result is not cached here — the step fetches for
+      // itself — but asking now warms any server-side/derived path and proves
+      // the attribution landed.
+      unawaited(_fetchInviterRace());
+    }
+  }
+
+  /// Part C: emits the single stashed install-attribution outcome (one event
+  /// per install, name-encoded) now that a signed-in token exists, and learns
+  /// whether a probable invite URL was detected but never read.
+  ///
+  /// Deliberately does NOT re-run `resolveOnFirstLaunch` — that stays
+  /// at-most-once per install, and a second launch-time pasteboard read is the
+  /// exact behavior part C is retiring.
+  Future<void> _resolveInstallAttributionTelemetry() async {
+    try {
+      await _installAttribution.flushStashedOutcome(_activationAnalytics);
+      final canPaste = await _installAttribution.hasUnreadDetectedInvite();
+      if (mounted && canPaste != _canPasteInviteLink) {
+        setState(() => _canPasteInviteLink = canPaste);
+      }
+    } catch (_) {
+      // Telemetry must never break a launch.
+    }
+    unawaited(_activationAnalytics.flush(widget.authService.authToken));
+  }
+
   /// Whether the persistent "steps aren't connected" banner should be showing.
   ///
   /// Deliberately independent of [_isOnboarding]: a degraded user is NOT
   /// onboarding, so the tab bar and the ad banner render exactly as they do for
   /// everyone else. Suppressing them would re-create the dead end this state
   /// exists to fix.
-  bool get _stepsDisconnected =>
-      OnboardingStateService.degradedBannerVisible(
-        onboardingV3Enabled: widget.authService.onboardingV3Enabled,
-        healthAuthorized: _healthAuthorized,
-        escapedHealthGate: _escapedHealthGate,
-        probeInconclusive: _probeInconclusive,
-        probeArmedAtMs: _probeArmedAtMs,
-      );
+  bool get _stepsDisconnected => OnboardingStateService.degradedBannerVisible(
+    onboardingV3Enabled: widget.authService.onboardingV3Enabled,
+    healthAuthorized: _healthAuthorized,
+    escapedHealthGate: _escapedHealthGate,
+    probeInconclusive: _probeInconclusive,
+    probeArmedAtMs: _probeArmedAtMs,
+  );
 
   /// Loads the persisted v3 bookkeeping. Runs before anything reads
   /// [_escapedHealthGate] — notably `_restoreAndFetch`, which would otherwise
@@ -250,17 +348,20 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _onboardingState.escapedHealthGate(),
       _onboardingState.probeInconclusive(),
       _onboardingState.probeArmedAtMs(),
+      _onboardingState.inviteCodeStepDone(),
     ]);
     final attempts = values[0] as int;
     final escaped = values[1] as bool;
     final inconclusive = values[2] as bool;
     final armedAt = values[3] as int?;
+    final inviteDone = values[4] as bool;
     if (!mounted) return;
     setState(() {
       _healthAttempts = attempts;
       _escapedHealthGate = escaped;
       _probeInconclusive = inconclusive;
       _probeArmedAtMs = armedAt;
+      _inviteCodeStepDone = inviteDone;
     });
   }
 
@@ -402,7 +503,14 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     if (!widget.authService.firstRaceOnboardingSeen) {
       unawaited(_activationAnalytics.record('onboarding_started'));
     }
-    unawaited(_activationAnalytics.flush(widget.authService.authToken));
+    // Part C: flush the one stashed install-attribution outcome (recorded in
+    // main() before any token existed) and learn whether the pasteboard was
+    // detected-but-unread. Ends by flushing the queue, which is why the plain
+    // flush that used to sit here is folded into it.
+    _installAttribution = InstallAttributionService(
+      authService: widget.authService,
+    );
+    unawaited(_resolveInstallAttributionTelemetry());
     unawaited(_startAppSession());
   }
 
@@ -1859,10 +1967,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         if (item is Map<String, dynamic> && item['assetKey'] == 'cape') {
           final metadata = item['renderMetadata'];
           if (metadata is Map<String, dynamic> && metadata.isNotEmpty) {
-            unawaited(StartCapeMetadata.save(
-              bobble: item['bobble'] == true,
-              renderMetadata: metadata,
-            ));
+            unawaited(
+              StartCapeMetadata.save(
+                bobble: item['bobble'] == true,
+                renderMetadata: metadata,
+              ),
+            );
           }
           break;
         }
@@ -2573,6 +2683,21 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       unawaited(_activationAnalytics.record('home_reached'));
     }
 
+    // Once per render-session: the denominator for invite_code_applied /
+    // invite_code_skipped. Guarded by a plain bool, like home_reached — a
+    // rebuild is not a second impression. The extra terms match the
+    // early-returns that render BEFORE the v3 branch (referral welcome,
+    // health gate): while one of those is on screen the step is not, and
+    // counting it would inflate the funnel denominator.
+    if (_isOnboarding &&
+        _showInviteCodeStep &&
+        widget.authService.welcomeReferralCode == null &&
+        (_healthAuthorized || _escapedHealthGate) &&
+        !_inviteCodeShownRecorded) {
+      _inviteCodeShownRecorded = true;
+      unawaited(_activationAnalytics.record('invite_code_step_shown'));
+    }
+
     return Scaffold(
       resizeToAvoidBottomInset: false,
       body: Stack(
@@ -2615,13 +2740,29 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     widget.authService.pendingShareToken != null,
                 welcomeReferralCode: widget.authService.welcomeReferralCode,
                 onWelcomeDismissed: () {
-                  unawaited(
-                    _activationAnalytics.record('referral_continued'),
-                  );
+                  unawaited(_activationAnalytics.record('referral_continued'));
                   widget.authService.clearWelcomeReferralCode();
                 },
                 onFetchReferralPreview: (code) =>
                     _backendApiService.fetchReferralPreview(code: code),
+                showInviteCodeStep: _showInviteCodeStep,
+                onApplyInviteCode: _applyInviteCode,
+                onInviteCodeResolved:
+                    ({required bool attributed, bool skipped = false}) {
+                      unawaited(
+                        _onInviteCodeResolved(
+                          attributed: attributed,
+                          skipped: skipped,
+                        ),
+                      );
+                    },
+                onFetchInviteCodeRewards: () =>
+                    _backendApiService.fetchReferralStatus(
+                      identityToken: widget.authService.authToken ?? '',
+                    ),
+                canPasteInviteLink: _canPasteInviteLink,
+                onPasteInviteLink:
+                    _installAttribution.readInviteCodeFromPasteboard,
                 error: _error,
                 isLoading: _isLoading,
               ),
@@ -2797,8 +2938,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
               builder: (context, adHeight, child) => Positioned(
                 left: 0,
                 right: 0,
-                bottom:
-                    77.5 + MediaQuery.of(context).padding.bottom + adHeight,
+                bottom: 77.5 + MediaQuery.of(context).padding.bottom + adHeight,
                 child: child!,
               ),
               child: StepsDisconnectedBanner(onFix: _fixDisconnectedSteps),

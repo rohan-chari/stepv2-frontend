@@ -881,7 +881,7 @@ void main() {
 
   group('§5.10 admin flag UI', () {
     // 18. all five client-served flags get a switch.
-    testWidgets('the admin settings card renders all five flag switches', (
+    testWidgets('the admin settings card renders every flag switch', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -895,6 +895,9 @@ void main() {
                   'teamRacesEnabled': true,
                   'onboardingV2Enabled': true,
                   'onboardingV3Enabled': false,
+                  // Invite-code spec R2: the kill switch needs a device-side
+                  // toggle for staging verification.
+                  'onboardingInviteCodeEnabled': true,
                 },
                 saving: false,
                 onChanged: (_, _) {},
@@ -905,9 +908,10 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.byType(Switch), findsNWidgets(5));
+      expect(find.byType(Switch), findsNWidgets(6));
       expect(find.text('Onboarding v2'), findsOneWidget);
       expect(find.text('Onboarding v3'), findsOneWidget);
+      expect(find.text('Onboarding invite code'), findsOneWidget);
       expect(find.text('Team races'), findsOneWidget);
       expect(find.textContaining('30s'), findsWidgets);
     });

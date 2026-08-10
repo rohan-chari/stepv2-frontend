@@ -58,6 +58,22 @@ class ActivationAnalyticsService {
     'demo_box_opened',
     'demo_powerup_used',
     'demo_won',
+    // Onboarding invite-code step.
+    'invite_code_step_shown',
+    'invite_code_applied',
+    'invite_code_skipped',
+    // Install-attribution funnel (part C). The stage outcome is encoded in the
+    // NAME rather than in a context key on purpose: the backend soft-drops an
+    // unknown name per event, but an unknown context key 400s the ENTIRE batch
+    // — and this client retains failed batches, so one bad event would poison
+    // every later flush until it rolled off the 50-event queue.
+    'install_attr_deep_link',
+    'install_attr_detect_miss',
+    'install_attr_read_denied',
+    'install_attr_read_no_code',
+    'install_attr_code_captured',
+    'install_attr_install_referrer',
+    'install_attr_error',
   };
 
   static const allowedContext = <String, Set<String>>{

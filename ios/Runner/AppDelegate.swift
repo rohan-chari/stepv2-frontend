@@ -156,13 +156,23 @@ import google_mobile_ads
           result(false)
         }
       case "readClipboardUrl":
+        // Returns a MAP, not a bare string, so Dart can tell "the read gave us
+        // nothing" apart from "nothing was ever detected". Those two produced
+        // an identical nil before, which is why years of silent referral loss
+        // could never be attributed to a stage. Classification only — the read
+        // itself is unchanged.
+        //
+        // On iOS 16+ an unconsented read raises the "Allow Paste?" alert and a
+        // denial surfaces here as nil url AND nil string, which — given the
+        // caller only asks after detectPatterns said a URL IS present — is the
+        // denial signature.
         let pasteboard = UIPasteboard.general
         if let url = pasteboard.url {
-          result(url.absoluteString)
+          result(["status": "ok", "value": url.absoluteString])
         } else if let string = pasteboard.string {
-          result(string)
+          result(["status": "ok", "value": string])
         } else {
-          result(nil)
+          result(["status": "denied"])
         }
       default:
         result(FlutterMethodNotImplemented)

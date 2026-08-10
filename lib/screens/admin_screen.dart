@@ -365,6 +365,12 @@ class AdminSettingsCardBody extends StatelessWidget {
       blurb: 'Health-gate rework, degraded state, relocated notification '
           'ask, referral landing, five-step tutorial. Implies v2.',
     ),
+    (
+      key: 'onboardingInviteCodeEnabled',
+      title: 'Onboarding invite code',
+      blurb: 'KILL SWITCH (defaults ON): the "got an invite code?" step at '
+          'the top of the v3 flow. Off removes it with no app release.',
+    ),
   ];
 
   @override

@@ -32,6 +32,16 @@ class OnboardingStateService {
   static const keyRenameChipDismissed = 'rename_chip_dismissed';
   static const keyCoachTipsSeen = 'coach_tips_seen';
 
+  /// Whether this device has already answered the onboarding invite-code step
+  /// (applied a code, hit a terminal rejection, or skipped).
+  ///
+  /// Device-scoped with NO userId suffix, and deliberately IN [allKeys]: a
+  /// different account on the same device gets its own chance to name an
+  /// inviter. Re-prompting an account that is already attributed is prevented
+  /// by server truth (`referredByCode`), not by this flag — which is why
+  /// wiping it on sign-out is safe here and was not for the rename chip.
+  static const keyInviteCodeStepDone = 'invite_code_step_done';
+
   /// The app version whose "What's New" sheet this device has already seen
   /// (batch 2026-08-08, item 8).
   ///
@@ -58,6 +68,7 @@ class OnboardingStateService {
     keyRenameChipShownCount,
     keyRenameChipDismissed,
     keyCoachTipsSeen,
+    keyInviteCodeStepDone,
   ];
 
   /// Total notification asks allowed per install. "Not now" in-app leaves the
@@ -233,6 +244,23 @@ class OnboardingStateService {
   static void debugResetRenameChipSession() {
     _renameChipCountedThisSession = false;
   }
+
+  // -- invite-code step ------------------------------------------------------
+
+  /// Whether the invite-code onboarding step has already been answered on this
+  /// device. Absent ⇒ false ⇒ the step is still owed, which is the safe
+  /// default: the worst case is one redundant prompt answered by
+  /// `already_attributed`.
+  Future<bool> inviteCodeStepDone() async =>
+      (await _prefs).getBool(keyInviteCodeStepDone) ?? false;
+
+  /// Marks the step answered. Called on apply-success, on a TERMINAL rejection
+  /// (already_attributed / already_raced — self_referral is NOT terminal: the
+  /// user typed their own code and can retype their friend's), and on skip —
+  /// never on a transient failure, so a network blip or a typo leaves the user
+  /// a second chance on the next launch.
+  Future<void> markInviteCodeStepDone() async =>
+      (await _prefs).setBool(keyInviteCodeStepDone, true);
 
   // -- what's new (item 8) ---------------------------------------------------
 

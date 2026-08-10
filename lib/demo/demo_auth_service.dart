@@ -83,6 +83,18 @@ class DemoAuthService extends AuthService {
   @override
   bool get onboardingV3Enabled => false;
 
+  /// The invite-code step is v3-only, so this is a second lock on the same
+  /// door — and it matters more than it looks: the flag FAILS OPEN on the real
+  /// service (a kill switch must), so inheriting it would leave the demo host
+  /// one `onboardingV3Enabled` change away from rendering an onboarding step
+  /// and firing a `/referrals/me` fetch inside a network-guarded demo.
+  @override
+  bool get onboardingInviteCodeEnabled => false;
+
+  /// The demo never provisions an account, so there is no attribution to read.
+  @override
+  String? get referredByCode => null;
+
   /// No ads inside the demo (§5.6). The banner slots are hidden by `demoMode`
   /// too; this keeps the flag itself from arming an ad request.
   @override
