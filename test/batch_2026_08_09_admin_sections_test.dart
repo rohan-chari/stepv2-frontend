@@ -18,7 +18,6 @@ class _AdminApi extends BackendApiService {
     this.base = const {},
     this.sectioned,
     this.suggestions,
-    this.statsThrows = false,
     this.suggestionsThrow = false,
   });
 
@@ -28,7 +27,6 @@ class _AdminApi extends BackendApiService {
   /// backend ignores the param and answers with the legacy payload.
   final Map<String, dynamic>? sectioned;
   final Map<String, dynamic>? suggestions;
-  final bool statsThrows;
   final bool suggestionsThrow;
 
   final List<List<String>> statsCalls = [];
@@ -40,7 +38,6 @@ class _AdminApi extends BackendApiService {
     List<String> sections = const [],
   }) async {
     statsCalls.add(sections);
-    if (statsThrows) throw Exception('boom');
     if (sections.isEmpty) return base;
     return {...base, ...?sectioned};
   }

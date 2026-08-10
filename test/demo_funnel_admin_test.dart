@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:step_tracker/screens/admin_onboarding_funnel.dart';
-import 'package:step_tracker/screens/admin_screen.dart';
 
 /// The admin onboarding funnel renders the demo-race stages the backend added
 /// to `ONBOARDING_FUNNEL_STAGES`.
@@ -13,20 +12,17 @@ import 'package:step_tracker/screens/admin_screen.dart';
 
 Widget host(Map<String, dynamic>? funnel) => MaterialApp(
   home: Scaffold(
-    body: SingleChildScrollView(
-      child: OnboardingFunnelSection(funnel: funnel),
-    ),
+    body: SingleChildScrollView(child: OnboardingFunnelSection(funnel: funnel)),
   ),
 );
 
 /// The count rendered on the row labelled [label].
 int countFor(WidgetTester tester, String label) {
-  final row = find.ancestor(
-    of: find.text(label),
-    matching: find.byType(Row),
-  );
+  final row = find.ancestor(of: find.text(label), matching: find.byType(Row));
   final texts = tester
-      .widgetList<Text>(find.descendant(of: row.first, matching: find.byType(Text)))
+      .widgetList<Text>(
+        find.descendant(of: row.first, matching: find.byType(Text)),
+      )
       .map((t) => t.data)
       .toList();
   // label, count, trailing
