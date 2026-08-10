@@ -94,6 +94,7 @@ class AuthService extends ChangeNotifier {
   static const _keyTeamRacesEnabled = 'auth_team_races_enabled';
   static const _keyOnboardingV2Enabled = 'auth_onboarding_v2_enabled';
   static const _keyOnboardingV3Enabled = 'auth_onboarding_v3_enabled';
+  static const _keyTutorialMandatoryEnabled = 'auth_tutorial_mandatory_enabled';
   static const _keyStepSampleBucketMinutes = 'auth_step_sample_bucket_minutes';
   static const _keyPendingShareToken = 'auth_pending_share_token';
   static const _keyPendingTournamentShareToken =
@@ -138,6 +139,7 @@ class AuthService extends ChangeNotifier {
   bool _teamRacesEnabled = true;
   bool _onboardingV2Enabled = false;
   bool _onboardingV3Enabled = false;
+  bool _tutorialMandatoryEnabled = false;
   int _stepSampleBucketMinutes = 60;
   String? _pendingShareToken;
   String? _pendingTournamentShareToken;
@@ -204,6 +206,16 @@ class AuthService extends ChangeNotifier {
   /// five-step tutorial). Defaults false: a v3-capable binary with the flag off
   /// behaves exactly as v2 does today, which is the rollback path.
   bool get onboardingV3Enabled => _onboardingV3Enabled;
+
+  /// Batch 2026-08-09 item 9 — remote kill switch for the MANDATORY tutorial.
+  ///
+  /// Opt-in, like the onboarding flags and for the same reason: a backend
+  /// that predates the key (or serves it null/non-boolean) must leave the
+  /// tutorial skippable, which is exactly today's behavior. Only the literal
+  /// boolean true closes the escape hatches. The client also holds a local
+  /// circuit breaker on top of this (see `tutorial/tutorial_gate.dart`) so a
+  /// wedged user never has to wait for a flag flip to reach the app.
+  bool get tutorialMandatoryEnabled => _tutorialMandatoryEnabled;
 
   /// Remotely-configurable step-sample bucket size in minutes (backend
   /// `featureFlags.stepSampleBucketMinutes`). One of {5, 10, 15, 30, 60};
@@ -301,6 +313,8 @@ class AuthService extends ChangeNotifier {
     _teamRacesEnabled = prefs.getBool(_keyTeamRacesEnabled) ?? true;
     _onboardingV2Enabled = prefs.getBool(_keyOnboardingV2Enabled) ?? false;
     _onboardingV3Enabled = prefs.getBool(_keyOnboardingV3Enabled) ?? false;
+    _tutorialMandatoryEnabled =
+        prefs.getBool(_keyTutorialMandatoryEnabled) ?? false;
     _stepSampleBucketMinutes = prefs.getInt(_keyStepSampleBucketMinutes) ?? 60;
     _pendingShareToken = prefs.getString(_keyPendingShareToken);
     _pendingTournamentShareToken = prefs.getString(
@@ -725,12 +739,23 @@ class AuthService extends ChangeNotifier {
       _onboardingV3Enabled =
           activationFlags is Map &&
           activationFlags['onboardingV3Enabled'] == true;
+      // Item 9. Same opt-in semantics and the same envelope guard.
+      _tutorialMandatoryEnabled =
+          activationFlags is Map &&
+          activationFlags['tutorialMandatoryEnabled'] == true;
     }
     // Contract §12 names the envelope `appSettings`; accept it too so either
     // backend shape flips the switch. Only an explicit false disables.
     final appSettings = backendUser['appSettings'];
     if (appSettings is Map && appSettings.containsKey('teamRacesEnabled')) {
       _teamRacesEnabled = appSettings['teamRacesEnabled'] != false;
+    }
+    // Item 9's flag lives in `KNOWN_FLAGS`, which the backend may serve under
+    // either envelope. Opt-in in both: only the literal true enables it.
+    if (appSettings is Map &&
+        appSettings.containsKey('tutorialMandatoryEnabled')) {
+      _tutorialMandatoryEnabled =
+          appSettings['tutorialMandatoryEnabled'] == true;
     }
   }
 
@@ -784,6 +809,7 @@ class AuthService extends ChangeNotifier {
     AdService.remoteDualBoxBannersEnabled = false;
     _onboardingV2Enabled = false;
     _onboardingV3Enabled = false;
+    _tutorialMandatoryEnabled = false;
     _stepSampleBucketMinutes = 60;
     _pendingShareToken = null;
     _pendingTournamentShareToken = null;
@@ -811,6 +837,7 @@ class AuthService extends ChangeNotifier {
     await prefs.remove(_keyDualBoxBannersEnabled);
     await prefs.remove(_keyOnboardingV2Enabled);
     await prefs.remove(_keyOnboardingV3Enabled);
+    await prefs.remove(_keyTutorialMandatoryEnabled);
     await prefs.remove(_keyStepSampleBucketMinutes);
     await prefs.remove(_keyPendingShareToken);
     await prefs.remove(_keyPendingTournamentShareToken);
@@ -1071,6 +1098,10 @@ class AuthService extends ChangeNotifier {
     await prefs.setBool(_keyTeamRacesEnabled, _teamRacesEnabled);
     await prefs.setBool(_keyOnboardingV2Enabled, _onboardingV2Enabled);
     await prefs.setBool(_keyOnboardingV3Enabled, _onboardingV3Enabled);
+    await prefs.setBool(
+      _keyTutorialMandatoryEnabled,
+      _tutorialMandatoryEnabled,
+    );
     await prefs.setInt(_keyStepSampleBucketMinutes, _stepSampleBucketMinutes);
   }
 }
