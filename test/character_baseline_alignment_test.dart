@@ -91,7 +91,7 @@ void main() {
   testWidgets('alignment holds at the larger home-course user size', (
     tester,
   ) async {
-    const bigger = 50.0 * 1.4;
+    const bigger = 55.0 * 1.4;
     await _pumpSprite(tester, null, size: bigger);
     final capybaraGround = _feetY(tester, null, size: bigger);
 

@@ -335,7 +335,7 @@ class _HomeCourseTrackState extends State<HomeCourseTrack>
             layout: layout,
           );
           final sizeScale = (widget.height / 236.0).clamp(1.0, 1.16);
-          final capybaraSize = (runner.isUser ? 50.0 : 44.0) * sizeScale;
+          final capybaraSize = (runner.isUser ? 55.0 : 48.0) * sizeScale;
           final overlayOffset = runner.isUser
               ? const Offset(0, -1)
               : _friendOverlayOffset(
