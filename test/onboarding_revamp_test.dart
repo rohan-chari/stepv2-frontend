@@ -48,7 +48,8 @@ class _FakeHealthService extends HealthService {
 
   @override
   Future<HealthSetupResult> setUpHealthAccess() async {
-    final result = setupResults[setupCalls.clamp(0, setupResults.length - 1)];
+    final result =
+        setupResults[setupCalls.clamp(0, setupResults.length - 1)];
     setupCalls += 1;
     return result;
   }
@@ -136,8 +137,9 @@ class _FakeBackendApiService extends BackendApiService {
   }) async => const [];
 
   @override
-  Future<Map<String, dynamic>> fetchMe({required String identityToken}) async =>
-      const {'displayName': 'Trail Walker', 'incomingFriendRequests': 0};
+  Future<Map<String, dynamic>> fetchMe({
+    required String identityToken,
+  }) async => const {'displayName': 'Trail Walker', 'incomingFriendRequests': 0};
 
   @override
   Future<Map<String, dynamic>> fetchRaces({
@@ -348,27 +350,24 @@ void main() {
   });
 
   group('§5.1 flag plumbing', () {
-    test(
-      'onboardingV3Enabled defaults false and only literal true opts in',
-      () async {
-        SharedPreferences.setMockInitialValues({});
-        final auth = AuthService();
-        auth.applyBackendUser({'id': 'u'});
-        expect(auth.onboardingV3Enabled, isFalse);
+    test('onboardingV3Enabled defaults false and only literal true opts in', () async {
+      SharedPreferences.setMockInitialValues({});
+      final auth = AuthService();
+      auth.applyBackendUser({'id': 'u'});
+      expect(auth.onboardingV3Enabled, isFalse);
 
-        auth.applyBackendUser({
-          'id': 'u',
-          'featureFlags': {'onboardingV3Enabled': 'yes'},
-        });
-        expect(auth.onboardingV3Enabled, isFalse);
+      auth.applyBackendUser({
+        'id': 'u',
+        'featureFlags': {'onboardingV3Enabled': 'yes'},
+      });
+      expect(auth.onboardingV3Enabled, isFalse);
 
-        auth.applyBackendUser({
-          'id': 'u',
-          'featureFlags': {'onboardingV3Enabled': true},
-        });
-        expect(auth.onboardingV3Enabled, isTrue);
-      },
-    );
+      auth.applyBackendUser({
+        'id': 'u',
+        'featureFlags': {'onboardingV3Enabled': true},
+      });
+      expect(auth.onboardingV3Enabled, isTrue);
+    });
 
     test('v3 implies v2 regardless of the stored v2 value', () async {
       SharedPreferences.setMockInitialValues({});
@@ -519,10 +518,7 @@ void main() {
       expect(await _hasEvent('health_escaped'), isTrue);
 
       final prefs = await SharedPreferences.getInstance();
-      expect(
-        prefs.getBool(OnboardingStateService.keyHealthEscapedGate),
-        isTrue,
-      );
+      expect(prefs.getBool(OnboardingStateService.keyHealthEscapedGate), isTrue);
     });
 
     // 6. relaunch after an escape must not return the user to the gate.
@@ -543,25 +539,24 @@ void main() {
     });
 
     // 7. iOS probe returns 0 -> user proceeds, banner stays latent for 6h.
-    testWidgets(
-      'an inconclusive probe lets the user through without a banner',
-      (tester) async {
-        final auth = await _auth(_prefs());
-        final health = _FakeHealthService(
-          setupResults: const [HealthSetupResult.inconclusive],
-        );
-        await _pumpShell(tester, auth: auth, health: health);
+    testWidgets('an inconclusive probe lets the user through without a banner', (
+      tester,
+    ) async {
+      final auth = await _auth(_prefs());
+      final health = _FakeHealthService(
+        setupResults: const [HealthSetupResult.inconclusive],
+      );
+      await _pumpShell(tester, auth: auth, health: health);
 
-        await tester.tap(find.text('CONTINUE'));
-        for (var i = 0; i < 8; i++) {
-          await tester.pump(const Duration(milliseconds: 40));
-        }
+      await tester.tap(find.text('CONTINUE'));
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 40));
+      }
 
-        expect(find.byType(WoodenTabBar), findsOneWidget);
-        expect(find.byType(StepsDisconnectedBanner), findsNothing);
-        expect(await _hasEvent('health_probe_inconclusive'), isTrue);
-      },
-    );
+      expect(find.byType(WoodenTabBar), findsOneWidget);
+      expect(find.byType(StepsDisconnectedBanner), findsNothing);
+      expect(await _hasEvent('health_probe_inconclusive'), isTrue);
+    });
 
     // 8. probe zero + 6h elapsed -> banner shows.
     testWidgets('the banner arms once six hours have passed', (tester) async {
@@ -621,34 +616,33 @@ void main() {
 
   group('§5.4 notification ask relocation', () {
     // 10. the ask renders once and promises nothing that does not ship.
-    testWidgets(
-      'the ask is race-oriented and promises no box or powerup push',
-      (tester) async {
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Scaffold(
-              body: NotificationAskDialog(onEnable: () {}, onNotNow: () {}),
-            ),
+    testWidgets('the ask is race-oriented and promises no box or powerup push', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: NotificationAskDialog(onEnable: () {}, onNotNow: () {}),
           ),
-        );
-        await tester.pump();
+        ),
+      );
+      await tester.pump();
 
-        expect(find.text('Stay in the race'), findsOneWidget);
-        expect(
-          find.text('Get notified about what’s happening in your races.'),
-          findsOneWidget,
-        );
-        expect(find.text('ENABLE'), findsOneWidget);
-        expect(find.text('NOT NOW'), findsOneWidget);
+      expect(find.text('Stay in the race'), findsOneWidget);
+      expect(
+        find.text('Get notified about what’s happening in your races.'),
+        findsOneWidget,
+      );
+      expect(find.text('ENABLE'), findsOneWidget);
+      expect(find.text('NOT NOW'), findsOneWidget);
 
-        final copy = tester
-            .widgetList<Text>(find.byType(Text))
-            .map((t) => (t.data ?? '').toLowerCase())
-            .join(' ');
-        expect(copy.contains('box'), isFalse);
-        expect(copy.contains('powerup'), isFalse);
-      },
-    );
+      final copy = tester
+          .widgetList<Text>(find.byType(Text))
+          .map((t) => (t.data ?? '').toLowerCase())
+          .join(' ');
+      expect(copy.contains('box'), isFalse);
+      expect(copy.contains('powerup'), isFalse);
+    });
 
     test('the box-open trigger fires once per install', () async {
       SharedPreferences.setMockInitialValues({});
@@ -879,11 +873,7 @@ void main() {
 
       final prefs = await SharedPreferences.getInstance();
       for (final key in OnboardingStateService.allKeys) {
-        expect(
-          prefs.get(key),
-          isNull,
-          reason: '$key must not survive sign-out',
-        );
+        expect(prefs.get(key), isNull, reason: '$key must not survive sign-out');
       }
       expect(prefs.getBool('auth_onboarding_v3_enabled'), isNull);
       expect(auth.onboardingV3Enabled, isFalse);
@@ -973,9 +963,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('renders nothing when the section is malformed', (
-      tester,
-    ) async {
+    testWidgets('renders nothing when the section is malformed', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -1120,22 +1108,19 @@ void main() {
 
   group('§5.12 team-lead push routing', () {
     // 19. both spellings route to race detail.
-    test(
-      'TEAM_LEAD_CHANGED routes to race detail alongside the old spelling',
-      () {
-        final service = NotificationService(
-          backendApiService: _FakeBackendApiService(),
-        );
-        expect(
-          service.routeFromType('TEAM_LEAD_CHANGED'),
-          NotificationRoute.raceDetail,
-        );
-        expect(
-          service.routeFromType('TEAM_LEAD_CHANGE'),
-          NotificationRoute.raceDetail,
-        );
-      },
-    );
+    test('TEAM_LEAD_CHANGED routes to race detail alongside the old spelling', () {
+      final service = NotificationService(
+        backendApiService: _FakeBackendApiService(),
+      );
+      expect(
+        service.routeFromType('TEAM_LEAD_CHANGED'),
+        NotificationRoute.raceDetail,
+      );
+      expect(
+        service.routeFromType('TEAM_LEAD_CHANGE'),
+        NotificationRoute.raceDetail,
+      );
+    });
   });
 
   group('degraded state chrome', () {
@@ -1145,12 +1130,17 @@ void main() {
       var fixes = 0;
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(body: StepsDisconnectedBanner(onFix: () => fixes++)),
+          home: Scaffold(
+            body: StepsDisconnectedBanner(onFix: () => fixes++),
+          ),
         ),
       );
       await tester.pump();
 
-      expect(find.textContaining('Steps aren’t connected'), findsOneWidget);
+      expect(
+        find.textContaining('Steps aren’t connected'),
+        findsOneWidget,
+      );
       expect(find.text('Fix this'), findsOneWidget);
       // No dismiss affordance — the banner clears only when steps return.
       expect(find.byIcon(Icons.close_rounded), findsNothing);

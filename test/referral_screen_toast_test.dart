@@ -114,7 +114,10 @@ void main() {
 
     expect(find.byType(SnackBar), findsNothing);
     expect(find.byKey(const Key('error-toast-shell')), findsOneWidget);
-    expect(find.text("You can't use your own invite code."), findsOneWidget);
+    expect(
+      find.text("You can't use your own invite code."),
+      findsOneWidget,
+    );
 
     await _flushToast(tester);
   });

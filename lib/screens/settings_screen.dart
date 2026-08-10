@@ -574,7 +574,11 @@ class _SocialRow extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(Icons.open_in_new_rounded, size: 15, color: colors.textMid),
+              Icon(
+                Icons.open_in_new_rounded,
+                size: 15,
+                color: colors.textMid,
+              ),
             ],
           ),
         ),

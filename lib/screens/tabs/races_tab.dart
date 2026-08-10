@@ -597,7 +597,9 @@ class _RacesTabState extends State<RacesTab> {
     GlobalKey? potKey,
   }) {
     return DecoratedBox(
-      decoration: BoxDecoration(color: AppColors.of(context).roofLight),
+      decoration: BoxDecoration(
+        color: AppColors.of(context).roofLight,
+      ),
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
         child: KeyedSubtree(

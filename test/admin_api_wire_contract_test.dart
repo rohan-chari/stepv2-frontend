@@ -68,7 +68,8 @@ class _FakeResponse extends Stream<List<int>> implements HttpClientResponse {
   }
 
   @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+  dynamic noSuchMethod(Invocation invocation) =>
+      super.noSuchMethod(invocation);
 }
 
 class _FakeRequest implements HttpClientRequest {
@@ -87,7 +88,8 @@ class _FakeRequest implements HttpClientRequest {
       _FakeResponse(_script.status, _script.body);
 
   @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+  dynamic noSuchMethod(Invocation invocation) =>
+      super.noSuchMethod(invocation);
 }
 
 class _FakeHttpClient implements HttpClient {
@@ -109,7 +111,8 @@ class _FakeHttpClient implements HttpClient {
   }
 
   @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+  dynamic noSuchMethod(Invocation invocation) =>
+      super.noSuchMethod(invocation);
 }
 
 Map<String, dynamic> _bodyOf(_CapturedRequest r) =>
@@ -176,12 +179,9 @@ void main() {
   group('PATCH /admin/powerup-shop/items/:itemId', () {
     test('sends ONLY the keys that were provided', () async {
       final client = _FakeHttpClient([
-        const _Scripted(
-          200,
-          '{"item":{"id":"i1","sku":"S","name":"N",'
-          '"powerupType":"LEECH","priceCoins":300,"active":true,'
-          '"testOnly":false,"sortOrder":4}}',
-        ),
+        const _Scripted(200, '{"item":{"id":"i1","sku":"S","name":"N",'
+            '"powerupType":"LEECH","priceCoins":300,"active":true,'
+            '"testOnly":false,"sortOrder":4}}'),
       ]);
       final api = BackendApiService(httpClient: client);
 
@@ -202,12 +202,9 @@ void main() {
 
     test('sends every provided key, including false booleans', () async {
       final client = _FakeHttpClient([
-        const _Scripted(
-          200,
-          '{"item":{"id":"i1","sku":"S","name":"N",'
-          '"powerupType":"LEECH","priceCoins":300,"active":false,'
-          '"testOnly":false,"sortOrder":0}}',
-        ),
+        const _Scripted(200, '{"item":{"id":"i1","sku":"S","name":"N",'
+            '"powerupType":"LEECH","priceCoins":300,"active":false,'
+            '"testOnly":false,"sortOrder":0}}'),
       ]);
       final api = BackendApiService(httpClient: client);
 
@@ -227,20 +224,17 @@ void main() {
       });
     });
 
-    test(
-      'refuses an all-null update instead of sending an empty body',
-      () async {
-        final client = _FakeHttpClient([const _Scripted(200, '{}')]);
-        final api = BackendApiService(httpClient: client);
+    test('refuses an all-null update instead of sending an empty body', () async {
+      final client = _FakeHttpClient([const _Scripted(200, '{}')]);
+      final api = BackendApiService(httpClient: client);
 
-        await expectLater(
-          api.updateAdminPowerupShopItem(identityToken: 'tok', itemId: 'i1'),
-          throwsA(isA<ApiException>()),
-        );
-        // §5.1 requires >= 1 key; the request never leaves the device.
-        expect(client.requests, isEmpty);
-      },
-    );
+      await expectLater(
+        api.updateAdminPowerupShopItem(identityToken: 'tok', itemId: 'i1'),
+        throwsA(isA<ApiException>()),
+      );
+      // §5.1 requires >= 1 key; the request never leaves the device.
+      expect(client.requests, isEmpty);
+    });
   });
 
   group('GET /admin/powerup-shop/items', () {
@@ -257,14 +251,11 @@ void main() {
     test('skips catalog rows this build cannot render safely', () async {
       final api = BackendApiService(
         httpClient: _FakeHttpClient([
-          const _Scripted(
-            200,
-            '{"items":['
-            '{"id":"ok","sku":"S","name":"N","powerupType":"LEECH",'
-            '"priceCoins":300,"active":true,"testOnly":false,"sortOrder":1},'
-            '{"sku":"no-id","priceCoins":10},'
-            '{"id":"no-price","sku":"S"}]}',
-          ),
+          const _Scripted(200, '{"items":['
+              '{"id":"ok","sku":"S","name":"N","powerupType":"LEECH",'
+              '"priceCoins":300,"active":true,"testOnly":false,"sortOrder":1},'
+              '{"sku":"no-id","priceCoins":10},'
+              '{"id":"no-price","sku":"S"}]}'),
         ]),
       );
 
@@ -285,13 +276,10 @@ void main() {
     test('parses version, config and the bounds table', () async {
       final api = BackendApiService(
         httpClient: _FakeHttpClient([
-          const _Scripted(
-            200,
-            '{"version":7,"config":{"schemaVersion":1},'
-            '"note":"n","createdBy":"u","boundOverride":false,'
-            '"createdAt":"2026-07-20T12:00:00.000Z",'
-            '"bounds":{"dailyBox.streakCap":[7,90],"bad":"nope"}}',
-          ),
+          const _Scripted(200, '{"version":7,"config":{"schemaVersion":1},'
+              '"note":"n","createdBy":"u","boundOverride":false,'
+              '"createdAt":"2026-07-20T12:00:00.000Z",'
+              '"bounds":{"dailyBox.streakCap":[7,90],"bad":"nope"}}'),
         ]),
       );
 
@@ -337,31 +325,23 @@ void main() {
       });
     });
 
-    test(
-      '409 -> conflict carrying currentVersion and the server config',
-      () async {
-        final result = await put(
-          const _Scripted(
-            409,
-            '{"error":"stale_version","currentVersion":9,'
-            '"config":{"schemaVersion":1,"dailyBox":{"streakCap":45}}}',
-          ),
-        );
+    test('409 -> conflict carrying currentVersion and the server config',
+        () async {
+      final result = await put(
+        const _Scripted(409, '{"error":"stale_version","currentVersion":9,'
+            '"config":{"schemaVersion":1,"dailyBox":{"streakCap":45}}}'),
+      );
 
-        expect(result.status, BalanceConfigSaveStatus.conflict);
-        expect(result.currentVersion, 9);
-        expect((result.config!['dailyBox'] as Map)['streakCap'], 45);
-      },
-    );
+      expect(result.status, BalanceConfigSaveStatus.conflict);
+      expect(result.currentVersion, 9);
+      expect((result.config!['dailyBox'] as Map)['streakCap'], 45);
+    });
 
     test('422 -> parsed bound warnings', () async {
       final result = await put(
-        const _Scripted(
-          422,
-          '{"error":"bound_warnings","warnings":['
-          '{"path":"dailyBox.streakCap","value":200,"bound":[7,90],'
-          '"message":"out of range"}]}',
-        ),
+        const _Scripted(422, '{"error":"bound_warnings","warnings":['
+            '{"path":"dailyBox.streakCap","value":200,"bound":[7,90],'
+            '"message":"out of range"}]}'),
       );
 
       expect(result.status, BalanceConfigSaveStatus.boundWarnings);
@@ -394,32 +374,27 @@ void main() {
   });
 
   group('POST /admin/balance-config/rollback', () {
-    test(
-      'sends the target and expected versions and shares 409 semantics',
-      () async {
-        final client = _FakeHttpClient([
-          const _Scripted(
-            409,
-            '{"error":"stale_version","currentVersion":11,'
-            '"config":{"schemaVersion":1}}',
-          ),
-        ]);
-        final api = BackendApiService(httpClient: client);
+    test('sends the target and expected versions and shares 409 semantics',
+        () async {
+      final client = _FakeHttpClient([
+        const _Scripted(409, '{"error":"stale_version","currentVersion":11,'
+            '"config":{"schemaVersion":1}}'),
+      ]);
+      final api = BackendApiService(httpClient: client);
 
-        final result = await api.rollbackAdminBalanceConfig(
-          identityToken: 'tok',
-          version: 6,
-          expectedVersion: 8,
-        );
+      final result = await api.rollbackAdminBalanceConfig(
+        identityToken: 'tok',
+        version: 6,
+        expectedVersion: 8,
+      );
 
-        final request = client.requests.single;
-        expect(request.method, 'POST');
-        expect(request.uri.path, '/admin/balance-config/rollback');
-        expect(_bodyOf(request), {'version': 6, 'expectedVersion': 8});
-        expect(result.status, BalanceConfigSaveStatus.conflict);
-        expect(result.currentVersion, 11);
-      },
-    );
+      final request = client.requests.single;
+      expect(request.method, 'POST');
+      expect(request.uri.path, '/admin/balance-config/rollback');
+      expect(_bodyOf(request), {'version': 6, 'expectedVersion': 8});
+      expect(result.status, BalanceConfigSaveStatus.conflict);
+      expect(result.currentVersion, 11);
+    });
   });
 
   group('GET /admin/balance-config/versions', () {
@@ -436,12 +411,9 @@ void main() {
     test('parses rows and drops ones without a version', () async {
       final api = BackendApiService(
         httpClient: _FakeHttpClient([
-          const _Scripted(
-            200,
-            '{"versions":['
-            '{"version":7,"note":"n","active":true,"boundOverride":false},'
-            '{"note":"no version"}]}',
-          ),
+          const _Scripted(200, '{"versions":['
+              '{"version":7,"note":"n","active":true,"boundOverride":false},'
+              '{"note":"no version"}]}'),
         ]),
       );
 

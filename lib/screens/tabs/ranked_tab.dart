@@ -238,7 +238,9 @@ class _RankedTabState extends State<RankedTab> {
 
   Widget _buildHeader() {
     return DecoratedBox(
-      decoration: BoxDecoration(color: AppColors.of(context).roofLight),
+      decoration: BoxDecoration(
+        color: AppColors.of(context).roofLight,
+      ),
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
         child: Padding(
@@ -981,9 +983,7 @@ class _RankedTabState extends State<RankedTab> {
             imageUrl: profilePhotoUrl,
             size: 34,
             isUser: isMe,
-            borderColor: isMe
-                ? AppColors.of(context).accent
-                : tier.colorOf(context),
+            borderColor: isMe ? AppColors.of(context).accent : tier.colorOf(context),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -1317,10 +1317,7 @@ class _RankedTabState extends State<RankedTab> {
                 top: 148,
                 child: Text(
                   tierText,
-                  style: PixelText.title(
-                    size: 28,
-                    color: tier.colorOf(context),
-                  ),
+                  style: PixelText.title(size: 28, color: tier.colorOf(context)),
                 ),
               ),
             ],
@@ -1544,10 +1541,7 @@ class _RankedTabState extends State<RankedTab> {
           if (!grouped)
             TierBadge(tier: row.tier, division: row.division)
           else if (row.division != null)
-            _DivisionPill(
-              division: row.division!,
-              color: row.tier.colorOf(context),
-            )
+            _DivisionPill(division: row.division!, color: row.tier.colorOf(context))
           else
             const SizedBox(width: 28),
           const SizedBox(width: 8),

@@ -422,7 +422,9 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
 
   Widget _buildRankingControls() {
     return DecoratedBox(
-      decoration: BoxDecoration(color: AppColors.of(context).roofLight),
+      decoration: BoxDecoration(
+        color: AppColors.of(context).roofLight,
+      ),
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
         child: Padding(

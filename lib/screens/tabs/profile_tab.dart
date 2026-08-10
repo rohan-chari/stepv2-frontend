@@ -242,7 +242,9 @@ class _ProfileTabState extends State<ProfileTab> {
     final hasPhoto = widget.authService.profilePhotoUrl != null;
 
     return DecoratedBox(
-      decoration: BoxDecoration(color: AppColors.of(context).roofLight),
+      decoration: BoxDecoration(
+        color: AppColors.of(context).roofLight,
+      ),
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
         child: Padding(
@@ -636,7 +638,11 @@ class _StatsSectionState extends State<_StatsSection> {
           2,
         ),
         _buildStatRow('All Time', _formatSteps(_allTime), 3),
-        _buildStatRow('Streak', '$_streak day${_streak == 1 ? '' : 's'}', 4),
+        _buildStatRow(
+          'Streak',
+          '$_streak day${_streak == 1 ? '' : 's'}',
+          4,
+        ),
       ],
     );
   }

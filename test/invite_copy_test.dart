@@ -68,10 +68,7 @@ class _NoAdController implements ExtraSpinAdController {
   @override
   bool get isReady => false;
   @override
-  Future<void> load({
-    required String userId,
-    required String localDate,
-  }) async {}
+  Future<void> load({required String userId, required String localDate}) async {}
   @override
   Future<bool> showAndAwaitReward() async => false;
   @override
@@ -277,7 +274,10 @@ void main() {
         ),
       );
 
-      expect(find.text('Tap everyone you want in this race.'), findsOneWidget);
+      expect(
+        find.text('Tap everyone you want in this race.'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('race invite empty state is an invitation to act', (
