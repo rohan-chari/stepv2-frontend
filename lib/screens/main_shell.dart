@@ -2256,7 +2256,22 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   /// at the first beat then counted as having done the tutorial. Under
   /// mandatory mode the mark is gated on `completed == true`; with the flag
   /// off the old unconditional mark is preserved byte-for-byte.
+  /// Guards the async gap between the START tap and the route push below.
+  /// Without it a double-tap pushes two tutorial routes and double-counts the
+  /// abandon, which would trip the circuit breaker a third early.
+  bool _launchingTutorial = false;
+
   Future<void> _startTutorialOnboarding() async {
+    if (_launchingTutorial) return;
+    _launchingTutorial = true;
+    try {
+      await _runTutorialOnboarding();
+    } finally {
+      _launchingTutorial = false;
+    }
+  }
+
+  Future<void> _runTutorialOnboarding() async {
     final mandatory = _tutorialMandatory;
     // Captured before the first await — the route is pushed onto this
     // navigator, and reading it after the async gap trips

@@ -93,6 +93,13 @@ String adminNumber(dynamic value) {
   return buffer.toString();
 }
 
+/// A one-decimal figure, or "—". For genuinely fractional metrics (averages),
+/// where the integer reader would silently floor 2.7 to 2.
+String adminDecimal(dynamic value, {int places = 1}) {
+  if (value is! num) return kAdminMissing;
+  return value.toStringAsFixed(places);
+}
+
 /// "a / b", with each half degrading independently.
 String adminPair(dynamic a, dynamic b) =>
     '${adminNumber(a)} / ${adminNumber(b)}';
@@ -505,7 +512,9 @@ class AdminRevenueBody extends StatelessWidget {
         adminStatRow(
           context,
           'Avg watches/user',
-          adminNumber(cap?['avgWatchesPerUser']),
+          // An average, not a count: the integer reader would render 2.7 as 2
+          // and quietly understate cap pressure.
+          adminDecimal(cap?['avgWatchesPerUser']),
         ),
         adminStatRow(context, 'Users at cap', adminNumber(cap?['usersAtCap'])),
       ],

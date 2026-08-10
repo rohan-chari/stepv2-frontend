@@ -255,6 +255,45 @@ void main() {
       expect(api.statsCalls.length, 2);
     });
 
+    testWidgets('refresh re-pulls REVENUE once it has been opened', (
+      tester,
+    ) async {
+      final api = _AdminApi(
+        sectioned: const {
+          'coinEconomy': {'days': []},
+        },
+      );
+      await _pumpHub(tester, api);
+      await _expand(tester, 'REVENUE');
+      expect(api.statsCalls.length, 2);
+
+      await tester.tap(find.byIcon(Icons.refresh));
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+
+      // Base + revenue again: the lazy latch must not freeze the numbers for
+      // the life of the screen.
+      expect(api.statsCalls.length, 4);
+      expect(api.statsCalls.last, ['economy', 'ads']);
+    });
+
+    testWidgets('refresh does NOT fetch REVENUE that was never opened', (
+      tester,
+    ) async {
+      final api = _AdminApi();
+      await _pumpHub(tester, api);
+      expect(api.statsCalls.length, 1);
+
+      await tester.tap(find.byIcon(Icons.refresh));
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+
+      // Refresh must not start paying for aggregates nobody asked to see.
+      expect(api.statsCalls, [const <String>[], const <String>[]]);
+    });
+
     testWidgets('INBOX fetches suggestions only when first expanded', (
       tester,
     ) async {
@@ -447,8 +486,28 @@ void main() {
       expect(find.text('AD WATCHES'), findsOneWidget);
       expect(find.text('30 / 12'), findsOneWidget);
       expect(find.text('CAP UTILIZATION'), findsOneWidget);
-      expect(find.text('2'), findsWidgets);
+      expect(find.text('2.0'), findsOneWidget);
       expect(find.text('6'), findsWidgets);
+    });
+
+    testWidgets('a fractional avg watches/user is not floored to an int', (
+      tester,
+    ) async {
+      await _pumpBody(
+        tester,
+        const AdminRevenueBody(
+          stats: {
+            'adRevenue': {
+              'capUtilization': {'avgWatchesPerUser': 2.7, 'usersAtCap': 6},
+            },
+          },
+        ),
+      );
+
+      // The integer reader would render this as "2" and understate cap
+      // pressure by a quarter.
+      expect(find.text('2.7'), findsOneWidget);
+      expect(find.text('2'), findsNothing);
     });
 
     testWidgets('a prod backend without the new blocks degrades to "—"', (

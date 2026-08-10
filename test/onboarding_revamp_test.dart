@@ -880,6 +880,80 @@ void main() {
     });
   });
 
+  // Batch 2026-08-09 item 9. The widget-level behavior is pinned in
+  // batch_2026_08_09_mandatory_tutorial_test.dart; what can only be checked
+  // HERE is the wiring — MainShell combining the remote flag with the local
+  // circuit breaker and handing one `tutorialMandatory` down to the live step.
+  group('batch 2026-08-09 item 9 — mandatory tutorial through the shell', () {
+    Map<String, Object> mandatoryPrefs({
+      bool flag = true,
+      int abandons = 0,
+    }) => _prefs(
+      healthAuthorized: true,
+      tutorialSeen: false,
+      extra: {
+        if (flag) 'auth_tutorial_mandatory_enabled': true,
+        if (abandons > 0) 'tutorial_abandon_count_v1': abandons,
+      },
+    );
+
+    testWidgets('flag ON: the onboarding tutorial step has no skip', (
+      tester,
+    ) async {
+      final auth = await _auth(mandatoryPrefs());
+      await _pumpShell(
+        tester,
+        auth: auth,
+        health: _FakeHealthService(restored: true),
+      );
+
+      expect(find.text('START THE TUTORIAL'), findsOneWidget);
+      expect(find.text('Skip for now'), findsNothing);
+    });
+
+    testWidgets('flag absent: skip is present exactly as it ships today', (
+      tester,
+    ) async {
+      final auth = await _auth(mandatoryPrefs(flag: false));
+      await _pumpShell(
+        tester,
+        auth: auth,
+        health: _FakeHealthService(restored: true),
+      );
+
+      expect(find.text('START THE TUTORIAL'), findsOneWidget);
+      expect(find.text('Skip for now'), findsOneWidget);
+    });
+
+    testWidgets('circuit breaker: 3 abandoned entries restore the skip', (
+      tester,
+    ) async {
+      // The wedge scenario — flag ON, but this device has failed to get
+      // through the tutorial three times. It must not be trapped waiting on a
+      // week-long phased rollout of a flag flip.
+      final auth = await _auth(mandatoryPrefs(abandons: 3));
+      await _pumpShell(
+        tester,
+        auth: auth,
+        health: _FakeHealthService(restored: true),
+      );
+
+      expect(find.text('START THE TUTORIAL'), findsOneWidget);
+      expect(find.text('Skip for now'), findsOneWidget);
+    });
+
+    testWidgets('two abandons is not yet enough', (tester) async {
+      final auth = await _auth(mandatoryPrefs(abandons: 2));
+      await _pumpShell(
+        tester,
+        auth: auth,
+        health: _FakeHealthService(restored: true),
+      );
+
+      expect(find.text('Skip for now'), findsNothing);
+    });
+  });
+
   group('§5.10 admin flag UI', () {
     // 18. every client-served flag gets a switch. Batch 2026-08-09 item 9
     // added `tutorialMandatoryEnabled`, so the count is six — the property

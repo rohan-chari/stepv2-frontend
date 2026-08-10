@@ -302,6 +302,16 @@ class _AdminScreenState extends State<AdminScreen> {
         _statsFailed = true;
       });
     }
+
+    // REVENUE latches `_revenueRequested` so that collapsing and re-opening
+    // the section can't re-run ten aggregates. That latch also froze its
+    // numbers for the life of the screen — refresh has to clear it, but only
+    // when the section was actually opened, or refresh would start paying for
+    // aggregates nobody asked to see.
+    if (_revenueStats != null || _revenueFailed) {
+      _revenueRequested = false;
+      await _loadRevenue();
+    }
   }
 
   /// Fired once, by the REVENUE section's first expand.
@@ -311,6 +321,7 @@ class _AdminScreenState extends State<AdminScreen> {
 
     final token = widget.authService.authToken;
     if (token == null) {
+      if (!mounted) return;
       setState(() => _revenueFailed = true);
       return;
     }
