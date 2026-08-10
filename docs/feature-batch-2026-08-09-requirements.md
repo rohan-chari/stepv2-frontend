@@ -542,9 +542,19 @@ text intact.
 
 1. **Backend PR** (items 1, 2, 6, 7, 8, 11 + admin `sections=` stats for 10
    + `tutorialMandatoryEnabled` flag for 9, default OFF): deploy;
-   re-run seed (item 1 copy); `PUT /admin/balance-config` (items 6, 8 —
-   including `upgradeCosts.byType.LUCKY_HORSESHOE=[0,0,0,0]`);
-   `npm run powerups:store -- hide POWER_OUTAGE` (item 6).
+   re-run seed per environment (item 1 copy); then ONE
+   `PUT /admin/balance-config` carrying ALL of:
+   `upgradeCosts.byType = { LEG_CRAMP:[0,10,20,30], WRONG_TURN:[0,15,30,45],
+   LUCKY_HORSESHOE:[0,0,0,0] }`,
+   `positionRules.leadingDownweight.POWER_OUTAGE = 0.3`,
+   `luckyHorseshoe.rareChanceByLevel = [1,1,1,1]`,
+   `rarityByType.POWER_OUTAGE = "RARE"`, `POWER_OUTAGE` added to
+   `dropPool.RARE`, `FANNY_PACK` removed from `dropPool.RARE`,
+   `POWER_OUTAGE` removed from `storeOnlyTypes`; finally
+   `npm run powerups:store -- hide POWER_OUTAGE --db=prod --apply` (item 6).
+   Known drift: prod `rarityByType.WRONG_TURN = RARE` vs code default
+   UNCOMMON — the byType reprice makes prices agree either way; do not
+   "fix" the drift in this PUT.
 2. **Frontend PR** (items 3, 9, 10 UI + fallback-copy touch-ups for 1, 6, 8;
    referral verbiage for 2): iOS + Android built in lockstep, normal release.
 3. **Flip `tutorialMandatoryEnabled` ON** only after the carrying build has
