@@ -140,7 +140,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(
-      MaterialApp(home: TutorialScreen(onComplete: (_) {})),
+      MaterialApp(home: TutorialScreen(onComplete: (_, _) {})),
     );
     await settle(tester);
 
@@ -168,7 +168,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: TutorialScreen(authService: auth, onComplete: (_) {}),
+        home: TutorialScreen(authService: auth, onComplete: (_, _) {}),
       ),
     );
     await settle(tester);

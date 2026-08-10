@@ -24,7 +24,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(600, 1000));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    await tester.pumpWidget(MaterialApp(home: TutorialScreen(onComplete: (_) {})));
+    await tester.pumpWidget(MaterialApp(home: TutorialScreen(onComplete: (_, _) {})));
     await _settle(tester);
 
     // Step 1 (home): the REAL hero step count, no goal editor.
@@ -61,7 +61,7 @@ void main() {
 
     var completed = false;
     await tester.pumpWidget(
-      MaterialApp(home: TutorialScreen(onComplete: (_) => completed = true)),
+      MaterialApp(home: TutorialScreen(onComplete: (_, _) => completed = true)),
     );
     await _settle(tester);
 

@@ -412,7 +412,9 @@ abstract final class PowerupCopy {
   };
 
   static const _bundledDescriptions = {
-    'LEG_CRAMP': "Freeze a rival's steps for 2 hours",
+    // Batch 2026-08-09 item 1: base Leg Cramp is (and always was) 1 hour —
+    // "2 hours" was stale bundled copy. Upgrades now add 15 min, not an hour.
+    'LEG_CRAMP': "Freeze a rival's steps for 1 hour",
     'RED_CARD': "Remove 10% of the leader's steps",
     'SHORTCUT': 'Steal 1,000 steps from a rival',
     'COMPRESSION_SOCKS': 'Shield against the next attack',
@@ -425,7 +427,11 @@ abstract final class PowerupCopy {
     'FANNY_PACK': 'Unlock an extra powerup slot',
     'TRAIL_MIX': '+100 steps per unique powerup type used',
     'DETOUR_SIGN': 'Hide the entire leaderboard from a rival for 3 hours',
-    'LUCKY_HORSESHOE': 'Guarantee a better next mystery box',
+    // Batch 2026-08-09 item 8b: guaranteed rare at every level, and a forced
+    // box can never hand back another Horseshoe.
+    'LUCKY_HORSESHOE':
+        'Guarantees a rare powerup from your next mystery box — and it '
+        "can't grant another Horseshoe",
     'CAMPFIRE_REST': 'Freeze for 30 min, then multiply steps for up to 90 min',
     'TRAIL_MAGNET': 'Pull your next mystery box 1,000 steps closer',
     'POCKET_WATCH': 'Extend all active timed buffs',
@@ -468,14 +474,11 @@ abstract final class PowerupCopy {
         'Set a decoy that redirects the next single-target attack aimed at you to another racer',
     'POWER_OUTAGE':
         "Cut the power on every rival — no one else can use powerups for 30 minutes. Compression Socks keep a racer online",
-    'UMBRELLA':
-        'Stay dry for 12 hours — immune to Rainstorm and Power Outage',
-    'RALLY_FLAG':
-        'Raise the flag: 1.25x steps for your whole team for 1 hour',
+    'UMBRELLA': 'Stay dry for 12 hours — immune to Rainstorm and Power Outage',
+    'RALLY_FLAG': 'Raise the flag: 1.25x steps for your whole team for 1 hour',
     'DRILL_SERGEANT':
         'Dare a rival to hit a step goal within 2 hours — if they fall short they lose steps',
-    'PIGGY_BANK':
-        'Bank your steps for 24 hours and cash them out as coins',
+    'PIGGY_BANK': 'Bank your steps for 24 hours and cash them out as coins',
     'BOUNTY':
         'Place a bounty on a rival ahead of you — out-place them by race end to collect the payout',
   };
@@ -540,21 +543,33 @@ abstract final class PowerupCopy {
       '+300 steps per unique type',
     ],
     'RUNNERS_HIGH': ['2x for 3h', '2x for 4h', '2x for 5h', '2x for 7h'],
-    'LEG_CRAMP': ['Freeze 2h', 'Freeze 3h', 'Freeze 4h', 'Freeze 6h'],
-    'STEALTH_MODE': ['Hide 4h', 'Hide 5h', 'Hide 6.5h', 'Hide 8h'],
-    'WRONG_TURN': ['Reverse 1h', 'Reverse 1.5h', 'Reverse 2h', 'Reverse 3h'],
+    // Item 1 — each upgrade adds 15 minutes on top of the 1h base.
+    'LEG_CRAMP': [
+      'Freeze 1h',
+      'Freeze 1h 15m',
+      'Freeze 1h 30m',
+      'Freeze 1h 45m',
+    ],
+    // Was 4/5/6.5/8h here — never matched the backend's real 1/2/3/4h ladder.
+    'STEALTH_MODE': ['Hide 1h', 'Hide 2h', 'Hide 3h', 'Hide 4h'],
+    'WRONG_TURN': [
+      'Reverse 1h',
+      'Reverse 1h 15m',
+      'Reverse 1h 30m',
+      'Reverse 1h 45m',
+    ],
     'COMPRESSION_SOCKS': [
       'Shield 24h',
       'Shield 30h',
       'Shield 36h',
       'Shield 48h',
     ],
-    'LUCKY_HORSESHOE': [
-      'Next box uncommon+',
-      'Better rare odds',
-      'Strong rare odds',
-      'Next box rare',
-    ],
+    // LUCKY_HORSESHOE deliberately has NO bundled ladder (batch 2026-08-09
+    // item 8b): it now guarantees a rare at every level, so the upgrade UI —
+    // which this map gates via `isUpgradeable` — is hidden in this build. The
+    // type stays in the backend's `upgradeableTypes` with zeroed costs so
+    // frozen binaries that still offer L1-3 don't hit a permanent 400, and a
+    // backend that still serves a ladder still overrides this omission.
     'CAMPFIRE_REST': ['2.25x boost', '2.5x boost', '2.75x boost', '3x boost'],
     'TRAIL_MAGNET': [
       'Box 1,000 steps closer',

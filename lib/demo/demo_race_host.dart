@@ -40,6 +40,7 @@ class DemoRaceHost extends StatefulWidget {
     this.engine,
     this.analytics,
     this.onRealBoxOpened,
+    this.mandatory = false,
   });
 
   /// The user's REAL auth service. Reads flow through it (id, name, coins);
@@ -68,6 +69,19 @@ class DemoRaceHost extends StatefulWidget {
   /// race. Taking the callback and dropping it makes that invariant explicit
   /// — and testable.
   final Future<void> Function()? onRealBoxOpened;
+
+  /// Batch 2026-08-09 item 9. When true the SKIP chip is not rendered and the
+  /// back gesture is inert — the only way out is finishing the demo.
+  ///
+  /// Deliberately does NOT cover the `_afterFrame` catch-all
+  /// (`_finish(completed: false)` in the try/catch below). §8.2's fail-open
+  /// rule outranks the gate: a demo that throws must eject the user rather
+  /// than trap them on a broken screen. That exit still counts as an
+  /// abandoned entry, so three of them trip the host's circuit breaker and
+  /// hand the skip control back.
+  ///
+  /// Defaults false so the flag-off path is byte-identical to today.
+  final bool mandatory;
 
   @override
   State<DemoRaceHost> createState() => _DemoRaceHostState();
@@ -480,7 +494,11 @@ class _DemoRaceHostState extends State<DemoRaceHost>
       // exit — the gate must always end up satisfied.
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _finish(completed: false);
+        if (didPop) return;
+        // Item 9: under mandatory mode back is a no-op, not a skip. canPop is
+        // already false, so nothing pops either way.
+        if (widget.mandatory) return;
+        _finish(completed: false);
       },
       // The race screen scrolls freely during the demo (§16h — wandering into
       // chat or the odds sheet must not break the script). Every one of those
@@ -544,7 +562,10 @@ class _DemoRaceHostState extends State<DemoRaceHost>
                   ),
                 ),
 
-              if (isFrontmost && beat != DemoBeat.win)
+              // Item 9: no chip under mandatory mode. The coach post and the
+              // countdown are positioned independently, so removing it shifts
+              // nothing else on the stage.
+              if (isFrontmost && beat != DemoBeat.win && !widget.mandatory)
                 Positioned(
                   right: 12,
                   top: MediaQuery.of(context).padding.top + 10,

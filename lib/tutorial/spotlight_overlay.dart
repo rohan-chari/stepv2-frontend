@@ -25,7 +25,10 @@ class SpotlightOverlay extends StatelessWidget {
   final int stepCount;
   final VoidCallback onNext;
   final VoidCallback? onBack;
-  final VoidCallback onSkip;
+
+  /// Batch 2026-08-09 item 9: NULL hides the SKIP pill entirely (mandatory
+  /// onboarding). Non-null is the Settings-replay behavior, unchanged.
+  final VoidCallback? onSkip;
 
   static const double _calloutWidth = 320;
   static const double _calloutGap = 16;
@@ -181,7 +184,7 @@ class _CalloutCard extends StatelessWidget {
   final int stepCount;
   final VoidCallback onNext;
   final VoidCallback? onBack;
-  final VoidCallback onSkip;
+  final VoidCallback? onSkip;
   final bool isLast;
 
   @override
@@ -214,47 +217,49 @@ class _CalloutCard extends StatelessWidget {
                       fontSize: 10.5,
                     ),
                     const Spacer(),
-                    Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: onSkip,
-                        borderRadius: BorderRadius.circular(999),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(
-                              color: AppColors.of(
-                                context,
-                              ).textLight.withValues(alpha: 0.55),
-                              width: 1.5,
+                    // Item 9: no pill at all when there is no skip handler.
+                    if (onSkip != null)
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: onSkip,
+                          borderRadius: BorderRadius.circular(999),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
                             ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'SKIP',
-                                style: PixelText.title(
-                                  size: 11,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: AppColors.of(
+                                  context,
+                                ).textLight.withValues(alpha: 0.55),
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'SKIP',
+                                  style: PixelText.title(
+                                    size: 11,
+                                    color: AppColors.of(context).textLight,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Icon(
+                                  Icons.close_rounded,
+                                  size: 13,
                                   color: AppColors.of(context).textLight,
                                 ),
-                              ),
-                              const SizedBox(width: 4),
-                              Icon(
-                                Icons.close_rounded,
-                                size: 13,
-                                color: AppColors.of(context).textLight,
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 12),

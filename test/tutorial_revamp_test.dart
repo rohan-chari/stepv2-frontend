@@ -79,7 +79,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(
-      MaterialApp(home: TutorialScreen(onComplete: (_) {})),
+      MaterialApp(home: TutorialScreen(onComplete: (_, _) {})),
     );
     await _settle(tester);
 
@@ -106,7 +106,7 @@ void main() {
 
     var completed = false;
     await tester.pumpWidget(
-      MaterialApp(home: TutorialScreen(onComplete: (_) => completed = true)),
+      MaterialApp(home: TutorialScreen(onComplete: (_, _) => completed = true)),
     );
     await _settle(tester);
 
@@ -141,7 +141,7 @@ void main() {
 
     var completed = false;
     await tester.pumpWidget(
-      MaterialApp(home: TutorialScreen(onComplete: (_) => completed = true)),
+      MaterialApp(home: TutorialScreen(onComplete: (_, _) => completed = true)),
     );
     await _settle(tester);
 
@@ -167,7 +167,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(
-      MaterialApp(home: TutorialScreen(onComplete: (_) {})),
+      MaterialApp(home: TutorialScreen(onComplete: (_, _) {})),
     );
     await _settle(tester);
     for (var i = 0; i < _titles.length - 1; i++) {
@@ -194,7 +194,7 @@ void main() {
     final auth = _RewardAuthService(granted: true);
     await tester.pumpWidget(
       MaterialApp(
-        home: TutorialScreen(onComplete: (_) {}, authService: auth),
+        home: TutorialScreen(onComplete: (_, _) {}, authService: auth),
       ),
     );
     await _settle(tester);
@@ -217,7 +217,7 @@ void main() {
     final auth = _RewardAuthService(granted: false);
     await tester.pumpWidget(
       MaterialApp(
-        home: TutorialScreen(onComplete: (_) {}, authService: auth),
+        home: TutorialScreen(onComplete: (_, _) {}, authService: auth),
       ),
     );
     await _settle(tester);
@@ -238,7 +238,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(
-      MaterialApp(home: TutorialScreen(onComplete: (_) {})),
+      MaterialApp(home: TutorialScreen(onComplete: (_, _) {})),
     );
     await _settle(tester);
     // Advance to step 3, then bail.
@@ -261,7 +261,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(
-      MaterialApp(home: TutorialScreen(onComplete: (_) {})),
+      MaterialApp(home: TutorialScreen(onComplete: (_, _) {})),
     );
     await _settle(tester);
     await _next(tester);
@@ -281,7 +281,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(
-      MaterialApp(home: TutorialScreen(onComplete: (_) {})),
+      MaterialApp(home: TutorialScreen(onComplete: (_, _) {})),
     );
     await _settle(tester);
     for (var i = 0; i < _titles.length - 1; i++) {

@@ -537,7 +537,9 @@ class _ShopTabState extends State<ShopTab> {
               // don't disturb the body's stagger-in tile list.
               if (_section == _ShopSection.store &&
                   _activeCategory == _ShopCategory.powerups) ...[
-                const SizedBox(height: 2),
+                // Batch 2026-08-09 item 3: was 2px — visibly cramped against
+                // the 8px gap above the pills. The two header gaps now match.
+                const SizedBox(height: 8),
                 _buildPowerupControls(),
               ],
             ],
@@ -577,6 +579,7 @@ class _ShopTabState extends State<ShopTab> {
     }
 
     return Container(
+      key: const Key('shop-segment-control'),
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.18),
@@ -613,6 +616,7 @@ class _ShopTabState extends State<ShopTab> {
     final active = _activeCategory;
 
     return Row(
+      key: const Key('shop-category-pills'),
       children: [
         for (var i = 0; i < visible.length; i++) ...[
           if (i > 0) const SizedBox(width: 6),
@@ -624,6 +628,7 @@ class _ShopTabState extends State<ShopTab> {
 
   Widget _categoryPill(_ShopCategory category, bool selected) {
     return GestureDetector(
+      key: Key('shop-category-${category.label}'),
       behavior: HitTestBehavior.opaque,
       onTap: () => setState(() => _category = category),
       child: AnimatedContainer(

@@ -7,7 +7,10 @@ import '../widgets/onboarding_scene.dart';
 import '../widgets/pill_button.dart';
 import '../styles.dart';
 import '../utils/at_name.dart';
-import 'referral_screen.dart' show referralRedeemedCopy;
+// One shared definition of the qualifying race, so the referred-install scene
+// can't drift from the referral screen / Get Coins copy.
+import 'referral_screen.dart'
+    show kQualifyingRaceShortPhrase, referralRedeemedCopy;
 
 /// Standalone onboarding flow shown after sign-in until the user has granted
 /// health access, answered the notification prompt, and seen the
@@ -28,6 +31,7 @@ class OnboardingFlow extends StatelessWidget {
     required this.onSkipFirstRace,
     this.onboardingV2Enabled = false,
     this.onboardingV3Enabled = false,
+    this.tutorialMandatory = false,
     this.healthAttemptCount = 0,
     this.onOpenHealthSettings,
     this.onEscapeHealthGate,
@@ -88,6 +92,12 @@ class OnboardingFlow extends StatelessWidget {
   /// the v2 (or v1) sequence byte-for-byte as it ships today — that is the
   /// rollback path, and it is why the v2 branch below is untouched.
   final bool onboardingV3Enabled;
+
+  /// Batch 2026-08-09 item 9. True only when the backend flag
+  /// `tutorialMandatoryEnabled` is on AND the host's local abandon circuit
+  /// breaker has not tripped — the host owns that decision. Defaults false, so
+  /// an older backend renders this flow exactly as it ships today.
+  final bool tutorialMandatory;
 
   /// How many completed health-permission attempts the user has made. Drives
   /// the Android ladder; the host owns the counter (it must survive an app
@@ -240,6 +250,7 @@ class OnboardingFlow extends StatelessWidget {
         return OnboardingDemoRaceStep(
           onStart: onStartTutorial,
           onSkip: onSkipTutorial,
+          mandatory: tutorialMandatory,
         );
       }
       return OnboardingInviterRaceStep(
@@ -291,6 +302,7 @@ class OnboardingFlow extends StatelessWidget {
       return OnboardingTutorialStep(
         onStart: onStartTutorial,
         onSkip: onSkipTutorial,
+        mandatory: tutorialMandatory,
       );
     }
 
@@ -683,14 +695,17 @@ class _OnboardingReferralWelcomeStepState
     final mine = _refereeCoins ?? _rewardCoins;
     final theirs = _referrerCoins;
     final String body;
+    // Batch 2026-08-09 item 2: an auto-enrolled daily challenge is a "first
+    // race" but no longer completes the referral, so the qualifying action is
+    // named explicitly here too.
     if (mine == null || mine <= 0) {
-      body = 'Finish your first race and the coins start landing.';
+      body = 'Finish $kQualifyingRaceShortPhrase and the coins start landing.';
     } else if (theirs != null && theirs == mine) {
       body =
-          'Finish your first race and you each pocket $mine coins — '
-          'yours to spend right away.';
+          'Finish $kQualifyingRaceShortPhrase and you each pocket $mine '
+          'coins — yours to spend right away.';
     } else {
-      body = 'Finish your first race and $mine coins are yours.';
+      body = 'Finish $kQualifyingRaceShortPhrase and $mine coins are yours.';
     }
 
     if (_loading) {
@@ -736,10 +751,16 @@ class OnboardingTutorialStep extends StatelessWidget {
     super.key,
     required this.onStart,
     required this.onSkip,
+    this.mandatory = false,
   });
 
   final VoidCallback onStart;
   final VoidCallback onSkip;
+
+  /// Batch 2026-08-09 item 9. Defaults FALSE so every existing call site —
+  /// and every backend that doesn't serve `tutorialMandatoryEnabled` — keeps
+  /// the skip affordance exactly as it ships today.
+  final bool mandatory;
 
   @override
   Widget build(BuildContext context) {
@@ -757,10 +778,12 @@ class OnboardingTutorialStep extends StatelessWidget {
         ),
       ),
       dockLabel: 'FIRST 100 COINS',
+      // Item 9 mirror of the v3 copy: when the step can't be skipped, the
+      // body has to answer "how long is this?" before the user goes looking
+      // for a way out.
       dockBody:
-          'Take the quick tour to learn how Bara works — '
-          'finish it and we’ll drop 100 coins in your '
-          'balance to get you started.',
+          'A quick tour of how Bara works — we promise it’s fast, '
+          'and you keep the 100 coins.',
       actions: [
         SizedBox(
           width: double.infinity,
@@ -774,27 +797,31 @@ class OnboardingTutorialStep extends StatelessWidget {
             onPressed: onStart,
           ),
         ),
-        const SizedBox(height: 2),
-        TextButton(
-          onPressed: onSkip,
-          child: Text(
-            'Skip for now',
-            // textMid is a dark ink meant for parchment; on the dock's green
-            // checkers it was near-invisible. Cream + the same sky outline the
-            // headline uses makes it legible without turning a deliberately
-            // quiet escape hatch into a second button.
-            style:
-                PixelText.body(
-                  size: 15,
-                  color: colors.textLight.withValues(alpha: 0.92),
-                ).copyWith(
-                  fontWeight: FontWeight.w800,
-                  decoration: TextDecoration.underline,
-                  decorationColor: colors.textLight.withValues(alpha: 0.55),
-                  shadows: PixelText.skyOutline(1.4),
-                ),
+        // Item 9: under mandatory mode the escape hatch is not rendered at
+        // all — a disabled-looking control invites tapping at it.
+        if (!mandatory) const SizedBox(height: 2),
+        if (!mandatory)
+          TextButton(
+            key: const Key('onboarding-tutorial-skip'),
+            onPressed: onSkip,
+            child: Text(
+              'Skip for now',
+              // textMid is a dark ink meant for parchment; on the dock's green
+              // checkers it was near-invisible. Cream + the same sky outline the
+              // headline uses makes it legible without turning a deliberately
+              // quiet escape hatch into a second button.
+              style:
+                  PixelText.body(
+                    size: 15,
+                    color: colors.textLight.withValues(alpha: 0.92),
+                  ).copyWith(
+                    fontWeight: FontWeight.w800,
+                    decoration: TextDecoration.underline,
+                    decorationColor: colors.textLight.withValues(alpha: 0.55),
+                    shadows: PixelText.skyOutline(1.4),
+                  ),
+            ),
           ),
-        ),
       ],
     );
   }
@@ -1194,10 +1221,14 @@ class OnboardingDemoRaceStep extends StatelessWidget {
     super.key,
     required this.onStart,
     required this.onSkip,
+    this.mandatory = false,
   });
 
   final VoidCallback onStart;
   final VoidCallback onSkip;
+
+  /// Batch 2026-08-09 item 9. Defaults FALSE — see [OnboardingTutorialStep].
+  final bool mandatory;
 
   @override
   Widget build(BuildContext context) {
@@ -1215,7 +1246,13 @@ class OnboardingDemoRaceStep extends StatelessWidget {
       dockLabel: '90 SECONDS · 100 COINS',
       // One line. The label above already carries "90 SECONDS · 100 COINS", so
       // repeating the duration or the payout here just adds words to skim past.
-      dockBody: 'Practice against three bots. Learn the moves, keep the coins.',
+      //
+      // Item 9 reframes it around the objection instead of the content: with
+      // no "Skip for now" underneath, the sentence has to do the reassuring
+      // the escape hatch used to do. The dock label keeps the numbers.
+      dockBody:
+          'A quick 90-second practice race against three bots — we promise '
+          'it’s fast, and you keep the 100 coins.',
       actions: [
         SizedBox(
           width: double.infinity,
@@ -1233,28 +1270,30 @@ class OnboardingDemoRaceStep extends StatelessWidget {
             onPressed: onStart,
           ),
         ),
-        const SizedBox(height: 2),
-        TextButton(
-          key: const Key('onboarding-demo-race-skip'),
-          onPressed: onSkip,
-          child: Text(
-            'Skip for now',
-            // textMid is a dark ink meant for parchment; on the dock's green
-            // checkers it was near-invisible. Cream + the same sky outline the
-            // headline uses makes it legible without turning a deliberately
-            // quiet escape hatch into a second button.
-            style:
-                PixelText.body(
-                  size: 15,
-                  color: colors.textLight.withValues(alpha: 0.92),
-                ).copyWith(
-                  fontWeight: FontWeight.w800,
-                  decoration: TextDecoration.underline,
-                  decorationColor: colors.textLight.withValues(alpha: 0.55),
-                  shadows: PixelText.skyOutline(1.4),
-                ),
+        // Item 9: same treatment as the v1/v2 mirror above.
+        if (!mandatory) const SizedBox(height: 2),
+        if (!mandatory)
+          TextButton(
+            key: const Key('onboarding-demo-race-skip'),
+            onPressed: onSkip,
+            child: Text(
+              'Skip for now',
+              // textMid is a dark ink meant for parchment; on the dock's green
+              // checkers it was near-invisible. Cream + the same sky outline the
+              // headline uses makes it legible without turning a deliberately
+              // quiet escape hatch into a second button.
+              style:
+                  PixelText.body(
+                    size: 15,
+                    color: colors.textLight.withValues(alpha: 0.92),
+                  ).copyWith(
+                    fontWeight: FontWeight.w800,
+                    decoration: TextDecoration.underline,
+                    decorationColor: colors.textLight.withValues(alpha: 0.55),
+                    shadows: PixelText.skyOutline(1.4),
+                  ),
+            ),
           ),
-        ),
       ],
     );
   }

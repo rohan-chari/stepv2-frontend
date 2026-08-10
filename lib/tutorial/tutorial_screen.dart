@@ -102,6 +102,7 @@ class TutorialScreen extends StatefulWidget {
     this.onComplete,
     this.authService,
     this.analytics,
+    this.mandatory = false,
   });
 
   /// Called when the user finishes or skips the tutorial, with the tutorial's
@@ -110,7 +111,13 @@ class TutorialScreen extends StatefulWidget {
   /// sits on top of the app and pops cleanly). On first run there is nothing
   /// beneath the tutorial to pop to, so the caller passes a callback that
   /// routes into the app instead.
-  final void Function(BuildContext context)? onComplete;
+  ///
+  /// [completed] is true only when the user reached the end — a skip, and a
+  /// back gesture outside mandatory mode, report false. Batch 2026-08-09 item
+  /// 9 needs that distinction to decide whether the onboarding step may be
+  /// marked seen; it used to be inferred by the caller from the fact that the
+  /// skip controls were hidden, which was correct but only by argument.
+  final void Function(BuildContext context, bool completed)? onComplete;
 
   /// The real auth service. When provided, finishing the *entire* tutorial
   /// (not skipping) claims the one-time 100-coin completion reward via the
@@ -122,6 +129,15 @@ class TutorialScreen extends StatefulWidget {
   /// Activation telemetry sink. Defaults to a real service; injectable so the
   /// tutorial's own funnel events are assertable.
   final ActivationAnalyticsService? analytics;
+
+  /// Batch 2026-08-09 item 9 — mandatory onboarding mode.
+  ///
+  /// Hides the SKIP pill and makes the back gesture inert. Defaults FALSE, and
+  /// the Settings replay call site deliberately never sets it: a replay user
+  /// whose spotlight anchor fails to mount would otherwise have no exit at all
+  /// (ui-test-planner risk R2). Only the onboarding host passes true, and only
+  /// when the backend flag is on and the local circuit breaker has not tripped.
+  final bool mandatory;
 
   @override
   State<TutorialScreen> createState() => _TutorialScreenState();
@@ -281,7 +297,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
     }
 
     if (widget.onComplete != null) {
-      widget.onComplete!(context);
+      widget.onComplete!(context, completed);
     } else {
       Navigator.of(context).pop();
     }
@@ -373,6 +389,10 @@ class _TutorialScreenState extends State<TutorialScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
+        // Item 9: back stops being the skip affordance under mandatory mode.
+        // canPop is already false, so this is simply a no-op — the route does
+        // not pop and onboarding is not marked complete.
+        if (widget.mandatory) return;
         _skip();
       },
       child: Scaffold(
@@ -398,7 +418,8 @@ class _TutorialScreenState extends State<TutorialScreen> {
                   stepCount: _steps.length,
                   onNext: _next,
                   onBack: _index == 0 ? null : _back,
-                  onSkip: _skip,
+                  // Null removes the pill; the replay path keeps it.
+                  onSkip: widget.mandatory ? null : _skip,
                 ),
               ),
             ],

@@ -45,6 +45,7 @@ import 'ranked_results_summary_screen.dart';
 import 'start_screen.dart';
 import 'onboarding_flow.dart';
 import '../demo/demo_race_host.dart';
+import '../tutorial/tutorial_gate.dart';
 import '../tutorial/tutorial_screen.dart';
 import 'tabs/friends_tab.dart';
 import 'tabs/home_tab.dart';
@@ -111,6 +112,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   // reproduces the pre-v3 behavior when the keys are absent.
   final OnboardingStateService _onboardingState = OnboardingStateService();
   int _healthAttempts = 0;
+
+  /// Batch 2026-08-09 item 9 — tutorial entries started and never completed.
+  /// Feeds the local circuit breaker that hands the skip control back after
+  /// [kTutorialAbandonLimit] of them, even while the backend flag is on.
+  int _tutorialAbandons = 0;
   bool _escapedHealthGate = false;
   bool _probeInconclusive = false;
   int? _probeArmedAtMs;
@@ -349,12 +355,15 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _onboardingState.probeInconclusive(),
       _onboardingState.probeArmedAtMs(),
       _onboardingState.inviteCodeStepDone(),
+      // Item 9: one more key on the same round trip.
+      tutorialAbandonCount(),
     ]);
     final attempts = values[0] as int;
     final escaped = values[1] as bool;
     final inconclusive = values[2] as bool;
     final armedAt = values[3] as int?;
     final inviteDone = values[4] as bool;
+    final abandons = values[5] as int;
     if (!mounted) return;
     setState(() {
       _healthAttempts = attempts;
@@ -362,6 +371,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _probeInconclusive = inconclusive;
       _probeArmedAtMs = armedAt;
       _inviteCodeStepDone = inviteDone;
+      _tutorialAbandons = abandons;
     });
   }
 
@@ -384,7 +394,14 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     // build they have never used. They meet it on session two.
     await markWhatsNewSeenForOnboarding();
     unawaited(_skipFirstRaceOnboarding());
-    unawaited(widget.authService.markTutorialOnboardingSeen());
+    // Item 9 (ui-test-planner R3 audit): this escape hatch marked the TUTORIAL
+    // seen too, which under mandatory mode would be a bypass — a user who
+    // can't grant health access would land in the app having never seen it.
+    // The health gate and the tutorial gate are independent; nothing about a
+    // failed health permission stops a demo race from running.
+    if (!_tutorialMandatory) {
+      unawaited(widget.authService.markTutorialOnboardingSeen());
+    }
     if (!mounted) return;
     // The degraded user still gets a real app: load every home surface that
     // does not depend on a local step read.
@@ -2325,12 +2342,59 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     await markWhatsNewSeenForOnboarding();
   }
 
+  /// Batch 2026-08-09 item 9 — whether the onboarding tutorial is currently
+  /// un-skippable.
+  ///
+  /// TWO conditions, and both must hold: the backend flag is on (absent or
+  /// false on any older backend, which is today's behavior), AND the local
+  /// abandon circuit breaker has not tripped. The single source of truth for
+  /// the intro button, the in-tutorial controls, the back handler and the
+  /// seen-marking rule below, so they can never disagree.
+  bool get _tutorialMandatory => !tutorialSkippable(
+    mandatoryEnabled: widget.authService.tutorialMandatoryEnabled,
+    abandonCount: _tutorialAbandons,
+  );
+
   /// Launches the tutorial from the onboarding step. TutorialScreen claims the
-  /// one-time reward itself on full completion (and marks the step seen). On
-  /// return — whether the user finished or bailed — we mark the step seen so
-  /// onboarding advances to the first-race step. Marking seen is idempotent.
+  /// one-time reward itself on full completion. Marking the step seen is
+  /// idempotent.
+  ///
+  /// Item 9 changes WHEN it is marked. With the tutorial optional, returning
+  /// from the route marked it seen regardless of outcome (F8) — which is
+  /// exactly the bypass "mandatory" has to close, since backgrounding the app
+  /// at the first beat then counted as having done the tutorial. Under
+  /// mandatory mode the mark is gated on `completed == true`; with the flag
+  /// off the old unconditional mark is preserved byte-for-byte.
+  /// Guards the async gap between the START tap and the route push below.
+  /// Without it a double-tap pushes two tutorial routes and double-counts the
+  /// abandon, which would trip the circuit breaker a third early.
+  bool _launchingTutorial = false;
+
   Future<void> _startTutorialOnboarding() async {
+    if (_launchingTutorial) return;
+    _launchingTutorial = true;
+    try {
+      await _runTutorialOnboarding();
+    } finally {
+      _launchingTutorial = false;
+    }
+  }
+
+  Future<void> _runTutorialOnboarding() async {
+    final mandatory = _tutorialMandatory;
+    // Captured before the first await — the route is pushed onto this
+    // navigator, and reading it after the async gap trips
+    // use_build_context_synchronously.
     final navigator = Navigator.of(context);
+
+    // Counted BEFORE the push: an entry that crashes on its first frame, or an
+    // app kill mid-tutorial, reaches no callback at all and must still count
+    // toward the circuit breaker.
+    await recordTutorialEntry();
+    if (!mounted) return;
+    setState(() => _tutorialAbandons = _tutorialAbandons + 1);
+
+    var completed = false;
     await navigator.push(
       MaterialPageRoute(
         builder: (routeContext) => widget.authService.onboardingV3Enabled
@@ -2340,23 +2404,52 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
             ? DemoRaceHost(
                 authService: widget.authService,
                 backendApiService: _backendApiService,
-                onDone: (_) => Navigator.of(routeContext).pop(),
+                mandatory: mandatory,
+                onDone: (didComplete) {
+                  completed = didComplete;
+                  Navigator.of(routeContext).pop();
+                },
               )
             : TutorialScreen(
                 authService: widget.authService,
-                onComplete: (ctx) => Navigator.of(ctx).pop(),
+                mandatory: mandatory,
+                // The spotlight screen reports finish and skip through the
+                // same callback, but it now says WHICH — so the gate below is
+                // structurally safe rather than safe-by-argument (it used to
+                // rely on the skip pill being hidden and the back handler
+                // being inert to know this could only be a completion).
+                onComplete: (ctx, didComplete) {
+                  completed = didComplete;
+                  Navigator.of(ctx).pop();
+                },
               ),
       ),
     );
-    // F8: marked seen on return whether the user finished or bailed — including
-    // the "backgrounded the app and came back" path. Idempotent.
-    await widget.authService.markTutorialOnboardingSeen();
-    await markWhatsNewSeenForOnboarding();
+
+    if (completed) {
+      // Not an abandoned entry — reset the breaker.
+      await clearTutorialAbandons();
+      if (mounted) setState(() => _tutorialAbandons = 0);
+    }
+
+    // Under mandatory mode an incomplete run leaves the gate shut, so the
+    // tutorial re-runs on the next build of the onboarding flow. The 100-coin
+    // grant is idempotent server-side (one ledger key), so a re-completion
+    // cannot double-pay.
+    if (!mandatory || completed) {
+      await widget.authService.markTutorialOnboardingSeen();
+      await markWhatsNewSeenForOnboarding();
+    }
   }
 
   /// Skips the tutorial onboarding step: marks it seen (backend + locally) with
   /// no reward. The user can still earn the 100 coins later by finishing a
   /// replay of the tutorial.
+  ///
+  /// Item 9 keeps this handler rather than deleting it: it is unreachable while
+  /// the tutorial is mandatory (the intro renders no skip control at all), and
+  /// it is still the live path both with the flag off and after the circuit
+  /// breaker trips.
   Future<void> _skipTutorialOnboarding() async {
     await widget.authService.markTutorialOnboardingSeen();
     await markWhatsNewSeenForOnboarding();
@@ -2721,6 +2814,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                 onSkipFirstRace: _skipFirstRaceOnboarding,
                 onboardingV2Enabled: widget.authService.onboardingV2Enabled,
                 onboardingV3Enabled: widget.authService.onboardingV3Enabled,
+                tutorialMandatory: _tutorialMandatory,
                 healthAttemptCount: _healthAttempts,
                 // The ladder: retrying stops being offered once the OS has
                 // refused twice, because it stops producing a prompt.

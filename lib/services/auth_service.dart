@@ -10,6 +10,7 @@ import 'ad_service.dart';
 import 'backend_api_service.dart';
 import 'health_service.dart';
 import 'onboarding_state_service.dart';
+import '../tutorial/tutorial_gate.dart';
 
 /// The Firebase project's **Web** OAuth client id, passed to GoogleSignIn as
 /// `serverClientId` so the returned ID token's `aud` matches what the backend
@@ -98,6 +99,7 @@ class AuthService extends ChangeNotifier {
       'auth_onboarding_invite_code_enabled';
   static const _keyReferredByCode = 'auth_referred_by_code';
   static const _keyAuthPayloadApplied = 'auth_payload_applied';
+  static const _keyTutorialMandatoryEnabled = 'auth_tutorial_mandatory_enabled';
   static const _keyStepSampleBucketMinutes = 'auth_step_sample_bucket_minutes';
   static const _keyPendingShareToken = 'auth_pending_share_token';
   static const _keyPendingTournamentShareToken =
@@ -147,6 +149,7 @@ class AuthService extends ChangeNotifier {
   bool _onboardingInviteCodeEnabled = true;
   String? _referredByCode;
   bool _authPayloadApplied = false;
+  bool _tutorialMandatoryEnabled = false;
   int _stepSampleBucketMinutes = 60;
   String? _pendingShareToken;
   String? _pendingTournamentShareToken;
@@ -236,6 +239,15 @@ class AuthService extends ChangeNotifier {
   /// of one. Callers that hide UI on `referredByCode != null` must wait for
   /// this, or a fresh install flashes the invite step and then hides it.
   bool get authPayloadApplied => _authPayloadApplied;
+  /// Batch 2026-08-09 item 9 — remote kill switch for the MANDATORY tutorial.
+  ///
+  /// Opt-in, like the onboarding flags and for the same reason: a backend
+  /// that predates the key (or serves it null/non-boolean) must leave the
+  /// tutorial skippable, which is exactly today's behavior. Only the literal
+  /// boolean true closes the escape hatches. The client also holds a local
+  /// circuit breaker on top of this (see `tutorial/tutorial_gate.dart`) so a
+  /// wedged user never has to wait for a flag flip to reach the app.
+  bool get tutorialMandatoryEnabled => _tutorialMandatoryEnabled;
 
   /// Remotely-configurable step-sample bucket size in minutes (backend
   /// `featureFlags.stepSampleBucketMinutes`). One of {5, 10, 15, 30, 60};
@@ -338,6 +350,8 @@ class AuthService extends ChangeNotifier {
         prefs.getBool(_keyOnboardingInviteCodeEnabled) ?? true;
     _referredByCode = prefs.getString(_keyReferredByCode);
     _authPayloadApplied = prefs.getBool(_keyAuthPayloadApplied) ?? false;
+    _tutorialMandatoryEnabled =
+        prefs.getBool(_keyTutorialMandatoryEnabled) ?? false;
     _stepSampleBucketMinutes = prefs.getInt(_keyStepSampleBucketMinutes) ?? 60;
     _pendingShareToken = prefs.getString(_keyPendingShareToken);
     _pendingTournamentShareToken = prefs.getString(
@@ -786,12 +800,23 @@ class AuthService extends ChangeNotifier {
       _onboardingInviteCodeEnabled =
           !(activationFlags is Map &&
               activationFlags['onboardingInviteCodeEnabled'] == false);
+      // Item 9. Same opt-in semantics and the same envelope guard.
+      _tutorialMandatoryEnabled =
+          activationFlags is Map &&
+          activationFlags['tutorialMandatoryEnabled'] == true;
     }
     // Contract §12 names the envelope `appSettings`; accept it too so either
     // backend shape flips the switch. Only an explicit false disables.
     final appSettings = backendUser['appSettings'];
     if (appSettings is Map && appSettings.containsKey('teamRacesEnabled')) {
       _teamRacesEnabled = appSettings['teamRacesEnabled'] != false;
+    }
+    // Item 9's flag lives in `KNOWN_FLAGS`, which the backend may serve under
+    // either envelope. Opt-in in both: only the literal true enables it.
+    if (appSettings is Map &&
+        appSettings.containsKey('tutorialMandatoryEnabled')) {
+      _tutorialMandatoryEnabled =
+          appSettings['tutorialMandatoryEnabled'] == true;
     }
   }
 
@@ -848,6 +873,7 @@ class AuthService extends ChangeNotifier {
     _onboardingInviteCodeEnabled = true;
     _referredByCode = null;
     _authPayloadApplied = false;
+    _tutorialMandatoryEnabled = false;
     _stepSampleBucketMinutes = 60;
     _pendingShareToken = null;
     _pendingTournamentShareToken = null;
@@ -880,6 +906,7 @@ class AuthService extends ChangeNotifier {
     await prefs.remove(_keyOnboardingInviteCodeEnabled);
     await prefs.remove(_keyReferredByCode);
     await prefs.remove(_keyAuthPayloadApplied);
+    await prefs.remove(_keyTutorialMandatoryEnabled);
     await prefs.remove(_keyStepSampleBucketMinutes);
     await prefs.remove(_keyPendingShareToken);
     await prefs.remove(_keyPendingTournamentShareToken);
@@ -895,6 +922,12 @@ class AuthService extends ChangeNotifier {
     // coach-tip seen-set are all device-scoped and must not leak across
     // accounts (spec §7).
     await OnboardingStateService.clearPersistedState();
+    // Batch 2026-08-09 item 9, same reasoning again: the mandatory-tutorial
+    // circuit breaker counts abandoned entries per DEVICE. Left behind, a
+    // fresh account on a shared device would start with the previous user's
+    // 3-abandon skip already unlocked and could walk straight past a tutorial
+    // it has never seen.
+    await clearTutorialAbandons();
     notifyListeners();
   }
 
@@ -1153,6 +1186,10 @@ class AuthService extends ChangeNotifier {
     } else {
       await prefs.remove(_keyReferredByCode);
     }
+    await prefs.setBool(
+      _keyTutorialMandatoryEnabled,
+      _tutorialMandatoryEnabled,
+    );
     await prefs.setInt(_keyStepSampleBucketMinutes, _stepSampleBucketMinutes);
   }
 }

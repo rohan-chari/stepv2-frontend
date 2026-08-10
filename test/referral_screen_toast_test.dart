@@ -81,7 +81,12 @@ void main() {
     expect(find.byType(SnackBar), findsNothing);
     expect(find.byKey(const Key('info-toast-shell')), findsOneWidget);
     expect(
-      find.text("You're in! Finish your first race to earn coins."),
+      // The old literal ("You're in! Finish your first race to earn coins.")
+      // had been stale since the copy moved into `referralRedeemedCopy`, so
+      // this assertion was already failing before batch 2026-08-09. Asserting
+      // through the builder alone would be unfalsifiable, so this pins what
+      // item 2 actually changed: the toast names the real qualifying action.
+      find.textContaining('another real player'),
       findsOneWidget,
     );
 

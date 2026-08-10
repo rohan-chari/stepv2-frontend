@@ -80,6 +80,14 @@ class PowerupIcon extends StatelessWidget {
 
   static int get knownTypeCount => _assetNames.length;
 
+  /// Every powerup type this build ships art for, in declaration order.
+  ///
+  /// Exposed for the admin icon gallery (batch 2026-08-09 item 10), which used
+  /// to carry a hand-maintained parallel list — and had silently drifted five
+  /// types behind this map. Driving the gallery from here makes that drift
+  /// impossible rather than merely detectable.
+  static Iterable<String> get knownTypes => _assetNames.keys;
+
   /// Full asset path for a powerup type, or null when unknown. Lets shop
   /// tiles render the art through AccessoryThumbnail (thumb-first, fills
   /// the tile) instead of at this widget's fixed icon size.
@@ -172,11 +180,10 @@ class _TurtleShellIcon extends StatelessWidget {
           width: size * sprite.frameCount,
           height: size,
           fit: BoxFit.contain,
-          errorBuilder: (context, error, stackTrace) =>
-              SizedBox.square(
-                dimension: size,
-                child: Icon(Icons.shield_rounded, size: size * 0.62),
-              ),
+          errorBuilder: (context, error, stackTrace) => SizedBox.square(
+            dimension: size,
+            child: Icon(Icons.shield_rounded, size: size * 0.62),
+          ),
         ),
       ),
     );

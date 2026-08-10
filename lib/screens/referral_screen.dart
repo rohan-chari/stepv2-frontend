@@ -224,9 +224,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
 
   Widget _buildHeader() {
     return DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.of(context).roofLight,
-      ),
+      decoration: BoxDecoration(color: AppColors.of(context).roofLight),
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
         child: Padding(
@@ -557,6 +555,27 @@ class _ReferralScreenState extends State<ReferralScreen> {
 //      its numbers instead of promising an amount the server may not pay.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// The qualifying action (batch 2026-08-09 item 2).
+//
+// The backend gate is now `seedId == null && realParticipants >= 2`: a seeded
+// daily/weekly challenge NEVER completes a referral, even though a referee is
+// auto-enrolled in one and "finishes their first race" within a day. Every
+// surface that describes the payout uses one of these two phrasings so the
+// wording can't drift apart across screens.
+// ---------------------------------------------------------------------------
+
+/// Full definition, for surfaces with room for a sentence.
+const String kQualifyingRacePhrase =
+    'a race with at least one other real player who logs steps';
+
+/// Compact definition, for toasts and share sheets.
+const String kQualifyingRaceShortPhrase = 'a race against another real player';
+
+/// The exclusion, stated explicitly wherever the full phrase is used.
+const String kQualifyingRaceCaveat =
+    'Official daily and weekly challenges don’t count.';
+
 /// True when both figures are present and payable, i.e. safe to state.
 bool _statable(int? referrerCoins, int? refereeCoins) =>
     referrerCoins != null &&
@@ -568,39 +587,43 @@ bool _statable(int? referrerCoins, int? refereeCoins) =>
 String referralHeadlineCopy({int? referrerCoins, int? refereeCoins}) {
   if (!_statable(referrerCoins, refereeCoins)) {
     return 'Send your link. Coins land in both bags when your friend '
-        'finishes their first race.';
+        'finishes $kQualifyingRacePhrase. $kQualifyingRaceCaveat';
   }
   if (referrerCoins == refereeCoins) {
-    return 'Send your link. When your friend finishes their first race, you '
-        'each pocket ${formatCoinsWithCommas(referrerCoins!)} coins.';
+    return 'Send your link. When your friend finishes $kQualifyingRacePhrase, '
+        'you each pocket ${formatCoinsWithCommas(referrerCoins!)} coins. '
+        '$kQualifyingRaceCaveat';
   }
-  return 'Send your link. When your friend finishes their first race, you '
-      'pocket ${formatCoinsWithCommas(referrerCoins!)} coins and they get '
-      '${formatCoinsWithCommas(refereeCoins!)}.';
+  return 'Send your link. When your friend finishes $kQualifyingRacePhrase, '
+      'you pocket ${formatCoinsWithCommas(referrerCoins!)} coins and they get '
+      '${formatCoinsWithCommas(refereeCoins!)}. $kQualifyingRaceCaveat';
 }
 
 /// The Get Coins hub's invite row. Names the qualifying action — the old line
 /// said coins arrive "when a friend joins with your link", which they don't.
 String referralInviteRowCopy({int? referrerCoins, int? refereeCoins}) {
   if (!_statable(referrerCoins, refereeCoins)) {
-    return 'Coins land in both bags when a friend finishes their first race.';
+    return 'Coins land in both bags when a friend finishes '
+        '$kQualifyingRaceShortPhrase. $kQualifyingRaceCaveat';
   }
   if (referrerCoins == refereeCoins) {
     return 'You each pocket ${formatCoinsWithCommas(referrerCoins!)} coins '
-        'when a friend finishes their first race.';
+        'when a friend finishes $kQualifyingRaceShortPhrase. '
+        '$kQualifyingRaceCaveat';
   }
   return 'Pocket ${formatCoinsWithCommas(referrerCoins!)} coins when a friend '
-      'finishes their first race. They get '
-      '${formatCoinsWithCommas(refereeCoins!)}.';
+      'finishes $kQualifyingRaceShortPhrase. They get '
+      '${formatCoinsWithCommas(refereeCoins!)}. $kQualifyingRaceCaveat';
 }
 
 /// Toast after a code is redeemed. Speaks only for the referee's side, so the
 /// referee figure alone is enough here.
 String referralRedeemedCopy({int? refereeCoins}) {
   if (refereeCoins == null || refereeCoins <= 0) {
-    return "You're in. Finish your first race and the coins are yours.";
+    return "You're in. Finish $kQualifyingRaceShortPhrase and the coins are "
+        'yours.';
   }
-  return "You're in. Finish your first race and "
+  return "You're in. Finish $kQualifyingRaceShortPhrase and "
       '${formatCoinsWithCommas(refereeCoins)} coins are yours.';
 }
 
@@ -632,7 +655,7 @@ String referralShareText({
   }
 
   return '$opener Race me on Bara with code $code — $reward once you finish '
-      'your first race: $url';
+      '$kQualifyingRaceShortPhrase: $url';
 }
 
 /// Challenge-framed share copy: a personal taunt with today's live step count

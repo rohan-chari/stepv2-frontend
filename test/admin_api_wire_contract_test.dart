@@ -129,6 +129,53 @@ void main() {
         );
   });
 
+  // Batch 2026-08-09 item 10. The sectioned admin hub must not change what a
+  // SHIPPED admin build asks for: an absent `sections` param is what makes the
+  // backend run today's query set and nothing more.
+  group('GET /admin/stats sections', () {
+    test('no sections -> the bare legacy path, no query string', () async {
+      final client = _FakeHttpClient([const _Scripted(200, '{"stats":{}}')]);
+      final api = BackendApiService(httpClient: client);
+
+      await api.fetchAdminStats(identityToken: 'tok');
+
+      final request = client.requests.single;
+      expect(request.uri.path, '/admin/stats');
+      expect(request.uri.hasQuery, isFalse);
+    });
+
+    test('sections are sent as one comma-joined param', () async {
+      final client = _FakeHttpClient([const _Scripted(200, '{"stats":{}}')]);
+      final api = BackendApiService(httpClient: client);
+
+      await api.fetchAdminStats(
+        identityToken: 'tok',
+        sections: const ['economy', 'ads'],
+      );
+
+      final request = client.requests.single;
+      expect(request.uri.path, '/admin/stats');
+      expect(request.uri.queryParameters['sections'], 'economy,ads');
+    });
+
+    test('a response without the requested block is not an error', () async {
+      // An older backend ignores `sections` entirely. The caller must get the
+      // legacy payload back, not an exception.
+      final client = _FakeHttpClient([
+        const _Scripted(200, '{"stats":{"users":{"total":3}}}'),
+      ]);
+      final api = BackendApiService(httpClient: client);
+
+      final stats = await api.fetchAdminStats(
+        identityToken: 'tok',
+        sections: const ['economy'],
+      );
+
+      expect(stats['users'], {'total': 3});
+      expect(stats['coinEconomy'], isNull);
+    });
+  });
+
   group('PATCH /admin/powerup-shop/items/:itemId', () {
     test('sends ONLY the keys that were provided', () async {
       final client = _FakeHttpClient([

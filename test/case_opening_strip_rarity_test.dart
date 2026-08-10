@@ -62,6 +62,10 @@ void main() {
       'SNEAKY_SWAP': 'UNCOMMON',
       'CLEANSE': 'UNCOMMON',
       'MIRROR': 'UNCOMMON',
+      // Batch 2026-08-09 item 6 added POWER_OUTAGE to the rare decoy pool.
+      // Without it here the tile would fall through to the bundled RARE and
+      // this test would fail intermittently, depending on the random draw.
+      'POWER_OUTAGE': 'UNCOMMON',
     };
 
     await _pumpStrip(tester, rarityByType: allUncommon);

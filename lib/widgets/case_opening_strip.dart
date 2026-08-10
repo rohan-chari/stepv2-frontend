@@ -539,6 +539,9 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip> {
     'SNEAKY_SWAP': 'RARE',
     'MIRROR': 'RARE',
     'CLEANSE': 'RARE',
+    // Batch 2026-08-09 item 6: Power Outage left the shop and entered the
+    // RARE box-drop pool. Absent here it would have painted COMMON.
+    'POWER_OUTAGE': 'RARE',
   };
 
   // Weighted random: common 50%, uncommon 35%, rare 15%
@@ -559,11 +562,14 @@ class _CaseOpeningStripState extends State<CaseOpeningStrip> {
     'WRONG_TURN',
     'PINECONE_TOSS',
   ];
+  // Batch 2026-08-09: FANNY_PACK left `dropPool.RARE` (item 8a) so the reel
+  // must stop advertising it; POWER_OUTAGE joined it (item 6). Decoys only —
+  // the real result tile always comes from the server.
   static const _rareTypes = [
     'RED_CARD',
     'SECOND_WIND',
     'COMPRESSION_SOCKS',
-    'FANNY_PACK',
+    'POWER_OUTAGE',
     'LUCKY_HORSESHOE',
     'POCKET_WATCH',
     'TRAIL_MINE',
