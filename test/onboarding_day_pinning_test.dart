@@ -80,7 +80,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(600, 1000));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    await tester.pumpWidget(_night(TutorialScreen(onComplete: (_) {})));
+    await tester.pumpWidget(_night(TutorialScreen(onComplete: (_, _) {})));
     for (var i = 0; i < 16; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }

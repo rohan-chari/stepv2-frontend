@@ -2305,13 +2305,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                 authService: widget.authService,
                 mandatory: mandatory,
                 // The spotlight screen reports finish and skip through the
-                // same callback. Under mandatory mode the skip pill is not
-                // rendered and the back handler is inert, so the ONLY way to
-                // get here is running the last step — which is why this can
-                // treat the callback as a completion. With the flag off the
-                // value is moot: the mark below is unconditional there.
-                onComplete: (ctx) {
-                  completed = true;
+                // same callback, but it now says WHICH — so the gate below is
+                // structurally safe rather than safe-by-argument (it used to
+                // rely on the skip pill being hidden and the back handler
+                // being inert to know this could only be a completion).
+                onComplete: (ctx, didComplete) {
+                  completed = didComplete;
                   Navigator.of(ctx).pop();
                 },
               ),

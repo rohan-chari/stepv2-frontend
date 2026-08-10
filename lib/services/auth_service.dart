@@ -10,6 +10,7 @@ import 'ad_service.dart';
 import 'backend_api_service.dart';
 import 'health_service.dart';
 import 'onboarding_state_service.dart';
+import '../tutorial/tutorial_gate.dart';
 
 /// The Firebase project's **Web** OAuth client id, passed to GoogleSignIn as
 /// `serverClientId` so the returned ID token's `aud` matches what the backend
@@ -853,6 +854,12 @@ class AuthService extends ChangeNotifier {
     // coach-tip seen-set are all device-scoped and must not leak across
     // accounts (spec §7).
     await OnboardingStateService.clearPersistedState();
+    // Batch 2026-08-09 item 9, same reasoning again: the mandatory-tutorial
+    // circuit breaker counts abandoned entries per DEVICE. Left behind, a
+    // fresh account on a shared device would start with the previous user's
+    // 3-abandon skip already unlocked and could walk straight past a tutorial
+    // it has never seen.
+    await clearTutorialAbandons();
     notifyListeners();
   }
 

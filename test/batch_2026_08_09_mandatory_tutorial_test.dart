@@ -144,6 +144,48 @@ void main() {
       expect(await tutorialAbandonCount(), 0);
     });
 
+    test(
+      'sign-out clears the counter so it cannot follow the device',
+      () async {
+        // Device-scoped, not account-scoped. Left behind, the next account on a
+        // shared device would start with the skip already unlocked and could
+        // walk past a tutorial it has never seen — the same cross-account leak
+        // the health-auth key had.
+        SharedPreferences.setMockInitialValues({
+          'auth_identity_token': 'apple-token',
+          'auth_user_identifier': 'apple-user-123',
+          'auth_session_token': 'session-token',
+          'auth_backend_user_id': 'user-1',
+        });
+        final auth = AuthService();
+        await auth.restoreSession();
+
+        for (var i = 0; i < kTutorialAbandonLimit; i++) {
+          await recordTutorialEntry();
+        }
+        expect(await tutorialAbandonCount(), kTutorialAbandonLimit);
+        expect(
+          tutorialSkippable(
+            mandatoryEnabled: true,
+            abandonCount: await tutorialAbandonCount(),
+          ),
+          isTrue,
+        );
+
+        await auth.signOut();
+
+        expect(await tutorialAbandonCount(), 0);
+        expect(
+          tutorialSkippable(
+            mandatoryEnabled: true,
+            abandonCount: await tutorialAbandonCount(),
+          ),
+          isFalse,
+          reason: 'the next account starts mandatory again',
+        );
+      },
+    );
+
     test('with the flag off the tutorial is skippable at any count', () async {
       expect(
         tutorialSkippable(mandatoryEnabled: false, abandonCount: 0),
@@ -368,19 +410,30 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(600, 1000));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
-      var finished = false;
+      var exited = false;
+      bool? reportedCompleted;
       await tester.pumpWidget(
-        MaterialApp(home: TutorialScreen(onComplete: (_) => finished = true)),
+        MaterialApp(
+          home: TutorialScreen(
+            onComplete: (_, completed) {
+              exited = true;
+              reportedCompleted = completed;
+            },
+          ),
+        ),
       );
       await _settle(tester);
 
       expect(find.text('SKIP'), findsOneWidget);
       await _pressBack(tester);
       expect(
-        finished,
+        exited,
         isTrue,
         reason: 'the Settings replay must always have an exit',
       );
+      // And the exit is reported as a NON-completion, so a host that gates on
+      // completion can't mistake a back gesture for finishing the tutorial.
+      expect(reportedCompleted, isFalse);
     });
 
     testWidgets('mandatory hides the SKIP pill', (tester) async {
@@ -388,7 +441,9 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
       await tester.pumpWidget(
-        MaterialApp(home: TutorialScreen(mandatory: true, onComplete: (_) {})),
+        MaterialApp(
+          home: TutorialScreen(mandatory: true, onComplete: (_, _) {}),
+        ),
       );
       await _settle(tester);
 
@@ -407,7 +462,7 @@ void main() {
         MaterialApp(
           home: TutorialScreen(
             mandatory: true,
-            onComplete: (_) => finished = true,
+            onComplete: (_, _) => finished = true,
           ),
         ),
       );
@@ -425,11 +480,15 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
       var finished = false;
+      bool? reportedCompleted;
       await tester.pumpWidget(
         MaterialApp(
           home: TutorialScreen(
             mandatory: true,
-            onComplete: (_) => finished = true,
+            onComplete: (_, completed) {
+              finished = true;
+              reportedCompleted = completed;
+            },
           ),
         ),
       );
@@ -443,6 +502,9 @@ void main() {
       await _settle(tester);
 
       expect(finished, isTrue);
+      // Reaching the last step is the only thing that reports completion —
+      // this is what lets the host mark the onboarding step seen.
+      expect(reportedCompleted, isTrue);
     });
   });
 }

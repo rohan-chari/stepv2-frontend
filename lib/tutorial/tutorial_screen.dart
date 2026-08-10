@@ -111,7 +111,13 @@ class TutorialScreen extends StatefulWidget {
   /// sits on top of the app and pops cleanly). On first run there is nothing
   /// beneath the tutorial to pop to, so the caller passes a callback that
   /// routes into the app instead.
-  final void Function(BuildContext context)? onComplete;
+  ///
+  /// [completed] is true only when the user reached the end — a skip, and a
+  /// back gesture outside mandatory mode, report false. Batch 2026-08-09 item
+  /// 9 needs that distinction to decide whether the onboarding step may be
+  /// marked seen; it used to be inferred by the caller from the fact that the
+  /// skip controls were hidden, which was correct but only by argument.
+  final void Function(BuildContext context, bool completed)? onComplete;
 
   /// The real auth service. When provided, finishing the *entire* tutorial
   /// (not skipping) claims the one-time 100-coin completion reward via the
@@ -291,7 +297,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
     }
 
     if (widget.onComplete != null) {
-      widget.onComplete!(context);
+      widget.onComplete!(context, completed);
     } else {
       Navigator.of(context).pop();
     }

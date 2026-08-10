@@ -10,8 +10,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// skip control comes back regardless of the flag.
 ///
 /// Deliberately local-only and deliberately cheap: no backend field, no sync.
-/// Losing the counter (sign-out clears prefs) only means a wedged user has to
-/// bounce three more times, which is the same guarantee a fresh install gets.
+///
+/// It is device-scoped, not account-scoped, so [clearTutorialAbandons] is
+/// called from `AuthService.signOut` alongside the other device-scoped state
+/// (health authorization, the onboarding ladder). Without that, a fresh
+/// account on a shared device would inherit the previous user's unlocked skip
+/// — the same cross-account leak the health-auth key had.
 const int kTutorialAbandonLimit = 3;
 
 const String _kAbandonCountKey = 'tutorial_abandon_count_v1';
@@ -40,7 +44,8 @@ Future<void> recordTutorialEntry() async {
 }
 
 /// Clears the counter. Called on a COMPLETED run — the entry was not abandoned,
-/// and a user who has finished once is not wedged.
+/// and a user who has finished once is not wedged — and from sign-out, so the
+/// unlock does not follow the device to the next account.
 Future<void> clearTutorialAbandons() async {
   try {
     final prefs = await SharedPreferences.getInstance();
