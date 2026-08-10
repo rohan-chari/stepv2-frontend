@@ -107,7 +107,23 @@ dropPool.RARE     = RED_CARD, SECOND_WIND, COMPRESSION_SOCKS, FANNY_PACK,
 typeWeights       = { RED_CARD: 0.5 }
 teamOnlyTypes     = [RALLY_FLAG]
 storeOnlyTypes    = IMPOSTER, RAINSTORM, SIGNAL_JAMMER, LEECH, DEFENSE_SCAN, HITCHHIKE, QUICK_RINSE
+luckyHorseshoe.rareChanceByLevel = [0, 0.2, 0.45, 1.0]
+upgradeCosts.byType = {}   (byRarity per §3.4)
+discardPrices     = (key absent — code defaults apply)
 ```
+
+Re-verified unchanged 2026-08-09 (`version 3`, `active`, `created_at
+2026-07-28 09:46:24`). Note `storeOnlyTypes` in the DB row does **not** list
+`POWER_OUTAGE`; the `CODE` default does, and `enforceStoreOnlyExclusion` unions
+both lists before filtering `dropPool` — so a drop-pool addition for a
+code-listed store-only type is silently zeroed until `defaults.js` is edited too.
+
+**Observed 30d roll volume (verified 2026-08-09):** 11,695 typed rolls =
+**389.8/day** across 54 users; mix C 37.7% / U 28.7% / R 30.3% (396 rows, 3.4%,
+still `type IS NULL` unopened boxes). Rare drops by type, 30d: `sneaky_swap` 408,
+`compression_socks` 394, `lucky_horseshoe` 379, `trail_mine` 374, `shortcut` 369,
+`second_wind` 347, `mirror` 338, `cleanse` 302, `fanny_pack` 300, `red_card` 184,
+`pocket_watch` 147 (legacy, no longer in the pool).
 
 ### 3.3 Mystery-box supply and rarity odds
 
@@ -307,27 +323,175 @@ Box hoarding: gap between box mint and box open — mean 16.0h, **p50 1.1h, p90
 
 | Key | `DB balance_config` v3 | `CODE balanceConfig.defaults.js` | Consequence |
 |---|---|---|---|
-| `rarityByType.WRONG_TURN` | `RARE` | `UNCOMMON` | drops from the **UNCOMMON** tier (dropPool wins) but upgrades on the **RARE** ladder — 195 coins to max instead of 130 |
+| `rarityByType.WRONG_TURN` | `RARE` | `UNCOMMON` | drops from the **UNCOMMON** tier (dropPool wins) but upgrades on the **RARE** ladder — L3 costs **135**, not 90. Confirmed against prod upgrade events (§3.4) |
 | `rarityByType.SNEAKY_SWAP` | `UNCOMMON` | `RARE` | drops from RARE, tinted/priced as UNCOMMON |
+| `rarityByType.POWER_OUTAGE` | `UNCOMMON` | `UNCOMMON` | agrees; sets its would-be discard price at 5 |
 | `storeOnlyTypes` | 7 entries | 17 entries | harmless — `enforceStoreOnlyExclusion` unions the code list before filtering `dropPool` |
 | `dailyBoxExcludedTypes` | present | removed | ignored at runtime |
 
-### 3.4 Upgrade ladder — `DB balance_config.upgradeCosts.byRarity`
+### 3.4 Upgrade ladder — `DB balance_config.upgradeCosts` (verified 2026-08-09)
 
-| Rarity | L1→L2 | L2→L3 | L3→L4 | Full |
-|---|---|---|---|---|
-| COMMON | 5 | 15 | 45 | 65 |
-| UNCOMMON | 10 | 30 | 90 | 130 |
-| RARE | 15 | 45 | 135 | 195 |
+**Upgrades are NOT cumulative and NOT persistent.** `upgradeLevel` is a
+parameter of the *use* call; the price is a single lookup
+`byRarity[rarity][level]` (`CODE powerupUpgrades.js:68-80`) charged once, and the
+level is stamped onto the consumed `race_powerups` row. Playing at L3 costs the
+L3 price only — there is no ladder to climb and nothing carries to the next copy.
+
+| Rarity | L1 | L2 | L3 |
+|---|---|---|---|
+| COMMON | 5 | 15 | 45 |
+| UNCOMMON | 10 | 30 | 90 |
+| RARE | 15 | 45 | 135 |
+
+`upgradeCosts.byType` overrides `byRarity` per type and is `{}` in both `CODE`
+and `DB` — it is the intended seam for repricing a single type.
 
 15 upgradeable types (`upgradeableTypes`). `TRAIL_MAGNET` and `CAMPFIRE_REST`
 are upgradeable but **no longer generated** (`powerupOdds.js:6`).
 
-### 3.5 Discard — current behaviour
+Which ladder a type charges is `rarityByType`, **not** its drop tier — so the
+§3.3f drift is a live price fact: `WRONG_TURN` drops from the UNCOMMON tier but
+charges the **RARE** ladder. Confirmed against prod `powerup_upgrade_events`
+(all-time, `status='APPLIED'`):
 
-`CODE powerups/commands/discardPowerup.js` — sets status `DISCARDED`, writes a
-race event, emits `POWERUP_DISCARDED`. **Pays 0 coins today.** Eligible statuses:
-`HELD` and `MYSTERY_BOX` (i.e. an *unopened* box can be discarded).
+| Type | L1 n / avg cost | L2 n / avg | L3 n / avg | Ladder in force |
+|---|---|---|---|---|
+| `wrong_turn` | 54 / 17.3 | 18 / 42.5 | 6 / 120.0 | RARE `[15,45,135]` |
+| `leg_cramp` | 60 / 16.4 | 19 / 30.0 | 2 / 90.0 | UNCOMMON `[10,30,90]` |
+| `stealth_mode` | 33 / 16.4 | 12 / 30.0 | 3 / 90.0 | UNCOMMON |
+| `lucky_horseshoe` | 4 / 73.8 | 0 | 0 | retired premium ladder (2026-07-14) |
+
+(L1 averages exceed the nominal price because rows predate the 2026-07-28
+rarity reclass.) Level mix across all types: **≈74% L1 / 22% L2 / 5% L3**.
+
+Wrong Turn + Leg Cramp upgrades in the last 30d: **145 events, 3,525 coins =
+117.5 coins/day**, i.e. **18.7% of the whole `powerup_upgrade` sink** (§2).
+
+### 3.4b Step-swing value per tier — computed 2026-08-09
+
+`typeOddsForPosition` (live prod config, N=6) weighted by the §3.3c empirical
+value table (`SNEAKY_SWAP` conservatively 0). "Swing" = self gain + damage dealt.
+
+| Race position | E[COMMON] | E[UNCOMMON] | E[RARE] | E[box] |
+|---|---|---|---|---|
+| P1 (leader) | 1,096 | **1,737** | 491 | 1,093 |
+| P2 | 1,096 | **1,737** | 1,171 | 1,292 |
+| P3 | 1,096 | **1,737** | 1,171 | 1,308 |
+| P4 | 1,261 | **2,084** | 1,309 | 1,534 |
+| P5 | 1,261 | **2,084** | 1,309 | 1,552 |
+| P6 (last) | 1,261 | **2,084** | 1,257 | 1,547 |
+
+**Rarity is inverted relative to value.** UNCOMMON is the most valuable tier at
+every position (it is 100% Wrong Turn / Leg Cramp / Stealth in a solo race) and
+RARE is the least (half the tier — Socks, Cleanse, Mirror, Horseshoe, and now
+Power Outage — has zero direct step swing). At the leader, RARE is worth 45% of
+UNCOMMON because `leaderExcluded` removes Red Card and Second Wind, the only two
+high-swing rares. Every "guaranteed rare" mechanic inherits this.
+
+### 3.4c Timed-effect durations — `CODE powerupUpgrades.js:35-45` (NOT balance config)
+
+`DURATIONS_MS` and `MAGNITUDES` are deliberately **code constants**, not admin
+config (file comment `:14-18`). They are stamped into the effect row's
+`expiresAt` at use time, so a deploy changes all future uses instantly on every
+app version and leaves in-flight effects alone.
+
+| Type | L0 | L1 | L2 | L3 |
+|---|---|---|---|---|
+| `LEG_CRAMP`, `RUNNERS_HIGH`, `STEALTH_MODE`, `WRONG_TURN`, `DETOUR_SIGN`, `POCKET_WATCH` | 1h | 2h | 3h | 4h |
+| `COMPRESSION_SOCKS` | 24h | 30h | 36h | 48h |
+| `CAMPFIRE_REST` | 45m | 60m | 75m | 90m |
+
+Fixed (non-upgradeable) durations: `SIGNAL_JAMMER` 1h
+(`usePowerup.js:158`), `POWER_OUTAGE` 30m (`:129`), Mystery Potion's cramps
+**hardcoded 2h** self and enemy (`:546`, `:730`) with potion self-wrong-turn at
+1h (`:559`) — the potion has never adopted the standard ladder.
+
+**Cost per marginal duration minute** at the live ladders, with the empirical
+targeted-victim walk rate of **1,737 steps/h** (§3.3c `LEG_CRAMP` realised
+window average; 94% of those uses were L0/1h, so it is a clean per-hour rate):
+
+| | +minutes vs L0 | coins | swing steps bought | steps/coin |
+|---|---|---|---|---|
+| `LEG_CRAMP` L1 | +60 | 10 | 1,737 | 174 |
+| `LEG_CRAMP` L2 | +120 | 30 | 3,474 | 116 |
+| `LEG_CRAMP` L3 | +180 | 90 | 5,211 | 58 |
+| `WRONG_TURN` L1 | +60 | 15 | 3,474 (2× — sign flip) | 232 |
+| `WRONG_TURN` L2 | +120 | 45 | 6,948 | 154 |
+| `WRONG_TURN` L3 | +180 | 135 | 10,422 | 77 |
+
+Market band for comparison (same value table): `PROTEIN_SHAKE` 150/100/67,
+`SHORTCUT` 67/44/30, `PINECONE_TOSS` 50/50/33, `TRAIL_MIX` ≈50/…/22 steps/coin
+at L1/L2/L3. `STEALTH_MODE` and `DETOUR_SIGN` buy 0 direct step value.
+
+**Population walk-decay reference** (prod, 30d, hourly buckets from
+`step_samples`, n=30,070 user-hours with steps>0): the hour *after* an active
+hour averages **497 steps**, median 146, p90 1,459, and is **zero 23.4%** of the
+time. A marginal duration extension is therefore worth 0.3–1.0× the first hour
+depending on how well-timed the attack was; 1,737/h is the optimistic bound.
+
+### 3.5 Discard — `CODE powerups/commands/discardPowerup.js` (batch 2026-08-08)
+
+Sets status `DISCARDED`, writes a race event, emits `POWERUP_DISCARDED`, and
+pays `discardPrices[rarity]` coins capped per user per LOCAL day.
+
+| Knob | Value | Source |
+|---|---|---|
+| `discardPrices` | COMMON 2 / UNCOMMON 5 / RARE 10 | `CODE balanceConfig.defaults.js:248-252` — the **live DB row has no `discardPrices` key**, so code defaults apply via `mergeOverDefaults` |
+| Daily cap | 40 coins/user/local day | `ENV POWERUP_DISCARD_DAILY_COIN_CAP`, default `CODE discardRewards.js:10` |
+| Unopened `MYSTERY_BOX` | pays **0** — a rule, not a knob | `CODE discardRewards.js:41-48` |
+| Partial award at the cap | `min(price, capRemaining)` | `CODE discardRewards.js` |
+
+Price keys off `race_powerups.rarity` (the tier actually rolled), not
+`rarityByType`. Eligible statuses: `HELD` and `MYSTERY_BOX`.
+
+**Not yet live in prod:** `coin_transactions` has **0** rows with reason
+`powerup_discard` (verified 2026-08-09). All discard EV below is prospective.
+
+Expected discard yield per box at live odds (no horseshoe): **P1 4.91 · P3 5.70 ·
+P6 6.65 coins**. The 40/day cap therefore binds at ~6–8 discarded rolls/day.
+
+### 3.6 Lucky Horseshoe — `DB balance_config.luckyHorseshoe`, verified 2026-08-09
+
+| Fact | Value | Source |
+|---|---|---|
+| `rareChanceByLevel` | `[0, 0.2, 0.45, 1.0]` | `DB balance_config` v3 = `CODE defaults.js:378-380` |
+| Roll timing | at **use** time, frozen into `race_active_effects.metadata.minRarity` | `CODE usePowerup.js:397-403, 3129-3141` |
+| Floor on a miss | `UNCOMMON` | same |
+| Forced pick | weighted draw from the **position-filtered** RARE pool — may currently return another Horseshoe | `CODE openMysteryBox.js:186-194` |
+| Reroll path | **no horseshoe logic at all** — an ad-funded reroll is a fresh roll and ignores `minRarity` | `CODE rerollMysteryBox.js:295-297` |
+| Shop SKU | **none** — `powerup_shop_items` has no `lucky_horseshoe` row | `DB` |
+| Duplicate guard | one active Horseshoe per participant (400 otherwise) | `CODE usePowerup.js:1909-1917` |
+| Hard validation | 4 entries in `[0,1]`, non-decreasing, `[3]` must be exactly `1.0` | `CODE balanceConfig.js:484-500` |
+| Soft bound | `luckyHorseshoe.rareChanceByLevel.1` ∈ `[0, 0.5]` → a save above it returns **422 `bound_warnings`** unless `acknowledgeBoundWarnings`, and stamps `boundOverride=true` on the row | `CODE defaults.js:441-446`, `balanceConfig.js:759-767` |
+
+**Prod usage, all-time (verified 2026-08-09):** 594 copies ever
+(580 used, 10 expired, 4 used at L1); 375 uses by 32 users in the last 30d.
+Upgrades: **4 events, 3 users, 295 coins, all tier 1, all already consumed.**
+**Zero upgraded Horseshoes are currently held** — `upgrade_level` lives on the
+`race_powerups` row and the row is consumed on use, so retiring the ladder
+strands nothing.
+
+**Rare-inflation and chain length** (Monte Carlo, 2×10⁶ boxes per cell, RARE pool
+after Fanny Pack removal + Power Outage addition, horseshoe used immediately on
+the next box):
+
+| Position | baseline rare rate | with 100% horseshoe, self-excluded | without self-exclusion | mean chain (excl / no-excl) | max chain seen |
+|---|---|---|---|---|---|
+| P1 | 27.0% | **29.4%** | 29.8% | 1.00 / 1.14 | 1 / 6 |
+| P3 | 36.2% | **38.5%** | 38.8% | 1.00 / 1.12 | 1 / 6 |
+| P6 | 45.0% | **48.1%** | 48.6% | 1.00 / 1.16 | 1 / 7 |
+
+Closed form: with `r` = P(rare) and `h` = the Horseshoe's share of the RARE pool,
+the forced-box fraction is `rh/(1+rh)` and the un-excluded chain is geometric
+with ratio `h ≈ 0.105–0.133`, converging to **1.12–1.16 forced rares per
+Horseshoe**. There is no rare-farming loop with or without the self-exclusion.
+
+**Discard interaction — no coin loop.** Discarding a Horseshoe pays 10. Using it
+converts one box worth 4.91–6.65 in expected discard coins into one worth 10, a
+gain of 3.4–5.1 — less than the 10 it was worth unspent. Simulated coins/box:
+**never use 4.913 / use 4.752 at P1**, **6.650 / 6.273 at P6**. Using the
+Horseshoe is strictly coin-negative and step-positive, which is the correct
+incentive.
 
 ---
 
@@ -518,18 +682,377 @@ Leader:last self-steps 6.0×. Trailer's Wrong Turn + Leg Cramp share falls from
 | 1 | 0.75 | 2.63 | 674 | 1,770 | 1,980 |
 
 Leader:last self-steps **3.7×**. This is the only option that moves the
-dominant term. Sandbagging remains unprofitable: last place still earns 6×
-fewer boxes than the leader.
+dominant term. Sandbagging remains unprofitable (dynamic sim, Option H section:
+min winning walk-fraction 125% with damage, 105% without). **But it raises the
+hoarding edge from +1.0% to +7.4%** — see the Option H exploit re-check; the
+raw-steps-position fix is a prerequisite for E as well as for H.
 
 **Option F — repeat-target cap (code change)** e.g. max 2 offensive effects
 from the same attacker on the same victim per rolling 24h per race. Prod tail
 today: p99 = 10, max = 19 uses per (race, attacker, victim) pair.
+
+> **Owner decision 2026-08-09 — Option E DECLINED.** Selected scope is
+> **Option H config + the raw-steps position fix** (its stated prerequisite),
+> plus the `rarityByType` drift reconcile (`WRONG_TURN` → UNCOMMON, 195→130;
+> `SNEAKY_SWAP` → RARE, 130→195). Spec:
+> `docs/box-raw-steps-position-and-option-h-requirements.md`. Options E, F and
+> G remain unselected. **Everything in §8 is still NOT APPLIED** until the
+> backend deploy and the `balance_config` row land; mark APPLIED with the
+> config version id at that point.
+>
+> Ordering is mandatory: the raw-steps fix ships **before** the Option H row.
+> Option H roughly doubles the value of trailing odds (E[self]/box 635 → 1,180),
+> so applying the config first amplifies the hoarding incentive it depends on
+> the code fix to remove.
 
 **Option G — Wrong Turn sign clamp (code change)**
 `effectMultiplier.js:132` currently returns `−M`. Clamping to `−min(M, 1)`
 removes the "your paid buff is turned into double damage" interaction (8.4% of
 Wrong Turns today).
 
+### Option H — trailers catch up by SELF-BOOST, not griefing (2026-08-09, NOT APPLIED)
+
+Design goal (owner): players in lower positions should receive catch-up /
+self-boost powerups rather than offensive ones. Offense should sit with
+mid-pack and the front, which is where prod already shows it being *used*
+(§3.3e: the lead bucket throws 46% of all Wrong Turns; last place throws 9%).
+
+**Enabling mechanic.** `validateConfig` (`balanceConfig.js`) requires only that
+a `dropPool` member *has* a rarity in `rarityByType` — it does **not** require
+the tier to equal `rarityByType[type]`. So `PROTEIN_SHAKE`, `TRAIL_MIX` and
+`RUNNERS_HIGH` can be added to `dropPool.UNCOMMON` while leaving `rarityByType`
+(and therefore the upgrade ladder, §3.4) untouched. Without this the UNCOMMON
+tier in a solo race is only `LEG_CRAMP` / `STEALTH_MODE` / `WRONG_TURN`
+(`RALLY_FLAG` is team-gated out), i.e. 100% grief with nowhere for the mass to
+move.
+
+> **Empty-weight trap — verified.** If the UNCOMMON tier is left as-is and all
+> three members are given `trailingDownweight: 0`, `drawWeighted` sees
+> `total === 0` and falls back to a **uniform** pick over the pool
+> (`powerupOdds.js:226`). Wrong Turn + Leg Cramp then become **66.7%** of the
+> tier — the down-weight silently inverts into an up-weight. Any zero-weight
+> tier is unsafe; a tier must always retain a positively-weighted member.
+
+**H — full config (config-only; `validateConfig` returns `[]`)**
+
+```
+dropPool.UNCOMMON  = LEG_CRAMP, STEALTH_MODE, WRONG_TURN, RALLY_FLAG,
+                     PROTEIN_SHAKE, TRAIL_MIX, RUNNERS_HIGH   <- 3 added
+dropPool.COMMON    unchanged
+dropPool.RARE      unchanged
+rarityByType       unchanged (upgrade prices unchanged)
+positionOdds.first = [0.52, 0.20, 0.28]     (was [0.48, 0.25, 0.27])
+positionOdds.last  = [0.30, 0.36, 0.34]     (was [0.20, 0.35, 0.45])
+positionRules.leaderExcluded     = RED_CARD, SECOND_WIND        (unchanged)
+positionRules.lastPlaceExcluded  = TRAIL_MINE                   (unchanged)
+positionRules.leadingDownweight  = { RUNNERS_HIGH 0.5, PROTEIN_SHAKE 0.7, TRAIL_MIX 0.7 }
+positionRules.trailingDownweight = { WRONG_TURN 0.2, LEG_CRAMP 0.25,
+                                     PINECONE_TOSS 0.4, DETOUR_SIGN 0.4,
+                                     SNEAKY_SWAP 0.5, CLEANSE 0.5, MIRROR 0.5,
+                                     STEALTH_MODE 1 }   <- MUST be explicit
+positionRules.leadingDownweightFrom  = 0.4   (unchanged)
+positionRules.trailingDownweightFrom = 0.6   (unchanged)
+```
+
+`STEALTH_MODE`'s down-weight is neutralized with an **explicit `1`** — NOT by
+omitting the key. `mergeOverDefaults` merges plain objects recursively (only
+arrays replace), so a stored `trailingDownweight` missing the key would
+silently inherit the code default's `0.5` and the restore would do nothing
+(caught during implementation, 2026-08-09). Rationale: prod shows trailers
+are barely attacked (0.19 Wrong Turns received per head), so weighting them
+*away* from defense was correct but the freed mass is better spent on
+self-boost.
+
+**Per-type drop probability under H, N=6 (%)**
+
+| Type | P1 | P2 | P3 | P4 | P5 | P6 |
+|---|---|---|---|---|---|---|
+| PROTEIN_SHAKE | 12.19 | 11.86 | 11.53 | 17.70 | 17.36 | **17.01** |
+| TRAIL_MIX | 12.19 | 11.86 | 11.53 | 17.70 | 17.36 | **17.01** |
+| RUNNERS_HIGH | 8.71 | 8.47 | 8.23 | 17.70 | 17.36 | **17.01** |
+| SECOND_WIND | 0 | 3.07 | 3.20 | 3.95 | 4.10 | 4.86 |
+| DETOUR_SIGN | 13.33 | 12.21 | 11.08 | 4.08 | 3.62 | 3.16 |
+| PINECONE_TOSS | 13.33 | 12.21 | 11.08 | 4.08 | 3.62 | 3.16 |
+| WRONG_TURN | 4.08 | 4.73 | **5.39** | 1.50 | 1.66 | **1.82** |
+| LEG_CRAMP | 4.08 | 4.73 | **5.39** | 1.87 | 2.08 | **2.28** |
+| STEALTH_MODE | 4.08 | 4.73 | 5.39 | 3.75 | 4.15 | 4.56 |
+| RED_CARD | 0 | 1.54 | 1.60 | 1.98 | 2.05 | 2.43 |
+| TRAIL_MINE | 3.50 | 3.07 | 3.20 | 3.95 | 4.10 | 0 |
+| CLEANSE / MIRROR / SNEAKY_SWAP | 3.50 | 3.07 | 3.20 | 1.98 | 2.05 | 2.43 |
+| COMPRESSION_SOCKS / FANNY_PACK / LUCKY_HORSESHOE / SHORTCUT | 3.50 | 3.07 | 3.20 | 3.95 | 4.10 | 4.86 |
+
+Wrong Turn + Leg Cramp now **peak at mid-pack (P3, 10.8%)**, not at the back.
+
+**EV by position, before vs after**
+
+| | npos | boxes/race | E[self]/box | E[dmg]/box | self/race | dmg/race | %self-boost | %WT+LC |
+|---|---|---|---|---|---|---|---|---|
+| **A (current)** | 0 | 18.71 | 499 | 635 | 9,328 | 11,881 | 33.4 | 16.7 |
+| | 0.5 | 7.22 | 576 | 841 | 4,160 | 6,069 | 31.8 | 20.0 |
+| | 1 | 1.97 | 540 | 1,079 | 1,064 | 2,126 | 30.0 | **28.0** |
+| **H** | 0 | 18.71 | 635 | 439 | 11,884 | 8,215 | 40.1 | 8.2 |
+| | 0.25 | 12.59 | 721 | 568 | 9,080 | 7,150 | 41.3 | 9.8 |
+| | 0.5 | 7.22 | 882 | 537 | 6,367 | 3,878 | 48.4 | 9.3 |
+| | 0.75 | 4.01 | 1,164 | 393 | 4,668 | 1,577 | 64.5 | 3.6 |
+| | 1 | 1.97 | 1,180 | 371 | 2,325 | 730 | **65.6** | **4.1** |
+| **H + Option E** | 0 | 15.59 | 635 | 439 | 9,904 | 6,846 | 40.1 | 8.2 |
+| | 0.5 | 7.41 | 882 | 537 | 6,530 | 3,977 | 48.4 | 9.3 |
+| | 1 | 2.63 | 1,180 | 371 | 3,100 | 974 | 65.6 | 4.1 |
+
+Leader:last self-steps per race: **A 8.8× → H 5.1× → H+E 3.2×**.
+
+**Step inflation.** Total self-boost steps injected per race (5 sampled slots)
+rises 23,728 → 34,324 (**+45%**). No coin impact (boxes are free), but
+`target_steps` races will complete faster and effective-step leaderboards
+inflate. Lower `positionOdds.*` COMMON/UNCOMMON mass, or trim `MAGNITUDES`, if
+that is unwanted.
+
+**H-hard variant — REJECTED.** Adding `WRONG_TURN`/`LEG_CRAMP` to
+`lastPlaceExcluded` is **rejected by `validateConfig`** when those types also
+appear in `trailingDownweight` (*"a type may be in at most one positionRules
+list"*). Even with the down-weights removed it is worse:
+`lastPlaceExcluded` keys off `isStepLast` (nobody strictly behind), so it fires
+only for the literal last player — and for **every** player in a 2-player race
+and for **everyone at a 0–0 race start**, where the whole field is
+simultaneously `isStepLeader` and `isStepLast`. Verified pools at a 0–0 start:
+UNCOMMON `[STEALTH_MODE, PROTEIN_SHAKE, TRAIL_MIX, RUNNERS_HIGH]`, RARE loses
+Red Card, Second Wind and Trail Mine. The ramped down-weight (H) reaches
+4.1% at last place without any of these edge cases.
+
+**Exploit re-check under H** — Monte Carlo, 6 players × 7 days × 10,000
+steps/day, interval 2,500, position recomputed from `totalSteps` (raw + bonus)
+every 3h, offense targeted at the prod-measured share (61% lead / 34% mid / 5%
+last), 70% use rate, 200 races per bisection step:
+
+| Config | min winning walk-fraction φ (with damage) | φ (damage off — worst case) | hoarder edge |
+|---|---|---|---|
+| A current | 119.2% | 105.3% | +785 (+1.0%) |
+| A + Option E | 125.1% | 105.2% | +5,932 (+7.4%) |
+| H | ~115% | 107.7% | **+10,300 (+12.5%)** |
+| H + Option E | ~125% | 115.2% | **+19,958 (+24.9%)** |
+
+- **Sandbagging (walking less on purpose): NOT viable** under any variant.
+  φ > 1.05 even with all incoming damage disabled. The static break-even
+  estimate (74–88%) is **wrong** because it holds npos fixed; bonus steps feed
+  into `totalSteps`, which feeds position, so the catch-up switches itself off
+  as soon as it works. Box supply also still scales with raw steps.
+- **Hoarding IS viable and is created by this change.** Unused powerups do not
+  raise `totalSteps`, so a player who banks everything stays pinned at the back
+  and farms trailing odds all race, then dumps on the final day. Worth **+1.0%
+  today**, **+12.5% under H**, **+24.9% under H + Option E** — for a player
+  walking exactly the field average. This is the §7 box-banking exploit
+  (mint-vs-open position) plus a new *hold-unused-powerups* variant that
+  mint-time snapshotting alone does **not** fix.
+  > **Magnitude correction (2026-08-09).** Those percentages are an **upper
+  > bound**: the sim let the hoarder bank unlimited items. In reality inventory
+  > is capped at `DEFAULT_POWERUP_SLOTS = 3` plus `MAX_QUEUED_BOXES = 1`, and
+  > further crossings are **forfeited** (`rollPowerup.js:5-6,137-145`), so at
+  > most 4 items can be banked. The perverse *incentive* is real and is what
+  > the raw-steps fix removes; the realised edge is well under +12.5%.
+  > Residual after the fix: deliberately resting so opponents pass you on **raw**
+  > steps, then opening ≤4 banked boxes at trailing odds — worth ≤ 4 × (1,180 −
+  > 635) ≈ 2,200 steps against a ~10,000-step rest day. Unprofitable.
+- **Prerequisite for shipping H:** compute the drop-odds position from **raw
+  walked steps** (the quantity `boxSteps.js` already treats as
+  manipulation-proof) instead of `totalSteps`. Keep `isStepLeader` /
+  `isStepLast` on `totalSteps` so the RED_CARD / SECOND_WIND hard exclusions
+  still match the use-time check. Code change in `openMysteryBox.js` and
+  `getRaceProgress.js` (pass a second `rawStepTotals` into `buildRollContext`).
+
+**Config-only vs code change**
+
+| Piece | Config-only? |
+|---|---|
+| H weight table (`dropPool`, `positionOdds`, `positionRules`) | **Yes** — one `balance_config` row, `validateConfig` clean, no `schemaVersion` bump, no deploy. Kill switch unchanged. |
+| Option E interval scaling | No — `powerupStepInterval` is a per-race column |
+| Raw-steps position (hoarding prerequisite) | No — `openMysteryBox.js` / `getRaceProgress.js` |
+| Repeat-target cap (F), Wrong Turn clamp (G) | No |
+
+**Frozen-client safety.** `positionOdds` rows still sum to 1.0, so the odds
+sheet's `rarity` block renders (it hides itself below 1.0 ± 0.01).
+`typeOddsForPosition` sums a type's contribution across every tier it appears
+in, so a type listed in two tiers is disclosed correctly. No new powerup types,
+no new fields, no client gate involved — old binaries are unaffected. One
+cosmetic wrinkle: a Protein Shake rolled from the UNCOMMON tier is stamped
+`race_powerups.rarity = uncommon`, so a frozen client tints that copy as
+uncommon while its upgrade price stays COMMON (`rarityByType` untouched).
+Confusing, not wrong, and reversible.
+
 ---
 
-*Last full verification pass: 2026-08-08 (prod SELECT-only, aggregates only).*
+## 9. Batch 2026-08-09 — proposed numbers (analysed 2026-08-09, NOT APPLIED)
+
+Spec: `docs/feature-batch-2026-08-09-requirements.md`, items 1, 6, 8. Nothing in
+this section is in code, seeds or the DB.
+
+### 9.1 Item 1 — Wrong Turn / Leg Cramp duration nerf
+
+`DURATIONS_MS.LEG_CRAMP` / `.WRONG_TURN` `[1h,2h,3h,4h]` → `[1h,1h15,1h30,1h45]`
+(`CODE powerupUpgrades.js:36,:41`). Costs proposed unchanged.
+
+Marginal value per level after the nerf (same 1,737 steps/h basis as §3.4c):
+
+| | +min | coins (live ladder) | swing steps | steps/coin | was |
+|---|---|---|---|---|---|
+| `LEG_CRAMP` L1 | +15 | 10 (UNCOMMON) | 434 | 43 | 174 |
+| `LEG_CRAMP` L2 | +30 | 30 | 868 | 29 | 116 |
+| `LEG_CRAMP` L3 | +45 | 90 | 1,302 | **14.5** | 58 |
+| `WRONG_TURN` L1 | +15 | **15** (RARE ladder, §3.3f) | 868 | 58 | 232 |
+| `WRONG_TURN` L2 | +30 | **45** | 1,737 | 39 | 154 |
+| `WRONG_TURN` L3 | +45 | **135** | 2,605 | **19** | 77 |
+
+The duration ladder is arithmetic (+15 min per level) while the cost ladder is
+geometric (×3 per level), so marginal price per minute rises 0.67 → 1.0 → 2.0
+c/min for Leg Cramp and 1.0 → 1.5 → 3.0 for Wrong Turn.
+
+Repricing candidate (arithmetic cost to match an arithmetic duration; uses the
+existing, currently-empty `upgradeCosts.byType` seam, config-only, no deploy):
+
+```
+upgradeCosts.byType.LEG_CRAMP  = [0, 10, 20, 30]    -> 43 steps/coin flat
+upgradeCosts.byType.WRONG_TURN = [0, 15, 30, 45]    -> 58 steps/coin flat
+```
+
+L1 prices are unchanged, so the entry point is untouched. `byType` is not
+covered by any `SOFT_BOUNDS` entry (`upgradeCosts.byRarity.*.3` only).
+
+Mystery Potion alignment (hardcoded 2h cramps → 1h): pool weights are
+`LEG_CRAMP` (enemy) 10/100 and `LEG_CRAMP_SELF` 5/100, so the swap costs the user
+`0.10 × 1,737 = 174` swing steps and refunds `0.05 × 1,737 = 87`, net **−87 swing
+steps per potion (≈ −5% of potion EV)**. `mystery_potion` is `active=false,
+test_only=true` at 40 coins in prod, so the bypass it closes is currently
+unreachable anyway.
+
+### 9.2 Item 6 — Power Outage from shop to `dropPool.RARE`
+
+`POWER_OUTAGE`: 30-min AoE powerup lockout of **every enemy** (teammates exempt —
+`isEnemy`), non-stackable (already-jammed victims are skipped), countered by
+Umbrella (immune, not consumed) and Compression Socks (consumed, blocks).
+`CODE usePowerup.js:1387-1461`, duration `:129`. Not upgradeable, no step swing.
+
+> **Umbrella is unobtainable in prod**: `powerup_shop_items.umbrella` is
+> `active=false` and it is in no `dropPool`. Compression Socks (a free RARE,
+> 3.4–6.0% per box) is the only reachable counter today.
+
+Prod all-time: **13 copies used by 6 users**, 76 victim effects, 5 Socks blocks.
+Purchases ≈ 1,950 coins all-time — a negligible share of the −914/day
+`powerup_purchase` sink.
+
+**Item 6 and item 8a cancel out on tier size.** The spec's "RARE weight 9.5 →
+10.5" holds only if Fanny Pack stays; with 8a it is 9.5 → 9.5 and Power Outage
+takes Fanny Pack's slot **exactly**. Verified with the backend's own
+`typeOddsForPosition`: **every other type's per-position odds are byte-identical
+before and after.**
+
+Per-position `POWER_OUTAGE` drop probability, N=6, live prod config
+(spec estimated 2.6% / 4.3% — both low):
+
+| | P1 | P2 | P3 | P4 | P5 | P6 |
+|---|---|---|---|---|---|---|
+| weight 1.0 | 3.38 | 3.32 | 3.79 | 4.76 | 4.87 | **6.00** |
+| weight 0.5 | 1.80 | 1.75 | 2.00 | 2.53 | 2.59 | 3.21 |
+| w1.0 + `leadingDownweight 0.3` | 1.11 | 1.07 | 3.79 | 4.76 | 4.87 | 6.00 |
+
+RARE-tier internal share after the swap: **12.5% at the leader** (pool loses Red
+Card + Second Wind), 10.5% mid, **13.3% at last** (pool also loses Trail Mine and
+halves Cleanse/Mirror).
+
+**Absolute supply is leader-skewed, not trailer-skewed.** Multiplying by the
+measured boxes/race per quintile (§3.3e):
+
+| npos | boxes/race | P(PO) | PO per race | with `leadingDownweight 0.3` |
+|---|---|---|---|---|
+| 0 (leader) | 18.71 | 3.38% | **0.631** | 0.208 |
+| 0.25 | 12.59 | 3.32% | 0.417 | 0.135 |
+| 0.5 | 7.22 | 3.79% | 0.274 | 0.274 |
+| 0.75 | 4.01 | 4.76% | 0.191 | 0.191 |
+| 1 (last) | 1.97 | 6.00% | 0.118 | 0.118 |
+| **leader : last** | | 1 : 1.78 | **5.34 : 1** | **1.76 : 1** |
+
+App-wide supply at 389.8 rolls/day, weighted by the observed drop-position mix
+(§3.3e, n=16,775): **3.57% → ≈13.9 Power Outages/day**, i.e. more free copies per
+*day* than have been bought in the product's entire history. With
+`leadingDownweight { POWER_OUTAGE: 0.3 }` it is **1.87% → ≈7.3/day**.
+
+Discard: the rarity change lifts its would-be discard price 5 → 10
+(`race_powerups.rarity` is stamped `rare` by the roll). At 13.9/day that is at
+most +139 coins/day of faucet, replacing Fanny Pack's ~10/day × 10 = 100/day —
+and the 40/day per-user cap binds long before either.
+
+### 9.3 Item 8 — Fanny Pack out, Lucky Horseshoe to a 100% rare floor
+
+RARE pool after both items (weights in parens):
+
+```
+RED_CARD (0.5), SECOND_WIND, COMPRESSION_SOCKS, LUCKY_HORSESHOE, TRAIL_MINE,
+SNEAKY_SWAP, SHORTCUT, CLEANSE, MIRROR, POWER_OUTAGE          total 9.5
+  leader   -> RED_CARD, SECOND_WIND excluded                  total 8.0
+  last     -> TRAIL_MINE excluded, CLEANSE/MIRROR ×0.5        total 7.5
+```
+
+Fanny Pack: 300 drops in 30d (≈10/day), zero step swing, permanent +1 inventory
+slot. Removing it tightens inventory slightly and removes one 0-swing rare; it
+does not move any EV number in §3.4b.
+
+**Horseshoe as a "guaranteed rare" voucher is EV-neutral-to-negative in step
+swing**, because RARE is the *lowest*-value tier (§3.4b). Forced-RARE EV vs the
+unforced box EV it replaces, N=6:
+
+| Position | E[unforced box] | E[forced RARE, horseshoe excluded] | ratio |
+|---|---|---|---|
+| P1 (leader) | 1,093 | 561 | **0.51** |
+| P2 | 1,292 | 1,309 | 1.01 |
+| P3 | 1,308 | 1,309 | 1.00 |
+| P4 | 1,534 | 1,483 | 0.97 |
+| P5 | 1,552 | 1,483 | 0.96 |
+| P6 (last) | 1,547 | 1,450 | 0.94 |
+
+(With `SNEAKY_SWAP` valued at 1,500 steps the ratios become 0.68 / 1.11 / 1.09 /
+1.05 / 1.04 / 1.03 — the leader stays clearly negative.) The current L0 behaviour
+(force UNCOMMON) is *better* in swing terms than the proposed L0 (force RARE),
+because UNCOMMON is 100% Wrong Turn / Leg Cramp / Stealth in a solo race.
+
+No-refund sizing: **4 upgrade events, 3 users, 295 coins, all tier 1, all already
+consumed; zero upgraded copies held** (§3.6). There is no SKU to reprice —
+`powerup_shop_items` has no `lucky_horseshoe` row.
+
+Self-exclusion on forced boxes removes a geometric tail of ratio 0.105–0.133,
+i.e. **12–16% of forced-rare value**; it is a feel/anti-dud change, not an
+exploit fix (§3.6).
+
+Soft bound: `[1,1,1,1]` passes hard `validateConfig` (monotone, ≤1, `[3]===1`)
+but trips `SOFT_BOUNDS` entry `luckyHorseshoe.rareChanceByLevel.1` (max 0.5) →
+**422 `bound_warnings`** unless the PUT sets `acknowledgeBoundWarnings`, which
+stamps `boundOverride=true` on the row. Because the bound is a *level-1 ramp*
+guard and the ramp is being retired, the entry should be **deleted** from
+`SOFT_BOUNDS` rather than widened to `[0,1]` (a vacuous bound that would still be
+advertised to the admin UI by `serializeBounds`). Leaving it in place means every
+future balance-config save inherits `boundOverride`, masking genuine warnings.
+
+### 9.4 Spec corrections found while verifying
+
+1. **Item 1 cost premise is wrong for Wrong Turn.** Live prod
+   `rarityByType.WRONG_TURN = RARE`, so its ladder is `[0,15,45,135]`, not the
+   UNCOMMON `[0,10,30,90]` the spec quotes. Leg Cramp is UNCOMMON as stated.
+2. **Item 6's "RARE weight 9.5 → 10.5" and "≈2.6% / ≈4.3%" are wrong** once item
+   8a lands in the same PUT: total stays 9.5 and the real rates are 3.38% /
+   6.00% (§9.2).
+3. **Item 8b's "duplicated block in `rerollMysteryBox.js`" does not exist.**
+   The reroll path deliberately ignores `minRarity`
+   (`rerollMysteryBox.js:295-297`); the only horseshoe-forced pick is
+   `openMysteryBox.js:186-194`. The duplicated function in the reroll file is
+   `resolveNullRoll`, a different mechanism.
+4. **Frozen-client edge for item 8b step 2.** Removing `LUCKY_HORSESHOE` from
+   `upgradeableTypes` makes `usePowerup.js:1013-1015` reject any
+   `upgradeLevel > 0` with a **400** ("… is not upgradeable"). Shipped binaries
+   still render the tier picker (`FE/lib/constants/powerup_copy.dart:552-557`),
+   so a player picking a tier gets a hard error until the next release. Setting
+   `upgradeCosts.byType.LUCKY_HORSESHOE = [0,0,0,0]` and leaving it in
+   `upgradeableTypes` makes those requests free no-ops instead.
+
+---
+
+*Last full verification pass: 2026-08-08 (prod SELECT-only, aggregates only).
+§3.2 / §3.4 / §3.4b / §3.4c / §3.5 / §3.6 / §9 verified and added 2026-08-09
+(prod SELECT-only, aggregates only). §8 Option H and §9 are analysis only —
+nothing in either has been applied.*

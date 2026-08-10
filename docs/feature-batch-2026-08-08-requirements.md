@@ -793,6 +793,19 @@ binding spec steps for the implementation agents.)
   amended into scope; Detour Sign all-null placement case specified;
   What's New allKeys structural test; podium ordered after Item 18;
   frozen-client contract tests + no-Redis suite run added.
+- Implementation + code review (2026-08-09): built on
+  `feature/batch-2026-08-08` (backend, 7 commits) and
+  `feature/batch-2026-08-08-frontend` (frontend, 8 commits). Code review
+  verdict FIX FIRST → all fixes applied: reroll localDate validated with
+  ±1-day consume window (blocker), auto-start backstop bounded to 7-day
+  recency (blocker), discardPrices served in powerupData, cheap gate before
+  deep race fetch, completed-summary key renamed `podium`, truncate guard in
+  test setup, podium occupancy counts finishers, reroll ad unit no longer
+  falls back to the extra-spin unit, single prefs fetch, pubspec → 2.2.0.
+  Item 16 pinned to `_LegendRow` (home_course_track.dart) and removed.
+  Final verification: backend 1222/1246 (24 failures = pre-existing base
+  set, zero regressions), frontend analyze clean + 71 batch tests green +
+  iOS/Android debug builds pass.
 - Gap pass 2: MYSTERY_BOX discard still allowed but pays 0 (was ambiguous);
   cap message in confirm dialog at 0 remaining; team payout throttle
   redistribution question flagged for architect; reroll requires

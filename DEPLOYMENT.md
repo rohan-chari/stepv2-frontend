@@ -176,15 +176,16 @@ flutter build ipa --release \
   --dart-define=ADMOB_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/5308967309 \
   --dart-define=ADMOB_BOX_TOP_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/3019108638 \
   --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \
-  --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID=<create in AdMob; omitting DISABLES box reroll> \
+  --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID=ca-app-pub-4538901002392200/9184830227 \
   --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com
 ```
 
 > The banner unit (`/5308967309`) lives under the iOS AdMob app (`~5288861983`).
 > Omit the define on dev/staging to fall back to Google's public test banner;
 > new units can take up to an hour to start filling live ads. The native unit
-> for the races-tab in-feed slot (`/9892856363`, created 2026-07-13) lives
-> under the same iOS AdMob app.
+> for the races-tab in-feed slot (`/9892856363`, created 2026-07-13) and the
+> box-reroll rewarded unit (`/9184830227`, created 2026-08-09) live under the
+> same iOS AdMob app.
 
 Upload via Transporter to "Bara" in App Store Connect.
 
