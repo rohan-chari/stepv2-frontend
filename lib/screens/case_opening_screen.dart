@@ -565,8 +565,15 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
                 textAlign: TextAlign.center,
               ),
             ],
+            const SizedBox(height: 18),
+            PillButton(
+              label: 'Continue',
+              icon: Icons.check_rounded,
+              onPressed: _rerolling ? null : () => Navigator.of(context).pop(),
+              fullWidth: true,
+            ),
             if (_canReroll) ...[
-              const SizedBox(height: 18),
+              const SizedBox(height: 10),
               PillButton(
                 key: const Key('case-reroll-button'),
                 label: 'REROLL · WATCH AD',
@@ -586,15 +593,7 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 10),
-            ] else
-              const SizedBox(height: 22),
-            PillButton(
-              label: 'Continue',
-              icon: Icons.check_rounded,
-              onPressed: _rerolling ? null : () => Navigator.of(context).pop(),
-              fullWidth: true,
-            ),
+            ],
           ],
         ),
       ),
