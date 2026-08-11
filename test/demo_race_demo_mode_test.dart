@@ -257,7 +257,7 @@ void main() {
       find.textContaining('${ctx.real.displayName!} (you)'),
       findsWidgets,
     );
-    expect(find.textContaining('Sam Rivera'), findsWidgets);
+    expect(find.textContaining('CapyBot'), findsWidgets);
     // Three real inventory slots: one held + two boxes.
     expect(find.byType(ItemSlot), findsNWidgets(3));
   });

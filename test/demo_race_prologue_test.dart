@@ -256,7 +256,7 @@ void main() {
     await pumpHost(tester, ctx);
     await createTheRace(tester);
 
-    await tester.tap(find.textContaining('Sam Rivera'));
+    await tester.tap(find.textContaining('CapyBot'));
     await settleDemo(tester, frames: 6);
     await tester.tap(find.text('INVITE 1 FRIEND'));
     await settleDemo(tester);
@@ -270,9 +270,9 @@ void main() {
     );
 
     // Completing the set sends.
-    await tester.tap(find.textContaining('Jordan Lee'));
+    await tester.tap(find.textContaining('CorgiBot'));
     await settleDemo(tester, frames: 6);
-    await tester.tap(find.textContaining('Priya N.'));
+    await tester.tap(find.textContaining('TurtleBot'));
     await settleDemo(tester, frames: 6);
     await tester.tap(find.text('INVITE 3 FRIENDS'));
     await settleDemo(tester);

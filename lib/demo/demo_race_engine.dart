@@ -44,7 +44,15 @@ class DemoRaceEngine {
   static const String raceId = 'demo-race';
   static const String raceName = 'Demo Dash';
   static const String rivalLeaderUserId = 'demo-sam';
-  static const String rivalLeaderName = 'Sam Rivera';
+
+  /// Re-exported from demo_race_script.dart, which owns them because the coach
+  /// copy interpolates them and this file already imports that one.
+  ///
+  /// The user ids above keep their original spellings — they are persisted in
+  /// demo progress state, and renaming them would strand anyone mid-tutorial.
+  static const String rivalLeaderName = demoRivalLeaderName;
+  static const String rivalSecondName = demoRivalSecondName;
+  static const String rivalThirdName = demoRivalThirdName;
 
   /// The Shortcut is no longer handed to the user pre-owned — it is what the
   /// THIRD box rolls. Rows keep their id when a box becomes a powerup, so this
@@ -170,8 +178,8 @@ class DemoRaceEngine {
       'displayName': rivalLeaderName,
       'profilePhotoUrl': null,
     },
-    {'id': 'demo-jordan', 'displayName': 'Jordan Lee', 'profilePhotoUrl': null},
-    {'id': 'demo-priya', 'displayName': 'Priya N.', 'profilePhotoUrl': null},
+    {'id': 'demo-jordan', 'displayName': rivalSecondName, 'profilePhotoUrl': null},
+    {'id': 'demo-priya', 'displayName': rivalThirdName, 'profilePhotoUrl': null},
   ];
 
   /// Beat 1 is satisfied: the user created the race. [durationDays] is whatever
@@ -548,8 +556,8 @@ class DemoRaceEngine {
     if (userId == myUserId) return myDisplayName;
     return const {
       rivalLeaderUserId: rivalLeaderName,
-      'demo-jordan': 'Jordan Lee',
-      'demo-priya': 'Priya N.',
+      'demo-jordan': rivalSecondName,
+      'demo-priya': rivalThirdName,
     }[userId]!;
   }
 

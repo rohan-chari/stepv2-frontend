@@ -6,12 +6,15 @@ import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/utils/team_race.dart';
 import 'package:step_tracker/widgets/home_course_track.dart';
-import 'package:step_tracker/widgets/team_h2h_banner.dart';
+import 'package:step_tracker/widgets/team_scoreboard_cards.dart';
 
-// TR-803: ACTIVE team detail — H2H tug-of-war banner above individual planks
+// TR-803: ACTIVE team detail — the H2H scoreboard above individual planks
 // grouped by team. TR-656: a stealthed member's plank reads "???" while the
-// team total stays honest and includes their steps (TR-658). TR-804: course
-// capys carry their team color for the glow/pennant chrome.
+// team total stays honest and includes their steps (TR-658).
+//
+// TR-804 (team glow/pennant chrome on course capys) is retired: the scoreboard
+// redesign removed the course from team races entirely, taking `teamColor`'s
+// only producer with it. Solo races keep their course and their runners.
 
 class _ActiveTeamRaceApi extends BackendApiService {
   @override
@@ -170,7 +173,7 @@ void main() {
       'backend totals', (tester) async {
     await _pump(tester, _ActiveTeamRaceApi());
 
-    expect(find.byType(TeamH2HBanner), findsOneWidget);
+    expect(find.byType(TeamScoreboardCards), findsOneWidget);
     // Backend team block totals (not the sum of visible planks — TR-658).
     expect(find.text('12,340'), findsOneWidget);
     expect(find.text('11,900'), findsOneWidget);
@@ -199,31 +202,28 @@ void main() {
     expect(find.text('11,900'), findsOneWidget);
   });
 
-  testWidgets('TR-804: course runners carry team colors for the glow chrome',
-      (tester) async {
+  testWidgets('an ACTIVE team race renders no course at all', (tester) async {
+    // CHANGED (scoreboard redesign): a team race drops the hero course. Only
+    // two capys ever ran on it — one leader per side — so it spent ~286pt
+    // saying less than the scoreboard cards directly beneath it.
+    //
+    // This REPLACES the old TR-804 assertion that course runners carry team
+    // colors for the glow/pennant chrome. That assertion is not weakened, it is
+    // unreachable: the runner list here was `teamColor`'s only producer in the
+    // whole screen, and the PENDING and COMPLETED heroes never set it. The
+    // solo course is untouched — see the individual-race test below.
     await _pump(tester, _ActiveTeamRaceApi());
 
-    final track = tester.widget<HomeCourseTrack>(find.byType(HomeCourseTrack));
-    final ctx = tester.element(find.byType(HomeCourseTrack));
-    final colors = track.runners.map((r) => r.teamColor).toList();
-    // Only each team's LEADER runs the course now (one capy per side), still
-    // carrying its team color for the glow chrome.
-    expect(track.runners.length, 2);
-    expect(
-      colors.where((c) => c == TeamRace.color(RaceTeam.teamA, ctx)).length,
-      1,
-    );
-    expect(
-      colors.where((c) => c == TeamRace.color(RaceTeam.teamB, ctx)).length,
-      1,
-    );
+    expect(find.byType(HomeCourseTrack), findsNothing);
+    // The HUD chips survive the course they used to float on.
+    expect(find.textContaining('ENDS IN'), findsWidgets);
   });
 
   testWidgets('TR-705: individual ACTIVE race shows no H2H banner and no '
       'team groups', (tester) async {
     await _pump(tester, _IndividualActiveApi());
 
-    expect(find.byType(TeamH2HBanner), findsNothing);
+    expect(find.byType(TeamScoreboardCards), findsNothing);
     expect(find.byKey(const Key('team-group-A')), findsNothing);
     final track = tester.widget<HomeCourseTrack>(find.byType(HomeCourseTrack));
     expect(track.runners.every((r) => r.teamColor == null), isTrue);

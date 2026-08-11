@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:step_tracker/styles.dart';
 import 'package:step_tracker/utils/team_race.dart';
 import 'package:step_tracker/widgets/race_ui.dart';
-import 'package:step_tracker/widgets/team_h2h_banner.dart';
+import 'package:step_tracker/widgets/team_scoreboard_cards.dart';
 import 'package:step_tracker/widgets/tier_badge.dart';
 
 /// Items 3 + 13 — night-mode legibility. The reported bug was the team-race
@@ -165,7 +165,7 @@ void main() {
     });
   });
 
-  group('P1 — the reported bug: TeamH2HBanner totals at night', () {
+  group('P1 — the reported bug: team scoreboard totals at night', () {
     testWidgets('the big totals are legible and not a colorDark token', (
       tester,
     ) async {
@@ -173,7 +173,7 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
         _themed(
-          const TeamH2HBanner(
+          const TeamScoreboardCards(
             teamAName: 'Swift Capys',
             teamBName: 'Turbo Beavers',
             teamATotal: 364261,

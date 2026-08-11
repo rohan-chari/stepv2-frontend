@@ -158,7 +158,7 @@ class _DemoRaceHostState extends State<DemoRaceHost>
 
   /// Refuses an off-script target in the REAL picker and shakes the coach.
   ///
-  /// "Tap it and pick Sam" was an instruction the app did not enforce: every
+  /// "Tap it and pick CapyBot" was an instruction the app did not enforce: every
   /// rival in the sheet was live, so the one beat that teaches targeting could
   /// be completed by ignoring it. Same treatment as an off-script tray tap.
   bool _gateTarget(String userId) {
@@ -484,7 +484,7 @@ class _DemoRaceHostState extends State<DemoRaceHost>
     final isFrontmost = ModalRoute.of(context)?.isCurrent ?? true;
 
     // …with one exception. On the Shortcut beat the thing on top is the target
-    // picker, and the instruction the user needs ("pick Sam") lives on the
+    // picker, and the instruction the user needs ("pick CapyBot") lives on the
     // coach — as does the shake that answers a wrong pick. Hiding it there
     // would leave a refused tap with no feedback at all.
     final showCoach = isFrontmost || beat == DemoBeat.useShortcut;

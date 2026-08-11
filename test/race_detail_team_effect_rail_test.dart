@@ -58,6 +58,21 @@ class _RailApi extends BackendApiService {
         'status': 'ACCEPTED',
         'team': 'TEAM_B',
       },
+      // The two cells whose CONTENT height differs from a plain cell: a frozen
+      // racer (icon-only multiplier chip is 23pt tall vs a 20.25pt name row)
+      // and a stealthed racer (draws no progress bar at all).
+      {
+        'userId': 'ally-2',
+        'displayName': 'Frozen Fred',
+        'status': 'ACCEPTED',
+        'team': 'TEAM_A',
+      },
+      {
+        'userId': 'enemy-3',
+        'displayName': 'Sneaky Sue',
+        'status': 'ACCEPTED',
+        'team': 'TEAM_B',
+      },
     ],
   };
 
@@ -94,6 +109,23 @@ class _RailApi extends BackendApiService {
         'displayName': 'Enemy Ed',
         'team': 'TEAM_B',
         'totalSteps': 5000,
+        'finishedAt': null,
+      },
+      {
+        'userId': 'ally-2',
+        'displayName': 'Frozen Fred',
+        'team': 'TEAM_A',
+        'totalSteps': 4800,
+        // < 0.5 → the frost chip, which renders ICON-ONLY and taller.
+        'currentMultiplier': 0.2,
+        'finishedAt': null,
+      },
+      {
+        'userId': 'enemy-3',
+        'displayName': '???',
+        'stealthed': true,
+        'team': 'TEAM_B',
+        'totalSteps': null,
         'finishedAt': null,
       },
     ],
@@ -208,6 +240,14 @@ void main() {
     expect(one, zero);
     // The card must not grow vertically no matter how many effects are active.
     expect(five, zero);
+
+    // ...nor may cell CONTENT push past the min-height floor. These are the two
+    // sources of content variance, and both were uncovered until the per-member
+    // progress bar pushed a plain cell to 104.25 against the old floor of 104.
+    // A frozen racer's icon-only chip makes its name row 23pt instead of 20.25;
+    // a stealthed racer draws no bar at all.
+    expect(_cellHeight(tester, 'ally-2'), zero); // frozen → taller chip
+    expect(_cellHeight(tester, 'enemy-3'), zero); // stealthed → no bar
   });
 
   testWidgets('overflowing effects collapse into a +N chip', (tester) async {

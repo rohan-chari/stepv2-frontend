@@ -837,9 +837,9 @@ class OnboardingTutorialStep extends StatelessWidget {
 ///
 /// It fronts 100% of new users to serve the invited fraction, so the exits
 /// matter as much as the happy path:
-///  * `I wasn't invited` carries near-equal visual weight and is ALWAYS
-///    tappable — including while a redeem is in flight and while the backend
-///    is unreachable. A backend outage must never trap a user in onboarding.
+///  * `Skip` carries near-equal visual weight and is ALWAYS tappable —
+///    including while a redeem is in flight and while the backend is
+///    unreachable. A backend outage must never trap a user in onboarding.
 ///  * A terminal rejection (already attributed / already raced / own code…)
 ///    resolves the step rather than arguing with the user.
 ///  * A transient failure (network, typo) deliberately does NOT resolve it, so
@@ -1131,7 +1131,7 @@ class _OnboardingInviteCodeStepState extends State<OnboardingInviteCodeStep> {
             // exit.
             _InviteGhostButton(
               buttonKey: const Key('onboarding-invite-code-skip'),
-              label: 'I wasn’t invited',
+              label: 'Skip',
               height: 50,
               fontSize: 15,
               onPressed: () => _resolve(attributed: false, skipped: true),
