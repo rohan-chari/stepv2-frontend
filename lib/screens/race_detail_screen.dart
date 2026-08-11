@@ -48,8 +48,8 @@ import '../widgets/leaderboard_plank.dart';
 import '../services/ad_service.dart';
 import '../widgets/multiplier_chip.dart';
 import '../widgets/race_podium.dart';
-import '../widgets/team_h2h_banner.dart';
 import '../widgets/team_lobby_board.dart';
+import '../widgets/team_scoreboard_cards.dart';
 import '../widgets/loading_skeleton.dart';
 import '../widgets/race_ui.dart';
 import '../widgets/race_alert_opt_in_card.dart';
@@ -98,7 +98,7 @@ class RaceDetailScreen extends StatefulWidget {
 
   /// Onboarding-demo target gate. Returns false to REFUSE a tap on a row of
   /// the target picker, leaving the sheet open. The demo's script names the
-  /// rival to hit ("pick Sam"), and without this the user could hit anyone —
+  /// rival to hit ("pick CapyBot"), and without this the user could hit anyone —
   /// an instruction the app does not enforce reads as a suggestion. Null (the
   /// shipped app) allows every target.
   final bool Function(String userId)? demoTargetGate;
@@ -3297,7 +3297,28 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   Widget _buildRaceHero({
     required List<GoalTrackRunner> runners,
     List<Widget> chips = const [],
+    bool showCourse = true,
   }) {
+    // A team race drops the course entirely: only two capys ever ran on it (one
+    // leader per side), so it cost ~286pt to say less than the scoreboard cards
+    // directly below already say. The HUD chips are the part worth keeping, so
+    // they re-flow onto the parchment instead of floating on the sky.
+    if (!showCourse) {
+      if (chips.isEmpty) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < chips.length; i++) ...[
+              if (i > 0) const SizedBox(width: 8),
+              chips[i],
+            ],
+          ],
+        ),
+      );
+    }
+
     // TR-901: the goal-line/milestone marker is gone with target-steps races;
     // the hero course is purely leader-relative now.
     return Stack(
@@ -4414,47 +4435,39 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     return Column(
       children: [
         // THE RACE — full-bleed race-day hero with HUD chips on the sky.
-        _buildRaceHero(
-          chips: chips,
-          runners: [
-            // Team races: only the two team leaders run the track (one capy per
-            // side). Solo/ranked: every racer as before.
-            for (final p
-                in (isTeamRace ? _twoTeamLeaders(participants) : participants))
-              GoalTrackRunner(
-                name: p['stealthed'] == true
-                    ? '???'
-                    : (p['displayName'] as String? ?? '???'),
-                progress: p['stealthed'] == true
-                    ? _jitterProgress(p['userId'] as String? ?? '')
-                    : _courseProgress(p['totalSteps'], courseDenominator),
-                isUser: (p['userId'] as String?) == _myUserId,
-                isStealthed: p['stealthed'] == true,
-                profilePhotoUrl: p['profilePhotoUrl'] as String?,
-                accessories:
-                    (p['accessories'] as List?)?.cast<Map<String, dynamic>>() ??
-                    const [],
-                animal: p['stealthed'] == true
-                    ? null
-                    : animalFromJson(p['animal']),
-                // TR-804: team glow + pennant chrome on course capys.
-                teamColor: isTeamRace
-                    ? switch (TeamRace.participantTeam(p)) {
-                        final team? => TeamRace.color(team, context),
-                        null => null,
-                      }
-                    : null,
-                // The two track capys represent their TEAM (its leader), so
-                // label them by team name, not the leader's username.
-                label: isTeamRace
-                    ? switch (TeamRace.participantTeam(p)) {
-                        final team? => TeamRace.teamName(_race!, team),
-                        null => null,
-                      }
-                    : null,
-              ),
-          ],
-        ),
+        // A team race drops the course (see _buildRaceHero) — the scoreboard
+        // cards below carry the head-to-head. Only the HUD chips remain.
+        //
+        // NOTE: this retires the TR-804 team glow/pennant chrome on course
+        // capys. Its only producer was this runner list, and the PENDING and
+        // COMPLETED heroes never set `teamColor`, so nothing else rendered it.
+        if (isTeamRace)
+          _buildRaceHero(chips: chips, runners: const [], showCourse: false)
+        else
+          _buildRaceHero(
+            chips: chips,
+            runners: [
+              for (final p in participants)
+                GoalTrackRunner(
+                  name: p['stealthed'] == true
+                      ? '???'
+                      : (p['displayName'] as String? ?? '???'),
+                  progress: p['stealthed'] == true
+                      ? _jitterProgress(p['userId'] as String? ?? '')
+                      : _courseProgress(p['totalSteps'], courseDenominator),
+                  isUser: (p['userId'] as String?) == _myUserId,
+                  isStealthed: p['stealthed'] == true,
+                  profilePhotoUrl: p['profilePhotoUrl'] as String?,
+                  accessories:
+                      (p['accessories'] as List?)
+                          ?.cast<Map<String, dynamic>>() ??
+                      const [],
+                  animal: p['stealthed'] == true
+                      ? null
+                      : animalFromJson(p['animal']),
+                ),
+            ],
+          ),
 
         if (_progressState.isRefreshing)
           Padding(
@@ -4546,31 +4559,66 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               _sectionCard(
                 padding: EdgeInsets.all(isTeamRace ? 14 : 8),
                 child: isTeamRace
-                    ? Column(
-                        children: [
-                          TeamH2HBanner(
-                            teamAName: TeamRace.teamName(
-                              _race!,
-                              RaceTeam.teamA,
-                            ),
-                            teamBName: TeamRace.teamName(
-                              _race!,
-                              RaceTeam.teamB,
-                            ),
-                            teamATotal: _teamTotalFromProgress(
-                              progress,
-                              participants,
-                              RaceTeam.teamA,
-                            ),
-                            teamBTotal: _teamTotalFromProgress(
-                              progress,
-                              participants,
-                              RaceTeam.teamB,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          _buildTeamTwoColumns(participants),
-                        ],
+                    ? Builder(
+                        builder: (context) {
+                          // One totals source for the cards, the LEADING ribbon
+                          // AND the lead banner. Deriving the ribbon from
+                          // TeamRace.leadingTeam instead would recompute off
+                          // the participants list, which coerces a stealthed
+                          // member's null steps to 0 — the crown could then
+                          // land on the card showing the SMALLER number.
+                          final totalA = _teamTotalFromProgress(
+                            progress,
+                            participants,
+                            RaceTeam.teamA,
+                          );
+                          final totalB = _teamTotalFromProgress(
+                            progress,
+                            participants,
+                            RaceTeam.teamB,
+                          );
+                          final nameA = TeamRace.teamName(
+                            _race!,
+                            RaceTeam.teamA,
+                          );
+                          final nameB = TeamRace.teamName(
+                            _race!,
+                            RaceTeam.teamB,
+                          );
+                          return Column(
+                            children: [
+                              TeamVsChips(
+                                teamAName: nameA,
+                                teamBName: nameB,
+                              ),
+                              const SizedBox(height: 12),
+                              TeamScoreboardCards(
+                                teamAName: nameA,
+                                teamBName: nameB,
+                                teamATotal: totalA,
+                                teamBTotal: totalB,
+                                teamALeader: TeamCardMember.topScorerOf(
+                                  participants,
+                                  RaceTeam.teamA,
+                                ),
+                                teamBLeader: TeamCardMember.topScorerOf(
+                                  participants,
+                                  RaceTeam.teamB,
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                              // Owns its own bottom gap — see TeamLeadBanner.
+                              TeamLeadBanner(
+                                teamAName: nameA,
+                                teamBName: nameB,
+                                teamATotal: totalA,
+                                teamBTotal: totalB,
+                                myTeam: _myTeam(participants),
+                              ),
+                              _buildTeamTwoColumns(participants),
+                            ],
+                          );
+                        },
                       )
                     : _standingsList(participants),
               ),
@@ -7148,6 +7196,18 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     return TeamRace.teamTotalOrNull(participants, team);
   }
 
+  /// The side the VIEWER is on, or null when they aren't in this race (a
+  /// spectator) — the lead banner uses it to choose between "you're ahead"
+  /// phrasing and neutral third-person phrasing.
+  RaceTeam? _myTeam(List<Map<String, dynamic>> participants) {
+    // No explicit spectator guard: _isSpectator IS "no participant matches
+    // _myUserId", so the loop below already falls through to null for them.
+    for (final p in participants) {
+      if (p['userId'] == _myUserId) return TeamRace.participantTeam(p);
+    }
+    return null;
+  }
+
   /// TR-402/403/404: the settled team-race crown — winning team plaque with
   /// its members, or the dedicated tie state (all buy-ins refunded).
   Widget _buildTeamWinnerBoard(
@@ -7413,26 +7473,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   }
 
   /// The current front-runner of each team (highest steps), for the race-track
-  /// hero — one capy per side. Skips a side with no members. Order: Team A, B.
-  List<Map<String, dynamic>> _twoTeamLeaders(
-    List<Map<String, dynamic>> participants,
-  ) {
-    final leaders = <Map<String, dynamic>>[];
-    for (final team in RaceTeam.values) {
-      Map<String, dynamic>? best;
-      var bestSteps = -1;
-      for (final p in participants) {
-        if (TeamRace.participantTeam(p) != team) continue;
-        final steps = (p['totalSteps'] as num?)?.toInt() ?? 0;
-        if (steps > bestSteps) {
-          bestSteps = steps;
-          best = p;
-        }
-      }
-      if (best != null) leaders.add(best);
-    }
-    return leaders;
-  }
 
   /// Team standings as two color-matched columns (Team A | Team B) sitting
   /// under the scoreboard plaques. Bold compact cells; rank shields keep the
@@ -8630,6 +8670,20 @@ class _OpenAllButton extends StatelessWidget {
 // Team-roster effect rail geometry (spec §4). The rail is deliberately narrow
 // and the 44pt hit-target guideline is relaxed to ~28-32pt for effect icons —
 // a 44pt rail would starve the name/steps in a half-width column.
+/// The floor that keeps opposing roster cells aligned: it must EXCEED the
+/// tallest content a cell can produce, otherwise variance shows through and the
+/// two columns drift apart.
+///
+/// Content is 46 (avatar) + 7 + name row + 1 + 18 (steps). The name row is
+/// 20.25 normally but 23 when an ICON-ONLY multiplier chip (frozen) sits beside
+/// it, so the tallest cell is ~95 — comfortably absorbed here. A per-member
+/// progress bar was briefly added below the steps, which pushed content to
+/// 104.25 and required raising this to 116; the bar was cut, so the floor
+/// returns to 104. Anything added to a cell must re-check this sum.
+///
+/// Must stay inside 96–127: the rail's overflow math is
+/// `floor(available / _kTeamEffectSlotHeight)`, and `floor(104/32) == 3` keeps
+/// the "+3 for 5 effects" behaviour asserted by the effect-rail test.
 const double _kTeamCellContentMinHeight = 104;
 const double _kTeamEffectRailWidth = 34;
 const double _kTeamEffectSlotHeight = 32; // icon hit-target + vertical spacing
