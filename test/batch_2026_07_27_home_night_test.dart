@@ -127,13 +127,16 @@ void main() {
     ) async {
       await _pumpHome(tester, theme: AppThemeData.night());
       await tester.dragUntilVisible(
-        find.text('INVITE'),
+        // Batch 2026-08-10b item 3 promoted the invite to its own block and
+        // gave RACES the empty-state row, whose secondary button is also
+        // labelled INVITE. The eyebrow is the first in tree order.
+        find.text('INVITE').first,
         find.byType(Scrollable).first,
         const Offset(0, -200),
       );
       await tester.pump();
 
-      final label = tester.widget<Text>(find.text('INVITE'));
+      final label = tester.widget<Text>(find.text('INVITE').first);
       expect(label.style?.color, isNot(AppPalette.night.roofMid));
       expect(label.style?.color, AppPalette.night.successText);
     });
@@ -141,13 +144,16 @@ void main() {
     testWidgets('day: the eyebrow keeps its green, unchanged', (tester) async {
       await _pumpHome(tester, theme: AppThemeData.light());
       await tester.dragUntilVisible(
-        find.text('INVITE'),
+        // Batch 2026-08-10b item 3 promoted the invite to its own block and
+        // gave RACES the empty-state row, whose secondary button is also
+        // labelled INVITE. The eyebrow is the first in tree order.
+        find.text('INVITE').first,
         find.byType(Scrollable).first,
         const Offset(0, -200),
       );
       await tester.pump();
 
-      final label = tester.widget<Text>(find.text('INVITE'));
+      final label = tester.widget<Text>(find.text('INVITE').first);
       // successText maps to roofMid in the day palette, so day is pixel-identical.
       expect(label.style?.color, AppPalette.light.roofMid);
     });
@@ -177,7 +183,9 @@ void main() {
           theme: night ? AppThemeData.night() : AppThemeData.light(),
         );
         await tester.dragUntilVisible(
-          find.text('RACES'),
+          // The empty-state fallback row's primary button is also "RACES";
+          // the section header is first in tree order.
+          find.text('RACES').first,
           find.byType(Scrollable).first,
           const Offset(0, -200),
         );
@@ -209,7 +217,7 @@ void main() {
     ) async {
       await _pumpHome(tester, theme: AppThemeData.light());
       await tester.dragUntilVisible(
-        find.text('RACES'),
+        find.text('RACES').first,
         find.byType(Scrollable).first,
         const Offset(0, -200),
       );
@@ -218,7 +226,7 @@ void main() {
       final paddings = tester
           .widgetList<Padding>(
             find.ancestor(
-              of: find.text('RACES'),
+              of: find.text('RACES').first,
               matching: find.byType(Padding),
             ),
           )

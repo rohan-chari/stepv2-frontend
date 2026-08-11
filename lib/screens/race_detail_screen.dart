@@ -1949,9 +1949,45 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     return table[rarity] ?? fallback;
   }
 
-  /// The daily discard-bonus headroom last reported by the backend, or null if
-  /// it has never told us (older backend → we simply don't mention the cap).
+  /// The daily discard-bonus headroom last reported by a DISCARD RESPONSE, or
+  /// null if we have never made one this visit. This is the "last write wins"
+  /// override over the served value, which can be up to a minute stale.
   int? _discardCapRemaining;
+
+  /// The local date [_discardCapRemaining] was written on. The override must
+  /// survive an ordinary progress poll (clearing it there re-introduces the
+  /// very bug item 2 fixes, via a memoized server value built before the
+  /// discard) but must NOT survive local midnight, when the cap resets.
+  String? _discardCapDate;
+
+  /// `powerupData.discardCapRemaining` — additive (batch 2026-08-10b item 2).
+  /// Absent on an older backend, and absent whenever the viewer holds nothing
+  /// discardable, so it is read defensively and every caller treats null as
+  /// "unknown", never as 0.
+  int? get _serverDiscardCapRemaining {
+    final raw = _powerupData?['discardCapRemaining'];
+    return raw is num ? raw.toInt() : null;
+  }
+
+  /// The headroom to quote: the discard response's value when we have a fresh
+  /// one (it is newer than anything the progress payload can carry), else the
+  /// server-served value, else null = unknown.
+  int? get _capRemaining {
+    final override = _discardCapRemaining;
+    if (override != null && _discardCapDate == _todayLocalDate()) {
+      return override;
+    }
+    return _serverDiscardCapRemaining;
+  }
+
+  /// What a discard of [powerup] will ACTUALLY pay: the backend awards
+  /// `min(price, capRemaining)`. One rule, used by all three price surfaces
+  /// (the DISCARD tag, the confirm dialog, and the Pocket Watch sheet).
+  int _discardPayoutFor(Map<String, dynamic> powerup) {
+    final price = _discardPriceFor(powerup);
+    final cap = _capRemaining;
+    return cap == null ? price : math.min(price, cap);
+  }
 
   /// Trailing "+N 🪙" price tag for a DISCARD button, in the same shape as the
   /// tier buttons' cost tag. Null (no tag) for an unopened box (pays nothing)
@@ -1959,12 +1995,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// out both cases, so the button must not promise coins it won't pay.
   Widget? _discardPriceTrailing(Map<String, dynamic> powerup) {
     final isUnopenedBox = (powerup['status'] as String?) == 'MYSTERY_BOX';
-    if (isUnopenedBox || _discardCapRemaining == 0) return null;
+    if (isUnopenedBox || _capRemaining == 0) return null;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          '+${_discardPriceFor(powerup)}',
+          '+${_discardPayoutFor(powerup)}',
           style: PixelText.pill(size: 12, color: Colors.white),
         ),
         const SizedBox(width: 4),
@@ -1980,7 +2016,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   Future<void> _confirmAndDiscardPowerup(Map<String, dynamic> powerup) async {
     final isUnopenedBox = (powerup['status'] as String?) == 'MYSTERY_BOX';
     final price = _discardPriceFor(powerup);
-    final capReached = _discardCapRemaining == 0;
+    final cap = _capRemaining;
+    final capReached = cap == 0;
     final name = PowerupCopy.nameFor(powerup['type'] as String?);
 
     final String body;
@@ -1990,7 +2027,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       body = "Discard this mystery box? You won't get coins for unopened boxes.";
     } else if (capReached) {
       body = "Daily discard bonus reached — you'll get 0 coins.";
+    } else if (cap != null && cap < price) {
+      // Batch 2026-08-10b item 2: the backend pays min(price, cap), so quoting
+      // the full price here promised coins it would not pay.
+      body =
+          'Discard $name for $cap coins? Your daily discard bonus is nearly '
+          'used up.';
     } else {
+      // Includes "cap unknown" (older backend): today's exact copy.
       body = 'Discard $name for $price coins?';
     }
 
@@ -2025,6 +2069,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       final capRemaining = result['capRemaining'];
       if (capRemaining is num) {
         _discardCapRemaining = capRemaining.toInt();
+        // Date-stamped so the override survives a stale progress poll but not
+        // local midnight (architect R7).
+        _discardCapDate = _todayLocalDate();
       }
 
       // Optimistic coin badge bump. Prefer the server's authoritative balance;
@@ -2734,9 +2781,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           targetEffectId: targetEffectId,
         ),
         onDiscard: () => _confirmAndDiscardPowerup(powerup),
-        discardPriceCoins: _discardCapRemaining == 0
+        // Third price surface (ui-test-planner): same _capRemaining and the
+        // same min(price, cap) clamp as the DISCARD tag and the dialog, or the
+        // sheet keeps promising the full price.
+        discardPriceCoins: _capRemaining == 0
             ? null
-            : _discardPriceFor(powerup),
+            : _discardPayoutFor(powerup),
       );
       return;
     }
@@ -4872,6 +4922,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               }
             },
             openAll: () => _performOpenAll(token, slotIds),
+            // Item 1 (batch 2026-08-10b) — one ad rerolls the whole bank.
+            // Null (button hidden) unless the backend advertised
+            // `boxRerollBatch`, a reroll ad unit exists, and we're not in the
+            // demo. On Android there is no reroll ad unit, so this is always
+            // null and the summary renders exactly as it does today.
+            onRerollAll: _boxRerollBatchEnabled
+                ? _rerollAllBoxPowerups
+                : null,
           ),
           transitionsBuilder: (_, anim, _, child) =>
               FadeTransition(opacity: anim, child: child),
@@ -4959,6 +5017,21 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     return widget.boxRerollAdController != null || AdService.boxRerollSupported;
   }
 
+  /// Batch 2026-08-10b item 1 — whether the backend is advertising the BATCH
+  /// box-reroll (REROLL ALL after OPEN ALL).
+  ///
+  /// A hand-copy of [_boxRerollEnabled], deliberately carrying BOTH of its
+  /// guards: the demo-mode bail (OPEN ALL is separately suppressed in the demo
+  /// today, but that suppression is not this getter's job to depend on) and
+  /// the "no ad unit baked in => no button" tail. Anything other than a
+  /// literal `true` — absent key, null, a string, an older backend, the demo
+  /// service — hides the button and the Open All summary renders as today.
+  bool get _boxRerollBatchEnabled {
+    if (widget.demoMode) return false;
+    if (_powerupData?['boxRerollBatch'] != true) return false;
+    return widget.boxRerollAdController != null || AdService.boxRerollSupported;
+  }
+
   /// Lazily-built rewarded-ad controller for the reroll. Its own AdMob unit
   /// and its own SSV customData prefix, so its grants can never be consumed by
   /// the daily-spinner extra spin (and vice versa).
@@ -5011,7 +5084,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       final result = await _rerollWithRetry(token, powerupId, localDate);
       // Warm the next one up for a second box this session.
       unawaited(_rerollAd.load(userId: userId, localDate: localDate));
-      _loadProgress();
+      // Item 4 (batch 2026-08-10b): do NOT refresh here. The case overlay is
+      // non-opaque, so `_loadProgress` swapped the inventory row behind the
+      // still-spinning reel to the NEW type and spoiled the reveal — exactly
+      // the bug the original open path documents and avoids below. The
+      // refresh already happens after the overlay closes, in
+      // `_openMysteryBox`'s post-push block.
       return result;
     } on ApiException catch (e) {
       if (mounted) {
@@ -5046,6 +5124,116 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           identityToken: token,
           raceId: widget.raceId,
           powerupId: powerupId,
+          localDate: localDate,
+        );
+      } on ApiException catch (e) {
+        final ssvLag =
+            e.statusCode == 409 &&
+            (e.code == 'AD_NOT_VERIFIED' ||
+                e.message.toLowerCase().contains('not verified'));
+        if (!ssvLag || attempt >= maxAttempts - 1) rethrow;
+        await Future<void>.delayed(const Duration(seconds: 2));
+      }
+    }
+  }
+
+  /// Batch 2026-08-10b item 1 — shows ONE rewarded ad, then rerolls every
+  /// eligible box from the Open All batch together. Returns the new rows
+  /// (keyed `powerupId`) or null when the user backed out / it failed, in
+  /// which case the reel bank keeps its original results.
+  Future<List<Map<String, dynamic>>?> _rerollAllBoxPowerups(
+    List<String> powerupIds,
+  ) async {
+    final token = widget.authService.authToken;
+    final userId = _myUserId;
+    if (token == null || token.isEmpty || userId.isEmpty) return null;
+    if (powerupIds.isEmpty) return null;
+
+    final localDate = _todayLocalDate();
+    try {
+      if (!_rerollAd.isSupported) return null;
+      if (!_rerollAd.isReady) {
+        await _rerollAd.load(userId: userId, localDate: localDate);
+      }
+      if (!_rerollAd.isReady) {
+        if (mounted) {
+          showInfoToast(context, 'No ad available right now. Try again later.');
+        }
+        return null;
+      }
+
+      final earned = await _rerollAd.showAndAwaitReward();
+      // Closed early: no grant was minted, so there is nothing to consume.
+      if (!earned) return null;
+
+      // Same localDate the grant was minted with, captured BEFORE the retry
+      // loop — the loop can span local midnight.
+      final response = await _rerollBatchWithRetry(token, powerupIds, localDate);
+      // Warm the next ad for a second Open All this session.
+      unawaited(_rerollAd.load(userId: userId, localDate: localDate));
+      // Item 4: NO _loadProgress() here — the reels are about to re-spin over
+      // a non-opaque overlay. `_openAllBoxes`'s `finally` refreshes once the
+      // overlay closes.
+      final rows =
+          (response['results'] as List?)
+              ?.whereType<Map<String, dynamic>>()
+              .toList() ??
+          const <Map<String, dynamic>>[];
+      // A 200 carrying no rows at all shouldn't happen (every owned id comes
+      // back, rerolled or skipped), but if it does the grant is already spent
+      // server-side. Say so rather than re-spinning to identical results in
+      // silence — and still return the (empty) list, so the button retires
+      // instead of inviting a second wasted watch.
+      if (rows.isEmpty && mounted) {
+        showInfoToast(context, 'Nothing changed — your rolls are unchanged.');
+      }
+      return rows;
+    } on ApiException catch (e) {
+      if (mounted) {
+        final String message;
+        if (e.code == 'NOTHING_TO_REROLL') {
+          message = 'Nothing left to reroll.';
+        } else if (e.statusCode == 404) {
+          // Backend predates this batch. Feature detection should have hidden
+          // the button; this is the belt-and-braces path.
+          message = "Reroll isn't available right now.";
+        } else if (e.statusCode == null &&
+            e.message.toLowerCase().contains('timed out')) {
+          // The batch may well have landed; `_openAllBoxes`'s finally will
+          // reconcile the inventory once the overlay closes.
+          message = 'Reroll may have completed — check your boxes.';
+        } else {
+          message = "Couldn't reroll those boxes.";
+        }
+        showErrorToast(context, message);
+      }
+      return null;
+    } on TimeoutException {
+      if (mounted) {
+        showErrorToast(context, 'Reroll may have completed — check your boxes.');
+      }
+      return null;
+    } catch (_) {
+      if (mounted) showErrorToast(context, "Couldn't reroll those boxes.");
+      return null;
+    }
+  }
+
+  /// The batch twin of [_rerollWithRetry]: the same bounded 5×2s wait for
+  /// AdMob's server-side verification to land, with the SAME localDate on every
+  /// attempt.
+  Future<Map<String, dynamic>> _rerollBatchWithRetry(
+    String token,
+    List<String> powerupIds,
+    String localDate,
+  ) async {
+    const maxAttempts = 5;
+    for (var attempt = 0; ; attempt++) {
+      try {
+        return await _api.rerollPowerupBatch(
+          identityToken: token,
+          raceId: widget.raceId,
+          powerupIds: powerupIds,
           localDate: localDate,
         );
       } on ApiException catch (e) {

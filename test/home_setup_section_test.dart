@@ -186,9 +186,11 @@ void main() {
       await tester.pumpWidget(_buildHome(authService, api));
       await _flush(tester);
 
+      // Today's Coins moved from index 3 to 4 when batch 2026-08-10b item 3
+      // inserted the pending-invite block at 3.
       expect(
         tester.getTopLeft(_staggerAt(2)).dy,
-        lessThan(tester.getTopLeft(_staggerAt(3)).dy),
+        lessThan(tester.getTopLeft(_staggerAt(4)).dy),
       );
     });
 

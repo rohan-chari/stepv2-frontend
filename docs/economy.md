@@ -91,7 +91,34 @@ different prices for some rows; its `update` block deliberately omits
 `priceCoins`/`active` for the powerup upsert (see `admin/routes.js:492`) — do not
 re-add them.
 
-### 3.2 Rarity + drop pool — `DB balance_config` (latest row `5ba76396…`, created 2026-07-28 09:46:24)
+### 3.2 Rarity + drop pool — `DB balance_config` **v4** (`86a0d190-a45d-4937-bfe4-80badee7f82b`, created 2026-08-10 15:37:51) — verified 2026-08-10
+
+Batch 2026-08-09 landed as config **version 4**. The live row now differs from
+the v3 description that follows it; v4 is authoritative:
+
+```
+dropPool.COMMON   = PROTEIN_SHAKE, TRAIL_MIX, DETOUR_SIGN, RUNNERS_HIGH, PINECONE_TOSS   (unchanged)
+dropPool.UNCOMMON = LEG_CRAMP, STEALTH_MODE, WRONG_TURN, RALLY_FLAG                       (unchanged)
+dropPool.RARE     = RED_CARD, SECOND_WIND, COMPRESSION_SOCKS, LUCKY_HORSESHOE, TRAIL_MINE,
+                    SNEAKY_SWAP, SHORTCUT, CLEANSE, MIRROR, POWER_OUTAGE
+                    <- FANNY_PACK REMOVED, POWER_OUTAGE ADDED (total weight still 9.5)
+positionOdds        first [0.48,0.25,0.27] / last [0.20,0.35,0.45]   (unchanged)
+positionRules.leadingDownweight  = { RUNNERS_HIGH 0.5, POWER_OUTAGE 0.3 }   <- PO added
+positionRules.trailingDownweight = { CLEANSE 0.5, MIRROR 0.5, STEALTH_MODE 0.5 } (unchanged)
+typeWeights         = { RED_CARD: 0.5 }        teamOnlyTypes = [RALLY_FLAG]
+luckyHorseshoe.rareChanceByLevel = [1, 1, 1, 1]   <- 100% forced RARE at every level
+upgradeCosts.byType = { LEG_CRAMP [0,10,20,30], WRONG_TURN [0,15,30,45],
+                        LUCKY_HORSESHOE [0,0,0,0] }   <- was {} in v3
+rarityByType        WRONG_TURN RARE, SNEAKY_SWAP UNCOMMON, POWER_OUTAGE RARE, FANNY_PACK RARE
+```
+
+Consequence for §3.4: `LEG_CRAMP` and `WRONG_TURN` now charge the **arithmetic
+`byType` ladders**, not `byRarity` — the §3.3f "Wrong Turn pays the RARE ladder"
+drift is now priced around rather than reconciled (`rarityByType.WRONG_TURN` is
+still `RARE`). `FANNY_PACK` is no longer rollable, so the Fanny-Pack rejection
+loops in `openMysteryBox.js` / `rerollMysteryBox.js` are dead code.
+
+### 3.2b Previous row — v3 (`5ba76396…`, created 2026-07-28 09:46:24), superseded
 
 The DB row is authoritative and **has drifted from `data/balance-config.json`
 (v1, 2026-07-21)**: DB adds `RALLY_FLAG` to the UNCOMMON drop pool, removes
@@ -444,8 +471,10 @@ pays `discardPrices[rarity]` coins capped per user per LOCAL day.
 Price keys off `race_powerups.rarity` (the tier actually rolled), not
 `rarityByType`. Eligible statuses: `HELD` and `MYSTERY_BOX`.
 
-**Not yet live in prod:** `coin_transactions` has **0** rows with reason
-`powerup_discard` (verified 2026-08-09). All discard EV below is prospective.
+**Now live in prod** (verified 2026-08-10): `coin_transactions` has **29** rows
+with reason `powerup_discard`, **168 coins** total, avg 5.8/discard —
+consistent with the 4.9–6.7 expected yield below. 286 `POWERUP_DISCARDED`
+events in 30d (most discards therefore land at 0 coins or on unopened boxes).
 
 Expected discard yield per box at live odds (no horseshoe): **P1 4.91 · P3 5.70 ·
 P6 6.65 coins**. The 40/day cap therefore binds at ~6–8 discarded rolls/day.
@@ -454,7 +483,7 @@ P6 6.65 coins**. The 40/day cap therefore binds at ~6–8 discarded rolls/day.
 
 | Fact | Value | Source |
 |---|---|---|
-| `rareChanceByLevel` | `[0, 0.2, 0.45, 1.0]` | `DB balance_config` v3 = `CODE defaults.js:378-380` |
+| `rareChanceByLevel` | **`[1, 1, 1, 1]`** (`DB` v4, 2026-08-10) — was `[0, 0.2, 0.45, 1.0]` in v3 | `DB balance_config` v4 |
 | Roll timing | at **use** time, frozen into `race_active_effects.metadata.minRarity` | `CODE usePowerup.js:397-403, 3129-3141` |
 | Floor on a miss | `UNCOMMON` | same |
 | Forced pick | weighted draw from the **position-filtered** RARE pool — may currently return another Horseshoe | `CODE openMysteryBox.js:186-194` |
@@ -492,6 +521,51 @@ gain of 3.4–5.1 — less than the 10 it was worth unspent. Simulated coins/box
 **never use 4.913 / use 4.752 at P1**, **6.650 / 6.273 at P6**. Using the
 Horseshoe is strictly coin-negative and step-positive, which is the correct
 incentive.
+
+### 3.7 Ad-funded mystery-box reroll — `CODE powerups/commands/rerollMysteryBox.js`, verified 2026-08-10
+
+| Knob | Value | Source |
+|---|---|---|
+| Kill switch | `ADS_BOX_REROLL_ENABLED === "true"` (defaults **OFF**) | `ENV`, `CODE adRewards.js:56` |
+| Grant kind | `box_reroll`, SSV custom_data `box_reroll:<userId>:<localDate>` | `CODE grantAdReward.js:30,95` |
+| **Daily cap on reroll ad watches** | **NONE** — unlike `ad_coin_reward` (25×3) and the ad unlock kinds, no cap exists | `CODE` |
+| Cost | 1 verified watch = 1 reroll, consumed CAS | `CODE rerollMysteryBox.js:225-250` |
+| Eligibility | `status=HELD`, `rarity != null`, `upgradeLevel = 0`, `rerolledAt = null` | same |
+| Odds used | fresh roll at **current raw-steps position**, no Lucky Horseshoe floor | `CODE :283-297` |
+| Platform | iOS only (`ADMOB_BOX_REROLL_AD_UNIT_ID`); Android compiles the button out | `FE AdService` |
+
+**Rerollable population.** Spin-granted powerups carry a rarity (506 rows with
+`earned_at_steps IS NULL` and non-null rarity) and are therefore rerollable.
+**Store purchases carry a null rarity** (all `rainstorm`/`leech`/`quick_rinse`
+rows), so coins can *not* be converted into a box roll via reroll.
+
+**Prod volume since launch (2026-08-10):** 29 `box_reroll` grants / 8 users,
+27 rerolls performed, 27 `POWERUP_REROLLED` events.
+
+**Simultaneous-box ceiling (bounds any "reroll all" batch).**
+`DEFAULT_POWERUP_SLOTS = 3` + `MAX_QUEUED_BOXES = 1`; further crossings are
+**forfeited** (2,486 `POWERUP_FORFEITED` events in 30d). Max observed
+`race_participants.powerup_slots` = **4**, so the physical maximum openable at
+once is **5**. Live holdings right now: 1 box ×26 participants, 2 ×38, 3 ×26,
+4 ×28 (0 at 5).
+
+Measured open-burst sizes (15s windows per user, 30d, n=10,288 opens):
+**1 → 6,829 · 2 → 1,111 · 3 → 290 · 4 → 83 · 5 → 7.** 82.1% of opens are
+singletons; mean burst 1.24; mean burst given ≥2 boxes **2.32**.
+
+**Reroll EV** (Monte Carlo 4×10⁵ per cell, live v4 config via the backend's own
+`typeOddsForPosition`, N=6 solo, valued with the §3.3c swing table, Lucky
+Horseshoe valued 0):
+
+| Position | E[box swing] | sd | cherry-pick 1 box | all-or-nothing N=2 | N=3 | N=4 | N=5 |
+|---|---|---|---|---|---|---|---|
+| P1 | 1,106 | 1,109 | **+470** | +643 (322/box) | +777 (259) | +892 (223) | +1,000 (200) |
+| P3 | 1,340 | 1,472 | **+586** | +818 (409/box) | +1,003 (334) | +1,155 (289) | +1,305 (261) |
+| P6 | 1,547 | 1,682 | **+686** | +939 (470/box) | +1,158 (386) | +1,340 (335) | +1,503 (301) |
+
+Gain formula: reroll is a fresh iid draw, so the optimal rule is "reroll iff the
+current holding is below its mean" and the gain is `E[(μ−S)⁺]`. Per-box gain
+falls like `1/√N` for an all-or-nothing batch; per-**ad** gain rises like `√N`.
 
 ---
 
@@ -1052,7 +1126,37 @@ future balance-config save inherits `boundOverride`, masking genuine warnings.
 
 ---
 
+## 10. Rainstorm — measured facts (verified 2026-08-10, prod SELECT-only)
+
+| Fact | Value | Source |
+|---|---|---|
+| Store price | **75 coins**, `active=true`, not testOnly | `DB powerup_shop_items` |
+| Duration / magnitude | 60 min, `metadata.multiplier = 0.5` (fixed, non-upgradeable) | `CODE usePowerup.js:167-168` |
+| Targeting | untargeted **AoE**: every alive enemy participant (enemy team only in team races); caster exempt | `CODE usePowerup.js:2907-2980` |
+| Counters | `UMBRELLA` = immune, not consumed — **but `umbrella` is `active=false` in the store and in no drop pool, i.e. unobtainable**; `COMPRESSION_SOCKS` = consumed, blocks. Mirror cannot reflect it (shop-powerup rule) | `CODE`, `DB` |
+| Supply | 61 copies ever, **all** `earned_at_steps IS NULL` (store purchase or daily-spin grant); never a box drop | `DB race_powerups` |
+| Usage | 60 casts by 9 casters → **588 victim-rows**, i.e. **9.8 victims per cast** | `DB race_active_effects` |
+| Steps walked inside a storm window, per victim | mean **590**, p50 192, p90 1,842, 20.4% zero | `DB step_samples × race_active_effects` |
+| Victim buffed during the storm | **72 / 588 rows (12.2%)**; **16.3%** of all storm-window steps fall inside a buff sub-window; step-weighted mean buff multiplier in those segments **M = 2.66**, time-weighted mean M = 2.16, max 4.39 | same |
+
+Realised damage at the **current subtractive** rule (`M − 0.5`):
+`0.5 × 347,128` = **173,564 scored steps** all-time, ≈ **2,893 per cast**
+(= 38.6 swing-steps/coin at 75).
+
+Multiplicative rule (`M × 0.5`) recomputed over the same rows:
+`0.5 × (290,375 unbuffed + 151,038 buffed-M-weighted)` = **220,707**, ≈ **3,678
+per cast** — **+27.2%**, 49.0 swing-steps/coin. Unbuffed victims (M = 1) are
+bit-identical under either rule.
+
+`COIN_FLIP`'s losing side is hardcoded `multiplier = 0.5`
+(`CODE usePowerup.js:3515`), so its `lostFraction` is always exactly 0.5 —
+identical to Rainstorm's. All-time coin-flip effect rows: **5**.
+
+---
+
 *Last full verification pass: 2026-08-08 (prod SELECT-only, aggregates only).
+§3.2 (config v4), §3.5, §3.6, §3.7 and §10 verified 2026-08-10 (prod
+SELECT-only, aggregates only).
 §3.2 / §3.4 / §3.4b / §3.4c / §3.5 / §3.6 / §9 verified and added 2026-08-09
 (prod SELECT-only, aggregates only). §8 Option H and §9 are analysis only —
 nothing in either has been applied.*

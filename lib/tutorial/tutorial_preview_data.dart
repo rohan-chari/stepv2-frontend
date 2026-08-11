@@ -40,6 +40,20 @@ class TutorialPreviewAuthService extends AuthService {
 }
 
 class TutorialPreviewBackendApiService extends BackendApiService {
+  // -- Home: feedback card (batch 2026-08-10b item 5) --
+  //
+  // The home tab renders the real feedback card inside the tutorial preview,
+  // and this service EXTENDS the real BackendApiService — so without this
+  // override a tap inside the tutorial would fire a genuine
+  // POST /feedback/suggestions. The only other thing standing in the way is
+  // the opaque GestureDetector in spotlight_overlay.dart, which is incidental
+  // chrome, not a guarantee (architect R4 / ui-test-planner risk 2).
+  @override
+  Future<void> submitSuggestion({
+    required String identityToken,
+    required String text,
+  }) async {}
+
   // -- Home: step milestones (StepMilestonesSection) --
   @override
   Future<Map<String, dynamic>> fetchStepMilestonesToday({
@@ -376,6 +390,12 @@ const List<Map<String, dynamic>> tutorialPreviewAccessories = [
 
 /// Home race rail: a single active race so the home RACES section renders the
 /// real active-race ticket strip.
+///
+/// **Must stay `ACTIVE_RACES`.** Batch 2026-08-10b item 3 promotes a
+/// `PENDING_INVITE` card into its own block directly above Today's Coins —
+/// which is exactly where `tutorialMilestonesKey`, the milestones spotlight
+/// anchor, sits. Seeding `PENDING_INVITE` here would push that anchor below the
+/// fold and the tutorial would ring an off-screen element.
 Map<String, dynamic> tutorialPreviewHomeRaceCard() {
   final now = DateTime.now();
   return {

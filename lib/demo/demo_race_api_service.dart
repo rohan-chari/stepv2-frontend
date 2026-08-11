@@ -341,6 +341,22 @@ class DemoRaceApiService extends BackendApiService {
     required String localDate,
   }) async => const {};
 
+  /// Batch 2026-08-10b item 1 — the rewarded-ad REROLL ALL after OPEN ALL.
+  ///
+  /// UNREACHABLE in the demo by design: OPEN ALL itself is suppressed in
+  /// demoMode (§5.7b), `_boxRerollBatchEnabled` carries its own `!demoMode`
+  /// guard, and this service's progress payload never advertises
+  /// `boxRerollBatch`. The override exists so the §8.4 network-leak guard
+  /// stays honest — an un-overridden call site is a live HTTPS request against
+  /// prod with a fabricated race id, whether or not today's UI can reach it.
+  @override
+  Future<Map<String, dynamic>> rerollPowerupBatch({
+    required String identityToken,
+    required String raceId,
+    required List<String> powerupIds,
+    required String localDate,
+  }) async => const {};
+
   // -- Telemetry --------------------------------------------------------------
   //
   // Activation events for the demo funnel are recorded through a REAL

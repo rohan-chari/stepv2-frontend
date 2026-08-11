@@ -48,6 +48,16 @@ class MultiCaseOpeningScreen extends StatefulWidget {
   /// Raw `powerupData.dropOdds`; hidden entirely when absent or malformed.
   final Map<String, dynamic>? dropOdds;
 
+  /// Batch 2026-08-10b item 1 — one rewarded ad rerolls EVERY eligible box in
+  /// this batch. **Null by default**, so nothing that builds this screen picks
+  /// the button up implicitly: the host passes it only when the backend
+  /// advertised `powerupData.boxRerollBatch == true` AND a reroll ad unit is
+  /// baked into this build. Resolves the new rows (keyed `powerupId`), or null
+  /// when the user backed out of the ad / it failed (already toasted by the
+  /// host), in which case the summary is left exactly as it was.
+  final Future<List<Map<String, dynamic>>?> Function(List<String> powerupIds)?
+  onRerollAll;
+
   const MultiCaseOpeningScreen({
     super.key,
     required this.boxCount,
@@ -56,6 +66,7 @@ class MultiCaseOpeningScreen extends StatefulWidget {
     this.onResults,
     this.rarityByType,
     this.dropOdds,
+    this.onRerollAll,
   });
 
   @override
@@ -65,10 +76,25 @@ class MultiCaseOpeningScreen extends StatefulWidget {
 enum _Phase { idle, loading, revealing, done }
 
 class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
+  /// Mirrors the backend's `REROLL_BATCH_MAX_COUNT`. Used ONLY to word the
+  /// disclaimer honestly — the server is what actually truncates, and any id
+  /// past the cap comes back `skipped: "OVER_CAP"` with its unchanged roll.
+  static const int rerollBatchMaxCount = 8;
+
   _Phase _phase = _Phase.idle;
   List<Map<String, dynamic>> _results = const [];
   final _SpinTrigger _trigger = _SpinTrigger();
   int _completed = 0;
+
+  /// One reroll per batch, mirroring the single-box flow's one-per-box rule.
+  bool _rerollUsed = false;
+  bool _rerollingAll = false;
+
+  /// Bumped on every reroll so each reel's key changes and Flutter genuinely
+  /// REMOUNTS the strip (architect S1). Reusing the existing reel `State` would
+  /// mean `onComplete` never fires again, leaving `_phase` stuck on
+  /// `revealing` and `_canDismiss` false — a permanently undismissable overlay.
+  int _rollGen = 0;
 
   @override
   void dispose() {
@@ -120,9 +146,94 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
     }
   }
 
+  /// Ids this batch could plausibly reroll, from the CLIENT's point of view.
+  /// A display filter only — the server re-checks everything, and an
+  /// auto-activated Fanny Pack is already USED so it comes back `skipped`.
+  List<String> get _rerollableIds => [
+    for (final r in _results)
+      if (r['powerupId'] is String &&
+          r['autoActivated'] != true &&
+          r['alreadyOpened'] != true)
+        r['powerupId'] as String,
+  ];
+
+  /// Wording for the disclaimer. The server truncates to
+  /// [rerollBatchMaxCount], so promising "ALL" past that would be a lie.
+  String get _rerollDisclaimer {
+    final n = _rerollableIds.length;
+    final subject = n > rerollBatchMaxCount
+        ? '$rerollBatchMaxCount of these boxes'
+        : 'ALL of these boxes';
+    return 'Watch an ad to reroll $subject. Every roll is replaced — '
+        'the new rolls are final.';
+  }
+
+  Future<void> _rerollAll() async {
+    final reroll = widget.onRerollAll;
+    if (reroll == null || _rerollingAll || _rerollUsed) return;
+    final ids = _rerollableIds;
+    if (ids.isEmpty) return;
+
+    setState(() => _rerollingAll = true);
+    List<Map<String, dynamic>>? rows;
+    try {
+      rows = await reroll(ids);
+    } catch (_) {
+      // The host owns the error copy; never leave the button spinning.
+      rows = null;
+    }
+    if (!mounted) return;
+    if (rows == null) {
+      // Backed out of the ad / already toasted: the summary is untouched and
+      // the button stays available — no credit was spent.
+      setState(() => _rerollingAll = false);
+      return;
+    }
+
+    // Join on `powerupId` — the key `open-batch` and `reroll-batch` share.
+    // Anything not echoed back (skipped, omitted foreign id, an older/newer
+    // backend shape) keeps its original roll rather than blanking.
+    final byId = <String, Map<String, dynamic>>{};
+    for (final row in rows) {
+      final id = row['powerupId'];
+      if (id is String) byId[id] = row;
+    }
+    final merged = <Map<String, dynamic>>[];
+    for (final existing in _results) {
+      final id = existing['powerupId'];
+      final match = id is String ? byId[id] : null;
+      if (match == null) {
+        merged.add(existing);
+        continue;
+      }
+      merged.add({
+        ...existing,
+        if (match['type'] is String) 'type': match['type'],
+        if (match['rarity'] is String) 'rarity': match['rarity'],
+      });
+    }
+
+    setState(() {
+      _results = merged;
+      _rerollUsed = true;
+      _rerollingAll = false;
+      _rollGen++;
+      _completed = 0;
+      _phase = _Phase.revealing;
+    });
+    // Same two-step as the first open: build the (remounted) reels this frame,
+    // pulse them next frame once every one of them is listening.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _trigger.fire();
+    });
+  }
+
   // Dismissal is allowed only before the boxes are opened or after the whole
-  // reel bank has landed — never while the reels are loading/spinning (spec §6).
-  bool get _canDismiss => _phase == _Phase.idle || _phase == _Phase.done;
+  // reel bank has landed — never while the reels are loading/spinning (spec §6)
+  // and never while a reroll ad is up, so a backgrounded ad can't leave a
+  // half-applied batch behind a popped route.
+  bool get _canDismiss =>
+      !_rerollingAll && (_phase == _Phase.idle || _phase == _Phase.done);
 
   void _close() {
     if (!_canDismiss) return;
@@ -287,8 +398,10 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
           SizedBox(
             width: double.infinity,
             child: CaseOpeningStrip(
-              // Stable identity so each reel keeps its state across rebuilds.
-              key: ValueKey('reel_$i'),
+              // Stable identity so each reel keeps its state across rebuilds —
+              // but the roll GENERATION is part of it, so a reroll forces a
+              // genuine remount and the new bank actually re-spins and lands.
+              key: ValueKey('${_results[i]['powerupId'] ?? 'reel_$i'}:$_rollGen'),
               resultType: _results[i]['type'] as String? ?? '',
               resultRarity: _results[i]['rarity'] as String? ?? 'COMMON',
               // Same reel height as the single-box opening screen.
@@ -377,11 +490,45 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
               ),
             ],
             const SizedBox(height: 20),
+            // Item 1 — REROLL ALL. Absent unless the host wired it (backend
+            // advertised `boxRerollBatch`, a reroll ad unit is baked in, not
+            // demo), already spent, or nothing in the bank is rerollable. On
+            // Android the ad unit doesn't exist, so this whole block is
+            // simply never built and the card renders as it does today.
+            if (widget.onRerollAll != null &&
+                !_rerollUsed &&
+                _rerollableIds.isNotEmpty) ...[
+              PillButton(
+                key: const Key('open-all-reroll-button'),
+                label: 'REROLL ALL',
+                icon: Icons.ondemand_video_rounded,
+                variant: PillButtonVariant.secondary,
+                fontSize: 13,
+                fullWidth: true,
+                loading: _rerollingAll,
+                onPressed: _rerollingAll ? null : _rerollAll,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                _rerollDisclaimer,
+                key: const Key('open-all-reroll-disclaimer'),
+                textAlign: TextAlign.center,
+                style: PixelText.body(
+                  size: 11,
+                  color: AppColors.of(context).textMid,
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
             PillButton(
               label: 'Continue',
               icon: Icons.check_rounded,
               fullWidth: true,
-              onPressed: () => Navigator.of(context).pop(),
+              // Disabled while the ad is up: a half-applied batch behind a
+              // popped route is the one state this screen cannot recover from.
+              onPressed: _rerollingAll
+                  ? null
+                  : () => Navigator.of(context).pop(),
             ),
           ],
         ),

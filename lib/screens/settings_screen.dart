@@ -12,6 +12,7 @@ import '../theme_controller.dart';
 import '../tutorial/tutorial_screen.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
+import '../widgets/feedback_sheet.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/pixel_switch.dart';
 import '../widgets/trail_sign.dart';
@@ -141,21 +142,16 @@ class _SettingsContentState extends State<_SettingsContent> {
     }
   }
 
-  /// Item 7 — the suggestion box.
+  /// Item 7 — the suggestion box. The sheet itself lives in
+  /// `lib/widgets/feedback_sheet.dart` so Home can offer the same one
+  /// (batch 2026-08-10b item 5); this screen's behaviour is unchanged.
   Future<void> _openFeedbackSheet() async {
     final api = widget.backendApiService;
     if (api == null) return;
-    await showModalBottomSheet<void>(
+    await showFeedbackSheet(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.of(context).parchment,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) => _FeedbackSheet(
-        authService: widget.authService,
-        backendApiService: api,
-      ),
+      authService: widget.authService,
+      backendApiService: api,
     );
   }
 
@@ -578,172 +574,6 @@ class _SocialRow extends StatelessWidget {
                 Icons.open_in_new_rounded,
                 size: 15,
                 color: colors.textMid,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Item 7 — the suggestion sheet. Offline keeps the text and offers a retry;
-/// the user never loses what they typed.
-class _FeedbackSheet extends StatefulWidget {
-  const _FeedbackSheet({
-    required this.authService,
-    required this.backendApiService,
-  });
-
-  final AuthService authService;
-  final BackendApiService backendApiService;
-
-  @override
-  State<_FeedbackSheet> createState() => _FeedbackSheetState();
-}
-
-class _FeedbackSheetState extends State<_FeedbackSheet> {
-  static const int _maxChars = 2000;
-
-  final TextEditingController _controller = TextEditingController();
-  bool _sending = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller.addListener(() => setState(() {}));
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    final text = _controller.text.trim();
-    if (text.isEmpty || _sending) return;
-    final token = widget.authService.authToken;
-    if (token == null || token.isEmpty) return;
-
-    setState(() {
-      _sending = true;
-      _error = null;
-    });
-    try {
-      await widget.backendApiService.submitSuggestion(
-        identityToken: token,
-        text: text,
-      );
-      if (!mounted) return;
-      Navigator.of(context).pop();
-      // The toast belongs to the screen underneath, which outlives the sheet.
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _sending = false;
-        // Keep the text. The retry button re-posts exactly what they wrote.
-        _error = e.statusCode == 429
-            ? "That's plenty for today — thanks! Try again tomorrow."
-            : "Couldn't send that. Check your connection and try again.";
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _sending = false;
-        _error = "Couldn't send that. Check your connection and try again.";
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
-    final length = _controller.text.characters.length;
-    final tooLong = length > _maxChars;
-    final canSend = _controller.text.trim().isNotEmpty && !tooLong && !_sending;
-
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: SafeArea(
-        key: const Key('feedback-sheet'),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'SEND FEEDBACK',
-                textAlign: TextAlign.center,
-                style: PixelText.title(size: 17, color: colors.textDark),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Ideas, bugs, gripes — we read every one.',
-                textAlign: TextAlign.center,
-                style: PixelText.body(size: 12, color: colors.textMid),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                key: const Key('feedback-input'),
-                controller: _controller,
-                autofocus: true,
-                maxLines: 5,
-                minLines: 3,
-                enabled: !_sending,
-                textCapitalization: TextCapitalization.sentences,
-                style: PixelText.body(size: 14, color: colors.textDark),
-                decoration: InputDecoration(
-                  hintText: 'What would make Bara better?',
-                  hintStyle: PixelText.body(size: 13, color: colors.textMid),
-                  filled: true,
-                  fillColor: colors.parchmentLight,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(
-                      color: colors.parchmentBorder,
-                      width: 1.5,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 6),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Text(
-                  '$length / $_maxChars',
-                  style: PixelText.body(
-                    size: 11,
-                    color: tooLong ? colors.error : colors.textMid,
-                  ),
-                ),
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  _error!,
-                  key: const Key('feedback-error'),
-                  style: PixelText.body(size: 12, color: colors.error),
-                ),
-              ],
-              const SizedBox(height: 10),
-              PillButton(
-                key: const Key('feedback-submit'),
-                // The label becomes RETRY once a send has failed, so the
-                // button says what it will do rather than repeating itself.
-                label: _error == null ? 'SUBMIT' : 'RETRY',
-                variant: PillButtonVariant.primary,
-                fullWidth: true,
-                loading: _sending,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-                onPressed: canSend ? _submit : null,
               ),
             ],
           ),

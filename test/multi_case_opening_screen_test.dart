@@ -49,9 +49,10 @@ void main() {
     // into a multi-column grid.
     final reels = find.byType(CaseOpeningStrip);
     expect(reels, findsNWidgets(3));
+    // Reel keys carry a roll-generation suffix (batch 2026-08-10b item 1) so a
+    // REROLL ALL genuinely remounts the bank; generation 0 is the first open.
     final reelRects = [
-      for (var i = 0; i < 3; i++)
-        tester.getRect(find.byKey(ValueKey('reel_$i'))),
+      for (var i = 0; i < 3; i++) tester.getRect(find.byKey(ValueKey('p$i:0'))),
     ];
     expect(reelRects.every((rect) => rect.width > 350), isTrue);
     expect(reelRects.map((rect) => rect.width).toSet().length, 1);

@@ -15,6 +15,8 @@ import '../../services/onboarding_state_service.dart';
 import '../../widgets/arcade_fx.dart';
 import '../../widgets/coach_tip.dart';
 import '../../widgets/coin_balance_badge.dart';
+import '../../widgets/feedback_sheet.dart';
+import '../../widgets/game_container.dart';
 import '../../widgets/global_event_banner.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/step_milestones_section.dart';
@@ -280,13 +282,19 @@ class HomeTab extends StatelessWidget {
                                 onFindFriends: onOpenFriendsTab,
                               ),
                             ),
+                            // A pending race invite outranks everything below
+                            // SETUP: it expires, and it is the only block here
+                            // that another person is waiting on. It renders as
+                            // its own block and is suppressed inside RACES.
+                            if (_buildPendingInviteSection() case final invite?)
+                              StaggerIn(index: 3, child: invite),
                             // Today's coins sits above the races: it's the one
                             // section that moves every single day whether or not
                             // the user is in a race, so it earns the higher
                             // slot. The stagger index moves with it — the
                             // cascade is ordered by index, not by position.
                             StaggerIn(
-                              index: 3,
+                              index: 4,
                               child: KeyedSubtree(
                                 key: tutorialMilestonesKey,
                                 child: CoachTipHost(
@@ -316,12 +324,18 @@ class HomeTab extends StatelessWidget {
                               ),
                             ),
                             if (raceCard != null)
-                              StaggerIn(index: 4, child: _buildRaceSection())
+                              StaggerIn(index: 5, child: _buildRaceSection())
                             else if (raceCardLoading)
                               StaggerIn(
-                                index: 4,
+                                index: 5,
                                 child: _buildRaceSkeletonSection(),
                               ),
+                            // Last block on the page: the ask, once the user
+                            // has seen everything the app has to show them.
+                            StaggerIn(
+                              index: 6,
+                              child: _buildFeedbackSection(context),
+                            ),
                           ],
                         ),
                       ),
@@ -364,9 +378,42 @@ class HomeTab extends StatelessWidget {
     );
   }
 
+  /// A pending race invite, promoted out of the RACES section to its own block
+  /// directly under SETUP (batch 2026-08-10b item 3). Returns null — and so
+  /// renders nothing at all, no gap — for every other card state.
+  ///
+  /// This is a MOVE, not a redesign: it reuses `_buildRaceOpportunityRow`'s
+  /// `pendingInvite` branch verbatim, so label/title/subtitle/callbacks are
+  /// identical to what RACES used to show.
+  ///
+  /// Known limitation (accepted): the backend returns exactly one home-card
+  /// state, so a user with an ACTIVE race gets `ACTIVE_RACES` and their pending
+  /// invite is not in the payload at all. This moves the invite in the case
+  /// where it renders today; it does not make invites appear during a race.
+  Widget? _buildPendingInviteSection() {
+    final card = raceCard;
+    if (card == null) return null;
+    final data = RaceCardData.fromJson(card);
+    if (data.state != RaceCardState.pendingInvite) return null;
+    return Padding(
+      key: const Key('home-pending-invite'),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: _buildRaceOpportunityRow(data),
+    );
+  }
+
   /// RACES section on home — a compact launcher/rail, not the full races page.
   Widget _buildRaceSection() {
     final card = raceCard!;
+    final data = RaceCardData.fromJson(card);
+    // The invite has been promoted above Today's Coins, so rendering it again
+    // here would duplicate it — but dropping it outright would leave RACES as a
+    // bare header with nothing underneath. Fall back to the empty-state row,
+    // which is the honest thing to offer a user whose only race is an invite
+    // they haven't accepted.
+    final rowData = data.state == RaceCardState.pendingInvite
+        ? const RaceCardData(state: RaceCardState.empty)
+        : data;
     return ColoredBox(
       color: Colors.transparent,
       child: Column(
@@ -378,9 +425,67 @@ class HomeTab extends StatelessWidget {
           else
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: _buildRaceOpportunityRow(RaceCardData.fromJson(card)),
+              child: _buildRaceOpportunityRow(rowData),
             ),
         ],
+      ),
+    );
+  }
+
+  /// Batch 2026-08-10b item 5 — the feedback ask, last block on Home.
+  ///
+  /// Renders unconditionally: the endpoint is already live, and there is no
+  /// backend field to feature-detect. The tutorial preview renders this card
+  /// too (it looks intentional there), and is prevented from actually
+  /// submitting by `TutorialPreviewBackendApiService.submitSuggestion` being a
+  /// no-op — NOT by the spotlight overlay, which is incidental.
+  Widget _buildFeedbackSection(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: GameContainer(
+        key: const Key('home-feedback-card'),
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                const _SectionTick(),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Found a bug? Have an idea? Let us know',
+                    style: PixelText.title(
+                      size: 14,
+                      color: AppColors.of(context).textDark,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Builder(
+              builder: (btnContext) => PillButton(
+                key: const Key('home-feedback-button'),
+                label: 'SEND FEEDBACK',
+                icon: Icons.chat_bubble_outline_rounded,
+                variant: PillButtonVariant.secondary,
+                fontSize: 13,
+                fullWidth: true,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                onPressed: () => showFeedbackSheet(
+                  context: btnContext,
+                  authService: authService,
+                  backendApiService: backendApiService,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

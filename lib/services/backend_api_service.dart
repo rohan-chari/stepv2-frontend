@@ -889,6 +889,39 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  /// POST /races/:raceId/powerups/reroll-batch (feature batch 2026-08-10b,
+  /// Item 1). One rewarded ad, N boxes rerolled together.
+  ///
+  /// Returns `{results: [{powerupId, type, rarity, rerolled, skipped?}],
+  /// rerolledCount}`. **Rows are keyed `powerupId`, not `id`** — the client
+  /// joins them against `MultiCaseOpeningScreen._results`, which `open-batch`
+  /// populates with the same key. Callers must read every field defensively
+  /// and leave any reel whose id is missing from `results` on its original
+  /// roll.
+  ///
+  /// The endpoint is NEW: an older backend 404s, which surfaces as an
+  /// [ApiException] the caller turns into "Reroll isn't available right now"
+  /// rather than a crash. [localDate] carries the same `YYYY-MM-DD` string the
+  /// ad grant's SSV customData was minted with, exactly as [rerollPowerup].
+  Future<Map<String, dynamic>> rerollPowerupBatch({
+    required String identityToken,
+    required String raceId,
+    required List<String> powerupIds,
+    required String localDate,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races/$raceId/powerups/reroll-batch',
+      body: <String, dynamic>{
+        'powerupIds': powerupIds,
+        'localDate': localDate,
+      },
+      identityToken: identityToken,
+    );
+
+    return _decodeJsonResponse(response);
+  }
+
   Future<Map<String, dynamic>> checkDisplayName({
     required String identityToken,
     required String name,
