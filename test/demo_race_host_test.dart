@@ -139,7 +139,7 @@ void main() {
     expect(find.byType(RaceDetailScreen), findsOneWidget);
     expect(find.text(kDemoBeatCopy[DemoBeat.intro]!.title), findsOneWidget);
     // The real standings, with the real user in 2nd behind the scripted leader.
-    expect(find.textContaining('Sam Rivera'), findsWidgets);
+    expect(find.textContaining('CapyBot'), findsWidgets);
     expect(find.textContaining('${ctx.auth.displayName} (you)'), findsWidgets);
     expect(ctx.engine.myPlacement, 2);
     // The real countdown chip, near two minutes.
@@ -251,7 +251,7 @@ void main() {
   testWidgets('the picker refuses a rival the coach did not name', (
     tester,
   ) async {
-    // "Tap it and pick Sam" has to be enforced, or it is a suggestion: every
+    // "Tap it and pick CapyBot" has to be enforced, or it is a suggestion: every
     // row in the REAL picker is live, so the targeting beat could be finished
     // by ignoring the only instruction it gives.
     final ctx = build();
@@ -263,7 +263,7 @@ void main() {
     await tester.tap(find.text('USE'));
     await settleDemo(tester);
 
-    await tester.tap(find.textContaining('Priya N.').last);
+    await tester.tap(find.textContaining('TurtleBot').last);
     await settleDemo(tester);
 
     // Sheet still open, nothing spent, beat unmoved.
@@ -274,14 +274,14 @@ void main() {
     // And the coach is still on screen to carry the shake.
     expect(find.byKey(const Key('demo-coach-card')), findsOneWidget);
 
-    // Sam is accepted.
-    await tester.tap(find.textContaining('Sam Rivera').last);
+    // CapyBot is accepted.
+    await tester.tap(find.textContaining('CapyBot').last);
     await settleDemo(tester);
     expect(ctx.engine.myPlacement, 1);
   });
 
   testWidgets('7/8/16d — the REAL target picker excludes the user and lists '
-      'three rivals; picking Sam takes 1st in the REAL standings', (
+      'three rivals; picking CapyBot takes 1st in the REAL standings', (
     tester,
   ) async {
     final ctx = build();
@@ -300,9 +300,9 @@ void main() {
     await settleDemo(tester);
 
     // The REAL picker: three rivals, and never the user themselves (G2).
-    expect(find.textContaining('Sam Rivera'), findsWidgets);
-    expect(find.textContaining('Jordan Lee'), findsWidgets);
-    expect(find.textContaining('Priya N.'), findsWidgets);
+    expect(find.textContaining('CapyBot'), findsWidgets);
+    expect(find.textContaining('CorgiBot'), findsWidgets);
+    expect(find.textContaining('TurtleBot'), findsWidgets);
     expect(
       find.descendant(
         of: find.byType(BottomSheet),
@@ -312,7 +312,7 @@ void main() {
       reason: 'the user must be excluded from their own target picker',
     );
 
-    await tester.tap(find.textContaining('Sam Rivera').last);
+    await tester.tap(find.textContaining('CapyBot').last);
     await settleDemo(tester);
 
     expect(ctx.engine.myPlacement, 1);
@@ -325,7 +325,7 @@ void main() {
     final ctx = build();
     await pumpHost(tester, ctx);
     await runToShortcutBeat(tester, ctx);
-    await useShortcutOn(tester, 'Sam Rivera');
+    await useShortcutOn(tester, 'CapyBot');
 
     // The floor lifts and the clock runs down.
     ctx.clock.advance(DemoRaceEngine.finalCountdown);
@@ -386,7 +386,7 @@ void main() {
     await settleDemo(tester, frames: 40);
     await dismissBlockedModal(tester);
     await openABox(tester);
-    await useShortcutOn(tester, 'Sam Rivera');
+    await useShortcutOn(tester, 'CapyBot');
     ctx.clock.advance(DemoRaceEngine.finalCountdown);
     await settleDemo(tester, frames: 100);
     await tester.tap(find.byKey(const Key('demo-win-continue')));
@@ -416,7 +416,7 @@ void main() {
     );
 
     await runToShortcutBeat(tester, ctx);
-    await useShortcutOn(tester, 'Sam Rivera');
+    await useShortcutOn(tester, 'CapyBot');
     ctx.clock.advance(DemoRaceEngine.finalCountdown);
     await settleDemo(tester, frames: 100);
     expect(find.byKey(const Key('demo-win-card')), findsOneWidget);
@@ -494,7 +494,7 @@ void main() {
     final ctx = build();
     await pumpHost(tester, ctx);
     await runToShortcutBeat(tester, ctx);
-    await useShortcutOn(tester, 'Sam Rivera');
+    await useShortcutOn(tester, 'CapyBot');
 
     expect(
       ctx.auth.coinUpdates,
@@ -520,7 +520,7 @@ void main() {
       await tester.tap(find.text('ACTIVITY').first);
       await settleDemo(tester);
     }
-    await tester.tap(find.textContaining('Sam Rivera').first);
+    await tester.tap(find.textContaining('CapyBot').first);
     await settleDemo(tester);
     // Close whatever the tap opened, if anything.
     final navigator = tester.state<NavigatorState>(find.byType(Navigator));

@@ -63,6 +63,22 @@ extension DemoBeatX on DemoBeat {
   String get stepValue => '$number';
 }
 
+/// The demo rivals' display names.
+///
+/// They live HERE, not on the engine, because the coach copy below names them
+/// and the engine already imports this file — putting them on the engine would
+/// make the dependency circular. `DemoRaceEngine` re-exports them so callers
+/// keep using `DemoRaceEngine.rivalLeaderName`.
+///
+/// They are bots on purpose: this is a scripted race against no one, and
+/// human-looking names read as real friends the user doesn't recognise. One per
+/// playable animal. Interpolate them into the copy rather than repeating the
+/// literal — the previous copy hardcoded "Sam" in three places, which is
+/// exactly how a rename leaves the coach naming a rival who no longer exists.
+const String demoRivalLeaderName = 'CapyBot';
+const String demoRivalSecondName = 'CorgiBot';
+const String demoRivalThirdName = 'TurtleBot';
+
 /// Coach-mark copy, keyed by beat. The last beat is the win card, which the
 /// host renders itself.
 const Map<DemoBeat, ({String title, String body, String? cta})> kDemoBeatCopy =
@@ -98,13 +114,15 @@ const Map<DemoBeat, ({String title, String body, String? cta})> kDemoBeatCopy =
         cta: null,
       ),
       DemoBeat.useShield: (
-        title: "Sam's coming for you.",
+        title: '$demoRivalLeaderName is coming for you.',
         body: 'Shield up — tap the Compression Socks.',
         cta: null,
       ),
       DemoBeat.blockedAttack: (
         title: 'Blocked!',
-        body: 'Sam tried to steal 1,000 steps. Your shield blocked it.',
+        body:
+            '$demoRivalLeaderName tried to steal 1,000 steps. '
+            'Your shield blocked it.',
         cta: 'NICE',
       ),
       DemoBeat.openThirdBox: (
@@ -114,7 +132,7 @@ const Map<DemoBeat, ({String title, String body, String? cta})> kDemoBeatCopy =
       ),
       DemoBeat.useShortcut: (
         title: 'A Shortcut. Now take the lead.',
-        body: 'Tap it and pick Sam — it steals his steps.',
+        body: 'Tap it and pick $demoRivalLeaderName — it steals their steps.',
         cta: null,
       ),
       DemoBeat.finish: (
