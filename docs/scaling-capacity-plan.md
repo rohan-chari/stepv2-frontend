@@ -1,6 +1,15 @@
 # Scaling & Capacity Plan
 
-**Status:** Draft for approval · **Measured:** 2026-07-25 · **Owner:** Rohan
+> **SUPERSEDED 2026-08-10 by `docs/scaling-capacity-plan-v2.md`.**
+> The headline capacity numbers below (~1,000 DAU comfortable / ~2,500 cliff)
+> are **wrong by ~15x** — they came from a synthetic single-endpoint load test
+> that never exercised the step-ingest path or the async worker. Prod CPU
+> regression on 2026-08-10 measured the real ceiling at **~140 DAU comfortable
+> / ~210 hard**. See v2 §3.3 for the post-mortem on this estimate.
+> The infrastructure inventory (§2) and the cron blocker (§4 Phase 2) below
+> remain correct and are carried forward into v2.
+
+**Status:** Superseded · **Measured:** 2026-07-25 · **Owner:** Rohan
 
 Everything below is grounded in a real load test run against staging on
 2026-07-25, not estimates. Reproduction steps are in §7 so the numbers can be
