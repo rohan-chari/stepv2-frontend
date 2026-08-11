@@ -473,6 +473,20 @@ render nothing for it inside the RACES section.
   "Race your friends" row) so the RACES section is never a bare header with
   nothing under it. This is the one non-mechanical judgment in the item and is
   explicitly part of the spec.
+- **Label de-duplication (user decision, 2026-08-10, after implementation).**
+  Promoting the invite put two different meanings of the same word on one
+  screen: the promoted card's eyebrow badge INVITE ("you were invited") and the
+  fallback row's secondary button INVITE ("invite friends"). Resolution:
+  - `_buildRaceOpportunityRow` takes `invitePromoted`; when true, the empty
+    row's secondary invite-friends button is suppressed entirely. Users with
+    **no** invite are unaffected — the referral button stays exactly where it
+    was, and is still reachable from Friends and Get Coins regardless.
+  - Separately, the empty row's primary button is relabelled `RACES` →
+    `BROWSE`. The `RACES`-twice echo (section header + that button) is
+    **pre-existing** — it shipped for every no-races user long before this
+    batch — but a button echoing its own header reads as a rendering bug. This
+    one **does** change what every no-races user sees, so it carries its own
+    manual-checklist line.
 - Everything else about `_buildRaceOpportunityRow` is untouched.
 
 ### Known limitation (accepted, not fixed here)
@@ -942,6 +956,13 @@ batch is called done.
    or simultaneous with a neighbor.
 3. Home tab, account with NO invite. **Verify:** no empty gap or stray padding
    where the invite block would be; RACES renders its normal state unchanged.
+3b. **(Label de-dup)** With an invite present: "INVITE" appears **exactly
+   once** on the page (the promoted card's eyebrow) and "RACES" **exactly once**
+   (the section header); the fallback row shows a single `BROWSE` button and no
+   invite-friends button. With **no** invite (an account with zero races): the
+   empty row shows `BROWSE` **and** `INVITE`, and that INVITE still opens the
+   referral screen. This second case affects every no-races user, not just
+   invite-holders.
 4. Scroll to the bottom of Home. **Verify:** the "Found a bug? Have an idea? Let
    us know" card is the last block, below RACES (and below the RACES skeleton
    while loading). Tapping SEND FEEDBACK opens the sheet; the sheet is not

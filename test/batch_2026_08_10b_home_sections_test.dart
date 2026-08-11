@@ -159,8 +159,16 @@ void main() {
       );
       await _flush(tester);
 
-      // The header, plus the empty-state row's own "RACES" button label.
-      expect(find.text('RACES'), findsNWidgets(2));
+      // "RACES" appears EXACTLY once — the section header. The fallback row's
+      // primary button says BROWSE, so the button no longer echoes its own
+      // header.
+      expect(find.text('RACES'), findsOneWidget);
+      expect(find.text('BROWSE'), findsOneWidget);
+      // "INVITE" appears EXACTLY once — the promoted card's eyebrow, meaning
+      // "you were invited". The fallback row's invite-friends button is
+      // suppressed while an invite is promoted, so the same word never carries
+      // two meanings on one screen.
+      expect(find.text('INVITE'), findsOneWidget);
       // Exactly one invite row on the page.
       expect(find.text('@Jordan challenged you'), findsOneWidget);
       // The RACES section carries the empty-state row instead.
@@ -168,8 +176,29 @@ void main() {
       expect(empty, findsOneWidget);
       expect(
         tester.getTopLeft(empty).dy,
-        greaterThan(tester.getTopLeft(find.text('RACES').first).dy),
+        greaterThan(tester.getTopLeft(find.text('RACES')).dy),
       );
+    });
+
+    testWidgets('with NO invite the empty state keeps its invite-friends button', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(800, 2400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final api = _FakeApi();
+      final auth = await _authService(api);
+      await tester.pumpWidget(
+        _buildHome(auth, api, raceCard: {'state': 'EMPTY', 'data': {}}),
+      );
+      await _flush(tester);
+
+      // Nothing is promoted, so there is no competing meaning of INVITE and the
+      // referral entry point stays exactly where it has always been.
+      expect(find.text('Race your friends'), findsOneWidget);
+      expect(find.text('INVITE'), findsOneWidget);
+      expect(find.text('BROWSE'), findsOneWidget);
+      expect(find.text('RACES'), findsOneWidget);
     });
 
     testWidgets('no invite → no block, no stray gap', (tester) async {

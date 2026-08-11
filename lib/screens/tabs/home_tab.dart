@@ -425,7 +425,10 @@ class HomeTab extends StatelessWidget {
           else
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: _buildRaceOpportunityRow(rowData),
+              child: _buildRaceOpportunityRow(
+                rowData,
+                invitePromoted: data.state == RaceCardState.pendingInvite,
+              ),
             ),
         ],
       ),
@@ -582,7 +585,14 @@ class HomeTab extends StatelessWidget {
     );
   }
 
-  Widget _buildRaceOpportunityRow(RaceCardData data) {
+  /// [invitePromoted] is true only for the RACES-section fallback row rendered
+  /// when a pending invite has been lifted above Today's Coins. It suppresses
+  /// the row's invite-friends button so INVITE doesn't appear twice, meaning
+  /// two different things, on one screen.
+  Widget _buildRaceOpportunityRow(
+    RaceCardData data, {
+    bool invitePromoted = false,
+  }) {
     final cardData = data.data;
     switch (data.state) {
       case RaceCardState.pendingInvite:
@@ -684,10 +694,17 @@ class HomeTab extends StatelessWidget {
           label: 'OPEN',
           title: 'Race your friends',
           subtitle: 'Start with friends or find a public race.',
-          primaryLabel: 'RACES',
-          secondaryLabel: 'INVITE',
+          // BROWSE, not RACES: the section header directly above this row
+          // already says RACES, and a button echoing its own header reads as a
+          // rendering bug rather than a choice.
+          primaryLabel: 'BROWSE',
+          // Suppressed when the invite has been promoted above Today's Coins:
+          // that card's eyebrow already says INVITE meaning "you were invited",
+          // and this button means "invite friends". Same word, two meanings,
+          // one screen.
+          secondaryLabel: invitePromoted ? null : 'INVITE',
           onPrimary: onOpenRacesTab,
-          onSecondary: (ctx) {
+          onSecondary: invitePromoted ? null : (ctx) {
             // Open the referral screen so the invite carries the user's real
             // /r/BARA-<code> link (earns both sides coins), not a bare store URL.
             Navigator.of(ctx).push(
