@@ -571,6 +571,85 @@ Map<String, dynamic> tutorialPreviewRacesData() {
         'queuedBoxCount': 0,
       },
     ],
+    // The real RacesTab receives the same additive summaries as production.
+    // Keep ordinary races first in every shelf: tutorial spotlights `races.card`
+    // and `races.box` intentionally target `race-active-1`, never a bracket.
+    'tournaments': [
+      {
+        'id': 'tournament-preview-active',
+        'name': 'Trailblazer Knockout',
+        'status': 'ACTIVE',
+        'bracketSize': 8,
+        'currentRound': 1,
+        'totalRounds': 3,
+        'myStatus': 'ACCEPTED',
+        'championPrizeCoins': 300,
+        'myCurrentMatch': {
+          'raceId': 'tournament-preview-match',
+          'endsAt': now
+              .add(const Duration(days: 1, hours: 8))
+              .toIso8601String(),
+          'myPlacement': 2,
+          'slotItems': const [
+            {'id': 'preview-powerup', 'type': 'SECOND_WIND', 'status': 'HELD'},
+            {'id': 'preview-box', 'type': null, 'status': 'MYSTERY_BOX'},
+          ],
+          'mysteryBoxCount': 1,
+          'queuedBoxCount': 1,
+        },
+        'myIdentity': const {
+          'displayName': 'Rohan',
+          'animal': 'corgi_puppy',
+          'equippedAccessories': [
+            {'slot': 'HEAD', 'assetId': 'baseball_cap'},
+            {'slot': 'FACE', 'assetId': 'sunglasses'},
+          ],
+        },
+      },
+      {
+        'id': 'tournament-preview-pending',
+        'name': 'Campfire Bracket',
+        'status': 'PENDING',
+        'bracketSize': 4,
+        'acceptedCount': 3,
+        'myStatus': 'ACCEPTED',
+        'championPrizeCoins': 150,
+        'myIdentity': const {
+          'displayName': 'Rohan',
+          'animal': 'CAPYBARA',
+          'equippedAccessories': [
+            {'slot': 'FEET', 'assetId': 'shoes'},
+          ],
+        },
+      },
+      {
+        'id': 'tournament-preview-champion',
+        'name': 'Finished Forest Final',
+        'status': 'COMPLETED',
+        'bracketSize': 4,
+        'championUserId': tutorialPreviewUserId,
+        'myStatus': 'ACCEPTED',
+        'championPrizeCoins': 150,
+        'myIdentity': const {
+          'displayName': 'Rohan',
+          'animal': 'corgi_puppy',
+          'equippedAccessories': [
+            {'slot': 'HEAD', 'assetId': 'baseball_cap'},
+          ],
+        },
+      },
+      // An intentionally older/partial summary exercises the same neutral
+      // capybara fallback a production client needs during staggered rollout.
+      {
+        'id': 'tournament-preview-no-identity',
+        'name': 'Last Lap Bracket',
+        'status': 'COMPLETED',
+        'bracketSize': 8,
+        'myStatus': 'ACCEPTED',
+        'myEliminatedInRound': 2,
+        'championPrizeCoins': 300,
+      },
+    ],
   };
 }
 

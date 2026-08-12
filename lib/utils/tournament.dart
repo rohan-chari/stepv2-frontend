@@ -252,6 +252,60 @@ abstract final class Tournament {
   static bool hasLiveMatchup(Map<String, dynamic> t) =>
       myCurrentMatch(t) != null || liveMatchRaceId(t) != null;
 
+  // -- Additive viewer identity summary ------------------------------------
+
+  /// The requesting player's compact identity on a tournament list summary.
+  ///
+  /// `GET /races` sends this only for clients advertising `characters`; all of
+  /// its children are optional too. Keep the raw server map isolated here so a
+  /// version-skewed or malformed identity degrades to the base capybara.
+  static Map<String, dynamic>? myIdentity(Map<String, dynamic> t) {
+    final raw = t['myIdentity'];
+    if (raw is! Map) return null;
+    return {
+      for (final entry in raw.entries)
+        if (entry.key is String) entry.key as String: entry.value,
+    };
+  }
+
+  static String? myIdentityDisplayName(Map<String, dynamic> t) {
+    final value = myIdentity(t)?['displayName'];
+    if (value is String && value.trim().isNotEmpty) return value.trim();
+    return null;
+  }
+
+  static String? myIdentityAnimal(Map<String, dynamic> t) {
+    final value = myIdentity(t)?['animal'];
+    if (value is String && value.trim().isNotEmpty) return value.trim();
+    return null;
+  }
+
+  /// Adapts the contract's `{slot, assetId}` entries to the shared sprite
+  /// primitive's local `{slot, assetKey}` shape. The asset identifier is kept
+  /// verbatim; unknown/missing assets are handled by the renderer's normal
+  /// neutral fallback, rather than inventing an accessory payload.
+  static List<Map<String, dynamic>> myIdentityAccessories(
+    Map<String, dynamic> t,
+  ) {
+    final raw = myIdentity(t)?['equippedAccessories'];
+    if (raw is! List) return const [];
+
+    final accessories = <Map<String, dynamic>>[];
+    for (final item in raw) {
+      if (item is! Map) continue;
+      final slot = item['slot'];
+      final assetId = item['assetId'];
+      if (slot is! String ||
+          slot.trim().isEmpty ||
+          assetId is! String ||
+          assetId.trim().isEmpty) {
+        continue;
+      }
+      accessories.add({'slot': slot.trim(), 'assetKey': assetId.trim()});
+    }
+    return accessories;
+  }
+
   // -- §4.2 personal-list classification ------------------------------------
 
   /// Classifies a personal tournament by what the user can DO with it.

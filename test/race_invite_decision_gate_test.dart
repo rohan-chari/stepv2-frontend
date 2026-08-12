@@ -157,6 +157,43 @@ void main() {
     },
   );
 
+  testWidgets(
+    'paid tournament preflight shows its actual buy-in and accepts normally',
+    (tester) async {
+      final auth = await _auth();
+      final api = _GateApi({
+        'active': const <Map<String, dynamic>>[],
+        'pending': const <Map<String, dynamic>>[],
+        'completed': const <Map<String, dynamic>>[],
+        'tournaments': [
+          {
+            'id': 'paid-tournament-invite',
+            'name': 'Paid Bracket',
+            'myStatus': 'INVITED',
+            'buyInAmount': 75,
+            'createdAt': '2026-08-12T12:00:00.000Z',
+            'creator': {'displayName': 'BracketHost'},
+          },
+        ],
+      });
+
+      await tester.pumpWidget(
+        _gate(auth: auth, api: api, enabled: true, active: true),
+      );
+      await tester.pump();
+
+      expect(find.text('75 GOLD'), findsOneWidget);
+      expect(find.text('ACCEPT · 75'), findsOneWidget);
+      expect(find.text('ACCEPT · 0'), findsNothing);
+
+      await tester.tap(find.byKey(const Key('races-gate-accept')));
+      await tester.pump();
+
+      expect(api.responses, ['tournament:paid-tournament-invite:true']);
+      expect(find.text('STALE RACE LIST'), findsOneWidget);
+    },
+  );
+
   testWidgets('initial error never reveals stale list and can exit Home', (
     tester,
   ) async {

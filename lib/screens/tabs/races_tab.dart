@@ -1097,6 +1097,9 @@ class _RacesTabState extends State<RacesTab> {
   Widget _buildTournamentRow(Map<String, dynamic> t, int index) {
     final id = Tournament.id(t) ?? '';
     final name = Tournament.name(t);
+    final identityName = Tournament.myIdentityDisplayName(t);
+    final identityAnimal = Tournament.myIdentityAnimal(t);
+    final identityAccessories = Tournament.myIdentityAccessories(t);
     final match = Tournament.myCurrentMatch(t);
     final liveRaceId = Tournament.liveMatchRaceId(t);
     final isLive = liveRaceId != null || match != null;
@@ -1167,137 +1170,188 @@ class _RacesTabState extends State<RacesTab> {
       timeLabel = Tournament.ticketStatusLine(t);
     }
 
-    return Material(
-      color: stripeColor,
-      child: InkWell(
-        key: Key('tournament-row-$id'),
-        // Always open the BRACKET — it's the tournament's home screen and has
-        // its own "GO TO MY MATCHUP" path into the live race.
-        onTap: id.isEmpty ? null : () => _navigateToTournamentDetail(id),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            name,
-                            style: PixelText.title(
-                              size: 18,
-                              color: AppColors.of(context).textDark,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        // Bracket marker distinguishes a tournament row from an
-                        // ordinary race at a glance.
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: TournamentColors.gold.withValues(
-                              alpha: 0.30,
-                            ),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(
-                              color: TournamentColors.goldDark,
-                            ),
-                          ),
-                          child: Text(
-                            roundLabel,
-                            style: PixelText.title(
-                              size: 9,
-                              color: AppColors.of(context).textDark,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      timeLabel,
-                      style: PixelText.body(size: 13, color: timeColor),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                    ),
-                    // Live matchup: same 4-slot inventory strip as an active
-                    // race. Absent/partial data simply renders empty slots.
-                    if (isLive) ...[
-                      const SizedBox(height: 4),
-                      _buildInventoryRow(
-                        Tournament.matchSlotItems(match),
-                        Tournament.matchMysteryBoxCount(match),
-                        Tournament.matchQueuedBoxCount(match),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisSize: MainAxisSize.min,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
+      child: Container(
+        key: Key('tournament-card-surface-$id'),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: _raceCardShadow,
+        ),
+        child: Material(
+          color: stripeColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: AppColors.of(
+                context,
+              ).parchmentBorder.withValues(alpha: 0.9),
+              width: 1.5,
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            key: Key('tournament-row-$id'),
+            // Always open the BRACKET — it's the tournament's home screen and
+            // has its own "GO TO MY MATCHUP" path into the live race.
+            onTap: id.isEmpty ? null : () => _navigateToTournamentDetail(id),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 14, 8, 14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  if (placement != null)
-                    _buildMetaChip(
-                      '${formatOrdinal(placement)} PLACE',
-                      backgroundColor: AppColors.of(context).isDark
-                          ? AppColors.of(context).pillGreenDark
-                          : AppColors.of(
-                              context,
-                            ).pillGreenDark.withValues(alpha: 0.16),
-                      textColor: AppColors.of(context).isDark
-                          ? AppColors.of(context).textLight
-                          : AppColors.of(context).pillGreenDark,
-                    )
-                  else if (placementHidden)
-                    _buildMetaChip(
-                      '??? PLACE',
-                      backgroundColor: AppColors.of(
-                        context,
-                      ).textMid.withValues(alpha: 0.16),
-                      textColor: AppColors.of(context).textMid,
+                  Semantics(
+                    label: identityName == null
+                        ? 'Your racer'
+                        : 'Your racer, $identityName',
+                    child: RacerAvatar(
+                      key: Key('tournament-identity-avatar-$id'),
+                      rank: 1,
+                      accessories: identityAccessories,
+                      animal: identityAnimal,
+                      size: 48,
+                      showMedalRing: false,
                     ),
-                  if (badgeLabel.isNotEmpty) ...[
-                    if (placement != null || placementHidden)
-                      const SizedBox(height: 4),
-                    Text(
-                      badgeLabel,
-                      style: PixelText.title(size: 12, color: badgeColor),
-                      textAlign: TextAlign.right,
-                    ),
-                  ],
-                  // What the bracket pays out — the reason to care about a
-                  // finished row at all.
-                  if (Tournament.prizeCoins(t) > 0) ...[
-                    const SizedBox(height: 3),
-                    Row(
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          '${Tournament.prizeCoins(t)}',
-                          style: PixelText.body(
-                            size: 12,
-                            color: AppColors.of(context).coinDark,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                name,
+                                style: PixelText.title(
+                                  size: 18,
+                                  color: AppColors.of(context).textDark,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            Flexible(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerRight,
+                                child: _buildMetaChip(
+                                  roundLabel,
+                                  backgroundColor: AppColors.of(
+                                    context,
+                                  ).pillGold.withValues(alpha: 0.30),
+                                  textColor: AppColors.of(context).textDark,
+                                  borderColor: AppColors.of(
+                                    context,
+                                  ).pillGoldDark,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 4),
-                        const SpinningCoin(size: 13),
+                        const SizedBox(height: 3),
+                        Text(
+                          timeLabel,
+                          style: PixelText.body(size: 14, color: timeColor),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                        // Live matchup: same four-slot inventory rail as an
+                        // active race. Missing/partial data renders fallback
+                        // slots instead of omitting the whole card.
+                        if (isLive) ...[
+                          const SizedBox(height: 4),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: _buildInventoryRow(
+                              Tournament.matchSlotItems(match),
+                              Tournament.matchMysteryBoxCount(match),
+                              Tournament.matchQueuedBoxCount(match),
+                              rowKey: Key('tournament-card-inventory-$id'),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
-                  ],
+                  ),
+                  const SizedBox(width: 6),
+                  SizedBox(
+                    width: 64,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (placement != null)
+                            _buildMetaChip(
+                              '${formatOrdinal(placement)} PLACE',
+                              backgroundColor: AppColors.of(context).isDark
+                                  ? AppColors.of(context).pillGreenDark
+                                  : AppColors.of(
+                                      context,
+                                    ).pillGreenDark.withValues(alpha: 0.16),
+                              textColor: AppColors.of(context).isDark
+                                  ? AppColors.of(context).textLight
+                                  : AppColors.of(context).pillGreenDark,
+                            )
+                          else if (placementHidden)
+                            _buildMetaChip(
+                              '??? PLACE',
+                              backgroundColor: AppColors.of(
+                                context,
+                              ).textMid.withValues(alpha: 0.16),
+                              textColor: AppColors.of(context).textMid,
+                            ),
+                          if (badgeLabel.isNotEmpty) ...[
+                            if (placement != null || placementHidden)
+                              const SizedBox(height: 4),
+                            Text(
+                              badgeLabel,
+                              style: PixelText.title(
+                                size: 12,
+                                color: badgeColor,
+                              ),
+                              textAlign: TextAlign.right,
+                            ),
+                          ],
+                          // What the bracket pays out — the reason to care
+                          // about a finished row at all.
+                          if (Tournament.prizeCoins(t) > 0) ...[
+                            const SizedBox(height: 3),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '${Tournament.prizeCoins(t)}',
+                                  style: PixelText.body(
+                                    size: 12,
+                                    color: AppColors.of(context).coinDark,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                const SpinningCoin(size: 13),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    key: Key('tournament-card-arrow-$id'),
+                    size: 30,
+                    color: AppColors.of(context).successText,
+                  ),
                 ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -1754,7 +1808,7 @@ class _RacesTabState extends State<RacesTab> {
     List slotItems,
     int mysteryBoxCount,
     int queuedBoxCount, {
-    GlobalKey? rowKey,
+    Key? rowKey,
   }) {
     const activeSlots = 3;
     const slotSize = 22.0;
@@ -1810,6 +1864,7 @@ class _RacesTabState extends State<RacesTab> {
     String label, {
     required Color backgroundColor,
     required Color textColor,
+    Color? borderColor,
     GlobalKey? chipKey,
   }) {
     return Container(
@@ -1818,6 +1873,7 @@ class _RacesTabState extends State<RacesTab> {
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(999),
+        border: borderColor == null ? null : Border.all(color: borderColor),
       ),
       child: Text(label, style: PixelText.title(size: 11, color: textColor)),
     );

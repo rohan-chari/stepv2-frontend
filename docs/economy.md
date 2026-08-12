@@ -78,6 +78,25 @@ Where `DB` and `SEED`/`CODE` disagree, `DB` wins at runtime unless the seed's
 | others (`manual_grant`, `mystery_potion_refund`, refunds, `powerup_discard`, `bounty_payout`, `piggy_bank`, `admin_grant`) | ~106 | — | — | — |
 | **Total sources** | **≈ 3,544 / day** | | | +26% |
 
+### 1c. Featured tournament seed — verified 2026-08-12 (prod, read-only)
+
+| Item | Live value | Source |
+|---|---:|---|
+| Active seed | `seed-tournament-daily-dash` / `DAILY_DASH`, display name **Tourneys** | `DB tournament_seeds` |
+| Bracket / stored round duration / champion prize | 4 players / 1 day / 150 coins | `DB tournament_seeds` |
+| Powerups | enabled; stored interval 2,500 | `DB tournament_seeds` |
+| Completed featured brackets / champion mint, trailing 30d | 13 / 1,950 coins = **65.0 coins/day**; every mint was exactly 150 | `DB tournaments × coin_transactions` (`reason=tournament_champion_reward`, joined on `<tournamentId>:champion`) |
+| Total bracket lifetime, completed brackets | p50 97.3h, p90 169.1h (n=13) | `DB tournaments` |
+
+**Runtime drift:** `TournamentSeed.matchupDurationDays=1` is legacy stored
+data. `CODE tournaments/constants/tournaments.js` clamps every newly-created
+matchup to **2 days**, so a newly started 4-player bracket has a 4-day minimum
+play window; existing legacy matchup races in prod remain 1 day. Likewise,
+the renewal worker ignores the stored 2,500 interval and creates new
+powerup-enabled matchups at the global fixed **2,000 steps/box**; old matchup
+rows still include 2,500. `CODE tournaments/jobs/tournamentSeedRenewal.js`,
+`races/services/validateRaceConfig.js`, `races/constants/powerupInterval.js`.
+
 `powerup_discard` is now separately visible at **9.8 coins/day** (46 txns, 11
 users) against a theoretical ceiling of 40/user/day × 124 users = 4,960/day.
 The faucet has ~500× headroom; it is bounded by discard *behaviour*, not by the cap.
@@ -95,11 +114,18 @@ The faucet has ~500× headroom; it is bounded by discard *behaviour*, not by the
 | `ad_coin_reward` | 123.3 | 9 | `AD_COIN_REWARD_AMOUNT` × `AD_COIN_REWARD_DAILY_CAP`; prod = **25 × 3 = 75/day** | `ENV` |
 | `referral_reward` | 100.0 | 5 | one payout per provider identity | `CODE social/` |
 | `tutorial_complete` | 73.3 | 22 | 100 one-off | `CODE` |
-| `tournament_champion_reward` | 55.0 | 7 | funded, capped by `MAX_CHAMPION_PRIZE` | `CODE tournaments/` |
+| `tournament_champion_reward` | 55.0 | 7 | featured-seed champion mint (then-live seed prize 150) | `DB tournament_seeds × coin_transactions` |
 | others (`manual_grant`, `mystery_potion_refund`, refunds, `bounty_payout`, `piggy_bank`, `admin_grant`) | ~96 | — | — | `DB` |
 | **Total sources** | **≈ 2,813 / day** | | | |
 
 ## 2. Coin sinks
+
+### 2c. Economy rollup — verified 2026-08-12 (prod, read-only)
+
+Trailing 30 calendar days, grouped in pure SQL by the tz-naive ledger's stored
+`created_at::date`: **+3,568.2 coins/day sources, -2,507.4 sinks, net +1,060.7/day**.
+The positive-ledger earning-day distribution is p10 10, p50 50, p90 313.5 coins
+(936 earning user-days, 96 users). Source: `DB coin_transactions`.
 
 ### 2b. Refresh — 30 days to 2026-08-11 (`DB coin_transactions`)
 
