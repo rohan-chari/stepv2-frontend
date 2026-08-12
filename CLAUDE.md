@@ -73,12 +73,12 @@ This repo ships **both** an iOS app (Bara, App Store, native APNs) and an
 Android app (Health Connect, Google Sign-In, Firebase/FCM) from the same Dart
 code. **Never ship one platform without the other.**
 
-- iOS:     `flutter build ipa       --dart-define=BACKEND_BASE_URL=… [--dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=… --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID=…]`
+- iOS:     `flutter build ipa       --dart-define=BACKEND_BASE_URL=… [--dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=… --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID=… --dart-define=ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID=ca-app-pub-4538901002392200/6376353967]`
   (NO `--flavor` on iOS. The ADMOB defines are PROD-only — they enable the
   iOS-only rewarded-ad extra spin and box reroll; staging builds omit them.
   The reroll unit has NO test-ad fallback: omitting it compiles the reroll
   button out. See `DEPLOYMENT.md` for the full release command.)
-- Android: `flutter build appbundle --flavor <prod|staging> --dart-define=BACKEND_BASE_URL=…`
+- Android: `flutter build appbundle --flavor <prod|staging> --dart-define=BACKEND_BASE_URL=… [--dart-define=ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID_ANDROID=<create in AdMob; omission disables race payout double>]`
 
 Keep flavor (Android), backend URL, and version/build number in sync. The
 platforms are coupled in non-obvious ways: a dependency added for one (e.g.

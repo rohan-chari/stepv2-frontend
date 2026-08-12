@@ -8,15 +8,18 @@ import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../config/animals.dart';
+import '../config/backend_config.dart';
 import '../config/start_cape_metadata.dart';
 import '../models/loadable.dart';
 import '../models/home_race_suggestion.dart';
 import '../models/next_race.dart';
 import '../models/race_handoff_result.dart';
+import '../models/race_payout_double_offer.dart';
 import '../models/step_data.dart';
 import '../models/step_sample_data.dart';
 import '../services/async_ttl_cache.dart';
 import '../services/activation_analytics_service.dart';
+import '../services/ad_service.dart';
 import '../services/onboarding_state_service.dart';
 import '../utils/onboarding_gate.dart';
 import '../widgets/notification_ask_dialog.dart';
@@ -30,6 +33,7 @@ import '../services/health_service.dart';
 import '../services/install_attribution_service.dart';
 import '../services/notification_service.dart';
 import '../services/review_prompt_service.dart';
+import '../services/race_results_ack_queue.dart';
 import '../utils/team_race.dart';
 import '../utils/tournament.dart';
 import '../widgets/ad_banner_slot.dart';
@@ -76,6 +80,8 @@ class MainShell extends StatefulWidget {
     this.backgroundSyncBootstrapService,
     this.notificationService,
     this.reviewPromptService,
+    this.racePayoutDoubleAdController,
+    this.raceResultsAcknowledgementQueue,
   });
 
   final AuthService authService;
@@ -84,6 +90,8 @@ class MainShell extends StatefulWidget {
   final BackgroundSyncBootstrapService? backgroundSyncBootstrapService;
   final NotificationService? notificationService;
   final ReviewPromptService? reviewPromptService;
+  final RacePayoutDoubleAdController? racePayoutDoubleAdController;
+  final RaceResultsAcknowledgementQueue? raceResultsAcknowledgementQueue;
 
   @override
   State<MainShell> createState() => _MainShellState();
@@ -101,6 +109,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   late final BackgroundSyncBootstrapService _backgroundSyncBootstrapService;
   late final ReviewPromptService _reviewPromptService;
   late final ActivationAnalyticsService _activationAnalytics;
+  late final RaceResultsAcknowledgementQueue _raceResultsAckQueue;
 
   int _currentTab = 0;
   late final PageController _pageController;
@@ -630,6 +639,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _maybeDrainPendingSharedTournament();
     _maybeCaptureInviterRace();
     _maybeOfferInviterRace();
+    unawaited(_hydrateAndReplayRaceResultsAcks());
+    if (!_isOnboarding) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_maybeShowRaceResults());
+      });
+    }
   }
 
   @override
@@ -644,6 +659,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _activationAnalytics = ActivationAnalyticsService(
       backendApiService: _backendApiService,
     );
+    _raceResultsAckQueue =
+        widget.raceResultsAcknowledgementQueue ??
+        RaceResultsAcknowledgementQueue(backendApiService: _backendApiService);
     _homeSuggestionsUserId = widget.authService.userId;
     _homeSuggestions.setUser(_homeSuggestionsUserId);
     _pageController = PageController();
@@ -1088,6 +1106,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
     final sessionIsValid = await _refreshSessionToken();
     if (!sessionIsValid || !mounted) return;
+
+    // Hydrate before the first race fetch/result detection. Matching queued
+    // IDs are suppressed locally even when the atomic server ack is offline.
+    await _hydrateAndReplayRaceResultsAcks();
+    if (!mounted) return;
 
     final wasAuthorized = await _healthService.restoreHealthAuthState();
     if (!mounted) return;
@@ -1590,6 +1613,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         return;
       }
 
+      await _hydrateAndReplayRaceResultsAcks();
+
       final data = await _backendApiService.fetchRaces(
         identityToken: identityToken,
       );
@@ -1936,20 +1961,72 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   /// (true), so an older backend that doesn't send the field never triggers a
   /// spurious popup.
   Future<void> _maybeShowRaceResults() async {
-    if (!mounted || _raceResultsPopupOpen) return;
+    if (!mounted || _raceResultsPopupOpen || _isOnboarding) return;
 
-    final completed =
-        (_racesData?['completed'] as List?)?.cast<Map<String, dynamic>>() ??
-        const [];
+    final completed = _safeStringMaps(_racesData?['completed']);
+    final userId = widget.authService.userId;
+    final identityToken = widget.authService.authToken;
+    final backendBaseUrl = BackendConfig.baseUrl;
+    final suppressed = userId == null || userId.isEmpty
+        ? const <String>{}
+        : _raceResultsAckQueue.suppressedRaceIds(
+            userId: userId,
+            backendBaseUrl: backendBaseUrl,
+          );
+    final capable = _racePayoutDoubleCapability;
 
-    final unseen = completed.where((race) {
-      if (race['myStatus'] != 'ACCEPTED') return false;
-      final seen = (race['myResultsSeen'] as bool?) ?? true;
-      if (seen) return false;
-      final id = race['id'] as String?;
-      if (id == null) return false;
-      return !_raceResultsShownThisSession.contains(id);
-    }).toList();
+    // Parse against the complete returned page first. A non-null offer ID is
+    // recovery and therefore selects its frozen races BEFORE resultsSeen.
+    final allCompletedIds = completed
+        .map((race) => race['id'])
+        .whereType<String>()
+        .toList(growable: false);
+    final pageOffer = capable
+        ? RacePayoutDoubleOffer.tryParse(
+            _racesData?['payoutDoubleOffer'],
+            popupRaceIds: allCompletedIds,
+          )
+        : null;
+
+    List<Map<String, dynamic>> unseen;
+    RacePayoutDoubleOffer? popupOffer;
+    if (pageOffer?.offerId != null) {
+      final frozenIds = pageOffer!.raceIds.toSet();
+      if (frozenIds.any(suppressed.contains)) return;
+      unseen = completed
+          .where((race) {
+            return race['myStatus'] == 'ACCEPTED' &&
+                frozenIds.contains(race['id']);
+          })
+          .toList(growable: false);
+      if (unseen.length != frozenIds.length) return;
+      popupOffer = RacePayoutDoubleOffer.tryParse(
+        _racesData?['payoutDoubleOffer'],
+        popupRaceIds: unseen.map((race) => race['id']).whereType<String>(),
+      );
+      if (popupOffer?.offerId == null) return;
+    } else {
+      unseen = completed
+          .where((race) {
+            if (race['myStatus'] != 'ACCEPTED') return false;
+            final seen = (race['myResultsSeen'] as bool?) ?? true;
+            if (seen) return false;
+            final id = race['id'];
+            if (id is! String || id.isEmpty || suppressed.contains(id)) {
+              return false;
+            }
+            return !_raceResultsShownThisSession.contains(id);
+          })
+          .toList(growable: false);
+      popupOffer = capable
+          ? RacePayoutDoubleOffer.tryParse(
+              _racesData?['payoutDoubleOffer'],
+              popupRaceIds: unseen
+                  .map((race) => race['id'])
+                  .whereType<String>(),
+            )
+          : null;
+    }
 
     if (unseen.isEmpty) return;
 
@@ -1987,6 +2064,37 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
               nextRace?.resolved == true &&
               nextRace?.eligible == true &&
               nextRace?.createEnabled == true,
+          payoutDoubleOffer: popupOffer,
+          authService: widget.authService,
+          backendApiService: _backendApiService,
+          adController: popupOffer == null
+              ? null
+              : widget.racePayoutDoubleAdController ??
+                    (AdService.racePayoutDoubleSupported
+                        ? AdService(
+                            adUnitId: AdService.racePayoutDoubleAdUnitId,
+                          )
+                        : null),
+          onBeforeDismiss: userId == null || userId.isEmpty
+              ? null
+              : () async {
+                  await _raceResultsAckQueue.enqueue(
+                    userId: userId,
+                    backendBaseUrl: backendBaseUrl,
+                    raceIds: shownIds,
+                    racePayoutDoubleCapability: capable,
+                    identityToken:
+                        identityToken != null &&
+                            identityToken.isNotEmpty &&
+                            _raceResultsAuthContextMatches(
+                              identityToken: identityToken,
+                              userId: userId,
+                              backendBaseUrl: backendBaseUrl,
+                            )
+                        ? identityToken
+                        : null,
+                  );
+                },
         ),
         transitionsBuilder: (_, anim, _, child) =>
             FadeTransition(opacity: anim, child: child),
@@ -1995,25 +2103,33 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     );
     _raceResultsPopupOpen = false;
 
-    // On dismiss: ack server-side and optimistically flip the local flag so a
-    // re-fetch in this session doesn't re-show them.
-    final identityToken = widget.authService.authToken;
-    if (identityToken != null && identityToken.isNotEmpty) {
-      _backendApiService.markRaceResultsSeen(
-        identityToken: identityToken,
-        raceIds: shownIds,
+    // The screen queued durably before route pop. Replay now without blocking
+    // navigation/review/next-race sequencing.
+    if (identityToken != null &&
+        identityToken.isNotEmpty &&
+        userId != null &&
+        userId.isNotEmpty &&
+        _raceResultsAuthContextMatches(
+          identityToken: identityToken,
+          userId: userId,
+          backendBaseUrl: backendBaseUrl,
+        )) {
+      unawaited(
+        _raceResultsAckQueue.replayMatching(
+          identityToken: identityToken,
+          userId: userId,
+          backendBaseUrl: backendBaseUrl,
+          isAuthenticatedContextCurrent: () => _raceResultsAuthContextMatches(
+            identityToken: identityToken,
+            userId: userId,
+            backendBaseUrl: backendBaseUrl,
+          ),
+        ),
       );
     }
-    if (mounted) {
-      setState(() {
-        final shownSet = shownIds.toSet();
-        for (final race in completed) {
-          if (shownSet.contains(race['id'])) {
-            race['myResultsSeen'] = true;
-          }
-        }
-      });
-    }
+    // Session + durable queue suppression already hides these IDs. Avoid
+    // mutating response maps here: injected/demo payloads may be immutable and
+    // a backend-version-skewed map should never turn dismissal into a crash.
 
     // Happy-moment hook: the user just dismissed a results modal that included
     // a top-3 finish — or, for team races, a strict team WIN (TR-807: ties
@@ -2026,6 +2142,65 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     if (startNext == true && mounted) {
       await _showQuickCreateRaceSheet(surface: 'results');
     }
+  }
+
+  bool get _racePayoutDoubleCapability =>
+      widget.racePayoutDoubleAdController?.isSupported ??
+      BackendApiService.racePayoutDoubleCapabilitySupported;
+
+  List<Map<String, dynamic>> _safeStringMaps(Object? raw) {
+    if (raw is! List) return const [];
+    final result = <Map<String, dynamic>>[];
+    for (final value in raw) {
+      if (value is Map<String, dynamic>) {
+        result.add(value);
+        continue;
+      }
+      if (value is! Map) continue;
+      final map = <String, dynamic>{};
+      var valid = true;
+      for (final entry in value.entries) {
+        if (entry.key is! String) {
+          valid = false;
+          break;
+        }
+        map[entry.key as String] = entry.value;
+      }
+      if (valid) result.add(map);
+    }
+    return result;
+  }
+
+  Future<void> _hydrateAndReplayRaceResultsAcks() async {
+    await _raceResultsAckQueue.hydrate();
+    final token = widget.authService.authToken;
+    final userId = widget.authService.userId;
+    final backendBaseUrl = BackendConfig.baseUrl;
+    if (token == null || token.isEmpty || userId == null || userId.isEmpty) {
+      return;
+    }
+    unawaited(
+      _raceResultsAckQueue.replayMatching(
+        identityToken: token,
+        userId: userId,
+        backendBaseUrl: backendBaseUrl,
+        isAuthenticatedContextCurrent: () => _raceResultsAuthContextMatches(
+          identityToken: token,
+          userId: userId,
+          backendBaseUrl: backendBaseUrl,
+        ),
+      ),
+    );
+  }
+
+  bool _raceResultsAuthContextMatches({
+    required String identityToken,
+    required String userId,
+    required String backendBaseUrl,
+  }) {
+    return widget.authService.authToken == identityToken &&
+        widget.authService.userId == userId &&
+        BackendConfig.baseUrl == backendBaseUrl;
   }
 
   /// Fetches `/ranked/v2` and, if the caller's most recently settled week is

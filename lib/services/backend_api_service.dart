@@ -14,6 +14,7 @@ import '../models/balance_config.dart';
 import '../models/home_race_suggestion.dart';
 import '../models/powerup_shop_admin_item.dart';
 import '../models/race_discovery_summary.dart';
+import '../models/race_payout_double_offer.dart';
 import '../models/race_resolution_status.dart';
 import '../models/step_data.dart';
 import '../models/step_sample_data.dart';
@@ -101,6 +102,24 @@ class BackendApiService {
     return false;
   }
 
+  static const String _racePayoutDoubleAdUnitIdIos = String.fromEnvironment(
+    'ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID',
+  );
+  static const String _racePayoutDoubleAdUnitIdAndroid = String.fromEnvironment(
+    'ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID_ANDROID',
+  );
+  static bool get _racePayoutDoubleSupported {
+    if (kIsWeb) return false;
+    if (Platform.isIOS) return _racePayoutDoubleAdUnitIdIos.isNotEmpty;
+    if (Platform.isAndroid) {
+      return _racePayoutDoubleAdUnitIdAndroid.isNotEmpty;
+    }
+    return false;
+  }
+
+  static bool get racePayoutDoubleCapabilitySupported =>
+      _racePayoutDoubleSupported;
+
   // `spinpowerups` tells the backend this build can render a shop-powerup prize
   // won from the daily-reward box (reel tile + reveal). Old binaries omit it and
   // never get offered a powerup — they'd mis-render it as "+0 coins".
@@ -137,8 +156,23 @@ class BackendApiService {
   // hides catalog rows whose art is remote-only — they'd render as a grey
   // placeholder, and worse, be purchasable. Must appear in BOTH branches.
   static final String clientFeaturesHeader = _adsSupported
-      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,next_race_cta,discoverable_identity,home_suggested_races'
-      : 'characters,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,next_race_cta,discoverable_identity,home_suggested_races';
+      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,next_race_cta,discoverable_identity,home_suggested_races${_racePayoutDoubleSupported ? ',race_payout_double' : ''}'
+      : 'characters,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,next_race_cta,discoverable_identity,home_suggested_races${_racePayoutDoubleSupported ? ',race_payout_double' : ''}';
+
+  /// Replays a persisted results dismissal with the capability it originally
+  /// advertised. A later app build may have gained or lost the dedicated ad
+  /// define; neither transition may upgrade/downgrade the stored request.
+  static String clientFeaturesHeaderForRacePayoutDoubleCapability(
+    bool enabled,
+  ) {
+    final tokens = clientFeaturesHeader
+        .split(',')
+        .where((token) => token.isNotEmpty && token != 'race_payout_double')
+        .toList(growable: true);
+    if (enabled) tokens.add('race_payout_double');
+    return tokens.join(',');
+  }
+
   final HttpClient _httpClient;
   String? _cachedTimeZone;
   String? _cachedReleaseChannel;
@@ -153,6 +187,7 @@ class BackendApiService {
   EndpointSupport _raceResolutionStatusSupport = EndpointSupport.unknown;
   EndpointSupport _shopAdUnlockSupport = EndpointSupport.unknown;
   EndpointSupport _friendIdentitySearchSupport = EndpointSupport.unknown;
+  EndpointSupport _racePayoutDoubleSupport = EndpointSupport.unknown;
   // Identity guards: capability caches are keyed to (user, base URL). A plain
   // token refresh for the SAME user must not clear them.
   String? _sessionUserId;
@@ -183,6 +218,7 @@ class BackendApiService {
     _raceResolutionStatusSupport = EndpointSupport.unknown;
     _shopAdUnlockSupport = EndpointSupport.unknown;
     _friendIdentitySearchSupport = EndpointSupport.unknown;
+    _racePayoutDoubleSupport = EndpointSupport.unknown;
     _sessionUserId = null;
   }
 
@@ -198,6 +234,7 @@ class BackendApiService {
       _raceResolutionStatusSupport = EndpointSupport.unknown;
       _shopAdUnlockSupport = EndpointSupport.unknown;
       _friendIdentitySearchSupport = EndpointSupport.unknown;
+      _racePayoutDoubleSupport = EndpointSupport.unknown;
       _sessionUserId = userId;
       _sessionBaseUrl = baseUrl;
     }
@@ -2791,23 +2828,127 @@ class BackendApiService {
     _decodeJsonResponse(response);
   }
 
+  /// Freezes the exact server-validated result batch before any ad is loaded.
+  /// The client supplies IDs only; every amount comes back from the backend.
+  Future<RacePayoutDoubleOffer> createRacePayoutDoubleOffer({
+    required String identityToken,
+    required List<String> raceIds,
+    required List<String> popupRaceIds,
+  }) async {
+    if (_racePayoutDoubleSupport == EndpointSupport.unsupported) {
+      throw const ApiException(
+        'Race payout bonus is unavailable.',
+        statusCode: 404,
+        code: 'ENDPOINT_UNSUPPORTED',
+      );
+    }
+    try {
+      final response = await _sendJsonRequest(
+        method: 'POST',
+        path: '/races/results/double-payout/offer',
+        body: {'raceIds': raceIds},
+        identityToken: identityToken,
+      );
+      final decoded = await _decodeJsonResponse(response);
+      final parsed = RacePayoutDoubleOffer.tryParse(
+        decoded,
+        popupRaceIds: popupRaceIds,
+        requirePendingStatus: true,
+      );
+      if (parsed == null || parsed.offerId == null) {
+        throw const ApiException('The payout offer response was invalid.');
+      }
+      _racePayoutDoubleSupport = EndpointSupport.supported;
+      return parsed;
+    } on ApiException catch (error) {
+      if (error.statusCode == 404 && error.code == null) {
+        _racePayoutDoubleSupport = EndpointSupport.unsupported;
+      }
+      rethrow;
+    } on Object {
+      throw const ApiException('The payout offer response was invalid.');
+    }
+  }
+
+  /// Redeems one server-issued offer after AdMob SSV. No amount or race list is
+  /// sent by the app.
+  Future<RacePayoutDoubleClaimResult> claimRacePayoutDouble({
+    required String identityToken,
+    required String offerId,
+    required List<String> popupRaceIds,
+  }) async {
+    if (_racePayoutDoubleSupport == EndpointSupport.unsupported) {
+      throw const ApiException(
+        'Race payout bonus is unavailable.',
+        statusCode: 404,
+        code: 'ENDPOINT_UNSUPPORTED',
+      );
+    }
+    try {
+      final response = await _sendJsonRequest(
+        method: 'POST',
+        path: '/races/results/double-payout/$offerId/claim',
+        body: const <String, dynamic>{},
+        identityToken: identityToken,
+      );
+      final decoded = await _decodeJsonResponse(response);
+      final parsed = RacePayoutDoubleClaimResult.tryParse(
+        decoded,
+        popupRaceIds: popupRaceIds,
+      );
+      if (parsed == null) {
+        throw const ApiException('The payout claim response was invalid.');
+      }
+      _racePayoutDoubleSupport = EndpointSupport.supported;
+      return parsed;
+    } on ApiException catch (error) {
+      // OFFER_NOT_FOUND is a valid response from a supported endpoint. Only a
+      // plain route 404 (no machine code) freezes support off for this session.
+      if (error.statusCode == 404 && error.code == null) {
+        _racePayoutDoubleSupport = EndpointSupport.unsupported;
+      }
+      rethrow;
+    } on Object {
+      throw const ApiException('The payout claim response was invalid.');
+    }
+  }
+
+  /// Strict acknowledgement used by the durable queue. It completes only
+  /// after a decoded 2xx and propagates every network/non-2xx failure.
+  Future<void> markRaceResultsSeenStrict({
+    required String identityToken,
+    required List<String> raceIds,
+    required bool racePayoutDoubleCapability,
+  }) async {
+    if (raceIds.isEmpty) return;
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races/results/seen',
+      body: {'raceIds': raceIds},
+      identityToken: identityToken,
+      headers: {
+        'X-Client-Features': clientFeaturesHeaderForRacePayoutDoubleCapability(
+          racePayoutDoubleCapability,
+        ),
+      },
+    );
+    await _decodeJsonResponse(response);
+  }
+
   /// Acknowledges that the user has seen the results popup for the given
-  /// finished races. Additive endpoint: older backends 404 here and the popup
-  /// simply re-shows next session, so tolerate any non-2xx (or network error)
-  /// silently rather than surfacing it to the user.
+  /// finished races. Legacy callers remain best-effort; the shell's durable
+  /// queue uses [markRaceResultsSeenStrict].
   Future<void> markRaceResultsSeen({
     required String identityToken,
     required List<String> raceIds,
   }) async {
     if (raceIds.isEmpty) return;
     try {
-      final response = await _sendJsonRequest(
-        method: 'POST',
-        path: '/races/results/seen',
-        body: {'raceIds': raceIds},
+      await markRaceResultsSeenStrict(
         identityToken: identityToken,
+        raceIds: raceIds,
+        racePayoutDoubleCapability: _racePayoutDoubleSupported,
       );
-      await _decodeJsonResponse(response);
     } catch (_) {
       // Best-effort ack; never disrupt the UI if it fails.
     }

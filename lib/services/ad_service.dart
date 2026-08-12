@@ -29,6 +29,23 @@ abstract class ExtraSpinAdController {
   void dispose();
 }
 
+/// Narrow rewarded-ad contract for the combined race-payout bonus.
+///
+/// Its load method accepts the immutable server offer ID, preventing this
+/// placement from accidentally reusing the date-shaped extra-spin wire format.
+abstract class RacePayoutDoubleAdController {
+  bool get isSupported;
+  bool get isReady;
+
+  Future<void> loadForRacePayoutDouble({
+    required String userId,
+    required String offerId,
+  });
+
+  Future<bool> showAndAwaitReward();
+  void dispose();
+}
+
 /// AdMob rewarded ad for the extra daily box spin.
 ///
 /// The earned-reward callback here is UX-only (it lets the screen proceed to
@@ -36,7 +53,7 @@ abstract class ExtraSpinAdController {
 /// callback hitting /ads/ssv. The default ad-unit IDs are Google's public
 /// TEST units — real per-flavor IDs are injected with --dart-define like
 /// BACKEND_BASE_URL (see DEPLOYMENT.md).
-class AdService implements ExtraSpinAdController {
+class AdService implements ExtraSpinAdController, RacePayoutDoubleAdController {
   AdService({String? adUnitId, String? customDataPrefix})
     : _adUnitIdOverride = adUnitId,
       _customDataPrefix = customDataPrefix;
@@ -86,6 +103,16 @@ class AdService implements ExtraSpinAdController {
   );
   static const _envBoxRerollAdUnitIdAndroid = String.fromEnvironment(
     'ADMOB_BOX_REROLL_AD_UNIT_ID_ANDROID',
+  );
+
+  // Dedicated rewarded units for the combined race-payout bonus. There is
+  // deliberately NO fallback: another placement's signed SSV callback must
+  // never be consumable for a variable-value race award.
+  static const _envRacePayoutDoubleAdUnitId = String.fromEnvironment(
+    'ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID',
+  );
+  static const _envRacePayoutDoubleAdUnitIdAndroid = String.fromEnvironment(
+    'ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID_ANDROID',
   );
 
   // Banner placements (shop, race mystery-box overlay) are display-only: no
@@ -165,6 +192,18 @@ class AdService implements ExtraSpinAdController {
   /// Whether this build can show the box-reroll ad at all. False without the
   /// define — the caller must not offer the button.
   static bool get boxRerollSupported => boxRerollAdUnitId.isNotEmpty;
+
+  /// Dedicated unit for this platform, or an empty string when this build did
+  /// not bake one in. Never falls back to a test or unrelated live unit.
+  static String get racePayoutDoubleAdUnitId {
+    if (kIsWeb) return '';
+    if (Platform.isIOS) return _envRacePayoutDoubleAdUnitId;
+    if (Platform.isAndroid) return _envRacePayoutDoubleAdUnitIdAndroid;
+    return '';
+  }
+
+  static bool get racePayoutDoubleSupported =>
+      racePayoutDoubleAdUnitId.isNotEmpty;
 
   static String get _platformBannerUnitId {
     if (kIsWeb) return '';
@@ -319,6 +358,27 @@ class AdService implements ExtraSpinAdController {
 
   @override
   Future<void> load({required String userId, required String localDate}) async {
+    await _loadRewarded(
+      userId: userId,
+      customData: _customDataFor(userId, localDate),
+    );
+  }
+
+  @override
+  Future<void> loadForRacePayoutDouble({
+    required String userId,
+    required String offerId,
+  }) async {
+    await _loadRewarded(
+      userId: userId,
+      customData: 'race_payout_double:$userId:$offerId',
+    );
+  }
+
+  Future<void> _loadRewarded({
+    required String userId,
+    required String customData,
+  }) async {
     if (!isSupported || _loading || _ad != null) return;
     _loading = true;
     try {
@@ -335,7 +395,7 @@ class AdService implements ExtraSpinAdController {
             await ad.setServerSideOptions(
               ServerSideVerificationOptions(
                 userId: userId,
-                customData: _customDataFor(userId, localDate),
+                customData: customData,
               ),
             );
             _ad = ad;

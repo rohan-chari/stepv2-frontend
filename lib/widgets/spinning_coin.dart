@@ -5,12 +5,14 @@ import 'spinning_face.dart';
 
 class SpinningCoin extends StatelessWidget {
   final double size;
+  final bool animate;
 
-  const SpinningCoin({super.key, this.size = 20});
+  const SpinningCoin({super.key, this.size = 20, this.animate = true});
 
   @override
   Widget build(BuildContext context) {
-    return SpinningFace(child: _CoinFace(size: size));
+    final face = _CoinFace(size: size);
+    return animate ? SpinningFace(child: face) : face;
   }
 }
 

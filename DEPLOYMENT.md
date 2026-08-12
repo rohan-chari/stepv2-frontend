@@ -22,10 +22,13 @@ The same `--dart-define=BACKEND_BASE_URL=…` value is baked at build time; a bu
 ## Local dev (Xcode debug build, fastest iteration)
 
 Full staging run command (iPhone over cable; banner/native units fall back to
-Google's test ads in debug — the box-reroll unit does NOT (no fallback; omit
+Google’s test ads in debug — the box-reroll unit does NOT (no fallback; omit
 its define and the reroll button is compiled out). GOOGLE_IOS_CLIENT_ID
 enables the Google sign-in button — use the STAGING client since this hits
 the staging backend):
+
+The race-payout-double rewarded define is intentionally omitted from every
+staging command until a staging-specific AdMob unit points SSV at staging.
 
 ```bash
 flutter run -d 00008150-000171DE2638401C --device-connection=attached --debug \
@@ -173,6 +176,8 @@ For most releases, you can deploy backend first because the old App Store binary
 # (PROD iOS OAuth client, registered for com.rohanchari.steptracker). The
 # backend's GOOGLE_AUTH_CLIENT_ID allowlist must already include this client
 # id in prod BEFORE this build ships (iOS Google ID tokens carry it as `aud`).
+# ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID is the dedicated race-results Rewarded
+# unit. It has NO fallback; production uses /6376353967 under app ~5288861983.
 flutter build ipa --release \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
@@ -180,6 +185,7 @@ flutter build ipa --release \
   --dart-define=ADMOB_BOX_TOP_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/3019108638 \
   --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \
   --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID=ca-app-pub-4538901002392200/9184830227 \
+  --dart-define=ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID=ca-app-pub-4538901002392200/6376353967 \
   --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com
 ```
 
@@ -261,6 +267,7 @@ flutter build appbundle --release --flavor prod \
   --dart-define=ADMOB_BANNER_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/8844513901 \
   --dart-define=ADMOB_NATIVE_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/4905268896 \
   --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID_ANDROID=<create in AdMob; omitting DISABLES box reroll> \
+  --dart-define=ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID_ANDROID=<create in AdMob; omission disables race payout double> \
   --build-number=<versionCode>
 ```
 
@@ -287,6 +294,24 @@ Android ad units — the ids are per-platform in AdMob, so Android uses its own
   the existing footer-only layout with zero reserved top space.
 - `ADMOB_NATIVE_AD_UNIT_ID_ANDROID` — races-tab in-feed native ad (gated by the
   same banner switch).
+- `ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID_ANDROID` — dedicated Rewarded unit for
+  the combined race-results bonus. There is no test/live-placement fallback;
+  omission keeps the capability token and offer out of the build.
+
+iOS uses `ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID` with production unit
+`ca-app-pub-4538901002392200/6376353967` under app
+`ca-app-pub-4538901002392200~5288861983`. Create the remaining Android Rewarded
+unit under its AdMob app, set reward amount `1` and item
+`race_payout_double` on both units, and configure SSV to
+`https://steptracker-api.org/ads/ssv`. Do not reuse extra-spin, get-coins, or
+box-reroll units. Until the Android unit exists, its placeholder remains and
+omission safely compiles the Android action out.
+
+Results dismissal is queued in device preferences before the popup closes and
+retried on startup, resume, auth restore, and refresh. If preference storage is
+unavailable, Bara still dismisses and suppresses the results for that running
+process while attempting the request immediately; a process death before a 2xx
+may re-show those results because durable local storage was unavailable.
 
 Omit any of these and that surface stays OFF on Android (empty id → the
 `*Enabled` getters return false), exactly as before. With none of them passed,

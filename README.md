@@ -127,6 +127,9 @@ flutter pub get
 # extra spin / reroll against prod. The reroll define still makes the reroll
 # UI appear (there is NO test-ad fallback for it — omit it and the reroll
 # button is compiled out entirely).
+# ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID is intentionally omitted here too. Its
+# SSV-backed reward must use a staging-specific unit/callback before it can be
+# enabled in a staging-backend build.
 # GOOGLE_IOS_CLIENT_ID enables the "Sign in with Google" button (iOS). This is
 # the STAGING iOS OAuth client — it must match the backend the build talks to,
 # since each env's GOOGLE_AUTH_CLIENT_ID allowlist only accepts its own client.
@@ -151,6 +154,8 @@ flutter run -d 00008150-000171DE2638401C --device-connection=attached \
 # ADMOB_NATIVE_AD_UNIT_ID bakes in the races-tab in-feed NATIVE ad unit; omit
 # it and the slot uses Google's test native ad (gated by the same banner
 # switch, so it still requires ADMOB_BANNER_AD_UNIT_ID to render at all).
+# ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID is the dedicated rewarded unit for the
+# combined race-results bonus. It has NO fallback; omission removes the offer.
 # GOOGLE_IOS_CLIENT_ID here is the PROD iOS OAuth client (prod backend only
 # accepts this one — the staging client would fail with "audience is invalid").
 flutter run -d 00008150-000171DE2638401C --device-connection=attached --debug \
@@ -160,6 +165,7 @@ flutter run -d 00008150-000171DE2638401C --device-connection=attached --debug \
   --dart-define=ADMOB_BOX_TOP_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/3019108638 \
   --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \
   --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID=ca-app-pub-4538901002392200/9184830227 \
+  --dart-define=ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID=ca-app-pub-4538901002392200/6376353967 \
   --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com
 ```
 
@@ -177,6 +183,7 @@ flutter run -d 2AAC407C-4EBE-40C0-B673-C0F4B0F114E7 \
     --dart-define=ADMOB_BOX_TOP_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/3019108638 \
     --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \
     --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID=ca-app-pub-4538901002392200/9184830227 \
+    --dart-define=ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID=ca-app-pub-4538901002392200/6376353967 \
     --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com
 ```
 
@@ -192,6 +199,8 @@ flutter run -d 2AAC407C-4EBE-40C0-B673-C0F4B0F114E7 \
 # ADMOB_BOX_REROLL_AD_UNIT_ID is the rewarded box-reroll unit (batch 08-08
 # item 11) — it has NO test-ad fallback: omit it and the reroll button is
 # compiled out of the release entirely.
+# ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID is also dedicated and has NO fallback.
+# The production iOS Rewarded unit is /6376353967 under app ~5288861983.
 flutter build ipa --release \
   --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
   --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=ca-app-pub-4538901002392200/8833390717 \
@@ -199,7 +208,22 @@ flutter build ipa --release \
   --dart-define=ADMOB_BOX_TOP_BANNER_AD_UNIT_ID=ca-app-pub-4538901002392200/3019108638 \
   --dart-define=ADMOB_NATIVE_AD_UNIT_ID=ca-app-pub-4538901002392200/9892856363 \
   --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID=ca-app-pub-4538901002392200/9184830227 \
+  --dart-define=ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID=ca-app-pub-4538901002392200/6376353967 \
   --dart-define=GOOGLE_IOS_CLIENT_ID=784756906133-iod9c45m7guhnpkv8svbdbmb27nctagl.apps.googleusercontent.com
+```
+
+### Build production Android
+```bash
+# The race-payout rewarded unit is platform-specific and has NO fallback.
+# Keep the explicit placeholder until the Android Rewarded unit is created.
+flutter build appbundle --release --flavor prod \
+  --dart-define=BACKEND_BASE_URL=https://steptracker-api.org \
+  --dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/4587493133 \
+  --dart-define=ADMOB_BANNER_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/8844513901 \
+  --dart-define=ADMOB_NATIVE_AD_UNIT_ID_ANDROID=ca-app-pub-4538901002392200/4905268896 \
+  --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID_ANDROID=<create in AdMob; omitting DISABLES box reroll> \
+  --dart-define=ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID_ANDROID=<create in AdMob; omission disables race payout double> \
+  --build-number=<versionCode>
 ```
 
 ### Tests

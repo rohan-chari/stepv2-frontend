@@ -1,6 +1,6 @@
 # Race-payout double rewarded ad — requirements
 
-Status: **Awaiting user approval — architect APPROVE; economy SOUND**  
+Status: **Implemented — code review APPROVE; dark until Android AdMob ID and rollout configuration**
 Owners: frontend + backend  
 Platforms: iOS and Android  
 Last updated: 2026-08-12
@@ -813,10 +813,10 @@ do not add custom pictorial art or a new asset pipeline for this feature.
 The feature needs a dedicated **Rewarded** unit per platform because AdMob unit
 IDs are platform-specific and iOS/Android ship in lockstep:
 
-| Platform | AdMob app | Proposed unit name | Dart define |
+| Platform | AdMob app | Unit | Dart define |
 | --- | --- | --- | --- |
-| iOS | Bara iOS (`~5288861983`, verify in console) | `Race payout double - iOS` | `ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID` |
-| Android | Bara Android (verify app ID in console) | `Race payout double - Android` | `ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID_ANDROID` |
+| iOS | Bara iOS (`ca-app-pub-4538901002392200~5288861983`) | `ca-app-pub-4538901002392200/6376353967` | `ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID` |
+| Android | Bara Android (verify app ID in console) | Pending | `ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID_ANDROID` |
 
 For each unit:
 
@@ -846,13 +846,12 @@ Repository documentation updates after IDs exist:
 - Do not sweep historical feature specs or obsolete planning files merely
   because they contain old commands; update current operator-facing commands.
 
-AdMob console creation is a user-owned external action. The user will create
-both units **after the feature code is built** and then provide the two
-generated IDs. Until then, current build commands use explicit
-`<create in AdMob; omission disables race payout double>` placeholders. Code
-lands safely with empty defines, an empty backend allowlist, and the backend
-switch off. After the IDs arrive, replace every active placeholder in
-`README.md`, `DEPLOYMENT.md`, `AGENTS.md`, and `CLAUDE.md` before release.
+The user created the iOS unit after the feature code was built; its ID is now
+present in every active iOS command in `README.md`, `DEPLOYMENT.md`, `AGENTS.md`,
+and `CLAUDE.md`. The Android commands retain an explicit
+`<create in AdMob; omission disables race payout double>` placeholder until its
+separate unit is supplied. Keep the backend allowlist empty and switches off
+until both platform units exist so iOS and Android can roll out in lockstep.
 
 ## 10. Backward compatibility and rollout
 
@@ -864,10 +863,10 @@ switch off. After the IDs arrive, replace every active placeholder in
 3. Land the app with dedicated per-platform define support, placeholder release
    documentation, and the defensive offer parser. Build/verify iOS and Android
    without the new defines to prove safe compilation-out behavior.
-4. After the code is built, the user creates/configures both AdMob units and
-   supplies both IDs. Replace every active placeholder, configure the backend
-   allowlist, and build/verify iOS and Android from the same version with their
-   platform-specific defines.
+4. The iOS unit is configured in documentation. After the user creates and
+   supplies the Android unit, replace its active placeholders, configure the
+   backend allowlist with both IDs, and build/verify iOS and Android from the
+   same version with their platform-specific defines.
 5. Test on staging only with staging-routed units or a controlled SSV test
    setup. Never point a staging claim flow at a prod-only callback.
 6. Deploy compatible backend to production first, still dark.
@@ -1073,8 +1072,8 @@ Pump the real `RaceResultsSummaryScreen`/shell path with fake services:
    tokenless client has since marked its exact results seen.
 4. **Platforms:** ship code/configuration for both iOS and Android and create
    one dedicated rewarded unit for each.
-5. **AdMob ownership:** the user creates both console units after the feature is
-   built and provides their IDs before release documentation/configuration is
+5. **AdMob ownership:** the user creates both console units. The iOS unit is
+   recorded; the Android unit remains required before release configuration is
    finalized.
 
 ### 12.1 Economy-review safeguards approved
@@ -1336,3 +1335,10 @@ The economy review also requires:
 - **Final reviews (2026-08-12):** architect returned **APPROVE** with no required
   changes or suggestions; game-economy reviewer returned **SOUND** and confirmed
   `docs/economy.md` is aligned.
+- **Implementation and code review (2026-08-12):** backend and Flutter work was
+  completed tests-first against the locked contract. Combined review initially
+  required queue/auth concurrency, strict AdMob configuration, reconciliation,
+  deletion-race, copy, and accessibility hardening; all findings received
+  regression coverage and the final reviewer returned **APPROVE — SHIP** with
+  no remaining blockers, issues, or nits. Production remains dark pending the
+  remaining Android rewarded unit ID and manual SSV/device validation.

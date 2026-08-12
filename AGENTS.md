@@ -26,8 +26,8 @@ paths in committed files.
 - `flutter analyze` — must be clean before work is called done.
 - `flutter test` — full suite. To diagnose a failure, run the single failing
   suite (`flutter test test/foo_test.dart`), not the whole suite repeatedly.
-- iOS:     `flutter build ipa       --dart-define=BACKEND_BASE_URL=… [--dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=… --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID=…]`
-- Android: `flutter build appbundle --flavor <prod|staging> --dart-define=BACKEND_BASE_URL=…`
+- iOS:     `flutter build ipa       --dart-define=BACKEND_BASE_URL=… [--dart-define=ADMOB_EXTRA_SPIN_AD_UNIT_ID=… --dart-define=ADMOB_BOX_REROLL_AD_UNIT_ID=… --dart-define=ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID=ca-app-pub-4538901002392200/6376353967]`
+- Android: `flutter build appbundle --flavor <prod|staging> --dart-define=BACKEND_BASE_URL=… [--dart-define=ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID_ANDROID=<create in AdMob; omission disables race payout double>]`
 - Backend repo: `npm run test:unit` / `npm run test:integration` — **never bare
   `npm test`** (it hangs).
 
