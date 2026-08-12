@@ -143,17 +143,20 @@ void main() {
       );
     });
 
-    test('a legacy bare-string nil answer still classifies as denied', () async {
-      _mockRaw((method) {
-        if (method == 'clipboardHasProbableUrl') return true;
-        return null;
-      });
-      final service = await _service(InstallPlatform.ios);
+    test(
+      'a legacy bare-string nil answer still classifies as denied',
+      () async {
+        _mockRaw((method) {
+          if (method == 'clipboardHasProbableUrl') return true;
+          return null;
+        });
+        final service = await _service(InstallPlatform.ios);
 
-      await service.resolveOnFirstLaunch();
+        await service.resolveOnFirstLaunch();
 
-      expect(await _stashedOutcome(), 'install_attr_read_denied');
-    });
+        expect(await _stashedOutcome(), 'install_attr_read_denied');
+      },
+    );
 
     test('a read with no BARA- code is read_no_code, not denied', () async {
       _mockRaw((method) {
@@ -171,22 +174,45 @@ void main() {
       expect(await service.hasUnreadDetectedInvite(), isFalse);
     });
 
-    test('a captured code stashes code_captured and sets the pending code', () async {
-      _mockRaw((method) {
-        if (method == 'clipboardHasProbableUrl') return true;
-        return <String, Object?>{
-          'status': 'ok',
-          'value': 'https://steptracker-api.org/r/BARA-7F3K',
-        };
-      });
-      final service = await _service(InstallPlatform.ios);
+    test(
+      'a captured code stashes code_captured and sets the pending code',
+      () async {
+        _mockRaw((method) {
+          if (method == 'clipboardHasProbableUrl') return true;
+          return <String, Object?>{
+            'status': 'ok',
+            'value': 'https://steptracker-api.org/r/BARA-7F3K',
+          };
+        });
+        final service = await _service(InstallPlatform.ios);
 
-      await service.resolveOnFirstLaunch();
+        await service.resolveOnFirstLaunch();
 
-      expect(await _stashedOutcome(), 'install_attr_code_captured');
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString('auth_pending_referral_code'), 'BARA-7F3K');
-    });
+        expect(await _stashedOutcome(), 'install_attr_code_captured');
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getString('auth_pending_referral_code'), 'BARA-7F3K');
+      },
+    );
+
+    test(
+      'combined iOS URL preserves referral and race independently',
+      () async {
+        _mockRaw((method) {
+          if (method == 'clipboardHasProbableUrl') return true;
+          return <String, Object?>{
+            'status': 'ok',
+            'value': 'https://steptracker-api.org/r/raceToken123?ref=BARA-7F3K',
+          };
+        });
+        final service = await _service(InstallPlatform.ios);
+
+        await service.resolveOnFirstLaunch();
+
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getString('auth_pending_referral_code'), 'BARA-7F3K');
+        expect(prefs.getString('auth_pending_share_token'), 'raceToken123');
+      },
+    );
 
     test('a channel failure stashes error and never throws', () async {
       _mockRaw((method) => throw PlatformException(code: 'boom'));
@@ -197,21 +223,24 @@ void main() {
       expect(await _stashedOutcome(), 'install_attr_error');
     });
 
-    test('the deferred paste read returns a code and clears the state', () async {
-      _mockRaw((method) {
-        if (method == 'clipboardHasProbableUrl') return true;
-        return <String, Object?>{'status': 'denied'};
-      });
-      final service = await _service(InstallPlatform.ios);
-      await service.resolveOnFirstLaunch();
-      expect(await service.hasUnreadDetectedInvite(), isTrue);
+    test(
+      'the deferred paste read returns a code and clears the state',
+      () async {
+        _mockRaw((method) {
+          if (method == 'clipboardHasProbableUrl') return true;
+          return <String, Object?>{'status': 'denied'};
+        });
+        final service = await _service(InstallPlatform.ios);
+        await service.resolveOnFirstLaunch();
+        expect(await service.hasUnreadDetectedInvite(), isTrue);
 
-      _mockRaw(
-        (method) => <String, Object?>{'status': 'ok', 'value': 'BARA-7F3K'},
-      );
-      expect(await service.readInviteCodeFromPasteboard(), 'BARA-7F3K');
-      expect(await service.hasUnreadDetectedInvite(), isFalse);
-    });
+        _mockRaw(
+          (method) => <String, Object?>{'status': 'ok', 'value': 'BARA-7F3K'},
+        );
+        expect(await service.readInviteCodeFromPasteboard(), 'BARA-7F3K');
+        expect(await service.hasUnreadDetectedInvite(), isFalse);
+      },
+    );
 
     test('a second denial on the deferred read returns null', () async {
       _mockRaw((method) => <String, Object?>{'status': 'denied'});
@@ -221,14 +250,31 @@ void main() {
   });
 
   group('Android + deep link', () {
-    test('an install referrer carrying a code stashes install_referrer', () async {
-      _mockRaw((method) => 'referrer=BARA-7F3K&utm_source=share');
-      final service = await _service(InstallPlatform.android);
+    test(
+      'an install referrer carrying a code stashes install_referrer',
+      () async {
+        _mockRaw((method) => 'referrer=BARA-7F3K&utm_source=share');
+        final service = await _service(InstallPlatform.android);
 
-      await service.resolveOnFirstLaunch();
+        await service.resolveOnFirstLaunch();
 
-      expect(await _stashedOutcome(), 'install_attr_install_referrer');
-    });
+        expect(await _stashedOutcome(), 'install_attr_install_referrer');
+      },
+    );
+
+    test(
+      'decoded Play payload preserves referral and race independently',
+      () async {
+        _mockRaw((method) => 'raceToken=raceToken123&ref=BARA-7F3K');
+        final service = await _service(InstallPlatform.android);
+
+        await service.resolveOnFirstLaunch();
+
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getString('auth_pending_referral_code'), 'BARA-7F3K');
+        expect(prefs.getString('auth_pending_share_token'), 'raceToken123');
+      },
+    );
 
     test('an organic referrer stashes read_no_code', () async {
       _mockRaw((method) => 'utm_source=google-play&utm_medium=organic');
@@ -267,7 +313,11 @@ void main() {
       await service.resolveOnFirstLaunch();
 
       expect(await _stashedOutcome(), 'install_attr_deep_link');
-      expect(platformCalls, 0, reason: 'never touch the clipboard in this case');
+      expect(
+        platformCalls,
+        0,
+        reason: 'never touch the clipboard in this case',
+      );
     });
   });
 

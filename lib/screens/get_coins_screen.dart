@@ -328,9 +328,7 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
 
   Widget _buildHeader() {
     return DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.of(context).roofLight,
-      ),
+      decoration: BoxDecoration(color: AppColors.of(context).roofLight),
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
         child: Padding(
@@ -489,7 +487,7 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
       icon: Icons.card_giftcard_rounded,
       title: 'DAILY BOX',
       subtitle: claimed
-          ? 'Claimed today — come back tomorrow for the next one.'
+          ? 'Claimed today. Come back tomorrow for the next one.'
           : 'Open your free daily box for coins and gear.',
       action: PillButton(
         label: claimed ? 'CLAIMED TODAY' : 'OPEN DAILY BOX',

@@ -246,15 +246,19 @@ void main() {
       await tester.pumpWidget(const MaterialApp(home: StartScreen()));
       await tester.pump(const Duration(milliseconds: 100));
 
-      final tagline = find.text('STEP. RACE. WIN.');
+      final title = find.text('Bara');
       final mission = find.text(
-        "We're on a mission to make your daily steps fun",
+        'Step challenges are more fun when you can steal someone’s steps.',
       );
-      expect(tagline, findsOneWidget);
+      expect(find.text('STEP. RACE. WIN.'), findsNothing);
+      expect(
+        find.text("We're on a mission to make your daily steps fun"),
+        findsNothing,
+      );
       expect(mission, findsOneWidget);
       expect(
         tester.getTopLeft(mission).dy,
-        greaterThan(tester.getTopLeft(tagline).dy),
+        greaterThan(tester.getTopLeft(title).dy),
       );
     });
   });
@@ -273,7 +277,7 @@ void main() {
             label: 'HEALTH DATA',
             headline: 'Connect steps to start racing',
             body:
-                'Bara only reads your step count — never your routes, '
+                'Bara only reads your step count. It never reads your routes, '
                 'workouts, heart rate, or location. Your steps are used for '
                 'races and nothing else, and we never sell your data.',
             icon: Icons.favorite_rounded,

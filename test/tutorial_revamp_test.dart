@@ -291,7 +291,9 @@ void main() {
     await _settle(tester);
 
     final events = await _queuedEvents();
-    final completed = events.firstWhere((e) => e['name'] == 'tutorial_completed');
+    final completed = events.firstWhere(
+      (e) => e['name'] == 'tutorial_completed',
+    );
     expect((completed['context'] as Map).containsKey('step'), isFalse);
     final opened = events.firstWhere((e) => e['name'] == 'tutorial_opened');
     expect((opened['context'] as Map).containsKey('step'), isFalse);
@@ -311,21 +313,16 @@ void main() {
     final source = File('lib/screens/onboarding_flow.dart').readAsStringSync();
     final v3Branch = source.indexOf('onboardingV3Enabled) {');
     expect(v3Branch, greaterThan(-1));
-    // Strengthened (invite-code spec, test-plan item 8): the invite-code step
-    // is the FIRST v3 step — attribution intent is captured before the demo
-    // race, so a successful apply means the rest of onboarding (including the
-    // inviter-race step) already knows the inviter.
     final inviteAt = source.indexOf('OnboardingInviteCodeStep(', v3Branch);
     final teachingAt = source.indexOf('OnboardingDemoRaceStep(', v3Branch);
     final raceAt = source.indexOf('OnboardingInviterRaceStep(', v3Branch);
-    expect(inviteAt, greaterThan(-1));
-    expect(teachingAt, greaterThan(-1));
-    expect(raceAt, greaterThan(-1));
     expect(
       inviteAt,
-      lessThan(teachingAt),
-      reason: 'the invite-code step must come first under v3',
+      -1,
+      reason: 'invite-code entry was removed from onboarding',
     );
+    expect(teachingAt, greaterThan(-1));
+    expect(raceAt, greaterThan(-1));
     expect(
       teachingAt,
       lessThan(raceAt),
@@ -388,7 +385,8 @@ void main() {
         expect(
           source.contains('CoachTip'),
           isFalse,
-          reason: '$path must not fire a coach tip — the box-open moment '
+          reason:
+              '$path must not fire a coach tip — the box-open moment '
               'belongs to the notification ask alone (§5.11.6)',
         );
       }

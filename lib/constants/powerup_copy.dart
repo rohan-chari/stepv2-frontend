@@ -430,7 +430,7 @@ abstract final class PowerupCopy {
     // Batch 2026-08-09 item 8b: guaranteed rare at every level, and a forced
     // box can never hand back another Horseshoe.
     'LUCKY_HORSESHOE':
-        'Guarantees a rare powerup from your next mystery box — and it '
+        'Guarantees a rare powerup from your next mystery box. It '
         "can't grant another Horseshoe",
     'CAMPFIRE_REST': 'Freeze for 30 min, then multiply steps for up to 90 min',
     'TRAIL_MAGNET': 'Pull your next mystery box 1,000 steps closer',
@@ -445,7 +445,7 @@ abstract final class PowerupCopy {
     'RAINSTORM':
         "Everyone else's steps count for half for 1 hour. Mirrors can't reflect it; Compression Socks keep a racer dry",
     'SIGNAL_JAMMER':
-        "Jam a rival's signal — they can't use any powerups for 1 hour. Mirrors can't reflect it; Compression Socks block it",
+        "Jam a rival's signal. They can't use any powerups for 1 hour. Mirrors can't reflect it; Compression Socks block it",
     // DURATION-NEUTRAL by contract (§7.5.1). A new binary can talk to an OLD
     // backend (30 min) or the new one (60 min for `powerups3`), so naming
     // either number here makes the fallback lie in one of those pairings. The
@@ -456,7 +456,7 @@ abstract final class PowerupCopy {
         "Instantly reveal every opponent's active defenses (shields and mirrors)",
     // Also duration-neutral: the window is a backend-tuned value.
     'HITCHHIKE':
-        "Copy a rival's effective steps into your score while Hitchhike is active — boosts and reversals carry over",
+        "Copy a rival's effective steps into your score while Hitchhike is active. Boosts and reversals carry over",
     'QUICK_RINSE':
         'Cut the remaining time on every opponent effect currently on you in half',
     'QUICKSAND':
@@ -465,22 +465,22 @@ abstract final class PowerupCopy {
     'UPRISING':
         'Rally the underdogs: everyone in the bottom half, you included, gets 2x steps for 2 hours',
     'GHOST_PEPPER':
-        'Blaze with 3x steps for 30 min, then burn out — frozen for the next 30 min',
+        'Blaze with 3x steps for 30 min, then burn out. Frozen for the next 30 min',
     'COIN_FLIP':
         'Flip a coin: heads doubles your steps for an hour, tails cuts them in half',
     'MYSTERY_POTION':
-        'Drink up for a random effect — a boost, an attack on a rival, or a nasty surprise',
+        'Drink up for a random effect. It could be a boost, an attack on a rival, or a nasty surprise',
     'DECOY':
         'Set a decoy that redirects the next single-target attack aimed at you to another racer',
     'POWER_OUTAGE':
-        "Cut the power on every rival — no one else can use powerups for 30 minutes. Compression Socks keep a racer online",
-    'UMBRELLA': 'Stay dry for 12 hours — immune to Rainstorm and Power Outage',
+        "Cut the power on every rival. No one else can use powerups for 30 minutes. Compression Socks keep a racer online",
+    'UMBRELLA': 'Stay dry for 12 hours. Immune to Rainstorm and Power Outage',
     'RALLY_FLAG': 'Raise the flag: 1.25x steps for your whole team for 1 hour',
     'DRILL_SERGEANT':
-        'Dare a rival to hit a step goal within 2 hours — if they fall short they lose steps',
+        'Dare a rival to hit a step goal within 2 hours. If they fall short they lose steps',
     'PIGGY_BANK': 'Bank your steps for 24 hours and cash them out as coins',
     'BOUNTY':
-        'Place a bounty on a rival ahead of you — out-place them by race end to collect the payout',
+        'Place a bounty on a rival ahead of you. Out-place them by race end to collect the payout',
   };
 
   // Short-form copy for the active-effects rail, where the countdown badge on

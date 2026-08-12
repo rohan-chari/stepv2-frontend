@@ -607,15 +607,15 @@ String tournamentErrorCopy(String? code, {String? friendName}) {
     case 'FEATURE_DISABLED':
       return 'Tournaments are taking a quick nap. Try again later!';
     case 'TOURNAMENT_NOT_FOUND':
-      return "That tournament is gone — it may have been called off.";
+      return "That tournament is gone. It may have been called off.";
     case 'TOURNAMENT_FULL':
-      return 'That bracket just filled up — try another!';
+      return 'That bracket just filled up. Try another!';
     case 'ALREADY_IN_FEATURED':
       return "Finish your current bracket first, then jump into the next one!";
     case 'ALREADY_JOINED':
       return "You're already in this bracket!";
     case 'TOURNAMENT_NOT_PENDING':
-      return 'This bracket already started — no changes now.';
+      return 'This bracket already started. No changes now.';
     case 'BRACKET_NOT_FULL':
       return 'Fill every slot before you start the bracket.';
     case 'NO_LIVE_MATCHUP':
@@ -627,7 +627,7 @@ String tournamentErrorCopy(String? code, {String? friendName}) {
     case 'NOT_INVITED':
       return 'You need an invite to join this bracket.';
     case 'NOT_PUBLIC':
-      return "This bracket is private — you'll need an invite or a link.";
+      return "This bracket is private. You'll need an invite or a link.";
     case 'PARTICIPANT_NOT_FOUND':
       return "That racer isn't in the lobby.";
     case 'ALREADY_RESPONDED':
@@ -640,7 +640,7 @@ String tournamentErrorCopy(String? code, {String? friendName}) {
           : 'Your friend';
       return '$who needs to update the app to join tournaments.';
     case 'TOURNAMENT_RACE_LOCKED':
-      return 'This matchup is run by the tournament — manage it from the bracket.';
+      return 'This matchup is run by the tournament. Manage it from the bracket.';
     case 'VALIDATION':
       return "Those tournament settings don't look right. Give them another look.";
     default:

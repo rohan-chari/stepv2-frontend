@@ -27,6 +27,7 @@ class HomeHeroScene extends StatefulWidget {
     this.groundHeight = 86,
     this.skyAlignment = Alignment.bottomCenter,
     this.groundScrollSpeed = 0,
+    this.excludeBackgroundSemantics = false,
   });
 
   final Widget child;
@@ -42,6 +43,10 @@ class HomeHeroScene extends StatefulWidget {
 
   /// Controls how the wide sky artwork crops in unusually tall scenes.
   final AlignmentGeometry skyAlignment;
+
+  /// Excludes only the decorative sky/cloud/ground layers. The foreground
+  /// [child] keeps its semantics. Defaults off to preserve existing callers.
+  final bool excludeBackgroundSemantics;
 
   /// Source dimensions of home_hero_ground.png (the course-strip crop); used
   /// to size each tile to [groundHeight] exactly.
@@ -129,6 +134,9 @@ class _HomeHeroSceneState extends State<HomeHeroScene>
     final transitionDuration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
         : const Duration(milliseconds: 250);
+    Widget decorative(Widget child) => widget.excludeBackgroundSemantics
+        ? ExcludeSemantics(child: child)
+        : child;
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -139,21 +147,23 @@ class _HomeHeroSceneState extends State<HomeHeroScene>
           right: 0,
           top: 0,
           bottom: widget.groundHeight - 20,
-          child: ClipRect(
-            child: AnimatedSwitcher(
-              duration: transitionDuration,
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeOutCubic,
-              layoutBuilder: (currentChild, previousChildren) => Stack(
-                fit: StackFit.expand,
-                children: [...previousChildren, ?currentChild],
-              ),
-              child: Image.asset(
-                assets.homeHeroSky,
-                key: ValueKey(assets.homeHeroSky),
-                fit: BoxFit.cover,
-                alignment: widget.skyAlignment,
-                filterQuality: FilterQuality.none,
+          child: decorative(
+            ClipRect(
+              child: AnimatedSwitcher(
+                duration: transitionDuration,
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeOutCubic,
+                layoutBuilder: (currentChild, previousChildren) => Stack(
+                  fit: StackFit.expand,
+                  children: [...previousChildren, ?currentChild],
+                ),
+                child: Image.asset(
+                  assets.homeHeroSky,
+                  key: ValueKey(assets.homeHeroSky),
+                  fit: BoxFit.cover,
+                  alignment: widget.skyAlignment,
+                  filterQuality: FilterQuality.none,
+                ),
               ),
             ),
           ),
@@ -166,22 +176,24 @@ class _HomeHeroSceneState extends State<HomeHeroScene>
           right: 0,
           top: 0,
           bottom: widget.groundHeight,
-          child: LayoutBuilder(
-            builder: (context, constraints) => AnimatedBuilder(
-              animation: _ambient,
-              builder: (context, _) => Stack(
-                clipBehavior: Clip.hardEdge,
-                children: [
-                  for (var i = 0; i < _clouds.length; i++)
-                    _CloudInstance(
-                      key: ValueKey('home-cloud-$i'),
-                      config: _clouds[i],
-                      t: _ambient.value,
-                      fieldSize: constraints.biggest,
-                      assetPath: assets.homeClouds,
-                      transitionDuration: transitionDuration,
-                    ),
-                ],
+          child: decorative(
+            LayoutBuilder(
+              builder: (context, constraints) => AnimatedBuilder(
+                animation: _ambient,
+                builder: (context, _) => Stack(
+                  clipBehavior: Clip.hardEdge,
+                  children: [
+                    for (var i = 0; i < _clouds.length; i++)
+                      _CloudInstance(
+                        key: ValueKey('home-cloud-$i'),
+                        config: _clouds[i],
+                        t: _ambient.value,
+                        fieldSize: constraints.biggest,
+                        assetPath: assets.homeClouds,
+                        transitionDuration: transitionDuration,
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -195,54 +207,57 @@ class _HomeHeroSceneState extends State<HomeHeroScene>
           right: 0,
           bottom: 0,
           height: widget.groundHeight,
-          child: ClipRect(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final tileW =
-                    HomeHeroScene._groundSrcWidth *
-                    widget.groundHeight /
-                    HomeHeroScene._groundSrcHeight;
-                final scrolls = widget.groundScrollSpeed != 0;
-                // One spare tile so the strip stays covered while it slides
-                // left by up to a full tile width.
-                final tiles =
-                    (constraints.maxWidth / tileW).ceil() + (scrolls ? 1 : 0);
-                // OverflowBox: the last tile intentionally runs past the
-                // right edge (ClipRect trims it) without a flex overflow.
-                final strip = OverflowBox(
-                  key: const Key('hero-ground-strip'),
-                  maxWidth: double.infinity,
-                  alignment: Alignment.centerLeft,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      for (var i = 0; i < tiles; i++)
-                        Image.asset(
-                          assets.homeHeroGround,
-                          key: ValueKey('${assets.homeHeroGround}-$i'),
-                          width: tileW,
-                          height: widget.groundHeight,
-                          fit: BoxFit.fill,
-                          filterQuality: FilterQuality.none,
-                        ),
-                    ],
-                  ),
-                );
-                if (!scrolls) return strip;
-                return ValueListenableBuilder<double>(
-                  valueListenable: _groundPhase,
-                  child: strip,
-                  builder: (context, seconds, child) {
-                    // Wrap on the tile width: the crop is seam-aligned, so
-                    // resetting by exactly one tile is invisible.
-                    final dx = -((seconds * widget.groundScrollSpeed) % tileW);
-                    return Transform.translate(
-                      offset: Offset(dx, 0),
-                      child: child,
-                    );
-                  },
-                );
-              },
+          child: decorative(
+            ClipRect(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final tileW =
+                      HomeHeroScene._groundSrcWidth *
+                      widget.groundHeight /
+                      HomeHeroScene._groundSrcHeight;
+                  final scrolls = widget.groundScrollSpeed != 0;
+                  // One spare tile so the strip stays covered while it slides
+                  // left by up to a full tile width.
+                  final tiles =
+                      (constraints.maxWidth / tileW).ceil() + (scrolls ? 1 : 0);
+                  // OverflowBox: the last tile intentionally runs past the
+                  // right edge (ClipRect trims it) without a flex overflow.
+                  final strip = OverflowBox(
+                    key: const Key('hero-ground-strip'),
+                    maxWidth: double.infinity,
+                    alignment: Alignment.centerLeft,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (var i = 0; i < tiles; i++)
+                          Image.asset(
+                            assets.homeHeroGround,
+                            key: ValueKey('${assets.homeHeroGround}-$i'),
+                            width: tileW,
+                            height: widget.groundHeight,
+                            fit: BoxFit.fill,
+                            filterQuality: FilterQuality.none,
+                          ),
+                      ],
+                    ),
+                  );
+                  if (!scrolls) return strip;
+                  return ValueListenableBuilder<double>(
+                    valueListenable: _groundPhase,
+                    child: strip,
+                    builder: (context, seconds, child) {
+                      // Wrap on the tile width: the crop is seam-aligned, so
+                      // resetting by exactly one tile is invisible.
+                      final dx =
+                          -((seconds * widget.groundScrollSpeed) % tileW);
+                      return Transform.translate(
+                        offset: Offset(dx, 0),
+                        child: child,
+                      );
+                    },
+                  );
+                },
+              ),
             ),
           ),
         ),

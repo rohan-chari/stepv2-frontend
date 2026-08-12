@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../config/animals.dart';
 import '../models/loadable.dart';
 import '../models/race_payouts.dart';
+import '../models/next_race.dart';
 import '../models/race_prize_pool.dart';
 import '../services/activation_analytics_service.dart';
 import '../services/auth_service.dart';
@@ -48,6 +49,7 @@ import '../widgets/leaderboard_plank.dart';
 import '../services/ad_service.dart';
 import '../widgets/multiplier_chip.dart';
 import '../widgets/race_podium.dart';
+import '../widgets/race_payout_scorecard.dart';
 import '../widgets/team_lobby_board.dart';
 import '../widgets/team_scoreboard_cards.dart';
 import '../widgets/loading_skeleton.dart';
@@ -117,6 +119,7 @@ class RaceDetailScreen extends StatefulWidget {
   /// tests never touch google_mobile_ads. Null in production, where the screen
   /// builds a real [AdService] on its own dedicated ad unit.
   final ExtraSpinAdController? boxRerollAdController;
+  final bool showPostCreateSharePrompt;
 
   RaceDetailScreen({
     super.key,
@@ -132,6 +135,7 @@ class RaceDetailScreen extends StatefulWidget {
     this.demoTargetGate,
     this.demoMode = false,
     this.boxRerollAdController,
+    this.showPostCreateSharePrompt = false,
   }) : backendApiService = backendApiService ?? BackendApiService();
 
   @override
@@ -267,6 +271,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   Map<String, int> _globalPowerupInventory = const {};
   bool _isLoading = true;
   bool _isActing = false;
+  bool? _acceptingInvite;
+  late bool _postCreateSharePromptVisible;
 
   /// WHICH action is in flight (batch 2026-08-08, item 12).
   ///
@@ -300,6 +306,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       _actingPowerupId = null;
     });
   }
+
   // The viewer is not (or is no longer) a participant: `GET /races/:id/details`
   // answered 403. Reached two ways — opening a stale link, or being pruned from
   // a seeded challenge while the screen is open. Terminal for this screen: once
@@ -405,6 +412,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   @override
   void initState() {
     super.initState();
+    _postCreateSharePromptVisible = widget.showPostCreateSharePrompt;
+    if (_postCreateSharePromptVisible && !widget.demoMode) {
+      unawaited(
+        _activationAnalytics.record(
+          'race_share_prompt_shown',
+          context: {'race_id': widget.raceId},
+        ),
+      );
+    }
     WidgetsBinding.instance.addObserver(this);
     _countdownNow = DateTime.now();
     _messageFocus.addListener(_onComposerFocusChanged);
@@ -889,7 +905,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         if (newQueued > 0) {
           showInfoToast(
             context,
-            '$newQueued mystery box${newQueued > 1 ? 'es' : ''} queued \u2014 inventory full',
+            '$newQueued mystery box${newQueued > 1 ? 'es' : ''} queued. Inventory full',
           );
         }
       }
@@ -1054,7 +1070,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   }
 
   Future<void> _respondToInvite(bool accept) async {
-    setState(() => _isActing = true);
+    if (_isActing) return;
+    setState(() {
+      _isActing = true;
+      _acceptingInvite = accept;
+    });
     try {
       final token = widget.authService.authToken;
       if (token == null || token.isEmpty) return;
@@ -1085,7 +1105,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     } catch (e) {
       if (mounted) showErrorToast(context, e.toString());
     } finally {
-      if (mounted) setState(() => _isActing = false);
+      if (mounted) {
+        setState(() {
+          _isActing = false;
+          _acceptingInvite = null;
+        });
+      }
     }
   }
 
@@ -1197,7 +1222,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               const SizedBox(height: 14),
               _forfeitConsequence(
                 Icons.ac_unit_rounded,
-                'Your steps freeze now and stay with $teamName — they still '
+                'Your steps freeze now and stay with $teamName. They still '
                 'count toward the team total.',
               ),
               const SizedBox(height: 10),
@@ -1209,7 +1234,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               const SizedBox(height: 10),
               _forfeitConsequence(
                 Icons.block_rounded,
-                "This is permanent — you can't rejoin this race.",
+                "This is permanent. You can't rejoin this race.",
               ),
               const SizedBox(height: 18),
               PillButton(
@@ -1698,7 +1723,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             title: reveal.won ? 'HEADS!' : 'TAILS!',
             subtitle: reveal.won
                 ? 'Your steps are doubled for the next hour!'
-                : 'Tough luck — your steps are halved for the next hour.',
+                : 'Tough luck. Your steps are halved for the next hour.',
             accent: reveal.won
                 ? AppColors.of(context).coinDark
                 : AppColors.of(context).error,
@@ -1729,7 +1754,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         showInfoToast(
           context,
           affected >= 0
-              ? '$name activated — $affected racer${affected == 1 ? '' : 's'} affected!'
+              ? '$name activated. $affected racer${affected == 1 ? '' : 's'} affected!'
               : '$name activated!',
         );
       } else if (type == 'SNEAKY_SWAP') {
@@ -2024,9 +2049,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     if (isUnopenedBox) {
       // An unopened box pays nothing — otherwise never opening one would
       // dominate every other play.
-      body = "Discard this mystery box? You won't get coins for unopened boxes.";
+      body =
+          "Discard this mystery box? You won't get coins for unopened boxes.";
     } else if (capReached) {
-      body = "Daily discard bonus reached — you'll get 0 coins.";
+      body = "Daily discard bonus reached. You'll get 0 coins.";
     } else if (cap != null && cap < price) {
       // Batch 2026-08-10b item 2: the backend pays min(price, cap), so quoting
       // the full price here promised coins it would not pay.
@@ -2087,7 +2113,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       if (mounted) {
         final name = PowerupCopy.nameFor(powerup['type'] as String?);
         if (coinsAwarded is num && coinsAwarded > 0) {
-          showInfoToast(context, '$name discarded — +${coinsAwarded.toInt()} coins');
+          showInfoToast(
+            context,
+            '$name discarded. +${coinsAwarded.toInt()} coins',
+          );
         } else {
           // Covers an older backend (no field), an unopened box (always 0) and
           // a user who has hit the daily cap.
@@ -2950,8 +2979,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       final affordable = myCoins >= cost;
       final isBase = level == 0;
       final label = isBase
-          ? 'USE BASE — ${tierLabels[0]}'
-          : 'LVL $level — ${tierLabels[level]}';
+          ? 'USE BASE: ${tierLabels[0]}'
+          : 'LVL $level: ${tierLabels[level]}';
 
       Widget? trailing;
       if (!isBase) {
@@ -3422,17 +3451,24 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
   RacePrizePool? get _prizePool => RacePrizePool.fromRace(_race);
 
+  RacePayoutPresentation get _payoutPresentation =>
+      RacePayoutPresentation.fromRace(
+        _race,
+        viewerPlacement: _myViewerPlacement,
+        isTeamRace: TeamRace.isTeamRace(_race ?? const {}),
+      );
+
   /// The number shown as the prize. A funded race carries it in `prizePool`;
   /// otherwise the projected pot (which is what the pool re-uses on the wire,
   /// so this is also correct against a newer backend on an old read path).
   int get _prizeCoins =>
       _prizePool?.coins ?? _readInt(_race?['projectedPotCoins'], fallback: 0);
 
-  /// Whether there is any prize worth showing: a funded pool with coins in it,
-  /// or a legacy buy-in race.
+  /// Whether there is any prize contract worth showing: a valid funded pool,
+  /// including a truthful zero while it is forming, or a legacy buy-in race.
   bool get _hasPrizeDisplay {
     final pool = _prizePool;
-    if (pool != null) return pool.coins > 0;
+    if (pool != null) return pool.funded || pool.coins > 0;
     return _readInt(_race?['buyInAmount'], fallback: 0) > 0;
   }
 
@@ -3489,9 +3525,19 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     );
   }
 
-  /// Bottom sheet with the pot and the full payout breakdown (podium +
-  /// "+N MORE" expansion, same as before — just summoned from the hero chip).
   void _showPrizePoolSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => RacePrizePoolSheet(presentation: _payoutPresentation),
+    );
+  }
+
+  // Kept temporarily as the compatibility implementation for the older
+  // summary helpers below; the shipped path uses the shared sheet above.
+  // ignore: unused_element
+  void _showLegacyPrizePoolSheet() {
     final potCoins = _prizeCoins;
     final pool = _prizePool;
     final payoutTiers = parsePayoutTiers(_race);
@@ -3604,9 +3650,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                   else if (_isGradedCurvePayout(payoutTiers))
                     _buildGradedPayoutSummary(
                       payoutTiers,
-                      key: const Key(
-                        'race-prize-pool-graded-payout-summary',
-                      ),
+                      key: const Key('race-prize-pool-graded-payout-summary'),
                       labelColor: AppColors.of(ctx).textMid,
                       amountColor: AppColors.of(ctx).coinDark,
                     )
@@ -3665,12 +3709,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// Parchment game-piece card for a section body on the checker (home tab
   /// below-the-fold language).
   Widget _sectionCard({
+    Key? key,
     required Widget child,
     EdgeInsetsGeometry padding = const EdgeInsets.all(14),
+    double horizontalMargin = 12,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      padding: EdgeInsets.symmetric(horizontal: horizontalMargin),
       child: Container(
+        key: key,
         width: double.infinity,
         padding: padding,
         decoration: raceCardDecoration(context),
@@ -3679,7 +3726,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     );
   }
 
-  Widget _buildRaceInfoCard() {
+  Widget _buildRaceInfoCard() => RacePayoutScorecard(
+    presentation: _payoutPresentation,
+    onOpenPayouts: _hasPrizeDisplay ? _showPrizePoolSheet : null,
+  );
+
+  // ignore: unused_element
+  Widget _buildLegacyRaceInfoCard() {
     final maxDays = _readInt(_race!['maxDurationDays'], fallback: 7);
     final buyInAmount = _readInt(_race!['buyInAmount'], fallback: 0);
     final potCoins = _readInt(_race!['projectedPotCoins'], fallback: 0);
@@ -3875,10 +3928,54 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             if (_hasPrizeDisplay) _prizeChip(),
           ],
         ),
+        if (_postCreateSharePromptVisible && !widget.demoMode) ...[
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: RetroCard(
+              key: const Key('quick-race-share-prompt'),
+              padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.ios_share_rounded,
+                    color: AppColors.of(context).pillGreenDark,
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Text(
+                      'Bring in the second walker. This race starts automatically when they join.',
+                      style: PixelText.body(
+                        size: 12.5,
+                        color: AppColors.of(context).textDark,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Dismiss',
+                    onPressed: () =>
+                        setState(() => _postCreateSharePromptVisible = false),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
 
         _checkerSectionHeader('RACE DETAILS'),
-        _sectionCard(child: _buildRaceInfoCard()),
+        _sectionCard(
+          padding: const EdgeInsets.fromLTRB(12, 9, 8, 9),
+          child: _buildRaceInfoCard(),
+        ),
+        if (!widget.demoMode && myStatus == 'INVITED') ...[
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: _buildInviteDecisionRow(),
+          ),
+        ],
         const SizedBox(height: 16),
 
         if (isTeamRace) ...[
@@ -3893,7 +3990,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                   race: _race!,
                   participants: participants,
                   myUserId: _myUserId,
-                  onTapEmptySlot: (_isActing || myStatus == 'DECLINED')
+                  onTapEmptySlot:
+                      (_isActing ||
+                          myStatus == 'DECLINED' ||
+                          myStatus == 'INVITED')
                       ? null
                       : _onLobbySlotTap,
                 ),
@@ -3928,7 +4028,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Both teams are full — someone beat you to it! '
+                            'Both teams are full. Someone beat you to it! '
                             'Your invite stays put: if a spot frees up, hop '
                             'straight in.',
                             style: PixelText.body(
@@ -3938,16 +4038,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                ] else if (myStatus == 'INVITED') ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    'Tap an empty peg to pick your side and join!',
-                    textAlign: TextAlign.center,
-                    style: PixelText.body(
-                      size: 13,
-                      color: AppColors.of(context).textMid,
                     ),
                   ),
                 ] else if (myStatus == 'ACCEPTED') ...[
@@ -4053,7 +4143,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'START PAUSED — WAITING FOR EVEN TEAMS',
+                        'START PAUSED. WAITING FOR EVEN TEAMS',
                         style: PixelText.title(
                           size: 12,
                           color: AppColors.of(context).textDark,
@@ -4064,8 +4154,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                         teamACount == 0 || teamBCount == 0
                             ? "Both teams need at least 1 racer. We'll start "
                                   'it automatically as soon as they even up.'
-                            : "It's ${teamACount}v$teamBCount right now — "
-                                  "we'll start it automatically as soon as "
+                            : "It's ${teamACount}v$teamBCount right now. "
+                                  "We'll start it automatically as soon as "
                                   'the teams are even.',
                         style: PixelText.body(
                           size: 12,
@@ -4126,7 +4216,43 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         ],
 
         // Actions
-        if (isCreator) ...[
+        if (!widget.demoMode && isAutomaticStartRace(_race ?? const {})) ...[
+          RetroCard(
+            key: const Key('quick-race-auto-start-pending'),
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'WAITING FOR ANOTHER WALKER',
+                  style: PixelText.title(
+                    size: 14,
+                    color: AppColors.of(context).textDark,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  'Share your race, or wait for someone to find it. It starts automatically when one more person joins.',
+                  style: PixelText.body(
+                    size: 12.5,
+                    color: AppColors.of(context).textMid,
+                  ),
+                ),
+                if (_canShareRace()) ...[
+                  const SizedBox(height: 12),
+                  PillButton(
+                    key: const Key('quick-race-inline-share'),
+                    label: _sharingRace ? 'SHARING…' : 'SHARE',
+                    icon: Icons.ios_share_rounded,
+                    variant: PillButtonVariant.secondary,
+                    fullWidth: true,
+                    onPressed: _sharingRace ? null : _shareRace,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ] else if (isCreator) ...[
           if (!scheduledInFuture) ...[
             RetroCard(
               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
@@ -4141,7 +4267,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                   Expanded(
                     child: Text(
                       'This race is waiting to start. Invite friends, and once '
-                      '2+ have joined, tap Start Race — it won’t begin on its own.',
+                      '2+ have joined, tap Start Race. It won’t begin on its own.',
                       style: PixelText.body(
                         size: 13,
                         color: AppColors.of(context).textDark,
@@ -4183,7 +4309,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               isTeamRace
                   ? (teamACount == 0 && teamBCount == 0
                         ? 'Both teams need at least 1 racer'
-                        : 'Teams must be even — ${teamACount}v$teamBCount')
+                        : 'Teams must be even. ${teamACount}v$teamBCount')
                   : 'Need at least 2 participants to start',
               style: PixelText.body(
                 size: 12,
@@ -4192,35 +4318,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               textAlign: TextAlign.center,
             ),
           ],
-        ] else if (myStatus == 'INVITED' && isTeamRace) ...[
-          // TR-802: team invites are accepted by tapping a peg in the lobby
-          // above — only Decline lives down here.
-          PillButton(
-            label: 'DECLINE INVITE',
-            variant: PillButtonVariant.accent,
-            fontSize: 13,
-            fullWidth: true,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            onPressed: _isActing ? null : () => _respondToInvite(false),
-          ),
         ] else if (myStatus == 'INVITED') ...[
-          PillButton(
-            label: _isActing ? 'JOINING...' : 'ACCEPT',
-            variant: PillButtonVariant.primary,
-            fontSize: 14,
-            fullWidth: true,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-            onPressed: _isActing ? null : () => _respondToInvite(true),
-          ),
-          const SizedBox(height: 10),
-          PillButton(
-            label: 'DECLINE',
-            variant: PillButtonVariant.accent,
-            fontSize: 13,
-            fullWidth: true,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            onPressed: _isActing ? null : () => _respondToInvite(false),
-          ),
+          // The decision row lives immediately under Race Details.
         ] else if (myStatus == 'ACCEPTED') ...[
           Row(
             children: [
@@ -4248,8 +4347,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                         const SizedBox(height: 8),
                         Text(
                           isSeeded
-                              ? "You're in! This race starts automatically — "
-                                    'no action needed.'
+                              ? "You're in! This race starts automatically. "
+                                    'No action needed.'
                               : 'Waiting for the creator to start the race',
                           style: PixelText.body(
                             size: 14,
@@ -4288,7 +4387,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       children: [
         const SizedBox(height: 12),
         _checkerSectionHeader('RACE DETAILS'),
-        _sectionCard(child: _buildRaceInfoCard()),
+        _sectionCard(
+          padding: const EdgeInsets.fromLTRB(12, 9, 8, 9),
+          child: _buildRaceInfoCard(),
+        ),
+        const SizedBox(height: 10),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: _buildInviteDecisionRow(),
+        ),
         const SizedBox(height: 16),
         _sectionCard(
           child: Column(
@@ -4319,40 +4426,56 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             ],
           ),
         ),
-        const SizedBox(height: 16),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              PillButton(
-                label: _isActing ? 'JOINING...' : 'JOIN RACE',
-                variant: PillButtonVariant.primary,
-                fontSize: 14,
-                fullWidth: true,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 14,
-                ),
-                onPressed: _isActing ? null : () => _respondToInvite(true),
-              ),
-              const SizedBox(height: 10),
-              PillButton(
-                label: 'DECLINE',
-                variant: PillButtonVariant.accent,
-                fontSize: 13,
-                fullWidth: true,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-                onPressed: _isActing ? null : () => _respondToInvite(false),
-              ),
-            ],
-          ),
-        ),
         const SizedBox(height: 24),
       ],
+    );
+  }
+
+  Widget _buildInviteDecisionRow() {
+    final buyIn = _prizePool == null
+        ? _readInt(_race?['buyInAmount'], fallback: 0)
+        : 0;
+    final acceptLabel = _isActing && _acceptingInvite == true
+        ? 'JOINING…'
+        : buyIn > 0
+        ? 'ACCEPT · $buyIn'
+        : 'ACCEPT';
+    final declineLabel = _isActing && _acceptingInvite == false
+        ? 'DECLINING…'
+        : 'DECLINE';
+    return SizedBox(
+      key: const Key('race-invite-actions'),
+      height: 52,
+      child: Row(
+        children: [
+          Expanded(
+            child: PillButton(
+              key: const Key('race-invite-accept'),
+              label: acceptLabel,
+              leading: buyIn > 0 ? const SpinningCoin(size: 15) : null,
+              variant: PillButtonVariant.decision,
+              fontSize: 13,
+              fullWidth: true,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+              loading: _isActing && _acceptingInvite == true,
+              onPressed: _isActing ? null : () => _respondToInvite(true),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: PillButton(
+              key: const Key('race-invite-decline'),
+              label: declineLabel,
+              variant: PillButtonVariant.destructive,
+              fontSize: 13,
+              fullWidth: true,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+              loading: _isActing && _acceptingInvite == false,
+              onPressed: _isActing ? null : () => _respondToInvite(false),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -4557,7 +4680,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             children: [
               _checkerSectionHeader(isTeamRace ? 'SCOREBOARD' : 'STANDINGS'),
               _sectionCard(
-                padding: EdgeInsets.all(isTeamRace ? 14 : 8),
+                key: isTeamRace
+                    ? const ValueKey('team-scoreboard-shell')
+                    : null,
+                horizontalMargin: isTeamRace ? 6 : 12,
+                padding: const EdgeInsets.all(8),
                 child: isTeamRace
                     ? Builder(
                         builder: (context) {
@@ -4587,10 +4714,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                           );
                           return Column(
                             children: [
-                              TeamVsChips(
-                                teamAName: nameA,
-                                teamBName: nameB,
-                              ),
+                              TeamVsChips(teamAName: nameA, teamBName: nameB),
                               const SizedBox(height: 12),
                               TeamScoreboardCards(
                                 teamAName: nameA,
@@ -4607,7 +4731,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                                 ),
                               ),
                               const SizedBox(height: 14),
-                              // Owns its own bottom gap — see TeamLeadBanner.
                               TeamLeadBanner(
                                 teamAName: nameA,
                                 teamBName: nameB,
@@ -4615,13 +4738,39 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                                 teamBTotal: totalB,
                                 myTeam: _myTeam(participants),
                               ),
-                              _buildTeamTwoColumns(participants),
                             ],
                           );
                         },
                       )
                     : _standingsList(participants),
               ),
+              if (isTeamRace) ...[
+                const SizedBox(height: 18),
+                _checkerSectionHeader('STANDINGS'),
+                _sectionCard(
+                  key: const ValueKey('team-standings-shell'),
+                  horizontalMargin: 6,
+                  padding: const EdgeInsets.all(8),
+                  child: Builder(
+                    builder: (context) {
+                      final totalA = _teamTotalFromProgress(
+                        progress,
+                        participants,
+                        RaceTeam.teamA,
+                      );
+                      final totalB = _teamTotalFromProgress(
+                        progress,
+                        participants,
+                        RaceTeam.teamB,
+                      );
+                      return _buildTeamTwoColumns(
+                        participants,
+                        teamLaneStatesForTotals(totalA, totalB),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -4828,7 +4977,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '$label — ${name.toUpperCase()}',
+                    '$label: ${name.toUpperCase()}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: PixelText.title(
@@ -4975,9 +5124,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             // `boxRerollBatch`, a reroll ad unit exists, and we're not in the
             // demo. On Android there is no reroll ad unit, so this is always
             // null and the summary renders exactly as it does today.
-            onRerollAll: _boxRerollBatchEnabled
-                ? _rerollAllBoxPowerups
-                : null,
+            onRerollAll: _boxRerollBatchEnabled ? _rerollAllBoxPowerups : null,
           ),
           transitionsBuilder: (_, anim, _, child) =>
               FadeTransition(opacity: anim, child: child),
@@ -5085,13 +5232,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// the daily-spinner extra spin (and vice versa).
   ExtraSpinAdController? _rerollAdCtrl;
 
-  ExtraSpinAdController get _rerollAd =>
-      _rerollAdCtrl ??=
-          widget.boxRerollAdController ??
-          AdService(
-            adUnitId: AdService.boxRerollAdUnitId,
-            customDataPrefix: 'box_reroll',
-          );
+  ExtraSpinAdController get _rerollAd => _rerollAdCtrl ??=
+      widget.boxRerollAdController ??
+      AdService(
+        adUnitId: AdService.boxRerollAdUnitId,
+        customDataPrefix: 'box_reroll',
+      );
 
   static String _todayLocalDate() {
     final now = DateTime.now();
@@ -5216,7 +5362,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
       // Same localDate the grant was minted with, captured BEFORE the retry
       // loop — the loop can span local midnight.
-      final response = await _rerollBatchWithRetry(token, powerupIds, localDate);
+      final response = await _rerollBatchWithRetry(
+        token,
+        powerupIds,
+        localDate,
+      );
       // Warm the next ad for a second Open All this session.
       unawaited(_rerollAd.load(userId: userId, localDate: localDate));
       // Item 4: NO _loadProgress() here — the reels are about to re-spin over
@@ -5233,7 +5383,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       // silence — and still return the (empty) list, so the button retires
       // instead of inviting a second wasted watch.
       if (rows.isEmpty && mounted) {
-        showInfoToast(context, 'Nothing changed — your rolls are unchanged.');
+        showInfoToast(context, 'Nothing changed. Your rolls are unchanged.');
       }
       return rows;
     } on ApiException catch (e) {
@@ -5249,7 +5399,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             e.message.toLowerCase().contains('timed out')) {
           // The batch may well have landed; `_openAllBoxes`'s finally will
           // reconcile the inventory once the overlay closes.
-          message = 'Reroll may have completed — check your boxes.';
+          message = 'Reroll may have completed. Check your boxes.';
         } else {
           message = "Couldn't reroll those boxes.";
         }
@@ -5258,7 +5408,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       return null;
     } on TimeoutException {
       if (mounted) {
-        showErrorToast(context, 'Reroll may have completed — check your boxes.');
+        showErrorToast(context, 'Reroll may have completed. Check your boxes.');
       }
       return null;
     } catch (_) {
@@ -5368,23 +5518,25 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// source-based only.
   bool _effectIsBoost(Map<String, dynamic> e) {
     return effectIsBoost(
-      type: e['type'] as String?,
-      sourceUserId: e['sourceUserId'] as String?,
+      type: e['type'] is String ? e['type'] as String : null,
+      sourceUserId: e['sourceUserId'] is String
+          ? e['sourceUserId'] as String
+          : null,
       myUserId: widget.authService.userId,
     );
   }
 
   Widget _buildActiveEffectsSection() {
-    final effects =
-        (_powerupData?['activeEffects'] as List?)
-            ?.cast<Map<String, dynamic>>()
-            .where(
-              (e) =>
-                  e['onSelf'] == true ||
-                  e['targetUserId'] == widget.authService.userId,
-            )
-            .toList() ??
-        [];
+    final rawEffects = _powerupData?['activeEffects'];
+    final effects = rawEffects is List
+        ? <Map<String, dynamic>>[
+            for (final effect in rawEffects)
+              if (effect is Map<String, dynamic> &&
+                  (effect['onSelf'] == true ||
+                      effect['targetUserId'] == widget.authService.userId))
+                effect,
+          ]
+        : <Map<String, dynamic>>[];
 
     if (effects.isEmpty) {
       return const SizedBox.shrink();
@@ -5836,11 +5988,17 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       final text = mySteps > 0
           ? 'I\'ve logged ${_formatSteps(mySteps)} steps in "$raceName" on '
                 'Bara. Think you can catch me? $url'
-          : 'Race me in "$raceName" on Bara — bet you can\'t keep up! $url';
+          : 'Race me in "$raceName" on Bara. Bet you can\'t keep up! $url';
       await shareText(
         _shareButtonKey.currentContext ?? context,
         text,
         subject: 'Race me on Bara',
+      );
+      unawaited(
+        _activationAnalytics.record(
+          'race_share_completed',
+          context: {'race_id': widget.raceId},
+        ),
       );
     } on ApiException catch (e) {
       if (mounted) showErrorToast(context, e.message);
@@ -6379,7 +6537,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               ),
             ),
             // A finished funded race still shows what the pool paid out.
-            if (_prizePool != null && _prizePool!.coins > 0) ...[
+            if (_prizePool != null &&
+                (_prizePool!.funded || _prizePool!.coins > 0)) ...[
               const Spacer(),
               _prizeChip(),
             ],
@@ -6594,11 +6753,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   String _gradedHeadline(int paidPlaces) {
     switch (_race?['payoutPreset']) {
       case 'TOP_HALF':
-        return 'Top half wins — bigger prizes up top';
+        return 'Top half wins. Bigger prizes up top';
       case 'ALL_BUT_LAST':
-        return 'Everyone but last wins — bigger prizes up top';
+        return 'Everyone but last wins. Bigger prizes up top';
       default:
-        return 'The top $paidPlaces win — bigger prizes up top';
+        return 'The top $paidPlaces win. Bigger prizes up top';
     }
   }
 
@@ -6700,8 +6859,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             ),
             child: Text(
               inTheMoney
-                  ? 'You’re ${_lowerOrdinal(placement)} — in the money'
-                  : 'You’re ${_lowerOrdinal(placement)} — '
+                  ? 'You’re ${_lowerOrdinal(placement)}. In the money'
+                  : 'You’re ${_lowerOrdinal(placement)}. '
                         '${placement - paidPlaces} '
                         '${placement - paidPlaces == 1 ? 'place' : 'places'} '
                         'from the cut',
@@ -6799,7 +6958,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         ),
         const SizedBox(height: 4),
         Text(
-          'Projected — final payouts settle on who walked.',
+          'Projected. Final payouts settle on who walked.',
           textAlign: TextAlign.center,
           style: PixelText.body(size: 11.5, color: label),
         ),
@@ -6824,16 +6983,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             ),
             child: Text(
               !inTheMoney
-                  ? 'You’re ${_lowerOrdinal(placement)} — '
+                  ? 'You’re ${_lowerOrdinal(placement)}. '
                         '${placement - paidPlaces} '
                         '${placement - paidPlaces == 1 ? 'place' : 'places'} '
                         'from the cut'
                   : myAmount != null
                   // What this rank is worth right now — the whole point of a
                   // curve is that the answer changes as you climb.
-                  ? 'You’re ${_lowerOrdinal(placement)} — '
+                  ? 'You’re ${_lowerOrdinal(placement)}. '
                         '${formatPrizeCoins(myAmount)} coins projected'
-                  : 'You’re ${_lowerOrdinal(placement)} — in the money',
+                  : 'You’re ${_lowerOrdinal(placement)}. In the money',
               textAlign: TextAlign.center,
               style: PixelText.body(
                 size: 12,
@@ -7224,7 +7383,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           ),
           const SizedBox(height: 10),
           Text(
-            'It\u2019s a tie \u2014 buy-ins refunded',
+            'It\u2019s a tie. Buy-ins refunded',
             textAlign: TextAlign.center,
             style: PixelText.title(
               size: 16,
@@ -7474,16 +7633,20 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
   /// The current front-runner of each team (highest steps), for the race-track
 
-  /// Team standings as two color-matched columns (Team A | Team B) sitting
-  /// under the scoreboard plaques. Bold compact cells; rank shields keep the
-  /// participant's OVERALL race place.
-  Widget _buildTeamTwoColumns(List<Map<String, dynamic>> participants) {
+  Widget _buildTeamTwoColumns(
+    List<Map<String, dynamic>> participants,
+    ({TeamLaneState teamA, TeamLaneState teamB}) states,
+  ) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(child: _teamRosterColumn(participants, RaceTeam.teamA)),
-        const SizedBox(width: 10),
-        Expanded(child: _teamRosterColumn(participants, RaceTeam.teamB)),
+        Expanded(
+          child: _teamRosterColumn(participants, RaceTeam.teamA, states.teamA),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: _teamRosterColumn(participants, RaceTeam.teamB, states.teamB),
+        ),
       ],
     );
   }
@@ -7491,12 +7654,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   Widget _teamRosterColumn(
     List<Map<String, dynamic>> participants,
     RaceTeam team,
+    TeamLaneState laneState,
   ) {
     final cells = <Widget>[];
     for (var i = 0; i < participants.length; i++) {
       if (TeamRace.participantTeam(participants[i]) != team) continue;
       if (cells.isNotEmpty) cells.add(const SizedBox(height: 8));
-      cells.add(_teamColumnCell(participants[i], i, team));
+      cells.add(_teamColumnCell(participants[i], team, laneState));
     }
     if (cells.isEmpty) {
       cells.add(
@@ -7526,31 +7690,29 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// non-stealthed racer opens the friend-request sheet (parity with the plank).
   Widget _teamColumnCell(
     Map<String, dynamic> p,
-    int overallRank,
     RaceTeam team,
+    TeamLaneState laneState,
   ) {
-    final name = p['displayName'] as String? ?? '???';
-    final totalSteps = (p['totalSteps'] as num?)?.toInt() ?? 0;
-    final userId = p['userId'] as String? ?? '';
+    final name = p['displayName'] is String
+        ? p['displayName'] as String
+        : '???';
+    final totalSteps = p['totalSteps'] is num
+        ? (p['totalSteps'] as num).toInt()
+        : 0;
+    final userId = p['userId'] is String ? p['userId'] as String : '';
     final isMe = userId == _myUserId;
     final isStealthed = p['stealthed'] == true;
     final isForfeited = TeamRace.hasForfeited(p);
     final colorLight = TeamRace.colorLight(team, context);
     final colorDark = TeamRace.colorDark(team, context);
-    final accessories = isStealthed
+    final rawAccessories = p['accessories'];
+    final accessories = isStealthed || rawAccessories is! List
         ? const <Map<String, dynamic>>[]
-        : (p['accessories'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+        : <Map<String, dynamic>>[
+            for (final item in rawAccessories)
+              if (item is Map<String, dynamic>) item,
+          ];
     final animal = isStealthed ? null : animalFromJson(p['animal']);
-
-    // Item 18: the team cell had NO server-placement override at all — it
-    // painted `overallRank + 1`, the caller's array index. With a stealthed
-    // team-mate pinned to the top of the ordering that produced the same
-    // "1 2 1 2" collision the solo planks had. Prefer the server placement,
-    // and show "?" when the backend masked it.
-    final serverPlacement = serverPlacementOf(p);
-    final rankLabel = (isStealthed && serverPlacement == null)
-        ? '?'
-        : '${serverPlacement ?? (overallRank + 1)}';
 
     // Item 19: the multiplier chip existed only on the solo plank, so a
     // buffed/frozen/reversed racer looked untouched in the team scoreboard.
@@ -7558,133 +7720,136 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final multiplierChip = MultiplierChip.maybe(
       currentMultiplier: MultiplierChip.multiplierOf(p),
       isStealthed: isStealthed,
+      compact: true,
     );
+    final effects = isStealthed
+        ? const <_EffectViewData>[]
+        : _effectDataFor(userId);
+    final displayName = isMe ? '${atName(name)} (you)' : atName(name);
+    final palette = AppColors.of(context);
+    final blend = switch (laneState) {
+      TeamLaneState.leading => isMe ? 0.42 : 0.58,
+      TeamLaneState.neutral => isMe ? 0.55 : 0.70,
+      TeamLaneState.trailing => isMe ? 0.68 : 0.82,
+    };
+    final surface = team == RaceTeam.teamB
+        ? Color.lerp(
+            palette.parchmentLight,
+            palette.roofRidge,
+            laneState == TeamLaneState.leading ? 0.12 : 0.07,
+          )!
+        : Color.lerp(colorLight, palette.parchmentLight, blend)!;
+    final isLeading = laneState == TeamLaneState.leading;
 
-    // Rank/avatar + name + steps, centered in the space left of the rail.
-    final content = Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Capy avatar (the racer's own capybara + cosmetics) with the
-        // overall-rank shield tucked into its corner.
-        SizedBox(
-          width: 52,
-          height: 46,
-          child: Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.center,
-            children: [
-              CapybaraSpriteWithAccessories(
-                accessories: accessories,
-                capybaraSize: 46,
-                frameIndex: 0,
-                animal: animal,
-              ),
-              Positioned(
-                top: -3,
-                left: -2,
-                child: Container(
-                  width: 21,
-                  height: 21,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: colorDark,
-                    borderRadius: BorderRadius.circular(7),
-                    border: Border.all(color: Colors.white, width: 1.5),
-                  ),
-                  child: Text(
-                    rankLabel,
-                    style: PixelText.number(size: 11, color: Colors.white),
-                  ),
-                ),
-              ),
-            ],
+    Widget avatar() => SizedBox(
+      key: ValueKey('team-avatar-$userId'),
+      width: 30,
+      height: 31,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          CapybaraSpriteWithAccessories(
+            accessories: accessories,
+            capybaraSize: 30,
+            frameIndex: 0,
+            animal: animal,
           ),
-        ),
-        const SizedBox(height: 7),
-        // Name, with the multiplier chip beside it. The cell is only about
-        // half the screen wide, so the name flexes and the chip keeps its
-        // intrinsic width rather than the other way round.
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Flexible(
-              child: Text(
-                isMe ? '${atName(name)} (you)' : atName(name),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: PixelText.body(
-                  size: 15,
-                  color: AppColors.of(context).textDark,
-                ),
-              ),
-            ),
-            if (multiplierChip != null) ...[
-              const SizedBox(width: 5),
-              multiplierChip,
-            ],
-          ],
-        ),
-        const SizedBox(height: 1),
-        Text(
-          _formatSteps(totalSteps),
-          textAlign: TextAlign.center,
-          // P2 (item 3): the per-player total had the same 1.09:1 night bug as
-          // the H2H banner — `colorDark` is plaque chrome, not a text colour.
-          style: PixelText.number(
-            size: 18,
-            color: TeamRace.textColorOn(team, context),
-          ),
-        ),
-      ],
-    );
-
-    final cell = Opacity(
-      key: ValueKey('team-cell-$userId'),
-      opacity: isForfeited ? 0.5 : 1.0,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(8, 10, 8, 10),
-        decoration: BoxDecoration(
-          color: isMe
-              ? colorLight.withValues(alpha: 0.22)
-              : AppColors.of(context).parchmentLight,
-          borderRadius: BorderRadius.circular(11),
-          border: Border.all(
-            color: isMe ? colorDark : AppColors.of(context).parchmentBorder,
-            width: isMe ? 2 : 1.5,
-          ),
-        ),
-        // Every cell is at least [_kTeamCellContentMinHeight] tall and reserves
-        // the effect rail on the right, so opposing cells stay aligned no
-        // matter how many effects sit on each racer (spec §4). The min-height
-        // child sizes the Stack; the rail (#6: rainstorm/leech/etc. on
-        // opponents) is stretched to that same height beside it — hidden for
-        // stealthed rows to match the plank.
-        child: Stack(
-          children: [
-            ConstrainedBox(
-              constraints: const BoxConstraints(
-                minHeight: _kTeamCellContentMinHeight,
-              ),
-              child: Padding(
-                padding: const EdgeInsets.only(right: _kTeamEffectRailWidth),
-                child: Center(child: content),
-              ),
-            ),
-            Positioned(
-              top: 0,
-              bottom: 0,
-              right: 0,
-              child: _teamEffectRail(userId, visible: !isStealthed),
-            ),
-          ],
-        ),
+        ],
       ),
     );
 
-    if (isMe || isStealthed || userId.isEmpty) return cell;
+    Widget nameText() => Text(
+      displayName,
+      key: ValueKey('team-name-$userId'),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: PixelText.body(size: 11.5, color: palette.textDark),
+    );
+
+    Widget scoreGroup() {
+      return Wrap(
+        key: ValueKey('team-score-group-$userId'),
+        spacing: 3,
+        runSpacing: 1,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text(
+            _formatSteps(totalSteps),
+            maxLines: 1,
+            style: PixelText.number(
+              size: 9.5,
+              color: TeamRace.textColorOn(team, context),
+            ),
+          ),
+          ?multiplierChip,
+        ],
+      );
+    }
+
+    final cell = Container(
+      key: ValueKey('team-cell-$userId'),
+      constraints: const BoxConstraints(minHeight: 59),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 6),
+      decoration: BoxDecoration(
+        color: surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isLeading
+              ? palette.medalGold
+              : isMe
+              ? colorDark
+              : team == RaceTeam.teamB
+              ? Color.lerp(palette.parchmentBorder, palette.roofRidge, 0.28)!
+              : Color.lerp(colorDark, surface, 0.62)!,
+          width: isLeading || isMe ? 2 : 1.25,
+        ),
+        boxShadow: isLeading
+            ? [
+                BoxShadow(
+                  color: palette.medalGold.withValues(alpha: 0.20),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                ),
+              ]
+            : null,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          avatar(),
+          const SizedBox(width: 3),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(width: double.infinity, child: nameText()),
+                const SizedBox(height: 2),
+                MediaQuery.withClampedTextScaling(
+                  // Give the compact stat line meaningful accessibility
+                  // growth while keeping the exact value on one line inside
+                  // a half-width team card. The username above remains fully
+                  // responsive to the user's chosen scale.
+                  maxScaleFactor: 1.3,
+                  child: scoreGroup(),
+                ),
+              ],
+            ),
+          ),
+          if (effects.isNotEmpty) ...[
+            const SizedBox(width: 3),
+            SizedBox(width: 44, child: _teamEffectTray(userId, effects)),
+          ],
+        ],
+      ),
+    );
+
+    final presentedCell = isForfeited
+        ? Opacity(opacity: 0.5, child: cell)
+        : cell;
+
+    if (isMe || isStealthed || userId.isEmpty) return presentedCell;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => showFriendRequestSheet(
@@ -7693,9 +7858,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         backendApiService: _api,
         userId: userId,
         displayName: name,
-        profilePhotoUrl: p['profilePhotoUrl'] as String?,
+        profilePhotoUrl: p['profilePhotoUrl'] is String
+            ? p['profilePhotoUrl'] as String
+            : null,
       ),
-      child: cell,
+      child: presentedCell,
     );
   }
 
@@ -7977,7 +8144,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  'No defenses up — safe to attack',
+                  'No defenses up. Safe to attack',
                   style: PixelText.body(
                     size: 12,
                     color: AppColors.of(context).textMid,
@@ -8169,74 +8336,95 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     ];
   }
 
-  /// The raw active-effect data targeting [userId] (type + resolved attacker
-  /// name), shared by the solo plank's [_effectIconsFor] and the team cell's
-  /// vertical effect rail. Kept separate from widget construction so the rail
-  /// can measure/overflow the list before rendering.
-  List<({String type, String? attackerName, bool isBoost})> _effectDataFor(
-    String userId,
-  ) {
+  /// Defensive effect view data shared by solo status and team trays. Entries
+  /// without a non-empty type are individually ignored; optional source and
+  /// expiry fields never make an otherwise valid effect disappear.
+  List<_EffectViewData> _effectDataFor(String userId) {
     final effects = _rawEffectsFor(userId);
     return [
       for (final e in effects)
-        (
-          type: e['type'] is String ? e['type'] as String : '',
-          attackerName: _displayNameForUser(
-            e['sourceUserId'] is String ? e['sourceUserId'] as String : null,
-          ),
-          // Item 15 — same classifier the races tab uses, so the two surfaces
-          // can never disagree about what counts as a buff.
-          isBoost: effectIsBoost(
-            type: e['type'] is String ? e['type'] as String : null,
-            sourceUserId: e['sourceUserId'] is String
-                ? e['sourceUserId'] as String
+        if (e['type'] is String && (e['type'] as String).trim().isNotEmpty)
+          _EffectViewData(
+            type: e['type'] as String,
+            attackerName:
+                e['sourceUserId'] is String &&
+                    (e['sourceUserId'] as String).isNotEmpty &&
+                    e['sourceUserId'] != userId
+                ? _displayNameForUser(e['sourceUserId'] as String)
                 : null,
-            myUserId: userId,
+            isBoost: effectIsBoost(
+              type: e['type'] as String,
+              sourceUserId: e['sourceUserId'] is String
+                  ? e['sourceUserId'] as String
+                  : null,
+              myUserId: userId,
+            ),
+            expiresAt: e['expiresAt'] is String
+                ? e['expiresAt'] as String
+                : null,
           ),
-        ),
     ];
   }
 
-  /// The narrow right-hand effect rail for a team-roster cell (spec §4). Always
-  /// occupies [_kTeamEffectRailWidth] so reserving it never shifts only the
-  /// affected cells; stacks every active-effect icon vertically, and collapses
-  /// any overflow past what fits into a trailing `+N` chip (multi-line tooltip)
-  /// so the card never grows. Empty (but still width-reserving) when the racer
-  /// is stealthed or has no effects.
-  Widget _teamEffectRail(String userId, {required bool visible}) {
-    final data = visible
-        ? _effectDataFor(userId)
-        : const <({String type, String? attackerName, bool isBoost})>[];
-    return SizedBox(
-      width: _kTeamEffectRailWidth,
-      child: data.isEmpty
-          ? const SizedBox.shrink()
-          : LayoutBuilder(
-              builder: (context, constraints) {
-                final available = constraints.maxHeight.isFinite
-                    ? constraints.maxHeight
-                    : _kTeamCellContentMinHeight;
-                var maxSlots = (available / _kTeamEffectSlotHeight).floor();
-                if (maxSlots < 1) maxSlots = 1;
-                final overflowing = data.length > maxSlots;
-                final iconCount = overflowing ? maxSlots - 1 : data.length;
-                final shown = data.take(iconCount).toList();
-                final rest = data.skip(iconCount).toList();
-                return Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    for (final d in shown)
-                      _EffectIconWithTooltip(
-                        type: d.type,
-                        attackerName: d.attackerName,
-                        isBoost: d.isBoost,
-                        railMode: true,
-                      ),
-                    if (overflowing) _EffectOverflowChip(effects: rest),
-                  ],
-                );
-              },
+  Widget _teamEffectTray(String userId, List<_EffectViewData> effects) {
+    final names = effects.map((e) => PowerupCopy.nameFor(e.type)).join(', ');
+    final platform = Theme.of(context).platform;
+    final physics =
+        platform == TargetPlatform.iOS || platform == TargetPlatform.macOS
+        ? const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics())
+        : const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const hitTarget = 44.0;
+        const gap = 3.0;
+        final contentWidth =
+            (effects.length * hitTarget) +
+            ((effects.length - 1).clamp(0, effects.length) * gap);
+        final overflowing =
+            effects.length > 1 &&
+            constraints.maxWidth.isFinite &&
+            contentWidth > constraints.maxWidth + 0.5;
+        return Semantics(
+          key: ValueKey('team-effect-tray-$userId'),
+          label: overflowing
+              ? '$names. Swipe horizontally for more effects.'
+              : '$names active.',
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {},
+            child: SizedBox(
+              height: hitTarget,
+              child: ShaderMask(
+                blendMode: BlendMode.dstIn,
+                shaderCallback: (bounds) => LinearGradient(
+                  colors: overflowing
+                      ? const [Colors.black, Colors.black, Colors.transparent]
+                      : const [Colors.black, Colors.black, Colors.black],
+                  stops: overflowing ? const [0, 0.88, 1] : const [0, 0.5, 1],
+                ).createShader(bounds),
+                child: SingleChildScrollView(
+                  key: ValueKey('team-effect-scroll-$userId'),
+                  primary: false,
+                  scrollDirection: Axis.horizontal,
+                  physics: physics,
+                  child: Row(
+                    children: [
+                      for (var i = 0; i < effects.length; i++) ...[
+                        if (i > 0) const SizedBox(width: gap),
+                        _EffectIconWithTooltip(
+                          key: ValueKey('team-effect-$userId-$i'),
+                          effect: effects[i],
+                          remainingLabel: _expiresInLabel(effects[i].expiresAt),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
             ),
+          ),
+        );
+      },
     );
   }
 
@@ -8245,11 +8433,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// still renders, just without an attacker suffix).
   String? _displayNameForUser(String? userId) {
     if (userId == null || userId.isEmpty) return null;
-    final participants =
-        (_progress?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
-        const [];
-    for (final p in participants) {
-      if (p['userId'] == userId) return p['displayName'] as String?;
+    final rawParticipants = _progress?['participants'];
+    if (rawParticipants is! List) return null;
+    for (final p in rawParticipants) {
+      if (p is Map<String, dynamic> && p['userId'] == userId) {
+        return p['displayName'] is String ? p['displayName'] as String : null;
+      }
     }
     return null;
   }
@@ -8667,26 +8856,20 @@ class _OpenAllButton extends StatelessWidget {
   }
 }
 
-// Team-roster effect rail geometry (spec §4). The rail is deliberately narrow
-// and the 44pt hit-target guideline is relaxed to ~28-32pt for effect icons —
-// a 44pt rail would starve the name/steps in a half-width column.
-/// The floor that keeps opposing roster cells aligned: it must EXCEED the
-/// tallest content a cell can produce, otherwise variance shows through and the
-/// two columns drift apart.
-///
-/// Content is 46 (avatar) + 7 + name row + 1 + 18 (steps). The name row is
-/// 20.25 normally but 23 when an ICON-ONLY multiplier chip (frozen) sits beside
-/// it, so the tallest cell is ~95 — comfortably absorbed here. A per-member
-/// progress bar was briefly added below the steps, which pushed content to
-/// 104.25 and required raising this to 116; the bar was cut, so the floor
-/// returns to 104. Anything added to a cell must re-check this sum.
-///
-/// Must stay inside 96–127: the rail's overflow math is
-/// `floor(available / _kTeamEffectSlotHeight)`, and `floor(104/32) == 3` keeps
-/// the "+3 for 5 effects" behaviour asserted by the effect-rail test.
-const double _kTeamCellContentMinHeight = 104;
-const double _kTeamEffectRailWidth = 34;
-const double _kTeamEffectSlotHeight = 32; // icon hit-target + vertical spacing
+@immutable
+class _EffectViewData {
+  const _EffectViewData({
+    required this.type,
+    required this.attackerName,
+    required this.isBoost,
+    required this.expiresAt,
+  });
+
+  final String type;
+  final String? attackerName;
+  final bool isBoost;
+  final String? expiresAt;
+}
 
 /// Builds an overlay tooltip bubble anchored to [anchorContext]'s widget but
 /// CLAMPED to the screen bounds (spec §4): pinned inside an 8pt margin on both
@@ -8770,7 +8953,7 @@ OverlayEntry _buildClampedEffectTooltip({
 /// horizontal list. A narrow peek at the fourth tile advertises the swipe.
 /// The tray remains one tap target for the full status sheet.
 class _ParticipantEffectTray extends StatefulWidget {
-  final List<({String type, String? attackerName, bool isBoost})> effects;
+  final List<_EffectViewData> effects;
   final VoidCallback onTap;
 
   const _ParticipantEffectTray({required this.effects, required this.onTap});
@@ -8828,7 +9011,7 @@ class _ParticipantEffectTrayState extends State<_ParticipantEffectTray> {
 }
 
 class _EffectTrayPlate extends StatelessWidget {
-  final ({String type, String? attackerName, bool isBoost}) effect;
+  final _EffectViewData effect;
 
   const _EffectTrayPlate({required this.effect});
 
@@ -8861,28 +9044,13 @@ class _EffectTrayPlate extends StatelessWidget {
 }
 
 class _EffectIconWithTooltip extends StatefulWidget {
-  final String type;
-
-  /// Item 15: polarity drives the badge's fill tint, matching the races-tab
-  /// cluster (`races_tab.dart` boost/debuff plates). Classification comes from
-  /// [effectIsBoost] — source-based, never the payload's `onSelf` flag.
-  final bool isBoost;
-
-  /// Optional attacker/source display name, appended to the tooltip (e.g. the
-  /// Leech badge shown on the victim reads "…from @Otter42"). Null for effects
-  /// with no distinct source.
-  final String? attackerName;
-
-  /// True inside the team-roster vertical rail (spec §4): vertical spacing and
-  /// a relaxed ~28-32pt tap target instead of the plank's tight horizontal
-  /// packing. Default false keeps the solo-plank layout unchanged.
-  final bool railMode;
+  final _EffectViewData effect;
+  final String? remainingLabel;
 
   const _EffectIconWithTooltip({
-    required this.type,
-    required this.isBoost,
-    this.attackerName,
-    this.railMode = false,
+    super.key,
+    required this.effect,
+    required this.remainingLabel,
   });
 
   @override
@@ -8894,19 +9062,24 @@ class _EffectIconWithTooltipState extends State<_EffectIconWithTooltip> {
 
   void _show() {
     _dismiss();
-    final name = PowerupCopy.nameFor(widget.type);
-    var desc = PowerupCopy.descriptionFor(widget.type);
-    if (desc.isEmpty) return;
-    final attacker = widget.attackerName;
+    final effect = widget.effect;
+    final name = PowerupCopy.nameFor(effect.type);
+    final parts = <String>[];
+    final subtitle = PowerupCopy.effectRailSubtitleFor(effect.type);
+    if (subtitle.isNotEmpty) parts.add(subtitle);
+    final attacker = effect.attackerName;
     if (attacker != null && attacker.isNotEmpty) {
-      desc = '$desc — from ${atName(attacker)}';
+      parts.add('From ${atName(attacker)}');
     }
+    final remaining = widget.remainingLabel;
+    if (remaining != null) parts.add(remaining);
+    final detail = parts.isEmpty ? name : '$name: ${parts.join('. ')}';
 
     _entry = _buildClampedEffectTooltip(
       anchorContext: context,
       onDismiss: _dismiss,
       child: Text(
-        '$name: $desc',
+        detail,
         style: PixelText.body(size: 11, color: AppColors.of(context).textLight),
       ),
     );
@@ -8927,11 +9100,12 @@ class _EffectIconWithTooltipState extends State<_EffectIconWithTooltip> {
 
   @override
   Widget build(BuildContext context) {
-    final name = PowerupCopy.nameFor(widget.type);
+    final effect = widget.effect;
+    final name = PowerupCopy.nameFor(effect.type);
     final palette = AppColors.of(context);
-    final tint = widget.isBoost ? palette.feedBoost : palette.feedAttack;
+    final tint = effect.isBoost ? palette.feedBoost : palette.feedAttack;
     final icon = Container(
-      key: Key('team-effect-plate-${widget.isBoost ? 'boost' : 'debuff'}'),
+      key: Key('team-effect-plate-${effect.isBoost ? 'boost' : 'debuff'}'),
       width: 28,
       height: 28,
       alignment: Alignment.center,
@@ -8947,129 +9121,18 @@ class _EffectIconWithTooltipState extends State<_EffectIconWithTooltip> {
           ),
         ],
       ),
-      child: PowerupIcon(type: widget.type, size: 20),
+      child: PowerupIcon(type: effect.type, size: 20),
     );
 
     return Semantics(
       label: name,
       button: true,
-      child: Padding(
-        padding: widget.railMode
-            ? const EdgeInsets.symmetric(vertical: 2)
-            : const EdgeInsets.only(right: 3),
-        child: GestureDetector(
-          behavior: widget.railMode
-              ? HitTestBehavior.opaque
-              : HitTestBehavior.deferToChild,
-          onTap: _show,
-          child: widget.railMode
-              ? ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    minWidth: 30,
-                    minHeight: 28,
-                  ),
-                  child: Center(child: icon),
-                )
-              : icon,
-        ),
-      ),
-    );
-  }
-}
-
-/// The `+N` overflow chip closing a team-roster effect rail when more effects
-/// are active than fit (spec §4). Tapping it shows a multi-line tooltip listing
-/// the remaining effects (with attacker suffixes), clamped on-screen like the
-/// per-icon bubble.
-class _EffectOverflowChip extends StatefulWidget {
-  final List<({String type, String? attackerName, bool isBoost})> effects;
-
-  const _EffectOverflowChip({required this.effects});
-
-  @override
-  State<_EffectOverflowChip> createState() => _EffectOverflowChipState();
-}
-
-class _EffectOverflowChipState extends State<_EffectOverflowChip> {
-  OverlayEntry? _entry;
-
-  void _show() {
-    _dismiss();
-    final lines = <Widget>[];
-    for (final e in widget.effects) {
-      final name = PowerupCopy.nameFor(e.type);
-      final attacker = e.attackerName;
-      final text = (attacker != null && attacker.isNotEmpty)
-          ? '$name — from ${atName(attacker)}'
-          : name;
-      if (lines.isNotEmpty) lines.add(const SizedBox(height: 3));
-      lines.add(
-        Text(
-          text,
-          style: PixelText.body(
-            size: 11,
-            color: AppColors.of(context).textLight,
-          ),
-        ),
-      );
-    }
-
-    _entry = _buildClampedEffectTooltip(
-      anchorContext: context,
-      onDismiss: _dismiss,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: lines,
-      ),
-    );
-    Overlay.of(context).insert(_entry!);
-    Future.delayed(const Duration(seconds: 3), _dismiss);
-  }
-
-  void _dismiss() {
-    _entry?.remove();
-    _entry = null;
-  }
-
-  @override
-  void dispose() {
-    _dismiss();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      label: '${widget.effects.length} more effects',
-      button: true,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: _show,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minWidth: 30, minHeight: 28),
-            child: Container(
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: AppColors.of(context).woodDark,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: AppColors.of(context).woodShadow,
-                  width: 0.5,
-                ),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-              child: Text(
-                '+${widget.effects.length}',
-                style: PixelText.number(
-                  size: 12,
-                  color: AppColors.of(context).textLight,
-                ),
-              ),
-            ),
-          ),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _show,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+          child: Center(child: icon),
         ),
       ),
     );

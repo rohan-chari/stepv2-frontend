@@ -1,8 +1,16 @@
-# Invite-code step in onboarding + referral-attribution observability
+# Invite-code setup prompt + referral-attribution observability
 
-Status: DRAFT — awaiting approval
+Status: **PARTIALLY SUPERSEDED**
 Date: 2026-08-09
 Repos: stepv2-frontend (this repo) + stepv2-backend (`/Users/rohan/repos/stepv2-backend`)
+
+> **2026-08-11 product amendment:** Part A's blocking
+> `OnboardingInviteCodeStep` is superseded by
+> [`next-race-cta-requirements.md` §8.6](./next-race-cta-requirements.md). Remove
+> the invite-code screen from onboarding v3. Manual entry now lives as a
+> dismissible Home SETUP prompt plus a permanent Settings entry, both using one
+> shared sheet. Parts B–D of this document remain active. Where any Part A text
+> below conflicts with that amendment, the 2026-08-11 amendment wins.
 
 ## Summary & user story
 
@@ -11,13 +19,12 @@ provision, IP-correlated link_opens fallback). Real-world capture over the
 2026-08-08/09 weekend was ~1 of 5–6 invites; the misses were silent and needed
 manual prod repairs (dylanhuynh, emersonz incidents). Four parts:
 
-**A. Onboarding invite-code step (frontend + small backend additions).**
-> As a new user who was invited by a friend, I want the app to ask me during
-> onboarding whether I have an invite code, so that my friend and I both get
-> our referral coins even when the automatic link/clipboard attribution fails
-> or I was invited by word of mouth.
+**A. Home SETUP invite-code prompt (supersedes the original onboarding step).**
+> As a new user who was invited by a friend, I want a dismissible setup prompt
+> and permanent Settings entry for my invite code, so automatic-attribution
+> failures can be repaired without blocking onboarding.
 
-The step is explicit user intent — it captures clipboard failures, iCloud
+The prompt is explicit user intent — it captures clipboard failures, iCloud
 Private Relay users, Wi-Fi↔cellular flips, and word-of-mouth invitees. **Both
 sides are rewarded**: applying a code creates the standard PENDING referral;
 when the referee finishes their first qualifying race, the referrer earns
@@ -46,7 +53,7 @@ start, which on iOS 16+ raises the system "Allow Paste?" alert outside any
 user gesture — a denial is silent today. If instrumentation confirms it, the
 fix direction is already documented in `REFERRAL_FEATURE_RESEARCH.md` §1
 (defer the read behind an explicit user action / `UIPasteControl`); with
-part A shipped, a denied read degrades to the onboarding step instead of a
+part A shipped, a denied read degrades to the Home SETUP prompt instead of a
 lost referral.
 
 **D. Coarse-network IP fallback matching (backend).**
@@ -61,11 +68,13 @@ unmatchable by any IP scheme; parts A and C are the answer there.)
 ## Scope / non-goals
 
 In scope:
-- New `OnboardingInviteCodeStep` in the onboarding v3 flow (both platforms —
-  same Dart code; iOS and Android built and verified in lockstep).
+- Remove `OnboardingInviteCodeStep` from onboarding v3; add the dismissible Home
+  SETUP prompt, permanent Settings entry, and shared invite-code sheet defined
+  by the 2026-08-11 amendment (both platforms, one Dart implementation).
 - Backend: additive `referrals.source` column; `referredByCode` in the auth
-  user payload; `onboardingInviteCodeEnabled` kill-switch flag; fallback log
-  lines; audit script; analytics event-name allowlist additions.
+  user payload; legacy `onboardingInviteCodeEnabled` and new
+  `setupInviteCodePromptEnabled` flags; fallback log lines; audit script;
+  analytics event-name allowlist additions.
 - Google-provision parity for the one-shot welcome stash (today only the
   Apple path stashes `welcomeReferralCode`; Google clears only —
   `auth_service.dart:431-433`).

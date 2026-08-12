@@ -184,7 +184,8 @@ Future<void> _openPrizeSheet(WidgetTester tester) async {
 
 Future<void> _teardown(WidgetTester tester) async {
   await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
-  await tester.pumpAndSettle();
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
 }
 
 const _sheetKey = Key('race-prize-pool-graded-payout-summary');
@@ -205,65 +206,72 @@ void main() {
     );
   });
 
-  testWidgets('descending TOP_HALF tiers render the graded summary in the sheet', (
-    tester,
-  ) async {
-    await _pump(tester, _StubApi(_challenge()));
-    await _openPrizeSheet(tester);
+  testWidgets(
+    'descending TOP_HALF tiers render the graded summary in the sheet',
+    (tester) async {
+      await _pump(tester, _StubApi(_challenge()));
+      await _openPrizeSheet(tester);
 
-    final summary = find.byKey(_sheetKey);
-    expect(summary, findsOneWidget);
+      final summary = find.byKey(_sheetKey);
+      expect(summary, findsOneWidget);
 
-    // The preset, restated as the thing that changed.
-    expect(
-      find.descendant(
-        of: summary,
-        matching: find.text('Top half wins — bigger prizes up top'),
-      ),
-      findsOneWidget,
-    );
-    // The headline figure, straight off payoutTiers[0].
-    expect(
-      find.descendant(of: summary, matching: find.text('300')),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: summary, matching: find.text('coins for 1st')),
-      findsOneWidget,
-    );
-    // D6: the projection shrinks at settlement, so say so.
-    expect(
-      find.descendant(
-        of: summary,
-        matching: find.text('Projected — final payouts settle on who walked.'),
-      ),
-      findsOneWidget,
-    );
-    // Where the money stops.
-    expect(
-      find.descendant(of: summary, matching: find.text('Top 5 of 9 get paid')),
-      findsOneWidget,
-    );
-    // What the viewer's own rank is worth right now — tiers[placement - 1].
-    expect(
-      find.descendant(
-        of: summary,
-        matching: find.text('You’re 3rd — 147 coins projected'),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: summary, matching: find.text('See all payouts')),
-      findsOneWidget,
-    );
+      // The preset, restated as the thing that changed.
+      expect(
+        find.descendant(
+          of: summary,
+          matching: find.text('Top half wins. Bigger prizes up top'),
+        ),
+        findsOneWidget,
+      );
+      // The headline figure, straight off payoutTiers[0].
+      expect(
+        find.descendant(of: summary, matching: find.text('300')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: summary, matching: find.text('coins for 1st')),
+        findsOneWidget,
+      );
+      // D6: the projection shrinks at settlement, so say so.
+      expect(
+        find.descendant(
+          of: summary,
+          matching: find.text('Projected. Final payouts settle on who walked.'),
+        ),
+        findsOneWidget,
+      );
+      // Where the money stops.
+      expect(
+        find.descendant(
+          of: summary,
+          matching: find.text('Top 5 of 9 get paid'),
+        ),
+        findsOneWidget,
+      );
+      // What the viewer's own rank is worth right now — tiers[placement - 1].
+      expect(
+        find.descendant(
+          of: summary,
+          matching: find.text('You’re 3rd. 147 coins projected'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('race-prize-pool-tier-list')),
+        findsOneWidget,
+      );
 
-    // The even-split card must NOT also fire.
-    expect(find.byKey(const Key('race-prize-pool-payout-summary')), findsNothing);
-    // Nor the podium row.
-    expect(find.byKey(const Key('race-prize-pool-summary')), findsNothing);
+      // The even-split card must NOT also fire.
+      expect(
+        find.byKey(const Key('race-prize-pool-payout-summary')),
+        findsNothing,
+      );
+      // Nor the podium row.
+      expect(find.byKey(const Key('race-prize-pool-summary')), findsNothing);
 
-    await _teardown(tester);
-  });
+      await _teardown(tester);
+    },
+  );
 
   testWidgets('a runner below the cut is told how far off the money they are', (
     tester,
@@ -271,7 +279,7 @@ void main() {
     await _pump(tester, _StubApi(_challenge(), myPlacement: 7));
     await _openPrizeSheet(tester);
 
-    expect(find.text('You’re 7th — 2 places from the cut'), findsOneWidget);
+    expect(find.text('You’re 7th. 2 places from the cut'), findsOneWidget);
     expect(find.textContaining('coins projected'), findsNothing);
 
     await _teardown(tester);
@@ -285,8 +293,9 @@ void main() {
     await _pump(tester, _StubApi(_challenge(status: 'PENDING')));
 
     expect(find.byKey(_cardKey), findsOneWidget);
-    expect(find.text('Top half wins — bigger prizes up top'), findsOneWidget);
-    expect(find.text('Top 5 of 9 get paid'), findsOneWidget);
+    expect(find.text('TOP CUT PAID'), findsOneWidget);
+    expect(find.text('5 OF 9'), findsOneWidget);
+    expect(find.text('1ST PLACE'), findsOneWidget);
     expect(find.byKey(const Key('race-payout-summary')), findsNothing);
     // Nobody has a placement before the gun goes off.
     expect(find.textContaining('You’re'), findsNothing);
@@ -301,39 +310,41 @@ void main() {
     );
 
     expect(find.byKey(_cardKey), findsOneWidget);
-    expect(
-      find.text('Everyone but last wins — bigger prizes up top'),
-      findsOneWidget,
-    );
+    expect(find.text('TOP CUT PAID'), findsOneWidget);
+    expect(find.text('5 OF 9'), findsOneWidget);
 
     await _teardown(tester);
   });
 
-  testWidgets('equal tiers still render the even-split card, not the graded one', (
-    tester,
-  ) async {
-    await _pump(
-      tester,
-      _StubApi(
-        _challenge(
-          tiers: const [
-            {'placement': 1, 'amount': 160},
-            {'placement': 2, 'amount': 160},
-            {'placement': 3, 'amount': 160},
-            {'placement': 4, 'amount': 160},
-            {'placement': 5, 'amount': 160},
-          ],
+  testWidgets(
+    'equal tiers still render the even-split card, not the graded one',
+    (tester) async {
+      await _pump(
+        tester,
+        _StubApi(
+          _challenge(
+            tiers: const [
+              {'placement': 1, 'amount': 160},
+              {'placement': 2, 'amount': 160},
+              {'placement': 3, 'amount': 160},
+              {'placement': 4, 'amount': 160},
+              {'placement': 5, 'amount': 160},
+            ],
+          ),
         ),
-      ),
-    );
-    await _openPrizeSheet(tester);
+      );
+      await _openPrizeSheet(tester);
 
-    expect(find.byKey(const Key('race-prize-pool-payout-summary')), findsOneWidget);
-    expect(find.byKey(_sheetKey), findsNothing);
-    expect(find.text('Top half splits the pool evenly'), findsOneWidget);
+      expect(
+        find.byKey(const Key('race-prize-pool-payout-summary')),
+        findsOneWidget,
+      );
+      expect(find.byKey(_sheetKey), findsNothing);
+      expect(find.text('Top half splits the pool evenly'), findsOneWidget);
 
-    await _teardown(tester);
-  });
+      await _teardown(tester);
+    },
+  );
 
   testWidgets('a TOP3 race with descending tiers keeps the podium row (G7)', (
     tester,
@@ -357,7 +368,7 @@ void main() {
 
     expect(find.byKey(_cardKey), findsNothing);
     expect(find.byKey(const Key('race-payout-summary')), findsNothing);
-    expect(find.text('1ST'), findsOneWidget);
+    expect(find.text('1ST PLACE'), findsOneWidget);
     expect(find.text('560'), findsOneWidget);
 
     await _teardown(tester);
@@ -371,14 +382,11 @@ void main() {
       // buyInAmount/potCoins with NO funded `prizePool` object. This mirrors the
       // long-standing fixture in race_detail_screen_test.dart, which must keep
       // rendering its podium row unchanged.
-      await _pump(
-        tester,
-        _StubApi(_challenge(status: 'PENDING', buyIn: true)),
-      );
+      await _pump(tester, _StubApi(_challenge(status: 'PENDING', buyIn: true)));
 
       expect(find.byKey(_cardKey), findsNothing);
       expect(find.byKey(const Key('race-payout-summary')), findsNothing);
-      expect(find.text('1ST'), findsOneWidget);
+      expect(find.text('1ST PLACE'), findsOneWidget);
       expect(find.text('300'), findsOneWidget);
       expect(find.textContaining('bigger prizes up top'), findsNothing);
 
@@ -394,7 +402,8 @@ void main() {
     await _pump(tester, _StubApi(_challenge(status: 'PENDING')));
 
     expect(find.byKey(_cardKey), findsOneWidget);
-    expect(find.text('Top half wins — bigger prizes up top'), findsOneWidget);
+    expect(find.text('TOP CUT PAID'), findsOneWidget);
+    expect(find.text('5 OF 9'), findsOneWidget);
 
     await _teardown(tester);
   });
@@ -407,35 +416,40 @@ void main() {
     await _pump(tester, _StubApi(race));
 
     expect(find.byKey(_cardKey), findsNothing);
-    expect(find.text('1ST'), findsOneWidget);
+    expect(find.text('1ST PLACE'), findsOneWidget);
 
     await _teardown(tester);
   });
 
-  testWidgets('an absent payoutPreset falls back to the podium, never a guess', (
-    tester,
-  ) async {
-    // A backend older than payoutPreset can still send tiers. Without the
-    // preset we cannot claim "top half wins", so the podium row stands.
-    await _pump(tester, _StubApi(_challenge(status: 'PENDING', omitPreset: true)));
+  testWidgets(
+    'an absent payoutPreset falls back to the podium, never a guess',
+    (tester) async {
+      // A backend older than payoutPreset can still send tiers. Without the
+      // preset we cannot claim "top half wins", so the podium row stands.
+      await _pump(
+        tester,
+        _StubApi(_challenge(status: 'PENDING', omitPreset: true)),
+      );
 
-    expect(find.byKey(_cardKey), findsNothing);
-    expect(find.text('1ST'), findsOneWidget);
+      expect(find.byKey(_cardKey), findsNothing);
+      expect(find.text('1ST PLACE'), findsOneWidget);
 
-    await _teardown(tester);
-  });
+      await _teardown(tester);
+    },
+  );
 
-  testWidgets('an older backend with no payoutTiers renders nothing, no crash', (
-    tester,
-  ) async {
-    await _pump(tester, _StubApi(_challenge(status: 'PENDING', tiers: null)));
+  testWidgets(
+    'an older backend with no payoutTiers renders nothing, no crash',
+    (tester) async {
+      await _pump(tester, _StubApi(_challenge(status: 'PENDING', tiers: null)));
 
-    expect(find.byKey(_cardKey), findsNothing);
-    expect(find.byKey(const Key('race-payout-summary')), findsNothing);
-    expect(find.textContaining('get paid'), findsNothing);
-    expect(find.textContaining('bigger prizes up top'), findsNothing);
-    expect(tester.takeException(), isNull);
+      expect(find.byKey(_cardKey), findsNothing);
+      expect(find.byKey(const Key('race-payout-summary')), findsNothing);
+      expect(find.textContaining('get paid'), findsNothing);
+      expect(find.textContaining('bigger prizes up top'), findsNothing);
+      expect(tester.takeException(), isNull);
 
-    await _teardown(tester);
-  });
+      await _teardown(tester);
+    },
+  );
 }

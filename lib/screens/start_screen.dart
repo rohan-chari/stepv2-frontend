@@ -255,27 +255,12 @@ class _StartScreenState extends State<StartScreen> {
                 ),
                 SizedBox(height: compact ? 2 : 4),
                 Text(
-                  'STEP. RACE. WIN.',
+                  'Step challenges are more fun when you can steal someone’s steps.',
                   textAlign: TextAlign.center,
-                  style: PixelText.display(
-                    size: compact ? 24 : 28,
-                    color: AppColors.pillGold,
-                    letterSpacing: 1.6,
-                  ).copyWith(shadows: PixelText.skyOutline(1.4)),
-                ),
-                // Item 14 (batch 2026-08-08): the mission line sits UNDER the
-                // tagline — both stay. Smaller and lower-contrast so it reads
-                // as a subtitle, not a second tagline. StartScreen pins a
-                // light sky palette, so this is a fixed light-on-sky colour
-                // with the same outline the tagline uses for legibility.
-                SizedBox(height: compact ? 4 : 6),
-                Text(
-                  "We're on a mission to make your daily steps fun",
-                  textAlign: TextAlign.center,
-                  style: PixelText.body(
-                    size: compact ? 12 : 13,
-                    color: AppColors.textLight,
-                  ).copyWith(shadows: PixelText.skyOutline(1.2)),
+                  style: PixelText.title(
+                    size: compact ? 15 : 17,
+                    color: colors.textLight,
+                  ).copyWith(height: 1.25, shadows: PixelText.skyOutline(1.4)),
                 ),
               ],
             ),

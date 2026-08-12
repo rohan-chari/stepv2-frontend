@@ -62,7 +62,7 @@ void main() {
     expect(find.text('BOUNCED & BLOCKED!'), findsOneWidget);
     expect(
       find.text(
-        'Their Mirror bounced your attack back — but your Compression Socks blocked it!',
+        'Their Mirror bounced your attack back. Your Compression Socks blocked it!',
       ),
       findsOneWidget,
     );

@@ -91,7 +91,7 @@ class _FeedbackSheetState extends State<FeedbackSheet> {
         _sending = false;
         // Keep the text. The retry button re-posts exactly what they wrote.
         _error = e.statusCode == 429
-            ? "That's plenty for today — thanks! Try again tomorrow."
+            ? "That's plenty for today. Thanks! Try again tomorrow."
             : "Couldn't send that. Check your connection and try again.";
       });
     } catch (_) {
@@ -129,7 +129,7 @@ class _FeedbackSheetState extends State<FeedbackSheet> {
               ),
               const SizedBox(height: 4),
               Text(
-                'Ideas, bugs, gripes — we read every one.',
+                'Ideas, bugs, gripes. We read every one.',
                 textAlign: TextAlign.center,
                 style: PixelText.body(size: 12, color: colors.textMid),
               ),

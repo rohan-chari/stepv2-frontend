@@ -3,6 +3,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/models/step_data.dart';
+import 'package:step_tracker/models/home_race_suggestion.dart';
+import 'package:step_tracker/models/loadable.dart';
 import 'package:step_tracker/screens/tabs/home_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
@@ -32,15 +34,27 @@ Future<AuthService> _auth() async {
   return auth;
 }
 
-/// A finished friend race is the state that renders the CHALLENGE button.
-Map<String, dynamic> _friendFinishedCard() => {
-  'state': 'FRIEND_FINISHED',
-  'data': {
-    'raceId': 'race-1',
-    'raceName': 'Weekend Dash',
-    'friend': {'userId': 'u2', 'displayName': 'Sneaky Pete'},
-  },
-};
+HomeRaceSuggestion _suggestion() => HomeRaceSuggestion.tryParse({
+  'kind': 'PUBLIC_RACE',
+  'id': 'race-1',
+  'name': 'Weekend Dash',
+  'status': 'PENDING',
+  'maxDurationDays': 3,
+  'endsAt': null,
+  'startedAt': null,
+  'participantCount': 3,
+  'maxParticipants': 10,
+  'buyInAmount': 0,
+  'payoutPreset': null,
+  'powerupsEnabled': true,
+  'prizePool': null,
+  'isTeamRace': false,
+  'teamSize': null,
+  'teamAName': null,
+  'teamBName': null,
+  'teams': null,
+  'joinAction': 'JOIN',
+})!;
 
 Future<void> _pumpHome(WidgetTester tester, {required double width}) async {
   await tester.binding.setSurfaceSize(Size(width, 1600));
@@ -64,8 +78,7 @@ Future<void> _pumpHome(WidgetTester tester, {required double width}) async {
           onEnableNotifications: () {},
           onDisplayNameChanged: () {},
           friendsSteps: const [],
-          raceCard: _friendFinishedCard(),
-          onChallengeFriendBack: (_) {},
+          suggestedRacesState: Loadable.success([_suggestion()]),
         ),
       ),
     ),
@@ -79,18 +92,17 @@ void main() {
   // 320pt is the iPhone SE 1st gen; 375pt the SE 2/3 and the 13 mini. The box
   // is fixed, so both must pass for the same reason.
   for (final width in [320.0, 375.0]) {
-    testWidgets('CHALLENGE is not truncated on the home race row at ${width}pt',
-        (tester) async {
+    testWidgets('JOIN is not truncated on the Home suggestion at ${width}pt', (
+      tester,
+    ) async {
       await _pumpHome(tester, width: width);
 
-      expect(find.text('CHALLENGE'), findsOneWidget);
-      final paragraph = tester.renderObject<RenderParagraph>(
-        find.text('CHALLENGE'),
-      );
+      expect(find.text('JOIN'), findsOneWidget);
+      final paragraph = tester.renderObject<RenderParagraph>(find.text('JOIN'));
       expect(
         paragraph.didExceedMaxLines,
         isFalse,
-        reason: 'CHALLENGE ellipsized inside the fixed-width action button',
+        reason: 'JOIN ellipsized inside the suggestion action button',
       );
     });
   }

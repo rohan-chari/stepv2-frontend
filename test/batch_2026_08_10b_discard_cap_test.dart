@@ -201,7 +201,7 @@ void main() {
       await _tapDiscard(tester);
 
       expect(
-        find.text("Daily discard bonus reached — you'll get 0 coins."),
+        find.text("Daily discard bonus reached. You'll get 0 coins."),
         findsOneWidget,
       );
       await _teardown(tester);

@@ -19,8 +19,9 @@ class ReferralRulesScreen extends StatelessWidget {
     (
       'How it works',
       'Share your personal invite link with a friend who is new to Bara. When '
-          'they install Bara, sign in, and finish their first qualifying race '
-          '— a real race with at least one other player — you each earn coins.',
+          'they install Bara, sign in, and finish their first qualifying race, '
+          'you each earn coins. A qualifying race is a real race with at '
+          'least one other player.',
     ),
     (
       "What's a qualifying race",
@@ -32,8 +33,8 @@ class ReferralRulesScreen extends StatelessWidget {
     ),
     (
       'Who can be referred',
-      'Only people new to Bara. Each person can be referred once, ever — '
-          'reinstalling or making a new account does not reset this. You cannot '
+      'Only people new to Bara. Each person can be referred once, ever. '
+          'Reinstalling or making a new account does not reset this. You cannot '
           'refer yourself, and review/demo accounts are excluded.',
     ),
     (
@@ -51,9 +52,9 @@ class ReferralRulesScreen extends StatelessWidget {
     ),
     (
       'No incentivized installs or reviews',
-      'Rewards are for a real in-app action — finishing a race against '
-          'another real player — never for simply installing the app, signing '
-          'up, or leaving a rating or review.',
+      'Rewards are for a real in-app action, finishing a race against '
+          'another real player. They are never for simply installing the app, '
+          'signing up, or leaving a rating or review.',
     ),
   ];
 

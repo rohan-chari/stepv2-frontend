@@ -9,7 +9,7 @@ import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/widgets/arcade_fx.dart';
 import 'package:step_tracker/widgets/step_milestones_section.dart';
 
-// Home section order: SETUP, then "Today's coins", then RACES.
+// Home section order: SETUP, then "Today's coins", then SUGGESTED RACES.
 //
 // Today's coins moves every day whether or not the user is in a race, so it
 // outranks the race rail. The StaggerIn indices must follow the visual order
@@ -84,7 +84,7 @@ void main() {
     );
   });
 
-  testWidgets("Today's coins renders above the RACES section", (tester) async {
+  testWidgets("Today's coins renders above Suggested Races", (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1600));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -95,7 +95,7 @@ void main() {
     await _flush(tester);
 
     final coins = find.text("Today's coins");
-    final races = find.text('RACES');
+    final races = find.text('SUGGESTED RACES');
     expect(coins, findsOneWidget);
     expect(races, findsWidgets);
 
@@ -105,7 +105,7 @@ void main() {
     );
   });
 
-  testWidgets("Today's coins breathes above and hugs the RACES header below", (
+  testWidgets("Today's coins breathes above and hugs Suggested Races below", (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(800, 1600));
@@ -119,7 +119,7 @@ void main() {
 
     final section = tester.getRect(find.byType(StepMilestonesSection));
     final coins = tester.getRect(find.text("Today's coins"));
-    final races = tester.getRect(find.text('RACES').first);
+    final races = tester.getRect(find.text('SUGGESTED RACES'));
 
     // The quick-actions row above ends flush, so this inset is the entire gap
     // under the EXTRA SPIN / SHOP buttons. It used to be 6 and read as a

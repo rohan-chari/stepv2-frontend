@@ -12,6 +12,7 @@ import '../widgets/app_avatar.dart';
 import '../widgets/arcade_fx.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/info_toast.dart';
+import '../widgets/invite_code_sheet.dart';
 import '../widgets/loading_skeleton.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/spinning_coin.dart';
@@ -130,55 +131,21 @@ class _ReferralScreenState extends State<ReferralScreen> {
   }
 
   Future<void> _enterCode() async {
-    final code = await showModalBottomSheet<String>(
+    final outcome = await showInviteCodeSheet(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.of(context).parchment,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) => const _EnterCodeSheet(),
+      authService: widget.authService,
+      backendApiService: _api,
     );
-    if (code == null || code.isEmpty) return;
-
-    final token = widget.authService.authToken;
-    if (token == null || token.isEmpty) return;
-
-    String message;
-    var success = false;
-    try {
-      final result = await _api.redeemReferralCode(
-        identityToken: token,
-        code: code,
-      );
-      success = result['attributed'] == true;
-      message = success
-          ? referralRedeemedCopy(refereeCoins: _refereeCoins)
-          : _reasonMessage(result['reason'] as String?);
-    } catch (_) {
-      message = "Couldn't apply that code. Please try again.";
-    }
+    if (outcome == null || !mounted) return;
+    final message = outcome.attributed
+        ? referralRedeemedCopy(refereeCoins: _refereeCoins)
+        : outcome.message;
     if (!mounted) return;
-    if (success) {
+    if (outcome.attributed) {
       showInfoToast(context, message);
+      await _load();
     } else {
       showErrorToast(context, message);
-    }
-  }
-
-  String _reasonMessage(String? reason) {
-    switch (reason) {
-      case 'self_referral':
-        return "You can't use your own invite code.";
-      case 'already_attributed':
-        return 'You already have an invite credited.';
-      case 'already_raced':
-        return 'Invite codes only work before your first race.';
-      case 'unknown_code':
-      case 'invalid_code':
-        return "That code doesn't look right.";
-      default:
-        return "Couldn't apply that code.";
     }
   }
 
@@ -356,7 +323,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
                   ? Padding(
                       padding: const EdgeInsets.symmetric(vertical: 18),
                       child: Text(
-                        "No invites yet — share your link to get started.",
+                        "No invites yet. Share your link to get started.",
                         textAlign: TextAlign.center,
                         style: PixelText.body(
                           size: 14,
@@ -645,16 +612,16 @@ String referralShareText({
 
   final String reward;
   if (!_statable(referrerCoins, refereeCoins)) {
-    reward = "there's a coin drop in it for both of us";
+    reward = "There's a coin drop in it for both of us";
   } else if (referrerCoins == refereeCoins) {
-    reward = "we'll each pocket ${formatCoinsWithCommas(referrerCoins!)} coins";
+    reward = "We'll each pocket ${formatCoinsWithCommas(referrerCoins!)} coins";
   } else {
     reward =
         "I'll pocket ${formatCoinsWithCommas(referrerCoins!)} coins and "
         "you'll get ${formatCoinsWithCommas(refereeCoins!)}";
   }
 
-  return '$opener Race me on Bara with code $code — $reward once you finish '
+  return '$opener Race me on Bara with code $code. $reward once you finish '
       '$kQualifyingRaceShortPhrase: $url';
 }
 
@@ -735,72 +702,6 @@ class _StageBadge extends StatelessWidget {
         border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Text(label, style: PixelText.body(size: 11, color: color)),
-    );
-  }
-}
-
-class _EnterCodeSheet extends StatefulWidget {
-  const _EnterCodeSheet();
-
-  @override
-  State<_EnterCodeSheet> createState() => _EnterCodeSheetState();
-}
-
-class _EnterCodeSheetState extends State<_EnterCodeSheet> {
-  final TextEditingController _controller = TextEditingController();
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(24, 20, 24, 24 + bottomInset),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'ENTER INVITE CODE',
-            style: PixelText.title(
-              size: 16,
-              color: AppColors.of(context).textDark,
-            ),
-          ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: _controller,
-            autofocus: true,
-            textCapitalization: TextCapitalization.characters,
-            decoration: InputDecoration(
-              hintText: 'BARA-XXXX',
-              filled: true,
-              fillColor: AppColors.of(context).parchmentLight,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(
-                  color: AppColors.of(context).parchmentBorder,
-                ),
-              ),
-            ),
-            style: PixelText.body(
-              size: 16,
-              color: AppColors.of(context).textDark,
-            ),
-            onSubmitted: (v) => Navigator.of(context).pop(v.trim()),
-          ),
-          const SizedBox(height: 16),
-          PillButton(
-            label: 'APPLY',
-            variant: PillButtonVariant.primary,
-            fullWidth: true,
-            onPressed: () => Navigator.of(context).pop(_controller.text.trim()),
-          ),
-        ],
-      ),
     );
   }
 }

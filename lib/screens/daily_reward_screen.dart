@@ -468,7 +468,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
           Text(
             claimedToday
                 ? 'You\'ve claimed today. Come back tomorrow!'
-                : 'Day $currentDay of 6 — claim to keep your streak.',
+                : 'Day $currentDay of 6. Claim to keep your streak.',
             style: HomeText.body(
               size: 13,
               color: AppColors.of(context).muted,
@@ -541,7 +541,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
             !claimedToday
                 ? 'Open today\'s mystery box to keep your streak going.'
                 : _extraSpinOffered
-                ? 'You\'ve opened today\'s box — grab your bonus spin!'
+                ? 'You\'ve opened today\'s box. Grab your bonus spin!'
                 : 'You\'ve opened today\'s box. Come back tomorrow!',
             style: HomeText.body(
               size: 13,
@@ -894,7 +894,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
               Text(
                 'Open a mystery box every day to build your streak. '
                 'The longer your streak, the better your odds of the top '
-                'rewards — more coins and accessories you don\'t own yet. '
+                'rewards. That means more coins and accessories you don\'t own yet. '
                 'Miss a day and your streak resets!',
                 style: HomeText.body(
                   size: 13,

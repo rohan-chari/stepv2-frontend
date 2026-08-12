@@ -1,21 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:step_tracker/models/home_race_suggestion.dart';
+import 'package:step_tracker/models/loadable.dart';
 import 'package:step_tracker/models/step_data.dart';
 import 'package:step_tracker/screens/tabs/home_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/styles.dart';
-import 'package:step_tracker/utils/team_race.dart';
-import 'package:step_tracker/widgets/race_ui.dart';
-import 'package:step_tracker/widgets/team_scoreline.dart';
 
 class _FakeBackendApiService extends BackendApiService {}
-
-// TR-809: the Home current-race area is team-aware — team format chip, capys
-// ringed in their team color (matching the TR-804 glow), and the compact
-// rope-knot scoreline where individual race info shows today. Individual
-// races render exactly as before (TR-705).
 
 Future<AuthService> _createAuthService() async {
   SharedPreferences.setMockInitialValues({
@@ -32,51 +26,37 @@ Future<AuthService> _createAuthService() async {
   return authService;
 }
 
-Map<String, dynamic> _raceCard({required bool team}) => {
-  'state': 'ACTIVE_RACES',
-  'data': {
-    'races': [
-      {
-        'raceId': 'race-1',
-        'name': team ? 'Team Clash' : 'Solo Sprint',
-        'endsAt': DateTime.now()
-            .add(const Duration(days: 2))
-            .toUtc()
-            .toIso8601String(),
-        'userPlacement': 2,
-        'participantCount': 4,
-        if (team) ...{
-          'isTeamRace': true,
-          'teamSize': 2,
-          'teamAName': 'Swift Capys',
-          'teamBName': 'Turbo Beavers',
-          'teams': {
-            'teamA': {'totalSteps': 12340, 'memberCount': 2},
-            'teamB': {'totalSteps': 11900, 'memberCount': 2},
-          },
-        },
-        'top3': [
-          {
-            'rank': 1,
-            'displayName': 'Trail Walker',
-            'totalSteps': 6200,
-            if (team) 'team': 'TEAM_A',
-          },
-          {
-            'rank': 2,
-            'displayName': 'Sneaky Pete',
-            'totalSteps': 6000,
-            if (team) 'team': 'TEAM_B',
-          },
-        ],
-      },
-    ],
-  },
-};
+HomeRaceSuggestion _suggestion({required bool team}) =>
+    HomeRaceSuggestion.tryParse({
+      'kind': 'PUBLIC_RACE',
+      'id': 'race-1',
+      'name': team ? 'Team Clash' : 'Solo Sprint',
+      'status': 'PENDING',
+      'maxDurationDays': 3,
+      'endsAt': null,
+      'startedAt': null,
+      'participantCount': team ? 3 : 4,
+      'maxParticipants': team ? 4 : 10,
+      'buyInAmount': 0,
+      'payoutPreset': null,
+      'powerupsEnabled': true,
+      'prizePool': null,
+      'isTeamRace': team,
+      'teamSize': team ? 2 : null,
+      'teamAName': team ? 'Swift Capys' : null,
+      'teamBName': team ? 'Turbo Beavers' : null,
+      'teams': team
+          ? {
+              'teamA': {'memberCount': 2},
+              'teamB': {'memberCount': 1},
+            }
+          : null,
+      'joinAction': 'JOIN',
+    })!;
 
 Future<void> _pump(
   WidgetTester tester,
-  Map<String, dynamic> raceCard, {
+  HomeRaceSuggestion suggestion, {
   ThemeData? theme,
 }) async {
   await tester.binding.setSurfaceSize(const Size(800, 1600));
@@ -100,70 +80,54 @@ Future<void> _pump(
           onEnableNotifications: () {},
           onDisplayNameChanged: () {},
           friendsSteps: const [],
-          raceCard: raceCard,
+          suggestedRacesState: Loadable.success([suggestion]),
         ),
       ),
     ),
   );
-  await tester.pump();
-
-  // The race rail sits below the hero — bring it on screen.
-  await tester.dragUntilVisible(
-    find.byType(RacerAvatar).first,
-    find.byType(Scrollable).first,
-    const Offset(0, -200),
-  );
+  await tester.pump(const Duration(milliseconds: 500));
+  await tester.drag(find.byType(CustomScrollView), const Offset(0, -900));
   await tester.pump();
 }
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('TR-809: team race ticket shows the compact scoreline', (
+  testWidgets('TR-809: team suggestion keeps compact format and slots', (
     tester,
   ) async {
-    await _pump(tester, _raceCard(team: true));
+    await _pump(tester, _suggestion(team: true));
 
-    expect(find.byType(TeamScoreline), findsOneWidget);
-    expect(find.textContaining('12,340'), findsOneWidget);
-    expect(find.textContaining('11,900'), findsOneWidget);
-    expect(find.text('2v2'), findsOneWidget);
+    expect(find.textContaining('2v2 TEAMS'), findsOneWidget);
+    expect(find.textContaining('1 SLOT'), findsOneWidget);
+    expect(find.text('TEAM CLASH'), findsOneWidget);
   });
 
-  testWidgets('TR-809: ticket capys are ringed in their team color', (
+  testWidgets('TR-809: team suggestion preserves both side names in payload', (
     tester,
   ) async {
-    await _pump(tester, _raceCard(team: true));
+    final suggestion = _suggestion(team: true);
+    await _pump(tester, suggestion);
 
-    final avatars = tester
-        .widgetList<RacerAvatar>(find.byType(RacerAvatar))
-        .toList();
-    expect(
-      avatars.map((a) => a.ringColor),
-      containsAll([
-        TeamRace.color(RaceTeam.teamA),
-        TeamRace.color(RaceTeam.teamB),
-      ]),
-    );
+    expect(suggestion.teamAName, 'Swift Capys');
+    expect(suggestion.teamBName, 'Turbo Beavers');
+    expect(find.text('PUBLIC'), findsOneWidget);
   });
 
-  testWidgets('TR-705: individual ticket renders as before', (tester) async {
-    await _pump(tester, _raceCard(team: false));
+  testWidgets('TR-705: individual suggestion has no team badge', (
+    tester,
+  ) async {
+    await _pump(tester, _suggestion(team: false));
 
-    expect(find.byType(TeamScoreline), findsNothing);
-    expect(find.text('2v2'), findsNothing);
-    final avatars = tester
-        .widgetList<RacerAvatar>(find.byType(RacerAvatar))
-        .toList();
-    expect(avatars.every((a) => a.ringColor == null), isTrue);
+    expect(find.textContaining('TEAMS'), findsNothing);
+    expect(find.textContaining('SLOT'), findsNothing);
+    expect(find.text('SOLO SPRINT'), findsOneWidget);
   });
 
   testWidgets('public-race action stays visible in dark mode', (tester) async {
-    await _pump(tester, _raceCard(team: false), theme: AppThemeData.night());
+    await _pump(tester, _suggestion(team: false), theme: AppThemeData.night());
 
-    final addIcon = tester.widget<Icon>(
-      find.byKey(const Key('home-public-race-add-icon')),
-    );
-    expect(addIcon.color, AppPalette.night.pillTerra);
+    final join = tester.widget<Text>(find.text('JOIN'));
+    expect(join.style?.color, isNot(equals(Colors.transparent)));
   });
 }

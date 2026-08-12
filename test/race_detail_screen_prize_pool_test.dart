@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/race_detail_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/widgets/race_payout_scorecard.dart';
 
 // App-funded prize pools on the race detail screen (spec §7.2 / §9).
 //
@@ -173,11 +174,50 @@ Future<void> _pump(WidgetTester tester, _StubApi api) async {
 
 Future<void> _teardown(WidgetTester tester) async {
   await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
-  await tester.pumpAndSettle();
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
 }
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('compact payout row fits a narrow phone with larger text', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(320, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: Size(320, 600),
+            textScaler: TextScaler.linear(1.4),
+          ),
+          child: Scaffold(
+            body: Align(
+              alignment: Alignment.topCenter,
+              child: SizedBox(
+                // The real 320px RaceDetailScreen leaves 276px after its
+                // section margin and compact card padding.
+                width: 276,
+                child: RacePayoutScorecard(
+                  presentation: RacePayoutPresentation.fromRace(
+                    _fundedRace(status: 'PENDING'),
+                  ),
+                  onOpenPayouts: () {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final payouts = find.byKey(const Key('race-payouts-open'));
+    expect(payouts, findsOneWidget);
+    expect(tester.getSize(payouts).height, greaterThanOrEqualTo(44));
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('a funded race shows a PROJECTED prize pool, no funder line', (
     tester,
@@ -199,10 +239,39 @@ void main() {
     expect(find.text('BUY-IN'), findsNothing);
     expect(find.text('POT'), findsNothing);
 
+    final duration = find.text('DURATION');
+    final payouts = find.byKey(const Key('race-payouts-open'));
+    expect(payouts, findsOneWidget);
+    expect(
+      (tester.getCenter(duration).dy - tester.getCenter(payouts).dy).abs(),
+      lessThan(12),
+    );
+    expect(
+      tester.getTopLeft(payouts).dx,
+      greaterThan(tester.getTopRight(stat).dx),
+    );
+
     await _teardown(tester);
   });
 
-  testWidgets('the funded pool chip opens the payout breakdown', (tester) async {
+  testWidgets('a valid funded zero-coin pool remains funded and visible', (
+    tester,
+  ) async {
+    await _pump(tester, _StubApi(_fundedRace(status: 'PENDING', coins: 0)));
+
+    final stat = find.byKey(const Key('race-info-prize-pool'));
+    expect(stat, findsOneWidget);
+    expect(find.descendant(of: stat, matching: find.text('0')), findsOneWidget);
+    expect(find.byKey(const Key('race-prize-pool-board')), findsOneWidget);
+    expect(find.text('BUY-IN'), findsNothing);
+    expect(find.text('POT'), findsNothing);
+
+    await _teardown(tester);
+  });
+
+  testWidgets('the funded pool chip opens the payout breakdown', (
+    tester,
+  ) async {
     await _pump(tester, _StubApi(_fundedRace()));
 
     final board = find.byKey(const Key('race-prize-pool-board'));
@@ -212,14 +281,14 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
-    final summary = find.byKey(const Key('race-prize-pool-summary'));
-    expect(summary, findsOneWidget);
+    final list = find.byKey(const Key('race-prize-pool-tier-list'));
+    expect(list, findsOneWidget);
     expect(
-      find.descendant(of: summary, matching: find.text('1ST')),
+      find.descendant(of: list, matching: find.text('1ST')),
       findsOneWidget,
     );
     expect(
-      find.descendant(of: summary, matching: find.text('112')),
+      find.descendant(of: list, matching: find.text('112')),
       findsOneWidget,
     );
     expect(
@@ -230,8 +299,7 @@ void main() {
     await _teardown(tester);
   });
 
-  testWidgets(
-      'a funded TEAM race sheet says the winning team splits the pool '
+  testWidgets('a funded TEAM race sheet says the winning team splits the pool '
       'and drops the 1ST tier row', (tester) async {
     final race = _fundedRace(coins: 800)
       ..['isTeamRace'] = true
@@ -264,10 +332,7 @@ void main() {
     // The sheet must say how a team pool pays out — split evenly across the
     // winning team, matching backend settlement (completeRace TR-502/503/504).
     // One short line only: the solo growth note is dropped for team races.
-    expect(
-      find.byKey(const Key('race-prize-pool-team-split')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const Key('race-prize-pool-team-split')), findsOneWidget);
     expect(
       find.text('The winning team splits the whole pool evenly.'),
       findsOneWidget,
@@ -340,24 +405,24 @@ void main() {
     },
   );
 
-  testWidgets('accepting an invite to a funded race is one tap — no buy-in sheet',
-      (tester) async {
-    final api = _StubApi(
-      _fundedRace(status: 'PENDING', myStatus: 'INVITED'),
-    );
-    await _pump(tester, api);
+  testWidgets(
+    'accepting an invite to a funded race is one tap — no buy-in sheet',
+    (tester) async {
+      final api = _StubApi(_fundedRace(status: 'PENDING', myStatus: 'INVITED'));
+      await _pump(tester, api);
 
-    expect(find.text('ACCEPT'), findsOneWidget);
-    await tester.ensureVisible(find.text('ACCEPT'));
-    await tester.pump();
-    await tester.tap(find.text('ACCEPT'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('ACCEPT'), findsOneWidget);
+      await tester.ensureVisible(find.text('ACCEPT'));
+      await tester.pump();
+      await tester.tap(find.text('ACCEPT'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
-    expect(find.textContaining('GOLD BUY-IN'), findsNothing);
-    expect(find.text('LOCK IT IN'), findsNothing);
-    expect(api.respondCalls, 1);
+      expect(find.textContaining('GOLD BUY-IN'), findsNothing);
+      expect(find.text('LOCK IT IN'), findsNothing);
+      expect(api.respondCalls, 1);
 
-    await _teardown(tester);
-  });
+      await _teardown(tester);
+    },
+  );
 }

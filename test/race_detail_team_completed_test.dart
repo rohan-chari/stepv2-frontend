@@ -167,7 +167,7 @@ void main() {
       (tester) async {
     await _pump(tester, _CompletedTeamRaceApi(winnerTeam: null));
 
-    expect(find.textContaining('It’s a tie — buy-ins refunded'), findsOneWidget);
+    expect(find.textContaining('It’s a tie. Buy-ins refunded'), findsOneWidget);
     expect(find.text('No winner'), findsNothing);
   });
 

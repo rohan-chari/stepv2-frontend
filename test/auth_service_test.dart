@@ -19,12 +19,184 @@ class _RecordingLeaderboardApi extends BackendApiService {
   }
 }
 
+class _ProvisionRecordingApi extends BackendApiService {
+  String? appleSourceRaceToken;
+
+  @override
+  Future<Map<String, dynamic>> provisionAppleUser({
+    required String identityToken,
+    required String userIdentifier,
+    String? email,
+    String? referralCode,
+    String? referralSourceRaceToken,
+  }) async {
+    appleSourceRaceToken = referralSourceRaceToken;
+    return {
+      'user': {'id': 'user-1'},
+      'sessionToken': 'session',
+    };
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
   });
+
+  test(
+    'discoverable identity support is contains-key guarded and defensive',
+    () {
+      final auth = AuthService();
+
+      expect(auth.supportsDiscoverableIdentity, isFalse);
+      expect(auth.requiresDiscoverableIdentityOnboarding, isFalse);
+
+      auth.applyBackendUser({
+        'firstName': 'Nathan',
+        'lastName': null,
+        'nameSetupOnboardingRequired': true,
+        'nameSetupCompletedAt': null,
+        'featureFlags': {'racesInviteDecisionGateEnabled': true},
+      });
+
+      expect(auth.supportsDiscoverableIdentity, isTrue);
+      expect(auth.firstName, 'Nathan');
+      expect(auth.lastName, isNull);
+      expect(auth.requiresDiscoverableIdentityOnboarding, isTrue);
+      expect(auth.racesInviteDecisionGateEnabled, isTrue);
+
+      auth.applyBackendUser({
+        'firstName': 42,
+        'lastName': <String>[],
+        'nameSetupOnboardingRequired': 'yes',
+        'nameSetupCompletedAt': 123,
+        'featureFlags': {'racesInviteDecisionGateEnabled': 'yes'},
+      });
+
+      expect(auth.firstName, isNull);
+      expect(auth.lastName, isNull);
+      expect(auth.requiresDiscoverableIdentityOnboarding, isFalse);
+      expect(auth.racesInviteDecisionGateEnabled, isFalse);
+    },
+  );
+
+  test(
+    'absent identity fields do not turn an old backend into incomplete setup',
+    () {
+      final auth = AuthService();
+      auth.applyBackendUser({'displayName': 'TrailWalker'});
+
+      expect(auth.supportsDiscoverableIdentity, isFalse);
+      expect(auth.shouldShowDiscoverableIdentityRemediation, isFalse);
+    },
+  );
+
+  test(
+    'quick-race share capability is literal, persisted, and authoritative',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'auth_identity_token': 'identity',
+        'auth_user_identifier': 'platform-user',
+        'auth_session_token': 'session',
+        'auth_backend_user_id': 'user-1',
+      });
+      final auth = AuthService();
+      await auth.restoreSession();
+
+      await auth.syncFromBackendUser({
+        'id': 'user-1',
+        'featureFlags': {'quickRaceShareAutoFriendEnabled': true},
+      }, authoritative: true);
+      expect(auth.quickRaceShareAutoFriendEnabled, isTrue);
+
+      final restored = AuthService();
+      await restored.restoreSession();
+      expect(restored.quickRaceShareAutoFriendEnabled, isTrue);
+
+      // A partial mutation without featureFlags is not capability evidence.
+      restored.applyBackendUser({'displayName': 'Renamed'});
+      expect(restored.quickRaceShareAutoFriendEnabled, isTrue);
+
+      await restored.syncFromBackendUser({'id': 'user-1'}, authoritative: true);
+      expect(restored.quickRaceShareAutoFriendEnabled, isFalse);
+      final restoredAfterOldBackend = AuthService();
+      await restoredAfterOldBackend.restoreSession();
+      expect(restoredAfterOldBackend.quickRaceShareAutoFriendEnabled, isFalse);
+
+      for (final payload in <Map<String, dynamic>>[
+        {'id': 'user-1', 'featureFlags': null},
+        {'id': 'user-1', 'featureFlags': 'bad'},
+        {
+          'id': 'user-1',
+          'featureFlags': {'quickRaceShareAutoFriendEnabled': null},
+        },
+        {
+          'id': 'user-1',
+          'featureFlags': {'quickRaceShareAutoFriendEnabled': 'yes'},
+        },
+        {
+          'id': 'user-1',
+          'featureFlags': {'quickRaceShareAutoFriendEnabled': false},
+        },
+      ]) {
+        restored.applyBackendUser({
+          'featureFlags': {'quickRaceShareAutoFriendEnabled': true},
+        });
+        restored.applyBackendUser(payload, authoritative: true);
+        expect(restored.quickRaceShareAutoFriendEnabled, isFalse);
+      }
+
+      restored.applyBackendUser({
+        'featureFlags': {'quickRaceShareAutoFriendEnabled': true},
+      });
+      await restored.signOut();
+      expect(restored.quickRaceShareAutoFriendEnabled, isFalse);
+    },
+  );
+
+  test(
+    'authoritative old-backend user clears cached identity capability state',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'auth_identity_token': 'identity',
+        'auth_user_identifier': 'platform-user',
+        'auth_session_token': 'session',
+        'auth_backend_user_id': 'user-1',
+        'auth_identity_state_user_id': 'user-1',
+        'auth_identity_supported': true,
+        'auth_first_name': 'Cached',
+        'auth_last_name': 'Walker',
+        'auth_name_setup_onboarding_required': true,
+      });
+      final auth = AuthService();
+      await auth.restoreSession();
+
+      expect(auth.requiresDiscoverableIdentityOnboarding, isTrue);
+      expect(auth.shouldShowDiscoverableIdentityRemediation, isTrue);
+
+      await auth.syncFromBackendUser({
+        'id': 'user-1',
+        'displayName': 'Old Backend User',
+      }, authoritative: true);
+
+      expect(auth.supportsDiscoverableIdentity, isFalse);
+      expect(auth.nameSetupOnboardingRequired, isFalse);
+      expect(auth.requiresDiscoverableIdentityOnboarding, isFalse);
+      expect(auth.shouldShowDiscoverableIdentityRemediation, isFalse);
+
+      // A partial mutation response is not capability evidence and may retain
+      // the last authoritative state.
+      auth.applyBackendUser({
+        'nameSetupCompletedAt': null,
+        'nameSetupOnboardingRequired': true,
+      });
+      await auth.syncFromBackendUser({'displayName': 'Renamed'});
+      expect(auth.supportsDiscoverableIdentity, isTrue);
+      expect(auth.requiresDiscoverableIdentityOnboarding, isTrue);
+    },
+  );
 
   test(
     'restoreSession returns false when a session token is missing',
@@ -100,6 +272,38 @@ void main() {
     expect(await authService.signInWithApple(), isFalse);
     expect(authService.lastErrorMessage, isNull);
   });
+
+  test(
+    'Apple provision receives pending race attribution without consuming it',
+    () async {
+      final api = _ProvisionRecordingApi();
+      final authService = AuthService(
+        backendApiService: api,
+        appleCredentialProvider: () async =>
+            const AuthorizationCredentialAppleID(
+              userIdentifier: 'apple-user',
+              givenName: 'Nathan',
+              familyName: 'Chari',
+              authorizationCode: 'code',
+              email: null,
+              identityToken: 'identity',
+              state: null,
+            ),
+      );
+      await authService.setPendingShareToken('raceToken123');
+
+      expect(await authService.signInWithApple(), isTrue);
+      expect(api.appleSourceRaceToken, 'raceToken123');
+      expect(authService.pendingShareToken, 'raceToken123');
+      expect(authService.providerFirstName, 'Nathan');
+      expect(authService.providerLastName, 'Chari');
+
+      final restored = AuthService();
+      await restored.restoreSession();
+      expect(restored.providerFirstName, 'Nathan');
+      expect(restored.providerLastName, 'Chari');
+    },
+  );
 
   test('a genuine Apple sign-in failure gets friendly copy', () async {
     final authService = AuthService(

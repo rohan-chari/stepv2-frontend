@@ -1,4 +1,5 @@
 import '../models/step_data.dart';
+import '../models/home_race_suggestion.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 
@@ -27,6 +28,10 @@ class TutorialPreviewAuthService extends AuthService {
     applyBackendUser(const {
       'id': tutorialPreviewUserId,
       'displayName': 'Rohan',
+      'firstName': 'Rohan',
+      'lastName': null,
+      'nameSetupOnboardingRequired': false,
+      'nameSetupCompletedAt': '2026-08-11T12:00:00.000Z',
       'profilePhotoUrl': 'preview-photo',
       'coins': 1840,
     });
@@ -425,8 +430,74 @@ Map<String, dynamic> tutorialPreviewHomeRaceCard() {
   };
 }
 
-/// Races screen data: active (one with a placement + queued boxes), an invite,
-/// and a completed race.
+List<HomeRaceSuggestion> tutorialPreviewHomeSuggestions() {
+  final endsAt = DateTime.now()
+      .add(const Duration(days: 2, hours: 4))
+      .toUtc()
+      .toIso8601String();
+  final rows = <Map<String, dynamic>>[
+    {
+      'kind': 'FEATURED_RACE',
+      'id': 'tutorial-daily',
+      'seedKind': 'DAILY_10K',
+      'name': 'Daily 10K',
+      'status': 'ACTIVE',
+      'endsAt': endsAt,
+      'participantCount': 18,
+      'maxParticipants': 100,
+      'isFull': false,
+      'powerupsEnabled': true,
+      'prizePool': null,
+      'finishReward': {'pool': 300, 'paidPlaces': 3},
+      'joinAction': 'JOIN',
+    },
+    {
+      'kind': 'PUBLIC_RACE',
+      'id': 'tutorial-public',
+      'name': 'Lunch Break Sprint',
+      'status': 'PENDING',
+      'maxDurationDays': 1,
+      'endsAt': null,
+      'startedAt': null,
+      'participantCount': 3,
+      'maxParticipants': 10,
+      'buyInAmount': 0,
+      'payoutPreset': 'TOP_HALF_GRADED',
+      'powerupsEnabled': true,
+      'prizePool': null,
+      'isTeamRace': false,
+      'teamSize': null,
+      'teamAName': null,
+      'teamBName': null,
+      'teams': null,
+      'joinAction': 'JOIN',
+    },
+    {
+      'kind': 'TOURNAMENT',
+      'id': 'tutorial-tournament',
+      'seedKind': 'DAILY_DASH',
+      'name': 'Daily Dash',
+      'status': 'PENDING',
+      'bracketSize': 8,
+      'matchupDurationDays': 1,
+      'acceptedCount': 5,
+      'buyInAmount': 0,
+      'potCoins': 800,
+      'prizePool': null,
+      'powerupsEnabled': true,
+      'powerupStepInterval': 2000,
+      'createdAt': '2026-08-11T20:00:00.000Z',
+      'joinAction': 'JOIN',
+    },
+  ];
+  return rows
+      .map(HomeRaceSuggestion.tryParse)
+      .whereType<HomeRaceSuggestion>()
+      .toList(growable: false);
+}
+
+/// Races screen data: active (one with a placement + queued boxes), a waiting
+/// race, and a completed race. Invite decisions belong to the shell gate.
 Map<String, dynamic> tutorialPreviewRacesData() {
   final now = DateTime.now();
   return {
@@ -439,6 +510,14 @@ Map<String, dynamic> tutorialPreviewRacesData() {
         'endsAt': now.add(const Duration(days: 2, hours: 4)).toIso8601String(),
         'participantCount': 6,
         'creator': {'displayName': 'Maya Chen'},
+        // Mirrors GET /races' additive character summary using bundled art so
+        // the tutorial stays deterministic and network-independent.
+        'leader': {
+          'userId': 'maya-preview',
+          'displayName': 'Maya Chen',
+          'animal': null,
+          'accessories': tutorialPreviewAccessories,
+        },
         'isCreator': false,
         'myPlacement': 2,
         // One held powerup (sprite) + one unopened mystery box (crate), plus a
@@ -465,7 +544,7 @@ Map<String, dynamic> tutorialPreviewRacesData() {
     ],
     'pending': [
       {
-        'id': 'race-invite-1',
+        'id': 'race-waiting-1',
         'name': 'Morning Crew',
         'status': 'PENDING',
         'maxDurationDays': 7,
@@ -473,7 +552,7 @@ Map<String, dynamic> tutorialPreviewRacesData() {
         'participantCount': 3,
         'creator': {'displayName': 'Alex'},
         'isCreator': false,
-        'myStatus': 'INVITED',
+        'myStatus': 'ACCEPTED',
         'myPlacement': null,
         'queuedBoxCount': 0,
       },
@@ -508,6 +587,24 @@ Map<String, dynamic> tutorialPreviewRaceDetail() {
     'isCreator': false,
     'maxDurationDays': 3,
     'buyInAmount': 0,
+    'payoutPreset': 'TOP3_70_20_10',
+    'projectedPotCoins': 300,
+    'prizePool': const {
+      'coins': 300,
+      'projected': true,
+      'atMax': false,
+      'playerCount': 5,
+      'durationDays': 3,
+      'durationPoints': 2,
+      'coinUnit': 20,
+      'maxCoins': 16000,
+      'funded': true,
+    },
+    'payoutTiers': const [
+      {'placement': 1, 'amount': 210},
+      {'placement': 2, 'amount': 60},
+      {'placement': 3, 'amount': 30},
+    ],
     'endsAt': now.add(const Duration(days: 2, hours: 4)).toIso8601String(),
     'participants': tutorialPreviewRaceParticipants(),
   };

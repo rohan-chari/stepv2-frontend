@@ -30,6 +30,7 @@ Widget adminStatRow(BuildContext context, String label, String value) {
     child: Row(
       children: [
         Expanded(
+          flex: 3,
           child: Text(
             label,
             style: PixelText.body(
@@ -38,11 +39,20 @@ Widget adminStatRow(BuildContext context, String label, String value) {
             ),
           ),
         ),
-        Text(
-          value,
-          style: PixelText.title(
-            size: 13,
-            color: AppColors.of(context).textDark,
+        // The value gets its own flex box rather than sitting unconstrained on
+        // the right: AD WATCHES now carries three thousands-separated numbers,
+        // and an unbounded Text would paint overflow stripes on a small screen
+        // instead of wrapping. `end` alignment keeps every value flush right,
+        // exactly where it sat before.
+        Expanded(
+          flex: 2,
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: PixelText.title(
+              size: 13,
+              color: AppColors.of(context).textDark,
+            ),
           ),
         ),
       ],
@@ -428,6 +438,16 @@ class AdminRevenueBody extends StatelessWidget {
     return '$count ($pct%)';
   }
 
+  /// "consumed (pct%)" for reroll grants. The percentage is dropped rather
+  /// than shown as 0% when nobody has watched, so an untouched flow can't be
+  /// misread as a flow everybody abandons.
+  static String rerollConversionLine(Map<String, dynamic>? reroll) {
+    final consumed = adminInt(reroll?['consumed']);
+    if (consumed == null) return kAdminMissing;
+    final pct = adminInt(reroll?['pctConsumed']);
+    return pct == null ? '$consumed' : '$consumed ($pct%)';
+  }
+
   @override
   Widget build(BuildContext context) {
     if (loading) {
@@ -447,6 +467,7 @@ class AdminRevenueBody extends StatelessWidget {
     final purchases = adminRows(economy?['purchasesBySku']);
     final boxOpens = adminRows(economy?['boxOpens']);
     final adDays = adminRows(ads?['days']);
+    final reroll = adminMap(ads?['boxReroll']);
     final cap = adminMap(ads?['capUtilization']);
 
     return Column(
@@ -462,6 +483,11 @@ class AdminRevenueBody extends StatelessWidget {
           context,
           'DAU watched extra-spin ad',
           rewardedAdLine(rewardedAds, 'extraSpin'),
+        ),
+        adminStatRow(
+          context,
+          'DAU watched reroll ad',
+          rewardedAdLine(rewardedAds, 'boxReroll'),
         ),
 
         adminStatHeading(context, 'COINS MINTED VS SUNK'),
@@ -499,14 +525,30 @@ class AdminRevenueBody extends StatelessWidget {
 
         adminStatHeading(context, 'AD WATCHES'),
         if (adDays.isEmpty)
-          adminStatRow(context, 'Per day (coin / extra spin)', kAdminMissing)
+          adminStatRow(context, 'Per day (coin / spin / reroll)', kAdminMissing)
         else
           for (final day in adDays)
             adminStatRow(
               context,
               '${day['date'] ?? kAdminMissing}',
-              adminPair(day['coinRewardWatches'], day['extraSpinWatches']),
+              // The reroll half degrades on its own: a backend too old to
+              // count it renders "—" there while the other two still read.
+              '${adminPair(day['coinRewardWatches'], day['extraSpinWatches'])}'
+                  ' / ${adminNumber(day['boxRerollWatches'])}',
             ),
+
+        adminStatHeading(context, 'BOX REROLL ADS (30D)'),
+        adminStatRow(context, 'Watches', adminNumber(reroll?['watches'])),
+        adminStatRow(
+          context,
+          'Unique watchers',
+          adminNumber(reroll?['uniqueWatchers']),
+        ),
+        adminStatRow(
+          context,
+          'Rerolled after watching',
+          rerollConversionLine(reroll),
+        ),
 
         adminStatHeading(context, 'CAP UTILIZATION'),
         adminStatRow(

@@ -58,10 +58,23 @@ class ActivationAnalyticsService {
     'demo_box_opened',
     'demo_powerup_used',
     'demo_won',
-    // Onboarding invite-code step.
-    'invite_code_step_shown',
-    'invite_code_applied',
-    'invite_code_skipped',
+    'next_race_cta_shown',
+    'next_race_cta_tapped',
+    'quick_create_selected',
+    'quick_create_succeeded',
+    'quick_create_failed',
+    'open_race_discovery_shown',
+    'open_race_join_succeeded',
+    'race_share_prompt_shown',
+    'race_share_completed',
+    'quick_race_second_participant_joined',
+    'quick_race_started',
+    'invite_code_setup_shown',
+    'invite_code_setup_dismissed',
+    'invite_code_setup_applied',
+    'settings_invite_code_opened',
+    'home_suggested_races_shown',
+    'home_suggested_race_tapped',
     // Install-attribution funnel (part C). The stage outcome is encoded in the
     // NAME rather than in a context key on purpose: the backend soft-drops an
     // unknown name per event, but an unknown context key 400s the ENTIRE batch
@@ -77,10 +90,33 @@ class ActivationAnalyticsService {
   };
 
   static const allowedContext = <String, Set<String>>{
-    'source': {'onboarding', 'profile', 'races', 'empty_state', 'share_link'},
+    'source': {
+      'onboarding',
+      'profile',
+      'races',
+      'empty_state',
+      'share_link',
+      'next_race',
+    },
     'race_state': {'active', 'pending'},
     'result': {'granted', 'denied', 'dismissed', 'unsupported', 'failed'},
     'mode': {'solo', 'team', 'tournament'},
+    'surface': {'home', 'results'},
+    'preset': {'2_day', '7_day'},
+    'attributed': {'true', 'false'},
+    'race_count': {'0', '1', '2', '3'},
+    'featured_count': {'0', '1', '2'},
+    'public_count': {'0', '1', '2', '3', '4'},
+    'tournament_count': {'0', '1', '2', '3', '4'},
+    'suggestion_kind': {'FEATURED_RACE', 'PUBLIC_RACE', 'TOURNAMENT'},
+    'position': {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'},
+    'error_code': {
+      'INVALID_QUICK_CREATE_CONFIG',
+      'QUICK_CREATE_DISABLED',
+      'QUICK_RACE_ALREADY_LIVE',
+      'QUICK_RACE_MEMBERSHIP_LIMIT',
+      'UNKNOWN',
+    },
     // Tutorial per-step drop-off (spec §5.11.8). Headroom to 10 so trimming or
     // extending the step list again needs no coordinated backend change — the
     // backend allowlist was widened to the same range.
@@ -136,7 +172,17 @@ class ActivationAnalyticsService {
     if (!allowedEventNames.contains(name)) return;
     final safeContext = <String, String>{};
     for (final entry in context.entries) {
-      if (allowedContext[entry.key]?.contains(entry.value) == true) {
+      final isUuidKey =
+          entry.key == 'race_id' ||
+          entry.key == 'source_race_id' ||
+          entry.key == 'suggestion_id';
+      final isSafeUuid =
+          isUuidKey &&
+          RegExp(
+            r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
+          ).hasMatch(entry.value);
+      if (allowedContext[entry.key]?.contains(entry.value) == true ||
+          isSafeUuid) {
         safeContext[entry.key] = entry.value;
       }
     }

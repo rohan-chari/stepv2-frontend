@@ -344,7 +344,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Nice work — your reward is in the bag. Now go earn some more!',
+                  'Nice work. Your reward is in the bag. Now go earn some more!',
                   style: PixelText.body(
                     size: 15,
                     color: AppColors.of(context).textMid,

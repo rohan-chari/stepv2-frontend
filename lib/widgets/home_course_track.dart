@@ -9,6 +9,98 @@ import 'remote_or_bundled_accessory_image.dart';
 import '../config/animals.dart';
 import '../utils/at_name.dart';
 
+/// Defensive normalization shared by sprite geometry and rendering.
+///
+/// Accessory rows are server-authored and can outlive the app build that reads
+/// them. Invalid identity/transform data is omitted instead of reaching
+/// Flutter layout or a modulo operation with unsafe values.
+List<Map<String, dynamic>> normalizedAccessoriesForAnimal(
+  Iterable<Map<String, dynamic>> accessories,
+  String? animal,
+) {
+  final result = <Map<String, dynamic>>[];
+  for (final accessory in accessories) {
+    final slot = accessory['slot'];
+    final assetKey = accessory['assetKey'];
+    if (slot is! String ||
+        slot.trim().isEmpty ||
+        assetKey is! String ||
+        assetKey.trim().isEmpty) {
+      continue;
+    }
+
+    final rawMetadata = accessory['renderMetadata'];
+    if (rawMetadata != null && rawMetadata is! Map) continue;
+    final baseMetadata = rawMetadata is Map
+        ? <String, dynamic>{
+            for (final entry in rawMetadata.entries)
+              if (entry.key is String) entry.key as String: entry.value,
+          }
+        : const <String, dynamic>{};
+    final resolved = renderMetadataForAnimal(baseMetadata, animal);
+    final metadata = _normalizedAccessoryMetadata(resolved);
+    if (metadata == null) continue;
+    result.add({
+      ...accessory,
+      'slot': slot.trim(),
+      'assetKey': assetKey.trim(),
+      'renderMetadata': metadata,
+    });
+  }
+  return result;
+}
+
+Map<String, dynamic>? _normalizedAccessoryMetadata(
+  Map<String, dynamic> metadata,
+) {
+  final result = <String, dynamic>{...metadata}..remove('perAnimal');
+
+  double? finiteDouble(String key) {
+    final value = metadata[key];
+    if (value == null) return null;
+    final parsed = value is num
+        ? value.toDouble()
+        : value is String
+        ? double.tryParse(value)
+        : null;
+    return parsed != null && parsed.isFinite ? parsed : null;
+  }
+
+  for (final key in const ['offsetX', 'offsetY']) {
+    if (!metadata.containsKey(key)) continue;
+    final value = finiteDouble(key);
+    if (value == null || value.abs() > 512) return null;
+    result[key] = value;
+  }
+
+  if (metadata.containsKey('rotation')) {
+    final value = finiteDouble('rotation');
+    if (value == null) return null;
+    const tau = math.pi * 2;
+    result['rotation'] = ((value % tau) + tau) % tau;
+  }
+
+  if (metadata.containsKey('scale')) {
+    final value = finiteDouble('scale');
+    if (value == null || value <= 0 || value > 8) return null;
+    result['scale'] = value;
+  }
+
+  if (metadata.containsKey('animationFrames')) {
+    final raw = metadata['animationFrames'];
+    final value = raw is int
+        ? raw
+        : raw is num && raw.isFinite && raw == raw.roundToDouble()
+        ? raw.toInt()
+        : raw is String
+        ? int.tryParse(raw)
+        : null;
+    if (value == null || value < 1 || value > 64) return null;
+    result['animationFrames'] = value;
+  }
+  return result;
+}
+
 class HomeCourseTrack extends StatefulWidget {
   const HomeCourseTrack({
     super.key,
@@ -671,13 +763,16 @@ class CapybaraSpriteWithAccessories extends StatelessWidget {
   Widget build(BuildContext context) {
     final sprite = animalSpriteFor(animal);
     final bodyFrame = frameIndex % sprite.frameCount;
+    final safeAccessories = normalizedAccessoriesForAnimal(accessories, animal);
     return SizedBox(
       width: capybaraSize,
       height: capybaraSize,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          for (final accessory in accessories.where(_isBehindCapybaraAccessory))
+          for (final accessory in safeAccessories.where(
+            _isBehindCapybaraAccessory,
+          ))
             _BehindCapybaraAccessoryOverlay(
               accessory: accessory,
               capybaraSize: capybaraSize,
@@ -708,7 +803,7 @@ class CapybaraSpriteWithAccessories extends StatelessWidget {
               ),
             ),
           ),
-          for (final accessory in accessories.where(
+          for (final accessory in safeAccessories.where(
             (accessory) => !_isBehindCapybaraAccessory(accessory),
           ))
             _AccessoryOverlay(
@@ -738,12 +833,14 @@ class AnimatedCapybaraWithAccessories extends StatefulWidget {
     required this.accessories,
     required this.size,
     this.stepDuration = const Duration(milliseconds: 760),
+    this.animate = true,
     this.animal,
   });
 
   final List<Map<String, dynamic>> accessories;
   final double size;
   final Duration stepDuration;
+  final bool animate;
   final String? animal;
 
   @override
@@ -762,7 +859,30 @@ class _AnimatedCapybaraWithAccessoriesState
     _controller = AnimationController(
       vsync: this,
       duration: widget.stepDuration,
-    )..repeat();
+    );
+    _syncAnimation();
+  }
+
+  @override
+  void didUpdateWidget(covariant AnimatedCapybaraWithAccessories oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.stepDuration != widget.stepDuration) {
+      _controller.duration = widget.stepDuration;
+    }
+    if (oldWidget.animate != widget.animate ||
+        oldWidget.stepDuration != widget.stepDuration) {
+      _syncAnimation();
+    }
+  }
+
+  void _syncAnimation() {
+    if (widget.animate) {
+      if (!_controller.isAnimating) _controller.repeat();
+    } else {
+      _controller
+        ..stop()
+        ..value = 0;
+    }
   }
 
   @override

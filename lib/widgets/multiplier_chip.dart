@@ -25,10 +25,12 @@ class MultiplierChip extends StatelessWidget {
     super.key,
     required this.currentMultiplier,
     this.isStealthed = false,
+    this.compact = false,
   });
 
   final double? currentMultiplier;
   final bool isStealthed;
+  final bool compact;
 
   /// Reads the field defensively off a participant row. Anything that is not
   /// a number reads as absent, so a retype on the backend cannot crash a
@@ -53,11 +55,13 @@ class MultiplierChip extends StatelessWidget {
   static Widget? maybe({
     required double? currentMultiplier,
     bool isStealthed = false,
+    bool compact = false,
   }) {
     if (!shouldShow(currentMultiplier, isStealthed: isStealthed)) return null;
     return MultiplierChip(
       currentMultiplier: currentMultiplier,
       isStealthed: isStealthed,
+      compact: compact,
     );
   }
 
@@ -112,23 +116,26 @@ class MultiplierChip extends StatelessWidget {
     final iconOnly = icon != null && label == null;
     final chip = Container(
       padding: EdgeInsets.symmetric(
-        horizontal: iconOnly ? 5 : 6,
-        vertical: iconOnly ? 4 : 3,
+        horizontal: compact ? 1.5 : (iconOnly ? 5 : 6),
+        vertical: compact ? 1.5 : (iconOnly ? 4 : 3),
       ),
       decoration: BoxDecoration(
         color: bg.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: BorderRadius.circular(compact ? 5 : 7),
         border: Border.all(color: bg.withValues(alpha: 0.85), width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(icon, size: iconOnly ? 13 : 11, color: bg),
-            if (label != null) const SizedBox(width: 3),
+            Icon(icon, size: compact ? 9 : (iconOnly ? 13 : 11), color: bg),
+            if (label != null) SizedBox(width: compact ? 1.5 : 3),
           ],
           if (label != null)
-            Text(label, style: PixelText.title(size: 10, color: bg)),
+            Text(
+              label,
+              style: PixelText.title(size: compact ? 8.5 : 10, color: bg),
+            ),
         ],
       ),
     );

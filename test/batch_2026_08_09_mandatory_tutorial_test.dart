@@ -254,7 +254,7 @@ void main() {
       await tester.pump();
 
       expect(find.text('90 SECONDS · 100 COINS'), findsOneWidget);
-      expect(find.textContaining('we promise'), findsOneWidget);
+      expect(find.textContaining('We promise'), findsOneWidget);
     });
   });
 
@@ -286,7 +286,7 @@ void main() {
 
       expect(find.text('Skip for now'), findsNothing);
       expect(find.text('START TUTORIAL'), findsOneWidget);
-      expect(find.textContaining('we promise'), findsOneWidget);
+      expect(find.textContaining('We promise'), findsOneWidget);
     });
   });
 

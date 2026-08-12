@@ -59,8 +59,7 @@ Map<String, dynamic> _dailyChallenge({
   },
   if (withTiers)
     'payoutTiers': [
-      for (var i = 1; i <= paidPlaces; i++)
-        {'placement': i, 'amount': perHead},
+      for (var i = 1; i <= paidPlaces; i++) {'placement': i, 'amount': perHead},
     ],
   'myStatus': 'ACCEPTED',
   'isCreator': false,
@@ -176,7 +175,8 @@ Future<void> _openPrizeSheet(WidgetTester tester) async {
 
 Future<void> _teardown(WidgetTester tester) async {
   await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
-  await tester.pumpAndSettle();
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
 }
 
 void main() {
@@ -232,37 +232,42 @@ void main() {
       expect(
         find.descendant(
           of: summary,
-          matching: find.text('You’re 62nd — in the money'),
+          matching: find.text('You’re 62nd. In the money'),
         ),
         findsOneWidget,
       );
       expect(
-        find.descendant(of: summary, matching: find.text('See all payouts')),
+        find.byKey(const Key('race-prize-pool-tier-list')),
         findsOneWidget,
       );
 
-      // The 150 rows must NOT be in the tree until asked for.
+      // The long list is lazy: nearby rows render, distant rows do not.
       expect(find.text('150TH'), findsNothing);
       expect(find.text('149TH'), findsNothing);
-      expect(find.text('2ND'), findsNothing);
+      expect(find.text('2ND'), findsOneWidget);
 
       await _teardown(tester);
     },
   );
 
-  testWidgets('tapping See all payouts reveals the full per-place list', (
+  testWidgets('the lazy payout list can scroll through every paid place', (
     tester,
   ) async {
     await _pump(tester, _StubApi(_dailyChallenge()));
     await _openPrizeSheet(tester);
 
-    await tester.tap(find.text('See all payouts'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-
     expect(find.text('PAYOUTS'), findsOneWidget);
     expect(find.text('1ST'), findsOneWidget);
     expect(find.text('2ND'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('150TH'),
+      500,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('race-prize-pool-tier-list')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    expect(find.text('150TH'), findsOneWidget);
 
     await _teardown(tester);
   });
@@ -273,10 +278,7 @@ void main() {
     await _pump(tester, _StubApi(_dailyChallenge(), myPlacement: 180));
     await _openPrizeSheet(tester);
 
-    expect(
-      find.text('You’re 180th — 30 places from the cut'),
-      findsOneWidget,
-    );
+    expect(find.text('You’re 180th. 30 places from the cut'), findsOneWidget);
 
     await _teardown(tester);
   });
@@ -299,8 +301,8 @@ void main() {
 
     // A pending race shows the race-info card inline — no tap required.
     expect(find.byKey(const Key('race-payout-summary')), findsOneWidget);
-    expect(find.text('Top 2 of 4 get paid'), findsOneWidget);
-    expect(find.text('~750'), findsOneWidget);
+    expect(find.text('2 OF 4'), findsOneWidget);
+    expect(find.text('750'), findsOneWidget);
     // Nobody has a placement before the gun goes off.
     expect(find.textContaining('You’re'), findsNothing);
 
@@ -334,7 +336,7 @@ void main() {
     expect(find.text('~120'), findsOneWidget);
     // 7th with 5 paid places is 2 off — subtraction of two server-owned
     // numbers, no division anywhere.
-    expect(find.text('You’re 7th — 2 places from the cut'), findsOneWidget);
+    expect(find.text('You’re 7th. 2 places from the cut'), findsOneWidget);
 
     await _teardown(tester);
   });
@@ -351,7 +353,7 @@ void main() {
     );
     await _openPrizeSheet(tester);
 
-    expect(find.text('You’re 6th — 1 place from the cut'), findsOneWidget);
+    expect(find.text('You’re 6th. 1 place from the cut'), findsOneWidget);
 
     await _teardown(tester);
   });
@@ -368,7 +370,7 @@ void main() {
     );
     await _openPrizeSheet(tester);
 
-    expect(find.text('You’re 5th — in the money'), findsOneWidget);
+    expect(find.text('You’re 5th. In the money'), findsOneWidget);
 
     await _teardown(tester);
   });
@@ -391,20 +393,24 @@ void main() {
     await _teardown(tester);
   });
 
-  testWidgets('an older backend with no payoutTiers renders nothing, no crash', (
-    tester,
-  ) async {
-    await _pump(tester, _StubApi(_dailyChallenge(withTiers: false)));
-    await _openPrizeSheet(tester);
+  testWidgets(
+    'an older backend with no payoutTiers renders nothing, no crash',
+    (tester) async {
+      await _pump(tester, _StubApi(_dailyChallenge(withTiers: false)));
+      await _openPrizeSheet(tester);
 
-    expect(find.byKey(const Key('race-prize-pool-payout-summary')), findsNothing);
-    expect(find.byKey(const Key('race-payout-summary')), findsNothing);
-    expect(find.textContaining('get paid'), findsNothing);
-    expect(find.textContaining('splits the pool'), findsNothing);
-    expect(tester.takeException(), isNull);
+      expect(
+        find.byKey(const Key('race-prize-pool-payout-summary')),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('race-payout-summary')), findsNothing);
+      expect(find.textContaining('get paid'), findsNothing);
+      expect(find.textContaining('splits the pool'), findsNothing);
+      expect(tester.takeException(), isNull);
 
-    await _teardown(tester);
-  });
+      await _teardown(tester);
+    },
+  );
 
   testWidgets('an uneven preset keeps the existing podium breakdown', (
     tester,
@@ -420,8 +426,8 @@ void main() {
     await _pump(tester, _StubApi(race));
 
     expect(find.byKey(const Key('race-payout-summary')), findsNothing);
-    expect(find.text('1ST'), findsOneWidget);
-    expect(find.text('4200'), findsOneWidget);
+    expect(find.text('1ST PLACE'), findsOneWidget);
+    expect(find.text('4,200'), findsOneWidget);
 
     await _teardown(tester);
   });

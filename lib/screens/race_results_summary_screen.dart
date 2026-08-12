@@ -24,9 +24,14 @@ import '../widgets/spinning_coin.dart';
 /// every field defensively: a race may come from a backend version newer or
 /// older than this build.
 class RaceResultsSummaryScreen extends StatelessWidget {
-  const RaceResultsSummaryScreen({super.key, required this.races});
+  const RaceResultsSummaryScreen({
+    super.key,
+    required this.races,
+    this.canStartNextRace = false,
+  });
 
   final List<Map<String, dynamic>> races;
+  final bool canStartNextRace;
 
   @override
   Widget build(BuildContext context) {
@@ -92,13 +97,35 @@ class RaceResultsSummaryScreen extends StatelessWidget {
                               ],
                               const SizedBox(height: 18),
                               PillButton(
-                                label: 'NICE',
+                                key: canStartNextRace
+                                    ? const Key('results-start-next-race')
+                                    : null,
+                                label: canStartNextRace
+                                    ? 'START YOUR NEXT RACE'
+                                    : 'NICE',
                                 variant: PillButtonVariant.primary,
                                 fullWidth: true,
                                 // TODO(ads-interstitial): frequency-capped
                                 // interstitial fires after this pop (see ADS_TODO.md)
-                                onPressed: () => Navigator.of(context).pop(),
+                                onPressed: () => Navigator.of(
+                                  context,
+                                ).pop(canStartNextRace ? true : null),
                               ),
+                              if (canStartNextRace) ...[
+                                const SizedBox(height: 8),
+                                TextButton(
+                                  key: const Key('results-nice-secondary'),
+                                  onPressed: () =>
+                                      Navigator.of(context).pop(false),
+                                  child: Text(
+                                    'NICE',
+                                    style: PixelText.body(
+                                      size: 13,
+                                      color: AppColors.of(context).textMid,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -354,7 +381,7 @@ class _ResultCard extends StatelessWidget {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  isTie ? 'It’s a tie — buy-ins refunded' : 'YOUR TEAM',
+                  isTie ? 'It’s a tie. Buy-ins refunded' : 'YOUR TEAM',
                   style: PixelText.body(
                     size: 11,
                     color: AppColors.of(context).textMid,
@@ -400,7 +427,7 @@ class _ResultCard extends StatelessWidget {
                                   atName(m['displayName'] as String? ?? '???'),
                             )
                             .join(', '),
-                    ].join(' — '),
+                    ].join(': '),
                     textAlign: TextAlign.right,
                     style: PixelText.title(
                       size: 12,

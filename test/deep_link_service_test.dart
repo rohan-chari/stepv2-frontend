@@ -25,19 +25,25 @@ void main() {
       );
     });
 
-    test('extracts the token from a bara://join/<token> custom-scheme link', () {
-      expect(
-        DeepLinkService.parseShareToken(Uri.parse('bara://join/tok-xyz')),
-        'tok-xyz',
-      );
-    });
+    test(
+      'extracts the token from a bara://join/<token> custom-scheme link',
+      () {
+        expect(
+          DeepLinkService.parseShareToken(Uri.parse('bara://join/tok-xyz')),
+          'tok-xyz',
+        );
+      },
+    );
 
-    test('extracts the token from a bara://race/<token> custom-scheme link', () {
-      expect(
-        DeepLinkService.parseShareToken(Uri.parse('bara://race/tok-xyz')),
-        'tok-xyz',
-      );
-    });
+    test(
+      'extracts the token from a bara://race/<token> custom-scheme link',
+      () {
+        expect(
+          DeepLinkService.parseShareToken(Uri.parse('bara://race/tok-xyz')),
+          'tok-xyz',
+        );
+      },
+    );
 
     test('returns null for an unrelated https path', () {
       expect(
@@ -126,21 +132,28 @@ void main() {
       SharedPreferences.setMockInitialValues({});
     });
 
-    test('persists a valid token to AuthService and notifies pendingToken', () async {
-      final authService = AuthService();
-      final service = DeepLinkService(authService: authService);
+    test(
+      'persists a valid token to AuthService and notifies pendingToken',
+      () async {
+        final authService = AuthService();
+        final service = DeepLinkService(authService: authService);
 
-      await service.handleLink(Uri.parse('https://steptracker-api.org/r/tok-1'));
+        await service.handleLink(
+          Uri.parse('https://steptracker-api.org/r/tok-1'),
+        );
 
-      expect(authService.pendingShareToken, 'tok-1');
-      expect(service.pendingToken.value, 'tok-1');
-    });
+        expect(authService.pendingShareToken, 'tok-1');
+        expect(service.pendingToken.value, 'tok-1');
+      },
+    );
 
     test('ignores a non-share link (no token persisted)', () async {
       final authService = AuthService();
       final service = DeepLinkService(authService: authService);
 
-      await service.handleLink(Uri.parse('https://steptracker-api.org/support'));
+      await service.handleLink(
+        Uri.parse('https://steptracker-api.org/support'),
+      );
 
       expect(authService.pendingShareToken, isNull);
       expect(service.pendingToken.value, isNull);
@@ -159,5 +172,21 @@ void main() {
       expect(authService.pendingShareToken, isNull);
       expect(service.pendingToken.value, isNull);
     });
+
+    test(
+      'combined race link persists race destination and referral independently',
+      () async {
+        final authService = AuthService();
+        final service = DeepLinkService(authService: authService);
+
+        await service.handleLink(
+          Uri.parse('https://steptracker-api.org/r/race-token?ref=BARA-7F3K'),
+        );
+
+        expect(authService.pendingShareToken, 'race-token');
+        expect(authService.pendingReferralCode, 'BARA-7F3K');
+        expect(service.pendingToken.value, 'race-token');
+      },
+    );
   });
 }

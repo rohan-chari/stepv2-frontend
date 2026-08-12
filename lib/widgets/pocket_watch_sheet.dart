@@ -299,7 +299,10 @@ class _PocketWatchSheetState extends State<PocketWatchSheet> {
                         children: [
                           Text(
                             '+${widget.discardPriceCoins}',
-                            style: PixelText.pill(size: 12, color: Colors.white),
+                            style: PixelText.pill(
+                              size: 12,
+                              color: Colors.white,
+                            ),
                           ),
                           const SizedBox(width: 4),
                           const SpinningCoin(size: 14),
@@ -540,7 +543,7 @@ class _PocketWatchSheetState extends State<PocketWatchSheet> {
           padding: const EdgeInsets.only(bottom: 6),
           child: PillButton(
             key: Key('pocket-watch-tier-$level'),
-            label: level == 0 ? 'USE BASE — $label' : 'LVL $level — $label',
+            label: level == 0 ? 'USE BASE: $label' : 'LVL $level: $label',
             variant: level == 0
                 ? PillButtonVariant.secondary
                 : PillButtonVariant.primary,

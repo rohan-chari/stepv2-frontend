@@ -505,7 +505,7 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
         body: Text(
           'Someone else changed this while you were editing. The server is now '
           'on version ${result.currentVersion ?? '?'}. Your edits were NOT '
-          'applied — review them against the new config before saving.',
+          'applied. Review them against the new config before saving.',
           style: PixelText.body(size: 12, color: AppColors.of(context).textMid),
         ),
         actions: [
@@ -1325,7 +1325,7 @@ class _AdminBalanceConfigScreenState extends State<AdminBalanceConfigScreen> {
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Text(
-              'legacy is the 36x prestige inversion — it makes 1500-coin '
+              'legacy is the 36x prestige inversion. It makes 1500-coin '
               'accessories the most common daily-box drop. Retained only so a '
               'rollback can reproduce history.',
               style: PixelText.body(

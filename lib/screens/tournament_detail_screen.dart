@@ -234,7 +234,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
         identityToken: token,
         tournamentId: widget.tournamentId,
       );
-      if (mounted) showInfoToast(context, 'The bracket is set — go!');
+      if (mounted) showInfoToast(context, 'The bracket is set. Go!');
     });
     await _load();
   }
@@ -367,7 +367,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
       final name = Tournament.name(_tournament ?? const {});
       await shareText(
         context,
-        'Join my "$name" bracket on Bara — last capybara standing wins! $url',
+        'Join my "$name" bracket on Bara. Last capybara standing wins! $url',
         subject: 'Join my bracket on Bara',
       );
     } on ApiException catch (e) {
@@ -686,7 +686,8 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
   /// the night text color), which turned these tiles into unreadable
   /// white-on-white boards — `woodDarker` stays dark in both themes, matching
   /// the race-detail `_heroChip` fill this HUD borrows its language from.
-  Color get _tileFill => AppColors.of(context).woodDarker.withValues(alpha: 0.92);
+  Color get _tileFill =>
+      AppColors.of(context).woodDarker.withValues(alpha: 0.92);
 
   /// Gold accent for the HUD tiles. The night palette migrates `pillGold` to
   /// twilight violet, which disappears against the dark tile fill — `feedGold`
@@ -783,8 +784,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
                       : Text(
                           _countdownShort(ends),
                           key: const ValueKey('ticking'),
-                          style:
-                              PixelText.title(size: 20, color: Colors.white),
+                          style: PixelText.title(size: 20, color: Colors.white),
                         ),
                 ),
               ),
@@ -882,11 +882,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     switch (status) {
       case TournamentStatus.active:
         return _heroTile(
-          leading: Icon(
-            Icons.account_tree_rounded,
-            size: 26,
-            color: _tileGold,
-          ),
+          leading: Icon(Icons.account_tree_rounded, size: 26, color: _tileGold),
           label: 'ROUND',
           value: '${Tournament.currentRound(t)}/${Tournament.totalRounds(t)}',
           valueColor: Colors.white,
@@ -905,11 +901,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
       case TournamentStatus.cancelled:
       case null:
         return _heroTile(
-          leading: Icon(
-            Icons.groups_2_rounded,
-            size: 26,
-            color: _tileGold,
-          ),
+          leading: Icon(Icons.groups_2_rounded, size: 26, color: _tileGold),
           label: 'FILLED',
           value: '${Tournament.acceptedCount(t)}/${Tournament.bracketSize(t)}',
           valueColor: Colors.white,
@@ -1039,7 +1031,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
           const SizedBox(width: 8),
           Flexible(
             child: Text(
-              "You're out — follow the bracket to the crown.",
+              "You're out. Follow the bracket to the crown.",
               style: PixelText.body(
                 size: 13,
                 color: AppColors.of(context).textMid,

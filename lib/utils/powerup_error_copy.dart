@@ -11,7 +11,7 @@ String powerupUseErrorCopy(Object error) {
   if (error is ApiException) {
     switch (error.code) {
       case 'SIGNAL_JAMMED':
-        return 'Powerups are jammed in this race right now — sit tight!';
+        return 'Powerups are jammed in this race right now. Sit tight!';
       case 'RAINSTORM_ACTIVE':
         return 'Your Rainstorm is already active in this race.';
       case 'NO_ELIGIBLE_TARGETS':

@@ -169,6 +169,7 @@ class RacerAvatar extends StatelessWidget {
     this.size = 40,
     this.ringColor,
     this.animal,
+    this.showMedalRing = true,
   });
 
   final int rank;
@@ -176,6 +177,7 @@ class RacerAvatar extends StatelessWidget {
   final String? animal;
   final double size;
   final Color? ringColor;
+  final bool showMedalRing;
 
   /// P6/item 13: this was a context-free static returning the LIGHT medal
   /// constants, so medals stayed daytime gold/silver/bronze after the 19:00
@@ -193,6 +195,20 @@ class RacerAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (!showMedalRing) {
+      return SizedBox.square(
+        dimension: size,
+        child: Center(
+          child: CapybaraSpriteWithAccessories(
+            accessories: accessories,
+            capybaraSize: size,
+            frameIndex: 0,
+            animal: animal,
+          ),
+        ),
+      );
+    }
+
     final color = ringColor ?? medalColor(rank, context);
     return Container(
       width: size,

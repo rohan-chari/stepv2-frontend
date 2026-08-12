@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../models/loadable.dart';
+import '../../models/home_race_suggestion.dart';
+import '../../models/next_race.dart';
 import '../../styles.dart';
 import '../../widgets/app_refresh_indicator.dart';
 import '../../models/step_data.dart';
@@ -15,6 +17,7 @@ import '../../services/onboarding_state_service.dart';
 import '../../widgets/arcade_fx.dart';
 import '../../widgets/coach_tip.dart';
 import '../../widgets/coin_balance_badge.dart';
+import '../../widgets/coin_glyph.dart';
 import '../../widgets/feedback_sheet.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/global_event_banner.dart';
@@ -23,10 +26,12 @@ import '../../widgets/step_milestones_section.dart';
 import '../../widgets/streak_chip.dart' show StreakChip, StreakChipState;
 import '../../widgets/home_course_track.dart' show CapybaraCustomizationPreview;
 import '../../widgets/home_hero_scene.dart';
+import '../../widgets/home_chrome.dart';
 import '../../widgets/race_opportunity_card.dart';
 import '../../widgets/race_ui.dart';
 import '../../widgets/team_scoreline.dart';
 import '../display_name_screen.dart';
+import '../discoverable_identity_flow.dart';
 import '../public_races_screen.dart';
 import '../get_coins_screen.dart';
 import '../referral_screen.dart';
@@ -71,6 +76,11 @@ class HomeTab extends StatelessWidget {
   final Future<bool> Function()? onDismissProfilePhotoPrompt;
   final Map<String, dynamic>? raceCard;
   final bool raceCardLoading;
+  final Loadable<List<HomeRaceSuggestion>> suggestedRacesState;
+  final Set<String> joiningSuggestionKeys;
+  final Future<void> Function(HomeRaceSuggestion suggestion)? onJoinSuggestion;
+  final VoidCallback? onRetrySuggestedRaces;
+  final VoidCallback? onOpenPublicRaces;
   final GlobalKey<StreakChipState>? streakChipKey;
   final GlobalKey<StepMilestonesSectionState>? stepMilestonesKey;
   // Optional tutorial spotlight anchors. Null in the shipped app (the wrapping
@@ -82,12 +92,18 @@ class HomeTab extends StatelessWidget {
   final GlobalKey? tutorialFriendsKey;
   final void Function(String raceId)? onOpenRace;
   final Future<void> Function(String raceId)? onJoinRaceFromCard;
+  final Future<void> Function(String raceId)? onJoinDiscoveredRace;
   final Future<void> Function(String raceId)? onAcceptRaceInvite;
   final Future<void> Function(String raceId)? onDeclineRaceInvite;
   final void Function(String friendUserId)? onChallengeFriendBack;
   // Lets the shell patch its cached race-card batch when today's daily reward
   // is claimed, so remounting home doesn't show a stale CLAIM button.
   final VoidCallback? onDailyRewardClaimed;
+  final bool isTutorialPreview;
+  final bool showInviteCodePrompt;
+  final VoidCallback? onEnterInviteCode;
+  final VoidCallback? onSkipInviteCode;
+  final VoidCallback? onStartQuickRace;
 
   const HomeTab({
     super.key,
@@ -117,6 +133,11 @@ class HomeTab extends StatelessWidget {
     this.onDismissProfilePhotoPrompt,
     this.raceCard,
     this.raceCardLoading = false,
+    this.suggestedRacesState = const Loadable.initial(),
+    this.joiningSuggestionKeys = const {},
+    this.onJoinSuggestion,
+    this.onRetrySuggestedRaces,
+    this.onOpenPublicRaces,
     this.streakChipKey,
     this.stepMilestonesKey,
     this.tutorialStepsKey,
@@ -125,10 +146,16 @@ class HomeTab extends StatelessWidget {
     this.tutorialFriendsKey,
     this.onOpenRace,
     this.onJoinRaceFromCard,
+    this.onJoinDiscoveredRace,
     this.onAcceptRaceInvite,
     this.onDeclineRaceInvite,
     this.onChallengeFriendBack,
     this.onDailyRewardClaimed,
+    this.isTutorialPreview = false,
+    this.showInviteCodePrompt = false,
+    this.onEnterInviteCode,
+    this.onSkipInviteCode,
+    this.onStartQuickRace,
   });
 
   @override
@@ -147,6 +174,9 @@ class HomeTab extends StatelessWidget {
     final hasProfilePhoto =
         authService.profilePhotoUrl != null &&
         authService.profilePhotoUrl!.isNotEmpty;
+    final nextRace = isTutorialPreview
+        ? null
+        : NextRaceState.tryParse(raceCard?['nextRace']);
 
     return Stack(
       children: [
@@ -266,11 +296,14 @@ class HomeTab extends StatelessWidget {
                                 displayName: displayName,
                                 hasProfilePhoto: hasProfilePhoto,
                                 authService: authService,
+                                backendApiService: backendApiService,
                                 onDisplayNameChanged: onDisplayNameChanged,
                                 onAddProfilePhoto: onAddProfilePhoto,
                                 onDismissProfilePhotoPrompt:
                                     onDismissProfilePhotoPrompt,
-                                showRenameChip: authService.onboardingV3Enabled,
+                                showRenameChip:
+                                    authService.onboardingV3Enabled &&
+                                    !authService.supportsDiscoverableIdentity,
                                 // Only an actually-loaded, actually-empty
                                 // friends list counts. A null state (tutorial
                                 // preview) or an in-flight/failed fetch must
@@ -280,6 +313,10 @@ class HomeTab extends StatelessWidget {
                                     friendsStepsState?.isSuccess == true &&
                                     friendsSteps.isEmpty,
                                 onFindFriends: onOpenFriendsTab,
+                                showInviteCodePrompt:
+                                    showInviteCodePrompt && !isTutorialPreview,
+                                onEnterInviteCode: onEnterInviteCode,
+                                onSkipInviteCode: onSkipInviteCode,
                               ),
                             ),
                             // A pending race invite outranks everything below
@@ -288,13 +325,30 @@ class HomeTab extends StatelessWidget {
                             // its own block and is suppressed inside RACES.
                             if (_buildPendingInviteSection() case final invite?)
                               StaggerIn(index: 3, child: invite),
+                            if (nextRace?.visible == true)
+                              StaggerIn(
+                                index: 4,
+                                child: _NextRaceSection(
+                                  state: nextRace!,
+                                  shareFirst:
+                                      nextRace.createEnabled &&
+                                      authService
+                                          .quickRaceShareAutoFriendEnabled &&
+                                      friendsStepsState?.isSuccess == true &&
+                                      friendsSteps.length < 5,
+                                  onStart: onStartQuickRace,
+                                  onJoin:
+                                      onJoinDiscoveredRace ??
+                                      onJoinRaceFromCard,
+                                ),
+                              ),
                             // Today's coins sits above the races: it's the one
                             // section that moves every single day whether or not
                             // the user is in a race, so it earns the higher
                             // slot. The stagger index moves with it — the
                             // cascade is ordered by index, not by position.
                             StaggerIn(
-                              index: 4,
+                              index: 5,
                               child: KeyedSubtree(
                                 key: tutorialMilestonesKey,
                                 child: CoachTipHost(
@@ -323,17 +377,14 @@ class HomeTab extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            if (raceCard != null)
-                              StaggerIn(index: 5, child: _buildRaceSection())
-                            else if (raceCardLoading)
-                              StaggerIn(
-                                index: 5,
-                                child: _buildRaceSkeletonSection(),
-                              ),
+                            StaggerIn(
+                              index: 6,
+                              child: _buildRaceSection(context),
+                            ),
                             // Last block on the page: the ask, once the user
                             // has seen everything the app has to show them.
                             StaggerIn(
-                              index: 6,
+                              index: 7,
                               child: _buildFeedbackSection(context),
                             ),
                           ],
@@ -402,36 +453,83 @@ class HomeTab extends StatelessWidget {
     );
   }
 
-  /// RACES section on home — a compact launcher/rail, not the full races page.
-  Widget _buildRaceSection() {
-    final card = raceCard!;
-    final data = RaceCardData.fromJson(card);
-    // The invite has been promoted above Today's Coins, so rendering it again
-    // here would duplicate it — but dropping it outright would leave RACES as a
-    // bare header with nothing underneath. Fall back to the empty-state row,
-    // which is the honest thing to offer a user whose only race is an invite
-    // they haven't accepted.
-    final rowData = data.state == RaceCardState.pendingInvite
-        ? const RaceCardData(state: RaceCardState.empty)
-        : data;
+  /// Discovery-only Home rail. Joined races remain authoritative on Races.
+  Widget _buildRaceSection(BuildContext context) {
     return ColoredBox(
       color: Colors.transparent,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _HomeRaceHeader(onViewAll: onOpenRacesTab),
-          if (card['state'] == 'ACTIVE_RACES')
-            _buildActiveRacesRow(card)
-          else
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: _buildRaceOpportunityRow(
-                rowData,
-                invitePromoted: data.state == RaceCardState.pendingInvite,
-              ),
-            ),
+          _HomeRaceHeader(onViewAll: () => _openPublicRaces(context)),
+          _buildSuggestedRacesBody(context),
         ],
       ),
+    );
+  }
+
+  void _openPublicRaces(BuildContext context) {
+    final callback = onOpenPublicRaces;
+    if (callback != null) {
+      callback();
+    } else {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => PublicRacesScreen(
+            authService: authService,
+            backendApiService: backendApiService,
+          ),
+        ),
+      );
+    }
+  }
+
+  Widget _buildSuggestedRacesBody(BuildContext homeContext) {
+    final state = suggestedRacesState;
+    if (state.shouldShowInitialLoading || state.isInitial) {
+      return _buildRaceSkeletonBody();
+    }
+    final suggestions = state.data;
+    if (suggestions != null && suggestions.isNotEmpty) {
+      return SizedBox(
+        height: 240,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final width = (constraints.maxWidth * 0.72).clamp(220.0, 260.0);
+            return ListView.separated(
+              key: const PageStorageKey('home-suggested-races-carousel'),
+              scrollDirection: Axis.horizontal,
+              physics: const PageScrollPhysics(parent: BouncingScrollPhysics()),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+              itemCount: suggestions.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 12),
+              itemBuilder: (context, index) {
+                final suggestion = suggestions[index];
+                return _HomeSuggestionTicket(
+                  key: Key(
+                    'home-suggestion-${suggestion.wireKind}-${suggestion.id}',
+                  ),
+                  suggestion: suggestion,
+                  width: width,
+                  joining: joiningSuggestionKeys.contains(suggestion.stableKey),
+                  onJoin: onJoinSuggestion == null
+                      ? null
+                      : () => onJoinSuggestion!(suggestion),
+                );
+              },
+            );
+          },
+        ),
+      );
+    }
+    return Builder(
+      builder: (context) {
+        return _HomeSuggestionStatusTicket(
+          error: state.isError,
+          onPressed: state.isError
+              ? (onRetrySuggestedRaces ?? () => onRefresh())
+              : () => _openPublicRaces(homeContext),
+        );
+      },
     );
   }
 
@@ -493,25 +591,18 @@ class HomeTab extends StatelessWidget {
     );
   }
 
-  Widget _buildRaceSkeletonSection() {
-    return ColoredBox(
-      color: Colors.transparent,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _HomeRaceHeader(onViewAll: onOpenRacesTab),
-          SizedBox(
-            height: 240,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              physics: const NeverScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
-              itemBuilder: (context, index) => const _HomeRaceSkeletonTicket(),
-              separatorBuilder: (context, index) => const SizedBox(width: 12),
-              itemCount: 3,
-            ),
-          ),
-        ],
+  Widget _buildRaceSkeletonBody() {
+    return SizedBox(
+      height: 240,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+        itemBuilder: (context, index) => _HomeRaceSkeletonTicket(
+          key: Key('home-suggestion-skeleton-$index'),
+        ),
+        separatorBuilder: (context, index) => const SizedBox(width: 12),
+        itemCount: 3,
       ),
     );
   }
@@ -520,6 +611,9 @@ class HomeTab extends StatelessWidget {
   /// user is in. Driven by the opt-in `ACTIVE_RACES` backend state. Reads the
   /// response defensively (missing/null fields default safely) so a backend on
   /// a different version can't crash the row.
+  // Kept as a private legacy renderer while frozen /home/race-card clients and
+  // its serializers remain supported; Home discovery no longer calls it.
+  // ignore: unused_element
   Widget _buildActiveRacesRow(Map<String, dynamic> cardData) {
     final data = cardData['data'];
     final races = (data is Map<String, dynamic>)
@@ -704,18 +798,20 @@ class HomeTab extends StatelessWidget {
           // one screen.
           secondaryLabel: invitePromoted ? null : 'INVITE',
           onPrimary: onOpenRacesTab,
-          onSecondary: invitePromoted ? null : (ctx) {
-            // Open the referral screen so the invite carries the user's real
-            // /r/BARA-<code> link (earns both sides coins), not a bare store URL.
-            Navigator.of(ctx).push(
-              MaterialPageRoute(
-                builder: (_) => ReferralScreen(
-                  authService: authService,
-                  backendApiService: backendApiService,
-                ),
-              ),
-            );
-          },
+          onSecondary: invitePromoted
+              ? null
+              : (ctx) {
+                  // Open the referral screen so the invite carries the user's real
+                  // /r/BARA-<code> link (earns both sides coins), not a bare store URL.
+                  Navigator.of(ctx).push(
+                    MaterialPageRoute(
+                      builder: (_) => ReferralScreen(
+                        authService: authService,
+                        backendApiService: backendApiService,
+                      ),
+                    ),
+                  );
+                },
         );
     }
   }
@@ -1187,17 +1283,22 @@ class _SetupPromptsSection extends StatefulWidget {
     required this.displayName,
     required this.hasProfilePhoto,
     required this.authService,
+    required this.backendApiService,
     required this.onDisplayNameChanged,
     this.onAddProfilePhoto,
     this.onDismissProfilePhotoPrompt,
     this.showRenameChip = false,
     this.hasNoFriends = false,
     this.onFindFriends,
+    this.showInviteCodePrompt = false,
+    this.onEnterInviteCode,
+    this.onSkipInviteCode,
   });
 
   final String? displayName;
   final bool hasProfilePhoto;
   final AuthService authService;
+  final BackendApiService backendApiService;
   final VoidCallback onDisplayNameChanged;
   final Future<void> Function()? onAddProfilePhoto;
   final Future<bool> Function()? onDismissProfilePhotoPrompt;
@@ -1209,6 +1310,9 @@ class _SetupPromptsSection extends StatefulWidget {
 
   /// Opens the Friends tab. Null hides the row (nowhere to send them).
   final VoidCallback? onFindFriends;
+  final bool showInviteCodePrompt;
+  final VoidCallback? onEnterInviteCode;
+  final VoidCallback? onSkipInviteCode;
 
   /// Whether to offer the one-time rename chip. Generated names
   /// (SwiftCapybara07) are good friction-reduction, but users don't know they
@@ -1340,6 +1444,21 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
     widget.onDisplayNameChanged();
   }
 
+  Future<void> _openDiscoverableIdentityFlow() async {
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => DiscoverableIdentityFlow(
+          authService: widget.authService,
+          backendApiService: widget.backendApiService,
+          initialFirstName: widget.authService.providerFirstName,
+          initialLastName: widget.authService.providerLastName,
+        ),
+      ),
+    );
+    widget.onDisplayNameChanged();
+    if (mounted) setState(() {});
+  }
+
   Future<void> _dismissProfilePhotoPrompt() async {
     if (_isSavingDismissal) return;
 
@@ -1373,7 +1492,9 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
 
   @override
   Widget build(BuildContext context) {
-    final showDisplayNamePrompt = widget.displayName == null;
+    final showDisplayNamePrompt =
+        widget.displayName == null &&
+        !widget.authService.supportsDiscoverableIdentity;
     final showProfilePhotoPrompt =
         widget.displayName != null &&
         !widget.hasProfilePhoto &&
@@ -1385,6 +1506,8 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
         _showDismissedConfirmation;
 
     final showRenameChip = _showRenameChip && widget.displayName != null;
+    final showDiscoverableIdentity =
+        widget.authService.shouldShowDiscoverableIdentityRemediation;
     final showFriendPrompt =
         widget.hasNoFriends && widget.onFindFriends != null;
 
@@ -1392,7 +1515,9 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
         !showProfilePhotoPrompt &&
         !showDismissedConfirmation &&
         !showFriendPrompt &&
-        !showRenameChip) {
+        !showDiscoverableIdentity &&
+        !showRenameChip &&
+        !widget.showInviteCodePrompt) {
       return const SizedBox.shrink();
     }
 
@@ -1403,13 +1528,62 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
     // a bare pill chip next to a full card read as two unrelated features that
     // happened to land under the same header.
     final entries = <_SetupEntry>[
+      if (showDiscoverableIdentity)
+        _SetupEntry(
+          icon: Icons.person_search_rounded,
+          title: 'HELP FRIENDS FIND YOU',
+          subtitle:
+              'Add the name people know you by. It is only used so friends can find you in Bara.',
+          actions: [
+            Expanded(
+              child: PillButton(
+                key: const Key('home-add-discoverable-name'),
+                label: 'ADD YOUR NAME',
+                variant: PillButtonVariant.secondary,
+                fontSize: 13,
+                fullWidth: true,
+                onPressed: _openDiscoverableIdentityFlow,
+              ),
+            ),
+          ],
+        ),
+      if (widget.showInviteCodePrompt)
+        _SetupEntry(
+          icon: Icons.card_giftcard_rounded,
+          title: 'Have an invite code?',
+          subtitle:
+              "If a friend invited you, enter their code. You'll both earn coins after your first qualifying race.",
+          actions: [
+            Expanded(
+              child: PillButton(
+                key: const Key('home-enter-invite-code'),
+                label: 'ENTER CODE',
+                variant: PillButtonVariant.primary,
+                fontSize: 13,
+                fullWidth: true,
+                onPressed: widget.onEnterInviteCode,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: PillButton(
+                key: const Key('home-skip-invite-code'),
+                label: 'SKIP',
+                variant: PillButtonVariant.secondary,
+                fontSize: 13,
+                fullWidth: true,
+                onPressed: widget.onSkipInviteCode,
+              ),
+            ),
+          ],
+        ),
       if (showRenameChip)
         _SetupEntry(
           icon: Icons.badge_rounded,
           title: 'Want a different name?',
           subtitle:
               'We picked @${widget.displayName} for you. It is what friends '
-              'look for in a race — keep it, or make it yours.',
+              'look for in a race. Keep it, or make it yours.',
           actions: [
             Expanded(
               child: PillButton(
@@ -1537,6 +1711,161 @@ class _SetupPromptsSectionState extends State<_SetupPromptsSection> {
   }
 }
 
+class _NextRaceSection extends StatefulWidget {
+  const _NextRaceSection({
+    required this.state,
+    required this.shareFirst,
+    required this.onStart,
+    required this.onJoin,
+  });
+
+  final NextRaceState state;
+  final bool shareFirst;
+  final VoidCallback? onStart;
+  final Future<void> Function(String raceId)? onJoin;
+
+  @override
+  State<_NextRaceSection> createState() => _NextRaceSectionState();
+}
+
+class _NextRaceSectionState extends State<_NextRaceSection> {
+  final Set<String> _joiningIds = {};
+
+  Future<void> _join(String id) async {
+    final join = widget.onJoin;
+    if (join == null || _joiningIds.contains(id)) return;
+    setState(() => _joiningIds.add(id));
+    try {
+      await join(id);
+    } finally {
+      if (mounted) setState(() => _joiningIds.remove(id));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = widget.state;
+    final shareFirst = state.createEnabled && widget.shareFirst;
+    final rows = state.discoveryEnabled
+        ? state.openRaces
+        : const <OpenRaceSummary>[];
+    return Column(
+      key: const Key('home-next-race-section'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (state.createEnabled)
+          const _HomeSectionHeader(title: 'CREATE A RACE')
+        else
+          const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: GameContainer(
+            frameColor: AppColors.of(context).accent,
+            surfaceColor: AppColors.of(context).parchmentLight,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  state.createEnabled
+                      ? shareFirst
+                            ? 'RACE WITH YOUR FRIENDS'
+                            : 'START YOUR OWN RACE'
+                      : 'OPEN RACES',
+                  style: HomeText.display(
+                    size: 20,
+                    color: AppColors.of(context).ink,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  state.createEnabled
+                      ? shareFirst
+                            ? 'Create a race, then send the link to your friends. Your race starts when someone joins.'
+                            : "Pick a length. We'll help find other walkers."
+                      : 'Join a public race started by another walker.',
+                  style: HomeText.body(
+                    size: 13,
+                    color: AppColors.of(context).muted,
+                  ),
+                ),
+                if (state.createEnabled) ...[
+                  const SizedBox(height: 14),
+                  PillButton(
+                    key: const Key('home-start-a-race'),
+                    label: shareFirst ? 'CREATE & SHARE' : 'START A RACE',
+                    icon: Icons.flag_rounded,
+                    fullWidth: true,
+                    onPressed: widget.onStart,
+                  ),
+                ],
+                if (rows.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  if (state.createEnabled)
+                    Text(
+                      'OR JOIN ONE',
+                      textAlign: TextAlign.center,
+                      style: PixelText.body(
+                        size: 11,
+                        color: AppColors.of(context).textMid,
+                      ),
+                    ),
+                  const SizedBox(height: 6),
+                  for (final race in rows)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 7),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  race.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: PixelText.title(
+                                    size: 13,
+                                    color: AppColors.of(context).textDark,
+                                  ),
+                                ),
+                                Text(
+                                  '${race.participantCount} in',
+                                  style: PixelText.body(
+                                    size: 11,
+                                    color: AppColors.of(context).textMid,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            key: Key('home-join-${race.id}'),
+                            tooltip: 'Join ${race.name}',
+                            onPressed: !_joiningIds.contains(race.id)
+                                ? () => _join(race.id)
+                                : null,
+                            icon: _joiningIds.contains(race.id)
+                                ? const SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.add_circle_rounded),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _SkeletonBar extends StatelessWidget {
   const _SkeletonBar({required this.width, required this.height});
 
@@ -1601,14 +1930,18 @@ class _HomeRaceHeader extends StatelessWidget {
           children: [
             const _SectionTick(),
             const SizedBox(width: 8),
-            Text(
-              'RACES',
-              style: PixelText.title(
-                size: 20,
-                color: AppColors.of(context).textLight,
-              ).copyWith(shadows: _textShadows),
+            Expanded(
+              child: Text(
+                'SUGGESTED RACES',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: PixelText.title(
+                  size: 20,
+                  color: AppColors.of(context).textLight,
+                ).copyWith(shadows: _textShadows),
+              ),
             ),
-            const Spacer(),
+            const SizedBox(width: 8),
             if (onViewAll != null)
               GestureDetector(
                 onTap: onViewAll,
@@ -1643,8 +1976,260 @@ class _HomeRaceHeader extends StatelessWidget {
   }
 }
 
+class _HomeSuggestionTicket extends StatelessWidget {
+  const _HomeSuggestionTicket({
+    super.key,
+    required this.suggestion,
+    required this.width,
+    required this.joining,
+    required this.onJoin,
+  });
+
+  final HomeRaceSuggestion suggestion;
+  final double width;
+  final bool joining;
+  final VoidCallback? onJoin;
+
+  int get _prizeCoins {
+    for (final source in [suggestion.prizePool, suggestion.finishReward]) {
+      if (source == null) continue;
+      for (final key in const ['coins', 'pool', 'projectedCoins']) {
+        final value = source[key];
+        if (value is int && value > 0) {
+          return value;
+        }
+      }
+    }
+    return 0;
+  }
+
+  String get _timeLine {
+    if (suggestion.kind == HomeRaceSuggestionKind.tournament) {
+      final days = suggestion.matchupDurationDays ?? 1;
+      return '$days-DAY MATCHUPS';
+    }
+    final ends = suggestion.endsAt;
+    if (ends != null) {
+      final left = ends.difference(DateTime.now());
+      if (left.inDays > 0) {
+        return '${left.inDays}D ${left.inHours.remainder(24)}H LEFT';
+      }
+      if (left.inHours > 0) return '${left.inHours}H LEFT';
+      if (left.inMinutes > 0) return '${left.inMinutes}M LEFT';
+      return 'ENDING SOON';
+    }
+    final days = suggestion.maxDurationDays ?? 1;
+    return '$days-DAY RACE';
+  }
+
+  String get _populationLine {
+    if (suggestion.kind == HomeRaceSuggestionKind.tournament) {
+      return '${suggestion.participantCount}/${suggestion.bracketSize ?? 0} IN';
+    }
+    final cap = suggestion.maxParticipants;
+    return cap == null
+        ? '${suggestion.participantCount} RACING'
+        : '${suggestion.participantCount}/$cap RACING';
+  }
+
+  String get _availabilitySemantics {
+    final cap = suggestion.kind == HomeRaceSuggestionKind.tournament
+        ? suggestion.bracketSize
+        : suggestion.maxParticipants;
+    return cap == null
+        ? '${suggestion.participantCount} participating'
+        : '${suggestion.participantCount} of $cap available';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final prize = _prizeCoins;
+    final team = suggestion.isTeamRace && suggestion.teamSize != null
+        ? '${suggestion.teamSize}v${suggestion.teamSize} TEAMS · '
+              '${((suggestion.teamSize! * 2) - suggestion.participantCount).clamp(0, suggestion.teamSize! * 2)} '
+              '${((suggestion.teamSize! * 2) - suggestion.participantCount) == 1 ? 'SLOT' : 'SLOTS'}'
+        : null;
+    final semanticCategory = switch (suggestion.eyebrow) {
+      'DAILY' => 'Daily',
+      'WEEKLY' => 'Weekly',
+      'PUBLIC' => 'Public',
+      _ => 'Tournament',
+    };
+    final semanticParts = [
+      semanticCategory,
+      suggestion.name,
+      _availabilitySemantics,
+      if (prize > 0) '$prize coin prize',
+      'Join ${suggestion.name}',
+    ];
+    return Semantics(
+      button: true,
+      enabled: onJoin != null && !joining,
+      label: semanticParts.join(', '),
+      child: ExcludeSemantics(
+        child: SizedBox(
+          width: width,
+          height: 222,
+          child: DecoratedBox(
+            decoration: raceCardDecoration(context),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 13),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Pill(
+                      label: suggestion.eyebrow,
+                      background:
+                          suggestion.kind == HomeRaceSuggestionKind.publicRace
+                          ? AppColors.of(context).pillGreen
+                          : AppColors.of(context).pillGold,
+                      foreground:
+                          suggestion.kind == HomeRaceSuggestionKind.publicRace
+                          ? Colors.white
+                          : null,
+                      fontSize: 10.5,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    suggestion.name.toUpperCase(),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: PixelText.title(
+                      size: 16,
+                      color: AppColors.of(context).textDark,
+                    ),
+                  ),
+                  const SizedBox(height: 7),
+                  Text(
+                    '$_timeLine · $_populationLine',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: PixelText.body(
+                      size: 11.5,
+                      color: AppColors.of(context).textMid,
+                    ),
+                  ),
+                  if (team != null) ...[
+                    const SizedBox(height: 5),
+                    Text(
+                      team,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: PixelText.title(
+                        size: 10.5,
+                        color: AppColors.of(context).successText,
+                      ),
+                    ),
+                  ],
+                  if (prize > 0) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const CoinGlyph(size: 14),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                            '$prize COIN PRIZE',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: PixelText.title(
+                              size: 11,
+                              color: AppColors.of(context).coinDark,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const Spacer(),
+                  PillButton(
+                    key: Key(
+                      'home-suggestion-join-${suggestion.wireKind}-${suggestion.id}',
+                    ),
+                    label: joining ? 'JOINING...' : 'JOIN',
+                    variant: PillButtonVariant.primary,
+                    fontSize: 12.5,
+                    fullWidth: true,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 9,
+                    ),
+                    onPressed: joining ? null : onJoin,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeSuggestionStatusTicket extends StatelessWidget {
+  const _HomeSuggestionStatusTicket({
+    required this.error,
+    required this.onPressed,
+  });
+
+  final bool error;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 240,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+        child: DecoratedBox(
+          key: Key(error ? 'home-suggestions-error' : 'home-suggestions-empty'),
+          decoration: raceCardDecoration(context),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+            child: Row(
+              children: [
+                Icon(
+                  error ? Icons.refresh_rounded : Icons.explore_rounded,
+                  color: AppColors.of(context).pillGoldShadow,
+                  size: 28,
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    error ? 'RACES TOOK A DETOUR' : 'NO RACES TO SUGGEST',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: PixelText.title(
+                      size: 14,
+                      color: AppColors.of(context).textDark,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                PillButton(
+                  label: error ? 'TRY AGAIN' : 'BROWSE ALL',
+                  variant: PillButtonVariant.secondary,
+                  fontSize: 11,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 9,
+                  ),
+                  onPressed: onPressed,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _HomeRaceSkeletonTicket extends StatelessWidget {
-  const _HomeRaceSkeletonTicket();
+  const _HomeRaceSkeletonTicket({super.key});
 
   @override
   Widget build(BuildContext context) {

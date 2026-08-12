@@ -115,7 +115,7 @@ const Map<DemoBeat, ({String title, String body, String? cta})> kDemoBeatCopy =
       ),
       DemoBeat.useShield: (
         title: '$demoRivalLeaderName is coming for you.',
-        body: 'Shield up — tap the Compression Socks.',
+        body: 'Shield up. Tap the Compression Socks.',
         cta: null,
       ),
       DemoBeat.blockedAttack: (
@@ -127,12 +127,12 @@ const Map<DemoBeat, ({String title, String body, String? cta})> kDemoBeatCopy =
       ),
       DemoBeat.openThirdBox: (
         title: 'One box left.',
-        body: 'Open it — walking keeps them coming.',
+        body: 'Open it. Walking keeps them coming.',
         cta: null,
       ),
       DemoBeat.useShortcut: (
         title: 'A Shortcut. Now take the lead.',
-        body: 'Tap it and pick $demoRivalLeaderName — it steals their steps.',
+        body: 'Tap it and pick $demoRivalLeaderName. It steals their steps.',
         cta: null,
       ),
       DemoBeat.finish: (

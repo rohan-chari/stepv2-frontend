@@ -42,6 +42,10 @@ class OnboardingStateService {
   /// wiping it on sign-out is safe here and was not for the rename chip.
   static const keyInviteCodeStepDone = 'invite_code_step_done';
 
+  Future<bool> inviteCodePromptResolved() => inviteCodeStepDone();
+
+  Future<void> markInviteCodePromptResolved() => markInviteCodeStepDone();
+
   /// The app version whose "What's New" sheet this device has already seen
   /// (batch 2026-08-08, item 8).
   ///

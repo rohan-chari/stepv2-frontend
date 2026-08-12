@@ -59,9 +59,8 @@ class _FullTeamInviteApi extends BackendApiService {
   }
 
   @override
-  Future<Map<String, dynamic>> fetchMe({
-    required String identityToken,
-  }) async => const {'coins': 320, 'heldCoins': 0};
+  Future<Map<String, dynamic>> fetchMe({required String identityToken}) async =>
+      const {'coins': 320, 'heldCoins': 0};
 }
 
 Future<AuthService> _createAuthService() async {
@@ -108,16 +107,15 @@ void main() {
     expect(find.byKey(const Key('lobby-empty-A-0')), findsNothing);
     expect(find.byKey(const Key('lobby-empty-B-0')), findsNothing);
     expect(find.byKey(const Key('team-lobby-race-full')), findsOneWidget);
-    expect(
-      find.textContaining('Both teams are full'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Both teams are full'), findsOneWidget);
     expect(
       find.textContaining('Tap an empty peg to pick your side'),
       findsNothing,
     );
-    // Declining is still possible — the invite is not silently dropped.
-    expect(find.text('DECLINE INVITE'), findsOneWidget);
+    // The approved gate no longer requires choosing a peg: the backend
+    // auto-assigns on ACCEPT and remains authoritative for TEAM_FULL.
+    expect(find.byKey(const Key('race-invite-accept')), findsOneWidget);
+    expect(find.byKey(const Key('race-invite-decline')), findsOneWidget);
   });
 
   testWidgets('TR-207/205: the invite becomes acceptable again once a slot '
@@ -128,7 +126,8 @@ void main() {
     expect(find.byKey(const Key('lobby-empty-B-0')), findsOneWidget);
     expect(
       find.textContaining('Tap an empty peg to pick your side'),
-      findsOneWidget,
+      findsNothing,
     );
+    expect(find.byKey(const Key('race-invite-accept')), findsOneWidget);
   });
 }

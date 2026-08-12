@@ -191,15 +191,19 @@ class StepMilestonesSectionState extends State<StepMilestonesSection> {
       children: [
         const SpinningCoin(size: 22),
         const SizedBox(width: 8),
-        Text(
-          "Today's coins",
-          // Light on the home tab's dark felt backdrop.
-          style: PixelText.title(
-            size: 22,
-            color: AppColors.of(context).textLight,
+        Expanded(
+          child: Text(
+            "Today's coins",
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            // Light on the home tab's dark felt backdrop.
+            style: PixelText.title(
+              size: 22,
+              color: AppColors.of(context).textLight,
+            ),
           ),
         ),
-        const Spacer(),
+        const SizedBox(width: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
           decoration: BoxDecoration(

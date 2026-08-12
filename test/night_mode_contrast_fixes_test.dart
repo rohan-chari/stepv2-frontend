@@ -42,7 +42,7 @@ void main() {
       final title = _textColor(tester, '2x RACE STEPS')!;
       final body = _textColor(
         tester,
-        'STEPS COUNT 2x IN ALL RACES — GO!',
+        'STEPS COUNT 2x IN ALL RACES. GO!',
       )!;
 
       expect(title, AppPalette.night.textDark);

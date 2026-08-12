@@ -10,6 +10,9 @@ import 'package:image_picker/image_picker.dart';
 import '../config/animals.dart';
 import '../config/start_cape_metadata.dart';
 import '../models/loadable.dart';
+import '../models/home_race_suggestion.dart';
+import '../models/next_race.dart';
+import '../models/race_handoff_result.dart';
 import '../models/step_data.dart';
 import '../models/step_sample_data.dart';
 import '../services/async_ttl_cache.dart';
@@ -22,6 +25,7 @@ import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../services/remote_asset_cache.dart';
 import '../services/background_sync_bootstrap_service.dart';
+import '../services/discovery_join_coordinator.dart';
 import '../services/health_service.dart';
 import '../services/install_attribution_service.dart';
 import '../services/notification_service.dart';
@@ -32,6 +36,9 @@ import '../widgets/ad_banner_slot.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/info_toast.dart';
+import '../widgets/invite_code_sheet.dart';
+import '../widgets/quick_create_race_sheet.dart';
+import '../widgets/race_invite_decision_gate.dart';
 import '../widgets/team_side_picker.dart';
 import '../widgets/step_milestones_section.dart';
 import '../widgets/streak_chip.dart';
@@ -44,6 +51,7 @@ import 'race_results_summary_screen.dart';
 import 'ranked_results_summary_screen.dart';
 import 'start_screen.dart';
 import 'onboarding_flow.dart';
+import 'discoverable_identity_flow.dart';
 import '../demo/demo_race_host.dart';
 import '../tutorial/tutorial_gate.dart';
 import '../tutorial/tutorial_screen.dart';
@@ -54,6 +62,7 @@ import 'tabs/profile_tab.dart';
 import 'create_race_screen.dart';
 import 'daily_reward_screen.dart';
 import 'race_detail_screen.dart';
+import 'public_races_screen.dart';
 import 'tournament_detail_screen.dart';
 import 'tabs/races_tab.dart';
 import 'tabs/shop_tab.dart';
@@ -126,7 +135,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   // render as "not done", or a returning user flashes a step they already
   // answered.
   bool? _inviteCodeStepDone;
-  bool _inviteCodeShownRecorded = false;
   // Part C: a probable invite URL was detected on the iOS pasteboard at launch
   // but could not be read. Only in that state does the step offer the
   // consented paste button.
@@ -159,6 +167,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   Loadable<Map<String, dynamic>> _shopCatalogState = const Loadable.initial();
   Map<String, dynamic>? _raceCard;
   bool _raceCardLoading = true;
+  final HomeSuggestedRacesStore _homeSuggestions = HomeSuggestedRacesStore();
+  String? _homeSuggestionsUserId;
+  final Set<String> _joiningHomeSuggestionKeys = {};
+  bool _homeSuggestionsImpressionRecorded = false;
   final String _requestedLeaderboardType = 'steps';
   final String _requestedLeaderboardPeriod = 'today';
   int _leaderboardSelectionNonce = 0;
@@ -172,8 +184,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   // second trigger while one runs shares its future instead of re-fanning out.
   Future<void>? _homeLoadInFlight;
   Future<void>? _homeRefreshInFlight;
-  // Coalesces overlapping Races refreshes (tab reveal, pull, route-return, Home
-  // initial load, profile-triggered). A trigger while one runs rides it (§9.4).
+  // Coalesces overlapping Races refreshes (tab reveal, pull, route-return,
+  // profile-triggered). Home owns a separate suggestions request.
   Future<void>? _racesRefreshInFlight;
   // Monotonic generation guarding race-list/discovery state commits so a slower
   // old response can never overwrite a newer refresh (§9.4).
@@ -199,6 +211,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   // (markRaceResultsSeen) is the durable source of truth across sessions.
   final Set<String> _raceResultsShownThisSession = {};
   bool _raceResultsPopupOpen = false;
+  bool _nextRaceHomeShownRecorded = false;
+  bool _inviteSetupShownRecorded = false;
+  int _racesGateEpoch = 0;
+  bool _racesGateBlocking = false;
 
   /// Item 8 — a results modal (race or ranked) took the screen this session,
   /// so the What's New sheet waits for the next launch rather than stacking.
@@ -230,15 +246,17 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   /// drains fire mid-tutorial under v1. It now lives in one pure function
   /// (`utils/onboarding_gate.dart`) with a structural test guarding against the
   /// duplication coming back.
-  bool get _isOnboarding => isOnboardingGate(
-    onboardingV3Enabled: widget.authService.onboardingV3Enabled,
-    onboardingV2Enabled: widget.authService.onboardingV2Enabled,
-    healthAuthorized: _healthAuthorized,
-    escapedHealthGate: _escapedHealthGate,
-    notificationsState: _notificationsState,
-    tutorialOnboardingSeen: widget.authService.tutorialOnboardingSeen,
-    firstRaceOnboardingSeen: widget.authService.firstRaceOnboardingSeen,
-  );
+  bool get _isOnboarding =>
+      widget.authService.requiresDiscoverableIdentityOnboarding ||
+      isOnboardingGate(
+        onboardingV3Enabled: widget.authService.onboardingV3Enabled,
+        onboardingV2Enabled: widget.authService.onboardingV2Enabled,
+        healthAuthorized: _healthAuthorized,
+        escapedHealthGate: _escapedHealthGate,
+        notificationsState: _notificationsState,
+        tutorialOnboardingSeen: widget.authService.tutorialOnboardingSeen,
+        firstRaceOnboardingSeen: widget.authService.firstRaceOnboardingSeen,
+      );
 
   /// Whether the onboarding invite-code step is still owed.
   ///
@@ -257,53 +275,160 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   ///    silently rejected would set it while leaving the account unattributed
   ///    — exactly the user this step exists to catch.
   ///  * the device-local done-flag is read (non-null) and false.
-  bool get _showInviteCodeStep =>
-      widget.authService.onboardingV3Enabled &&
-      widget.authService.onboardingInviteCodeEnabled &&
+  bool get _showInviteCodePrompt =>
+      widget.authService.setupInviteCodePromptEnabled &&
       widget.authService.authPayloadApplied &&
       widget.authService.referredByCode == null &&
+      !widget.authService.inviteCodePromptResolvedThisSession &&
       _inviteCodeStepDone == false;
 
-  /// Redeems a manually-entered invite code. Returns the raw
-  /// `{attributed, reason?}` body (always HTTP 200 by contract) so the step can
-  /// render the exact reason; throws only on transport failure, which the step
-  /// renders as a retryable error with the skip still live.
-  Future<Map<String, dynamic>> _applyInviteCode(String code) async {
-    final identityToken = widget.authService.authToken;
-    if (identityToken == null || identityToken.isEmpty) {
-      throw const ApiException('Not signed in.');
+  /// Opens the shared Home invite-code sheet. Terminal outcomes resolve the
+  /// device prompt; a successful attribution also refreshes auth and friends
+  /// because the backend may have created a friendship.
+  Future<void> _openInviteCodeFromHome() async {
+    final outcome = await showInviteCodeSheet(
+      context: context,
+      authService: widget.authService,
+      backendApiService: _backendApiService,
+    );
+    if (!mounted || outcome == null) return;
+    if (outcome.attributed || outcome.terminal) {
+      await _onboardingState.markInviteCodePromptResolved();
+      if (mounted) setState(() => _inviteCodeStepDone = true);
+      unawaited(
+        _activationAnalytics.record(
+          'invite_code_setup_applied',
+          context: {'attributed': '${outcome.attributed}'},
+        ),
+      );
     }
-    return _backendApiService.redeemReferralCode(
-      identityToken: identityToken,
-      code: code,
+    if (outcome.attributed) {
+      await Future.wait([_refreshMe(), _fetchFriendsSteps()]);
+      if (mounted) showInfoToast(context, outcome.message);
+    } else if (outcome.terminal && mounted) {
+      showErrorToast(context, outcome.message);
+    }
+  }
+
+  Future<void> _skipInviteCodeFromHome() async {
+    if (_inviteCodeStepDone == true) return;
+    setState(() => _inviteCodeStepDone = true);
+    widget.authService.markInviteCodePromptResolvedThisSession();
+    await _onboardingState.markInviteCodePromptResolved();
+    unawaited(_activationAnalytics.record('invite_code_setup_dismissed'));
+    if (mounted) {
+      showInfoToast(
+        context,
+        'You can always enter an invite code in Settings.',
+      );
+    }
+  }
+
+  Future<void> _showQuickCreateRaceSheet({String surface = 'home'}) async {
+    unawaited(
+      _activationAnalytics.record(
+        'next_race_cta_tapped',
+        context: {'surface': surface},
+      ),
+    );
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => QuickCreateRaceSheet(
+        onCreate: (preset) => _createQuickRace(sheetContext, preset),
+        onCustomize: () {
+          unawaited(_openCustomizedRaceFromSheet(sheetContext));
+        },
+      ),
     );
   }
 
-  /// The step's one FINAL answer: applied, terminally rejected, or skipped.
-  ///
-  /// Writes the device-scoped done-flag (never on a transient failure — the
-  /// step simply doesn't call this then), and on a successful apply re-fetches
-  /// the inviter race: `_fetchInviterRace` last ran before this user was
-  /// attributed, so its answer was empty by construction. Then setState, which
-  /// drops `_showInviteCodeStep` and lets the early-return chain fall through
-  /// to the demo race.
-  Future<void> _onInviteCodeResolved({
-    required bool attributed,
-    bool skipped = false,
-  }) async {
-    if (attributed) {
-      unawaited(_activationAnalytics.record('invite_code_applied'));
-    } else if (skipped) {
-      unawaited(_activationAnalytics.record('invite_code_skipped'));
+  Future<void> _openCustomizedRaceFromSheet(BuildContext sheetContext) async {
+    Navigator.of(sheetContext).pop();
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CreateRaceScreen(authService: widget.authService),
+      ),
+    );
+    if (mounted) await Future.wait([_fetchRaceCard(), _fetchRacesCore()]);
+  }
+
+  Future<void> _createQuickRace(
+    BuildContext sheetContext,
+    QuickRacePreset preset,
+  ) async {
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) {
+      throw const ApiException('Not signed in.');
     }
-    await _onboardingState.markInviteCodeStepDone();
-    if (mounted) setState(() => _inviteCodeStepDone = true);
-    if (attributed) {
-      // Fire the re-fetch so the inviter-race step downstream sees the new
-      // attribution. Its result is not cached here — the step fetches for
-      // itself — but asking now warms any server-side/derived path and proves
-      // the attribution landed.
-      unawaited(_fetchInviterRace());
+    final names = preset == QuickRacePreset.twoDay
+        ? const ['Weekend Sprint', 'Step Showdown', 'Trail Mix']
+        : const ['Seven Day Showdown', 'Long Haul', 'Trail Week'];
+    final name = names[DateTime.now().millisecondsSinceEpoch % names.length];
+    unawaited(
+      _activationAnalytics.record(
+        'quick_create_selected',
+        context: {
+          'preset': preset == QuickRacePreset.twoDay ? '2_day' : '7_day',
+        },
+      ),
+    );
+    try {
+      final payload = await _backendApiService.quickCreateRace(
+        identityToken: token,
+        name: name,
+        maxDurationDays: preset.days,
+      );
+      final rawRace = payload['race'];
+      if (rawRace is! Map || rawRace['id'] is! String) {
+        throw const ApiException('Race created. Find it in your Races tab.');
+      }
+      final id = rawRace['id'] as String;
+      final persistedAsQuick =
+          rawRace['creationSource'] == 'QUICK_CREATE' &&
+          rawRace['startPolicy'] == 'ON_MINIMUM_PARTICIPANTS';
+      unawaited(
+        _activationAnalytics.record(
+          'quick_create_succeeded',
+          context: {
+            'preset': preset == QuickRacePreset.twoDay ? '2_day' : '7_day',
+            'race_id': id,
+          },
+        ),
+      );
+      await Future.wait([_fetchRaceCard(), _fetchRacesCore()]);
+      if (!mounted || !sheetContext.mounted) return;
+      Navigator.of(sheetContext).pop();
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => RaceDetailScreen(
+            authService: widget.authService,
+            raceId: id,
+            friends: _friendsSteps,
+            notificationService: widget.notificationService,
+            showPostCreateSharePrompt: persistedAsQuick,
+          ),
+        ),
+      );
+    } catch (error) {
+      final code = error is ApiException ? error.code : null;
+      const knownCodes = {
+        'INVALID_QUICK_CREATE_CONFIG',
+        'QUICK_CREATE_DISABLED',
+        'QUICK_RACE_ALREADY_LIVE',
+        'QUICK_RACE_MEMBERSHIP_LIMIT',
+      };
+      unawaited(
+        _activationAnalytics.record(
+          'quick_create_failed',
+          context: {
+            'preset': preset == QuickRacePreset.twoDay ? '2_day' : '7_day',
+            'error_code': knownCodes.contains(code) ? code! : 'UNKNOWN',
+          },
+        ),
+      );
+      rethrow;
     }
   }
 
@@ -486,7 +611,18 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   void _handleAuthServiceChanged() {
     if (!mounted) return;
-    setState(() {});
+    final nextUserId = widget.authService.userId;
+    final userChanged = _homeSuggestionsUserId != nextUserId;
+    setState(() {
+      _homeSuggestionsUserId = nextUserId;
+      _homeSuggestions.setUser(nextUserId);
+    });
+    // A cold-start suggestions request can begin before /me establishes the
+    // backend user id. setUser intentionally invalidates that response so it
+    // cannot cross accounts; immediately replace it for the newly known user.
+    if (userChanged && nextUserId != null) {
+      unawaited(_refreshHomeSuggestions());
+    }
     // A share token may have just been captured (link tapped while running) or
     // the final onboarding step may have just completed — either way, try to
     // drain. Idempotent: no-ops when there's no token or onboarding isn't done.
@@ -508,6 +644,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _activationAnalytics = ActivationAnalyticsService(
       backendApiService: _backendApiService,
     );
+    _homeSuggestionsUserId = widget.authService.userId;
+    _homeSuggestions.setUser(_homeSuggestionsUserId);
     _pageController = PageController();
     WidgetsBinding.instance.addObserver(this);
     widget.authService.addListener(_handleAuthServiceChanged);
@@ -872,7 +1010,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       // way the race screen is the right destination; it renders any state.
     } catch (_) {
       if (mounted) {
-        showErrorToast(context, 'Couldn\'t join right now — try again later.');
+        showErrorToast(context, 'Couldn\'t join right now. Try again later.');
       }
       return;
     }
@@ -888,6 +1026,16 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     // stale one.
     if (state == AppLifecycleState.resumed &&
         (_healthAuthorized || _escapedHealthGate)) {
+      if (_currentTab == _homeTabIndex) {
+        _homeSuggestionsImpressionRecorded = false;
+        // A resume begins an epoch immediately. Cached visible/empty data has
+        // already reached a resolved state, so count the impression now; a
+        // transient refresh must not erase this epoch's only impression.
+        if (_homeSuggestions.state.isSuccess ||
+            _homeSuggestions.state.hasData) {
+          _recordHomeSuggestionsImpression();
+        }
+      }
       unawaited(_activationAnalytics.flush(widget.authService.authToken));
       // Re-probe on every resume: the banner clears the moment steps appear,
       // so a genuinely idle device heals itself with no user action.
@@ -993,7 +1141,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         await widget.authService.updateSessionToken(newToken);
       }
       if (user != null) {
-        await widget.authService.syncFromBackendUser(user);
+        await widget.authService.syncFromBackendUser(user, authoritative: true);
       }
       return true;
     } catch (error) {
@@ -1057,7 +1205,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           _isLoading = false;
           _error = attempts >= 2
               ? 'Bara still can’t read your steps. Open Health Connect '
-                    'settings and turn Steps on for Bara — or continue '
+                    'settings and turn Steps on for Bara. You can also continue '
                     'without steps and connect later.'
               : 'Steps access wasn’t granted. Tap Try Again to show the '
                     'permission prompt again, then allow Bara to read your '
@@ -1411,13 +1559,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
   }
 
-  /// Public races entrypoint (§9.4). Awaits ONLY the core `GET /races` list and
-  /// fires discovery (featured/public/tournaments) in the background so callers
-  /// never block on non-critical discovery data. Kept as the shared entrypoint
-  /// for the many existing triggers (joins, tournament return, onboarding, etc.).
+  /// Shared personal-races refresh. Home and non-Races callers must not fan out
+  /// into discovery; Races-tab entry owns [_refreshRacesDiscovery].
   Future<void> _fetchRaces() async {
     await _fetchRacesCore();
-    unawaited(_refreshRacesDiscovery());
   }
 
   /// Loads and commits only the user's core personal race list. Guarded by a
@@ -1501,6 +1646,124 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     });
   }
 
+  Future<void> _refreshHomeSuggestions() async {
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) return;
+    _homeSuggestions.setUser(widget.authService.userId);
+    late final int generation;
+    if (mounted) {
+      setState(() => generation = _homeSuggestions.beginRefresh());
+    } else {
+      return;
+    }
+    final refresh = await _backendApiService.fetchHomeSuggestedRaces(
+      identityToken: token,
+    );
+    if (!mounted) return;
+    var applied = false;
+    setState(() {
+      applied = _homeSuggestions.apply(generation, refresh);
+    });
+    if (applied && refresh.anyResolved) {
+      _recordHomeSuggestionsImpression();
+    }
+  }
+
+  void _recordHomeSuggestionsImpression() {
+    if (_homeSuggestionsImpressionRecorded || _currentTab != _homeTabIndex) {
+      return;
+    }
+    final suggestions = _homeSuggestions.state.data ?? const [];
+    int count(HomeRaceSuggestionKind kind) =>
+        suggestions.where((item) => item.kind == kind).length;
+    _homeSuggestionsImpressionRecorded = true;
+    unawaited(
+      _activationAnalytics.record(
+        'home_suggested_races_shown',
+        context: {
+          'featured_count': '${count(HomeRaceSuggestionKind.featuredRace)}',
+          'public_count': '${count(HomeRaceSuggestionKind.publicRace)}',
+          'tournament_count': '${count(HomeRaceSuggestionKind.tournament)}',
+        },
+      ),
+    );
+  }
+
+  Future<void> _joinHomeSuggestion(HomeRaceSuggestion suggestion) async {
+    if (_joiningHomeSuggestionKeys.contains(suggestion.stableKey)) return;
+    final suggestions = _homeSuggestions.state.data ?? const [];
+    final position = suggestions.indexWhere(
+      (item) => item.stableKey == suggestion.stableKey,
+    );
+    unawaited(
+      _activationAnalytics.record(
+        'home_suggested_race_tapped',
+        context: {
+          'suggestion_kind': suggestion.wireKind,
+          'suggestion_id': suggestion.id,
+          'position': '${position < 0 ? 0 : position}',
+        },
+      ),
+    );
+    setState(() => _joiningHomeSuggestionKeys.add(suggestion.stableKey));
+    final coordinator = DiscoveryJoinCoordinator(
+      authService: widget.authService,
+      backendApiService: _backendApiService,
+    );
+    final result = suggestion.kind == HomeRaceSuggestionKind.tournament
+        ? await coordinator.joinTournament(
+            context,
+            suggestion.raw,
+            featured: suggestion.seedKind != null,
+          )
+        : await coordinator.joinRace(context, suggestion.raw);
+    if (!mounted) return;
+    if (result == null) {
+      setState(() => _joiningHomeSuggestionKeys.remove(suggestion.stableKey));
+      return;
+    }
+
+    // The successful command is authoritative. Hide it before any refresh or
+    // route transition; the tombstone prevents stale/unresolved responses from
+    // putting it back.
+    setState(() {
+      _homeSuggestions.tombstone(suggestion);
+      _joiningHomeSuggestionKeys.remove(suggestion.stableKey);
+    });
+    unawaited(
+      Future.wait([
+        _refreshHomeSuggestions(),
+        _fetchRaceCard(),
+        _fetchRacesCore(),
+      ]),
+    );
+    if (result.target == DiscoveryJoinTarget.tournament) {
+      _openTournament(result.id);
+    } else {
+      _openRaceFromCard(result.id);
+    }
+  }
+
+  Future<void> _openPublicRacesFromHome() async {
+    final result = await Navigator.of(context).push<RaceHandoffResult>(
+      MaterialPageRoute(
+        builder: (_) => PublicRacesScreen(
+          authService: widget.authService,
+          backendApiService: _backendApiService,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    unawaited(
+      Future.wait([
+        _refreshHomeSuggestions(),
+        _fetchRaceCard(),
+        _fetchRacesCore(),
+      ]),
+    );
+    if (result != null) _openRaceFromCard(result.raceId);
+  }
+
   /// Loads every home-page surface in parallel and, once they have ALL
   /// settled, surfaces the race/ranked results modals. Gating the popups on
   /// completion keeps a results modal from appearing over sections that are
@@ -1529,6 +1792,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       // Keep prior surfaces; continue loading the rest.
     }
 
+    // Home discovery runs beside the modal-critical work but never gates result
+    // or What's New presentation.
+    unawaited(_refreshHomeSuggestions());
     await Future.wait([
       _fetchRaceCard(usePersistedTotals: outcome?.usePersistedHome ?? false),
       // Await ONLY the core race list — result-modal detection consumes
@@ -1539,8 +1805,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _refreshMe(),
     ]);
 
-    // Discovery runs in the background; never blocks the home load.
-    unawaited(_refreshRacesDiscovery());
     if (outcome?.jobId != null && outcome?.generation != null) {
       _startJobPolling(outcome!.jobId!, outcome.generation!);
     }
@@ -1703,10 +1967,27 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _raceResultsPopupOpen = true;
     // Item 8: a results modal showed, so What's New defers to the next launch.
     _resultsModalShownThisSession = true;
-    await Navigator.of(context).push<void>(
+    final nextRace = NextRaceState.tryParse(_racesData?['nextRace']);
+    if (nextRace?.resolved == true &&
+        nextRace?.eligible == true &&
+        nextRace?.createEnabled == true) {
+      unawaited(
+        _activationAnalytics.record(
+          'next_race_cta_shown',
+          context: {'surface': 'results'},
+        ),
+      );
+    }
+    final startNext = await Navigator.of(context).push<bool>(
       PageRouteBuilder(
         opaque: false,
-        pageBuilder: (_, _, _) => RaceResultsSummaryScreen(races: unseen),
+        pageBuilder: (_, _, _) => RaceResultsSummaryScreen(
+          races: unseen,
+          canStartNextRace:
+              nextRace?.resolved == true &&
+              nextRace?.eligible == true &&
+              nextRace?.createEnabled == true,
+        ),
         transitionsBuilder: (_, anim, _, child) =>
             FadeTransition(opacity: anim, child: child),
         transitionDuration: const Duration(milliseconds: 250),
@@ -1741,6 +2022,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     final placedTop3 = unseen.any(raceCountsAsReviewHappyMoment);
     if (placedTop3 && mounted) {
       await _reviewPromptService.recordHappyMomentAndMaybePrompt(context);
+    }
+    if (startNext == true && mounted) {
+      await _showQuickCreateRaceSheet(surface: 'results');
     }
   }
 
@@ -1825,9 +2109,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         identityToken: identityToken,
         raceId: raceId,
       );
-      // Refresh both surfaces: the featured card flips to VIEW and the race
-      // drops into ACTIVE below. (_fetchRaces also refreshes featured.)
-      await _fetchRaces();
+      // This action originates on the Races tab, so refresh both its personal
+      // list and its discovery surface. Home/non-Races refreshes intentionally
+      // keep using the core-only path.
+      await Future.wait([_fetchRacesCore(), _refreshRacesDiscovery()]);
       return true;
     } catch (e) {
       if (mounted) showErrorToast(context, 'Could not join: $e');
@@ -1846,8 +2131,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         identityToken: identityToken,
         tournamentId: tournamentId,
       );
-      await _fetchRaces();
-      await _fetchFeaturedTournaments();
+      await Future.wait([_fetchRacesCore(), _refreshRacesDiscovery()]);
       if (mounted) _openTournament(tournamentId);
       return true;
     } on ApiException catch (e) {
@@ -2038,7 +2322,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     // Stage 5: fetch the home batch AFTER persistence so milestones/reward use
     // the new daily total. Persisted-total path only when uploaderReconciliation
     // was CURRENT; otherwise the backend's live-computation fallback.
-    await _fetchRaceCard(usePersistedTotals: outcome.usePersistedHome);
+    await Future.wait([
+      _fetchRaceCard(usePersistedTotals: outcome.usePersistedHome),
+      _refreshHomeSuggestions(),
+    ]);
 
     // Stage 6: the refresh indicator completes when this method returns.
     // Stage 7: background, coalesced, non-blocking. The streak/milestone widgets
@@ -2072,6 +2359,28 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           _raceCard = data;
           _raceCardLoading = false;
         });
+        final next = NextRaceState.tryParse(data['nextRace']);
+        if (!_nextRaceHomeShownRecorded && next?.visible == true) {
+          _nextRaceHomeShownRecorded = true;
+          unawaited(
+            _activationAnalytics.record(
+              'next_race_cta_shown',
+              context: {'surface': 'home'},
+            ),
+          );
+          if (next!.openRaces.isNotEmpty) {
+            unawaited(
+              _activationAnalytics.record(
+                'open_race_discovery_shown',
+                context: {'race_count': '${next.openRaces.length}'},
+              ),
+            );
+          }
+        }
+        if (!_inviteSetupShownRecorded && _showInviteCodePrompt) {
+          _inviteSetupShownRecorded = true;
+          unawaited(_activationAnalytics.record('invite_code_setup_shown'));
+        }
       }
     } catch (_) {
       // Card is non-critical; ignore fetch errors and keep last value.
@@ -2119,6 +2428,18 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         .whenComplete(() => _openingRaceDetail = false);
   }
 
+  Future<void> _joinDiscoveredRace(String raceId) async {
+    final errorCode = await _joinRaceFromCardResult(raceId);
+    if (errorCode == null) {
+      unawaited(
+        _activationAnalytics.record(
+          'open_race_join_succeeded',
+          context: {'source': 'next_race', 'race_id': raceId},
+        ),
+      );
+    }
+  }
+
   /// Opens a tournament bracket screen (from a push tap or a share-link drain),
   /// guarding against rapid double-pushes like [_openRaceFromCard].
   void _openTournament(String tournamentId) {
@@ -2141,8 +2462,14 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   Future<void> _joinRaceFromCard(String raceId) async {
+    await _joinRaceFromCardResult(raceId);
+  }
+
+  /// Returns null after a successful join, otherwise a bounded analytics code.
+  /// The existing Home card callback intentionally keeps its void contract.
+  Future<String?> _joinRaceFromCardResult(String raceId) async {
     final identityToken = widget.authService.authToken;
-    if (identityToken == null || identityToken.isEmpty) return;
+    if (identityToken == null || identityToken.isEmpty) return 'UNKNOWN';
     try {
       await _backendApiService.joinPublicRace(
         identityToken: identityToken,
@@ -2153,6 +2480,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       }
       await _fetchRaceCard();
       _openRaceFromCard(raceId);
+      return null;
     } on ApiException catch (e) {
       if (mounted) {
         showErrorToast(
@@ -2164,10 +2492,14 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     : 'Could not join. Give it another try!'),
         );
       }
+      return e.code == 'QUICK_RACE_MEMBERSHIP_LIMIT'
+          ? 'QUICK_RACE_MEMBERSHIP_LIMIT'
+          : 'UNKNOWN';
     } catch (_) {
       if (mounted) {
         showErrorToast(context, 'Could not join. Give it another try!');
       }
+      return 'UNKNOWN';
     }
   }
 
@@ -2196,7 +2528,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _pageController.jumpToPage(_homeTabIndex);
       showInfoToast(
         context,
-        "You're all set — find your races on the Races tab.",
+        "You're all set. Find your races on the Races tab.",
       );
     }
   }
@@ -2738,7 +3070,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       final incoming = user['incomingFriendRequests'] as int? ?? 0;
       final displayName = user['displayName'] as String?;
       final email = user['email'] as String?;
-      await widget.authService.syncFromBackendUser(user);
+      await widget.authService.syncFromBackendUser(user, authoritative: true);
       if (mounted) {
         setState(() {
           _incomingFriendRequests = incoming;
@@ -2782,15 +3114,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     // early-returns that render BEFORE the v3 branch (referral welcome,
     // health gate): while one of those is on screen the step is not, and
     // counting it would inflate the funnel denominator.
-    if (_isOnboarding &&
-        _showInviteCodeStep &&
-        widget.authService.welcomeReferralCode == null &&
-        (_healthAuthorized || _escapedHealthGate) &&
-        !_inviteCodeShownRecorded) {
-      _inviteCodeShownRecorded = true;
-      unawaited(_activationAnalytics.record('invite_code_step_shown'));
-    }
-
     return Scaffold(
       resizeToAvoidBottomInset: false,
       body: Stack(
@@ -2799,67 +3122,67 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
           if (_isOnboarding)
             Positioned.fill(
-              child: OnboardingFlow(
-                healthAuthorized: _healthAuthorized,
-                notificationsState: _notificationsState,
-                tutorialOnboardingSeen:
-                    widget.authService.tutorialOnboardingSeen,
-                firstRaceOnboardingSeen:
-                    widget.authService.firstRaceOnboardingSeen,
-                onEnableHealth: _enableHealthData,
-                onEnableNotifications: _enableNotifications,
-                onStartTutorial: _startTutorialOnboarding,
-                onSkipTutorial: _skipTutorialOnboarding,
-                onEnterDaily: _enterDailyRaceOnboarding,
-                onSkipFirstRace: _skipFirstRaceOnboarding,
-                onboardingV2Enabled: widget.authService.onboardingV2Enabled,
-                onboardingV3Enabled: widget.authService.onboardingV3Enabled,
-                tutorialMandatory: _tutorialMandatory,
-                healthAttemptCount: _healthAttempts,
-                // The ladder: retrying stops being offered once the OS has
-                // refused twice, because it stops producing a prompt.
-                onOpenHealthSettings: _healthAttempts >= 2
-                    ? _openHealthSettings
-                    : null,
-                onEscapeHealthGate: _healthAttempts >= 2
-                    ? _escapeHealthGate
-                    : null,
-                onFetchInviterRace: _fetchInviterRace,
-                onJoinInviterRace: _joinInviterRace,
-                displayName: _displayName ?? widget.authService.displayName,
-                onFetchActiveDaily: _fetchVerifiedActiveDaily,
-                onEnterVerifiedDaily: _enterVerifiedDaily,
-                onFindRace: _finishOnboardingAndFindRace,
-                firstRaceShareTokenPending:
-                    widget.authService.pendingShareToken != null,
-                welcomeReferralCode: widget.authService.welcomeReferralCode,
-                onWelcomeDismissed: () {
-                  unawaited(_activationAnalytics.record('referral_continued'));
-                  widget.authService.clearWelcomeReferralCode();
-                },
-                onFetchReferralPreview: (code) =>
-                    _backendApiService.fetchReferralPreview(code: code),
-                showInviteCodeStep: _showInviteCodeStep,
-                onApplyInviteCode: _applyInviteCode,
-                onInviteCodeResolved:
-                    ({required bool attributed, bool skipped = false}) {
-                      unawaited(
-                        _onInviteCodeResolved(
-                          attributed: attributed,
-                          skipped: skipped,
-                        ),
-                      );
-                    },
-                onFetchInviteCodeRewards: () =>
-                    _backendApiService.fetchReferralStatus(
-                      identityToken: widget.authService.authToken ?? '',
+              child:
+                  widget.authService.requiresDiscoverableIdentityOnboarding &&
+                      widget.authService.welcomeReferralCode == null
+                  ? DiscoverableIdentityFlow(
+                      authService: widget.authService,
+                      backendApiService: _backendApiService,
+                      initialFirstName: widget.authService.providerFirstName,
+                      initialLastName: widget.authService.providerLastName,
+                      onCompleted: () {
+                        if (mounted) setState(() {});
+                      },
+                    )
+                  : OnboardingFlow(
+                      healthAuthorized: _healthAuthorized,
+                      notificationsState: _notificationsState,
+                      tutorialOnboardingSeen:
+                          widget.authService.tutorialOnboardingSeen,
+                      firstRaceOnboardingSeen:
+                          widget.authService.firstRaceOnboardingSeen,
+                      onEnableHealth: _enableHealthData,
+                      onEnableNotifications: _enableNotifications,
+                      onStartTutorial: _startTutorialOnboarding,
+                      onSkipTutorial: _skipTutorialOnboarding,
+                      onEnterDaily: _enterDailyRaceOnboarding,
+                      onSkipFirstRace: _skipFirstRaceOnboarding,
+                      onboardingV2Enabled:
+                          widget.authService.onboardingV2Enabled,
+                      onboardingV3Enabled:
+                          widget.authService.onboardingV3Enabled,
+                      tutorialMandatory: _tutorialMandatory,
+                      healthAttemptCount: _healthAttempts,
+                      // The ladder: retrying stops being offered once the OS has
+                      // refused twice, because it stops producing a prompt.
+                      onOpenHealthSettings: _healthAttempts >= 2
+                          ? _openHealthSettings
+                          : null,
+                      onEscapeHealthGate: _healthAttempts >= 2
+                          ? _escapeHealthGate
+                          : null,
+                      onFetchInviterRace: _fetchInviterRace,
+                      onJoinInviterRace: _joinInviterRace,
+                      displayName:
+                          _displayName ?? widget.authService.displayName,
+                      onFetchActiveDaily: _fetchVerifiedActiveDaily,
+                      onEnterVerifiedDaily: _enterVerifiedDaily,
+                      onFindRace: _finishOnboardingAndFindRace,
+                      firstRaceShareTokenPending:
+                          widget.authService.pendingShareToken != null,
+                      welcomeReferralCode:
+                          widget.authService.welcomeReferralCode,
+                      onWelcomeDismissed: () {
+                        unawaited(
+                          _activationAnalytics.record('referral_continued'),
+                        );
+                        widget.authService.clearWelcomeReferralCode();
+                      },
+                      onFetchReferralPreview: (code) =>
+                          _backendApiService.fetchReferralPreview(code: code),
+                      error: _error,
+                      isLoading: _isLoading,
                     ),
-                canPasteInviteLink: _canPasteInviteLink,
-                onPasteInviteLink:
-                    _installAttribution.readInviteCodeFromPasteboard,
-                error: _error,
-                isLoading: _isLoading,
-              ),
             )
           else
             Positioned.fill(
@@ -2881,11 +3204,28 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                       ),
                     ),
                     child: PageView(
+                      key: const Key('main-shell-pages'),
                       controller: _pageController,
-                      physics: const PageScrollPhysics(),
+                      physics:
+                          _currentTab == _racesTabIndex && _racesGateBlocking
+                          ? const NeverScrollableScrollPhysics()
+                          : const PageScrollPhysics(),
                       onPageChanged: (index) {
+                        final enteringHome =
+                            index == _homeTabIndex &&
+                            _currentTab != _homeTabIndex;
                         setState(() {
                           _currentTab = index;
+                          if (enteringHome) {
+                            _homeSuggestionsImpressionRecorded = false;
+                          }
+                          if (index == _racesTabIndex &&
+                              widget
+                                  .authService
+                                  .racesInviteDecisionGateEnabled) {
+                            _racesGateEpoch++;
+                            _racesGateBlocking = true;
+                          }
                           // Clear the incoming-friend-request badge when the Friends
                           // tab is revealed (mirrors _openFriendsTab's old behavior).
                           if (index == _friendsTabIndex &&
@@ -2893,7 +3233,17 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                             _incomingFriendRequests = 0;
                           }
                         });
-                        if (index == _racesTabIndex) _fetchRaces();
+                        if (index == _racesTabIndex &&
+                            !widget
+                                .authService
+                                .racesInviteDecisionGateEnabled) {
+                          _refreshRacesTab();
+                        }
+                        if (enteringHome &&
+                            (_homeSuggestions.state.isSuccess ||
+                                _homeSuggestions.state.hasData)) {
+                          _recordHomeSuggestionsImpression();
+                        }
                         // Refresh the friends surface each time it's revealed (mirrors
                         // the races refresh-on-reveal hook). We intentionally refresh
                         // only the friends-steps data here, not _refreshMe, so the
@@ -2930,28 +3280,79 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                               _dismissProfilePhotoPrompt,
                           raceCard: _raceCard,
                           raceCardLoading: _raceCardLoading,
+                          suggestedRacesState: _homeSuggestions.state,
+                          joiningSuggestionKeys: _joiningHomeSuggestionKeys,
+                          onJoinSuggestion: _joinHomeSuggestion,
+                          onRetrySuggestedRaces: () {
+                            unawaited(_refreshHomeSuggestions());
+                          },
+                          onOpenPublicRaces: () {
+                            unawaited(_openPublicRacesFromHome());
+                          },
                           onOpenRace: _openRaceFromCard,
                           onJoinRaceFromCard: _joinRaceFromCard,
+                          onJoinDiscoveredRace: _joinDiscoveredRace,
                           onAcceptRaceInvite: _acceptRaceInviteFromCard,
                           onDeclineRaceInvite: _declineRaceInviteFromCard,
                           onChallengeFriendBack: _challengeFriendBack,
                           onDailyRewardClaimed: _markDailyRewardClaimed,
+                          showInviteCodePrompt: _showInviteCodePrompt,
+                          onEnterInviteCode: _openInviteCodeFromHome,
+                          onSkipInviteCode: _skipInviteCodeFromHome,
+                          onStartQuickRace: () {
+                            unawaited(_showQuickCreateRaceSheet());
+                          },
                         ),
-                        RacesTab(
+                        RaceInviteDecisionGate(
+                          enabled:
+                              widget.authService.racesInviteDecisionGateEnabled,
+                          active: _currentTab == _racesTabIndex,
+                          entryEpoch: _racesGateEpoch,
                           authService: widget.authService,
-                          racesData: _racesData,
-                          racesState: _racesState,
-                          friendsSteps: _friendsSteps,
-                          featuredRaces: _featuredRaces,
-                          featuredTournaments: _featuredTournaments,
-                          onRacesChanged: _fetchRaces,
-                          onRefresh: _refreshRacesTab,
-                          onJoinFeaturedRace: _joinFeaturedRace,
-                          onJoinFeaturedTournament: _joinFeaturedTournament,
-                          publicRacesCount: _publicRacesCount,
-                          displayName: _displayName,
-                          notificationService: widget.notificationService,
-                          onOpenProfile: _openProfile,
+                          backendApiService: _backendApiService,
+                          onVerifiedData: (data) {
+                            if (!mounted) return;
+                            setState(() {
+                              _racesData = data;
+                              _racesState = Loadable.success(data);
+                            });
+                          },
+                          onExitHome: () {
+                            if (!mounted) return;
+                            setState(() {
+                              _racesGateBlocking = false;
+                              _currentTab = _homeTabIndex;
+                            });
+                            _pageController.jumpToPage(_homeTabIndex);
+                          },
+                          onBlockingChanged: (blocking) {
+                            if (!mounted || _racesGateBlocking == blocking) {
+                              return;
+                            }
+                            setState(() => _racesGateBlocking = blocking);
+                            if (!blocking && _currentTab == _racesTabIndex) {
+                              unawaited(_refreshRacesDiscovery());
+                            }
+                          },
+                          child: RacesTab(
+                            inviteDecisionGateEnabled: widget
+                                .authService
+                                .racesInviteDecisionGateEnabled,
+                            authService: widget.authService,
+                            racesData: _racesData,
+                            racesState: _racesState,
+                            friendsSteps: _friendsSteps,
+                            featuredRaces: _featuredRaces,
+                            featuredTournaments: _featuredTournaments,
+                            onRacesChanged: _fetchRaces,
+                            onRefresh: _refreshRacesTab,
+                            onJoinFeaturedRace: _joinFeaturedRace,
+                            onJoinFeaturedTournament: _joinFeaturedTournament,
+                            publicRacesCount: _publicRacesCount,
+                            displayName: _displayName,
+                            notificationService: widget.notificationService,
+                            onOpenProfile: _openProfile,
+                          ),
                         ),
                         FriendsTab(
                           authService: widget.authService,
@@ -3046,6 +3447,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
               child: WoodenTabBar(
                 currentIndex: _currentTab,
                 onTap: (index) {
+                  if (_currentTab == _racesTabIndex && _racesGateBlocking) {
+                    return;
+                  }
                   _pageController.animateToPage(
                     index,
                     duration: const Duration(milliseconds: 250),

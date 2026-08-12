@@ -98,7 +98,7 @@ class _StepsDisconnectedBannerState extends State<StepsDisconnectedBanner>
                         vertical: 6,
                       ),
                       child: Text(
-                        'Steps aren’t connected — you’re scoring 0.',
+                        'Steps aren’t connected. You’re scoring 0.',
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: PixelText.body(
@@ -119,13 +119,14 @@ class _StepsDisconnectedBannerState extends State<StepsDisconnectedBanner>
                           children: [
                             Text(
                               'Fix this',
-                              style: PixelText.title(
-                                size: 13,
-                                color: colors.textLight,
-                              ).copyWith(
-                                decoration: TextDecoration.underline,
-                                decorationColor: colors.textLight,
-                              ),
+                              style:
+                                  PixelText.title(
+                                    size: 13,
+                                    color: colors.textLight,
+                                  ).copyWith(
+                                    decoration: TextDecoration.underline,
+                                    decorationColor: colors.textLight,
+                                  ),
                             ),
                             const SizedBox(width: 2),
                             Icon(

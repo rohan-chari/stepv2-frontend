@@ -122,7 +122,7 @@ class _GlobalEventBannerState extends State<GlobalEventBanner> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'STEPS COUNT ${multiplier}x IN ALL RACES — GO!',
+                  'STEPS COUNT ${multiplier}x IN ALL RACES. GO!',
                   style: PixelText.body(
                     size: 12.5,
                     color: AppColors.of(context).textMid,

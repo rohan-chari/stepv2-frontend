@@ -30,7 +30,9 @@ Future<void> _pumpCards(
       ),
     ),
   );
-  await tester.pumpAndSettle();
+  // Team hero scenes intentionally animate forever; one frame is sufficient
+  // for these stable card-layout assertions.
+  await tester.pump();
 }
 
 Future<void> _pumpBanner(
@@ -129,20 +131,14 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
 
-      final a = tester.getSize(
-        find.byKey(const ValueKey('team-card-TEAM_A')),
-      );
-      final b = tester.getSize(
-        find.byKey(const ValueKey('team-card-TEAM_B')),
-      );
+      final a = tester.getSize(find.byKey(const ValueKey('team-card-TEAM_A')));
+      final b = tester.getSize(find.byKey(const ValueKey('team-card-TEAM_B')));
       expect(a.height, b.height);
     });
 
-    testWidgets('the two big totals share a baseline', (
-      tester,
-    ) async {
+    testWidgets('the two big totals share a baseline', (tester) async {
       // Regression guard from the ribbon era: the LEADING strip used to be a
       // real row, so it had to be reserved on the trailing card or the two
       // totals fell out of line. An outline occupies no layout, so this should

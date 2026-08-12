@@ -38,7 +38,7 @@ const List<WhatsNewEntry> kWhatsNewEntries = <WhatsNewEntry>[
     version: '2.2.0',
     title: 'PODIUMS & PAYOUTS',
     bullets: <String>[
-      'Finished races now end on a podium — see the top three with their coins.',
+      'Finished races now end on a podium. See the top three with their coins.',
       'Discard a powerup you do not want and get coins back for it.',
       'Team races pay out a lot more to the winning side.',
       'Private races start on their own once everyone has joined.',

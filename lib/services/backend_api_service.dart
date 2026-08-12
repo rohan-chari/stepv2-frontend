@@ -11,6 +11,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../config/backend_config.dart';
 import '../constants/powerup_copy.dart';
 import '../models/balance_config.dart';
+import '../models/home_race_suggestion.dart';
 import '../models/powerup_shop_admin_item.dart';
 import '../models/race_discovery_summary.dart';
 import '../models/race_resolution_status.dart';
@@ -24,6 +25,12 @@ import '../models/step_sync_v2_result.dart';
 /// change — but NOT on ordinary session-token rotation.
 enum EndpointSupport { unknown, supported, unsupported }
 
+/// A definite POST-search 404 selected the frozen backend contract. The
+/// current real-name query must not be replayed into a GET URL.
+class LegacyFriendSearchRequired implements Exception {
+  const LegacyFriendSearchRequired();
+}
+
 /// An API error with a user-friendly message.
 class ApiException implements Exception {
   final String message;
@@ -33,7 +40,8 @@ class ApiException implements Exception {
   /// (e.g. TEAM_FULL, TEAMS_UNEVEN, UPDATE_REQUIRED). Null on older backends
   /// or plain-message errors — callers must treat it as optional.
   final String? code;
-  const ApiException(this.message, {this.statusCode, this.code});
+  final Map<String, dynamic>? details;
+  const ApiException(this.message, {this.statusCode, this.code, this.details});
 
   @override
   String toString() => message;
@@ -129,8 +137,8 @@ class BackendApiService {
   // hides catalog rows whose art is remote-only — they'd render as a grey
   // placeholder, and worse, be purchasable. Must appear in BOTH branches.
   static final String clientFeaturesHeader = _adsSupported
-      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets'
-      : 'characters,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets';
+      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,next_race_cta,discoverable_identity,home_suggested_races'
+      : 'characters,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,next_race_cta,discoverable_identity,home_suggested_races';
   final HttpClient _httpClient;
   String? _cachedTimeZone;
   String? _cachedReleaseChannel;
@@ -141,8 +149,10 @@ class BackendApiService {
   // transient blip never permanently strands the app on the legacy path.
   EndpointSupport _syncV2Support = EndpointSupport.unknown;
   EndpointSupport _discoverySummarySupport = EndpointSupport.unknown;
+  EndpointSupport _homeSuggestedRacesSupport = EndpointSupport.unknown;
   EndpointSupport _raceResolutionStatusSupport = EndpointSupport.unknown;
   EndpointSupport _shopAdUnlockSupport = EndpointSupport.unknown;
+  EndpointSupport _friendIdentitySearchSupport = EndpointSupport.unknown;
   // Identity guards: capability caches are keyed to (user, base URL). A plain
   // token refresh for the SAME user must not clear them.
   String? _sessionUserId;
@@ -154,6 +164,8 @@ class BackendApiService {
   EndpointSupport get syncV2Support => _syncV2Support;
   @visibleForTesting
   EndpointSupport get discoverySummarySupport => _discoverySummarySupport;
+  @visibleForTesting
+  EndpointSupport get homeSuggestedRacesSupport => _homeSuggestedRacesSupport;
   @visibleForTesting
   EndpointSupport get raceResolutionStatusSupport =>
       _raceResolutionStatusSupport;
@@ -167,8 +179,10 @@ class BackendApiService {
   void resetSessionCapabilities() {
     _syncV2Support = EndpointSupport.unknown;
     _discoverySummarySupport = EndpointSupport.unknown;
+    _homeSuggestedRacesSupport = EndpointSupport.unknown;
     _raceResolutionStatusSupport = EndpointSupport.unknown;
     _shopAdUnlockSupport = EndpointSupport.unknown;
+    _friendIdentitySearchSupport = EndpointSupport.unknown;
     _sessionUserId = null;
   }
 
@@ -180,8 +194,10 @@ class BackendApiService {
     if (_sessionUserId != userId || _sessionBaseUrl != baseUrl) {
       _syncV2Support = EndpointSupport.unknown;
       _discoverySummarySupport = EndpointSupport.unknown;
+      _homeSuggestedRacesSupport = EndpointSupport.unknown;
       _raceResolutionStatusSupport = EndpointSupport.unknown;
       _shopAdUnlockSupport = EndpointSupport.unknown;
+      _friendIdentitySearchSupport = EndpointSupport.unknown;
       _sessionUserId = userId;
       _sessionBaseUrl = baseUrl;
     }
@@ -268,6 +284,7 @@ class BackendApiService {
     required String userIdentifier,
     String? email,
     String? referralCode,
+    String? referralSourceRaceToken,
   }) async {
     final response = await _sendJsonRequest(
       method: 'POST',
@@ -282,6 +299,9 @@ class BackendApiService {
         // so older backends (which ignore it) and this build both stay happy.
         if (referralCode != null && referralCode.isNotEmpty)
           'referralCode': referralCode,
+        if (referralSourceRaceToken != null &&
+            referralSourceRaceToken.isNotEmpty)
+          'referralSourceRaceToken': referralSourceRaceToken,
       },
     );
 
@@ -304,6 +324,7 @@ class BackendApiService {
     String? email,
     String? name,
     String? referralCode,
+    String? referralSourceRaceToken,
   }) async {
     final response = await _sendJsonRequest(
       method: 'POST',
@@ -314,6 +335,9 @@ class BackendApiService {
         'name': name,
         if (referralCode != null && referralCode.isNotEmpty)
           'referralCode': referralCode,
+        if (referralSourceRaceToken != null &&
+            referralSourceRaceToken.isNotEmpty)
+          'referralSourceRaceToken': referralSourceRaceToken,
       },
     );
 
@@ -638,6 +662,273 @@ class BackendApiService {
     return RaceDiscoverySummary.empty;
   }
 
+  /// Additive Home discovery endpoint. Only a definite 404 selects the legacy
+  /// three-call path and caches that choice for this authenticated session.
+  /// Every category remains independently nullable: null means retain cached
+  /// cards; an empty list means resolved-empty.
+  Future<HomeSuggestedRacesRefresh> fetchHomeSuggestedRaces({
+    required String identityToken,
+  }) async {
+    if (_homeSuggestedRacesSupport == EndpointSupport.unsupported) {
+      return _fetchLegacyHomeSuggestedRaces(identityToken);
+    }
+
+    late final _RawResponse raw;
+    try {
+      final response = await _sendGetRequest(
+        path: '/home/suggested-races',
+        identityToken: identityToken,
+      );
+      raw = await _readRawResponse(response);
+    } on ApiException catch (error) {
+      return HomeSuggestedRacesRefresh(error: error.message);
+    } catch (_) {
+      // A response stream or platform-header lookup can also fail outside the
+      // socket errors normalized by _sendGetRequest. It is still transient,
+      // never evidence that the additive route is absent.
+      return const HomeSuggestedRacesRefresh(
+        error: 'Could not load suggested races.',
+      );
+    }
+    if (raw.statusCode == 404) {
+      _homeSuggestedRacesSupport = EndpointSupport.unsupported;
+      return _fetchLegacyHomeSuggestedRaces(identityToken);
+    }
+
+    // Any definite non-404 response proves the route exists. A transient 5xx,
+    // 401, or malformed success must never fan out into duplicate requests.
+    _homeSuggestedRacesSupport = EndpointSupport.supported;
+    if (raw.statusCode < 200 ||
+        raw.statusCode >= 300 ||
+        raw.decodeFailed ||
+        raw.json == null) {
+      return const HomeSuggestedRacesRefresh(
+        error: 'Could not load suggested races.',
+      );
+    }
+    return _parseHomeSuggestedRaces(raw.json!);
+  }
+
+  HomeSuggestedRacesRefresh _parseHomeSuggestedRaces(
+    Map<String, dynamic> json,
+  ) {
+    final resolved = json['resolved'];
+    final suggestions = json['suggestions'];
+    if (resolved is! Map ||
+        suggestions is! List ||
+        resolved['featuredRaces'] is! bool ||
+        resolved['publicRaces'] is! bool ||
+        resolved['tournaments'] is! bool) {
+      return const HomeSuggestedRacesRefresh(
+        error: 'Could not load suggested races.',
+      );
+    }
+    final parsed = suggestions
+        .map(HomeRaceSuggestion.tryParse)
+        .whereType<HomeRaceSuggestion>()
+        .toList(growable: false);
+    List<HomeRaceSuggestion> owned(HomeRaceSuggestionCategory category) =>
+        parsed
+            .where((item) => item.category == category)
+            .toList(growable: false);
+    return HomeSuggestedRacesRefresh(
+      featuredRaces: resolved['featuredRaces'] == true
+          ? owned(HomeRaceSuggestionCategory.featuredRaces)
+          : null,
+      publicRaces: resolved['publicRaces'] == true
+          ? owned(HomeRaceSuggestionCategory.publicRaces)
+          : null,
+      tournaments: resolved['tournaments'] == true
+          ? owned(HomeRaceSuggestionCategory.tournaments)
+          : null,
+    );
+  }
+
+  Future<HomeSuggestedRacesRefresh> _fetchLegacyHomeSuggestedRaces(
+    String identityToken,
+  ) async {
+    // Start all three before awaiting any one: a slow/failed optional branch
+    // cannot serialize or suppress its siblings.
+    final featuredFuture = _legacyGet('/races/featured', identityToken);
+    final publicFuture = _legacyGet('/races/public', identityToken);
+    final tournamentsFuture = _legacyGet('/tournaments/public', identityToken);
+    final settled = await Future.wait([
+      featuredFuture,
+      publicFuture,
+      tournamentsFuture,
+    ]);
+    final featured = _parseLegacyFeatured(settled[0]);
+    final public = _parseLegacyPublic(settled[1], featured);
+    final tournaments = _parseLegacyTournaments(settled[2]);
+    return HomeSuggestedRacesRefresh(
+      featuredRaces: featured.suggestions,
+      publicRaces: public,
+      tournaments: tournaments,
+      error:
+          featured.suggestions == null && public == null && tournaments == null
+          ? 'Could not load suggested races.'
+          : null,
+    );
+  }
+
+  Future<_RawResponse?> _legacyGet(String path, String identityToken) async {
+    try {
+      final response = await _sendGetRequest(
+        path: path,
+        identityToken: identityToken,
+      );
+      return _readRawResponse(response);
+    } catch (_) {
+      // allSettled semantics: any failure owns only this legacy category.
+      return null;
+    }
+  }
+
+  _LegacyFeaturedSuggestions _parseLegacyFeatured(_RawResponse? raw) {
+    if (raw?.statusCode == 404) {
+      return const _LegacyFeaturedSuggestions(
+        suggestions: [],
+        proofCapable: false,
+      );
+    }
+    if (!_legacySuccess(raw)) return const _LegacyFeaturedSuggestions();
+    final rows = raw!.json!['races'];
+    if (rows is! List) return const _LegacyFeaturedSuggestions();
+
+    final maps = <Map<String, dynamic>>[];
+    for (final row in rows) {
+      if (row is! Map) return const _LegacyFeaturedSuggestions();
+      final map = _stringMap(row);
+      final raceId = map['raceId'];
+      final seedKind = map['seedKind'];
+      if (raceId is! String ||
+          raceId.trim().isEmpty ||
+          (seedKind != 'DAILY_10K' && seedKind != 'WEEKLY_50K')) {
+        return const _LegacyFeaturedSuggestions();
+      }
+      maps.add(map);
+    }
+
+    HomeRaceSuggestion? adapt(Map<String, dynamic> row) {
+      final endsAt = row['endsAt'];
+      final parsedEnd = endsAt is String ? DateTime.tryParse(endsAt) : null;
+      if (row['myStatus'] == 'ACCEPTED' ||
+          row['myStatus'] == 'INVITED' ||
+          row['isFull'] == true ||
+          parsedEnd == null ||
+          !parsedEnd.isAfter(DateTime.now())) {
+        return null;
+      }
+      return HomeRaceSuggestion.tryParse({
+        'kind': 'FEATURED_RACE',
+        'id': row['raceId'],
+        'seedKind': row['seedKind'],
+        'name': row['name'],
+        'status': 'ACTIVE',
+        'endsAt': row['endsAt'],
+        'participantCount': row['participantCount'],
+        'maxParticipants': row['maxParticipants'] is int
+            ? row['maxParticipants']
+            : 100,
+        'isFull': row['isFull'] is bool ? row['isFull'] : false,
+        'powerupsEnabled': row['powerupsEnabled'] == true,
+        'prizePool': row['prizePool'] is Map ? row['prizePool'] : null,
+        'finishReward': row['finishReward'] is Map ? row['finishReward'] : null,
+        'joinAction': 'JOIN',
+      });
+    }
+
+    final suggestions = <HomeRaceSuggestion>[];
+    for (final seedKind in const ['DAILY_10K', 'WEEKLY_50K']) {
+      for (final row in maps.where((entry) => entry['seedKind'] == seedKind)) {
+        final item = adapt(row);
+        if (item != null) {
+          suggestions.add(item);
+          break;
+        }
+      }
+    }
+    return _LegacyFeaturedSuggestions(
+      suggestions: suggestions,
+      proofCapable: true,
+      raceIds: maps.map((row) => row['raceId'] as String).toSet(),
+    );
+  }
+
+  List<HomeRaceSuggestion>? _parseLegacyPublic(
+    _RawResponse? raw,
+    _LegacyFeaturedSuggestions featured,
+  ) {
+    if (raw?.statusCode == 404) return const [];
+    if (!_legacySuccess(raw)) return null;
+    final rows = raw!.json!['races'];
+    if (rows is! List) return null;
+    if (rows.isEmpty) return const [];
+    if (!featured.proofCapable) return null;
+
+    final result = <HomeRaceSuggestion>[];
+    for (final row in rows) {
+      if (row is! Map) continue;
+      final map = _stringMap(row);
+      final id = map['id'];
+      if (id is String && featured.raceIds.contains(id)) continue;
+      final item = HomeRaceSuggestion.tryParse({
+        ...map,
+        'kind': 'PUBLIC_RACE',
+        'joinAction': 'JOIN',
+      });
+      if (item != null) result.add(item);
+      if (result.length == 4) break;
+    }
+    return result;
+  }
+
+  List<HomeRaceSuggestion>? _parseLegacyTournaments(_RawResponse? raw) {
+    if (raw?.statusCode == 404) return const [];
+    if (!_legacySuccess(raw)) return null;
+    final featured = raw!.json!['featured'];
+    final public = raw.json!['tournaments'];
+    if (featured is! List || public is! List) return null;
+    final result = <HomeRaceSuggestion>[];
+    var sourceIndex = 0;
+    for (final row in [...featured, ...public]) {
+      if (row is! Map) continue;
+      final map = _stringMap(row);
+      if (map['joinable'] != true) continue;
+      // The pre-Home tournament summary did not require createdAt. Supply a
+      // stable internal value in source order so a valid legacy join target is
+      // not discarded by the stricter additive Home parser.
+      final createdAt = map.containsKey('createdAt')
+          ? map['createdAt']
+          : DateTime.fromMillisecondsSinceEpoch(
+              sourceIndex,
+              isUtc: true,
+            ).toIso8601String();
+      sourceIndex += 1;
+      final item = HomeRaceSuggestion.tryParse({
+        ...map,
+        'kind': 'TOURNAMENT',
+        'createdAt': createdAt,
+        'joinAction': 'JOIN',
+      });
+      if (item != null) result.add(item);
+      if (result.length == 4) break;
+    }
+    return result;
+  }
+
+  bool _legacySuccess(_RawResponse? raw) =>
+      raw != null &&
+      raw.statusCode >= 200 &&
+      raw.statusCode < 300 &&
+      !raw.decodeFailed &&
+      raw.json != null;
+
+  Map<String, dynamic> _stringMap(Map<dynamic, dynamic> raw) => {
+    for (final entry in raw.entries)
+      if (entry.key is String) entry.key as String: entry.value,
+  };
+
   Future<Map<String, dynamic>> fetchMe({required String identityToken}) async {
     final response = await _sendGetRequest(
       path: '/auth/me',
@@ -700,6 +991,41 @@ class BackendApiService {
     }
 
     return user;
+  }
+
+  Future<Map<String, dynamic>> updateDiscoverableName({
+    required String identityToken,
+    required String firstName,
+    String? lastName,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'PUT',
+      path: '/auth/me/discoverable-name',
+      body: {'firstName': firstName, 'lastName': lastName},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  /// The setup flow needs both the returned user and an optional collision
+  /// suggestion, while the legacy settings editor keeps [setDisplayName]'s
+  /// existing user-only return shape.
+  Future<Map<String, dynamic>> updateDisplayName({
+    required String identityToken,
+    required String? displayName,
+    bool completeDiscoverableNameSetup = false,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'PUT',
+      path: '/auth/me/display-name',
+      body: {
+        'displayName': displayName,
+        if (completeDiscoverableNameSetup)
+          'completeDiscoverableNameSetup': true,
+      },
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
   }
 
   /// Toggles whether the signed-in user is hidden from the global leaderboard.
@@ -912,10 +1238,7 @@ class BackendApiService {
     final response = await _sendJsonRequest(
       method: 'POST',
       path: '/races/$raceId/powerups/reroll-batch',
-      body: <String, dynamic>{
-        'powerupIds': powerupIds,
-        'localDate': localDate,
-      },
+      body: <String, dynamic>{'powerupIds': powerupIds, 'localDate': localDate},
       identityToken: identityToken,
     );
 
@@ -1103,19 +1426,50 @@ class BackendApiService {
     required String identityToken,
     required String query,
   }) async {
-    final response = await _sendGetRequest(
-      path: '/friends/search?q=${Uri.encodeComponent(query)}',
+    if (_friendIdentitySearchSupport == EndpointSupport.unsupported) {
+      final response = await _sendGetRequest(
+        path: '/friends/search?q=${Uri.encodeComponent(query)}',
+        identityToken: identityToken,
+      );
+      return _safeUserRows(await _decodeJsonResponse(response));
+    }
+
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/friends/search',
+      body: {'q': query},
       identityToken: identityToken,
     );
+    final raw = await _readRawResponse(response);
+    if (raw.statusCode == 404) {
+      _friendIdentitySearchSupport = EndpointSupport.unsupported;
+      throw const LegacyFriendSearchRequired();
+    }
+    if (raw.statusCode >= 200 && raw.statusCode < 300 && raw.json != null) {
+      _friendIdentitySearchSupport = EndpointSupport.supported;
+      return _safeUserRows(raw.json!);
+    }
+    final message = raw.json?['error'];
+    final code = raw.json?['code'];
+    throw ApiException(
+      message is String && message.isNotEmpty
+          ? message
+          : 'Something went wrong. Please try again.',
+      statusCode: raw.statusCode,
+      code: code is String ? code : null,
+      details: raw.json,
+    );
+  }
 
-    final payload = await _decodeJsonResponse(response);
+  List<Map<String, dynamic>> _safeUserRows(Map<String, dynamic> payload) {
     final users = payload['users'];
-
     if (users is! List) {
       throw const ApiException('Something went wrong. Please try again.');
     }
-
-    return users.cast<Map<String, dynamic>>();
+    return users
+        .whereType<Map>()
+        .map((row) => row.cast<String, dynamic>())
+        .toList(growable: false);
   }
 
   Future<Map<String, dynamic>> fetchFriends({
@@ -1186,7 +1540,22 @@ class BackendApiService {
       throw const ApiException('Something went wrong. Please try again.');
     }
 
-    return friends.cast<Map<String, dynamic>>();
+    final validated = <Map<String, dynamic>>[];
+    for (final friend in friends) {
+      if (friend is! Map) {
+        throw const ApiException('Something went wrong. Please try again.');
+      }
+      final row = <String, dynamic>{};
+      for (final entry in friend.entries) {
+        final key = entry.key;
+        if (key is! String) {
+          throw const ApiException('Something went wrong. Please try again.');
+        }
+        row[key] = entry.value;
+      }
+      validated.add(row);
+    }
+    return validated;
   }
 
   Future<Map<String, dynamic>> fetchLeaderboard({
@@ -1643,6 +2012,33 @@ class BackendApiService {
       identityToken: identityToken,
     );
 
+    return _decodeJsonResponse(response);
+  }
+
+  /// The locked next-race preset contract. Kept separate from [createRace] so
+  /// legacy callers and test overrides retain their exact wire shape.
+  Future<Map<String, dynamic>> quickCreateRace({
+    required String identityToken,
+    required String name,
+    required int maxDurationDays,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races',
+      body: {
+        'name': name,
+        'maxDurationDays': maxDurationDays,
+        'isPublic': true,
+        'buyInAmount': 0,
+        'payoutPreset': 'TOP3_70_20_10',
+        'powerupsEnabled': true,
+        'powerupStepInterval': 2000,
+        'maxParticipants': 10,
+        'creationSource': 'QUICK_CREATE',
+        'startPolicy': 'ON_MINIMUM_PARTICIPANTS',
+      },
+      identityToken: identityToken,
+    );
     return _decodeJsonResponse(response);
   }
 
@@ -3149,13 +3545,19 @@ class BackendApiService {
     final code = rawCode is String && rawCode.isNotEmpty ? rawCode : null;
 
     if (message is String && message.isNotEmpty) {
-      throw ApiException(message, statusCode: response.statusCode, code: code);
+      throw ApiException(
+        message,
+        statusCode: response.statusCode,
+        code: code,
+        details: parsedBody,
+      );
     }
 
     throw ApiException(
       'Something went wrong. Please try again.',
       statusCode: response.statusCode,
       code: code,
+      details: parsedBody,
     );
   }
 
@@ -3200,4 +3602,16 @@ class _RawResponse {
   final Map<String, dynamic>? json;
   final String? code;
   final bool decodeFailed;
+}
+
+class _LegacyFeaturedSuggestions {
+  const _LegacyFeaturedSuggestions({
+    this.suggestions,
+    this.proofCapable = false,
+    this.raceIds = const {},
+  });
+
+  final List<HomeRaceSuggestion>? suggestions;
+  final bool proofCapable;
+  final Set<String> raceIds;
 }

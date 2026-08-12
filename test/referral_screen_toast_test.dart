@@ -93,7 +93,7 @@ void main() {
     await _flushToast(tester);
   });
 
-  testWidgets('rejected redeem shows an error toast, not a SnackBar', (
+  testWidgets('retryable redeem stays in the shared sheet with inline copy', (
     tester,
   ) async {
     final auth = await _createAuthService();
@@ -113,12 +113,8 @@ void main() {
     await _enterCodeAndApply(tester);
 
     expect(find.byType(SnackBar), findsNothing);
-    expect(find.byKey(const Key('error-toast-shell')), findsOneWidget);
-    expect(
-      find.text("You can't use your own invite code."),
-      findsOneWidget,
-    );
-
-    await _flushToast(tester);
+    expect(find.byKey(const Key('error-toast-shell')), findsNothing);
+    expect(find.byKey(const Key('invite-code-field')), findsOneWidget);
+    expect(find.text("You can't use your own invite code."), findsOneWidget);
   });
 }

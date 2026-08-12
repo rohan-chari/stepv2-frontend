@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/models/step_data.dart';
+import 'package:step_tracker/models/loadable.dart';
 import 'package:step_tracker/screens/tabs/home_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
@@ -83,6 +84,7 @@ Widget _buildHome(
         friendsSteps: const [],
         raceCard: raceCard,
         raceCardLoading: raceCardLoading,
+        suggestedRacesState: const Loadable.success([]),
         onAcceptRaceInvite: (_) async {},
         onDeclineRaceInvite: (_) async {},
       ),
@@ -147,7 +149,7 @@ void main() {
       // the cascade assertion below pins the exact ordering.
     });
 
-    testWidgets('RACES falls back to the empty-state row, never a bare header '
+    testWidgets('SUGGESTED RACES stays discoverable, never a bare header '
         'and never a duplicate invite', (tester) async {
       await tester.binding.setSurfaceSize(const Size(800, 2400));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -159,11 +161,8 @@ void main() {
       );
       await _flush(tester);
 
-      // "RACES" appears EXACTLY once — the section header. The fallback row's
-      // primary button says BROWSE, so the button no longer echoes its own
-      // header.
-      expect(find.text('RACES'), findsOneWidget);
-      expect(find.text('BROWSE'), findsOneWidget);
+      expect(find.text('SUGGESTED RACES'), findsOneWidget);
+      expect(find.text('BROWSE ALL'), findsOneWidget);
       // "INVITE" appears EXACTLY once — the promoted card's eyebrow, meaning
       // "you were invited". The fallback row's invite-friends button is
       // suppressed while an invite is promoted, so the same word never carries
@@ -171,16 +170,16 @@ void main() {
       expect(find.text('INVITE'), findsOneWidget);
       // Exactly one invite row on the page.
       expect(find.text('@Jordan challenged you'), findsOneWidget);
-      // The RACES section carries the empty-state row instead.
-      final empty = find.text('Race your friends');
+      // The discovery section carries its persistent empty-state ticket.
+      final empty = find.text('NO RACES TO SUGGEST');
       expect(empty, findsOneWidget);
       expect(
         tester.getTopLeft(empty).dy,
-        greaterThan(tester.getTopLeft(find.text('RACES')).dy),
+        greaterThan(tester.getTopLeft(find.text('SUGGESTED RACES')).dy),
       );
     });
 
-    testWidgets('with NO invite the empty state keeps its invite-friends button', (
+    testWidgets('with NO invite the empty state keeps Browse All', (
       tester,
     ) async {
       await tester.binding.setSurfaceSize(const Size(800, 2400));
@@ -193,12 +192,9 @@ void main() {
       );
       await _flush(tester);
 
-      // Nothing is promoted, so there is no competing meaning of INVITE and the
-      // referral entry point stays exactly where it has always been.
-      expect(find.text('Race your friends'), findsOneWidget);
-      expect(find.text('INVITE'), findsOneWidget);
-      expect(find.text('BROWSE'), findsOneWidget);
-      expect(find.text('RACES'), findsOneWidget);
+      expect(find.text('NO RACES TO SUGGEST'), findsOneWidget);
+      expect(find.text('BROWSE ALL'), findsOneWidget);
+      expect(find.text('SUGGESTED RACES'), findsOneWidget);
     });
 
     testWidgets('no invite → no block, no stray gap', (tester) async {
@@ -238,7 +234,9 @@ void main() {
       }
     });
 
-    testWidgets('the RACES SKELETON branch shifted too', (tester) async {
+    testWidgets('the suggested-races skeleton branch shifted too', (
+      tester,
+    ) async {
       await tester.binding.setSurfaceSize(const Size(800, 2400));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -266,6 +264,11 @@ void main() {
     // the fold.
     test('the tutorial home fixture is not a PENDING_INVITE', () {
       expect(tutorialPreviewHomeRaceCard()['state'], 'ACTIVE_RACES');
+      expect(tutorialPreviewHomeSuggestions().map((item) => item.eyebrow), [
+        'DAILY',
+        'PUBLIC',
+        'TOURNAMENT',
+      ]);
     });
   });
 
@@ -291,7 +294,7 @@ void main() {
       );
       expect(
         tester.getTopLeft(card).dy,
-        greaterThan(tester.getTopLeft(find.text('RACES').first).dy),
+        greaterThan(tester.getTopLeft(find.text('SUGGESTED RACES')).dy),
       );
 
       final button = find.byKey(const Key('home-feedback-button'));
@@ -305,7 +308,7 @@ void main() {
       expect(find.byKey(const Key('feedback-submit')), findsOneWidget);
     });
 
-    testWidgets('it renders below the RACES skeleton while loading', (
+    testWidgets('it renders below the SUGGESTED RACES rail while loading', (
       tester,
     ) async {
       await tester.binding.setSurfaceSize(const Size(800, 2400));
@@ -320,7 +323,7 @@ void main() {
 
       expect(
         tester.getTopLeft(find.byKey(const Key('home-feedback-card'))).dy,
-        greaterThan(tester.getTopLeft(find.text('RACES').first).dy),
+        greaterThan(tester.getTopLeft(find.text('SUGGESTED RACES')).dy),
       );
     });
 

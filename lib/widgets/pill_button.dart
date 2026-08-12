@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../styles.dart';
 
-enum PillButtonVariant { primary, secondary, accent }
+enum PillButtonVariant { primary, secondary, accent, decision, destructive }
 
 class PillButton extends StatefulWidget {
   final String label;
@@ -84,6 +84,18 @@ class _PillButtonState extends State<PillButton> {
           AppColors.of(context).pillTerraDark,
           AppColors.of(context).pillTerraShadow,
         );
+      case PillButtonVariant.decision:
+        return (
+          AppColors.of(context).feedGold,
+          AppColors.of(context).coinEdge,
+          AppColors.of(context).woodDarker,
+        );
+      case PillButtonVariant.destructive:
+        return (
+          AppColors.of(context).error,
+          AppColors.of(context).pillTerraDark,
+          AppColors.of(context).woodDarker,
+        );
     }
   }
 
@@ -158,16 +170,10 @@ class _PillButtonState extends State<PillButton> {
       children: [
         // Width-preserving ghost. Excluded from semantics so a screen reader
         // announces "Loading", not the stale label.
-        Opacity(
-          opacity: 0,
-          child: ExcludeSemantics(child: row),
-        ),
+        Opacity(opacity: 0, child: ExcludeSemantics(child: row)),
         Semantics(
           label: 'Loading',
-          child: PillButtonSpinner(
-            color: textColor,
-            size: widget.fontSize + 2,
-          ),
+          child: PillButtonSpinner(color: textColor, size: widget.fontSize + 2),
         ),
       ],
     );
@@ -182,7 +188,9 @@ class _PillButtonState extends State<PillButton> {
     final activeFace = _enabled ? face : disabledFace;
     final activeDark = _enabled ? dark : disabledDark;
 
-    final bool darkText = widget.variant == PillButtonVariant.secondary;
+    final bool darkText =
+        widget.variant == PillButtonVariant.secondary ||
+        widget.variant == PillButtonVariant.decision;
     final textColor = _enabled
         ? (darkText ? AppColors.of(context).textDark : Colors.white)
         : (darkText

@@ -23,7 +23,17 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: StartScreen()));
 
     expect(find.text('Bara'), findsOneWidget);
-    expect(find.text('STEP. RACE. WIN.'), findsOneWidget);
+    expect(
+      find.text(
+        'Step challenges are more fun when you can steal someone’s steps.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('STEP. RACE. WIN.'), findsNothing);
+    expect(
+      find.text("We're on a mission to make your daily steps fun"),
+      findsNothing,
+    );
     expect(find.text('RACE\nFRIENDS'), findsOneWidget);
     expect(find.text('EARN\nPOWERUPS'), findsOneWidget);
     expect(find.text('CLIMB THE\nLEADERBOARD'), findsOneWidget);

@@ -164,8 +164,8 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
     final subject = n > rerollBatchMaxCount
         ? '$rerollBatchMaxCount of these boxes'
         : 'ALL of these boxes';
-    return 'Watch an ad to reroll $subject. Every roll is replaced — '
-        'the new rolls are final.';
+    return 'Watch an ad to reroll $subject. Every roll is replaced. '
+        'The new rolls are final.';
   }
 
   Future<void> _rerollAll() async {
@@ -401,7 +401,9 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
               // Stable identity so each reel keeps its state across rebuilds —
               // but the roll GENERATION is part of it, so a reroll forces a
               // genuine remount and the new bank actually re-spins and lands.
-              key: ValueKey('${_results[i]['powerupId'] ?? 'reel_$i'}:$_rollGen'),
+              key: ValueKey(
+                '${_results[i]['powerupId'] ?? 'reel_$i'}:$_rollGen',
+              ),
               resultType: _results[i]['type'] as String? ?? '',
               resultRarity: _results[i]['rarity'] as String? ?? 'COMMON',
               // Same reel height as the single-box opening screen.
@@ -490,6 +492,16 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
               ),
             ],
             const SizedBox(height: 20),
+            PillButton(
+              label: 'Continue',
+              icon: Icons.check_rounded,
+              fullWidth: true,
+              // Disabled while the ad is up: a half-applied batch behind a
+              // popped route is the one state this screen cannot recover from.
+              onPressed: _rerollingAll
+                  ? null
+                  : () => Navigator.of(context).pop(),
+            ),
             // Item 1 — REROLL ALL. Absent unless the host wired it (backend
             // advertised `boxRerollBatch`, a reroll ad unit is baked in, not
             // demo), already spent, or nothing in the bank is rerollable. On
@@ -498,6 +510,7 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
             if (widget.onRerollAll != null &&
                 !_rerollUsed &&
                 _rerollableIds.isNotEmpty) ...[
+              const SizedBox(height: 14),
               PillButton(
                 key: const Key('open-all-reroll-button'),
                 label: 'REROLL ALL',
@@ -518,18 +531,7 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
                   color: AppColors.of(context).textMid,
                 ),
               ),
-              const SizedBox(height: 14),
             ],
-            PillButton(
-              label: 'Continue',
-              icon: Icons.check_rounded,
-              fullWidth: true,
-              // Disabled while the ad is up: a half-applied batch behind a
-              // popped route is the one state this screen cannot recover from.
-              onPressed: _rerollingAll
-                  ? null
-                  : () => Navigator.of(context).pop(),
-            ),
           ],
         ),
       ),

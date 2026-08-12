@@ -6,6 +6,7 @@ import '../models/race_handoff_result.dart';
 import '../models/race_prize_pool.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
+import '../services/discovery_join_coordinator.dart';
 import '../styles.dart';
 import '../widgets/app_refresh_indicator.dart';
 import '../utils/at_name.dart';
@@ -19,9 +20,7 @@ import '../widgets/info_toast.dart';
 import '../widgets/loading_skeleton.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/retro_card.dart';
-import '../widgets/team_side_picker.dart';
 import '../widgets/tournament_game_card.dart';
-import '../widgets/trail_sign.dart';
 import 'create_race_screen.dart';
 import 'race_detail_screen.dart';
 import 'tournament_detail_screen.dart';
@@ -70,6 +69,11 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
   // without the endpoint simply yields no strip.
   List<Map<String, dynamic>> _featuredRaces = const [];
   String? _joiningFeaturedRaceId;
+
+  DiscoveryJoinCoordinator get _joinCoordinator => DiscoveryJoinCoordinator(
+    authService: widget.authService,
+    backendApiService: widget.backendApiService,
+  );
 
   @override
   void initState() {
@@ -142,129 +146,21 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
   }
 
   Future<void> _join(Map<String, dynamic> race) async {
-    final token = widget.authService.authToken;
-    if (token == null || token.isEmpty) return;
-    final raceId = race['id'] as String;
-    // Funded races (contract §5.1) cost nothing — joining is one tap. The
-    // guard below only survives for a legacy race created before app-funded
-    // pools that still holds real buy-ins.
-    final isFunded = RacePrizePool.fromRace(race) != null;
-    final buyIn = isFunded ? 0 : ((race['buyInAmount'] as int?) ?? 0);
-    if (buyIn > 0 && buyIn > widget.authService.coins) {
-      showErrorToast(context, 'Not enough gold for this buy-in');
-      return;
-    }
-    if (buyIn > 0) {
-      final confirmed = await _confirmRaceBuyIn(buyIn);
-      if (confirmed != true || !mounted) return;
-    }
-
-    // TR-201: team races need a side before the join call fires.
-    String? team;
-    if (TeamRace.isTeamRace(race)) {
-      team = await showTeamSidePicker(context: context, race: race);
-      if (team == null || !mounted) return; // dismissed the sheet
-    }
-
+    final raceId = race['id'];
+    if (raceId is! String || raceId.isEmpty) return;
     setState(() => _joiningRaceId = raceId);
-    try {
-      Map<String, dynamic> result;
-      if (team != null) {
-        result = await widget.backendApiService.joinPublicRaceOnTeam(
-          identityToken: token,
-          raceId: raceId,
-          team: team,
-        );
-      } else {
-        result = await widget.backendApiService.joinPublicRace(
-          identityToken: token,
-          raceId: raceId,
-        );
-      }
-      try {
-        final user = await widget.backendApiService.fetchMe(
-          identityToken: token,
-        );
-        await widget.authService.updateCoins(
-          user['coins'] as int? ?? widget.authService.coins,
-        );
-        await widget.authService.updateHeldCoins(
-          user['heldCoins'] as int? ?? widget.authService.heldCoins,
-        );
-      } catch (_) {}
-      if (!mounted) return;
-      final joinedRace = result['race'] as Map<String, dynamic>?;
+    final result = await _joinCoordinator.joinRace(context, race);
+    if (!mounted) return;
+    setState(() => _joiningRaceId = null);
+    if (result != null) {
       Navigator.of(context).pop(
         RaceHandoffResult(
           raceId: raceId,
-          status:
-              joinedRace?['status'] as String? ??
-              race['status'] as String? ??
-              'PENDING',
+          status: result.status,
           kind: RaceHandoffKind.joined,
         ),
       );
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      setState(() => _joiningRaceId = null);
-      // TEAM_FULL / RACE_ALREADY_STARTED / UPDATE_REQUIRED get the playful
-      // team-race copy; older backends without codes keep their message.
-      showErrorToast(
-        context,
-        e.code != null ? teamRaceErrorCopy(e.code) : e.message,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _joiningRaceId = null);
-      showErrorToast(context, e.toString());
     }
-  }
-
-  Future<bool?> _confirmRaceBuyIn(int buyIn) {
-    return showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: TrailSign(
-          width: 320,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '$buyIn GOLD BUY-IN',
-                style: PixelText.title(
-                  size: 18,
-                  color: AppColors.of(context).textDark,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Your $buyIn gold is held until the race starts, then moves into the live pot. It returns only if the race is cancelled.',
-                textAlign: TextAlign.center,
-                style: PixelText.body(
-                  size: 13.5,
-                  color: AppColors.of(context).textMid,
-                ),
-              ),
-              const SizedBox(height: 18),
-              PillButton(
-                label: 'NEVER MIND',
-                variant: PillButtonVariant.secondary,
-                fullWidth: true,
-                onPressed: () => Navigator.of(dialogContext).pop(false),
-              ),
-              const SizedBox(height: 10),
-              PillButton(
-                label: 'LOCK IT IN',
-                variant: PillButtonVariant.accent,
-                fullWidth: true,
-                onPressed: () => Navigator.of(dialogContext).pop(true),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   Future<void> _loadTournaments(String token) async {
@@ -372,113 +268,20 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
     Map<String, dynamic> t, {
     required bool featured,
   }) async {
-    final token = widget.authService.authToken;
-    if (token == null || token.isEmpty) return;
     final id = Tournament.id(t) ?? '';
     if (id.isEmpty || _joiningTournamentId != null) return;
-
-    // Funded brackets are free (§5.2); only a pre-flip paid bracket confirms.
-    final buyIn = Tournament.prizePool(t) != null
-        ? 0
-        : Tournament.buyInAmount(t);
-    if (!featured && buyIn > 0) {
-      if (buyIn > widget.authService.coins) {
-        showErrorToast(context, 'Not enough gold for this buy-in');
-        return;
-      }
-      final ok = await _confirmBuyIn(buyIn);
-      if (ok != true) return;
-    }
-
     setState(() => _joiningTournamentId = id);
-    try {
-      await widget.backendApiService.joinTournament(
-        identityToken: token,
-        tournamentId: id,
-      );
-      try {
-        final user = await widget.backendApiService.fetchMe(
-          identityToken: token,
-        );
-        await widget.authService.updateCoins(
-          user['coins'] as int? ?? widget.authService.coins,
-        );
-        await widget.authService.updateHeldCoins(
-          user['heldCoins'] as int? ?? widget.authService.heldCoins,
-        );
-      } catch (_) {}
-      if (!mounted) return;
-      setState(() => _joiningTournamentId = null);
+    final result = await _joinCoordinator.joinTournament(
+      context,
+      t,
+      featured: featured,
+    );
+    if (!mounted) return;
+    setState(() => _joiningTournamentId = null);
+    if (result != null) {
       showInfoToast(context, "You're in the bracket!");
       _openTournament(id);
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      setState(() => _joiningTournamentId = null);
-      showErrorToast(
-        context,
-        e.code != null ? tournamentErrorCopy(e.code) : e.message,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _joiningTournamentId = null);
-      showErrorToast(context, e.toString());
     }
-  }
-
-  Future<bool?> _confirmBuyIn(int buyIn) {
-    return showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: TrailSign(
-          width: 320,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '$buyIn GOLD BUY-IN',
-                style: PixelText.title(
-                  size: 18,
-                  color: AppColors.of(context).textDark,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Your $buyIn gold is held until the bracket starts. You only '
-                'get it back if the tournament is cancelled.',
-                textAlign: TextAlign.center,
-                style: PixelText.body(
-                  size: 13.5,
-                  color: AppColors.of(context).textMid,
-                ),
-              ),
-              const SizedBox(height: 18),
-              PillButton(
-                label: 'NEVER MIND',
-                variant: PillButtonVariant.primary,
-                fullWidth: true,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-                onPressed: () => Navigator.of(dialogContext).pop(false),
-              ),
-              const SizedBox(height: 10),
-              PillButton(
-                label: 'LOCK IT IN',
-                variant: PillButtonVariant.accent,
-                fullWidth: true,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-                onPressed: () => Navigator.of(dialogContext).pop(true),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   @override
@@ -724,6 +527,24 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
         _userTournaments.isNotEmpty;
   }
 
+  bool _raceIsJoined(Map<String, dynamic> race) {
+    final status = race['myStatus'];
+    return status is String && status.toUpperCase() == 'ACCEPTED';
+  }
+
+  int get _featuredAvailableCount =>
+      _featuredRaces.where((race) => !_raceIsJoined(race)).length +
+      _featuredTournaments.where((t) => !Tournament.amIn(t)).length;
+
+  int get _tournamentsAvailableCount =>
+      _userTournaments.where((t) => !Tournament.amIn(t)).length;
+
+  int get _racesAvailableCount =>
+      (_racesState.data ?? _races).where((race) => !_raceIsJoined(race)).length;
+
+  String _filterLabel(String label, int availableCount) =>
+      '$label ($availableCount)';
+
   /// The FEATURED / TOURNEYS / RACES segmented control — the same dark
   /// ink pill (gold-selected) built for the races tab.
   Widget _buildContentFilterPills() {
@@ -798,18 +619,22 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
         child: Row(
           children: [
             seg(
-              'FEATURED',
+              _filterLabel('FEATURED', _featuredAvailableCount),
               _PublicFilter.featured,
               const Key('public-filter-featured'),
             ),
             const SizedBox(width: 4),
             seg(
-              'TOURNEYS',
+              _filterLabel('TOURNEYS', _tournamentsAvailableCount),
               _PublicFilter.tournaments,
               const Key('public-filter-tournaments'),
             ),
             const SizedBox(width: 4),
-            seg('RACES', _PublicFilter.races, const Key('public-filter-races')),
+            seg(
+              _filterLabel('RACES', _racesAvailableCount),
+              _PublicFilter.races,
+              const Key('public-filter-races'),
+            ),
           ],
         ),
       ),

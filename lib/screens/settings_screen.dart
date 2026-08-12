@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../config/backend_config.dart';
 import '../services/auth_service.dart';
+import '../services/activation_analytics_service.dart';
 import '../services/backend_api_service.dart';
 import '../services/health_service.dart';
 import '../services/notification_service.dart';
@@ -13,6 +14,8 @@ import '../tutorial/tutorial_screen.dart';
 import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/feedback_sheet.dart';
+import '../widgets/info_toast.dart';
+import '../widgets/invite_code_sheet.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/pixel_switch.dart';
 import '../widgets/trail_sign.dart';
@@ -100,6 +103,9 @@ class _SettingsContent extends StatefulWidget {
 }
 
 class _SettingsContentState extends State<_SettingsContent> {
+  late final ActivationAnalyticsService _activationAnalytics =
+      ActivationAnalyticsService(backendApiService: widget.backendApiService);
+
   /// The ONE `GET /notifications/preferences` round trip for this screen
   /// (review fix, batch 2026-08-08). Both toggles used to fetch it
   /// independently, so opening Settings fired the same request twice. Held as
@@ -153,6 +159,24 @@ class _SettingsContentState extends State<_SettingsContent> {
       authService: widget.authService,
       backendApiService: api,
     );
+  }
+
+  Future<void> _openInviteCodeSheet() async {
+    final api = widget.backendApiService;
+    if (api == null) return;
+    await _activationAnalytics.record('settings_invite_code_opened');
+    if (!mounted) return;
+    final outcome = await showInviteCodeSheet(
+      context: context,
+      authService: widget.authService,
+      backendApiService: api,
+    );
+    if (!mounted || outcome == null) return;
+    if (outcome.attributed) {
+      showInfoToast(context, outcome.message);
+    } else if (outcome.terminal) {
+      showErrorToast(context, outcome.message);
+    }
   }
 
   Future<void> _confirmDeleteAccount() async {
@@ -283,6 +307,22 @@ class _SettingsContentState extends State<_SettingsContent> {
                   widget.onSettingsChanged();
                 },
               ),
+              if (widget.backendApiService != null) ...[
+                const SizedBox(height: 10),
+                PillButton(
+                  key: const Key('settings-enter-invite-code'),
+                  label: 'ENTER INVITE CODE',
+                  icon: Icons.card_giftcard_rounded,
+                  variant: PillButtonVariant.secondary,
+                  fontSize: 13,
+                  fullWidth: true,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
+                  onPressed: _openInviteCodeSheet,
+                ),
+              ],
               // The "hide me from the global leaderboard" switch moved onto the
               // Leaderboard tab itself (batch 2026-07-27 item 1) — see
               // lib/widgets/leaderboard_visibility_toggle.dart.
@@ -570,11 +610,7 @@ class _SocialRow extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(
-                Icons.open_in_new_rounded,
-                size: 15,
-                color: colors.textMid,
-              ),
+              Icon(Icons.open_in_new_rounded, size: 15, color: colors.textMid),
             ],
           ),
         ),
@@ -957,8 +993,8 @@ class _ConnectHealthRowState extends State<_ConnectHealthRow> {
         // counts server-side, so it never claims we collect nothing.
         Text(
           key: const Key('settings-health-privacy-copy'),
-          'Bara only reads your step count — never your routes, workouts, '
-          'heart rate, or location. Your steps are used for races and nothing '
+          'Bara only reads your step count. It never reads your routes, '
+          'workouts, heart rate, or location. Your steps are used for races and nothing '
           'else, and we never sell your data.',
           style: PixelText.body(size: 11, color: AppColors.of(context).textMid),
         ),

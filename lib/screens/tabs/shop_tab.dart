@@ -467,9 +467,7 @@ class _ShopTabState extends State<ShopTab> {
 
   Widget _buildHeader({required bool showBackButton}) {
     return DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.of(context).roofLight,
-      ),
+      decoration: BoxDecoration(color: AppColors.of(context).roofLight),
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
         child: Padding(
@@ -956,8 +954,8 @@ class _ShopTabState extends State<ShopTab> {
         slotLabel: _slotLabels['CHARACTER'],
         badge: equipped ? 'EQUIPPED' : null,
         description:
-            'The original. Steady, sociable, and always in your corner — '
-            'capybaras top each other up with bonus steps every day.',
+            'The original. Steady, sociable, and always in your corner. '
+            'Capybaras top each other up with bonus steps every day.',
         actions: [
           if (!equipped)
             PillButton(
@@ -991,55 +989,55 @@ class _ShopTabState extends State<ShopTab> {
     final route = _routeFor(price);
     final adsNeeded = _adsNeededFor(price);
     void openSheet() => _showItemSheet(
-        art: _cosmeticArt(item, iconSize: 48),
-        name: name,
-        slotLabel: _slotLabels[item['slot']],
-        description: item['description'] as String? ?? '',
-        actions: [
-          ?_adUnlockCapNotice(price),
-          switch (route) {
-            _AffordRoute.affordable => PillButton(
-                label: 'BUY · $price',
-                leading: const CoinGlyph(size: 16),
-                variant: PillButtonVariant.secondary,
-                fontSize: 14,
-                fullWidth: true,
-                onPressed: _saving
-                    ? null
-                    : () {
-                        Navigator.of(context).pop();
-                        _purchase(item);
-                      },
-              ),
-            _AffordRoute.watchAds => PillButton(
-                label: adsNeeded == 1
-                    ? 'WATCH 1 AD TO UNLOCK'
-                    : 'WATCH $adsNeeded ADS TO UNLOCK',
-                icon: Icons.smart_display_rounded,
-                variant: PillButtonVariant.secondary,
-                fontSize: 13,
-                fullWidth: true,
-                onPressed: _saving
-                    ? null
-                    : () {
-                        Navigator.of(context).pop();
-                        _unlockCosmeticWithAds(item, adsNeeded);
-                      },
-              ),
-            _AffordRoute.getCoins => PillButton(
-                label: 'GET MORE COINS',
-                icon: Icons.add_circle_rounded,
-                variant: PillButtonVariant.secondary,
-                fontSize: 14,
-                fullWidth: true,
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  _openGetCoins();
-                },
-              ),
-          },
-        ],
-      );
+      art: _cosmeticArt(item, iconSize: 48),
+      name: name,
+      slotLabel: _slotLabels[item['slot']],
+      description: item['description'] as String? ?? '',
+      actions: [
+        ?_adUnlockCapNotice(price),
+        switch (route) {
+          _AffordRoute.affordable => PillButton(
+            label: 'BUY · $price',
+            leading: const CoinGlyph(size: 16),
+            variant: PillButtonVariant.secondary,
+            fontSize: 14,
+            fullWidth: true,
+            onPressed: _saving
+                ? null
+                : () {
+                    Navigator.of(context).pop();
+                    _purchase(item);
+                  },
+          ),
+          _AffordRoute.watchAds => PillButton(
+            label: adsNeeded == 1
+                ? 'WATCH 1 AD TO UNLOCK'
+                : 'WATCH $adsNeeded ADS TO UNLOCK',
+            icon: Icons.smart_display_rounded,
+            variant: PillButtonVariant.secondary,
+            fontSize: 13,
+            fullWidth: true,
+            onPressed: _saving
+                ? null
+                : () {
+                    Navigator.of(context).pop();
+                    _unlockCosmeticWithAds(item, adsNeeded);
+                  },
+          ),
+          _AffordRoute.getCoins => PillButton(
+            label: 'GET MORE COINS',
+            icon: Icons.add_circle_rounded,
+            variant: PillButtonVariant.secondary,
+            fontSize: 14,
+            fullWidth: true,
+            onPressed: () {
+              Navigator.of(context).pop();
+              _openGetCoins();
+            },
+          ),
+        },
+      ],
+    );
     return _ShopTile(
       art: _cosmeticArt(item),
       name: name,
@@ -1140,7 +1138,8 @@ class _ShopTabState extends State<ShopTab> {
     final list = _powerupStoreItems
         .where((i) => wanted == null || _powerupCategoryOf(i) == wanted)
         .toList();
-    int price(Map<String, dynamic> m) => (m['priceCoins'] as num?)?.toInt() ?? 0;
+    int price(Map<String, dynamic> m) =>
+        (m['priceCoins'] as num?)?.toInt() ?? 0;
     switch (_powerupSort) {
       case _PowerupSort.nameAsc:
         list.sort(_byName);
@@ -1284,10 +1283,7 @@ class _ShopTabState extends State<ShopTab> {
       padding: const EdgeInsets.only(bottom: 4),
       child: Text(
         text,
-        style: PixelText.title(
-          size: 11,
-          color: AppColors.of(context).textMid,
-        ),
+        style: PixelText.title(size: 11, color: AppColors.of(context).textMid),
       ),
     );
   }
@@ -1328,10 +1324,7 @@ class _ShopTabState extends State<ShopTab> {
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: PixelText.title(
-                        size: 13,
-                        color: colors.textDark,
-                      ),
+                      style: PixelText.title(size: 13, color: colors.textDark),
                     ),
                   ),
                   if (detail != null) ...[
@@ -1390,10 +1383,7 @@ class _ShopTabState extends State<ShopTab> {
       child: Text(
         'You’ve used today’s ad unlock. Come back tomorrow.',
         textAlign: TextAlign.center,
-        style: PixelText.body(
-          size: 13,
-          color: AppColors.of(context).textMid,
-        ),
+        style: PixelText.body(size: 13, color: AppColors.of(context).textMid),
       ),
     );
   }
@@ -1446,14 +1436,14 @@ class _ShopTabState extends State<ShopTab> {
         await controller.load(userId: userId, localDate: customData);
         if (!controller.isReady) {
           if (mounted) {
-            showErrorToast(context, 'Ad didn’t load — no coins spent.');
+            showErrorToast(context, 'Ad didn’t load. No coins spent.');
           }
           return;
         }
         final earned = await controller.showAndAwaitReward();
         if (!earned) {
           if (mounted) {
-            showErrorToast(context, 'Ad not finished — no coins spent.');
+            showErrorToast(context, 'Ad not finished. No coins spent.');
           }
           return;
         }
@@ -1476,7 +1466,10 @@ class _ShopTabState extends State<ShopTab> {
       if (mounted) showErrorToast(context, error.message);
     } catch (_) {
       if (mounted) {
-        showErrorToast(context, 'Couldn’t unlock this powerup. Please try again.');
+        showErrorToast(
+          context,
+          'Couldn’t unlock this powerup. Please try again.',
+        );
       }
     } finally {
       controller.dispose();
@@ -1530,14 +1523,14 @@ class _ShopTabState extends State<ShopTab> {
         await controller.load(userId: userId, localDate: customData);
         if (!controller.isReady) {
           if (mounted) {
-            showErrorToast(context, 'Ad didn’t load — no coins spent.');
+            showErrorToast(context, 'Ad didn’t load. No coins spent.');
           }
           return;
         }
         final earned = await controller.showAndAwaitReward();
         if (!earned) {
           if (mounted) {
-            showErrorToast(context, 'Ad not finished — no coins spent.');
+            showErrorToast(context, 'Ad not finished. No coins spent.');
           }
           return;
         }
@@ -1764,7 +1757,7 @@ class _ShopTabState extends State<ShopTab> {
             _ownedPowerupTile(entry.key, entry.value),
         ],
         emptyIcon: Icons.bolt_rounded,
-        emptyMessage: 'No powerups yet — buy some from the Store.',
+        emptyMessage: 'No powerups yet. Buy some from the Store.',
       ),
       _ShopCategory.characters => _buildCategoryBody(
         [
@@ -1779,7 +1772,7 @@ class _ShopTabState extends State<ShopTab> {
             _inventoryCosmeticTile(item),
         ],
         emptyIcon: Icons.pets_rounded,
-        emptyMessage: 'No extra characters yet — buy some from the Store.',
+        emptyMessage: 'No extra characters yet. Buy some from the Store.',
       ),
       _ShopCategory.accessories => _buildCategoryBody(
         [
@@ -1787,7 +1780,7 @@ class _ShopTabState extends State<ShopTab> {
             _inventoryCosmeticTile(item),
         ],
         emptyIcon: Icons.inventory_2_rounded,
-        emptyMessage: 'No gear yet — buy some from the Store.',
+        emptyMessage: 'No gear yet. Buy some from the Store.',
       ),
     };
   }
@@ -2188,14 +2181,18 @@ class _FittedTileName extends StatelessWidget {
         var chosen = _sizes.last;
         for (final size in _sizes) {
           final painter = TextPainter(
-            text: TextSpan(text: name, style: PixelText.title(size: size)),
+            text: TextSpan(
+              text: name,
+              style: PixelText.title(size: size),
+            ),
             maxLines: 2,
             textAlign: TextAlign.center,
             textDirection: direction,
             textScaler: textScaler,
           )..layout(maxWidth: constraints.maxWidth);
           final fits =
-              !painter.didExceedMaxLines && painter.height <= constraints.maxHeight;
+              !painter.didExceedMaxLines &&
+              painter.height <= constraints.maxHeight;
           painter.dispose();
           if (fits) {
             chosen = size;

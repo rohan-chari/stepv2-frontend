@@ -24,6 +24,24 @@ Where `DB` and `SEED`/`CODE` disagree, `DB` wins at runtime unless the seed's
 
 ## 0. Population baseline — verified 2026-08-08 (prod, read-only)
 
+### 0b. Refresh — verified 2026-08-11 (prod, read-only)
+
+| Metric | Value | Source |
+|---|---|---|
+| Users with steps in 30d | 124 | `DB steps` |
+| Steps/day (steps>0, 30d) | p10 1,241 · **p50 5,751** · p90 13,977 · mean 6,866 | `DB steps` (n=2,611 user-days) |
+| Users with a live human-created race **right now** | 47 | `DB races × race_participants` |
+| Users with **no** live human-created race (CTA target) | 77 | same |
+| Steps/day, has live human race | p50 7,883 · p90 13,412 | `DB steps` (n=47) |
+| Steps/day, **no** live human race | p50 5,537 · p90 10,553 | `DB steps` (n=77) |
+| Concurrent **human-created** races per user-day (30d) | p50 2 · p90 6 · max 21 · mean 2.55 | `DB` (n=1,337 user-days) |
+| Accepted participants per user-created race (started 30d) | p50 4 · p90 17 · max 30 · mean 6.58 | `DB` (n=52 races) |
+| Box-sourced powerups per participant-race (user races, 30d) | p50 18 · p90 48 · max 115 · mean 23.5 | `DB race_powerups` (n=350) |
+| Powerups minted/day (30d) | **471.3** total — 292.0 from user races, 179.3 from seeded | `DB race_powerups` |
+| Total coin sources / sinks / net | **+3,544 / −2,421 / +1,123 per day** | `DB coin_transactions` |
+
+### 0a. Original baseline — 2026-08-08
+
 | Metric | Value | Source |
 |---|---|---|
 | Users with steps in 30d | 112 | `DB steps` |
@@ -41,7 +59,30 @@ Where `DB` and `SEED`/`CODE` disagree, `DB` wins at runtime unless the seed's
 
 ---
 
-## 1. Coin sources — measured, 30 days to 2026-08-08
+## 1. Coin sources
+
+### 1b. Refresh — 30 days to 2026-08-11 (`DB coin_transactions`)
+
+| Reason | Coins/day | n | Users | vs 2026-08-08 |
+|---|---|---|---|---|
+| `daily_reward` | 840.8 | 712 | 80 | +8% |
+| `race_prize_pool_payout` | **592.1** | 290 | 45 | **+100%** |
+| `step_milestone` | 476.0 | 831 | 52 | +12% |
+| `ad_extra_spin` | 367.2 | 166 | 20 | +23% |
+| `race_buy_in_payout` | 294.9 | 57 | 20 | flat (legacy, redistribution) |
+| `referral_reward` | **266.7** | 16 | 12 | **+167%** — see §11 |
+| `race_finish_reward` | 253.2 | 105 | 19 | −6% |
+| `ad_coin_reward` | 142.5 | 171 | 9 | +16% |
+| `tutorial_complete` | 140.0 | 42 | 42 | +91% |
+| `tournament_champion_reward` | 60.0 | 12 | 8 | +9% |
+| others (`manual_grant`, `mystery_potion_refund`, refunds, `powerup_discard`, `bounty_payout`, `piggy_bank`, `admin_grant`) | ~106 | — | — | — |
+| **Total sources** | **≈ 3,544 / day** | | | +26% |
+
+`powerup_discard` is now separately visible at **9.8 coins/day** (46 txns, 11
+users) against a theoretical ceiling of 40/user/day × 124 users = 4,960/day.
+The faucet has ~500× headroom; it is bounded by discard *behaviour*, not by the cap.
+
+### 1a. Original — 30 days to 2026-08-08
 
 | Reason | Coins/day (app-wide) | Users | Rate / rule | Source |
 |---|---|---|---|---|
@@ -58,7 +99,29 @@ Where `DB` and `SEED`/`CODE` disagree, `DB` wins at runtime unless the seed's
 | others (`manual_grant`, `mystery_potion_refund`, refunds, `bounty_payout`, `piggy_bank`, `admin_grant`) | ~96 | — | — | `DB` |
 | **Total sources** | **≈ 2,813 / day** | | | |
 
-## 2. Coin sinks — same window
+## 2. Coin sinks
+
+### 2b. Refresh — 30 days to 2026-08-11 (`DB coin_transactions`)
+
+| Reason | Coins/day | n |
+|---|---|---|
+| `powerup_purchase` | −1,072.7 | 352 |
+| `powerup_upgrade` | −702.3 | 1,152 |
+| `shop_purchase` | −491.7 | 23 |
+| `race_buy_in_hold` | −144.1 | 111 |
+| `powerup_unlock_ads` | −11.0 | 4 |
+| **Total sinks** | **≈ −2,421 / day** | |
+
+**Net ≈ +1,123 coins/day** app-wide (≈ +9 coins/day per 30d-active user).
+
+**Upgrade sink per box minted = 702.3 / 471.3 = 1.49 coins.** This is the
+conversion factor for "what does one extra mystery box do to the coin economy":
+each additional box drives ~1.49 coins of `powerup_upgrade` spend on average —
+but the average is carried by leaders (§3.3e: 216 of 311 Protein Shake upgrades
+came from the lead bucket, 9 from last), so boxes minted to trailing/low-engagement
+players convert at well under 1.49.
+
+### 2a. Original — 30 days to 2026-08-08
 
 | Reason | Coins/day | Users | Source |
 |---|---|---|---|
@@ -574,8 +637,36 @@ falls like `1/√N` for an all-or-nothing batch; per-**ad** gain rises like `√
 ### 4.1 App-funded prize pool (current default)
 
 `app_settings.fundedPrizePoolsEnabled` has **no prod row** → code default `true`
-(`CODE src/shared/config/appSettings.js:75`). All new races are funded; buy-ins
+(`CODE src/shared/config/appSettings.js:103`). All new races are funded; buy-ins
 are forced to 0.
+
+> **Re-verified 2026-08-11.** `SELECT key,value FROM app_settings` returns 14
+> rows and `fundedPrizePoolsEnabled` is **not among them**, so the code default
+> stands. Consequence that is easy to get wrong: **a race created with
+> `buyInAmount: 0` is not a race that pays nothing.** `createRace.js:211-242`
+> coerces the buy-in to 0 *and* stamps `fundedPrize: true`, so every free race a
+> user creates today mints `walkers × durationPoints × 20`. Measured over races
+> created in the 30d to 2026-08-11: 40 of 52 user-created races carry
+> `funded_prize = true` (the 12 that don't were all created 2026-07-12…23,
+> pre-cutover). Any spec that reasons "free race ⇒ no payout" is wrong against
+> live config.
+
+Per-participant EV is `durationPoints × PRIZE_COIN_UNIT` **independent of field
+size** (pool = N × dp × 20, WINNER_TAKES_ALL pays one of N) — 40 coins for a
+2-day race, 80 for a 7-day one — but realised payout is winner-take-all, so the
+median participant receives 0. Measured `race_prize_pool_payout` amounts, 30d:
+n=290, 45 users, p10 **2** · p50 **40** · p90 **157** · max **336**.
+
+Per participant-**day** the mint rate is `durationPoints × 20 / days`, which is
+**higher for shorter races**: 1-day 20 · 2-day 20 · 3-day 13.3 · 7-day 11.4 ·
+14-day 11.4. A quick-create preset menu therefore prices differently per preset.
+
+**Graded presets cannot be a quick-create default.** `startRace.js:87-95` rejects
+the start of any non-`WINNER_TAKES_ALL` preset below
+`MIN_MULTI_PAYOUT_PARTICIPANTS = 4` accepted, with a 400. `TOP3_70_20_10` and
+`TOP3_80_15_5` are fixed-percentage and have **no** minimum, and unfilled places
+mint nothing (`completeRace.js:346-352` skips a payout index with no ranked
+recipient), so a 2-person TOP3 race mints 90% of its pool and pays two people.
 
 ```
 pool = playerCount × durationPoints(days) × PRIZE_COIN_UNIT      (clamped to PRIZE_POOL_MAX)
@@ -696,7 +787,23 @@ Affordability at p50 income (3/day): 250 ⇒ 83 days. At p90 (98/day): 2.5 days.
   banked and opened from a worse position (§8).
 - **No concurrent-race limit** exists anywhere in the codebase. Observed max: 10
   simultaneous active races per user.
-- **Referral farming** is bounded by one payout per provider identity.
+- **Referral farming** is bounded by one payout per provider identity (§11).
+- **Box volume per race is an order statistic of field size.** Boxes are
+  `raw_steps / 2000`, so the leader:last box ratio grows monotonically with the
+  number of participants purely from the spread of the step distribution — no
+  config change required. Monte Carlo (2×10⁵ trials/cell, lognormal fitted to
+  the prod 30d steps/day p50 5,751 / p90 13,977, 7-day race):
+
+  | Field | leader boxes | last boxes | leader:last (mean) | p50 | p90 | boxes/race |
+  |---|---|---|---|---|---|---|
+  | N=4 | 46.1 | 10.5 | **4.4×** | 4.1 | 10.3 | 100.4 |
+  | N=7 | 55.3 | 8.0 | **6.9×** | 6.6 | 15.5 | 172.7 |
+  | N=10 | 62.6 | 6.9 | **9.1×** | 8.7 | 19.7 | 248.0 |
+
+  (N=7 and N=10 rows model the extra bodies as lower-step joiners, median 5,537.)
+  Any feature whose success metric is "more participants per race" therefore
+  worsens the §8 box-volume imbalance mechanically. Sim:
+  scratchpad `boxsim.js`, 2026-08-11.
 
 ---
 
@@ -1154,7 +1261,175 @@ identical to Rainstorm's. All-time coin-flip effect rows: **5**.
 
 ---
 
+## 11. Referral economy — verified 2026-08-11 (prod SELECT-only)
+
+### 11.1 Rates and guards
+
+| Knob | Value | Source |
+|---|---|---|
+| Referrer reward | **500** coins | `ENV REFERRAL_REFERRER_COINS`, default `CODE social/referralRewards.js:11` |
+| Referee reward | **500** coins (double-sided since batch 2026-07-27 D6) | `ENV REFERRAL_REFEREE_COINS` |
+| **Total per successful referral** | **1,000 coins minted** | |
+| Attribution window | 30 days signup → first qualifying race; then `EXPIRED`, never pays | `ENV REFERRAL_QUALIFY_WINDOW_DAYS` |
+| Referrer velocity cap | **20 / rolling 24h**, **100 / rolling 30d** → status `FLAGGED`, held for manual review (both sides held) | `ENV REFERRAL_DAILY_CAP` / `REFERRAL_MONTHLY_CAP` |
+| Payout trigger | **not install** — the referee's first *qualifying completed race* (Apple 3.2.2) | `CODE grantReferralReward.js` |
+| Qualifying race | `seedId == null` **and** ≥2 ACCEPTED participants with `totalSteps > 0`; referee must have `placement != null` and `totalSteps > 0` | `CODE grantReferralReward.js:200-215` |
+| Idempotency | `@@unique(refereeSubHash, role)` on `referral_reward_grants` — one payout per **human provider identity per role, forever**, surviving delete + reinstall | `CODE grantReferralReward.js:29-46` |
+| Attribution idempotency | `@@unique(Referral.refereeSubHash)` — one attribution per human, ever; written only on the account-create branch | `CODE recordReferral.js` |
+| Self-referral | blocked (`referrer.id === newUser.id`) | same |
+| Review accounts | excluded on both sides (`EXCLUDED`) | same |
+| IP fallback | `link_opens.kind = 'referral'` only; tier 1 exact IP hash (48h, ≤10 opens, exactly 1 distinct code); tier 2 /24-/64 net prefix **OFF by default** | `CODE findLinkOpenReferralCode.js` |
+
+### 11.2 Measured volume (all-time, 2026-08-11)
+
+| Metric | Value |
+|---|---|
+| `referrals` rows, all time | **8** — all `REWARDED`, 0 PENDING / EXPIRED / FLAGGED |
+| First referral | 2026-08 (the program has one month of data) |
+| `referral_reward_grants` | 8 REFERRER (4,000) + 8 REFEREE (4,000) = **8,000 coins** |
+| `referral_reward` coin txns, 30d | 16 txns, 8,000 coins = **266.7 / day** (7.5% of all sources) |
+| Qualification rate to date | **8 / 8 = 100%** |
+
+### 11.3 Affordability frame
+
+At the p50 earn rate of **3 coins/active-day** (§0), one 500-coin side is
+**166 days** of median play; the 1,000-coin pair is **333 days**. At p90
+(98/day) it is 5 and 10 days. The cheapest active cosmetic is 250 and the
+cheapest active store powerup is 40, so **a single referral hands a new account
+more purchasing power than eleven months of median play**, and two referrals
+out-earn a p90 player's entire month.
+
+### 11.4 Cap headroom vs the live economy
+
+The velocity caps were sized for a much larger app. Against today's
+**3,544 coins/day of total supply**:
+
+| | Coins the guard still permits | × total daily supply |
+|---|---|---|
+| One referrer at the daily cap (20) | 10,000/day self + 10,000/day to referees | **5.6×** |
+| One referrer at the monthly cap (100) | 50,000/30d self + 50,000 to referees | **0.94×** of a whole month |
+
+i.e. a single account can mint more than five days of the entire app's coin
+supply in one day without tripping any guard.
+
+### 11.5 Race share links do NOT carry referral attribution
+
+`app.js:181-247`: `/r/:token` disambiguates on the reserved `BARA-` prefix.
+A **referral** link logs `logLinkOpen("referral", code, req)`; a **race share**
+link logs `logLinkOpen("race_share", token, req)` with the race token in `code`.
+`findLinkOpenReferralCode` queries `where: { kind: "referral" }` only. The race
+share text built in `FE lib/screens/race_detail_screen.dart:5807-5840` uses
+`createRaceShareLink`, i.e. the race token.
+
+**Therefore an install originating from a shared race link is attributed to
+nobody and pays nobody**, unless the installer separately opens a `/r/BARA-…`
+link or types the code in onboarding. Any copy promising coins for sharing a
+*race* is false against current code.
+
+---
+
+## 12. Race-payout rewarded-ad bonus — proposed, NOT LIVE (verified 2026-08-12)
+
+The draft in `docs/race-payout-double-ad-requirements.md` proposes one
+SSV-verified bonus per persisted results batch:
+
+```
+baseCoins  = sum(positive coin-ledger credits in the eligible batch
+                 where reason IN (race_prize_pool_payout, race_finish_reward))
+remaining = 500 - sum(durable provider-velocity grants in (databaseNow-24h, databaseNow])
+bonusCoins = min(baseCoins, 500, remaining)
+```
+
+This is a `SPEC` value only. There is currently no
+`race_payout_ad_double` ledger reason, offer table, runtime switch, dedicated
+allowlist, or claim path in code or prod DB. The existing payout column is the
+combined participant-facing display value and can contain app-funded
+prize-pool, legacy buy-in-pot, or legacy seeded finish-reward coins (`CODE
+completeRace.js:143-483`; `DB race_participants.payout_coins`). The proposal
+uses the two allowlisted system-funded ledger reasons as economic authority;
+`race_buy_in_payout`, refunds, tournament/referral coins and all other reasons
+are ineligible even when included in displayed `myPayoutCoins`.
+
+### 12.1 Empirical input distribution (30 days to 2026-08-12)
+
+Prod eligible ledger aggregate: 435 user/race awards, 51 users, **27,780 coins
+= 926.0/day**.
+
+| Ledger reason | n | Eligible coins/day | Proposed status |
+|---|---:|---:|---|
+| `race_prize_pool_payout` | 330 | 672.8 | eligible |
+| `race_finish_reward` | 105 | 253.2 | eligible |
+| `race_buy_in_payout` | 57 | 294.9 | **excluded transfer** |
+
+`DB coin_transactions`, read-only. Treating every user/race award as a separate
+immediate batch, an exact chronological rolling-window replay awarded 27,325
+coins (**910.8/day**), clipping 455/27,780 (1.64%) across 9 constrained events;
+3 events had zero remaining allowance. Simulation parameters: deterministic
+event order `(created_at, race_id)`, one claim at each qualifying ledger event,
+500 per batch and 500 across the preceding half-open 24-hour window. This is a
+100%-claim upper proxy, not a take-rate forecast; real popup batching can only
+reduce it.
+
+### 12.2 Economy frame
+
+Thirty-day live ledger at verification: **+3,707.5 sources / −2,536.5 sinks /
++1,171.0 net coins/day** (`DB coin_transactions`). At 100% redemption under the
+chronological upper proxy, the revised source adds at most **+910.8/day**:
+sources become 4,618.3/day (+24.6%) and net becomes 2,081.8/day (+77.8%),
+before induced spending. At the required initial 10% stable-provider rollout, a
+uniform-value estimate is +91.1/day (+2.5% of sources); the configured
+370/day alert bounds cohort-value concentration. Sixteen of the 51 eligible
+payout users already used a rewarded-ad surface and held 18,381/27,780 (66.2%)
+of eligible value before the rolling cap, so rollout membership by user is not
+the same as rollout by economic exposure.
+
+Among 94 users with at least seven active step-days, current positive coin
+income/day was p10 0 / p50 9.52 / p90 124.11 / p99 293.21. Adding every
+revised eligible rolling bonus would make it 0 / 10.02 / 150.22 / 356.08;
+bonus alone was p10 0 / p50 0 / p90 43.54 / p99 91.60 per active day. Thus
+median affordability barely moves (250-coin cosmetic: 26.3 → 25.0 active
+days), while the upper tail receives most issuance.
+
+### 12.3 Bounds relevant to the cap
+
+- `CODE raceBuyIns.js:26-32`: legacy buy-in is at most 200 coins per accepted
+  participant, but the pot can be transferred to a controlled winner. Prod
+  still had two active and one pending legacy buy-in races at verification.
+- `CODE prizePool.js`: a funded race pool is capped at 16,000; the proposed
+  500 bonus therefore duplicates between 100% of a small payout and 3.125% of
+  the theoretical maximum single payout.
+- `CODE createRace.js` / `validateRaceConfig.js`: user races can be one day and
+  normal creation has no global concurrent-race cap. The same walked steps can
+  participate in multiple funded races.
+- Offer preparation, claim and results-seen share a transactional durable
+  provider-identity lock before the user/offer locks; a partial unique index
+  permits at most one `PENDING` offer per user. Frozen allowance plus durable
+  velocity grants make separate pages, concurrent calls and delete/recreate
+  with the same Apple/Google subject share one hard 500-coin rolling limit and
+  one persistent rollout cohort.
+- `CODE deleteUserAccount.js:208-227` deletes the User coin ledger; the proposed
+  offer also has a cascading User relation, while the velocity row and immutable
+  claim receipt deliberately survive. The deletion transaction stamps the
+  receipt before the cascade, allowing reconciliation to distinguish expected
+  erasure from corruption. Account deletion joins the provider-identity → user
+  lock order before selecting receipts, so a concurrent claim either does not
+  award or commits a receipt that deletion observes and tombstones.
+- The proposed five-minute reconciliation job has its own default-off
+  `RACE_PAYOUT_DOUBLE_RECONCILE_ENABLED` flag. The release sequence now requires
+  enabling it and observing a healthy scheduled run while rollout is still zero.
+
+The unique offer-item participant fence prevents the same race payout from
+being doubled twice and prevents a modified client from submitting subsets of
+one current page. The provider lock, one-pending invariant and durable velocity
+sum prevent those legitimate separate batches from exceeding 500 in any
+rolling 24 hours, including across account recreation.
+
+---
+
 *Last full verification pass: 2026-08-08 (prod SELECT-only, aggregates only).
+§12 verified/added 2026-08-12 (prod SELECT-only aggregates + current code/spec).
+§0b, §1b, §2b, §4.1, §7 (box-volume order statistic) and §11 verified/added
+2026-08-11 (prod SELECT-only, aggregates only).
 §3.2 (config v4), §3.5, §3.6, §3.7 and §10 verified 2026-08-10 (prod
 SELECT-only, aggregates only).
 §3.2 / §3.4 / §3.4b / §3.4c / §3.5 / §3.6 / §9 verified and added 2026-08-09

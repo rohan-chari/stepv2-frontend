@@ -392,45 +392,44 @@ void main() {
     },
   );
 
-  testWidgets(
-    'RaceDetailScreen accepts a funded-race invite in one tap',
-    (WidgetTester tester) async {
-      final authService = await _createAuthService();
-      final backendApiService = _FakeBackendApiService();
+  testWidgets('RaceDetailScreen accepts a funded-race invite in one tap', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _createAuthService();
+    final backendApiService = _FakeBackendApiService();
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: RaceDetailScreen(
-            authService: authService,
-            raceId: 'race-1',
-            backendApiService: backendApiService,
-          ),
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RaceDetailScreen(
+          authService: authService,
+          raceId: 'race-1',
+          backendApiService: backendApiService,
         ),
-      );
-      await tester.pump();
-      await tester.pump();
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
 
-      expect(find.text('ACCEPT'), findsOneWidget);
+    expect(find.text('ACCEPT'), findsOneWidget);
 
-      // The race-day hero sits above the actions — scroll the button into
-      // view before tapping.
-      await tester.ensureVisible(find.text('ACCEPT'));
-      await tester.pump();
-      await tester.tap(find.text('ACCEPT'));
-      await tester.pump();
+    // The race-day hero sits above the actions — scroll the button into
+    // view before tapping.
+    await tester.ensureVisible(find.text('ACCEPT'));
+    await tester.pump();
+    await tester.tap(find.text('ACCEPT'));
+    await tester.pump();
 
-      // Nothing is charged, so no buy-in sheet interrupts the accept.
-      expect(find.textContaining('GOLD BUY-IN'), findsNothing);
-      expect(find.text('LOCK IT IN'), findsNothing);
+    // Nothing is charged, so no buy-in sheet interrupts the accept.
+    expect(find.textContaining('GOLD BUY-IN'), findsNothing);
+    expect(find.text('LOCK IT IN'), findsNothing);
 
-      // Bounded pumps instead of pumpAndSettle: the hero's spinning-coin
-      // prize chip animates forever, so the tree never fully settles.
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
+    // Bounded pumps instead of pumpAndSettle: the hero's spinning-coin
+    // prize chip animates forever, so the tree never fully settles.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
 
-      expect(backendApiService.respondCalls, 1);
-    },
-  );
+    expect(backendApiService.respondCalls, 1);
+  });
 
   testWidgets(
     'RaceDetailScreen shows the prize pool near the countdown for active paid races',
@@ -461,7 +460,9 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
 
-      final prizePoolSummary = find.byKey(const Key('race-prize-pool-summary'));
+      final prizePoolSummary = find.byKey(
+        const Key('race-prize-pool-tier-list'),
+      );
       expect(prizePoolSummary, findsOneWidget);
       expect(
         find.descendant(of: prizePoolSummary, matching: find.text('1ST')),
@@ -497,7 +498,8 @@ void main() {
       expect(find.byType(HomeCourseTrack), findsOneWidget);
 
       await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
     },
   );
 
@@ -530,7 +532,7 @@ void main() {
   );
 
   testWidgets(
-    'RaceDetailScreen collapses extra payout places behind a tap for field-scaled presets',
+    'RaceDetailScreen scrolls every payout place in the structured sheet',
     (WidgetTester tester) async {
       final authService = await _createAuthService();
       final backendApiService = _FieldScaledPayoutRaceBackendApiService();
@@ -547,38 +549,26 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      // Open the prize-pool sheet from the hero chip: the podium shows
-      // inline; the remaining two places collapse behind "+2 MORE".
+      // Open the prize-pool sheet from the hero chip: every place belongs to
+      // one lazy, scrollable payout list.
       await tester.tap(find.byKey(const Key('race-prize-pool-board')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
 
-      final summary = find.byKey(const Key('race-prize-pool-summary'));
+      final summary = find.byKey(const Key('race-prize-pool-tier-list'));
       expect(summary, findsOneWidget);
       expect(
         find.descendant(of: summary, matching: find.text('1ST')),
         findsOneWidget,
       );
-      expect(
-        find.descendant(of: summary, matching: find.text('+2 MORE')),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(of: summary, matching: find.text('4TH')),
-        findsNothing,
-      );
-
-      // Tapping reveals every paid place in a bottom sheet.
-      await tester.tap(find.text('+2 MORE'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-
       expect(find.text('PAYOUTS'), findsOneWidget);
       expect(find.text('4TH'), findsOneWidget);
       expect(find.text('5TH'), findsOneWidget);
+      expect(find.text('+2 MORE'), findsNothing);
 
       await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
     },
   );
 
@@ -721,9 +711,7 @@ void main() {
       // instead of shrink-wrapping its text.
       final waitingCard = find.byType(RetroCard);
       expect(waitingCard, findsOneWidget);
-      final screenWidth = tester
-          .getSize(find.byType(RaceDetailScreen))
-          .width;
+      final screenWidth = tester.getSize(find.byType(RaceDetailScreen)).width;
       expect(
         tester.getSize(waitingCard).width,
         equals(screenWidth - 24), // 12px gutter each side

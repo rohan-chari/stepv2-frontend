@@ -63,7 +63,10 @@ class AuthService extends ChangeNotifier {
        _appleCredentialProvider =
            appleCredentialProvider ??
            (() => SignInWithApple.getAppleIDCredential(
-             scopes: [AppleIDAuthorizationScopes.email],
+             scopes: [
+               AppleIDAuthorizationScopes.email,
+               AppleIDAuthorizationScopes.fullName,
+             ],
            )),
        _googleAccountProvider =
            googleAccountProvider ?? (() => _buildGoogleSignIn().signIn());
@@ -72,6 +75,19 @@ class AuthService extends ChangeNotifier {
   static const _keyUserIdentifier = 'auth_user_identifier';
   static const _keyBackendUserId = 'auth_backend_user_id';
   static const _keyDisplayName = 'auth_display_name';
+  static const _keyIdentityStateUserId = 'auth_identity_state_user_id';
+  static const _keyFirstName = 'auth_first_name';
+  static const _keyLastName = 'auth_last_name';
+  static const _keyProviderFirstName = 'auth_provider_first_name';
+  static const _keyProviderLastName = 'auth_provider_last_name';
+  static const _keyIdentitySupported = 'auth_identity_supported';
+  static const _keyNameSetupOnboardingRequired =
+      'auth_name_setup_onboarding_required';
+  static const _keyNameSetupCompletedAt = 'auth_name_setup_completed_at';
+  static const _keyRacesInviteDecisionGateEnabled =
+      'auth_races_invite_decision_gate_enabled';
+  static const _keyQuickRaceShareAutoFriendEnabled =
+      'auth_quick_race_share_auto_friend_enabled';
   static const _keyProfilePhotoUrl = 'auth_profile_photo_url';
   static const _keyProfilePhotoPromptDismissedAt =
       'auth_profile_photo_prompt_dismissed_at';
@@ -126,6 +142,15 @@ class AuthService extends ChangeNotifier {
   String? _backendUserId;
   String? _lastErrorMessage;
   String? _displayName;
+  String? _firstName;
+  String? _lastName;
+  String? _providerFirstName;
+  String? _providerLastName;
+  bool _supportsDiscoverableIdentity = false;
+  bool _nameSetupOnboardingRequired = false;
+  String? _nameSetupCompletedAt;
+  bool _racesInviteDecisionGateEnabled = false;
+  bool _quickRaceShareAutoFriendEnabled = false;
   String? _profilePhotoUrl;
   String? _profilePhotoPromptDismissedAt;
   int? _renameChipShownCount;
@@ -147,6 +172,8 @@ class AuthService extends ChangeNotifier {
   // Kill switch, NOT an opt-in: it starts life ON and only a literal `false`
   // from the backend turns it off.
   bool _onboardingInviteCodeEnabled = true;
+  bool _setupInviteCodePromptEnabled = false;
+  bool _inviteCodePromptResolvedThisSession = false;
   String? _referredByCode;
   bool _authPayloadApplied = false;
   bool _tutorialMandatoryEnabled = false;
@@ -164,6 +191,21 @@ class AuthService extends ChangeNotifier {
   String? get userId => _backendUserId;
   String? get lastErrorMessage => _lastErrorMessage;
   String? get displayName => _displayName;
+  String? get firstName => _firstName;
+  String? get lastName => _lastName;
+  String? get providerFirstName => _providerFirstName;
+  String? get providerLastName => _providerLastName;
+  bool get supportsDiscoverableIdentity => _supportsDiscoverableIdentity;
+  bool get nameSetupOnboardingRequired => _nameSetupOnboardingRequired;
+  String? get nameSetupCompletedAt => _nameSetupCompletedAt;
+  bool get racesInviteDecisionGateEnabled => _racesInviteDecisionGateEnabled;
+  bool get quickRaceShareAutoFriendEnabled => _quickRaceShareAutoFriendEnabled;
+  bool get requiresDiscoverableIdentityOnboarding =>
+      _supportsDiscoverableIdentity &&
+      _nameSetupOnboardingRequired &&
+      _nameSetupCompletedAt == null;
+  bool get shouldShowDiscoverableIdentityRemediation =>
+      _supportsDiscoverableIdentity && _nameSetupCompletedAt == null;
   String? get profilePhotoUrl => _profilePhotoUrl;
   String? get profilePhotoPromptDismissedAt => _profilePhotoPromptDismissedAt;
 
@@ -226,6 +268,14 @@ class AuthService extends ChangeNotifier {
   /// backend that has never heard of it would silently disable a shipped
   /// feature. Only the literal boolean `false` disables.
   bool get onboardingInviteCodeEnabled => _onboardingInviteCodeEnabled;
+  bool get setupInviteCodePromptEnabled => _setupInviteCodePromptEnabled;
+  bool get inviteCodePromptResolvedThisSession =>
+      _inviteCodePromptResolvedThisSession;
+
+  void markInviteCodePromptResolvedThisSession() {
+    _inviteCodePromptResolvedThisSession = true;
+    notifyListeners();
+  }
 
   /// Server truth for "this account is already attributed to an inviter", by
   /// ANY path (provision body, IP fallback, an earlier redeem, an ops repair).
@@ -239,6 +289,7 @@ class AuthService extends ChangeNotifier {
   /// of one. Callers that hide UI on `referredByCode != null` must wait for
   /// this, or a fresh install flashes the invite step and then hides it.
   bool get authPayloadApplied => _authPayloadApplied;
+
   /// Batch 2026-08-09 item 9 — remote kill switch for the MANDATORY tutorial.
   ///
   /// Opt-in, like the onboarding flags and for the same reason: a backend
@@ -310,6 +361,41 @@ class AuthService extends ChangeNotifier {
   bool get hasSessionToken =>
       _sessionToken != null && _sessionToken!.isNotEmpty;
 
+  String? _cleanString(Object? raw) =>
+      raw is String && raw.trim().isNotEmpty ? raw.trim() : null;
+
+  Map<String, dynamic>? _safeStringMap(Object? raw) {
+    if (raw is! Map) return null;
+    return {
+      for (final entry in raw.entries)
+        if (entry.key is String) entry.key as String: entry.value,
+    };
+  }
+
+  (String?, String?) _providerNameParts(String? displayName) {
+    final clean = _cleanString(displayName);
+    if (clean == null) return (null, null);
+    final parts = clean.split(RegExp(r'\s+'));
+    return (parts.first, parts.length > 1 ? parts.skip(1).join(' ') : null);
+  }
+
+  void _adoptBackendUserId(String? nextUserId) {
+    if (nextUserId != null &&
+        _backendUserId != null &&
+        nextUserId != _backendUserId) {
+      _firstName = null;
+      _lastName = null;
+      _providerFirstName = null;
+      _providerLastName = null;
+      _supportsDiscoverableIdentity = false;
+      _nameSetupOnboardingRequired = false;
+      _nameSetupCompletedAt = null;
+      _racesInviteDecisionGateEnabled = false;
+      _quickRaceShareAutoFriendEnabled = false;
+    }
+    _backendUserId = nextUserId;
+  }
+
   /// Loads persisted auth state. Returns true if a session exists.
   Future<bool> restoreSession() async {
     final prefs = await SharedPreferences.getInstance();
@@ -317,6 +403,22 @@ class AuthService extends ChangeNotifier {
     _userIdentifier = prefs.getString(_keyUserIdentifier);
     _backendUserId = prefs.getString(_keyBackendUserId);
     _displayName = prefs.getString(_keyDisplayName);
+    final identityStateUserId = prefs.getString(_keyIdentityStateUserId);
+    if (_backendUserId != null && identityStateUserId == _backendUserId) {
+      _supportsDiscoverableIdentity =
+          prefs.getBool(_keyIdentitySupported) ?? false;
+      _firstName = prefs.getString(_keyFirstName);
+      _lastName = prefs.getString(_keyLastName);
+      _providerFirstName = prefs.getString(_keyProviderFirstName);
+      _providerLastName = prefs.getString(_keyProviderLastName);
+      _nameSetupOnboardingRequired =
+          prefs.getBool(_keyNameSetupOnboardingRequired) ?? false;
+      _nameSetupCompletedAt = prefs.getString(_keyNameSetupCompletedAt);
+      _racesInviteDecisionGateEnabled =
+          prefs.getBool(_keyRacesInviteDecisionGateEnabled) ?? false;
+      _quickRaceShareAutoFriendEnabled =
+          prefs.getBool(_keyQuickRaceShareAutoFriendEnabled) ?? false;
+    }
     _profilePhotoUrl = prefs.getString(_keyProfilePhotoUrl);
     _profilePhotoPromptDismissedAt = prefs.getString(
       _keyProfilePhotoPromptDismissedAt,
@@ -379,8 +481,6 @@ class AuthService extends ChangeNotifier {
     // resurfaces stale error copy.
     _lastErrorMessage = null;
     try {
-      // Only the email scope: the backend assigns a generated display name and
-      // never uses the Apple real name, so we don't request (or send) it.
       final credential = await _appleCredentialProvider();
 
       final identityToken = credential.identityToken;
@@ -400,14 +500,19 @@ class AuthService extends ChangeNotifier {
       }
 
       final referralCode = pendingReferralCode;
+      final pendingRaceToken = pendingShareToken;
       final response = await _backendApiService.provisionAppleUser(
         identityToken: identityToken,
         userIdentifier: userIdentifier,
         email: credential.email,
         referralCode: referralCode,
+        referralSourceRaceToken: pendingRaceToken,
       );
 
-      final backendUser = response['user'] as Map<String, dynamic>;
+      final backendUser = _safeStringMap(response['user']);
+      if (backendUser == null) {
+        throw const ApiException('Sign-in response did not include a user.');
+      }
       // Attribution is recorded server-side in the new-user create branch (when
       // a code was present); clear the pending code so a later re-login can't
       // re-apply it, but stash a one-shot copy for the onboarding welcome.
@@ -418,9 +523,13 @@ class AuthService extends ChangeNotifier {
 
       _identityToken = identityToken;
       _userIdentifier = userIdentifier;
-      _backendUserId = backendUser['id'] as String?;
-      _sessionToken = response['sessionToken'] as String?;
-      applyBackendUser(backendUser);
+      _adoptBackendUserId(_cleanString(backendUser['id']));
+      _providerFirstName =
+          _cleanString(credential.givenName) ?? _providerFirstName;
+      _providerLastName =
+          _cleanString(credential.familyName) ?? _providerLastName;
+      _sessionToken = _cleanString(response['sessionToken']);
+      applyBackendUser(backendUser, authoritative: true);
       _lastErrorMessage = null;
 
       await _persist();
@@ -471,14 +580,19 @@ class AuthService extends ChangeNotifier {
       }
 
       final referralCode = pendingReferralCode;
+      final pendingRaceToken = pendingShareToken;
       final response = await _backendApiService.provisionGoogleUser(
         idToken: idToken,
         email: account.email,
         name: account.displayName,
         referralCode: referralCode,
+        referralSourceRaceToken: pendingRaceToken,
       );
 
-      final backendUser = response['user'] as Map<String, dynamic>;
+      final backendUser = _safeStringMap(response['user']);
+      if (backendUser == null) {
+        throw const ApiException('Sign-in response did not include a user.');
+      }
       // Parity with the Apple path: clear the pending code so a later re-login
       // can't re-apply it, and stash the one-shot copy the onboarding welcome
       // reads. Google used to clear only, so a Google-provisioned referee never
@@ -492,9 +606,12 @@ class AuthService extends ChangeNotifier {
       // The Google stable id keeps isSignedIn (needs both tokens) true across
       // launches, matching the Apple userIdentifier contract.
       _userIdentifier = account.id;
-      _backendUserId = backendUser['id'] as String?;
-      _sessionToken = response['sessionToken'] as String?;
-      applyBackendUser(backendUser);
+      _adoptBackendUserId(_cleanString(backendUser['id']));
+      final providerParts = _providerNameParts(account.displayName);
+      _providerFirstName = providerParts.$1 ?? _providerFirstName;
+      _providerLastName = providerParts.$2 ?? _providerLastName;
+      _sessionToken = _cleanString(response['sessionToken']);
+      applyBackendUser(backendUser, authoritative: true);
       _lastErrorMessage = null;
 
       await _persist();
@@ -524,13 +641,16 @@ class AuthService extends ChangeNotifier {
         password: password,
       );
 
-      final backendUser = response['user'] as Map<String, dynamic>;
+      final backendUser = _safeStringMap(response['user']);
+      if (backendUser == null) {
+        throw const ApiException('Sign-in response did not include a user.');
+      }
 
       _identityToken = null;
       _userIdentifier = null;
-      _backendUserId = backendUser['id'] as String?;
-      _sessionToken = response['sessionToken'] as String?;
-      applyBackendUser(backendUser);
+      _adoptBackendUserId(_cleanString(backendUser['id']));
+      _sessionToken = _cleanString(response['sessionToken']);
+      applyBackendUser(backendUser, authoritative: true);
       _lastErrorMessage = null;
 
       await _persist();
@@ -684,7 +804,10 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  void applyBackendUser(Map<String, dynamic> backendUser) {
+  void applyBackendUser(
+    Map<String, dynamic> backendUser, {
+    bool authoritative = false,
+  }) {
     if (backendUser.containsKey('id')) {
       _backendUserId = backendUser['id'] as String?;
       // A user envelope resolves the attribution question one way or the
@@ -702,14 +825,52 @@ class AuthService extends ChangeNotifier {
           : null;
     }
     if (backendUser.containsKey('displayName')) {
-      _displayName = backendUser['displayName'] as String?;
+      final raw = backendUser['displayName'];
+      _displayName = raw is String ? raw : null;
+    }
+    final speaksIdentityContract = backendUser.containsKey(
+      'nameSetupCompletedAt',
+    );
+    if (speaksIdentityContract) {
+      _supportsDiscoverableIdentity = true;
+      if (backendUser.containsKey('firstName')) {
+        final raw = backendUser['firstName'];
+        _firstName = raw is String && raw.trim().isNotEmpty ? raw : null;
+      }
+      if (backendUser.containsKey('lastName')) {
+        final raw = backendUser['lastName'];
+        _lastName = raw is String && raw.trim().isNotEmpty ? raw : null;
+      }
+      if (backendUser.containsKey('nameSetupOnboardingRequired')) {
+        _nameSetupOnboardingRequired =
+            backendUser['nameSetupOnboardingRequired'] == true;
+      }
+      if (backendUser.containsKey('nameSetupCompletedAt')) {
+        final raw = backendUser['nameSetupCompletedAt'];
+        _nameSetupCompletedAt = raw is String && raw.isNotEmpty ? raw : null;
+        if (_nameSetupCompletedAt != null) {
+          _providerFirstName = null;
+          _providerLastName = null;
+        }
+      }
+    } else if (authoritative) {
+      // A complete own-user envelope from an older backend is authoritative
+      // evidence that the additive identity contract is unavailable. Clear a
+      // capability cached by a newer backend so onboarding/remediation cannot
+      // strand the user. Partial mutation responses intentionally retain it.
+      _supportsDiscoverableIdentity = false;
+      _firstName = null;
+      _lastName = null;
+      _nameSetupOnboardingRequired = false;
+      _nameSetupCompletedAt = null;
     }
     if (backendUser.containsKey('profilePhotoUrl')) {
-      _profilePhotoUrl = backendUser['profilePhotoUrl'] as String?;
+      final raw = backendUser['profilePhotoUrl'];
+      _profilePhotoUrl = raw is String ? raw : null;
     }
     if (backendUser.containsKey('profilePhotoPromptDismissedAt')) {
-      _profilePhotoPromptDismissedAt =
-          backendUser['profilePhotoPromptDismissedAt'] as String?;
+      final raw = backendUser['profilePhotoPromptDismissedAt'];
+      _profilePhotoPromptDismissedAt = raw is String ? raw : null;
     }
     // Additive rename-chip ledger. Same containsKey guard as everything above:
     // an older backend omits both keys, which must leave the client on the
@@ -758,9 +919,9 @@ class AuthService extends ChangeNotifier {
       _autoJoinFeaturedRaces =
           backendUser['autoJoinFeaturedRaces'] as bool? ?? false;
     }
-    // Remote feature flags (additive `featureFlags` map on /auth/me). Only
-    // override when present so an older backend never flips a cached value;
-    // any absent/null flag reads as false (banners stay hidden).
+    // Remote feature flags (additive `featureFlags` map on /auth/me). A partial
+    // payload without the envelope retains cached flags; an authoritative
+    // payload is allowed to resolve opt-in capabilities to false below.
     if (backendUser.containsKey('featureFlags')) {
       final flags = backendUser['featureFlags'];
       _bannerAdsEnabled = flags is Map && flags['bannerAdsEnabled'] == true;
@@ -777,6 +938,15 @@ class AuthService extends ChangeNotifier {
       _stepSampleBucketMinutes = _resolveStepSampleBucketMinutes(
         flags is Map ? flags['stepSampleBucketMinutes'] : null,
       );
+      _racesInviteDecisionGateEnabled =
+          flags is Map && flags['racesInviteDecisionGateEnabled'] == true;
+      _quickRaceShareAutoFriendEnabled =
+          flags is Map && flags['quickRaceShareAutoFriendEnabled'] == true;
+    } else if (authoritative) {
+      // A complete envelope from an older backend is capability evidence too:
+      // omission means the create-and-share auto-friend promise is unavailable.
+      // Partial mutation payloads intentionally retain the last full answer.
+      _quickRaceShareAutoFriendEnabled = false;
     }
     // Unlike team races, v2 is opt-in: within a payload that carries the
     // envelope, anything except the literal boolean true is the compatible v1
@@ -800,6 +970,9 @@ class AuthService extends ChangeNotifier {
       _onboardingInviteCodeEnabled =
           !(activationFlags is Map &&
               activationFlags['onboardingInviteCodeEnabled'] == false);
+      _setupInviteCodePromptEnabled =
+          activationFlags is Map &&
+          activationFlags['setupInviteCodePromptEnabled'] == true;
       // Item 9. Same opt-in semantics and the same envelope guard.
       _tutorialMandatoryEnabled =
           activationFlags is Map &&
@@ -818,10 +991,18 @@ class AuthService extends ChangeNotifier {
       _tutorialMandatoryEnabled =
           appSettings['tutorialMandatoryEnabled'] == true;
     }
+    if (appSettings is Map &&
+        appSettings.containsKey('setupInviteCodePromptEnabled')) {
+      _setupInviteCodePromptEnabled =
+          appSettings['setupInviteCodePromptEnabled'] == true;
+    }
   }
 
-  Future<void> syncFromBackendUser(Map<String, dynamic> backendUser) async {
-    applyBackendUser(backendUser);
+  Future<void> syncFromBackendUser(
+    Map<String, dynamic> backendUser, {
+    bool authoritative = false,
+  }) async {
+    applyBackendUser(backendUser, authoritative: authoritative);
     await _persist();
     notifyListeners();
   }
@@ -851,6 +1032,15 @@ class AuthService extends ChangeNotifier {
     _backendUserId = null;
     _lastErrorMessage = null;
     _displayName = null;
+    _firstName = null;
+    _lastName = null;
+    _providerFirstName = null;
+    _providerLastName = null;
+    _supportsDiscoverableIdentity = false;
+    _nameSetupOnboardingRequired = false;
+    _nameSetupCompletedAt = null;
+    _racesInviteDecisionGateEnabled = false;
+    _quickRaceShareAutoFriendEnabled = false;
     _profilePhotoUrl = null;
     _profilePhotoPromptDismissedAt = null;
     _renameChipShownCount = null;
@@ -871,6 +1061,8 @@ class AuthService extends ChangeNotifier {
     _onboardingV2Enabled = false;
     _onboardingV3Enabled = false;
     _onboardingInviteCodeEnabled = true;
+    _setupInviteCodePromptEnabled = false;
+    _inviteCodePromptResolvedThisSession = false;
     _referredByCode = null;
     _authPayloadApplied = false;
     _tutorialMandatoryEnabled = false;
@@ -883,6 +1075,16 @@ class AuthService extends ChangeNotifier {
     await prefs.remove(_keyUserIdentifier);
     await prefs.remove(_keyBackendUserId);
     await prefs.remove(_keyDisplayName);
+    await prefs.remove(_keyIdentityStateUserId);
+    await prefs.remove(_keyFirstName);
+    await prefs.remove(_keyLastName);
+    await prefs.remove(_keyProviderFirstName);
+    await prefs.remove(_keyProviderLastName);
+    await prefs.remove(_keyIdentitySupported);
+    await prefs.remove(_keyNameSetupOnboardingRequired);
+    await prefs.remove(_keyNameSetupCompletedAt);
+    await prefs.remove(_keyRacesInviteDecisionGateEnabled);
+    await prefs.remove(_keyQuickRaceShareAutoFriendEnabled);
     await prefs.remove(_keyProfilePhotoUrl);
     await prefs.remove(_keyProfilePhotoPromptDismissedAt);
     // Correct to clear: these cache server state, and the next sign-in refills
@@ -1143,6 +1345,47 @@ class AuthService extends ChangeNotifier {
     }
     if (_displayName != null) {
       await prefs.setString(_keyDisplayName, _displayName!);
+    }
+    if (_backendUserId != null) {
+      await prefs.setString(_keyIdentityStateUserId, _backendUserId!);
+      await prefs.setBool(_keyIdentitySupported, _supportsDiscoverableIdentity);
+      if (_firstName != null) {
+        await prefs.setString(_keyFirstName, _firstName!);
+      } else {
+        await prefs.remove(_keyFirstName);
+      }
+      if (_lastName != null) {
+        await prefs.setString(_keyLastName, _lastName!);
+      } else {
+        await prefs.remove(_keyLastName);
+      }
+      if (_providerFirstName != null) {
+        await prefs.setString(_keyProviderFirstName, _providerFirstName!);
+      } else {
+        await prefs.remove(_keyProviderFirstName);
+      }
+      if (_providerLastName != null) {
+        await prefs.setString(_keyProviderLastName, _providerLastName!);
+      } else {
+        await prefs.remove(_keyProviderLastName);
+      }
+      await prefs.setBool(
+        _keyNameSetupOnboardingRequired,
+        _nameSetupOnboardingRequired,
+      );
+      if (_nameSetupCompletedAt != null) {
+        await prefs.setString(_keyNameSetupCompletedAt, _nameSetupCompletedAt!);
+      } else {
+        await prefs.remove(_keyNameSetupCompletedAt);
+      }
+      await prefs.setBool(
+        _keyRacesInviteDecisionGateEnabled,
+        _racesInviteDecisionGateEnabled,
+      );
+      await prefs.setBool(
+        _keyQuickRaceShareAutoFriendEnabled,
+        _quickRaceShareAutoFriendEnabled,
+      );
     }
     if (_profilePhotoUrl != null) {
       await prefs.setString(_keyProfilePhotoUrl, _profilePhotoUrl!);

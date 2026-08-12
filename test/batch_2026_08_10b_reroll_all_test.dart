@@ -19,8 +19,7 @@ import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/widgets/item_slot.dart';
 import 'package:step_tracker/widgets/pill_button.dart';
 
-Finder get _rerollAllButton =>
-    find.byKey(const Key('open-all-reroll-button'));
+Finder get _rerollAllButton => find.byKey(const Key('open-all-reroll-button'));
 Finder get _rerollAllDisclaimer =>
     find.byKey(const Key('open-all-reroll-disclaimer'));
 
@@ -89,10 +88,7 @@ class _FakeAdController implements ExtraSpinAdController {
   bool get isReady => _loaded;
 
   @override
-  Future<void> load({
-    required String userId,
-    required String localDate,
-  }) async {
+  Future<void> load({required String userId, required String localDate}) async {
     lastLocalDate = localDate;
     _loaded = true;
   }
@@ -352,8 +348,8 @@ void main() {
       expect(_rerollAllDisclaimer, findsNothing);
     });
 
-    testWidgets('wired → REROLL ALL sits above Continue with the disclaimer '
-        'directly beneath it', (tester) async {
+    testWidgets('wired → Continue sits above REROLL ALL with the disclaimer '
+        'directly beneath reroll', (tester) async {
       await _pumpMulti(tester, count: 3, onRerollAll: (_) async => null);
       await _openAllToSummary(tester);
 
@@ -361,8 +357,8 @@ void main() {
       expect(_rerollAllDisclaimer, findsOneWidget);
       expect(
         tester.widget<Text>(_rerollAllDisclaimer).data,
-        'Watch an ad to reroll ALL of these boxes. Every roll is replaced — '
-        'the new rolls are final.',
+        'Watch an ad to reroll ALL of these boxes. Every roll is replaced. '
+        'The new rolls are final.',
       );
 
       final buttonTop = tester.getTopLeft(_rerollAllButton).dy;
@@ -370,8 +366,8 @@ void main() {
       final continueTop = tester
           .getTopLeft(find.widgetWithText(PillButton, 'Continue'))
           .dy;
+      expect(buttonTop, greaterThan(continueTop));
       expect(disclaimerTop, greaterThan(buttonTop));
-      expect(continueTop, greaterThan(disclaimerTop));
     });
 
     testWidgets('nothing rerollable (all auto-activated) → no button', (
@@ -425,9 +421,8 @@ void main() {
       await _pumpMulti(
         tester,
         count: 2,
-        onResults: (r) => handedBack.add(
-          r.map((e) => Map<String, dynamic>.from(e)).toList(),
-        ),
+        onResults: (r) =>
+            handedBack.add(r.map((e) => Map<String, dynamic>.from(e)).toList()),
         onRerollAll: (ids) async {
           requested = ids;
           return [
@@ -505,10 +500,7 @@ void main() {
       expect(find.text('YOU OPENED 2'), findsOneWidget);
       expect(_rerollAllButton, findsOneWidget);
       expect(tester.widget<PillButton>(_rerollAllButton).loading, isFalse);
-      expect(
-        tester.widget<PillButton>(_rerollAllButton).onPressed,
-        isNotNull,
-      );
+      expect(tester.widget<PillButton>(_rerollAllButton).onPressed, isNotNull);
       expect(find.text('Protein Shake'), findsNWidgets(2));
     });
 
@@ -523,7 +515,8 @@ void main() {
 
       expect(tester.widget<PillButton>(_rerollAllButton).loading, isTrue);
       expect(
-        tester.widget<PillButton>(find.widgetWithText(PillButton, 'Continue'))
+        tester
+            .widget<PillButton>(find.widgetWithText(PillButton, 'Continue'))
             .onPressed,
         isNull,
       );
@@ -655,34 +648,40 @@ void main() {
   group('Item 1 — demo/tutorial guards', () {
     // architect R3: an un-overridden call site is a live HTTPS request against
     // prod with a fabricated race id, whether or not today's UI can reach it.
-    test('DemoRaceApiService overrides rerollPowerupBatch (no network)', () async {
-      final service = DemoRaceApiService(
-        DemoRaceEngine(
+    test(
+      'DemoRaceApiService overrides rerollPowerupBatch (no network)',
+      () async {
+        final service = DemoRaceApiService(
+          DemoRaceEngine(
+            myUserId: 'me',
+            myDisplayName: 'Rohan',
+            myAccessories: const [],
+          ),
+        );
+        final result = await service.rerollPowerupBatch(
+          identityToken: 't',
+          raceId: 'demo-race',
+          powerupIds: const ['a'],
+          localDate: '2026-08-10',
+        );
+        expect(result, isEmpty);
+      },
+    );
+
+    test(
+      'the demo engine progress payload never advertises boxRerollBatch',
+      () {
+        final engine = DemoRaceEngine(
           myUserId: 'me',
           myDisplayName: 'Rohan',
           myAccessories: const [],
-        ),
-      );
-      final result = await service.rerollPowerupBatch(
-        identityToken: 't',
-        raceId: 'demo-race',
-        powerupIds: const ['a'],
-        localDate: '2026-08-10',
-      );
-      expect(result, isEmpty);
-    });
-
-    test('the demo engine progress payload never advertises boxRerollBatch', () {
-      final engine = DemoRaceEngine(
-        myUserId: 'me',
-        myDisplayName: 'Rohan',
-        myAccessories: const [],
-      );
-      final powerupData =
-          engine.raceProgress(DateTime.now())['powerupData']
-              as Map<String, dynamic>;
-      expect(powerupData.containsKey('boxRerollBatch'), isFalse);
-    });
+        );
+        final powerupData =
+            engine.raceProgress(DateTime.now())['powerupData']
+                as Map<String, dynamic>;
+        expect(powerupData.containsKey('boxRerollBatch'), isFalse);
+      },
+    );
   });
 
   group('Item 4 — the reroll must not repopulate the inventory early', () {

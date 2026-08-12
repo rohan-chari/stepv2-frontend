@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/race_detail_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
-import 'package:step_tracker/utils/team_race.dart';
 import 'package:step_tracker/widgets/home_course_track.dart';
 import 'package:step_tracker/widgets/team_scoreboard_cards.dart';
 
@@ -39,10 +38,30 @@ class _ActiveTeamRaceApi extends BackendApiService {
       'powerupsEnabled': false,
       'endsAt': '2026-08-10T12:00:00.000Z',
       'participants': const [
-        {'userId': 'user-1', 'displayName': 'Trail Walker', 'status': 'ACCEPTED', 'team': 'TEAM_A'},
-        {'userId': 'u2', 'displayName': 'Hill Climber', 'status': 'ACCEPTED', 'team': 'TEAM_A'},
-        {'userId': 'u3', 'displayName': 'Sneaky Pete', 'status': 'ACCEPTED', 'team': 'TEAM_B'},
-        {'userId': 'u4', 'displayName': 'Marsh Mellow', 'status': 'ACCEPTED', 'team': 'TEAM_B'},
+        {
+          'userId': 'user-1',
+          'displayName': 'Trail Walker',
+          'status': 'ACCEPTED',
+          'team': 'TEAM_A',
+        },
+        {
+          'userId': 'u2',
+          'displayName': 'Hill Climber',
+          'status': 'ACCEPTED',
+          'team': 'TEAM_A',
+        },
+        {
+          'userId': 'u3',
+          'displayName': 'Sneaky Pete',
+          'status': 'ACCEPTED',
+          'team': 'TEAM_B',
+        },
+        {
+          'userId': 'u4',
+          'displayName': 'Marsh Mellow',
+          'status': 'ACCEPTED',
+          'team': 'TEAM_B',
+        },
       ],
     };
   }
@@ -56,7 +75,11 @@ class _ActiveTeamRaceApi extends BackendApiService {
       'status': 'ACTIVE',
       'teams': {
         'teamA': {'name': 'Swift Capys', 'totalSteps': 12340, 'memberCount': 2},
-        'teamB': {'name': 'Turbo Beavers', 'totalSteps': 11900, 'memberCount': 2},
+        'teamB': {
+          'name': 'Turbo Beavers',
+          'totalSteps': 11900,
+          'memberCount': 2,
+        },
       },
       'participants': const [
         {

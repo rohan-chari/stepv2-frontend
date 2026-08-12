@@ -143,6 +143,16 @@ class DeepLinkService {
     return upper;
   }
 
+  /// Referral attribution attached to a race destination (`/r/<race>?ref=...`).
+  /// Kept independent from [parseShareToken] so either value can drain even if
+  /// the other is malformed or its backend operation fails.
+  static String? parseReferralQuery(Uri uri) {
+    final raw = uri.queryParameters['ref'];
+    if (raw == null) return null;
+    final upper = raw.trim().toUpperCase();
+    return RegExp(r'^BARA-[A-Z0-9]{2,32}$').hasMatch(upper) ? upper : null;
+  }
+
   /// Begins listening for links: the cold-start link (if the app was launched
   /// by a link) plus the warm stream (links tapped while running). Safe to call
   /// once at startup. Never throws — a deep-link failure must not block launch.
@@ -171,6 +181,10 @@ class DeepLinkService {
   /// onto [pendingToken]. Public so it can be unit-tested directly without the
   /// platform plugin.
   Future<void> handleLink(Uri uri) async {
+    final queryReferral = parseReferralQuery(uri);
+    if (queryReferral != null) {
+      await _authService.setPendingReferralCode(queryReferral);
+    }
     // A referral invite and a race share link ride the same /r/ path; the
     // BARA- prefix routes them apart. Referral attribution is captured but does
     // NOT push pendingToken (there's no race to auto-join).

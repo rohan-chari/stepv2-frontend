@@ -66,6 +66,7 @@ class _FriendsTabState extends State<FriendsTab> {
   bool _isLoading = true;
   bool _isSearching = false;
   bool _showDropdown = false;
+  bool _legacyRaceNameSearch = false;
   Timer? _debounce;
 
   static const _textShadows = [
@@ -130,19 +131,15 @@ class _FriendsTabState extends State<FriendsTab> {
       // Copied (not sorted in place — the response list may be unmodifiable)
       // and ordered alphabetically regardless of backend version (older
       // backends return insertion order).
-      final friends =
-          List<Map<String, dynamic>>.of(
-            (data['friends'] as List?)?.cast<Map<String, dynamic>>() ?? [],
-          )..sort(
-            (a, b) => (a['displayName'] as String? ?? '')
-                .toLowerCase()
-                .compareTo((b['displayName'] as String? ?? '').toLowerCase()),
-          );
-      final pending = data['pending'] as Map<String, dynamic>? ?? {};
-      final incoming =
-          (pending['incoming'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-      final outgoing =
-          (pending['outgoing'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final friends = _safeRows(data['friends'])
+        ..sort(
+          (a, b) => (a['displayName'] as String? ?? '').toLowerCase().compareTo(
+            (b['displayName'] as String? ?? '').toLowerCase(),
+          ),
+        );
+      final pending = _safeMap(data['pending']);
+      final incoming = _safeRows(pending['incoming']);
+      final outgoing = _safeRows(pending['outgoing']);
 
       setState(() {
         _friends = friends;
@@ -208,6 +205,15 @@ class _FriendsTabState extends State<FriendsTab> {
         _searchResults = results;
         _isSearching = false;
         _showDropdown = true;
+      });
+    } on LegacyFriendSearchRequired {
+      if (!mounted) return;
+      _searchController.clear();
+      setState(() {
+        _legacyRaceNameSearch = true;
+        _searchResults = [];
+        _isSearching = false;
+        _showDropdown = false;
       });
     } catch (e) {
       if (!mounted) return;
@@ -385,9 +391,7 @@ class _FriendsTabState extends State<FriendsTab> {
         : BorderRadius.circular(8);
 
     return DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.of(context).roofLight,
-      ),
+      decoration: BoxDecoration(color: AppColors.of(context).roofLight),
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
         child: Padding(
@@ -467,7 +471,9 @@ class _FriendsTabState extends State<FriendsTab> {
                   decoration: InputDecoration(
                     filled: true,
                     fillColor: AppColors.of(context).parchmentLight,
-                    hintText: 'Search by display name',
+                    hintText: _legacyRaceNameSearch
+                        ? 'Search race names'
+                        : 'Search names or race names',
                     hintStyle: PixelText.body(
                       size: 16,
                       color: AppColors.of(context).parchmentBorder,
@@ -660,7 +666,7 @@ class _FriendsTabState extends State<FriendsTab> {
           ),
           const SizedBox(height: 8),
           Text(
-            'No friends yet \u2014 search above to invite some.',
+            'No friends yet. Search above to invite some.',
             style: PixelText.body(
               size: 14,
               color: AppColors.of(context).textMid,
@@ -779,20 +785,15 @@ class _FriendsTabState extends State<FriendsTab> {
             child: Row(
               children: [
                 AppAvatar(
-                  name: _searchResults[i]['displayName'] as String? ?? '',
-                  imageUrl: _searchResults[i]['profilePhotoUrl'] as String?,
+                  name:
+                      _safeString(_searchResults[i]['discoverableName']) ??
+                      _safeString(_searchResults[i]['displayName']) ??
+                      '',
+                  imageUrl: _safeString(_searchResults[i]['profilePhotoUrl']),
                   size: 30,
                 ),
                 const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    atName(_searchResults[i]['displayName'] as String? ?? ''),
-                    style: PixelText.body(
-                      size: 15,
-                      color: AppColors.of(context).textDark,
-                    ),
-                  ),
-                ),
+                Expanded(child: _searchIdentity(_searchResults[i])),
                 _buildSearchResultAction(_searchResults[i]),
               ],
             ),
@@ -831,14 +832,67 @@ class _FriendsTabState extends State<FriendsTab> {
           onPressed: null,
         );
       case _SearchResultState.addable:
+        final id = _safeString(user['id']);
         return PillButton(
           label: 'ADD',
           variant: PillButtonVariant.primary,
           fontSize: 11,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          onPressed: () => _sendRequest(user['id'] as String),
+          onPressed: id == null ? null : () => _sendRequest(id),
         );
     }
+  }
+
+  String? _safeString(Object? raw) =>
+      raw is String && raw.trim().isNotEmpty ? raw.trim() : null;
+
+  Map<String, dynamic> _safeMap(Object? raw) => raw is Map
+      ? <String, dynamic>{
+          for (final entry in raw.entries)
+            if (entry.key is String) entry.key as String: entry.value,
+        }
+      : const {};
+
+  List<Map<String, dynamic>> _safeRows(Object? raw) => raw is List
+      ? raw.whereType<Map>().map(_safeMap).toList()
+      : <Map<String, dynamic>>[];
+
+  Widget _searchIdentity(Map<String, dynamic> row) {
+    final realName = _safeString(row['discoverableName']);
+    final handle = _safeString(row['displayName']);
+    if (realName != null && handle != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            realName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: PixelText.title(
+              size: 14,
+              color: AppColors.of(context).textDark,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            atName(handle),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: PixelText.body(
+              size: 12,
+              color: AppColors.of(context).textMid,
+            ),
+          ),
+        ],
+      );
+    }
+    return Text(
+      realName ?? (handle == null ? 'Runner' : atName(handle)),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: PixelText.body(size: 15, color: AppColors.of(context).textDark),
+    );
   }
 
   _SearchResultState _searchResultState(Map<String, dynamic> user) {
@@ -917,9 +971,9 @@ class _FriendsTabState extends State<FriendsTab> {
   }
 
   Widget _buildFriendRow(Map<String, dynamic> friend, int index) {
-    final displayName = friend['displayName'] as String? ?? '???';
-    final profilePhotoUrl = friend['profilePhotoUrl'] as String?;
-    final friendshipId = friend['friendshipId'] as String? ?? '';
+    final displayName = _safeString(friend['displayName']) ?? 'Runner';
+    final profilePhotoUrl = _safeString(friend['profilePhotoUrl']);
+    final friendshipId = _safeString(friend['friendshipId']) ?? '';
 
     return Material(
       color: index.isOdd
@@ -956,10 +1010,10 @@ class _FriendsTabState extends State<FriendsTab> {
   }
 
   Widget _buildIncomingRow(Map<String, dynamic> req, int index) {
-    final user = (req['user'] as Map<String, dynamic>?) ?? const {};
-    final displayName = user['displayName'] as String? ?? '';
-    final profilePhotoUrl = user['profilePhotoUrl'] as String?;
-    final friendshipId = req['friendshipId'] as String;
+    final user = _safeMap(req['user']);
+    final displayName = _safeString(user['displayName']) ?? 'Runner';
+    final profilePhotoUrl = _safeString(user['profilePhotoUrl']);
+    final friendshipId = _safeString(req['friendshipId']);
 
     return Container(
       color: index.isOdd
@@ -986,7 +1040,9 @@ class _FriendsTabState extends State<FriendsTab> {
               variant: PillButtonVariant.primary,
               fontSize: 11,
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              onPressed: () => _respond(friendshipId, true),
+              onPressed: friendshipId == null
+                  ? null
+                  : () => _respond(friendshipId, true),
             ),
           ),
           const SizedBox(width: 6),
@@ -995,7 +1051,9 @@ class _FriendsTabState extends State<FriendsTab> {
             variant: PillButtonVariant.accent,
             fontSize: 11,
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            onPressed: () => _respond(friendshipId, false),
+            onPressed: friendshipId == null
+                ? null
+                : () => _respond(friendshipId, false),
           ),
         ],
       ),
@@ -1003,10 +1061,10 @@ class _FriendsTabState extends State<FriendsTab> {
   }
 
   Widget _buildOutgoingRow(Map<String, dynamic> req, int index) {
-    final user = (req['user'] as Map<String, dynamic>?) ?? const {};
-    final displayName = user['displayName'] as String? ?? '';
-    final profilePhotoUrl = user['profilePhotoUrl'] as String?;
-    final friendshipId = req['friendshipId'] as String;
+    final user = _safeMap(req['user']);
+    final displayName = _safeString(user['displayName']) ?? 'Runner';
+    final profilePhotoUrl = _safeString(user['profilePhotoUrl']);
+    final friendshipId = _safeString(req['friendshipId']);
 
     return Container(
       color: index.isOdd
@@ -1042,7 +1100,9 @@ class _FriendsTabState extends State<FriendsTab> {
             variant: PillButtonVariant.accent,
             fontSize: 11,
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            onPressed: () => _showCancelOutgoingMenu(friendshipId, displayName),
+            onPressed: friendshipId == null
+                ? null
+                : () => _showCancelOutgoingMenu(friendshipId, displayName),
           ),
         ],
       ),

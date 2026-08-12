@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../config/animals.dart';
@@ -5,6 +7,7 @@ import '../styles.dart';
 import '../utils/at_name.dart';
 import '../utils/team_race.dart';
 import 'home_course_track.dart';
+import 'home_hero_scene.dart';
 
 /// The member pictured on a team card — that side's current top scorer.
 @immutable
@@ -34,18 +37,25 @@ class TeamCardMember {
     for (final p in participants) {
       if (TeamRace.participantTeam(p) != team) continue;
       if (p['stealthed'] == true) continue;
-      final steps = (p['totalSteps'] as num?)?.toInt() ?? 0;
+      final rawSteps = p['totalSteps'];
+      final steps = rawSteps is num ? rawSteps.toInt() : 0;
       if (steps > bestSteps) {
         bestSteps = steps;
         best = p;
       }
     }
     if (best == null) return null;
+    final rawAccessories = best['accessories'];
     return TeamCardMember(
-      displayName: best['displayName'] as String? ?? '???',
-      accessories:
-          (best['accessories'] as List?)?.cast<Map<String, dynamic>>() ??
-          const [],
+      displayName: best['displayName'] is String
+          ? best['displayName'] as String
+          : '???',
+      accessories: rawAccessories is List
+          ? [
+              for (final item in rawAccessories)
+                if (item is Map<String, dynamic>) item,
+            ]
+          : const [],
       animal: animalFromJson(best['animal']),
     );
   }
@@ -137,6 +147,23 @@ class TeamVsChips extends StatelessWidget {
   }
 }
 
+enum TeamLaneState { leading, trailing, neutral }
+
+({TeamLaneState teamA, TeamLaneState teamB}) teamLaneStatesForTotals(
+  int? teamATotal,
+  int? teamBTotal,
+) {
+  if (teamATotal == null || teamBTotal == null || teamATotal == teamBTotal) {
+    return (teamA: TeamLaneState.neutral, teamB: TeamLaneState.neutral);
+  }
+  return teamATotal > teamBTotal
+      ? (teamA: TeamLaneState.leading, teamB: TeamLaneState.trailing)
+      : (teamA: TeamLaneState.trailing, teamB: TeamLaneState.leading);
+}
+
+/// The two independent team hero cards. Roster cards deliberately live below
+/// this pair rather than inside a full-height team wrapper: the scoreboard
+/// needs a clear team-summary → momentum → individual-racers hierarchy.
 class TeamScoreboardCards extends StatelessWidget {
   const TeamScoreboardCards({
     super.key,
@@ -155,131 +182,140 @@ class TeamScoreboardCards extends StatelessWidget {
   final TeamCardMember? teamALeader;
   final TeamCardMember? teamBLeader;
 
-  /// The side ahead, or null on a tie OR whenever either total is unknown —
-  /// a ribbon crowned off a half-known scoreline would be a confident lie.
-  RaceTeam? get leadingTeam {
-    final a = teamATotal;
-    final b = teamBTotal;
-    if (a == null || b == null || a == b) return null;
-    return a > b ? RaceTeam.teamA : RaceTeam.teamB;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final leader = leadingTeam;
-    // IntrinsicHeight so a wrapping team name on one side can't leave the two
-    // cards at different heights.
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: _card(
-              context: context,
-              team: RaceTeam.teamA,
-              name: teamAName,
-              total: teamATotal,
-              member: teamALeader,
-              isLeading: leader == RaceTeam.teamA,
-            ),
+    final states = teamLaneStatesForTotals(teamATotal, teamBTotal);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: _card(
+            context,
+            RaceTeam.teamA,
+            teamAName,
+            teamATotal,
+            teamALeader,
+            states.teamA,
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: _card(
-              context: context,
-              team: RaceTeam.teamB,
-              name: teamBName,
-              total: teamBTotal,
-              member: teamBLeader,
-              isLeading: leader == RaceTeam.teamB,
-            ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: _card(
+            context,
+            RaceTeam.teamB,
+            teamBName,
+            teamBTotal,
+            teamBLeader,
+            states.teamB,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  Widget _card({
-    required BuildContext context,
-    required RaceTeam team,
-    required String name,
-    required int? total,
-    required TeamCardMember? member,
-    required bool isLeading,
-  }) {
+  Widget _card(
+    BuildContext context,
+    RaceTeam team,
+    String name,
+    int? total,
+    TeamCardMember? leader,
+    TeamLaneState state,
+  ) {
     final colors = AppColors.of(context);
-    final color = TeamRace.color(team, context);
-    final colorLight = TeamRace.colorLight(team, context);
-    final colorDark = TeamRace.colorDark(team, context);
+    final teamLight = TeamRace.colorLight(team, context);
+    final teamDark = TeamRace.colorDark(team, context);
     final onText = TeamRace.textColorOn(team, context);
+    final fill = team == RaceTeam.teamB
+        ? Color.lerp(
+            colors.parchmentLight,
+            colors.roofRidge,
+            state == TeamLaneState.leading ? 0.16 : 0.08,
+          )!
+        : Color.lerp(teamLight, colors.parchmentLight, switch (state) {
+            TeamLaneState.leading => 0.10,
+            TeamLaneState.neutral => 0.42,
+            TeamLaneState.trailing => 0.72,
+          })!;
+    final border = switch (state) {
+      TeamLaneState.leading => colors.medalGold,
+      TeamLaneState.neutral => Color.lerp(
+        team == RaceTeam.teamB ? colors.roofRidge : teamDark,
+        colors.parchmentBorder,
+        team == RaceTeam.teamB ? 0.72 : 0.42,
+      )!,
+      TeamLaneState.trailing => colors.parchmentBorder,
+    };
 
     final card = Container(
       key: ValueKey('team-card-${team.wireValue}'),
       decoration: BoxDecoration(
-        // The team colour is the card's whole ground, not a band behind the
-        // portrait — the card IS the team. The leader sits a little stronger.
-        color: colorLight.withValues(alpha: isLeading ? 0.30 : 0.18),
-        borderRadius: BorderRadius.circular(12),
-        // Same WIDTH on both cards, always. A thicker border on the leader
-        // insets its content by the difference, which knocks the two 30pt
-        // totals off a shared baseline. The leader is distinguished by border
-        // COLOUR and the outer ring below — neither of which moves a pixel.
-        border: Border.all(
-          color: isLeading ? colorDark : colors.parchmentBorder,
-          width: 2.5,
-        ),
-        // The crown, replacing the old LEADING ribbon: a halo drawn OUTSIDE the
-        // card's box (spread, no blur, no offset). The ribbon was a strip in
-        // the layout, so it had to be reserved on the trailing card too, which
-        // left an empty band above the loser's portrait. An outline costs no
-        // layout at all, so nothing needs reserving and nothing can misalign.
-        boxShadow: isLeading
+        color: fill,
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: border, width: 2.5),
+        boxShadow: state == TeamLaneState.leading
             ? [
                 BoxShadow(
-                  color: color.withValues(alpha: 0.55),
-                  spreadRadius: 3,
+                  color: colors.medalGold.withValues(alpha: 0.30),
+                  blurRadius: 9,
+                  spreadRadius: 1,
+                  offset: const Offset(0, 3),
                 ),
               ]
             : null,
       ),
-      // Outer radius 12 minus the 2.5pt border = 9.5, so the ribbon and
-      // portrait corners sit flush inside the border instead of 0.5px proud.
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(9.5),
+        borderRadius: BorderRadius.circular(10.5),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _portrait(context, team, member),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: PixelText.title(size: 15, color: onText),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    total == null ? '—' : formatTeamSteps(total),
-                    maxLines: 1,
-                    textAlign: TextAlign.center,
-                    style: PixelText.number(size: 30, color: onText),
-                  ),
-                  Text(
-                    'TEAM STEPS',
-                    textAlign: TextAlign.center,
-                    style: PixelText.body(
-                      size: 10,
-                      color: colors.textMid,
-                    ).copyWith(letterSpacing: 0.8),
-                  ),
-                ],
+            SizedBox(
+              height: 148,
+              child: _TeamHeroScene(
+                team: team,
+                leader: leader,
+                laneState: state,
+                palette: colors,
+              ),
+            ),
+            SizedBox(
+              height: 88,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      height: 34,
+                      child: Center(
+                        child: Text(
+                          name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: PixelText.title(size: 13, color: onText),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          total == null ? '—' : formatTeamSteps(total),
+                          maxLines: 1,
+                          style: PixelText.number(size: 30, color: onText),
+                        ),
+                      ),
+                    ),
+                    Text(
+                      'TEAM STEPS',
+                      textAlign: TextAlign.center,
+                      style: PixelText.body(
+                        size: 9.5,
+                        color: colors.textMid,
+                      ).copyWith(letterSpacing: 0.7),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -287,57 +323,305 @@ class TeamScoreboardCards extends StatelessWidget {
       ),
     );
 
-    if (!isLeading) return card;
-    // The outline carries "leading" visually, but it says nothing to a screen
-    // reader and gives tests nothing to find — both of which the LEADING
-    // ribbon's text used to provide. This restores them without occupying any
-    // layout, so the trailing card still needs no reserved counterpart.
     return Semantics(
-      label: '$name leading',
-      child: KeyedSubtree(
-        key: ValueKey('team-leading-${team.wireValue}'),
-        child: card,
+      label: state == TeamLaneState.leading ? '$name leading' : null,
+      child: Stack(
+        children: [
+          card,
+          if (state == TeamLaneState.leading)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: SizedBox(
+                  key: ValueKey('team-leading-${team.wireValue}'),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A compact window onto the same living pixel world as the Home hero.
+class _TeamHeroScene extends StatelessWidget {
+  const _TeamHeroScene({
+    required this.team,
+    required this.leader,
+    required this.laneState,
+    required this.palette,
+  });
+
+  final RaceTeam team;
+  final TeamCardMember? leader;
+
+  // Kept with the scene input even though leadership is expressed by the
+  // unchanged card outline. The course wash must never grow stronger when a
+  // lane leads, which would compete with that gold treatment.
+  final TeamLaneState laneState;
+  final AppPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    final member = leader;
+    final alignment = team == RaceTeam.teamA
+        ? const Alignment(-0.45, 1)
+        : const Alignment(0.45, 1);
+    final teamLight = TeamRace.colorLight(team, context);
+    final parchmentWashOpacity = palette.isDark ? 0.14 : 0.24;
+    final teamWashOpacity = palette.isDark ? 0.08 : 0.10;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+
+    return RepaintBoundary(
+      key: ValueKey('team-hero-scene-${team.wireValue}'),
+      child: ClipRect(
+        child: HomeHeroScene(
+          key: ValueKey('team-home-hero-${team.wireValue}'),
+          groundHeight: 34,
+          groundScrollSpeed: reduceMotion ? 0 : 26,
+          skyAlignment: alignment,
+          excludeBackgroundSemantics: true,
+          child: Stack(
+            key: ValueKey('team-hero-lane-${laneState.name}'),
+            fit: StackFit.expand,
+            children: [
+              ExcludeSemantics(
+                child: ColoredBox(
+                  key: ValueKey('team-hero-parchment-wash-${team.wireValue}'),
+                  color: palette.parchmentLight.withValues(
+                    alpha: parchmentWashOpacity,
+                  ),
+                ),
+              ),
+              ExcludeSemantics(
+                child: ColoredBox(
+                  key: ValueKey('team-hero-team-wash-${team.wireValue}'),
+                  color: teamLight.withValues(alpha: teamWashOpacity),
+                ),
+              ),
+              if (member == null)
+                Center(
+                  child: Text(
+                    'No one yet',
+                    style: PixelText.body(size: 12, color: palette.textMid),
+                  ),
+                )
+              else ...[
+                Positioned.fill(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final geometry = _containedSpriteGeometry(
+                        member,
+                        constraints.maxWidth,
+                      );
+                      return Stack(
+                        children: [
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: geometry.bottom,
+                            child: Center(
+                              child: AnimatedCapybaraWithAccessories(
+                                accessories: geometry.accessories,
+                                size: geometry.size,
+                                stepDuration: const Duration(milliseconds: 720),
+                                animate: !reduceMotion,
+                                animal: member.animal,
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+                Positioned(
+                  top: 6,
+                  left: 6,
+                  right: 6,
+                  child: Center(
+                    child: Container(
+                      key: const ValueKey('team-hero-caption-scrim'),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: palette.parchment.withValues(alpha: 0.92),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Semantics(
+                        label: atName(member.displayName),
+                        excludeSemantics: true,
+                        child: Text(
+                          atName(member.displayName),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: PixelText.body(
+                            size: 11.5,
+                            color: palette.textDark,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  Widget _portrait(BuildContext context, RaceTeam team, TeamCardMember? m) {
-    final colors = AppColors.of(context);
-    // No fill of its own: the card behind it already carries the team tint, so
-    // a second wash here would band the card in two shades.
-    return SizedBox(
-      height: 148,
-      child: m == null
-          ? Center(
-              child: Text(
-                'No one yet',
-                style: PixelText.body(size: 12, color: colors.textMid),
-              ),
-            )
-          : Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CapybaraSpriteWithAccessories(
-                  accessories: m.accessories,
-                  capybaraSize: 108,
-                  frameIndex: 0,
-                  animal: m.animal,
-                ),
-                const SizedBox(height: 4),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  child: Text(
-                    atName(m.displayName),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: PixelText.body(size: 11.5, color: colors.textMid),
-                  ),
-                ),
-              ],
-            ),
+  /// Keeps the Home baseline fixed while shrinking only when transformed
+  /// behind-body art would leave this half-card. Cosmetics that cannot fit at
+  /// the 48px compatibility floor are omitted from this scene only.
+  ({double size, double bottom, List<Map<String, dynamic>> accessories})
+  _containedSpriteGeometry(TeamCardMember member, double sceneWidth) {
+    const sceneHeight = 148.0;
+    const groundHeight = 34.0;
+    const groundSink = 4.0;
+    const horizontalMargin = 0.0;
+    const artTop = 30.0;
+    const minSize = 48.0;
+    const maxSize = 108.0;
+    final normalized = normalizedAccessoriesForAnimal(
+      member.accessories,
+      member.animal,
+    );
+
+    bool isBehind(Map<String, dynamic> accessory) {
+      final metadata = accessory['renderMetadata'];
+      return metadata is Map<String, dynamic> &&
+          metadata['renderLayer'] == 'behind';
+    }
+
+    bool accessoryFits(Map<String, dynamic> accessory, double size) {
+      final metadata = accessory['renderMetadata'] as Map<String, dynamic>;
+      final bounds = _behindAccessoryBounds(
+        metadata: metadata,
+        animal: member.animal,
+        size: size,
+        sceneWidth: sceneWidth,
+      );
+      return bounds != null &&
+          bounds.left >= horizontalMargin &&
+          bounds.right <= sceneWidth - horizontalMargin &&
+          bounds.top >= artTop &&
+          bounds.bottom <= sceneHeight;
+    }
+
+    final retained = <Map<String, dynamic>>[
+      for (final accessory in normalized)
+        if (!isBehind(accessory) || accessoryFits(accessory, minSize))
+          accessory,
+    ];
+
+    bool fits(double size) {
+      if (!size.isFinite || size < minSize || size > maxSize) return false;
+      if (size > sceneWidth - horizontalMargin * 2) return false;
+      final bottom = groundHeight - groundSink - size * 0.22;
+      final hostTop = sceneHeight - bottom - size;
+      if (!bottom.isFinite || !hostTop.isFinite || hostTop < artTop) {
+        return false;
+      }
+      for (final accessory in retained) {
+        if (isBehind(accessory) && !accessoryFits(accessory, size)) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    var low = minSize;
+    var high = maxSize;
+    if (fits(maxSize)) {
+      low = maxSize;
+    } else {
+      for (var iteration = 0; iteration < 24; iteration++) {
+        final candidate = (low + high) / 2;
+        if (fits(candidate)) {
+          low = candidate;
+        } else {
+          high = candidate;
+        }
+      }
+    }
+    return (
+      size: low,
+      bottom: groundHeight - groundSink - low * 0.22,
+      accessories: retained,
     );
   }
 
+  Rect? _behindAccessoryBounds({
+    required Map<String, dynamic> metadata,
+    required String? animal,
+    required double size,
+    required double sceneWidth,
+  }) {
+    final offsetX = _metadataOffset(metadata['offsetX'], size);
+    final offsetY = _metadataOffset(metadata['offsetY'], size);
+    final scale = _metadataDouble(metadata['scale']) ?? 1;
+    final rotation = _metadataDouble(metadata['rotation']) ?? 0;
+    if (offsetX == null ||
+        offsetY == null ||
+        !scale.isFinite ||
+        scale <= 0 ||
+        !rotation.isFinite) {
+      return null;
+    }
+    final baseline = animalSpriteFor(animal).baselineOffset * size;
+    final center = Offset(
+      sceneWidth / 2 + offsetX,
+      148 - (34 - 4 - size * 0.22) - size / 2 + offsetY + baseline,
+    );
+    final cosine = math.cos(rotation);
+    final sine = math.sin(rotation);
+    final half = size * scale / 2;
+    final corners =
+        <Offset>[
+          const Offset(-1, -1),
+          const Offset(1, -1),
+          const Offset(1, 1),
+          const Offset(-1, 1),
+        ].map((unit) {
+          final x = unit.dx * half;
+          final y = unit.dy * half;
+          return center + Offset(x * cosine - y * sine, x * sine + y * cosine);
+        });
+    var left = double.infinity;
+    var top = double.infinity;
+    var right = double.negativeInfinity;
+    var bottom = double.negativeInfinity;
+    for (final corner in corners) {
+      if (!corner.dx.isFinite || !corner.dy.isFinite) return null;
+      left = math.min(left, corner.dx);
+      top = math.min(top, corner.dy);
+      right = math.max(right, corner.dx);
+      bottom = math.max(bottom, corner.dy);
+    }
+    return Rect.fromLTRB(left, top, right, bottom);
+  }
+
+  double? _metadataOffset(dynamic value, double size) {
+    final parsed = _metadataDouble(value) ?? 0;
+    if (!parsed.isFinite) return null;
+    final result = parsed.abs() <= 1 ? parsed * size : parsed;
+    return result.isFinite ? result : null;
+  }
+
+  double? _metadataDouble(dynamic value) {
+    if (value is num) {
+      final parsed = value.toDouble();
+      return parsed.isFinite ? parsed : null;
+    }
+    if (value is String) {
+      final parsed = double.tryParse(value);
+      return parsed != null && parsed.isFinite ? parsed : null;
+    }
+    return null;
+  }
 }
 
 /// The momentum strip under the cards: "Keep it up! 11,354 steps ahead!".
@@ -389,7 +673,7 @@ class TeamLeadBanner extends StatelessWidget {
     final List<InlineSpan> spans;
     if (leader == null) {
       spans = [
-        TextSpan(text: 'Dead even — ', style: body),
+        TextSpan(text: 'Dead even. ', style: body),
         TextSpan(text: formatTeamSteps(a), style: number),
         TextSpan(text: ' steps each.', style: body),
       ];
@@ -420,10 +704,6 @@ class TeamLeadBanner extends StatelessWidget {
     return Container(
       key: const Key('team-lead-banner'),
       width: double.infinity,
-      // The gap below belongs to the banner, not the caller — when the banner
-      // hides itself on unknown totals a caller-owned spacer would survive as a
-      // stray 14px hole between the cards and the rosters.
-      margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: fill,

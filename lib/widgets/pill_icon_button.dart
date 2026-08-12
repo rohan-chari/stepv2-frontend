@@ -45,6 +45,18 @@ class _PillIconButtonState extends State<PillIconButton> {
           AppColors.of(context).pillTerraDark,
           AppColors.of(context).pillTerraShadow,
         );
+      case PillButtonVariant.decision:
+        return (
+          AppColors.of(context).feedGold,
+          AppColors.of(context).coinEdge,
+          AppColors.of(context).woodDarker,
+        );
+      case PillButtonVariant.destructive:
+        return (
+          AppColors.of(context).error,
+          AppColors.of(context).pillTerraDark,
+          AppColors.of(context).woodDarker,
+        );
     }
   }
 

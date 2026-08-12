@@ -99,7 +99,7 @@ void main() {
       );
 
       expect(
-        find.textContaining('It’s a tie — buy-ins refunded'),
+        find.textContaining('It’s a tie. Buy-ins refunded'),
         findsOneWidget,
       );
       expect(find.byType(CelebrationConfetti), findsNothing);

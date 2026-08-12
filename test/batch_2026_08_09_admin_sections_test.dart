@@ -439,6 +439,7 @@ void main() {
               'rewardedAds': {
                 'coinReward': {'uniqueDauWatchers': 18, 'pctOfDau': 15},
                 'extraSpin': {'uniqueDauWatchers': 9, 'pctOfDau': 8},
+                'boxReroll': {'uniqueDauWatchers': 4, 'pctOfDau': 3},
               },
             },
             'coinEconomy': {
@@ -459,8 +460,15 @@ void main() {
                   'date': '2026-08-08',
                   'coinRewardWatches': 30,
                   'extraSpinWatches': 12,
+                  'boxRerollWatches': 7,
                 },
               ],
+              'boxReroll': {
+                'watches': 7,
+                'uniqueWatchers': 4,
+                'consumed': 5,
+                'pctConsumed': 71,
+              },
               'capUtilization': {'avgWatchesPerUser': 2, 'usersAtCap': 6},
             },
           },
@@ -484,7 +492,12 @@ void main() {
       expect(find.text('55'), findsOneWidget);
 
       expect(find.text('AD WATCHES'), findsOneWidget);
-      expect(find.text('30 / 12'), findsOneWidget);
+      expect(find.text('30 / 12 / 7'), findsOneWidget);
+
+      expect(find.text('4 (3%)'), findsOneWidget);
+      expect(find.text('BOX REROLL ADS (30D)'), findsOneWidget);
+      expect(find.text('5 (71%)'), findsOneWidget);
+
       expect(find.text('CAP UTILIZATION'), findsOneWidget);
       expect(find.text('2.0'), findsOneWidget);
       expect(find.text('6'), findsWidgets);
@@ -520,6 +533,92 @@ void main() {
       expect(find.text('COINS MINTED VS SUNK'), findsOneWidget);
       expect(find.text('AD WATCHES'), findsOneWidget);
       expect(find.text('—'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a backend that predates reroll counting degrades only that '
+        'half of the ad-watch row', (tester) async {
+      // The backend rolls out after the app here too: the coin and spin
+      // numbers must still read while the reroll count is simply absent.
+      await _pumpBody(
+        tester,
+        const AdminRevenueBody(
+          stats: {
+            'adRevenue': {
+              'days': [
+                {
+                  'date': '2026-08-08',
+                  'coinRewardWatches': 30,
+                  'extraSpinWatches': 12,
+                },
+              ],
+            },
+          },
+        ),
+      );
+
+      expect(find.text('30 / 12 / —'), findsOneWidget);
+      expect(find.text('BOX REROLL ADS (30D)'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('no reroll watches yet renders the count without a 0% '
+        'conversion', (tester) async {
+      // The shape the backend emits before anyone has watched. "0 (0%)" would
+      // read as a reroll flow everybody abandons; the truth is no data.
+      await _pumpBody(
+        tester,
+        const AdminRevenueBody(
+          stats: {
+            'adRevenue': {
+              'boxReroll': {
+                'watches': 0,
+                'uniqueWatchers': 0,
+                'consumed': 0,
+                'pctConsumed': null,
+              },
+            },
+          },
+        ),
+      );
+
+      expect(find.text('0'), findsWidgets);
+      expect(find.text('0 (0%)'), findsNothing);
+    });
+
+    testWidgets('a three-value ad-watch row wraps instead of overflowing on a '
+        'narrow screen', (tester) async {
+      // 320pt-wide phone: the row now carries three thousands-separated
+      // numbers where it used to carry two, which is exactly the width an
+      // unconstrained value Text would blow out with overflow stripes.
+      tester.view.physicalSize = const Size(960, 3400);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: AdminRevenueBody(
+                stats: {
+                  'adRevenue': {
+                    'days': [
+                      {
+                        'date': '2026-08-08',
+                        'coinRewardWatches': 123456,
+                        'extraSpinWatches': 234567,
+                        'boxRerollWatches': 345678,
+                      },
+                    ],
+                  },
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
       expect(tester.takeException(), isNull);
     });
 

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../widgets/app_avatar.dart';
-import '../widgets/info_toast.dart';
 import '../widgets/onboarding_permission_gate.dart';
 import '../widgets/onboarding_scene.dart';
 import '../widgets/pill_button.dart';
@@ -9,8 +8,7 @@ import '../styles.dart';
 import '../utils/at_name.dart';
 // One shared definition of the qualifying race, so the referred-install scene
 // can't drift from the referral screen / Get Coins copy.
-import 'referral_screen.dart'
-    show kQualifyingRaceShortPhrase, referralRedeemedCopy;
+import 'referral_screen.dart' show kQualifyingRaceShortPhrase;
 
 /// Standalone onboarding flow shown after sign-in until the user has granted
 /// health access, answered the notification prompt, and seen the
@@ -45,12 +43,6 @@ class OnboardingFlow extends StatelessWidget {
     this.welcomeReferralCode,
     this.onWelcomeDismissed,
     this.onFetchReferralPreview,
-    this.showInviteCodeStep = false,
-    this.onApplyInviteCode,
-    this.onInviteCodeResolved,
-    this.onFetchInviteCodeRewards,
-    this.canPasteInviteLink = false,
-    this.onPasteInviteLink,
     this.error,
     this.isLoading = false,
   });
@@ -142,37 +134,6 @@ class OnboardingFlow extends StatelessWidget {
   final Future<Map<String, dynamic>> Function(String code)?
   onFetchReferralPreview;
 
-  /// Whether the invite-code step is owed. The HOST owns this decision — this
-  /// widget is stateless and can read neither SharedPreferences nor the auth
-  /// payload. MainShell's condition is: v3 on, the `onboardingInviteCodeEnabled`
-  /// kill switch not explicitly false, `referredByCode` null (server truth,
-  /// resolved — never guessed), and the device-local done-flag unset.
-  final bool showInviteCodeStep;
-
-  /// Redeems a manually-entered code. Returns the raw
-  /// `{attributed, reason?}` body so the step can render the exact reason.
-  final Future<Map<String, dynamic>> Function(String code)? onApplyInviteCode;
-
-  /// Reports a FINAL answer to the step: an applied code, a terminal rejection,
-  /// or a skip. The host writes the done-flag, re-fetches the inviter race on
-  /// success, and rebuilds so the chain falls through. Never called for a
-  /// transient failure — a network blip must not burn the user's one prompt.
-  final void Function({required bool attributed, bool skipped})?
-  onInviteCodeResolved;
-
-  /// Fire-and-forget `GET /referrals/me` for the reward figures. Absent field,
-  /// error, or no fetcher all leave the copy figure-free — the amounts are
-  /// env-tunable server-side and must never be baked into the binary.
-  final Future<Map<String, dynamic>> Function()? onFetchInviteCodeRewards;
-
-  /// True when a probable invite URL was detected on the iOS pasteboard at
-  /// launch but could not be read (the "Allow Paste?" denial signature).
-  final bool canPasteInviteLink;
-
-  /// Performs the DEFERRED pasteboard read behind the user's tap. Null on a
-  /// second denial, which degrades to ordinary manual entry.
-  final Future<String?> Function()? onPasteInviteLink;
-
   final String? error;
   final bool isLoading;
 
@@ -204,8 +165,8 @@ class OnboardingFlow extends StatelessWidget {
         // this never claims "we collect nothing"; it is specific about what we
         // do not read and what we never do with it.
         body:
-            'Bara only reads your step count — never your routes, workouts, '
-            'heart rate, or location. Your steps are used for races and '
+            'Bara only reads your step count. It never reads your routes, '
+            'workouts, heart rate, or location. Your steps are used for races and '
             'nothing else, and we never sell your data.',
         icon: Icons.favorite_rounded,
         onContinue: onEnableHealth,
@@ -223,25 +184,6 @@ class OnboardingFlow extends StatelessWidget {
     // sits BEFORE the race intro because that intro's CTA drops the user into
     // a live race — they should know what a race is first (§5.11.2).
     if (onboardingV3Enabled) {
-      // Invite-code step FIRST (spec, product decision 2026-08-09): attribution
-      // intent is captured at the earliest moment, so a successful apply means
-      // the rest of onboarding — the demo race and, crucially, the inviter-race
-      // step below — already knows who invited this user. It renders while
-      // `tutorialOnboardingSeen` and `firstRaceOnboardingSeen` are both still
-      // false, so `isOnboardingGate` keeps onboarding open with no predicate
-      // change, and the redeem window (closed only by a non-seeded completed
-      // race) is not at risk.
-      if (showInviteCodeStep &&
-          onApplyInviteCode != null &&
-          onInviteCodeResolved != null) {
-        return OnboardingInviteCodeStep(
-          onApply: onApplyInviteCode!,
-          onResolved: onInviteCodeResolved!,
-          onFetchRewards: onFetchInviteCodeRewards,
-          canPasteInviteLink: canPasteInviteLink,
-          onPasteInviteLink: onPasteInviteLink,
-        );
-      }
       if (!tutorialOnboardingSeen) {
         // Demo-race spec §5.8: same position, same two callbacks — the
         // passive spotlight walkthrough is replaced by a playable 90-second
@@ -428,7 +370,7 @@ class _OnboardingDailyIntroStepState extends State<OnboardingDailyIntroStep> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'This is your racer tag—the name other players see. It won’t change how you sign in, and you can update it anytime in Profile.',
+                    'This is your racer tag. It’s the name other players see. It won’t change how you sign in, and you can update it anytime in Profile.',
                     textAlign: TextAlign.center,
                     style: PixelText.body(size: 12, color: colors.textMid),
                   ),
@@ -587,7 +529,7 @@ class _OnboardingInviterRaceStepState extends State<OnboardingInviterRaceStep> {
       ),
       dockLabel: alreadyJoined ? 'YOU’RE BOTH IN' : 'YOUR FIRST RACE',
       dockBody: alreadyJoined
-          ? 'You’re both in $raceName. Start walking — every step counts from now.'
+          ? 'You’re both in $raceName. Start walking. Every step counts from now.'
           : steps != null && steps > 0
           ? '$name is ${_formatSteps(steps)} steps into $raceName. Jump in and start closing the gap.'
           : '$name is racing in $raceName. Jump in and start closing the gap.',
@@ -703,7 +645,7 @@ class _OnboardingReferralWelcomeStepState
     } else if (theirs != null && theirs == mine) {
       body =
           'Finish $kQualifyingRaceShortPhrase and you each pocket $mine '
-          'coins — yours to spend right away.';
+          'coins. Yours to spend right away.';
     } else {
       body = 'Finish $kQualifyingRaceShortPhrase and $mine coins are yours.';
     }
@@ -782,7 +724,7 @@ class OnboardingTutorialStep extends StatelessWidget {
       // body has to answer "how long is this?" before the user goes looking
       // for a way out.
       dockBody:
-          'A quick tour of how Bara works — we promise it’s fast, '
+          'A quick tour of how Bara works. We promise it’s fast, '
           'and you keep the 100 coins.',
       actions: [
         SizedBox(
@@ -827,390 +769,6 @@ class OnboardingTutorialStep extends StatelessWidget {
   }
 }
 
-/// The v3 opening step: "GOT AN INVITE CODE?".
-///
-/// Automatic attribution (clipboard handoff, IP-correlated link opens) captured
-/// roughly one invite in five over the 2026-08-08 weekend, and every miss was
-/// silent. This step is the explicit-intent path: it catches denied clipboard
-/// reads, iCloud Private Relay users, Wi-Fi↔cellular flips, and word-of-mouth
-/// invitees, and it rewards BOTH sides through the ordinary referral machinery.
-///
-/// It fronts 100% of new users to serve the invited fraction, so the exits
-/// matter as much as the happy path:
-///  * `Skip` carries near-equal visual weight and is ALWAYS tappable —
-///    including while a redeem is in flight and while the backend is
-///    unreachable. A backend outage must never trap a user in onboarding.
-///  * A terminal rejection (already attributed / already raced / own code…)
-///    resolves the step rather than arguing with the user.
-///  * A transient failure (network, typo) deliberately does NOT resolve it, so
-///    the host leaves the done-flag unset and they get another chance.
-class OnboardingInviteCodeStep extends StatefulWidget {
-  const OnboardingInviteCodeStep({
-    super.key,
-    required this.onApply,
-    required this.onResolved,
-    this.onFetchRewards,
-    this.canPasteInviteLink = false,
-    this.onPasteInviteLink,
-  });
-
-  final Future<Map<String, dynamic>> Function(String code) onApply;
-  final void Function({required bool attributed, bool skipped}) onResolved;
-  final Future<Map<String, dynamic>> Function()? onFetchRewards;
-  final bool canPasteInviteLink;
-  final Future<String?> Function()? onPasteInviteLink;
-
-  @override
-  State<OnboardingInviteCodeStep> createState() =>
-      _OnboardingInviteCodeStepState();
-}
-
-class _OnboardingInviteCodeStepState extends State<OnboardingInviteCodeStep> {
-  final TextEditingController _controller = TextEditingController();
-  bool _submitting = false;
-  bool _pasting = false;
-  bool _resolved = false;
-  String? _error;
-  int? _referrerCoins;
-  int? _refereeCoins;
-
-  /// Reasons that END the step. The user cannot act on any of them, so
-  /// re-asking on the next launch would be pure friction.
-  static const _terminalReasons = <String>{
-    'already_attributed',
-    'already_raced',
-  };
-
-  @override
-  void initState() {
-    super.initState();
-    _controller.addListener(_onTextChanged);
-    _loadRewards();
-  }
-
-  @override
-  void dispose() {
-    _controller.removeListener(_onTextChanged);
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _onTextChanged() {
-    // Only the empty↔non-empty transition changes anything on screen (APPLY's
-    // enablement), so this is not a rebuild per keystroke in practice.
-    setState(() {});
-  }
-
-  /// Fire-and-forget. The step renders instantly with figure-free copy and
-  /// upgrades in place if the wire answers; an older backend, an offline
-  /// device, or a null field all simply leave the generic wording. The dock is
-  /// bottom-anchored, so an extra wrapped line grows the dock UPWARD and the
-  /// buttons do not move.
-  Future<void> _loadRewards() async {
-    final fetch = widget.onFetchRewards;
-    if (fetch == null) return;
-    try {
-      final data = await fetch();
-      if (!mounted) return;
-      setState(() {
-        _referrerCoins = (data['referrerCoins'] as num?)?.toInt();
-        _refereeCoins = (data['refereeCoins'] as num?)?.toInt();
-      });
-    } catch (_) {
-      // Generic copy is a perfectly good answer.
-    }
-  }
-
-  String get _subtitle {
-    final mine = _refereeCoins;
-    final theirs = _referrerCoins;
-    // Never print a figure unless BOTH sides are known and equal — the copy
-    // says "you'll both earn", and the amounts are independently tunable
-    // server-side.
-    if (mine != null && mine > 0 && theirs == mine) {
-      return 'If a friend invited you, enter their code — you’ll both earn '
-          '$mine coins when you finish your first race.';
-    }
-    return 'If a friend invited you, enter their code — you’ll both earn '
-        'coins when you finish your first race.';
-  }
-
-  void _resolve({required bool attributed, bool skipped = false}) {
-    if (_resolved) return;
-    _resolved = true;
-    widget.onResolved(attributed: attributed, skipped: skipped);
-  }
-
-  Future<void> _apply() async {
-    final code = _controller.text.trim().toUpperCase();
-    if (code.isEmpty || _submitting) return;
-    setState(() {
-      _submitting = true;
-      _error = null;
-    });
-    Map<String, dynamic>? result;
-    var threw = false;
-    try {
-      result = await widget.onApply(code);
-    } catch (_) {
-      threw = true;
-    }
-    if (!mounted) return;
-    setState(() => _submitting = false);
-
-    if (threw) {
-      // Stay put, keep the code, keep the skip. The host leaves the done-flag
-      // unset so a backgrounded user sees the step again next launch.
-      setState(
-        () => _error =
-            'Couldn’t apply that code. Check your connection and try again.',
-      );
-      return;
-    }
-
-    if (result?['attributed'] == true) {
-      showInfoToast(context, referralRedeemedCopy(refereeCoins: _refereeCoins));
-      _resolve(attributed: true);
-      return;
-    }
-
-    final reason = result?['reason'] as String?;
-    final message = _reasonMessage(reason);
-    if (reason != null && _terminalReasons.contains(reason)) {
-      // Nothing the user can do about these, so the step gets out of the way —
-      // but they still get told why, as a toast that survives the advance
-      // rather than as inline copy on a screen being torn down.
-      showInfoToast(context, message);
-      _resolve(attributed: false);
-      return;
-    }
-    setState(() => _error = message);
-  }
-
-  /// Mirrors `_reasonMessage` on the referral screen, in this step's voice.
-  /// `self_referral` is deliberately NON-terminal: the user has their own code
-  /// on the clipboard and their friend's in a text message — let them retype.
-  String _reasonMessage(String? reason) {
-    switch (reason) {
-      case 'already_attributed':
-        return 'You’re already connected to your inviter!';
-      case 'self_referral':
-        return 'You can’t use your own code.';
-      case 'already_raced':
-        return 'Invite codes only work before your first race.';
-      case 'unknown_code':
-      case 'invalid_code':
-        return 'That code doesn’t look right — double check it.';
-      default:
-        return 'Couldn’t apply that code. Check your connection and try again.';
-    }
-  }
-
-  Future<void> _paste() async {
-    final read = widget.onPasteInviteLink;
-    if (read == null || _pasting) return;
-    setState(() => _pasting = true);
-    String? code;
-    try {
-      code = await read();
-    } catch (_) {
-      code = null;
-    }
-    if (!mounted) return;
-    setState(() {
-      _pasting = false;
-      if (code != null) {
-        _controller.text = code;
-        _error = null;
-      }
-    });
-    // A second denial says nothing new and blames the user for an OS dialog —
-    // the manual field is right there and still works.
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
-    final hasCode = _controller.text.trim().isNotEmpty;
-
-    // The onboarding host runs with `resizeToAvoidBottomInset: false`, so the
-    // step lifts itself above the keyboard: the sky (the Expanded half of the
-    // scene) absorbs the loss and the dock — field, APPLY, skip — stays whole.
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
-      // The only onboarding step with a TextField and Material buttons, so it
-      // carries its own Material rather than relying on the host's Scaffold.
-      child: Material(
-        type: MaterialType.transparency,
-        child: OnboardingScene(
-          headline: 'GOT AN INVITE CODE?',
-          // No emblem: the field is the centerpiece, and the sky is what keeps
-          // the dock from swallowing the whole screen once the keyboard is up.
-          dockLabel: 'INVITE CODE',
-          dockBody: _subtitle,
-          error: _error,
-          dockExtra: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                key: const Key('onboarding-invite-code-field'),
-                controller: _controller,
-                // Deliberately NOT autofocused: most users here were not
-                // invited, and shoving a keyboard at them buys a tap to dismiss.
-                autofocus: false,
-                enabled: !_submitting,
-                textCapitalization: TextCapitalization.characters,
-                textAlign: TextAlign.center,
-                textInputAction: TextInputAction.done,
-                onSubmitted: (_) => _apply(),
-                style: PixelText.title(size: 20, color: colors.textDark),
-                decoration: InputDecoration(
-                  hintText: 'BARA-XXXX',
-                  hintStyle: PixelText.title(
-                    size: 20,
-                    color: colors.textMid.withValues(alpha: 0.45),
-                  ),
-                  filled: true,
-                  fillColor: colors.parchmentLight,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: colors.woodDark, width: 2),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: colors.woodDark, width: 2),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: colors.woodDarker, width: 3),
-                  ),
-                ),
-              ),
-              // Part C: only in the detect-but-unread state. The TAP is the user
-              // gesture iOS wants before it will hand over the pasteboard — this
-              // is what a launch-time "Allow Paste?" denial degrades into, and it
-              // sits WITH the manual field rather than replacing it.
-              if (widget.canPasteInviteLink && widget.onPasteInviteLink != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 10),
-                  child: _InviteGhostButton(
-                    buttonKey: const Key('onboarding-invite-code-paste'),
-                    label: _pasting ? 'PASTING…' : 'PASTE INVITE LINK',
-                    icon: Icons.content_paste_rounded,
-                    height: 44,
-                    fontSize: 12,
-                    onPressed: _pasting ? null : _paste,
-                  ),
-                ),
-            ],
-          ),
-          actions: [
-            SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: PillButton(
-                key: const Key('onboarding-invite-code-apply'),
-                label: 'APPLY',
-                variant: PillButtonVariant.secondary,
-                fullWidth: true,
-                padding: EdgeInsets.zero,
-                // PillButton keeps the label in the tree at zero opacity while
-                // loading, so the button neither resizes nor is replaced by a
-                // second widget mid-tap.
-                loading: _submitting,
-                onPressed: hasCode ? _apply : null,
-              ),
-            ),
-            const SizedBox(height: 10),
-            // Near-equal visual weight, and never disabled. This step fronts
-            // every new user; the uninvited majority must exit in one obvious
-            // tap, and a spinning APPLY or a dead backend must not remove the
-            // exit.
-            _InviteGhostButton(
-              buttonKey: const Key('onboarding-invite-code-skip'),
-              label: 'Skip',
-              height: 50,
-              fontSize: 15,
-              onPressed: () => _resolve(attributed: false, skipped: true),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// A full-width secondary action inside the onboarding dock: the sky-ring
-/// chrome the scene already uses for emblems and chips, sized like a button.
-/// Reads as a real choice next to the gold pill without competing with it.
-class _InviteGhostButton extends StatelessWidget {
-  const _InviteGhostButton({
-    required this.buttonKey,
-    required this.label,
-    required this.height,
-    required this.fontSize,
-    required this.onPressed,
-    this.icon,
-  });
-
-  final Key buttonKey;
-  final String label;
-  final double height;
-  final double fontSize;
-  final VoidCallback? onPressed;
-  final IconData? icon;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
-    return SizedBox(
-      width: double.infinity,
-      height: height,
-      child: TextButton(
-        key: buttonKey,
-        onPressed: onPressed,
-        style: TextButton.styleFrom(
-          padding: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(999),
-          ),
-        ),
-        child: SizedBox.expand(
-          child: DecoratedBox(
-            decoration: onboardingSkyRing(
-              context,
-              shape: BoxShape.rectangle,
-              borderRadius: BorderRadius.circular(999),
-              borderWidth: 2,
-            ),
-            child: Center(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (icon != null) ...[
-                    Icon(icon, size: fontSize + 3, color: colors.textLight),
-                    const SizedBox(width: 8),
-                  ],
-                  Text(
-                    label,
-                    style: PixelText.title(
-                      size: fontSize,
-                      color: colors.textLight,
-                    ).copyWith(shadows: PixelText.skyOutline(1.2)),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// The v3 teaching step: a playable 90-second demo race the user wins.
 ///
 /// The old step sold a tour ("take the quick tour"). This one sells a race,
@@ -1251,7 +809,7 @@ class OnboardingDemoRaceStep extends StatelessWidget {
       // no "Skip for now" underneath, the sentence has to do the reassuring
       // the escape hatch used to do. The dock label keeps the numbers.
       dockBody:
-          'A quick 90-second practice race against three bots — we promise '
+          'A quick 90-second practice race against three bots. We promise '
           'it’s fast, and you keep the 100 coins.',
       actions: [
         SizedBox(

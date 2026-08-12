@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:step_tracker/models/home_race_suggestion.dart';
 import 'package:step_tracker/models/step_data.dart';
 import 'package:step_tracker/models/step_sample_data.dart';
 import 'package:step_tracker/screens/main_shell.dart';
@@ -37,6 +39,9 @@ class _FakeBackgroundSyncBootstrapService
 }
 
 class _FakeBackendApiService extends BackendApiService {
+  int homeSuggestionCalls = 0;
+  int racesDiscoveryCalls = 0;
+
   @override
   Future<Map<String, dynamic>> refreshSessionToken({
     required String authToken,
@@ -64,7 +69,22 @@ class _FakeBackendApiService extends BackendApiService {
   @override
   Future<RaceDiscoverySummary> fetchRaceDiscoverySummary({
     required String identityToken,
-  }) async => RaceDiscoverySummary.unsupportedResult;
+  }) async {
+    racesDiscoveryCalls++;
+    return RaceDiscoverySummary.unsupportedResult;
+  }
+
+  @override
+  Future<HomeSuggestedRacesRefresh> fetchHomeSuggestedRaces({
+    required String identityToken,
+  }) async {
+    homeSuggestionCalls++;
+    return const HomeSuggestedRacesRefresh(
+      featuredRaces: [],
+      publicRaces: [],
+      tournaments: [],
+    );
+  }
 
   @override
   Future<Map<String, dynamic>> fetchHomeRaceCard({
@@ -141,6 +161,16 @@ Future<AuthService> _authService() async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  setUp(() {
+    PackageInfo.setMockInitialValues(
+      appName: 'Bara',
+      packageName: 'com.rohanchari.steptracker',
+      version: '2.3.0',
+      buildNumber: '1',
+      buildSignature: '',
+    );
+  });
+
   testWidgets('MainShell renders tabs in the primary navigation order', (
     WidgetTester tester,
   ) async {
@@ -167,5 +197,31 @@ void main() {
       'Boards',
       'Profile',
     ]);
+  });
+
+  testWidgets('Home loads suggestions without Races discovery fan-out', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _authService();
+    final api = _FakeBackendApiService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(api.homeSuggestionCalls, 1);
+    expect(api.racesDiscoveryCalls, 0);
+
+    tester.widget<WoodenTabBar>(find.byType(WoodenTabBar)).onTap(1);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(api.racesDiscoveryCalls, 1);
   });
 }

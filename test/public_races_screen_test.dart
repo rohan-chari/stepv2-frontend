@@ -8,6 +8,7 @@ import 'package:step_tracker/services/backend_api_service.dart';
 class _FakePublicRacesApi extends BackendApiService {
   bool joined = false;
   bool failFetchMe = false;
+  bool failJoin = false;
 
   @override
   Future<List<Map<String, dynamic>>> fetchPublicRaces({
@@ -47,6 +48,7 @@ class _FakePublicRacesApi extends BackendApiService {
     required String raceId,
     bool onboarding = false,
   }) async {
+    if (failJoin) throw const ApiException('Race filled up.');
     joined = true;
     return {
       'participant': {'id': 'rp-1', 'raceId': raceId},
@@ -134,4 +136,29 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('failed public join restores the card action and shows error', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _authService();
+    final api = _FakePublicRacesApi()..failJoin = true;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PublicRacesScreen(
+          authService: authService,
+          backendApiService: api,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('public-filter-races')));
+    await tester.pump();
+    await tester.tap(find.text('JOIN'));
+    await tester.pump();
+
+    expect(find.text('Race filled up.'), findsOneWidget);
+    expect(find.text('JOIN'), findsOneWidget);
+    expect(api.joined, isFalse);
+  });
 }

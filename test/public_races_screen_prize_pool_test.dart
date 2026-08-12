@@ -74,14 +74,14 @@ Map<String, dynamic> _legacyRace() => {
   'powerupsEnabled': false,
 };
 
-Future<AuthService> _authService() async {
+Future<AuthService> _authService({int coins = 0}) async {
   SharedPreferences.setMockInitialValues({
     'auth_identity_token': 'apple-token',
     'auth_user_identifier': 'apple-user-123',
     'auth_session_token': 'session-token',
     'auth_backend_user_id': 'user-1',
     'auth_display_name': 'Trail Walker',
-    'auth_coins': 0,
+    'auth_coins': coins,
     'auth_held_coins': 0,
   });
   final authService = AuthService();
@@ -89,14 +89,11 @@ Future<AuthService> _authService() async {
   return authService;
 }
 
-Future<void> _pump(WidgetTester tester, _Api api) async {
-  final authService = await _authService();
+Future<void> _pump(WidgetTester tester, _Api api, {int coins = 0}) async {
+  final authService = await _authService(coins: coins);
   await tester.pumpWidget(
     MaterialApp(
-      home: PublicRacesScreen(
-        authService: authService,
-        backendApiService: api,
-      ),
+      home: PublicRacesScreen(authService: authService, backendApiService: api),
     ),
   );
   await tester.pump();
@@ -151,5 +148,30 @@ void main() {
 
     expect(find.text('Not enough gold for this buy-in'), findsNothing);
     expect(api.joined, isTrue);
+  });
+
+  testWidgets('legacy paid race retains balance guard and confirmation', (
+    tester,
+  ) async {
+    final insufficientApi = _Api([_legacyRace()]);
+    await _pump(tester, insufficientApi);
+
+    await tester.tap(find.text('JOIN'));
+    await tester.pump();
+    expect(find.text('Not enough gold for this buy-in'), findsOneWidget);
+    expect(insufficientApi.joined, isFalse);
+
+    final paidApi = _Api([_legacyRace()]);
+    await _pump(tester, paidApi, coins: 500);
+    await tester.tap(find.text('JOIN'));
+    await tester.pump();
+
+    expect(find.text('100 GOLD BUY-IN'), findsOneWidget);
+    expect(find.text('LOCK IT IN'), findsOneWidget);
+    expect(paidApi.joined, isFalse);
+
+    await tester.tap(find.text('LOCK IT IN'));
+    await tester.pumpAndSettle();
+    expect(paidApi.joined, isTrue);
   });
 }

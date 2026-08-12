@@ -18,6 +18,7 @@ import '../../widgets/loading_skeleton.dart';
 import '../../widgets/pill_button.dart';
 import '../../utils/team_race.dart';
 import '../../widgets/powerup_icon.dart';
+import '../../widgets/race_ui.dart' show RacerAvatar;
 import '../../widgets/spinning_coin.dart';
 import '../../widgets/spinning_crate.dart';
 import '../../widgets/team_scoreline.dart';
@@ -62,6 +63,10 @@ class RacesTab extends StatefulWidget {
   // invite accept/decline calls.
   final BackendApiService? backendApiService;
 
+  /// Literal-true capability branch. False preserves the frozen/old-backend
+  /// inline invite treatment exactly.
+  final bool inviteDecisionGateEnabled;
+
   const RacesTab({
     super.key,
     required this.authService,
@@ -82,6 +87,7 @@ class RacesTab extends StatefulWidget {
     this.tutorialCardKey,
     this.tutorialBoxKey,
     this.backendApiService,
+    this.inviteDecisionGateEnabled = false,
   });
 
   @override
@@ -148,31 +154,32 @@ class _RacesTabState extends State<RacesTab> {
   // Declined races are excluded server-side on current backends, but an older
   // backend may still return them — filter defensively so a declined race
   // never shows up (the user opted out; it's dead weight they can't act on).
-  List<Map<String, dynamic>> get _active =>
-      (_raceData?['active'] as List?)
-          ?.cast<Map<String, dynamic>>()
-          .where((r) => r['myStatus'] != 'DECLINED')
-          .toList() ??
-      [];
+  List<Map<String, dynamic>> _safeRows(Object? raw) => raw is List
+      ? raw
+            .whereType<Map>()
+            .map(
+              (row) => <String, dynamic>{
+                for (final entry in row.entries)
+                  if (entry.key is String) entry.key as String: entry.value,
+              },
+            )
+            .toList(growable: false)
+      : const [];
 
-  List<Map<String, dynamic>> get _invites =>
-      (_raceData?['pending'] as List?)
-          ?.cast<Map<String, dynamic>>()
-          .where((r) => r['myStatus'] == 'INVITED')
-          .toList() ??
-      [];
+  List<Map<String, dynamic>> get _active => _safeRows(
+    _raceData?['active'],
+  ).where((r) => r['myStatus'] != 'DECLINED').toList();
 
-  List<Map<String, dynamic>> get _waiting =>
-      (_raceData?['pending'] as List?)
-          ?.cast<Map<String, dynamic>>()
-          .where(
-            (r) => r['myStatus'] != 'INVITED' && r['myStatus'] != 'DECLINED',
-          )
-          .toList() ??
-      [];
+  List<Map<String, dynamic>> get _invites => _safeRows(
+    _raceData?['pending'],
+  ).where((r) => r['myStatus'] == 'INVITED').toList();
+
+  List<Map<String, dynamic>> get _waiting => _safeRows(_raceData?['pending'])
+      .where((r) => r['myStatus'] != 'INVITED' && r['myStatus'] != 'DECLINED')
+      .toList();
 
   List<Map<String, dynamic>> get _completed =>
-      (_raceData?['completed'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      _safeRows(_raceData?['completed']);
 
   BackendApiService? _lazyApi;
   BackendApiService get _api =>
@@ -181,13 +188,9 @@ class _RacesTabState extends State<RacesTab> {
   // The additive `tournaments` bucket from GET /races (spec §6.3). Absent on an
   // older backend → empty, so there's simply no tournaments section. Read every
   // field defensively via [Tournament].
-  List<Map<String, dynamic>> get _tournaments =>
-      (_raceData?['tournaments'] as List?)
-          ?.whereType<Map>()
-          .map((e) => e.cast<String, dynamic>())
-          .where((t) => Tournament.myStatus(t) != 'DECLINED')
-          .toList() ??
-      const [];
+  List<Map<String, dynamic>> get _tournaments => _safeRows(
+    _raceData?['tournaments'],
+  ).where((t) => Tournament.myStatus(t) != 'DECLINED').toList();
 
   /// §4.2: tournaments classified into one personal-list state.
   List<Map<String, dynamic>> _tournamentsIn(TournamentListState state) {
@@ -413,8 +416,12 @@ class _RacesTabState extends State<RacesTab> {
   /// ONE eager adapter (the featured horizontal strip needs a box context and
   /// misbehaves as a bare sibling sliver); race sections build their rows lazily.
   List<Widget> _buildContentSlivers() {
-    final invites = _invites;
-    final tournamentInvites = _tournamentInvites;
+    final invites = widget.inviteDecisionGateEnabled
+        ? const <Map<String, dynamic>>[]
+        : _invites;
+    final tournamentInvites = widget.inviteDecisionGateEnabled
+        ? const <Map<String, dynamic>>[]
+        : _tournamentInvites;
 
     return <Widget>[
       SliverToBoxAdapter(
@@ -424,6 +431,7 @@ class _RacesTabState extends State<RacesTab> {
               activeCount: _countFor(_PersonalState.active),
               inviteCount: invites.length + tournamentInvites.length,
               waitingCount: _countFor(_PersonalState.pending),
+              gateEnabled: widget.inviteDecisionGateEnabled,
               potKey: widget.tutorialPotKey,
             ),
             // The FEATURED strip (seeded daily/weekly races + seeded brackets)
@@ -594,12 +602,11 @@ class _RacesTabState extends State<RacesTab> {
     required int activeCount,
     required int inviteCount,
     required int waitingCount,
+    required bool gateEnabled,
     GlobalKey? potKey,
   }) {
     return DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.of(context).roofLight,
-      ),
+      decoration: BoxDecoration(color: AppColors.of(context).roofLight),
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
         child: KeyedSubtree(
@@ -631,6 +638,7 @@ class _RacesTabState extends State<RacesTab> {
                   activeCount: activeCount,
                   inviteCount: inviteCount,
                   waitingCount: waitingCount,
+                  gateEnabled: gateEnabled,
                 ),
                 if (widget.displayName != null) ...[
                   const SizedBox(height: 14),
@@ -1016,45 +1024,22 @@ class _RacesTabState extends State<RacesTab> {
       itemCount: entries.length,
       itemBuilder: (context, i) {
         final entry = entries[i];
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (entry.isTournament)
-              _buildTournamentRow(entry.data, i)
-            else
-              _buildRaceRow(
-                entry.data,
-                i,
-                cardKey: i == 0 ? widget.tutorialCardKey : null,
-                boxKey: i == 0 ? widget.tutorialBoxKey : null,
-              ),
-            if (i != entries.length - 1)
-              Container(
-                height: 1,
-                color: AppColors.of(
-                  context,
-                ).parchmentBorder.withValues(alpha: 0.9),
-              ),
-          ],
+        if (entry.isTournament) {
+          return _buildTournamentRow(entry.data, i);
+        }
+        return _buildRaceRow(
+          entry.data,
+          i,
+          cardKey: i == 0 ? widget.tutorialCardKey : null,
+          boxKey: i == 0 ? widget.tutorialBoxKey : null,
         );
       },
     );
 
     return [
       SliverPadding(
-        padding: const EdgeInsets.only(bottom: 8),
-        sliver: DecoratedSliver(
-          decoration: BoxDecoration(
-            color: AppColors.of(context).parchment,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: AppColors.of(context).roofDark.withValues(alpha: 0.55),
-              width: 2,
-            ),
-            boxShadow: _raceCardShadow,
-          ),
-          sliver: rows,
-        ),
+        padding: const EdgeInsets.only(top: 2, bottom: 8),
+        sliver: rows,
       ),
     ];
   }
@@ -1335,6 +1320,30 @@ class _RacesTabState extends State<RacesTab> {
     final creator = race['creator'] as Map<String, dynamic>?;
     final creatorName = creator?['displayName'] as String? ?? '';
     final isCreator = race['isCreator'] as bool? ?? false;
+    // Additive list-summary identity. Current backends provide `leader`; old
+    // backends do not, so completed races may reuse their existing `winner`
+    // block and every other missing/malformed case falls back to race initials.
+    // The fallback deliberately does not show the creator's photo: creator and
+    // first place are different concepts.
+    final rawLeader = race['leader'] is Map
+        ? race['leader'] as Map
+        : race['winner'] is Map
+        ? race['winner'] as Map
+        : const <Object?, Object?>{};
+    final leaderAccessories = rawLeader['accessories'] is List
+        ? (rawLeader['accessories'] as List)
+              .whereType<Map>()
+              .map(
+                (item) => <String, dynamic>{
+                  for (final entry in item.entries)
+                    if (entry.key is String) entry.key as String: entry.value,
+                },
+              )
+              .toList(growable: false)
+        : const <Map<String, dynamic>>[];
+    final leaderAnimal = rawLeader['animal'] is String
+        ? rawLeader['animal'] as String
+        : null;
     final myPlacement = race['myPlacement'] as int?;
     // Detour Sign: the backend nulls myPlacement and sets this additive flag
     // so the list shows "???" instead of a placement (matches the race-detail
@@ -1432,174 +1441,225 @@ class _RacesTabState extends State<RacesTab> {
     final showTrailingContent =
         myPlacement != null || myPlacementHidden || showTrailingStatus;
 
-    return KeyedSubtree(
-      key: cardKey,
-      child: Material(
-        color: stripeColor,
-        child: InkWell(
-          onTap: raceId.isEmpty ? null : () => _navigateToRaceDetail(raceId),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-            child: Row(
-              key: Key('race-card-header-$raceId'),
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
+      child: KeyedSubtree(
+        key: cardKey,
+        child: Container(
+          key: Key('race-card-surface-$raceId'),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: _raceCardShadow,
+          ),
+          child: Material(
+            color: stripeColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(
+                color: AppColors.of(
+                  context,
+                ).parchmentBorder.withValues(alpha: 0.9),
+                width: 1.5,
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: raceId.isEmpty
+                  ? null
+                  : () => _navigateToRaceDetail(raceId),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
+                child: Row(
+                  key: Key('race-card-header-$raceId'),
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    RacerAvatar(
+                      key: Key('race-leader-avatar-$raceId'),
+                      rank: 1,
+                      accessories: leaderAccessories,
+                      animal: leaderAnimal,
+                      size: 52,
+                      showMedalRing: false,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Flexible(
-                            child: Text(
-                              name,
-                              style: PixelText.title(
-                                size: 18,
-                                color: AppColors.of(context).textDark,
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  name,
+                                  style: PixelText.title(
+                                    size: 18,
+                                    color: AppColors.of(context).textDark,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
+                              ),
+                              if (isTeamRace && teamSize != null) ...[
+                                const SizedBox(width: 6),
+                                TeamFormatChip(teamSize: teamSize),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 3),
+                          // Active races show time-left then the user's race inventory
+                          // (4 slots: held powerup sprites, mystery-box crates, then
+                          // queued crates, then empty). Everything else keeps the
+                          // runner count.
+                          if (status == 'ACTIVE') ...[
+                            Text(
+                              timeLabel,
+                              style: PixelText.body(size: 15, color: timeColor),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                            // TR-806: mini team scoreline (only when the payload
+                            // carries totals — older backends simply omit it).
+                            if (teamTotals != null) ...[
+                              const SizedBox(height: 4),
+                              TeamScoreline(
+                                teamAName: TeamRace.teamName(
+                                  race,
+                                  RaceTeam.teamA,
+                                ),
+                                teamBName: TeamRace.teamName(
+                                  race,
+                                  RaceTeam.teamB,
+                                ),
+                                teamATotal: teamTotals.$1,
+                                teamBTotal: teamTotals.$2,
+                                showRope: false,
+                              ),
+                              if (teamsAsOfLabel != null)
+                                Padding(
+                                  key: Key('team-totals-as-of-$raceId'),
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Text(
+                                    teamsAsOfLabel,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: PixelText.body(
+                                      size: 10,
+                                      color: AppColors.of(
+                                        context,
+                                      ).textMid.withValues(alpha: 0.8),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                            const SizedBox(height: 4),
+                            // Boxes and the buff/debuff badges share one row, split
+                            // by a slim muted rule. The separator + cluster only
+                            // render when there are active effects, so a no-effects
+                            // row is just the boxes as before.
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildInventoryRow(
+                                    slotItems,
+                                    mysteryBoxCount,
+                                    queuedBoxCount,
+                                    rowKey: boxKey,
+                                  ),
+                                  if (effectCluster != null) ...[
+                                    Padding(
+                                      key: Key('race-effects-sep-$raceId'),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 7,
+                                      ),
+                                      child: Container(
+                                        width: 1,
+                                        height: 22,
+                                        color: AppColors.of(
+                                          context,
+                                        ).textMid.withValues(alpha: 0.35),
+                                      ),
+                                    ),
+                                    effectCluster,
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ] else
+                            Text(
+                              '$participantCount runner${participantCount == 1 ? '' : 's'}${isInvite && creatorName.isNotEmpty ? ' \u2022 by ${atName(creatorName)}' : ''}',
+                              style: PixelText.body(
+                                size: 14,
+                                color: AppColors.of(context).textMid,
                               ),
                               overflow: TextOverflow.ellipsis,
                               maxLines: 1,
                             ),
-                          ),
-                          if (isTeamRace && teamSize != null) ...[
-                            const SizedBox(width: 6),
-                            TeamFormatChip(teamSize: teamSize),
+                        ],
+                      ),
+                    ),
+                    if (showTrailingContent) ...[
+                      const SizedBox(width: 8),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (myPlacement != null)
+                            _buildMetaChip(
+                              '${formatOrdinal(myPlacement)} PLACE',
+                              backgroundColor: AppColors.of(context).isDark
+                                  ? AppColors.of(context).pillGreenDark
+                                  : AppColors.of(
+                                      context,
+                                    ).pillGreenDark.withValues(alpha: 0.16),
+                              textColor: AppColors.of(context).isDark
+                                  ? AppColors.of(context).textLight
+                                  : AppColors.of(context).pillGreenDark,
+                            )
+                          else if (myPlacementHidden)
+                            _buildMetaChip(
+                              '??? PLACE',
+                              backgroundColor: AppColors.of(
+                                context,
+                              ).textMid.withValues(alpha: 0.16),
+                              textColor: AppColors.of(context).textMid,
+                            ),
+                          if (showTrailingStatus) ...[
+                            if (myPlacement != null || myPlacementHidden)
+                              const SizedBox(height: 4),
+                            Text(
+                              statusLabel,
+                              style: PixelText.title(
+                                size: 12,
+                                color: badgeColor,
+                              ),
+                              textAlign: TextAlign.right,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              timeLabel,
+                              style: PixelText.body(
+                                size: 12,
+                                color: AppColors.of(context).textMid,
+                              ),
+                              textAlign: TextAlign.right,
+                            ),
                           ],
                         ],
                       ),
-                      const SizedBox(height: 3),
-                      // Active races show time-left then the user's race inventory
-                      // (4 slots: held powerup sprites, mystery-box crates, then
-                      // queued crates, then empty). Everything else keeps the
-                      // runner count.
-                      if (status == 'ACTIVE') ...[
-                        Text(
-                          timeLabel,
-                          style: PixelText.body(size: 13, color: timeColor),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
-                        // TR-806: mini team scoreline (only when the payload
-                        // carries totals — older backends simply omit it).
-                        if (teamTotals != null) ...[
-                          const SizedBox(height: 4),
-                          TeamScoreline(
-                            teamAName: TeamRace.teamName(race, RaceTeam.teamA),
-                            teamBName: TeamRace.teamName(race, RaceTeam.teamB),
-                            teamATotal: teamTotals.$1,
-                            teamBTotal: teamTotals.$2,
-                            showRope: false,
-                          ),
-                          if (teamsAsOfLabel != null)
-                            Padding(
-                              key: Key('team-totals-as-of-$raceId'),
-                              padding: const EdgeInsets.only(top: 2),
-                              child: Text(
-                                teamsAsOfLabel,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: PixelText.body(
-                                  size: 10,
-                                  color: AppColors.of(
-                                    context,
-                                  ).textMid.withValues(alpha: 0.8),
-                                ),
-                              ),
-                            ),
-                        ],
-                        const SizedBox(height: 4),
-                        // Boxes and the buff/debuff badges share one row, split
-                        // by a slim muted rule. The separator + cluster only
-                        // render when there are active effects, so a no-effects
-                        // row is just the boxes as before.
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _buildInventoryRow(
-                              slotItems,
-                              mysteryBoxCount,
-                              queuedBoxCount,
-                              rowKey: boxKey,
-                            ),
-                            if (effectCluster != null) ...[
-                              Padding(
-                                key: Key('race-effects-sep-$raceId'),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 7,
-                                ),
-                                child: Container(
-                                  width: 1,
-                                  height: 18,
-                                  color: AppColors.of(
-                                    context,
-                                  ).textMid.withValues(alpha: 0.35),
-                                ),
-                              ),
-                              Flexible(child: effectCluster),
-                            ],
-                          ],
-                        ),
-                      ] else
-                        Text(
-                          '$participantCount runner${participantCount == 1 ? '' : 's'}${isInvite && creatorName.isNotEmpty ? ' \u2022 by ${atName(creatorName)}' : ''}',
-                          style: PixelText.body(
-                            size: 14,
-                            color: AppColors.of(context).textMid,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
                     ],
-                  ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      key: Key('race-card-arrow-$raceId'),
+                      size: 30,
+                      color: AppColors.of(context).successText,
+                    ),
+                  ],
                 ),
-                if (showTrailingContent) ...[
-                  const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (myPlacement != null)
-                        _buildMetaChip(
-                          '${formatOrdinal(myPlacement)} PLACE',
-                          backgroundColor: AppColors.of(context).isDark
-                              ? AppColors.of(context).pillGreenDark
-                              : AppColors.of(
-                                  context,
-                                ).pillGreenDark.withValues(alpha: 0.16),
-                          textColor: AppColors.of(context).isDark
-                              ? AppColors.of(context).textLight
-                              : AppColors.of(context).pillGreenDark,
-                        )
-                      else if (myPlacementHidden)
-                        _buildMetaChip(
-                          '??? PLACE',
-                          backgroundColor: AppColors.of(
-                            context,
-                          ).textMid.withValues(alpha: 0.16),
-                          textColor: AppColors.of(context).textMid,
-                        ),
-                      if (showTrailingStatus) ...[
-                        if (myPlacement != null || myPlacementHidden)
-                          const SizedBox(height: 4),
-                        Text(
-                          statusLabel,
-                          style: PixelText.title(size: 12, color: badgeColor),
-                          textAlign: TextAlign.right,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          timeLabel,
-                          style: PixelText.body(
-                            size: 12,
-                            color: AppColors.of(context).textMid,
-                          ),
-                          textAlign: TextAlign.right,
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
-              ],
+              ),
             ),
           ),
         ),
@@ -1636,7 +1696,7 @@ class _RacesTabState extends State<RacesTab> {
     final overflow = ordered.length - visible.length;
 
     final palette = AppColors.of(context);
-    const plateSize = 18.0;
+    const plateSize = 22.0;
 
     final children = <Widget>[];
     for (var i = 0; i < visible.length; i++) {
@@ -1659,7 +1719,7 @@ class _RacesTabState extends State<RacesTab> {
             borderRadius: BorderRadius.circular(5),
             border: Border.all(color: tint.withValues(alpha: 0.35), width: 1),
           ),
-          child: PowerupIcon(type: type ?? '', size: 14),
+          child: PowerupIcon(type: type ?? '', size: 18),
         ),
       );
     }
@@ -1697,7 +1757,7 @@ class _RacesTabState extends State<RacesTab> {
     GlobalKey? rowKey,
   }) {
     const activeSlots = 3;
-    const slotSize = 18.0;
+    const slotSize = 22.0;
     final active = <Widget>[];
 
     if (slotItems.isNotEmpty) {
@@ -1729,7 +1789,7 @@ class _RacesTabState extends State<RacesTab> {
 
     return SizedBox(
       key: rowKey,
-      height: 20,
+      height: 24,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1764,11 +1824,9 @@ class _RacesTabState extends State<RacesTab> {
   }
 }
 
-/// Loading placeholder for the race list. Mirrors the real layout — two
-/// titled sections (gold-tick header + count pill + collapse chevron) each
-/// over a parchment card of race-row skeletons. The first section stands in
-/// for ACTIVE races: its rows carry the 4-slot inventory crate strip. The
-/// second stands in for a placement section: its rows carry a trailing chip.
+/// Loading placeholder for the race list. Its rows mirror the rounded ticket
+/// composition so loading into real data does not jump from a full-bleed strip
+/// to an inset portrait card.
 class _RacesLoadingSkeleton extends StatelessWidget {
   const _RacesLoadingSkeleton();
 
@@ -1807,40 +1865,56 @@ class _RacesLoadingSkeleton extends StatelessWidget {
     required bool striped,
     required bool withCrate,
   }) {
-    return Container(
-      color: striped
-          ? AppColors.of(context).parchmentLight
-          : AppColors.of(context).parchment,
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SkeletonLine(width: 148, height: 15),
-                const SizedBox(height: 6),
-                const SkeletonLine(width: 96, height: 11),
-                if (withCrate) ...[
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      for (var i = 0; i < 4; i++) ...[
-                        if (i > 0) const SizedBox(width: 3),
-                        const SkeletonBox(width: 18, height: 18, radius: 4),
-                      ],
-                    ],
-                  ),
-                ],
-              ],
-            ),
+    final color = striped
+        ? AppColors.of(context).parchmentLight
+        : AppColors.of(context).parchment;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: AppColors.of(context).parchmentBorder.withValues(alpha: 0.9),
+            width: 1.5,
           ),
-          if (!withCrate) ...[
-            const SizedBox(width: 10),
-            const SkeletonBox(width: 54, height: 22, radius: 11),
+          boxShadow: _raceCardShadow,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const SkeletonBox(width: 52, height: 52, radius: 26),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SkeletonLine(width: 148, height: 15),
+                  const SizedBox(height: 6),
+                  const SkeletonLine(width: 96, height: 13),
+                  if (withCrate) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        for (var i = 0; i < 4; i++) ...[
+                          if (i > 0) const SizedBox(width: 3),
+                          const SkeletonBox(width: 22, height: 22, radius: 5),
+                        ],
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (!withCrate) ...[
+              const SizedBox(width: 8),
+              const SkeletonBox(width: 54, height: 22, radius: 11),
+            ],
+            const SizedBox(width: 6),
+            const SkeletonBox(width: 20, height: 30, radius: 8),
           ],
-        ],
+        ),
       ),
     );
   }
@@ -1850,33 +1924,11 @@ class _RacesLoadingSkeleton extends StatelessWidget {
     required int rows,
     required bool withCrate,
   }) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.of(context).parchment,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: AppColors.of(context).roofDark.withValues(alpha: 0.55),
-          width: 2,
-        ),
-        boxShadow: _raceCardShadow,
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Column(
-          children: [
-            for (var i = 0; i < rows; i++) ...[
-              if (i > 0)
-                Container(
-                  height: 1,
-                  color: AppColors.of(
-                    context,
-                  ).parchmentBorder.withValues(alpha: 0.9),
-                ),
-              _row(context, striped: i.isOdd, withCrate: withCrate),
-            ],
-          ],
-        ),
-      ),
+    return Column(
+      children: [
+        for (var i = 0; i < rows; i++)
+          _row(context, striped: i.isOdd, withCrate: withCrate),
+      ],
     );
   }
 
@@ -1916,11 +1968,13 @@ class _RaceHeaderMetrics extends StatelessWidget {
     required this.activeCount,
     required this.inviteCount,
     required this.waitingCount,
+    required this.gateEnabled,
   });
 
   final int activeCount;
   final int inviteCount;
   final int waitingCount;
+  final bool gateEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -1940,9 +1994,14 @@ class _RaceHeaderMetrics extends StatelessWidget {
         children: [
           _RaceMetricText(label: 'ACTIVE', count: activeCount),
           _MetricDivider(),
-          _RaceMetricText(label: 'INVITES', count: inviteCount),
-          _MetricDivider(),
-          _RaceMetricText(label: 'PENDING', count: waitingCount),
+          if (!gateEnabled) ...[
+            _RaceMetricText(label: 'INVITES', count: inviteCount),
+            _MetricDivider(),
+          ],
+          _RaceMetricText(
+            label: gateEnabled ? 'WAITING' : 'PENDING',
+            count: waitingCount,
+          ),
         ],
       ),
     );

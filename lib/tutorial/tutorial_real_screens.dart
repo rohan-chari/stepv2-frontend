@@ -95,6 +95,7 @@ class TutorialRealHost extends StatelessWidget {
     switch (page) {
       case TutorialMockPage.home:
         return HomeTab(
+          isTutorialPreview: true,
           stepData: tutorialPreviewStepData(),
           isLoading: false,
           error: null,
@@ -111,6 +112,9 @@ class TutorialRealHost extends StatelessWidget {
           equippedAccessories: tutorialPreviewAccessories,
           incomingFriendRequests: 2,
           raceCard: tutorialPreviewHomeRaceCard(),
+          suggestedRacesState: Loadable.success(
+            tutorialPreviewHomeSuggestions(),
+          ),
           tutorialStepsKey: keys['home.steps'],
           tutorialMilestonesKey: keys['home.milestones'],
           tutorialShopKey: keys['home.shop'],
@@ -118,6 +122,7 @@ class TutorialRealHost extends StatelessWidget {
         );
       case TutorialMockPage.races:
         return RacesTab(
+          inviteDecisionGateEnabled: true,
           authService: authService,
           racesState: Loadable.success(tutorialPreviewRacesData()),
           friendsSteps: const [],

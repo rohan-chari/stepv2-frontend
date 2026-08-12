@@ -238,9 +238,7 @@ class _RankedTabState extends State<RankedTab> {
 
   Widget _buildHeader() {
     return DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.of(context).roofLight,
-      ),
+      decoration: BoxDecoration(color: AppColors.of(context).roofLight),
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
         child: Padding(
@@ -570,7 +568,7 @@ class _RankedTabState extends State<RankedTab> {
       case 'promo':
         if (s.leadOverCut != null) {
           big = _fmtSteps(s.leadOverCut!);
-          caption = 'steps ahead of the move-up line — hold it';
+          caption = 'steps ahead of the move-up line. Hold it';
         } else {
           big = _ordinal(s.rank);
           caption = s.upTier != null
@@ -583,7 +581,7 @@ class _RankedTabState extends State<RankedTab> {
           caption = 'more steps to climb out of the drop zone';
         } else {
           big = _ordinal(s.rank);
-          caption = 'in the drop zone — keep walking';
+          caption = 'in the drop zone. Keep walking';
         }
       default:
         if (s.gapUp != null && s.upTier != null) {
@@ -746,7 +744,7 @@ class _RankedTabState extends State<RankedTab> {
           TierMedal(tier: shown, size: 96),
           const SizedBox(height: 12),
           Text(
-            "You're in${weekIndex != null ? ' — Week $weekIndex' : ''}",
+            "You're in${weekIndex != null ? '. Week $weekIndex' : ''}",
             style: PixelText.title(
               size: 18,
               color: AppColors.of(context).textDark,
@@ -755,7 +753,7 @@ class _RankedTabState extends State<RankedTab> {
           const SizedBox(height: 6),
           Text(
             'Walk 5,000+ steps today to join this week’s ${shown.label} '
-            'group — about 30 walkers at your level — and start climbing.',
+            'group and start climbing. That’s about 30 walkers at your level.',
             textAlign: TextAlign.center,
             style: PixelText.body(
               size: 13,
@@ -983,7 +981,9 @@ class _RankedTabState extends State<RankedTab> {
             imageUrl: profilePhotoUrl,
             size: 34,
             isUser: isMe,
-            borderColor: isMe ? AppColors.of(context).accent : tier.colorOf(context),
+            borderColor: isMe
+                ? AppColors.of(context).accent
+                : tier.colorOf(context),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -1064,11 +1064,11 @@ class _RankedTabState extends State<RankedTab> {
           'the bottom $demote drop down.';
     } else if (demote == 0) {
       rule =
-          'Most steps wins. Finish in the top $promote to move up a tier — '
+          'Most steps wins. Finish in the top $promote to move up a tier. '
           'Bronze is the bottom, so you can only climb.';
     } else {
       rule =
-          'Most steps wins. The bottom $demote drop a tier — Legend is the '
+          'Most steps wins. The bottom $demote drop a tier. Legend is the '
           'top, so hold your spot to defend it.';
     }
     showModalBottomSheet<void>(
@@ -1130,7 +1130,7 @@ class _RankedTabState extends State<RankedTab> {
                 const _HowItWorksLine(
                   icon: Icons.refresh_rounded,
                   text:
-                      'Resets every Monday — fresh group, fresh shot. Climb from '
+                      'Resets every Monday. Fresh group, fresh shot. Climb from '
                       'Bronze to Legend.',
                 ),
                 const SizedBox(height: 14),
@@ -1317,7 +1317,10 @@ class _RankedTabState extends State<RankedTab> {
                 top: 148,
                 child: Text(
                   tierText,
-                  style: PixelText.title(size: 28, color: tier.colorOf(context)),
+                  style: PixelText.title(
+                    size: 28,
+                    color: tier.colorOf(context),
+                  ),
                 ),
               ),
             ],
@@ -1541,7 +1544,10 @@ class _RankedTabState extends State<RankedTab> {
           if (!grouped)
             TierBadge(tier: row.tier, division: row.division)
           else if (row.division != null)
-            _DivisionPill(division: row.division!, color: row.tier.colorOf(context))
+            _DivisionPill(
+              division: row.division!,
+              color: row.tier.colorOf(context),
+            )
           else
             const SizedBox(width: 28),
           const SizedBox(width: 8),
@@ -2586,7 +2592,7 @@ class _ComingSoonPanel extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Keep walking — your steps will count toward the ladder.',
+            'Keep walking. Your steps will count toward the ladder.',
             textAlign: TextAlign.center,
             style: PixelText.body(
               size: 13,

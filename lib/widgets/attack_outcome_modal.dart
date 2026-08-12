@@ -151,7 +151,7 @@ class AttackOutcomeModal extends StatelessWidget {
       case AttackOutcome.redirected:
         return 'A decoy bounced your attack onto another racer';
       case AttackOutcome.reflectedBlocked:
-        return 'Their Mirror bounced your attack back — but your Compression Socks blocked it!';
+        return 'Their Mirror bounced your attack back. Your Compression Socks blocked it!';
       case AttackOutcome.blocked:
       case AttackOutcome.applied:
         return 'Your attack was blocked';
@@ -210,7 +210,8 @@ class AttackOutcomeModal extends StatelessWidget {
                 children: [
                   _iconBox(
                     context,
-                    type: result['reflectedBy'] is String &&
+                    type:
+                        result['reflectedBy'] is String &&
                             (result['reflectedBy'] as String).isNotEmpty
                         ? result['reflectedBy'] as String
                         : 'MIRROR',

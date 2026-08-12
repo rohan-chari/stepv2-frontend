@@ -178,8 +178,16 @@ class DemoRaceEngine {
       'displayName': rivalLeaderName,
       'profilePhotoUrl': null,
     },
-    {'id': 'demo-jordan', 'displayName': rivalSecondName, 'profilePhotoUrl': null},
-    {'id': 'demo-priya', 'displayName': rivalThirdName, 'profilePhotoUrl': null},
+    {
+      'id': 'demo-jordan',
+      'displayName': rivalSecondName,
+      'profilePhotoUrl': null,
+    },
+    {
+      'id': 'demo-priya',
+      'displayName': rivalThirdName,
+      'profilePhotoUrl': null,
+    },
   ];
 
   /// Beat 1 is satisfied: the user created the race. [durationDays] is whatever
@@ -357,7 +365,7 @@ class DemoRaceEngine {
           _pushActivity(
             'POWERUP_USED',
             type!,
-            'You pulled on Compression Socks — shielded from the next attack.',
+            'You pulled on Compression Socks. Shielded from the next attack.',
           );
         case 'SHORTCUT':
           stepsStolen = _resolveShortcutSteal(targetUserId);
@@ -400,8 +408,8 @@ class DemoRaceEngine {
         'eventType': 'POWERUP_USED',
         'powerupType': 'SHORTCUT',
         'body':
-            '$rivalLeaderName tried to steal 1,000 steps from you — '
-            'blocked!',
+            '$rivalLeaderName tried to steal 1,000 steps from you. '
+            'Blocked!',
         'actorUserId': rivalLeaderUserId,
         'targetUserId': myUserId,
         'createdAt': DateTime.now().toIso8601String(),
@@ -488,6 +496,24 @@ class DemoRaceEngine {
       'tournamentId': null,
       'maxDurationDays': _durationDays,
       'buyInAmount': 0,
+      'payoutPreset': 'TOP3_70_20_10',
+      'projectedPotCoins': 240,
+      'prizePool': {
+        'coins': 240,
+        'projected': !_completed,
+        'atMax': false,
+        'playerCount': participants.length,
+        'durationDays': _durationDays,
+        'durationPoints': _durationDays <= 1 ? 1 : 2,
+        'coinUnit': 20,
+        'maxCoins': 16000,
+        'funded': true,
+      },
+      'payoutTiers': const [
+        {'placement': 1, 'amount': 168},
+        {'placement': 2, 'amount': 48},
+        {'placement': 3, 'amount': 24},
+      ],
       'startedAt': _startedAt.toIso8601String(),
       'endsAt': (wallNow ?? now).add(remainingAt(now)).toIso8601String(),
       'myPlacementAlertsMuted': false,

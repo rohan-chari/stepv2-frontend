@@ -339,9 +339,7 @@ abstract final class TeamRace {
     required int myTotalSteps,
   }) {
     return targets
-        .where(
-          (t) => ((t['totalSteps'] as num?)?.toInt() ?? 0) > myTotalSteps,
-        )
+        .where((t) => ((t['totalSteps'] as num?)?.toInt() ?? 0) > myTotalSteps)
         .toList(growable: false);
   }
 
@@ -432,13 +430,13 @@ bool raceCountsAsReviewHappyMoment(Map<String, dynamic> race) {
 String teamRaceErrorCopy(String? code, {String? friendName}) {
   switch (code) {
     case 'TEAM_FULL':
-      return "That side's full — hop on the other team!";
+      return "That side's full. Hop on the other team!";
     case 'TEAMS_UNEVEN':
       return 'Teams have to be even to start. Even them up!';
     case 'TEAM_SIZE_TOO_SMALL':
       return "Can't shrink below a side that's already filled.";
     case 'RACE_ALREADY_STARTED':
-      return "This race already started — you can't hop in now.";
+      return "This race already started. You can't hop in now.";
     case 'UPDATE_REQUIRED':
       return 'Update the app to join team races.';
     case 'INVITEE_NEEDS_UPDATE':
@@ -456,7 +454,7 @@ String teamRaceErrorCopy(String? code, {String? friendName}) {
       return 'You can only target the enemy team.';
     // Issue 3c — respond/join failures surfaced from the homepage handlers.
     case 'RACE_NOT_FOUND':
-      return "That race is gone — it may have been cancelled.";
+      return "That race is gone. It may have been cancelled.";
     case 'RACE_NOT_ACCEPTING':
       return "This race isn't taking new racers right now.";
     case 'NOT_INVITED':
@@ -464,7 +462,7 @@ String teamRaceErrorCopy(String? code, {String? friendName}) {
     case 'ALREADY_RESPONDED':
       return "You're already in this race!";
     case 'PAID_RACE_LOCKED':
-      return "Someone already finished — this paid race is locked.";
+      return "Someone already finished. This paid race is locked.";
     case 'INSUFFICIENT_COINS':
       return "You don't have enough coins for the buy-in.";
     // Issue 4 — buy-in edit. The server normally names the offending player in

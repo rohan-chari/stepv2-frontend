@@ -233,10 +233,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
         Text(
           _isPublic ? 'ANYONE CAN JOIN' : 'INVITE ONLY',
           key: const Key('race-visibility-subcopy'),
-          style: PixelText.body(
-            size: 11,
-            color: AppColors.of(context).textMid,
-          ),
+          style: PixelText.body(size: 11, color: AppColors.of(context).textMid),
         ),
       ],
     );
@@ -406,7 +403,7 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                 const SizedBox(height: 2),
                 Text(
                   _teamSize < floor
-                      ? 'TOO SMALL — $floor ALREADY IN'
+                      ? 'TOO SMALL. $floor ALREADY IN'
                       : '${_teamSize * 2} RACERS MAX',
                   style: PixelText.body(
                     size: 10,

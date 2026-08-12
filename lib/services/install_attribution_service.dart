@@ -125,6 +125,9 @@ class InstallAttributionService {
       if (resolution.code != null) {
         await _authService.setPendingReferralCode(resolution.code);
       }
+      if (resolution.raceToken != null) {
+        await _authService.setPendingShareToken(resolution.raceToken);
+      }
       await _stashOutcome(prefs, resolution.outcome);
       if (resolution.outcome == InstallAttributionOutcome.readDenied) {
         await prefs.setBool(keyDetectedButUnread, true);
@@ -205,11 +208,13 @@ class InstallAttributionService {
           );
         }
         final code = extractReferralCode(raw);
-        return code == null
+        final raceToken = extractRaceShareToken(raw);
+        return code == null && raceToken == null
             ? const _PlatformResolution(InstallAttributionOutcome.readNoCode)
             : _PlatformResolution(
                 InstallAttributionOutcome.installReferrer,
                 code: code,
+                raceToken: raceToken,
               );
       case InstallPlatform.ios:
         // Silent presence check first — no "Allow Paste?" prompt fires here.
@@ -228,11 +233,13 @@ class InstallAttributionService {
           );
         }
         final code = extractReferralCode(read.value);
-        return code == null
+        final raceToken = extractRaceShareToken(read.value);
+        return code == null && raceToken == null
             ? const _PlatformResolution(InstallAttributionOutcome.readNoCode)
             : _PlatformResolution(
                 InstallAttributionOutcome.codeCaptured,
                 code: code,
+                raceToken: raceToken,
               );
       case InstallPlatform.other:
         return const _PlatformResolution(InstallAttributionOutcome.detectMiss);
@@ -276,19 +283,28 @@ class InstallAttributionService {
 
     // Android referrer query string: pull the `referrer` param and recurse.
     if (value.contains('=')) {
-      final params = Uri.splitQueryString(value);
-      final referrer = params['referrer'];
-      if (referrer != null && referrer.isNotEmpty && referrer != value) {
-        final fromParam = extractReferralCode(referrer);
-        if (fromParam != null) return fromParam;
-      }
+      try {
+        final params = Uri.splitQueryString(value);
+        final direct = params['ref'];
+        if (direct != null) {
+          final fromDirect = extractReferralCode(direct);
+          if (fromDirect != null) return fromDirect;
+        }
+        final referrer = params['referrer'];
+        if (referrer != null && referrer.isNotEmpty && referrer != value) {
+          final fromParam = extractReferralCode(referrer);
+          if (fromParam != null) return fromParam;
+        }
+      } catch (_) {}
     }
 
     // Full URL: reuse the deep-link parser (handles /r/<code>).
     if (value.contains('/')) {
       final uri = Uri.tryParse(value);
       if (uri != null) {
-        final fromUri = DeepLinkService.parseReferralCode(uri);
+        final fromUri =
+            DeepLinkService.parseReferralQuery(uri) ??
+            DeepLinkService.parseReferralCode(uri);
         if (fromUri != null) return fromUri;
       }
     }
@@ -298,13 +314,45 @@ class InstallAttributionService {
     if (RegExp(r'^BARA-[A-Z0-9]{2,32}$').hasMatch(upper)) return upper;
     return null;
   }
+
+  static String? extractRaceShareToken(String? raw) {
+    if (raw == null) return null;
+    final value = raw.trim();
+    if (value.isEmpty) return null;
+    if (value.contains('=')) {
+      try {
+        final params = Uri.splitQueryString(value);
+        for (final key in const [
+          'race',
+          'raceToken',
+          'shareToken',
+          'referrer',
+        ]) {
+          final nested = params[key];
+          if (nested != null && nested != value) {
+            if (key == 'raceToken' &&
+                RegExp(r'^[A-Za-z0-9_-]{1,128}$').hasMatch(nested) &&
+                !nested.toUpperCase().startsWith(kReferralCodePrefix)) {
+              return nested;
+            }
+            final token = extractRaceShareToken(nested);
+            if (token != null) return token;
+          }
+        }
+      } catch (_) {}
+    }
+    final uri = Uri.tryParse(value);
+    if (uri != null) return DeepLinkService.parseShareToken(uri);
+    return null;
+  }
 }
 
 class _PlatformResolution {
-  const _PlatformResolution(this.outcome, {this.code});
+  const _PlatformResolution(this.outcome, {this.code, this.raceToken});
 
   final InstallAttributionOutcome outcome;
   final String? code;
+  final String? raceToken;
 }
 
 class _ClipboardRead {

@@ -141,7 +141,7 @@ void main() {
 
   group('§6.1 placement', () {
     // 1. SETUP renders above the race section.
-    testWidgets('SETUP sits above the RACES section', (tester) async {
+    testWidgets('SETUP sits above the SUGGESTED RACES section', (tester) async {
       await tester.binding.setSurfaceSize(const Size(800, 1600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -155,19 +155,15 @@ void main() {
       await _flush(tester);
 
       expect(find.text('SETUP'), findsOneWidget);
-      expect(find.text('RACES'), findsWidgets);
+      expect(find.text('SUGGESTED RACES'), findsOneWidget);
       expect(find.byKey(const Key('home-rename-chip')), findsOneWidget);
 
       final setupDy = tester.getTopLeft(find.text('SETUP')).dy;
-      // "RACES" appears both as the section header and inside the empty-state
-      // card, so assert against every one of them.
-      for (final race in find.text('RACES').evaluate()) {
-        expect(
-          setupDy,
-          lessThan(tester.getTopLeft(find.byWidget(race.widget)).dy),
-          reason: 'setup work is a prerequisite for the races below it',
-        );
-      }
+      expect(
+        setupDy,
+        lessThan(tester.getTopLeft(find.text('SUGGESTED RACES')).dy),
+        reason: 'setup work is a prerequisite for the races below it',
+      );
     });
 
     // 1b. The stagger indices still run top-to-bottom.
@@ -186,11 +182,10 @@ void main() {
       await tester.pumpWidget(_buildHome(authService, api));
       await _flush(tester);
 
-      // Today's Coins moved from index 3 to 4 when batch 2026-08-10b item 3
-      // inserted the pending-invite block at 3.
+      // Today's Coins is index 5 after the pending-invite and NEXT RACE slots.
       expect(
         tester.getTopLeft(_staggerAt(2)).dy,
-        lessThan(tester.getTopLeft(_staggerAt(4)).dy),
+        lessThan(tester.getTopLeft(_staggerAt(5)).dy),
       );
     });
 
@@ -225,30 +220,34 @@ void main() {
   group('§6.3 rename chip — server state', () {
     // 3. Server dismissal wins over empty local prefs. (Regression: the chip
     // came back after every sign-out because the local ledger was wiped.)
-    testWidgets('a server dismissal hides the chip even with empty local prefs', (
-      tester,
-    ) async {
-      await tester.binding.setSurfaceSize(const Size(800, 1600));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+    testWidgets(
+      'a server dismissal hides the chip even with empty local prefs',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(800, 1600));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
 
-      final api = _FakeBackendApiService();
-      final authService = await _createAuthService(
-        backendApiService: api,
-        serverRenameChipState: {
-          'auth_rename_chip_shown_count': 1,
-          'auth_rename_chip_dismissed_at': '2026-07-20T10:00:00.000Z',
-        },
-      );
+        final api = _FakeBackendApiService();
+        final authService = await _createAuthService(
+          backendApiService: api,
+          serverRenameChipState: {
+            'auth_rename_chip_shown_count': 1,
+            'auth_rename_chip_dismissed_at': '2026-07-20T10:00:00.000Z',
+          },
+        );
 
-      await tester.pumpWidget(_buildHome(authService, api));
-      await _flush(tester);
+        await tester.pumpWidget(_buildHome(authService, api));
+        await _flush(tester);
 
-      expect(find.byKey(const Key('home-rename-chip')), findsNothing);
-      expect(api.shownCalls, 0);
+        expect(find.byKey(const Key('home-rename-chip')), findsNothing);
+        expect(api.shownCalls, 0);
 
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.get(OnboardingStateService.keyRenameChipShownCount), isNull);
-    });
+        final prefs = await SharedPreferences.getInstance();
+        expect(
+          prefs.get(OnboardingStateService.keyRenameChipShownCount),
+          isNull,
+        );
+      },
+    );
 
     // 4. Server count wins.
     testWidgets('a server count at the cap hides the chip', (tester) async {
@@ -411,34 +410,37 @@ void main() {
   });
 
   group('§6.2 AuthService persistence', () {
-    test('applyBackendUser reads both additive fields and signOut clears them', () async {
-      SharedPreferences.setMockInitialValues({
-        'auth_identity_token': 'apple-token',
-        'auth_user_identifier': 'apple-user-123',
-        'auth_session_token': 'session-token',
-      });
-      final auth = AuthService(backendApiService: _FakeBackendApiService());
-      await auth.restoreSession();
-      expect(auth.hasServerRenameChipState, isFalse);
+    test(
+      'applyBackendUser reads both additive fields and signOut clears them',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'auth_identity_token': 'apple-token',
+          'auth_user_identifier': 'apple-user-123',
+          'auth_session_token': 'session-token',
+        });
+        final auth = AuthService(backendApiService: _FakeBackendApiService());
+        await auth.restoreSession();
+        expect(auth.hasServerRenameChipState, isFalse);
 
-      await auth.syncFromBackendUser({
-        'id': 'user-1',
-        'renameChipShownCount': 2,
-        'renameChipDismissedAt': null,
-      });
-      expect(auth.hasServerRenameChipState, isTrue);
-      expect(auth.renameChipShownCount, 2);
-      expect(auth.renameChipDismissedAt, isNull);
+        await auth.syncFromBackendUser({
+          'id': 'user-1',
+          'renameChipShownCount': 2,
+          'renameChipDismissedAt': null,
+        });
+        expect(auth.hasServerRenameChipState, isTrue);
+        expect(auth.renameChipShownCount, 2);
+        expect(auth.renameChipDismissedAt, isNull);
 
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getInt('auth_rename_chip_shown_count'), 2);
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getInt('auth_rename_chip_shown_count'), 2);
 
-      await auth.signOut();
-      expect(auth.hasServerRenameChipState, isFalse);
-      expect(auth.renameChipShownCount, isNull);
-      expect(prefs.get('auth_rename_chip_shown_count'), isNull);
-      expect(prefs.get('auth_rename_chip_dismissed_at'), isNull);
-    });
+        await auth.signOut();
+        expect(auth.hasServerRenameChipState, isFalse);
+        expect(auth.renameChipShownCount, isNull);
+        expect(prefs.get('auth_rename_chip_shown_count'), isNull);
+        expect(prefs.get('auth_rename_chip_dismissed_at'), isNull);
+      },
+    );
 
     test('an absent key leaves the cached value untouched', () async {
       SharedPreferences.setMockInitialValues({
@@ -453,5 +455,64 @@ void main() {
       auth.applyBackendUser({'id': 'user-1'});
       expect(auth.renameChipShownCount, 2);
     });
+  });
+
+  group('discoverable identity remediation', () {
+    testWidgets(
+      'supported explicit-null state is first and replaces old name prompts',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(800, 1600));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final api = _FakeBackendApiService();
+        final auth = await _createAuthService(backendApiService: api);
+        auth.applyBackendUser({
+          'firstName': null,
+          'lastName': null,
+          'nameSetupOnboardingRequired': false,
+          'nameSetupCompletedAt': null,
+        });
+
+        await tester.pumpWidget(_buildHome(auth, api));
+        await _flush(tester);
+
+        expect(
+          find.byKey(const Key('home-add-discoverable-name')),
+          findsOneWidget,
+        );
+        expect(find.text('HELP FRIENDS FIND YOU'), findsOneWidget);
+        expect(find.text('Add your display name'), findsNothing);
+        expect(find.byKey(const Key('home-rename-chip')), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'completed or unsupported contracts do not render identity SETUP',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(800, 1600));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final api = _FakeBackendApiService();
+        final auth = await _createAuthService(backendApiService: api);
+
+        await tester.pumpWidget(_buildHome(auth, api));
+        await _flush(tester);
+        expect(
+          find.byKey(const Key('home-add-discoverable-name')),
+          findsNothing,
+        );
+
+        auth.applyBackendUser({
+          'firstName': 'Nathan',
+          'lastName': 'Chari',
+          'nameSetupOnboardingRequired': false,
+          'nameSetupCompletedAt': '2026-08-11T20:00:00.000Z',
+        });
+        await tester.pumpWidget(_buildHome(auth, api));
+        await _flush(tester);
+        expect(
+          find.byKey(const Key('home-add-discoverable-name')),
+          findsNothing,
+        );
+      },
+    );
   });
 }

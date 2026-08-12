@@ -115,7 +115,10 @@ class DemoAuthService extends AuthService {
   Future<void> updateAdminAccess(bool isAdmin) async {}
 
   @override
-  void applyBackendUser(Map<String, dynamic> backendUser) {}
+  void applyBackendUser(
+    Map<String, dynamic> backendUser, {
+    bool authoritative = false,
+  }) {}
 
   @override
   Future<void> markTutorialOnboardingSeen() async {}
