@@ -582,7 +582,7 @@ void main() {
         findsOneWidget,
       );
       await pump(const Loadable.success([]));
-      expect(find.text('NO RACES TO SUGGEST'), findsOneWidget);
+      expect(find.text('NO SUGGESTED RACES'), findsOneWidget);
       expect(find.text('BROWSE ALL'), findsOneWidget);
       await pump(const Loadable.error('offline'));
       expect(find.text('TRY AGAIN'), findsOneWidget);

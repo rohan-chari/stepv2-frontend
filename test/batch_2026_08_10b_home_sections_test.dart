@@ -171,7 +171,7 @@ void main() {
       // Exactly one invite row on the page.
       expect(find.text('@Jordan challenged you'), findsOneWidget);
       // The discovery section carries its persistent empty-state ticket.
-      final empty = find.text('NO RACES TO SUGGEST');
+      final empty = find.text('NO SUGGESTED RACES');
       expect(empty, findsOneWidget);
       expect(
         tester.getTopLeft(empty).dy,
@@ -192,9 +192,24 @@ void main() {
       );
       await _flush(tester);
 
-      expect(find.text('NO RACES TO SUGGEST'), findsOneWidget);
+      expect(find.text('NO SUGGESTED RACES'), findsOneWidget);
       expect(find.text('BROWSE ALL'), findsOneWidget);
       expect(find.text('SUGGESTED RACES'), findsOneWidget);
+
+      final card = find.byKey(const Key('home-suggestions-empty'));
+      final message = find.text('NO SUGGESTED RACES');
+      final browse = find.text('BROWSE ALL');
+      expect(tester.getSize(card).height, lessThan(180));
+      expect(
+        tester.getTopLeft(browse).dy,
+        greaterThan(tester.getTopLeft(message).dy),
+      );
+      expect(
+        tester
+            .getSize(find.byKey(const Key('home-suggestions-status-action')))
+            .width,
+        greaterThan(tester.getSize(card).width * 0.75),
+      );
     });
 
     testWidgets('no invite → no block, no stray gap', (tester) async {
@@ -288,9 +303,15 @@ void main() {
 
       final card = find.byKey(const Key('home-feedback-card'));
       expect(card, findsOneWidget);
+      final header = find.text('FEEDBACK');
+      expect(header, findsOneWidget);
       expect(
         find.text('Found a bug? Have an idea? Let us know'),
         findsOneWidget,
+      );
+      expect(
+        tester.getTopLeft(header).dy,
+        lessThan(tester.getTopLeft(card).dy),
       );
       expect(
         tester.getTopLeft(card).dy,

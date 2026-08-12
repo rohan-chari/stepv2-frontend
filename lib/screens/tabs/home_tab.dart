@@ -541,53 +541,52 @@ class HomeTab extends StatelessWidget {
   /// submitting by `TutorialPreviewBackendApiService.submitSuggestion` being a
   /// no-op — NOT by the spotlight overlay, which is incidental.
   Widget _buildFeedbackSection(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      child: GameContainer(
-        key: const Key('home-feedback-card'),
-        padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const _HomeSectionHeader(title: 'FEEDBACK'),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: GameContainer(
+            key: const Key('home-feedback-card'),
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const _SectionTick(),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Found a bug? Have an idea? Let us know',
-                    style: PixelText.title(
-                      size: 14,
-                      color: AppColors.of(context).textDark,
+                Text(
+                  'Found a bug? Have an idea? Let us know',
+                  style: PixelText.title(
+                    size: 14,
+                    color: AppColors.of(context).textDark,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Builder(
+                  builder: (btnContext) => PillButton(
+                    key: const Key('home-feedback-button'),
+                    label: 'SEND FEEDBACK',
+                    icon: Icons.chat_bubble_outline_rounded,
+                    variant: PillButtonVariant.secondary,
+                    fontSize: 13,
+                    fullWidth: true,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
+                    onPressed: () => showFeedbackSheet(
+                      context: btnContext,
+                      authService: authService,
+                      backendApiService: backendApiService,
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            Builder(
-              builder: (btnContext) => PillButton(
-                key: const Key('home-feedback-button'),
-                label: 'SEND FEEDBACK',
-                icon: Icons.chat_bubble_outline_rounded,
-                variant: PillButtonVariant.secondary,
-                fontSize: 13,
-                fullWidth: true,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-                onPressed: () => showFeedbackSheet(
-                  context: btnContext,
-                  authService: authService,
-                  backendApiService: backendApiService,
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -2180,26 +2179,26 @@ class _HomeSuggestionStatusTicket extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 240,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
-        child: DecoratedBox(
-          key: Key(error ? 'home-suggestions-error' : 'home-suggestions-empty'),
-          decoration: raceCardDecoration(context),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-            child: Row(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+      child: GameContainer(
+        key: Key(error ? 'home-suggestions-error' : 'home-suggestions-empty'),
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
               children: [
                 Icon(
                   error ? Icons.refresh_rounded : Icons.explore_rounded,
                   color: AppColors.of(context).pillGoldShadow,
-                  size: 28,
+                  size: 26,
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    error ? 'RACES TOOK A DETOUR' : 'NO RACES TO SUGGEST',
+                    error ? 'RACES TOOK A DETOUR' : 'NO SUGGESTED RACES',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: PixelText.title(
@@ -2208,20 +2207,19 @@ class _HomeSuggestionStatusTicket extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
-                PillButton(
-                  label: error ? 'TRY AGAIN' : 'BROWSE ALL',
-                  variant: PillButtonVariant.secondary,
-                  fontSize: 11,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 9,
-                  ),
-                  onPressed: onPressed,
-                ),
               ],
             ),
-          ),
+            const SizedBox(height: 12),
+            PillButton(
+              key: const Key('home-suggestions-status-action'),
+              label: error ? 'TRY AGAIN' : 'BROWSE ALL',
+              variant: PillButtonVariant.secondary,
+              fontSize: 13,
+              fullWidth: true,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              onPressed: onPressed,
+            ),
+          ],
         ),
       ),
     );
