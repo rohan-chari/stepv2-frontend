@@ -10,14 +10,10 @@ import 'package:step_tracker/services/backend_api_service.dart';
 // freeze and STAY with the team, no refund, no rejoin.
 
 class _ActiveTeamForfeitApi extends BackendApiService {
-  _ActiveTeamForfeitApi({
-    this.isTeamRace = true,
-    this.status = 'ACTIVE',
-    this.myForfeitedAt,
-  });
+  _ActiveTeamForfeitApi({this.isTeamRace = true, this.myForfeitedAt});
 
   final bool isTeamRace;
-  final String status;
+  static const String status = 'ACTIVE';
   final String? myForfeitedAt;
   bool forfeitCalled = false;
 
@@ -110,14 +106,16 @@ class _ActiveTeamForfeitApi extends BackendApiService {
   }) async {
     forfeitCalled = true;
     return const {
-      'participant': {'userId': 'user-1', 'forfeitedAt': '2026-07-15T12:00:00Z'},
+      'participant': {
+        'userId': 'user-1',
+        'forfeitedAt': '2026-07-15T12:00:00Z',
+      },
     };
   }
 
   @override
-  Future<Map<String, dynamic>> fetchMe({
-    required String identityToken,
-  }) async => const {'coins': 320, 'heldCoins': 0};
+  Future<Map<String, dynamic>> fetchMe({required String identityToken}) async =>
+      const {'coins': 320, 'heldCoins': 0};
 }
 
 Future<AuthService> _createAuthService() async {
@@ -152,68 +150,64 @@ Future<void> _pump(WidgetTester tester, BackendApiService api) async {
   await tester.pump();
 }
 
-/// The course capys walk on an infinite loop, so pumpAndSettle never returns —
-/// advance the dialog transition with timed pumps instead.
-Future<void> _pumpDialog(WidgetTester tester) async {
-  await tester.pump();
-  await tester.pump(const Duration(milliseconds: 400));
-}
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('TR-601: ACTIVE team race offers forfeit', (tester) async {
+  Future<void> pumpDialog(WidgetTester tester) async {
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+  }
+
+  testWidgets('TR-601: ACTIVE legacy team race offers forfeit', (tester) async {
     await _pump(tester, _ActiveTeamForfeitApi());
     expect(find.text('FORFEIT'), findsOneWidget);
   });
 
-  testWidgets('TR-601: the dialog spells out the team consequences',
-      (tester) async {
+  testWidgets(
+    'TR-601: legacy confirmation states consequences before mutation',
+    (tester) async {
+      final api = _ActiveTeamForfeitApi();
+      await _pump(tester, api);
+      await tester.ensureVisible(find.text('FORFEIT'));
+      await tester.tap(find.text('FORFEIT'));
+      await pumpDialog(tester);
+      expect(find.textContaining('stay with'), findsOneWidget);
+      expect(find.textContaining('No refund'), findsOneWidget);
+      expect(find.textContaining("can't rejoin"), findsOneWidget);
+      expect(api.forfeitCalled, isFalse);
+    },
+  );
+
+  testWidgets('TR-601: confirming legacy forfeit calls /forfeit', (
+    tester,
+  ) async {
     final api = _ActiveTeamForfeitApi();
     await _pump(tester, api);
-
     await tester.ensureVisible(find.text('FORFEIT'));
     await tester.tap(find.text('FORFEIT'));
-    await _pumpDialog(tester);
-
-    // Steps stay with the team, no refund, no rejoin — all three stated.
-    expect(find.textContaining('stay with'), findsOneWidget);
-    expect(find.textContaining('No refund'), findsOneWidget);
-    expect(find.textContaining("can't rejoin"), findsOneWidget);
-    // Nothing happens until the user confirms.
-    expect(api.forfeitCalled, isFalse);
-  });
-
-  testWidgets('TR-601: confirming calls forfeit', (tester) async {
-    final api = _ActiveTeamForfeitApi();
-    await _pump(tester, api);
-
-    await tester.ensureVisible(find.text('FORFEIT'));
-    await tester.tap(find.text('FORFEIT'));
-    await _pumpDialog(tester);
+    await pumpDialog(tester);
     await tester.tap(find.text('FORFEIT ANYWAY'));
     await tester.pump();
     await tester.pump();
-
     expect(api.forfeitCalled, isTrue);
   });
 
-  testWidgets('TR-601: backing out of the dialog does not forfeit',
-      (tester) async {
+  testWidgets('TR-601: cancelling legacy forfeit does not mutate', (
+    tester,
+  ) async {
     final api = _ActiveTeamForfeitApi();
     await _pump(tester, api);
-
     await tester.ensureVisible(find.text('FORFEIT'));
     await tester.tap(find.text('FORFEIT'));
-    await _pumpDialog(tester);
+    await pumpDialog(tester);
     await tester.tap(find.text('KEEP RACING'));
-    await _pumpDialog(tester);
-
+    await pumpDialog(tester);
     expect(api.forfeitCalled, isFalse);
   });
 
-  testWidgets('TR-601: a member who already forfeited sees no forfeit action',
-      (tester) async {
+  testWidgets('TR-601: a member who already forfeited sees no forfeit action', (
+    tester,
+  ) async {
     await _pump(
       tester,
       _ActiveTeamForfeitApi(myForfeitedAt: '2026-07-15T10:00:00.000Z'),
@@ -221,8 +215,9 @@ void main() {
     expect(find.text('FORFEIT'), findsNothing);
   });
 
-  testWidgets('TR-705: individual races have no forfeit action',
-      (tester) async {
+  testWidgets('TR-705: individual races have no legacy forfeit action', (
+    tester,
+  ) async {
     await _pump(tester, _ActiveTeamForfeitApi(isTeamRace: false));
     expect(find.text('FORFEIT'), findsNothing);
   });

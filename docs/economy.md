@@ -24,6 +24,17 @@ Where `DB` and `SEED`/`CODE` disagree, `DB` wins at runtime unless the seed's
 
 ## 0. Population baseline — verified 2026-08-08 (prod, read-only)
 
+### 0c. Refresh — verified 2026-08-12 (prod, read-only)
+
+| Metric | Value | Source |
+|---|---:|---|
+| Steps/day (steps>0, 30 calendar days) | p10 1,305 · **p50 5,826** · p90 14,069 · mean 6,957 | `DB steps` (n=2,533 user-days; 162 users) |
+| Positive coins / active step-day | p10 0 · **p50 0** · p90 120 · mean 43.2 | `DB steps × coin_transactions` (n=2,533 user-days) |
+| Positive coins / earning day | p10 10 · **p50 55** · p90 311 · mean 119.9 | `DB coin_transactions` (n=942 user-days; 125 users) |
+
+Date math uses the database's tz-naive `date` / `created_at::date`, never
+node-pg timestamp conversion.
+
 ### 0b. Refresh — verified 2026-08-11 (prod, read-only)
 
 | Metric | Value | Source |
@@ -123,9 +134,9 @@ The faucet has ~500× headroom; it is bounded by discard *behaviour*, not by the
 ### 2c. Economy rollup — verified 2026-08-12 (prod, read-only)
 
 Trailing 30 calendar days, grouped in pure SQL by the tz-naive ledger's stored
-`created_at::date`: **+3,568.2 coins/day sources, -2,507.4 sinks, net +1,060.7/day**.
-The positive-ledger earning-day distribution is p10 10, p50 50, p90 313.5 coins
-(936 earning user-days, 96 users). Source: `DB coin_transactions`.
+`created_at::date`: **+3,766.3 coins/day sources, -2,528.3 sinks, net +1,237.9/day**.
+The positive-ledger earning-day distribution is p10 10, p50 55, p90 311 coins
+(942 earning user-days, 125 users). Source: `DB coin_transactions`.
 
 ### 2b. Refresh — 30 days to 2026-08-11 (`DB coin_transactions`)
 
@@ -706,6 +717,16 @@ the placement check). Projection uses accepted count. Fewer than 2 players mints
 Verified against prod completions 2026-08-08: 4 walkers × 1d → 80; 10 walkers ×
 7d → 800. Formula confirmed.
 
+**Live footprint — verified 2026-08-12 (prod, read-only).** There are 15
+active funded races: individual n=13 (p50 3 accepted / 3 walkers,
+max 104 accepted) and team n=2 (p50 6 / 6); neither has a forfeited row.
+In the preceding 30 calendar days, 37 completed funded individual races minted
+19,180 coins (p50 pool 440, p90 1,020, max 4,240) and 3 funded team races
+minted 1,680 (800 each). The ledger's `race_prize_pool_payout` source is
+691.5 coins/day (333 credits). `DB races × race_participants ×
+coin_transactions`; `created_at::date` is used in SQL to avoid node-pg
+timezone shifts.
+
 ### 4.2 Individual payout presets — `CODE races/racePayoutPresets.js`
 
 | Preset | Split | Notes |
@@ -728,8 +749,10 @@ floor per paid place = 1 coin.
 - **Winning team's non-forfeited members split 100% of the pool evenly**;
   remainder to the team's top stepper. **Losing team gets 0.** Placements: all
   winners 1, all losers 2.
-- **Tie** ⇒ everyone placement 1, buy-ins refunded, and for a *funded* race the
-  pool is **never minted** — nobody is paid and `prizePoolCoins` is never stamped.
+- **Tie** ⇒ everyone placement 1. Legacy buy-ins are refunded. A *funded* tie
+  mints its settled pool and splits it evenly among all **non-forfeited**
+  members of both teams; `prizePoolCoins` is stamped. This differs from the
+  pre-2026-08-08 behaviour, which neither paid nor stamped funded ties.
 - Per-head winner payout is therefore
   `durationPoints × 20 × 2` — **independent of team size**.
 
@@ -742,6 +765,20 @@ floor per paid place = 1 coin.
 
 Prod team-race population 2026-08-08: 7 rows total (3 completed, 1 active,
 1 pending, 2 cancelled). **No 14-day team race has ever settled.**
+
+### 4.3a Active forfeit (current team-only behaviour, verified 2026-08-12)
+
+`forfeitRace.js` rejects individual races. For an accepted active team member,
+it snapshots the live effective total to `race_participants.total_steps`, sets
+`forfeited_at`, and every progress/reconcile path preserves that frozen value.
+The forfeiter remains `ACCEPTED`, so a positive frozen total remains a settled
+pool walker, but receives no team payout; their surviving winning teammates
+split the same pool. A zero-step forfeiter is not a settled walker, so it does
+not add a funded-pool unit. If every member of one side forfeits, the race
+settles immediately for the other side. Source: `CODE
+races/commands/forfeitRace.js`, `races/racePrizePool.js`, and
+`races/commands/completeRace.js`. This is current behaviour, not an
+individual-race policy.
 
 ### 4.4 Seeded challenge finish rewards — `CODE races/constants/raceFinishReward.js`
 

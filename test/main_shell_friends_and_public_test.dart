@@ -43,12 +43,16 @@ class _FakeBackendApiService extends BackendApiService {
   _FakeBackendApiService({
     this.publicRacesError = false,
     this.publicRacesCount = 0,
+    this.featuredTournamentCount = 0,
+    this.publicTournamentCount = 0,
     this.incomingFriendRequests = 0,
     this.rankedLastWeek,
   });
 
   final bool publicRacesError;
   final int publicRacesCount;
+  final int featuredTournamentCount;
+  final int publicTournamentCount;
   final int incomingFriendRequests;
   final Map<String, dynamic>? rankedLastWeek;
 
@@ -138,6 +142,20 @@ class _FakeBackendApiService extends BackendApiService {
       (i) => {'id': 'race-$i', 'name': 'Public $i'},
     );
   }
+
+  @override
+  Future<Map<String, dynamic>> fetchPublicTournaments({
+    required String identityToken,
+  }) async => {
+    'featured': List.generate(
+      featuredTournamentCount,
+      (index) => {'id': 'featured-tournament-$index'},
+    ),
+    'tournaments': List.generate(
+      publicTournamentCount,
+      (index) => {'id': 'tournament-$index'},
+    ),
+  };
 
   @override
   Future<Map<String, dynamic>> fetchShopCatalog({
@@ -251,6 +269,21 @@ void main() {
     await _tapTab(tester, 1); // Races tab.
 
     expect(find.text('PUBLIC RACES (2)'), findsOneWidget);
+  });
+
+  testWidgets('PUBLIC RACES count includes featured and browse tournaments', (
+    WidgetTester tester,
+  ) async {
+    await _pumpShell(
+      tester,
+      _FakeBackendApiService(
+        publicRacesCount: 2,
+        featuredTournamentCount: 1,
+        publicTournamentCount: 3,
+      ),
+    );
+    await _tapTab(tester, 1);
+    expect(find.text('PUBLIC RACES (6)'), findsOneWidget);
   });
 
   testWidgets('tab index 2 renders the Friends tab, not the Ranked tab', (

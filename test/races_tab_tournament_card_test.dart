@@ -297,6 +297,9 @@ void main() {
   testWidgets(
     'tutorial Races host keeps its spotlights on the first ordinary race',
     (tester) async {
+      tester.view.physicalSize = const Size(430, 1500);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
       final cardKey = GlobalKey();
       final boxKey = GlobalKey();
       await tester.pumpWidget(

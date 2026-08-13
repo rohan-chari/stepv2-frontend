@@ -1187,21 +1187,55 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final participants =
         (_race?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
         const [];
-    for (final p in participants) {
-      if (p['userId'] == _myUserId) return TeamRace.participantTeam(p);
+    for (final participant in participants) {
+      if (participant['userId'] == _myUserId) {
+        return TeamRace.participantTeam(participant);
+      }
     }
     return null;
   }
 
-  /// TR-601: mid-race forfeit for a team race. Permanent and consequential, so
-  /// the dialog states all three outcomes plainly before anything happens:
-  /// steps freeze but STAY with the team, no refund, no rejoin.
+  /// Legacy team races predate the stamped generalized leave action. Keep
+  /// their established controls only when the additive field is truly absent;
+  /// an invalid non-null stamp must never be guessed into a mutation.
+  bool get _hasNoLeaveActionStamp {
+    final race = _race;
+    return race != null &&
+        (!race.containsKey('leaveAction') || race['leaveAction'] == null);
+  }
+
+  bool get _canLeaveLegacyTeamLobby {
+    final race = _race;
+    return !widget.demoMode &&
+        !_isSpectator &&
+        race != null &&
+        race['tournamentId'] == null &&
+        TeamRace.isTeamRace(race) &&
+        race['status'] == 'PENDING' &&
+        race['myStatus'] == 'ACCEPTED' &&
+        race['isCreator'] != true &&
+        _hasNoLeaveActionStamp;
+  }
+
+  bool _canForfeitLegacyTeamRace(List<Map<String, dynamic>> participants) {
+    final race = _race;
+    return !widget.demoMode &&
+        !_isSpectator &&
+        race != null &&
+        race['tournamentId'] == null &&
+        TeamRace.isTeamRace(race) &&
+        race['status'] == 'ACTIVE' &&
+        race['myStatus'] == 'ACCEPTED' &&
+        race['isCreator'] != true &&
+        _hasNoLeaveActionStamp &&
+        !_iHaveForfeited(participants);
+  }
+
   Future<void> _forfeitTeamRace() async {
     final myTeam = _myLobbyTeam();
     final teamName = myTeam != null
         ? TeamRace.teamName(_race ?? const {}, myTeam)
         : 'your team';
-
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => Dialog(
@@ -1222,14 +1256,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               const SizedBox(height: 14),
               _forfeitConsequence(
                 Icons.ac_unit_rounded,
-                'Your steps freeze now and stay with $teamName. They still '
-                'count toward the team total.',
+                'Your steps freeze now and stay with $teamName. They still count toward the team total.',
               ),
               const SizedBox(height: 10),
               _forfeitConsequence(
                 Icons.money_off_rounded,
-                'No refund. Your buy-in stays in the pot, and you get no cut '
-                'even if your team wins.',
+                'No refund. Your buy-in stays in the pot, and you get no cut even if your team wins.',
               ),
               const SizedBox(height: 10),
               _forfeitConsequence(
@@ -1264,15 +1296,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       ),
     );
     if (confirmed != true || !mounted) return;
-
     setState(() => _isActing = true);
     try {
       final token = widget.authService.authToken;
       if (token == null || token.isEmpty) return;
       await _api.forfeitRace(identityToken: token, raceId: widget.raceId);
       await _refreshWallet();
-      // A forfeit can settle the race outright (team collapse, TR-603) — a
-      // full reload lets the screen fall into whatever state it's now in.
       await _loadDetails();
       await _loadProgress();
     } on ApiException catch (e) {
@@ -1289,26 +1318,23 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     }
   }
 
-  Widget _forfeitConsequence(IconData icon, String text) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 16, color: AppColors.of(context).textMid),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            text,
-            style: PixelText.body(
-              size: 12.5,
-              color: AppColors.of(context).textMid,
-            ),
+  Widget _forfeitConsequence(IconData icon, String text) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Icon(icon, size: 16, color: AppColors.of(context).textMid),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(
+          text,
+          style: PixelText.body(
+            size: 12.5,
+            color: AppColors.of(context).textMid,
           ),
         ),
-      ],
-    );
-  }
+      ),
+    ],
+  );
 
-  /// TR-205: leaving a PENDING team lobby is free (hold released, rejoin ok).
   Future<void> _leaveTeamLobby() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1329,8 +1355,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               ),
               const SizedBox(height: 12),
               Text(
-                'Your buy-in hold is released and your peg opens up. '
-                'You can rejoin any time before the race starts.',
+                'Your buy-in hold is released and your peg opens up. You can rejoin any time before the race starts.',
                 style: PixelText.body(
                   size: 14,
                   color: AppColors.of(context).textMid,
@@ -1373,7 +1398,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       ),
     );
     if (confirmed != true || !mounted) return;
-
     setState(() => _isActing = true);
     try {
       final token = widget.authService.authToken;
@@ -2587,8 +2611,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   }) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.of(context).parchment,
       isScrollControlled: true,
+      backgroundColor: AppColors.of(context).parchment,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -3109,39 +3133,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                                   ),
                           ),
                         ),
-                      if (_canMutePlacementAlerts())
-                        GestureDetector(
-                          onTap: _togglingPlacementMute
-                              ? null
-                              : _togglePlacementMute,
-                          child: Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: Icon(
-                              _placementMuted
-                                  ? Icons.notifications_off
-                                  : Icons.notifications_active,
-                              color: AppColors.of(context).textLight,
-                              size: 24,
-                            ),
-                          ),
-                        ),
-                      // A matchup race (tournamentId set) is owned by the
-                      // tournament engine — edit/cancel are locked server-side
-                      // (TOURNAMENT_RACE_LOCKED), so hide the options entry
-                      // entirely (spec §6.5/§9).
-                      if (_race != null &&
-                          !widget.demoMode &&
-                          !_isSpectator &&
-                          _race!['tournamentId'] == null &&
-                          (_race!['isCreator'] as bool? ?? false) &&
-                          (_race!['status'] == 'PENDING' ||
-                              _race!['status'] == 'ACTIVE'))
+                      if (_hasRaceOptions())
                         GestureDetector(
                           onTap: _showRaceOptionsSheet,
                           child: Padding(
-                            padding: EdgeInsets.all(8),
+                            padding: const EdgeInsets.all(8),
                             child: Icon(
-                              Icons.more_horiz,
+                              Icons.more_vert,
                               color: AppColors.of(context).textLight,
                               size: 24,
                             ),
@@ -3990,10 +3988,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                   race: _race!,
                   participants: participants,
                   myUserId: _myUserId,
-                  onTapEmptySlot:
-                      (_isActing ||
-                          myStatus == 'DECLINED' ||
-                          myStatus == 'INVITED')
+                  onTapEmptySlot: (_isActing || myStatus == 'DECLINED')
                       ? null
                       : _onLobbySlotTap,
                 ),
@@ -4085,6 +4080,20 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             scheduledStartAt: scheduledStartAt,
           ),
         ),
+        if (_canLeaveLegacyTeamLobby) ...[
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: PillButton(
+              label: 'LEAVE LOBBY',
+              variant: PillButtonVariant.accent,
+              fontSize: 13,
+              fullWidth: true,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              onPressed: _isActing ? null : _leaveTeamLobby,
+            ),
+          ),
+        ],
         const SizedBox(height: 24),
       ],
     );
@@ -4363,19 +4372,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               ),
             ],
           ),
-          if (isTeamRace) ...[
-            // TR-205/208: members can leave a PENDING team lobby freely;
-            // the creator's exits stay cancel/delete.
-            const SizedBox(height: 10),
-            PillButton(
-              label: 'LEAVE LOBBY',
-              variant: PillButtonVariant.accent,
-              fontSize: 13,
-              fullWidth: true,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              onPressed: _isActing ? null : _leaveTeamLobby,
-            ),
-          ],
         ],
       ],
     );
@@ -4836,15 +4832,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         // ACTIVITY & CHAT
         StaggerIn(index: 2, child: _buildActivityTabsSection()),
 
-        // TR-601: mid-race forfeit — team races only, and only while you're
-        // still in play. Deliberately last and low-key: it's a destructive,
-        // permanent exit, not a headline action. Hidden entirely for a
-        // tournament matchup — the bracket screen owns forfeit there, and the
-        // race-level path is locked server-side (spec §6.5/§6.7).
-        if (isTeamRace &&
-            !_isSpectator &&
-            _race?['tournamentId'] == null &&
-            !_iHaveForfeited(participants)) ...[
+        if (_canForfeitLegacyTeamRace(participants)) ...[
           const SizedBox(height: 18),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -4858,16 +4846,19 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             ),
           ),
         ],
+
         const SizedBox(height: 24),
       ],
     );
   }
 
-  /// True once the signed-in user has forfeited this race (frozen, out of
-  /// play). `forfeitedAt` is additive — absent on older payloads.
+  /// `forfeitedAt` is additive, so a missing value on an older payload means
+  /// the member remains eligible for the legacy control.
   bool _iHaveForfeited(List<Map<String, dynamic>> participants) {
-    for (final p in participants) {
-      if (p['userId'] == _myUserId) return TeamRace.hasForfeited(p);
+    for (final participant in participants) {
+      if (participant['userId'] == _myUserId) {
+        return TeamRace.hasForfeited(participant);
+      }
     }
     return false;
   }
@@ -6017,10 +6008,48 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     if (widget.demoMode) return false;
     final race = _race;
     if (race == null) return false;
+    // Tournament matchups own their lifecycle in the bracket UI. Keep every
+    // secondary control out of this header, including a relocated mute toggle.
+    if (race['tournamentId'] != null) return false;
     // A spectator gets no pushes for this race, and the toggle is a write.
     if (_isSpectator) return false;
     return race['myStatus'] == 'ACCEPTED' && race['status'] == 'ACTIVE';
   }
+
+  /// The backend stamps the one allowed destructive transition. This strict
+  /// gate is intentionally more conservative than deriving eligibility from
+  /// local state: an old/mid-rollout backend omitting `leaveAction` cannot be
+  /// prompted into a mutation it does not yet honour.
+  String? get _stampedLeaveAction {
+    if (widget.demoMode || _isSpectator) return null;
+    final race = _race;
+    if (race == null || race['tournamentId'] != null) return null;
+    if (race['myStatus'] != 'ACCEPTED' || race['isCreator'] == true) {
+      return null;
+    }
+    final participants = race['participants'];
+    if (participants is! List ||
+        !participants.whereType<Map>().any((p) => p['userId'] == _myUserId)) {
+      return null;
+    }
+    final action = race['leaveAction'];
+    if (action == 'LEAVE' && race['status'] == 'PENDING') return action;
+    if (action == 'FORFEIT' && race['status'] == 'ACTIVE') return action;
+    return null;
+  }
+
+  bool _canShowCreatorOptions() {
+    final race = _race;
+    if (widget.demoMode || _isSpectator || race == null) return false;
+    return race['tournamentId'] == null &&
+        race['isCreator'] == true &&
+        (race['status'] == 'PENDING' || race['status'] == 'ACTIVE');
+  }
+
+  bool _hasRaceOptions() =>
+      _canMutePlacementAlerts() ||
+      _canShowCreatorOptions() ||
+      _stampedLeaveAction != null;
 
   /// Flips the per-race notification mute, covering BOTH placement-change and
   /// chat pushes. Optimistic: update the icon immediately, persist both backend
@@ -6072,6 +6101,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
   void _showRaceOptionsSheet() {
     final status = _race?['status'] as String? ?? '';
+    final canMute = _canMutePlacementAlerts();
+    final canManage = _canShowCreatorOptions();
+    final leaveAction = _stampedLeaveAction;
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.of(context).parchment,
@@ -6091,21 +6123,47 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               ),
             ),
             const SizedBox(height: 16),
-            PillButton(
-              label: status == 'PENDING' ? 'INVITE FRIENDS' : 'INVITE MORE',
-              variant: PillButtonVariant.secondary,
-              fontSize: 13,
-              fullWidth: true,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              onPressed: _isActing
-                  ? null
-                  : () {
-                      Navigator.of(context).pop();
-                      _inviteMore();
-                    },
-            ),
-            const SizedBox(height: 10),
-            if (status == 'PENDING') ...[
+            if (canMute) ...[
+              PillButton(
+                label: _placementMuted
+                    ? 'NOTIFICATIONS ON'
+                    : 'NOTIFICATIONS OFF',
+                variant: PillButtonVariant.secondary,
+                fontSize: 13,
+                fullWidth: true,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                onPressed: _togglingPlacementMute
+                    ? null
+                    : () {
+                        Navigator.of(context).pop();
+                        _togglePlacementMute();
+                      },
+              ),
+              const SizedBox(height: 10),
+            ],
+            if (canManage) ...[
+              PillButton(
+                label: status == 'PENDING' ? 'INVITE FRIENDS' : 'INVITE MORE',
+                variant: PillButtonVariant.secondary,
+                fontSize: 13,
+                fullWidth: true,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                onPressed: _isActing
+                    ? null
+                    : () {
+                        Navigator.of(context).pop();
+                        _inviteMore();
+                      },
+              ),
+              const SizedBox(height: 10),
+            ],
+            if (canManage && status == 'PENDING') ...[
               PillButton(
                 label: 'EDIT SETTINGS',
                 variant: PillButtonVariant.secondary,
@@ -6123,24 +6181,148 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                       },
               ),
             ],
-            const SizedBox(height: 10),
-            PillButton(
-              label: 'CANCEL RACE',
-              variant: PillButtonVariant.accent,
-              fontSize: 13,
-              fullWidth: true,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              onPressed: _isActing
-                  ? null
-                  : () {
-                      Navigator.of(context).pop();
-                      _showCancelConfirmation();
-                    },
-            ),
+            if (canManage || leaveAction != null) const SizedBox(height: 10),
+            if (leaveAction != null)
+              PillButton(
+                label: leaveAction == 'LEAVE' ? 'LEAVE RACE' : 'FORFEIT RACE',
+                variant: PillButtonVariant.accent,
+                fontSize: 13,
+                fullWidth: true,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                onPressed: _isActing
+                    ? null
+                    : () {
+                        Navigator.of(context).pop();
+                        _confirmStampedLeave(leaveAction);
+                      },
+              ),
+            if (canManage)
+              PillButton(
+                label: 'CANCEL RACE',
+                variant: PillButtonVariant.accent,
+                fontSize: 13,
+                fullWidth: true,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                onPressed: _isActing
+                    ? null
+                    : () {
+                        Navigator.of(context).pop();
+                        _showCancelConfirmation();
+                      },
+              ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _confirmStampedLeave(String action) async {
+    final isForfeit = action == 'FORFEIT';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: TrailSign(
+          width: 330,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                isForfeit ? 'FORFEIT THE RACE?' : 'LEAVE THE RACE?',
+                style: PixelText.title(
+                  size: 18,
+                  color: AppColors.of(context).textDark,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 14),
+              Text(
+                isForfeit
+                    ? _stampedForfeitConsequence()
+                    : 'Your place will be removed and this race’s projected prize pot will update.',
+                style: PixelText.body(
+                  size: 14,
+                  color: AppColors.of(context).textMid,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 18),
+              PillButton(
+                label: isForfeit ? 'KEEP RACING' : 'STAY IN RACE',
+                variant: PillButtonVariant.secondary,
+                fullWidth: true,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+              ),
+              const SizedBox(height: 10),
+              PillButton(
+                label: isForfeit ? 'FORFEIT RACE' : 'LEAVE RACE',
+                variant: PillButtonVariant.accent,
+                fullWidth: true,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted || _isActing) return;
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) return;
+    setState(() => _isActing = true);
+    try {
+      await _api.leaveRace(identityToken: token, raceId: widget.raceId);
+      await _refreshWallet();
+      if (!mounted) return;
+      if (!isForfeit) {
+        Navigator.of(context).pop(true);
+        return;
+      }
+      await _loadDetails();
+      await _loadProgress();
+    } on ApiException catch (e) {
+      if (mounted) showErrorToast(context, e.message);
+    } catch (_) {
+      if (mounted) {
+        showErrorToast(context, 'Couldn’t update this race. Try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _isActing = false);
+    }
+  }
+
+  String _stampedForfeitConsequence() {
+    final progress = _progressState.data ?? _progress;
+    final participants = progress?['participants'];
+    var mySteps = 0;
+    if (participants is List) {
+      for (final participant in participants.whereType<Map>()) {
+        if (participant['userId'] == _myUserId) {
+          final rawSteps = participant['totalSteps'];
+          mySteps = rawSteps is num ? rawSteps.toInt() : 0;
+          break;
+        }
+      }
+    }
+    if (_prizePool?.funded == true) {
+      return mySteps > 0
+          ? 'Your score freezes now and you cannot receive a payout. Because you have walked steps, your funded spot stays in the final prize pool and it is redistributed among eligible finishers.'
+          : 'Your score freezes now and you cannot receive a payout. Because you have not walked any steps, your funded amount is removed from the projected prize pool.';
+    }
+    return 'Your score freezes now. You will not be eligible for a payout, and the final prize pot is recalculated under the race rules.';
   }
 
   bool get _canPostMessage {

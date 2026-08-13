@@ -1963,7 +1963,28 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       final races = await _backendApiService.fetchPublicRaces(
         identityToken: identityToken,
       );
-      if (mounted) setState(() => _publicRacesCount = races.length);
+      // `/tournaments/public` is additive. An older backend can reject it;
+      // keep the ordinary/team count in that case instead of blanking the
+      // whole affordance. Current backends return only joinable tournaments,
+      // so adding its list length matches the public discovery surface.
+      var tournamentCount = 0;
+      try {
+        final tournaments = await _backendApiService.fetchPublicTournaments(
+          identityToken: identityToken,
+        );
+        // The legacy discovery response separates joinable tournament cards
+        // into featured and browse lists. Both are visible from PUBLIC RACES.
+        final featured = tournaments['featured'];
+        final browse = tournaments['tournaments'];
+        tournamentCount =
+            (featured is List ? featured.length : 0) +
+            (browse is List ? browse.length : 0);
+      } catch (_) {
+        // Legacy endpoint absent or transiently unavailable: races still win.
+      }
+      if (mounted) {
+        setState(() => _publicRacesCount = races.length + tournamentCount);
+      }
     } catch (_) {
       // Keep the last known count on error.
     }
@@ -2601,6 +2622,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     unawaited(_refreshRacesDiscovery());
     _maybeRefreshFriends();
   }
+
+  /// Mutation-originated Races refresh: unlike a passive tab reveal, callers
+  /// await discovery too so a newly created public race or tournament updates
+  /// the visible PUBLIC RACES count before the next interaction.
+  Future<void> _refreshRacesAfterMutation() =>
+      Future.wait([_fetchRacesCore(), _refreshRacesDiscovery()]);
 
   Future<void> _refreshHomeTab() {
     // Coalesce rapid pull-to-refreshes: each swipe triggers a steps/samples
@@ -3617,7 +3644,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                           friendsSteps: _friendsSteps,
                           featuredRaces: _featuredRaces,
                           featuredTournaments: _featuredTournaments,
-                          onRacesChanged: _fetchRaces,
+                          onRacesChanged: _refreshRacesAfterMutation,
                           onRefresh: _refreshRacesTab,
                           onJoinFeaturedRace: _joinFeaturedRace,
                           onJoinFeaturedTournament: _joinFeaturedTournament,

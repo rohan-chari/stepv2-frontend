@@ -127,6 +127,54 @@ class _ListEntry {
   final bool isTournament;
 }
 
+/// Compact shelf label shared by the three personal-race groups. It follows
+/// Home's gold tick + pixel-title language while keeping enough vertical space
+/// that adjacent parchment cards do not visually merge.
+class _PersonalGroupHeader extends StatelessWidget {
+  const _PersonalGroupHeader({super.key, required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 13, 16, 5),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 18,
+            decoration: BoxDecoration(
+              color: colors.pillGold,
+              borderRadius: BorderRadius.circular(99),
+              boxShadow: [
+                BoxShadow(
+                  color: colors.pillGoldShadow.withValues(alpha: 0.55),
+                  offset: const Offset(1, 1),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: PixelText.title(size: 15, color: colors.textLight).copyWith(
+              shadows: const [
+                Shadow(
+                  color: Color(0x40000000),
+                  blurRadius: 4,
+                  offset: Offset(0, 1),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _RacesTabState extends State<RacesTab> {
   static const _textShadows = [
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
@@ -1008,26 +1056,64 @@ class _RacesTabState extends State<RacesTab> {
       ];
     }
 
-    final rows = SliverList.builder(
-      itemCount: entries.length,
-      itemBuilder: (context, i) {
-        final entry = entries[i];
-        if (entry.isTournament) {
-          return _buildTournamentRow(entry.data, i);
-        }
-        return _buildRaceRow(
-          entry.data,
-          i,
-          cardKey: i == 0 ? widget.tutorialCardKey : null,
-          boxKey: i == 0 ? widget.tutorialBoxKey : null,
-        );
-      },
-    );
-
+    // Keep ordinary cards ahead of brackets (the tutorial spotlight relies on
+    // that order), but make each kind scannable in long mixed lists. A group
+    // with no cards contributes no label or whitespace.
+    final classic = entries
+        .where(
+          (entry) => !entry.isTournament && !TeamRace.isTeamRace(entry.data),
+        )
+        .toList(growable: false);
+    final teams = entries
+        .where(
+          (entry) => !entry.isTournament && TeamRace.isTeamRace(entry.data),
+        )
+        .toList(growable: false);
+    final tournaments = entries
+        .where((entry) => entry.isTournament)
+        .toList(growable: false);
+    final groups = <({String label, String key, List<_ListEntry> entries})>[
+      (label: 'CLASSIC', key: 'classic', entries: classic),
+      (label: 'TEAMS', key: 'teams', entries: teams),
+      (label: 'TOURNAMENTS', key: 'tournaments', entries: tournaments),
+    ];
+    var globalIndex = 0;
+    final slivers = <Widget>[];
+    for (final group in groups) {
+      if (group.entries.isEmpty) continue;
+      final groupStart = globalIndex;
+      globalIndex += group.entries.length;
+      slivers.add(
+        SliverToBoxAdapter(
+          child: _PersonalGroupHeader(
+            key: Key('personal-group-${group.key}'),
+            label: group.label,
+          ),
+        ),
+      );
+      slivers.add(
+        SliverList.builder(
+          itemCount: group.entries.length,
+          itemBuilder: (context, index) {
+            final entry = group.entries[index];
+            final rowIndex = groupStart + index;
+            if (entry.isTournament) {
+              return _buildTournamentRow(entry.data, rowIndex);
+            }
+            return _buildRaceRow(
+              entry.data,
+              rowIndex,
+              cardKey: rowIndex == 0 ? widget.tutorialCardKey : null,
+              boxKey: rowIndex == 0 ? widget.tutorialBoxKey : null,
+            );
+          },
+        ),
+      );
+    }
     return [
       SliverPadding(
         padding: const EdgeInsets.only(top: 2, bottom: 8),
-        sliver: rows,
+        sliver: SliverMainAxisGroup(slivers: slivers),
       ),
     ];
   }

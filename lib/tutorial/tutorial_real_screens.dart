@@ -139,6 +139,8 @@ class TutorialRealHost extends StatelessWidget {
           authService: authService,
           raceId: tutorialPreviewRaceId,
           backendApiService: api,
+          // Preview data must never surface a live mutation/notification menu.
+          demoMode: true,
           tutorialPowerupsKey: keys['raceDetail.powerups'],
         );
       case TutorialMockPage.profile:

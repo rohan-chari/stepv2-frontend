@@ -34,12 +34,12 @@ class _TeamLobbyApi extends BackendApiService {
     required String raceId,
   }) async {
     Map<String, dynamic> member(String id, String team) => {
-          'userId': id,
-          'displayName': 'Racer $id',
-          'status': 'ACCEPTED',
-          'team': team,
-          'accessories': const [],
-        };
+      'userId': id,
+      'displayName': 'Racer $id',
+      'status': 'ACCEPTED',
+      'team': team,
+      'accessories': const [],
+    };
     return {
       'id': raceId,
       'name': 'Team Showdown',
@@ -124,7 +124,11 @@ class _IndividualPendingApi extends BackendApiService {
       'myStatus': 'ACCEPTED',
       'isCreator': true,
       'participants': const [
-        {'userId': 'user-1', 'displayName': 'Trail Walker', 'status': 'ACCEPTED'},
+        {
+          'userId': 'user-1',
+          'displayName': 'Trail Walker',
+          'status': 'ACCEPTED',
+        },
         {'userId': 'u2', 'displayName': 'Hill Climber', 'status': 'ACCEPTED'},
       ],
     };
@@ -169,44 +173,43 @@ Future<void> _pump(WidgetTester tester, BackendApiService api) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('TR-802: PENDING team race shows the lobby board',
-      (tester) async {
+  testWidgets('TR-802: PENDING team race shows the lobby board', (
+    tester,
+  ) async {
     // user-1 is on Team A with u3; u2 on Team B; one B peg open.
-    await _pump(
-      tester,
-      _TeamLobbyApi(teamAMembers: const ['user-1', 'u3']),
-    );
+    await _pump(tester, _TeamLobbyApi(teamAMembers: const ['user-1', 'u3']));
 
     expect(find.byType(TeamLobbyBoard), findsOneWidget);
     expect(find.text('VS'), findsOneWidget);
     expect(find.byKey(const Key('lobby-empty-B-1')), findsOneWidget);
   });
 
-  testWidgets('TR-705: individual PENDING race keeps the classic layout',
-      (tester) async {
+  testWidgets('TR-705: individual PENDING race keeps the classic layout', (
+    tester,
+  ) async {
     await _pump(tester, _IndividualPendingApi());
     expect(find.byType(TeamLobbyBoard), findsNothing);
     expect(find.text('PARTICIPANTS'), findsOneWidget);
   });
 
   testWidgets(
-      'TR-301: uneven teams disable Start with live "Teams must be even" copy',
-      (tester) async {
-    await _pump(
-      tester,
-      _TeamLobbyApi(teamAMembers: const ['user-1', 'u3']),
-    ); // 2v1
+    'TR-301: uneven teams disable Start with live "Teams must be even" copy',
+    (tester) async {
+      await _pump(
+        tester,
+        _TeamLobbyApi(teamAMembers: const ['user-1', 'u3']),
+      ); // 2v1
 
-    final startFinder = find.widgetWithText(PillButton, 'START RACE');
-    await tester.ensureVisible(startFinder);
-    final button = tester.widget<PillButton>(startFinder);
-    expect(button.onPressed, isNull);
-    expect(find.textContaining('Teams must be even'), findsOneWidget);
-    expect(find.textContaining('2v1'), findsOneWidget);
-  });
+      final startFinder = find.widgetWithText(PillButton, 'START RACE');
+      await tester.ensureVisible(startFinder);
+      final button = tester.widget<PillButton>(startFinder);
+      expect(button.onPressed, isNull);
+      expect(find.textContaining('Teams must be even'), findsOneWidget);
+      expect(find.textContaining('2v1'), findsOneWidget);
+    },
+  );
 
-  testWidgets('TR-301: even nonzero teams arm the Start lever',
-      (tester) async {
+  testWidgets('TR-301: even nonzero teams arm the Start lever', (tester) async {
     await _pump(
       tester,
       _TeamLobbyApi(
@@ -222,8 +225,9 @@ void main() {
     expect(find.textContaining('Teams must be even'), findsNothing);
   });
 
-  testWidgets('TR-203: ACCEPTED member taps the other side to switch',
-      (tester) async {
+  testWidgets('TR-203: ACCEPTED member taps the other side to switch', (
+    tester,
+  ) async {
     final api = _TeamLobbyApi(teamAMembers: const ['user-1', 'u3']);
     await _pump(tester, api);
 
@@ -235,8 +239,9 @@ void main() {
     expect(api.switchedTo, 'TEAM_B');
   });
 
-  testWidgets('TR-201: INVITED member accepts by tapping a peg',
-      (tester) async {
+  testWidgets('TR-201: INVITED member accepts by tapping a peg', (
+    tester,
+  ) async {
     final api = _TeamLobbyApi(
       isCreator: false,
       myStatus: 'INVITED',
@@ -254,19 +259,18 @@ void main() {
     expect(api.switchedTo, isNull);
   });
 
-  testWidgets('TR-205/208: non-creator can leave the lobby; creator cannot',
-      (tester) async {
+  testWidgets('TR-205/208: non-creator can leave the lobby; creator cannot', (
+    tester,
+  ) async {
     final api = _TeamLobbyApi(
       isCreator: false,
       teamAMembers: const ['user-1', 'u3'],
     );
     await _pump(tester, api);
-
     final leaveFinder = find.text('LEAVE LOBBY');
     await tester.ensureVisible(leaveFinder);
     await tester.tap(leaveFinder);
     await tester.pump();
-    // Confirm dialog -> confirm.
     await tester.tap(find.text('LEAVE'));
     await tester.pump();
     await tester.pump();
@@ -274,10 +278,7 @@ void main() {
   });
 
   testWidgets('TR-208: creator sees no leave-lobby action', (tester) async {
-    await _pump(
-      tester,
-      _TeamLobbyApi(teamAMembers: const ['user-1', 'u3']),
-    );
+    await _pump(tester, _TeamLobbyApi(teamAMembers: const ['user-1', 'u3']));
     expect(find.text('LEAVE LOBBY'), findsNothing);
   });
 }

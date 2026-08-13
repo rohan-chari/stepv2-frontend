@@ -130,6 +130,10 @@ class BackendApiService {
   // (lobby/bracket/champion screens, matchup races). Old binaries omit it, so
   // the backend keeps `/races` byte-identical for them, hides matchup races from
   // every listing, and rejects their tournament create/join (spec §4).
+  // `race_leave` tells the backend this build can render the stamped,
+  // server-authorized leaveAction affordance. Old binaries omit it and retain
+  // their legacy team-only paths; this build still hides the action unless the
+  // matching additive field is present on the race payload.
   // `powerups2` tells the backend this build can render the second-wave shop
   // powerups (Leech, X-Ray/DEFENSE_SCAN): their icons, the Leech victim badge,
   // and the X-Ray recon sheet. Old binaries omit it, so the gated catalog never
@@ -158,8 +162,8 @@ class BackendApiService {
   // says this build treats a valid manifest entry as authoritative over a
   // same-key bundle fallback. Both are additive and must be in BOTH branches.
   static final String clientFeaturesHeader = _adsSupported
-      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal${_racePayoutDoubleSupported ? ',race_payout_double' : ''}'
-      : 'characters,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal${_racePayoutDoubleSupported ? ',race_payout_double' : ''}';
+      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal${_racePayoutDoubleSupported ? ',race_payout_double' : ''}'
+      : 'characters,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal${_racePayoutDoubleSupported ? ',race_payout_double' : ''}';
 
   /// Replays a persisted results dismissal with the capability it originally
   /// advertised. A later app build may have gained or lost the dedicated ad
@@ -2368,9 +2372,10 @@ class BackendApiService {
     }
   }
 
-  /// TR-205: leaves a PENDING team-race lobby (buy-in hold released;
-  /// re-joining later is a fresh join on either side). Team races only —
-  /// the backend 400s for individual races and the creator (TR-208).
+  /// Leaves the server-stamped race action. New token clients use this for
+  /// both PENDING leave and ACTIVE forfeit; older client paths remain served
+  /// separately by the backend. The response is intentionally returned raw:
+  /// `action` and `prizePool` are additive and callers must tolerate absence.
   Future<Map<String, dynamic>> leaveRace({
     required String identityToken,
     required String raceId,
