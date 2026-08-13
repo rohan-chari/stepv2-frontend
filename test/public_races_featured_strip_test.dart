@@ -86,6 +86,30 @@ void main() {
     expect(find.text('VIEW'), findsWidgets);
   });
 
+  testWidgets(
+    'assigned private bucket renders VIEW without a manual Join action',
+    (tester) async {
+      await pumpScreen(
+        tester,
+        _FakeApi(
+          featuredRaces: [
+            {
+              ..._privateVirtualRace(),
+              'raceId': 'assigned-private-race',
+              'myStatus': 'ACCEPTED',
+              'participantCount': 4,
+            },
+          ],
+        ),
+      );
+
+      expect(find.byType(FeaturedRaceCard), findsOneWidget);
+      expect(find.text('VIEW'), findsWidgets);
+      expect(find.text('JOIN'), findsNothing);
+      expect(find.text('4 racing'), findsOneWidget);
+    },
+  );
+
   testWidgets('private virtual bucket elects once and becomes pending', (
     tester,
   ) async {
