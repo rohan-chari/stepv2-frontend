@@ -69,8 +69,7 @@ class _FakeResponse extends Stream<List<int>> implements HttpClientResponse {
   }
 
   @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      super.noSuchMethod(invocation);
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class _FakeRequest implements HttpClientRequest {
@@ -93,8 +92,7 @@ class _FakeRequest implements HttpClientRequest {
   }
 
   @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      super.noSuchMethod(invocation);
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class _FakeHttpClient implements HttpClient {
@@ -116,8 +114,7 @@ class _FakeHttpClient implements HttpClient {
   }
 
   @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      super.noSuchMethod(invocation);
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 Map<String, dynamic> _bodyOf(_CapturedRequest r) =>
@@ -144,9 +141,9 @@ void main() {
   ];
 
   Map<String, dynamic> payload() => BackendApiService.buildStepSyncV2Payload(
-        stepData: stepData,
-        samples: samples,
-      );
+    stepData: stepData,
+    samples: samples,
+  );
 
   group('buildStepSyncV2Payload', () {
     test('sorts samples chronologically and uses integer steps + date', () {
@@ -180,9 +177,10 @@ void main() {
       final key = BackendApiService.generateIdempotencyKey();
       expect(key.length, 36);
       expect(
-        RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}'
-                r'-[0-9a-f]{12}$')
-            .hasMatch(key),
+        RegExp(
+          r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}'
+          r'-[0-9a-f]{12}$',
+        ).hasMatch(key),
         isTrue,
       );
     });
@@ -191,7 +189,13 @@ void main() {
   group('recordStepSyncV2', () {
     String successBody(String state, {String? jobId, int? generation}) =>
         jsonEncode({
-          'record': {'id': 'r', 'userId': 'u', 'date': '2026-07-17T00:00:00.000Z', 'steps': 12345, 'stepGoal': 5000},
+          'record': {
+            'id': 'r',
+            'userId': 'u',
+            'date': '2026-07-17T00:00:00.000Z',
+            'steps': 12345,
+            'stepGoal': 5000,
+          },
           'sampleCount': 1,
           'uploaderReconciliation': {
             'state': state,
@@ -234,6 +238,69 @@ void main() {
       expect(api.syncV2Support, EndpointSupport.supported);
     });
 
+    test('Home pull sends the exact opt-in header and parses cooldown', () async {
+      final http = _FakeHttpClient([
+        _Scripted(
+          429,
+          '{"error":"Step sync is cooling down","code":"STEP_SYNC_COOLDOWN","retryAfterSeconds":18}',
+        ),
+      ]);
+      final api = BackendApiService(httpClient: http);
+
+      final result = await api.recordStepSyncV2(
+        identityToken: 't',
+        idempotencyKey: 'home-pull-key',
+        payload: payload(),
+        homePull: true,
+      );
+
+      expect(result.kind, StepSyncV2Kind.cooldown);
+      expect(result.retryAfterSeconds, 18);
+      expect(result.shouldLegacyFallback, isFalse);
+      expect(result.hasJob, isFalse);
+      expect(http.requests.single.headers['X-Step-Sync-Intent'], 'home-pull');
+    });
+
+    test('non-Home sync omits the Home-pull header', () async {
+      final http = _FakeHttpClient([_Scripted(202, successBody('DEFERRED'))]);
+      final api = BackendApiService(httpClient: http);
+
+      await api.recordStepSyncV2(
+        identityToken: 't',
+        idempotencyKey: 'ordinary-key',
+        payload: payload(),
+      );
+
+      expect(
+        http.requests.single.headers.containsKey('X-Step-Sync-Intent'),
+        isFalse,
+      );
+    });
+
+    test(
+      'malformed cooldown delay remains a no-work cooldown outcome',
+      () async {
+        final http = _FakeHttpClient([
+          _Scripted(
+            429,
+            '{"code":"STEP_SYNC_COOLDOWN","retryAfterSeconds":"soon"}',
+          ),
+        ]);
+        final api = BackendApiService(httpClient: http);
+
+        final result = await api.recordStepSyncV2(
+          identityToken: 't',
+          idempotencyKey: 'malformed-cooldown',
+          payload: payload(),
+          homePull: true,
+        );
+
+        expect(result.kind, StepSyncV2Kind.cooldown);
+        expect(result.retryAfterSeconds, isNull);
+        expect(result.shouldLegacyFallback, isFalse);
+      },
+    );
+
     test('DEFERRED success -> deferred, does not use persisted home', () async {
       final http = _FakeHttpClient([
         _Scripted(202, successBody('DEFERRED', jobId: 'job-2', generation: 3)),
@@ -249,28 +316,31 @@ void main() {
       expect(r.hasJob, isTrue);
     });
 
-    test('404 -> unsupported, cached for the session, permits legacy', () async {
-      final http = _FakeHttpClient([_Scripted(404, '{"error":"not found"}')]);
-      final api = BackendApiService(httpClient: http);
-      final r = await api.recordStepSyncV2(
-        identityToken: 't',
-        idempotencyKey: 'k',
-        payload: payload(),
-      );
-      expect(r.kind, StepSyncV2Kind.unsupported);
-      expect(r.shouldLegacyFallback, isTrue);
-      expect(api.syncV2Support, EndpointSupport.unsupported);
+    test(
+      '404 -> unsupported, cached for the session, permits legacy',
+      () async {
+        final http = _FakeHttpClient([_Scripted(404, '{"error":"not found"}')]);
+        final api = BackendApiService(httpClient: http);
+        final r = await api.recordStepSyncV2(
+          identityToken: 't',
+          idempotencyKey: 'k',
+          payload: payload(),
+        );
+        expect(r.kind, StepSyncV2Kind.unsupported);
+        expect(r.shouldLegacyFallback, isTrue);
+        expect(api.syncV2Support, EndpointSupport.unsupported);
 
-      // A second call short-circuits without hitting the network again.
-      final before = http.requests.length;
-      final r2 = await api.recordStepSyncV2(
-        identityToken: 't',
-        idempotencyKey: 'k2',
-        payload: payload(),
-      );
-      expect(r2.kind, StepSyncV2Kind.unsupported);
-      expect(http.requests.length, before);
-    });
+        // A second call short-circuits without hitting the network again.
+        final before = http.requests.length;
+        final r2 = await api.recordStepSyncV2(
+          identityToken: 't',
+          idempotencyKey: 'k2',
+          payload: payload(),
+        );
+        expect(r2.kind, StepSyncV2Kind.unsupported);
+        expect(http.requests.length, before);
+      },
+    );
 
     test('503 ASYNC_DISABLED -> asyncDisabled, permits legacy', () async {
       final http = _FakeHttpClient([
@@ -305,8 +375,10 @@ void main() {
       expect(http.requests[0].headers['Idempotency-Key'], 'same-key');
       expect(http.requests[1].headers['Idempotency-Key'], 'same-key');
       // Both retries reused the identical immutable body.
-      expect(http.requests[0].body.toString(),
-          http.requests[1].body.toString());
+      expect(
+        http.requests[0].body.toString(),
+        http.requests[1].body.toString(),
+      );
     });
 
     test('500 then 202 -> success on retry', () async {
@@ -357,8 +429,10 @@ void main() {
 
     test('409 conflict -> persistedStatusUnknown, no legacy write', () async {
       final http = _FakeHttpClient([
-        _Scripted(409,
-            '{"error":"Idempotency key already used","code":"IDEMPOTENCY_CONFLICT"}'),
+        _Scripted(
+          409,
+          '{"error":"Idempotency key already used","code":"IDEMPOTENCY_CONFLICT"}',
+        ),
       ]);
       final api = BackendApiService(httpClient: http);
       final r = await api.recordStepSyncV2(
@@ -386,9 +460,7 @@ void main() {
     });
 
     test('missing uploaderReconciliation -> deferred (safe default)', () async {
-      final http = _FakeHttpClient([
-        _Scripted(202, jsonencodeMinimal()),
-      ]);
+      final http = _FakeHttpClient([_Scripted(202, jsonencodeMinimal())]);
       final api = BackendApiService(httpClient: http);
       final r = await api.recordStepSyncV2(
         identityToken: 't',
@@ -405,12 +477,17 @@ void main() {
   group('fetchRaceResolutionStatus', () {
     test('SUCCEEDED -> succeeded/terminal', () async {
       final http = _FakeHttpClient([
-        _Scripted(200,
-            '{"raceResolution":{"jobId":"j","generation":1,"state":"SUCCEEDED"}}'),
+        _Scripted(
+          200,
+          '{"raceResolution":{"jobId":"j","generation":1,"state":"SUCCEEDED"}}',
+        ),
       ]);
       final api = BackendApiService(httpClient: http);
       final r = await api.fetchRaceResolutionStatus(
-          identityToken: 't', jobId: 'j', generation: 1);
+        identityToken: 't',
+        jobId: 'j',
+        generation: 1,
+      );
       expect(r.state, RaceResolutionState.succeeded);
       expect(r.isSucceeded, isTrue);
       expect(r.isTerminal, isTrue);
@@ -423,7 +500,10 @@ void main() {
       ]);
       final api = BackendApiService(httpClient: http);
       final r = await api.fetchRaceResolutionStatus(
-          identityToken: 't', jobId: 'j', generation: 1);
+        identityToken: 't',
+        jobId: 'j',
+        generation: 1,
+      );
       expect(r.state, RaceResolutionState.superseded);
       expect(r.isTerminal, isTrue);
     });
@@ -432,7 +512,10 @@ void main() {
       final http = _FakeHttpClient([_Scripted(404, '{"error":"not found"}')]);
       final api = BackendApiService(httpClient: http);
       final r = await api.fetchRaceResolutionStatus(
-          identityToken: 't', jobId: 'j', generation: 1);
+        identityToken: 't',
+        jobId: 'j',
+        generation: 1,
+      );
       expect(r.state, RaceResolutionState.notFound);
       expect(r.isTerminal, isTrue);
     });
@@ -441,7 +524,10 @@ void main() {
       final http = _FakeHttpClient([_Scripted(200, 'garbage')]);
       final api = BackendApiService(httpClient: http);
       final r = await api.fetchRaceResolutionStatus(
-          identityToken: 't', jobId: 'j', generation: 1);
+        identityToken: 't',
+        jobId: 'j',
+        generation: 1,
+      );
       expect(r.state, RaceResolutionState.unknown);
       expect(r.isTerminal, isFalse);
     });
@@ -450,18 +536,21 @@ void main() {
   group('fetchRaceDiscoverySummary', () {
     test('fully resolved -> commits all fields', () async {
       final http = _FakeHttpClient([
-        _Scripted(200, jsonEncode({
-          'publicRaceCount': 12,
-          'featuredRaces': [
-            {'raceId': 'a'},
-          ],
-          'featuredTournaments': [],
-          'resolved': {
-            'publicRaceCount': true,
-            'featuredRaces': true,
-            'featuredTournaments': true,
-          },
-        })),
+        _Scripted(
+          200,
+          jsonEncode({
+            'publicRaceCount': 12,
+            'featuredRaces': [
+              {'raceId': 'a'},
+            ],
+            'featuredTournaments': [],
+            'resolved': {
+              'publicRaceCount': true,
+              'featuredRaces': true,
+              'featuredTournaments': true,
+            },
+          }),
+        ),
       ]);
       final api = BackendApiService(httpClient: http);
       final r = await api.fetchRaceDiscoverySummary(identityToken: 't');
@@ -473,27 +562,32 @@ void main() {
       expect(r.featuredTournaments, isEmpty);
     });
 
-    test('partial failure: unresolved bits stay null (retain last known)',
-        () async {
-      final http = _FakeHttpClient([
-        _Scripted(200, jsonEncode({
-          'publicRaceCount': 0,
-          'featuredRaces': [
-            {'raceId': 'a'},
-          ],
-          'featuredTournaments': [],
-          'resolved': {
-            'publicRaceCount': false, // failed branch
-            'featuredRaces': true,
-            'featuredTournaments': true,
-          },
-        })),
-      ]);
-      final api = BackendApiService(httpClient: http);
-      final r = await api.fetchRaceDiscoverySummary(identityToken: 't');
-      expect(r.publicRaceCount, isNull); // not committed -> keep last known
-      expect(r.featuredRaces!.length, 1);
-    });
+    test(
+      'partial failure: unresolved bits stay null (retain last known)',
+      () async {
+        final http = _FakeHttpClient([
+          _Scripted(
+            200,
+            jsonEncode({
+              'publicRaceCount': 0,
+              'featuredRaces': [
+                {'raceId': 'a'},
+              ],
+              'featuredTournaments': [],
+              'resolved': {
+                'publicRaceCount': false, // failed branch
+                'featuredRaces': true,
+                'featuredTournaments': true,
+              },
+            }),
+          ),
+        ]);
+        final api = BackendApiService(httpClient: http);
+        final r = await api.fetchRaceDiscoverySummary(identityToken: 't');
+        expect(r.publicRaceCount, isNull); // not committed -> keep last known
+        expect(r.featuredRaces!.length, 1);
+      },
+    );
 
     test('404 -> unsupported, cached, legacy signaled', () async {
       final http = _FakeHttpClient([_Scripted(404, '{"error":"nope"}')]);
@@ -508,15 +602,17 @@ void main() {
       expect(http.requests.length, before); // short-circuited
     });
 
-    test('malformed body -> empty (retain last known, not unsupported)',
-        () async {
-      final http = _FakeHttpClient([_Scripted(200, 'not-json')]);
-      final api = BackendApiService(httpClient: http);
-      final r = await api.fetchRaceDiscoverySummary(identityToken: 't');
-      expect(r.unsupported, isFalse);
-      expect(r.publicRaceCount, isNull);
-      expect(r.featuredRaces, isNull);
-    });
+    test(
+      'malformed body -> empty (retain last known, not unsupported)',
+      () async {
+        final http = _FakeHttpClient([_Scripted(200, 'not-json')]);
+        final api = BackendApiService(httpClient: http);
+        final r = await api.fetchRaceDiscoverySummary(identityToken: 't');
+        expect(r.unsupported, isFalse);
+        expect(r.publicRaceCount, isNull);
+        expect(r.featuredRaces, isNull);
+      },
+    );
 
     test('500 -> empty (retain last known), not downgraded', () async {
       final http = _FakeHttpClient([_Scripted(500, '{"error":"boom"}')]);
@@ -554,6 +650,12 @@ void main() {
 }
 
 String jsonencodeMinimal() => jsonEncode({
-      'record': {'id': 'r', 'userId': 'u', 'date': '2026-07-17T00:00:00.000Z', 'steps': 1, 'stepGoal': 0},
-      'sampleCount': 0,
-    });
+  'record': {
+    'id': 'r',
+    'userId': 'u',
+    'date': '2026-07-17T00:00:00.000Z',
+    'steps': 1,
+    'stepGoal': 0,
+  },
+  'sampleCount': 0,
+});

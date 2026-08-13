@@ -26,6 +26,9 @@ class FeaturedRaceCard extends StatelessWidget {
     required this.onJoin,
     required this.onView,
     this.isUpcoming = false,
+    this.isElected = false,
+    this.canJoin = true,
+    this.showParticipantCount = true,
     this.startsAt,
     this.width = 250,
   });
@@ -48,6 +51,18 @@ class FeaturedRaceCard extends StatelessWidget {
   // opt into before it begins. Counts down to `startsAt` and the CTA is
   // OPT IN / YOU'RE IN / FULL instead of JOIN / VIEW.
   final bool isUpcoming;
+
+  /// A private-bucket election was accepted, but the server has not finalized
+  /// the user's assigned race yet. It intentionally has no navigation target.
+  final bool isElected;
+
+  /// False for malformed/private records that lack the only safe assignment
+  /// key. Keep the card readable but never manufacture a join request.
+  final bool canJoin;
+
+  /// Candidate-pool counts are private matching data. Virtual/elected bucket
+  /// cards deliberately omit this line until an assigned race exists.
+  final bool showParticipantCount;
   final DateTime? startsAt;
   final double width;
 
@@ -178,18 +193,19 @@ class FeaturedRaceCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  isUpcoming
-                      ? '$participantCount joined'
-                      : '$participantCount racing',
-                  textAlign: TextAlign.center,
-                  style: PixelText.body(
-                    size: 12,
-                    color: AppColors.of(context).textMid,
+                if (showParticipantCount)
+                  Text(
+                    isUpcoming
+                        ? '$participantCount joined'
+                        : '$participantCount racing',
+                    textAlign: TextAlign.center,
+                    style: PixelText.body(
+                      size: 12,
+                      color: AppColors.of(context).textMid,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
               ],
             ),
             Padding(
@@ -204,6 +220,16 @@ class FeaturedRaceCard extends StatelessWidget {
 
   Widget _buildCta(BuildContext context) {
     const padding = EdgeInsets.symmetric(horizontal: 16, vertical: 11);
+    if (isElected) {
+      return PillButton(
+        label: "YOU'RE IN",
+        variant: PillButtonVariant.secondary,
+        fontSize: 13,
+        fullWidth: true,
+        padding: padding,
+        onPressed: null,
+      );
+    }
     if (isJoined) {
       // Upcoming: "YOU'RE IN" (you opted into the next race); live: "VIEW".
       return PillButton(
@@ -218,6 +244,16 @@ class FeaturedRaceCard extends StatelessWidget {
     if (isFull) {
       return PillButton(
         label: 'FULL',
+        variant: PillButtonVariant.secondary,
+        fontSize: 13,
+        fullWidth: true,
+        padding: padding,
+        onPressed: null,
+      );
+    }
+    if (!canJoin) {
+      return PillButton(
+        label: 'UNAVAILABLE',
         variant: PillButtonVariant.secondary,
         fontSize: 13,
         fullWidth: true,

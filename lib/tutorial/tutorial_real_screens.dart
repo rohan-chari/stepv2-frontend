@@ -122,7 +122,6 @@ class TutorialRealHost extends StatelessWidget {
         );
       case TutorialMockPage.races:
         return RacesTab(
-          inviteDecisionGateEnabled: true,
           authService: authService,
           racesState: Loadable.success(tutorialPreviewRacesData()),
           friendsSteps: const [],

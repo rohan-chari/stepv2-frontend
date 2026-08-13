@@ -84,8 +84,6 @@ class AuthService extends ChangeNotifier {
   static const _keyNameSetupOnboardingRequired =
       'auth_name_setup_onboarding_required';
   static const _keyNameSetupCompletedAt = 'auth_name_setup_completed_at';
-  static const _keyRacesInviteDecisionGateEnabled =
-      'auth_races_invite_decision_gate_enabled';
   static const _keyQuickRaceShareAutoFriendEnabled =
       'auth_quick_race_share_auto_friend_enabled';
   static const _keyProfilePhotoUrl = 'auth_profile_photo_url';
@@ -149,7 +147,6 @@ class AuthService extends ChangeNotifier {
   bool _supportsDiscoverableIdentity = false;
   bool _nameSetupOnboardingRequired = false;
   String? _nameSetupCompletedAt;
-  bool _racesInviteDecisionGateEnabled = false;
   bool _quickRaceShareAutoFriendEnabled = false;
   String? _profilePhotoUrl;
   String? _profilePhotoPromptDismissedAt;
@@ -198,7 +195,6 @@ class AuthService extends ChangeNotifier {
   bool get supportsDiscoverableIdentity => _supportsDiscoverableIdentity;
   bool get nameSetupOnboardingRequired => _nameSetupOnboardingRequired;
   String? get nameSetupCompletedAt => _nameSetupCompletedAt;
-  bool get racesInviteDecisionGateEnabled => _racesInviteDecisionGateEnabled;
   bool get quickRaceShareAutoFriendEnabled => _quickRaceShareAutoFriendEnabled;
   bool get requiresDiscoverableIdentityOnboarding =>
       _supportsDiscoverableIdentity &&
@@ -390,7 +386,6 @@ class AuthService extends ChangeNotifier {
       _supportsDiscoverableIdentity = false;
       _nameSetupOnboardingRequired = false;
       _nameSetupCompletedAt = null;
-      _racesInviteDecisionGateEnabled = false;
       _quickRaceShareAutoFriendEnabled = false;
     }
     _backendUserId = nextUserId;
@@ -414,8 +409,6 @@ class AuthService extends ChangeNotifier {
       _nameSetupOnboardingRequired =
           prefs.getBool(_keyNameSetupOnboardingRequired) ?? false;
       _nameSetupCompletedAt = prefs.getString(_keyNameSetupCompletedAt);
-      _racesInviteDecisionGateEnabled =
-          prefs.getBool(_keyRacesInviteDecisionGateEnabled) ?? false;
       _quickRaceShareAutoFriendEnabled =
           prefs.getBool(_keyQuickRaceShareAutoFriendEnabled) ?? false;
     }
@@ -938,8 +931,6 @@ class AuthService extends ChangeNotifier {
       _stepSampleBucketMinutes = _resolveStepSampleBucketMinutes(
         flags is Map ? flags['stepSampleBucketMinutes'] : null,
       );
-      _racesInviteDecisionGateEnabled =
-          flags is Map && flags['racesInviteDecisionGateEnabled'] == true;
       _quickRaceShareAutoFriendEnabled =
           flags is Map && flags['quickRaceShareAutoFriendEnabled'] == true;
     } else if (authoritative) {
@@ -1039,7 +1030,6 @@ class AuthService extends ChangeNotifier {
     _supportsDiscoverableIdentity = false;
     _nameSetupOnboardingRequired = false;
     _nameSetupCompletedAt = null;
-    _racesInviteDecisionGateEnabled = false;
     _quickRaceShareAutoFriendEnabled = false;
     _profilePhotoUrl = null;
     _profilePhotoPromptDismissedAt = null;
@@ -1083,7 +1073,6 @@ class AuthService extends ChangeNotifier {
     await prefs.remove(_keyIdentitySupported);
     await prefs.remove(_keyNameSetupOnboardingRequired);
     await prefs.remove(_keyNameSetupCompletedAt);
-    await prefs.remove(_keyRacesInviteDecisionGateEnabled);
     await prefs.remove(_keyQuickRaceShareAutoFriendEnabled);
     await prefs.remove(_keyProfilePhotoUrl);
     await prefs.remove(_keyProfilePhotoPromptDismissedAt);
@@ -1378,10 +1367,6 @@ class AuthService extends ChangeNotifier {
       } else {
         await prefs.remove(_keyNameSetupCompletedAt);
       }
-      await prefs.setBool(
-        _keyRacesInviteDecisionGateEnabled,
-        _racesInviteDecisionGateEnabled,
-      );
       await prefs.setBool(
         _keyQuickRaceShareAutoFriendEnabled,
         _quickRaceShareAutoFriendEnabled,

@@ -35,6 +35,11 @@ enum StepSyncV2Kind {
   /// Definite pre-persistence rejection with no legacy path (400/401/413). The
   /// caller shows the sync-error state and does not claim success.
   failed,
+
+  /// An opted-in Home pull arrived inside the server-authoritative cooldown.
+  /// No steps were persisted and, unlike an ordinary failure, Home should end
+  /// its indicator immediately without changing the visible cards.
+  cooldown,
 }
 
 class StepSyncV2Result {
@@ -44,6 +49,7 @@ class StepSyncV2Result {
     this.generation,
     this.resolvedRaceCount = 0,
     this.boxStateCurrent = false,
+    this.retryAfterSeconds,
     this.diagnostic,
   });
 
@@ -52,6 +58,10 @@ class StepSyncV2Result {
   final int? generation;
   final int resolvedRaceCount;
   final bool boxStateCurrent;
+
+  /// Server-provided, rounded-up Home-pull cooldown delay. It is null unless
+  /// the response matched the complete additive cooldown contract.
+  final int? retryAfterSeconds;
 
   /// Non-null when this outcome is a client-side contract alarm that should be
   /// logged (malformed success, idempotency conflict).
@@ -82,4 +92,6 @@ class StepSyncV2Result {
   /// The refresh could not be acknowledged as successful.
   bool get isError =>
       kind == StepSyncV2Kind.ambiguousFailure || kind == StepSyncV2Kind.failed;
+
+  bool get isCooldown => kind == StepSyncV2Kind.cooldown;
 }

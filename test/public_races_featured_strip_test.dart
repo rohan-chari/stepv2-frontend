@@ -43,17 +43,17 @@ void main() {
 
   Future<void> pumpScreen(WidgetTester tester, _FakeApi api) async {
     final auth = await signedInAuth();
-    await tester.pumpWidget(MaterialApp(
-      home: PublicRacesScreen(
-        authService: auth,
-        backendApiService: api,
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PublicRacesScreen(authService: auth, backendApiService: api),
       ),
-    ));
+    );
     await pumpFrames(tester);
   }
 
-  testWidgets('featured race strip renders on the Public Races screen',
-      (tester) async {
+  testWidgets('featured race strip renders on the Public Races screen', (
+    tester,
+  ) async {
     await pumpScreen(tester, _FakeApi(featuredRaces: [_featuredRace()]));
 
     expect(find.text('FEATURED'), findsWidgets);
@@ -64,8 +64,9 @@ void main() {
     expect(find.text('JOIN'), findsWidgets);
   });
 
-  testWidgets('older backend without /races/featured → no strip, no crash',
-      (tester) async {
+  testWidgets('older backend without /races/featured → no strip, no crash', (
+    tester,
+  ) async {
     await pumpScreen(tester, _FakeApi(featuredThrows: true));
 
     expect(find.byType(FeaturedRaceCard), findsNothing);
@@ -85,9 +86,91 @@ void main() {
     expect(find.text('VIEW'), findsWidgets);
   });
 
+  testWidgets('private virtual bucket elects once and becomes pending', (
+    tester,
+  ) async {
+    final api = _FakeApi(featuredRaces: [_privateVirtualRace()]);
+    await pumpScreen(tester, api);
+
+    expect(find.text('JOIN'), findsWidgets);
+    expect(find.text('0 racing'), findsNothing);
+    await tester.tap(find.text('JOIN').first);
+    await pumpFrames(tester);
+
+    expect(api.assignments, ['DAILY_10K']);
+    expect(find.text("YOU'RE IN"), findsWidgets);
+    expect(find.text('VIEW'), findsNothing);
+  });
+
+  testWidgets(
+    'private elected bucket is non-navigable and hides candidate count',
+    (tester) async {
+      await pumpScreen(
+        tester,
+        _FakeApi(
+          featuredRaces: [
+            {
+              ..._privateVirtualRace(),
+              'myStatus': 'ELECTED',
+              'participantCount': 4,
+            },
+          ],
+        ),
+      );
+
+      expect(find.text("YOU'RE IN"), findsWidgets);
+      expect(find.text('4 racing'), findsNothing);
+      expect(find.text('VIEW'), findsNothing);
+    },
+  );
+
+  testWidgets('malformed private record never attempts a public race join', (
+    tester,
+  ) async {
+    final api = _FakeApi(
+      featuredRaces: [
+        {
+          'bucketPrivate': true,
+          'raceId': 'private-id-must-not-be-joined',
+          'seedKind': 'DAILY_10K',
+          'myStatus': 'BROKEN',
+          'name': 'Malformed private card',
+        },
+      ],
+    );
+    await pumpScreen(tester, api);
+
+    expect(find.byType(FeaturedRaceCard), findsOneWidget);
+    expect(find.text('JOIN'), findsNothing);
+    expect(api.assignments, isEmpty);
+    expect(api.publicJoinIds, isEmpty);
+  });
+
+  testWidgets('unknown private bucket state is unavailable, not joinable', (
+    tester,
+  ) async {
+    final api = _FakeApi(
+      featuredRaces: [
+        {
+          'bucketPrivate': true,
+          'raceId': null,
+          'seedKind': 'DAILY_10K',
+          'myStatus': 'FUTURE_STATUS',
+          'name': 'Unknown private card',
+        },
+      ],
+    );
+    await pumpScreen(tester, api);
+
+    expect(find.text('JOIN'), findsNothing);
+    expect(api.assignments, isEmpty);
+    expect(api.publicJoinIds, isEmpty);
+  });
+
   // Ported: 'featured row renders mixed race + tournament cards'.
-  testWidgets('FEATURED section renders mixed race strip + bracket cards',
-      (tester) async {
+  testWidgets('FEATURED section renders mixed race strip + bracket cards', (
+    tester,
+  ) async {
     await pumpScreen(
       tester,
       _FakeApi(
@@ -107,23 +190,26 @@ void main() {
   });
 
   // Ported: 'empty featured-tournaments → row shows only races'.
-  testWidgets('empty featured-tournaments → section shows only the race strip',
-      (tester) async {
-    await pumpScreen(tester, _FakeApi(featuredRaces: [_featuredRace()]));
+  testWidgets(
+    'empty featured-tournaments → section shows only the race strip',
+    (tester) async {
+      await pumpScreen(tester, _FakeApi(featuredRaces: [_featuredRace()]));
 
-    expect(find.byType(FeaturedRaceCard), findsOneWidget);
-    expect(
-      find.byKey(const Key('featured-tournament-join-ft1')),
-      findsNothing,
-    );
-    expect(find.text('BRACKET'), findsNothing);
-  });
+      expect(find.byType(FeaturedRaceCard), findsOneWidget);
+      expect(
+        find.byKey(const Key('featured-tournament-join-ft1')),
+        findsNothing,
+      );
+      expect(find.text('BRACKET'), findsNothing);
+    },
+  );
 
   // Ported: 'pill filters the FEATURED ROW only; user races/brackets stay
   // visible' — re-targeted at this screen's group filter: each pill narrows to
   // its own group and the featured strip follows the FEATURED/ALL selections.
-  testWidgets('filter pills select which groups show, including the strip',
-      (tester) async {
+  testWidgets('filter pills select which groups show, including the strip', (
+    tester,
+  ) async {
     // Tall viewport so every group lays out at once — the assertions below
     // interleave taps with checks across the whole list.
     tester.view.physicalSize = const Size(1200, 4000);
@@ -147,7 +233,9 @@ void main() {
     // FEATURED (default): only the featured group — strip + seeded bracket.
     expect(find.byType(FeaturedRaceCard), findsOneWidget);
     expect(
-        find.byKey(const Key('featured-tournament-join-ft1')), findsOneWidget);
+      find.byKey(const Key('featured-tournament-join-ft1')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('user-tournament-join-ut1')), findsNothing);
     expect(find.text('TRAIL LOOP'), findsNothing);
 
@@ -155,8 +243,7 @@ void main() {
     await tester.tap(find.byKey(const Key('public-filter-tournaments')));
     await pumpFrames(tester);
     expect(find.byType(FeaturedRaceCard), findsNothing);
-    expect(
-        find.byKey(const Key('featured-tournament-join-ft1')), findsNothing);
+    expect(find.byKey(const Key('featured-tournament-join-ft1')), findsNothing);
     expect(find.byKey(const Key('user-tournament-join-ut1')), findsOneWidget);
     expect(find.text('TRAIL LOOP'), findsNothing);
 
@@ -164,8 +251,7 @@ void main() {
     await tester.tap(find.byKey(const Key('public-filter-races')));
     await pumpFrames(tester);
     expect(find.byType(FeaturedRaceCard), findsNothing);
-    expect(
-        find.byKey(const Key('featured-tournament-join-ft1')), findsNothing);
+    expect(find.byKey(const Key('featured-tournament-join-ft1')), findsNothing);
     expect(find.byKey(const Key('user-tournament-join-ut1')), findsNothing);
     expect(find.text('TRAIL LOOP'), findsOneWidget);
   });
@@ -173,8 +259,9 @@ void main() {
   // Ported: 'TOURNAMENTS filter with no featured tournaments shows the
   // featured empty note' — here the FEATURED pill with nothing featured shows
   // the group's empty note while other groups still exist.
-  testWidgets('FEATURED filter with nothing featured shows the empty note',
-      (tester) async {
+  testWidgets('FEATURED filter with nothing featured shows the empty note', (
+    tester,
+  ) async {
     await pumpScreen(tester, _FakeApi(publicRaces: [_publicRace()]));
 
     await tester.tap(find.byKey(const Key('public-filter-featured')));
@@ -194,8 +281,9 @@ void main() {
   // renders the upcoming/opt-in "next race" card, even when the backend still
   // attaches an `upcoming` payload (old clients keep rendering it; this build
   // drops it — auto-join covers the next daily/weekly instead).
-  testWidgets('featured race with an `upcoming` payload shows only ONE card',
-      (tester) async {
+  testWidgets('featured race with an `upcoming` payload shows only ONE card', (
+    tester,
+  ) async {
     await pumpScreen(
       tester,
       _FakeApi(featuredRaces: [_featuredRaceWithUpcoming()]),
@@ -210,68 +298,82 @@ void main() {
 }
 
 Map<String, dynamic> _featuredRace({String? myStatus}) => {
-      'raceId': 'fr1',
-      'name': 'Daily 10K',
-      'seedKind': 'DAILY_10K',
-      'endsAt': DateTime.now()
-          .add(const Duration(hours: 5))
-          .toUtc()
-          .toIso8601String(),
-      'participantCount': 12,
-      'finishReward': {'pool': 500, 'paidPlaces': 3},
-      'myStatus': myStatus,
-      'isFull': false,
-    };
+  'raceId': 'fr1',
+  'name': 'Daily 10K',
+  'seedKind': 'DAILY_10K',
+  'endsAt': DateTime.now()
+      .add(const Duration(hours: 5))
+      .toUtc()
+      .toIso8601String(),
+  'participantCount': 12,
+  'finishReward': {'pool': 500, 'paidPlaces': 3},
+  'myStatus': myStatus,
+  'isFull': false,
+};
+
+Map<String, dynamic> _privateVirtualRace() => {
+  'raceId': null,
+  'name': 'Daily Challenge',
+  'seedKind': 'DAILY_10K',
+  'endsAt': DateTime.now()
+      .add(const Duration(hours: 5))
+      .toUtc()
+      .toIso8601String(),
+  'participantCount': 0,
+  'myStatus': null,
+  'isFull': false,
+  'bucketPrivate': true,
+};
 
 Map<String, dynamic> _featuredRaceWithUpcoming() => {
-      ..._featuredRace(),
-      // Backend still sends the pre-registerable next race — must be ignored.
-      'upcoming': {
-        'raceId': 'fr1-next',
-        'scheduledStartAt': DateTime.now()
-            .add(const Duration(hours: 20))
-            .toUtc()
-            .toIso8601String(),
-        'endsAt': DateTime.now()
-            .add(const Duration(days: 1, hours: 5))
-            .toUtc()
-            .toIso8601String(),
-        'participantCount': 2,
-        'isFull': false,
-      },
-    };
+  ..._featuredRace(),
+  // Backend still sends the pre-registerable next race — must be ignored.
+  'upcoming': {
+    'raceId': 'fr1-next',
+    'scheduledStartAt': DateTime.now()
+        .add(const Duration(hours: 20))
+        .toUtc()
+        .toIso8601String(),
+    'endsAt': DateTime.now()
+        .add(const Duration(days: 1, hours: 5))
+        .toUtc()
+        .toIso8601String(),
+    'participantCount': 2,
+    'isFull': false,
+  },
+};
 
 Map<String, dynamic> _featuredTournament() => {
-      'id': 'ft1',
-      'name': 'Daily Dash',
-      'status': 'PENDING',
-      'seedId': 'seed-tournament-daily-dash',
-      'seedKind': 'DAILY_DASH',
-      'bracketSize': 4,
-      'matchupDurationDays': 1,
-      'championPrizeCoins': 150,
-      'acceptedCount': 3,
-    };
+  'id': 'ft1',
+  'name': 'Daily Dash',
+  'status': 'PENDING',
+  'seedId': 'seed-tournament-daily-dash',
+  'seedKind': 'DAILY_DASH',
+  'bracketSize': 4,
+  'matchupDurationDays': 1,
+  'championPrizeCoins': 150,
+  'acceptedCount': 3,
+};
 
 Map<String, dynamic> _userTournament() => {
-      'id': 'ut1',
-      'name': 'Gauntlet',
-      'status': 'PENDING',
-      'bracketSize': 8,
-      'matchupDurationDays': 2,
-      'buyInAmount': 0,
-      'acceptedCount': 2,
-    };
+  'id': 'ut1',
+  'name': 'Gauntlet',
+  'status': 'PENDING',
+  'bracketSize': 8,
+  'matchupDurationDays': 2,
+  'buyInAmount': 0,
+  'acceptedCount': 2,
+};
 
 Map<String, dynamic> _publicRace() => {
-      'id': 'race-1',
-      'name': 'Trail Loop',
-      'status': 'PENDING',
-      'participantCount': 2,
-      'maxDurationDays': 3,
-      'buyInAmount': 0,
-      'creator': {'displayName': 'walker'},
-    };
+  'id': 'race-1',
+  'name': 'Trail Loop',
+  'status': 'PENDING',
+  'participantCount': 2,
+  'maxDurationDays': 3,
+  'buyInAmount': 0,
+  'creator': {'displayName': 'walker'},
+};
 
 class _FakeApi extends BackendApiService {
   _FakeApi({
@@ -297,6 +399,8 @@ class _FakeApi extends BackendApiService {
   final List<Map<String, dynamic>> featuredTournaments;
   final List<Map<String, dynamic>> userTournaments;
   final List<Map<String, dynamic>> publicRaces;
+  final assignments = <String>[];
+  final publicJoinIds = <String>[];
 
   @override
   Future<List<Map<String, dynamic>>> fetchFeaturedRaces({
@@ -307,20 +411,40 @@ class _FakeApi extends BackendApiService {
   }
 
   @override
+  Future<Map<String, dynamic>> assignSeededRaceBucket({
+    required String identityToken,
+    required String seedKind,
+  }) async {
+    assignments.add(seedKind);
+    return const {'elected': true, 'raceId': null};
+  }
+
+  @override
+  Future<Map<String, dynamic>> joinPublicRace({
+    required String identityToken,
+    required String raceId,
+    bool onboarding = false,
+  }) async {
+    publicJoinIds.add(raceId);
+    return const {};
+  }
+
+  @override
   Future<List<Map<String, dynamic>>> fetchPublicRaces({
     required String identityToken,
-  }) async =>
-      publicRaces;
+  }) async => publicRaces;
 
   @override
   Future<Map<String, dynamic>> fetchPublicTournaments({
     required String identityToken,
-  }) async =>
-      {'featured': featuredTournaments, 'tournaments': userTournaments};
+  }) async => {'featured': featuredTournaments, 'tournaments': userTournaments};
 
   @override
   Future<Map<String, dynamic>> fetchRaces({
     required String identityToken,
-  }) async =>
-      {'active': const [], 'pending': const [], 'tournaments': const []};
+  }) async => {
+    'active': const [],
+    'pending': const [],
+    'tournaments': const [],
+  };
 }

@@ -68,7 +68,8 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
   // the Races tab). Best-effort like the tournament buckets: an older backend
   // without the endpoint simply yields no strip.
   List<Map<String, dynamic>> _featuredRaces = const [];
-  String? _joiningFeaturedRaceId;
+  String? _joiningFeaturedRaceKey;
+  final Set<String> _locallyElectedBucketKeys = <String>{};
 
   DiscoveryJoinCoordinator get _joinCoordinator => DiscoveryJoinCoordinator(
     authService: widget.authService,
@@ -207,24 +208,43 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
   }
 
   /// One-tap join for a featured (seeded) race — always free, no confirm.
-  Future<void> _joinFeaturedRace(String raceId) async {
+  Future<void> _joinFeaturedRace(Map<String, dynamic> race) async {
     final token = widget.authService.authToken;
     if (token == null || token.isEmpty) return;
-    if (raceId.isEmpty || _joiningFeaturedRaceId != null) return;
-    setState(() => _joiningFeaturedRaceId = raceId);
+    final raceId = race['raceId'];
+    final bucketPrivate = race['bucketPrivate'] == true;
+    final seedKind = race['seedKind'];
+    final joinKey = bucketPrivate
+        ? (seedKind is String && seedKind.isNotEmpty ? 'bucket:$seedKind' : '')
+        : (raceId is String ? raceId : '');
+    if (joinKey.isEmpty || _joiningFeaturedRaceKey != null) return;
+    setState(() => _joiningFeaturedRaceKey = joinKey);
     try {
-      await widget.backendApiService.joinPublicRace(
-        identityToken: token,
-        raceId: raceId,
-      );
+      if (bucketPrivate && raceId == null) {
+        final assignment = await widget.backendApiService
+            .assignSeededRaceBucket(
+              identityToken: token,
+              seedKind: seedKind as String,
+            );
+        if (assignment['elected'] == true) {
+          _locallyElectedBucketKeys.add(joinKey);
+        }
+      } else if (raceId is String && raceId.isNotEmpty) {
+        await widget.backendApiService.joinPublicRace(
+          identityToken: token,
+          raceId: raceId,
+        );
+      } else {
+        return;
+      }
       if (!mounted) return;
-      setState(() => _joiningFeaturedRaceId = null);
-      showInfoToast(context, "You're in!");
+      setState(() => _joiningFeaturedRaceKey = null);
+      showInfoToast(context, bucketPrivate ? "You're in!" : "You're in!");
       // Refresh so the card flips to VIEW.
       await _load();
     } catch (e) {
       if (!mounted) return;
-      setState(() => _joiningFeaturedRaceId = null);
+      setState(() => _joiningFeaturedRaceKey = null);
       showErrorToast(context, 'Could not join: $e');
     }
   }
@@ -728,20 +748,57 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
   }
 
   Widget _buildFeaturedRaceCard(Map<String, dynamic> race) {
-    final raceId = race['raceId'] as String? ?? '';
-    final reward = race['finishReward'] as Map<String, dynamic>?;
+    final raceId = race['raceId'];
+    final safeRaceId = raceId is String && raceId.isNotEmpty ? raceId : null;
+    final seedKind = race['seedKind'] as String?;
+    final bucketPrivate = race['bucketPrivate'] == true;
+    final rewardRaw = race['finishReward'];
+    final reward = rewardRaw is Map
+        ? Map<String, dynamic>.from(rewardRaw)
+        : const <String, dynamic>{};
+    final key = bucketPrivate
+        ? (seedKind == null || seedKind.isEmpty ? '' : 'bucket:$seedKind')
+        : (safeRaceId ?? '');
+    final privateAssigned =
+        bucketPrivate && safeRaceId != null && race['myStatus'] == 'ACCEPTED';
+    final serverElected = race['myStatus'] == 'ELECTED';
+    final locallyElected =
+        race['myStatus'] == null &&
+        key.isNotEmpty &&
+        _locallyElectedBucketKeys.contains(key);
+    final elected =
+        bucketPrivate && !privateAssigned && (serverElected || locallyElected);
+    // Only a literal null status is an unassigned virtual card. A malformed or
+    // future server status must remain inert: never turn unknown private state
+    // into an /assign write.
+    final privateVirtual =
+        bucketPrivate &&
+        safeRaceId == null &&
+        race['myStatus'] == null &&
+        !elected;
     return FeaturedRaceCard(
       name: race['name'] as String? ?? 'Race',
-      seedKind: race['seedKind'] as String?,
+      seedKind: seedKind,
       endsAt: DateTime.tryParse(race['endsAt'] as String? ?? ''),
-      participantCount: (race['participantCount'] as num?)?.toInt() ?? 0,
-      finishRewardPool: (reward?['pool'] as num?)?.toInt() ?? 0,
-      finishRewardPlaces: (reward?['paidPlaces'] as num?)?.toInt() ?? 0,
-      isJoined: race['myStatus'] != null,
+      participantCount: privateAssigned
+          ? (race['participantCount'] as num?)?.toInt() ?? 0
+          : 0,
+      finishRewardPool: (reward['pool'] as num?)?.toInt() ?? 0,
+      finishRewardPlaces: (reward['paidPlaces'] as num?)?.toInt() ?? 0,
+      isJoined: bucketPrivate
+          ? privateAssigned
+          : safeRaceId != null && race['myStatus'] != null,
       isFull: race['isFull'] as bool? ?? false,
-      isJoining: _joiningFeaturedRaceId == raceId,
-      onJoin: () => _joinFeaturedRace(raceId),
-      onView: () => _viewFeaturedRace(raceId),
+      isJoining: _joiningFeaturedRaceKey == key,
+      isElected: elected,
+      canJoin: bucketPrivate
+          ? privateVirtual && seedKind != null && seedKind.isNotEmpty
+          : safeRaceId != null,
+      showParticipantCount: !bucketPrivate || privateAssigned,
+      onJoin: () => _joinFeaturedRace(race),
+      onView: () {
+        if (safeRaceId != null) _viewFeaturedRace(safeRaceId);
+      },
     );
   }
 

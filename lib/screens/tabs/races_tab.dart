@@ -63,10 +63,6 @@ class RacesTab extends StatefulWidget {
   // invite accept/decline calls.
   final BackendApiService? backendApiService;
 
-  /// Literal-true capability branch. False preserves the frozen/old-backend
-  /// inline invite treatment exactly.
-  final bool inviteDecisionGateEnabled;
-
   const RacesTab({
     super.key,
     required this.authService,
@@ -87,7 +83,6 @@ class RacesTab extends StatefulWidget {
     this.tutorialCardKey,
     this.tutorialBoxKey,
     this.backendApiService,
-    this.inviteDecisionGateEnabled = false,
   });
 
   @override
@@ -416,12 +411,8 @@ class _RacesTabState extends State<RacesTab> {
   /// ONE eager adapter (the featured horizontal strip needs a box context and
   /// misbehaves as a bare sibling sliver); race sections build their rows lazily.
   List<Widget> _buildContentSlivers() {
-    final invites = widget.inviteDecisionGateEnabled
-        ? const <Map<String, dynamic>>[]
-        : _invites;
-    final tournamentInvites = widget.inviteDecisionGateEnabled
-        ? const <Map<String, dynamic>>[]
-        : _tournamentInvites;
+    final invites = _invites;
+    final tournamentInvites = _tournamentInvites;
 
     return <Widget>[
       SliverToBoxAdapter(
@@ -431,7 +422,6 @@ class _RacesTabState extends State<RacesTab> {
               activeCount: _countFor(_PersonalState.active),
               inviteCount: invites.length + tournamentInvites.length,
               waitingCount: _countFor(_PersonalState.pending),
-              gateEnabled: widget.inviteDecisionGateEnabled,
               potKey: widget.tutorialPotKey,
             ),
             // The FEATURED strip (seeded daily/weekly races + seeded brackets)
@@ -602,7 +592,6 @@ class _RacesTabState extends State<RacesTab> {
     required int activeCount,
     required int inviteCount,
     required int waitingCount,
-    required bool gateEnabled,
     GlobalKey? potKey,
   }) {
     return DecoratedBox(
@@ -638,7 +627,6 @@ class _RacesTabState extends State<RacesTab> {
                   activeCount: activeCount,
                   inviteCount: inviteCount,
                   waitingCount: waitingCount,
-                  gateEnabled: gateEnabled,
                 ),
                 if (widget.displayName != null) ...[
                   const SizedBox(height: 14),
@@ -2024,13 +2012,11 @@ class _RaceHeaderMetrics extends StatelessWidget {
     required this.activeCount,
     required this.inviteCount,
     required this.waitingCount,
-    required this.gateEnabled,
   });
 
   final int activeCount;
   final int inviteCount;
   final int waitingCount;
-  final bool gateEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -2050,14 +2036,9 @@ class _RaceHeaderMetrics extends StatelessWidget {
         children: [
           _RaceMetricText(label: 'ACTIVE', count: activeCount),
           _MetricDivider(),
-          if (!gateEnabled) ...[
-            _RaceMetricText(label: 'INVITES', count: inviteCount),
-            _MetricDivider(),
-          ],
-          _RaceMetricText(
-            label: gateEnabled ? 'WAITING' : 'PENDING',
-            count: waitingCount,
-          ),
+          _RaceMetricText(label: 'INVITES', count: inviteCount),
+          _MetricDivider(),
+          _RaceMetricText(label: 'PENDING', count: waitingCount),
         ],
       ),
     );

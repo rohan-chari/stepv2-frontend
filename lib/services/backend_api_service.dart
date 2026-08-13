@@ -154,10 +154,12 @@ class BackendApiService {
   // (accessory/character/powerup PNGs fetched from /assets/... and disk-cached)
   // via the /assets/manifest registry. Old binaries omit it, so the backend
   // hides catalog rows whose art is remote-only — they'd render as a grey
-  // placeholder, and worse, be purchasable. Must appear in BOTH branches.
+  // placeholder, and worse, be purchasable. `remote_asset_preferred` further
+  // says this build treats a valid manifest entry as authoritative over a
+  // same-key bundle fallback. Both are additive and must be in BOTH branches.
   static final String clientFeaturesHeader = _adsSupported
-      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,next_race_cta,discoverable_identity,home_suggested_races${_racePayoutDoubleSupported ? ',race_payout_double' : ''}'
-      : 'characters,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,next_race_cta,discoverable_identity,home_suggested_races${_racePayoutDoubleSupported ? ',race_payout_double' : ''}';
+      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal${_racePayoutDoubleSupported ? ',race_payout_double' : ''}'
+      : 'characters,jammer,spinpowerups,team_races,tournaments,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal${_racePayoutDoubleSupported ? ',race_payout_double' : ''}';
 
   /// Replays a persisted results dismissal with the capability it originally
   /// advertised. A later app build may have gained or lost the dedicated ad
@@ -496,6 +498,7 @@ class BackendApiService {
     required String identityToken,
     required String idempotencyKey,
     required Map<String, dynamic> payload,
+    bool homePull = false,
   }) async {
     if (_syncV2Support == EndpointSupport.unsupported) {
       return const StepSyncV2Result(kind: StepSyncV2Kind.unsupported);
@@ -505,12 +508,18 @@ class BackendApiService {
       identityToken,
       idempotencyKey,
       payload,
+      homePull: homePull,
     );
     if (result.kind == StepSyncV2Kind.ambiguousFailure) {
       // The single permitted retry — SAME key, SAME immutable payload. The
       // server may have committed the first attempt, so we never fall back to a
       // legacy write from here.
-      result = await _attemptStepSyncV2(identityToken, idempotencyKey, payload);
+      result = await _attemptStepSyncV2(
+        identityToken,
+        idempotencyKey,
+        payload,
+        homePull: homePull,
+      );
     }
     return result;
   }
@@ -518,8 +527,9 @@ class BackendApiService {
   Future<StepSyncV2Result> _attemptStepSyncV2(
     String identityToken,
     String idempotencyKey,
-    Map<String, dynamic> payload,
-  ) async {
+    Map<String, dynamic> payload, {
+    required bool homePull,
+  }) async {
     HttpClientResponse response;
     try {
       response = await _sendJsonRequest(
@@ -527,7 +537,10 @@ class BackendApiService {
         path: '/steps/sync-v2',
         body: payload,
         identityToken: identityToken,
-        headers: {'Idempotency-Key': idempotencyKey},
+        headers: {
+          'Idempotency-Key': idempotencyKey,
+          if (homePull) 'X-Step-Sync-Intent': 'home-pull',
+        },
       );
     } on ApiException {
       // Connection loss / timeout / handshake — ambiguous and retryable.
@@ -559,6 +572,19 @@ class BackendApiService {
     if (status == 503 && raw.code == 'ASYNC_DISABLED') {
       // Guaranteed pre-persistence — safe to run the legacy flow.
       return const StepSyncV2Result(kind: StepSyncV2Kind.asyncDisabled);
+    }
+
+    if (status == 429 && raw.code == 'STEP_SYNC_COOLDOWN') {
+      final retry = raw.json?['retryAfterSeconds'];
+      // A malformed delay must never turn a confirmed cooldown into a legacy
+      // write or extra refresh. Preserve the distinct no-work outcome and let
+      // Home choose its safe generic copy when the countdown is absent.
+      return StepSyncV2Result(
+        kind: StepSyncV2Kind.cooldown,
+        retryAfterSeconds: retry is int && retry >= 1 && retry <= 30
+            ? retry
+            : null,
+      );
     }
 
     if (status >= 500) {
@@ -2142,6 +2168,30 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  /// Capability-scoped Home invitation preflight. A 404 or an old payload is
+  /// explicitly unsupported: never substitute `GET /races`, whose legacy
+  /// buckets are not a Home-modal contract.
+  Future<Map<String, dynamic>> fetchHomeInvitePreflight({
+    required String identityToken,
+  }) async {
+    try {
+      final response = await _sendGetRequest(
+        path: '/races/invite-preflight',
+        identityToken: identityToken,
+      );
+      final decoded = await _decodeJsonResponse(response);
+      if (decoded['resolved'] is! bool) {
+        return const {'supported': false, 'resolved': false, 'invites': []};
+      }
+      return decoded;
+    } on ApiException catch (error) {
+      if (error.statusCode == 404) {
+        return const {'supported': false, 'resolved': false, 'invites': []};
+      }
+      rethrow;
+    }
+  }
+
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
     required String raceId,
@@ -2210,8 +2260,12 @@ class BackendApiService {
       identityToken: identityToken,
     );
     final decoded = await _decodeJsonResponse(response);
-    final races = decoded['races'] as List? ?? [];
-    return races.cast<Map<String, dynamic>>();
+    final races = decoded['races'];
+    if (races is! List) return const [];
+    return races
+        .whereType<Map>()
+        .map((race) => Map<String, dynamic>.from(race))
+        .toList(growable: false);
   }
 
   /// The live seeded daily/weekly races for the Featured section. Each entry
@@ -2225,8 +2279,28 @@ class BackendApiService {
       identityToken: identityToken,
     );
     final decoded = await _decodeJsonResponse(response);
-    final races = decoded['races'] as List? ?? [];
-    return races.cast<Map<String, dynamic>>();
+    final races = decoded['races'];
+    if (races is! List) return const [];
+    return races
+        .whereType<Map>()
+        .map((race) => Map<String, dynamic>.from(race))
+        .toList(growable: false);
+  }
+
+  /// Elects the caller into the upcoming private seeded-race bucket. The
+  /// server chooses the bucket later; neither a bucket ID nor a race ID is
+  /// ever accepted from the client.
+  Future<Map<String, dynamic>> assignSeededRaceBucket({
+    required String identityToken,
+    required String seedKind,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/races/seeded/$seedKind/assign',
+      body: const {'window': 'UPCOMING'},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
   }
 
   Future<Map<String, dynamic>> joinPublicRace({

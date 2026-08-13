@@ -58,27 +58,23 @@ void main() {
         'lastName': null,
         'nameSetupOnboardingRequired': true,
         'nameSetupCompletedAt': null,
-        'featureFlags': {'racesInviteDecisionGateEnabled': true},
       });
 
       expect(auth.supportsDiscoverableIdentity, isTrue);
       expect(auth.firstName, 'Nathan');
       expect(auth.lastName, isNull);
       expect(auth.requiresDiscoverableIdentityOnboarding, isTrue);
-      expect(auth.racesInviteDecisionGateEnabled, isTrue);
 
       auth.applyBackendUser({
         'firstName': 42,
         'lastName': <String>[],
         'nameSetupOnboardingRequired': 'yes',
         'nameSetupCompletedAt': 123,
-        'featureFlags': {'racesInviteDecisionGateEnabled': 'yes'},
       });
 
       expect(auth.firstName, isNull);
       expect(auth.lastName, isNull);
       expect(auth.requiresDiscoverableIdentityOnboarding, isFalse);
-      expect(auth.racesInviteDecisionGateEnabled, isFalse);
     },
   );
 

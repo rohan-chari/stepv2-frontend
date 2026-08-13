@@ -37,7 +37,7 @@ Map<String, dynamic> _races() => {
   ],
 };
 
-Future<void> _pump(WidgetTester tester, {required bool gateEnabled}) async {
+Future<void> _pump(WidgetTester tester) async {
   await tester.binding.setSurfaceSize(const Size(430, 1200));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(
@@ -47,7 +47,6 @@ Future<void> _pump(WidgetTester tester, {required bool gateEnabled}) async {
         racesData: _races(),
         friendsSteps: const [],
         onRacesChanged: () async {},
-        inviteDecisionGateEnabled: gateEnabled,
       ),
     ),
   );
@@ -67,22 +66,22 @@ void main() {
     );
   });
 
-  testWidgets('gate-enabled tab has two metrics and no inline invitations', (
+  testWidgets('Races tab always retains its inline invitations', (
     tester,
   ) async {
-    await _pump(tester, gateEnabled: true);
+    await _pump(tester);
 
     expect(find.text('ACTIVE'), findsWidgets);
-    expect(find.text('WAITING'), findsWidgets);
-    expect(find.text('INVITES'), findsNothing);
-    expect(find.byKey(const Key('invites-strip-header')), findsNothing);
-    expect(find.text('Hidden Invitation'), findsNothing);
+    expect(find.text('PENDING'), findsWidgets);
+    expect(find.text('INVITES'), findsWidgets);
+    expect(find.byKey(const Key('invites-strip-header')), findsOneWidget);
+    expect(find.text('Hidden Invitation'), findsOneWidget);
   });
 
-  testWidgets('old-backend branch retains inline invitation treatment', (
+  testWidgets('inline invitation treatment has no feature-flag branch', (
     tester,
   ) async {
-    await _pump(tester, gateEnabled: false);
+    await _pump(tester);
 
     expect(find.text('INVITES'), findsWidgets);
     expect(find.text('PENDING'), findsWidgets);
@@ -108,7 +107,6 @@ void main() {
           racesData: data,
           friendsSteps: const [],
           onRacesChanged: () async {},
-          inviteDecisionGateEnabled: true,
         ),
       ),
     );

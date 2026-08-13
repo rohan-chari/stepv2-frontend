@@ -49,15 +49,21 @@ class _FakeBackendApiService extends BackendApiService {
       'active': <Map<String, dynamic>>[],
       'completed': <Map<String, dynamic>>[],
     },
+    this.homeInvitePreflight = const {
+      'resolved': true,
+      'invites': <Map<String, dynamic>>[],
+    },
     this.completeOnboarding = true,
   });
 
   final Map<String, dynamic> racesData;
+  final Map<String, dynamic> homeInvitePreflight;
   final bool completeOnboarding;
   int homeSuggestionCalls = 0;
   int racesDiscoveryCalls = 0;
   int payoutClaimCalls = 0;
   int seenCalls = 0;
+  int homeInvitePreflightCalls = 0;
   final List<({String token, List<String> raceIds})> seenRequests = [];
 
   @override
@@ -86,6 +92,7 @@ class _FakeBackendApiService extends BackendApiService {
     required String identityToken,
     required String idempotencyKey,
     required Map<String, dynamic> payload,
+    bool homePull = false,
   }) async => const StepSyncV2Result(kind: StepSyncV2Kind.unsupported);
 
   @override
@@ -114,6 +121,14 @@ class _FakeBackendApiService extends BackendApiService {
     bool usePersistedTotals = false,
   }) async {
     return const {'state': 'EMPTY'};
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchHomeInvitePreflight({
+    required String identityToken,
+  }) async {
+    homeInvitePreflightCalls++;
+    return homeInvitePreflight;
   }
 
   @override
@@ -351,6 +366,65 @@ void main() {
       await tester.tap(find.text('NICE'));
       await tester.pump(const Duration(milliseconds: 50));
       expect(api.seenCalls, 1);
+    },
+  );
+
+  testWidgets(
+    'completed results defer the Home invite until the results sheet closes',
+    (WidgetTester tester) async {
+      final authService = await _authService();
+      final api = _FakeBackendApiService(
+        racesData: const {
+          'invites': <Map<String, dynamic>>[],
+          'waiting': <Map<String, dynamic>>[],
+          'active': <Map<String, dynamic>>[],
+          'completed': <Map<String, dynamic>>[
+            {
+              'id': 'completed-race',
+              'name': 'Results Before Invite',
+              'myStatus': 'ACCEPTED',
+              'myResultsSeen': false,
+              'myPayoutCoins': 0,
+            },
+          ],
+        },
+        homeInvitePreflight: const {
+          'resolved': true,
+          'invites': <Map<String, dynamic>>[
+            {
+              'kind': 'RACE',
+              'id': 'pending-invite',
+              'name': 'Invite After Results',
+              'status': 'PENDING',
+            },
+          ],
+        },
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MainShell(
+            authService: authService,
+            healthService: _FakeHealthService(),
+            backendApiService: api,
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(find.text('Results Before Invite'), findsOneWidget);
+      expect(find.text('Invite After Results'), findsNothing);
+      expect(api.homeInvitePreflightCalls, 0);
+
+      await tester.tap(find.text('NICE'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(api.homeInvitePreflightCalls, 1);
+      expect(find.text('Invite After Results'), findsOneWidget);
     },
   );
 

@@ -105,6 +105,10 @@ class HomeTab extends StatelessWidget {
   final VoidCallback? onSkipInviteCode;
   final VoidCallback? onStartQuickRace;
 
+  /// Shell-owned Home invite overlay is showing this same invitation. Keep the
+  /// inline fallback out of the underlying Home tree until it is dismissed.
+  final bool suppressPendingInvite;
+
   const HomeTab({
     super.key,
     required this.stepData,
@@ -156,6 +160,7 @@ class HomeTab extends StatelessWidget {
     this.onEnterInviteCode,
     this.onSkipInviteCode,
     this.onStartQuickRace,
+    this.suppressPendingInvite = false,
   });
 
   @override
@@ -442,6 +447,7 @@ class HomeTab extends StatelessWidget {
   /// invite is not in the payload at all. This moves the invite in the case
   /// where it renders today; it does not make invites appear during a race.
   Widget? _buildPendingInviteSection() {
+    if (suppressPendingInvite) return null;
     final card = raceCard;
     if (card == null) return null;
     final data = RaceCardData.fromJson(card);

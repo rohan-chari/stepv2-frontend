@@ -12,6 +12,7 @@ import '../config/backend_config.dart';
 import '../config/start_cape_metadata.dart';
 import '../models/loadable.dart';
 import '../models/home_race_suggestion.dart';
+import '../models/home_invite_preflight.dart';
 import '../models/next_race.dart';
 import '../models/race_handoff_result.dart';
 import '../models/race_payout_double_offer.dart';
@@ -42,7 +43,7 @@ import '../widgets/error_toast.dart';
 import '../widgets/info_toast.dart';
 import '../widgets/invite_code_sheet.dart';
 import '../widgets/quick_create_race_sheet.dart';
-import '../widgets/race_invite_decision_gate.dart';
+import '../widgets/home_invite_overlay.dart';
 import '../widgets/team_side_picker.dart';
 import '../widgets/step_milestones_section.dart';
 import '../widgets/streak_chip.dart';
@@ -82,6 +83,7 @@ class MainShell extends StatefulWidget {
     this.reviewPromptService,
     this.racePayoutDoubleAdController,
     this.raceResultsAcknowledgementQueue,
+    this.forceHomeInviteEligibilityForTesting = false,
   });
 
   final AuthService authService;
@@ -92,6 +94,8 @@ class MainShell extends StatefulWidget {
   final ReviewPromptService? reviewPromptService;
   final RacePayoutDoubleAdController? racePayoutDoubleAdController;
   final RaceResultsAcknowledgementQueue? raceResultsAcknowledgementQueue;
+  @visibleForTesting
+  final bool forceHomeInviteEligibilityForTesting;
 
   @override
   State<MainShell> createState() => _MainShellState();
@@ -222,8 +226,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   bool _raceResultsPopupOpen = false;
   bool _nextRaceHomeShownRecorded = false;
   bool _inviteSetupShownRecorded = false;
-  int _racesGateEpoch = 0;
-  bool _racesGateBlocking = false;
+  bool _homeInvitePopupOpen = false;
+  bool _homeInviteSequenceRunning = false;
+  int _homeInviteRequestGeneration = 0;
 
   /// Item 8 — a results modal (race or ranked) took the screen this session,
   /// so the What's New sheet waits for the next launch rather than stacking.
@@ -256,16 +261,18 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   /// (`utils/onboarding_gate.dart`) with a structural test guarding against the
   /// duplication coming back.
   bool get _isOnboarding =>
-      widget.authService.requiresDiscoverableIdentityOnboarding ||
-      isOnboardingGate(
-        onboardingV3Enabled: widget.authService.onboardingV3Enabled,
-        onboardingV2Enabled: widget.authService.onboardingV2Enabled,
-        healthAuthorized: _healthAuthorized,
-        escapedHealthGate: _escapedHealthGate,
-        notificationsState: _notificationsState,
-        tutorialOnboardingSeen: widget.authService.tutorialOnboardingSeen,
-        firstRaceOnboardingSeen: widget.authService.firstRaceOnboardingSeen,
-      );
+      !widget.forceHomeInviteEligibilityForTesting &&
+          widget.authService.requiresDiscoverableIdentityOnboarding ||
+      (!widget.forceHomeInviteEligibilityForTesting &&
+          isOnboardingGate(
+            onboardingV3Enabled: widget.authService.onboardingV3Enabled,
+            onboardingV2Enabled: widget.authService.onboardingV2Enabled,
+            healthAuthorized: _healthAuthorized,
+            escapedHealthGate: _escapedHealthGate,
+            notificationsState: _notificationsState,
+            tutorialOnboardingSeen: widget.authService.tutorialOnboardingSeen,
+            firstRaceOnboardingSeen: widget.authService.firstRaceOnboardingSeen,
+          ));
 
   /// Whether the onboarding invite-code step is still owed.
   ///
@@ -642,7 +649,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     unawaited(_hydrateAndReplayRaceResultsAcks());
     if (!_isOnboarding) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(_maybeShowRaceResults());
+        if (mounted) unawaited(_coordinateHomeOverlays());
       });
     }
   }
@@ -1385,7 +1392,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   /// persisted-unknown outcome forbids a legacy write. Always updates
   /// [_stepData] from the truthful local read. May throw if the local health
   /// read fails — callers decide how to surface that.
-  Future<_StepSyncOutcome> _persistSteps() async {
+  Future<_StepSyncOutcome> _persistSteps({bool homePull = false}) async {
     final identityToken = widget.authService.authToken;
     final now = DateTime.now();
     final results = await Future.wait([
@@ -1414,6 +1421,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       identityToken: identityToken,
       idempotencyKey: key,
       payload: payload,
+      homePull: homePull,
     );
 
     // Local step display is always truthful from the device read, regardless of
@@ -1423,6 +1431,14 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     if (v2.shouldLegacyFallback) {
       final ok = await _legacySyncSteps(identityToken, stepData, hourlySamples);
       return _StepSyncOutcome(persisted: ok, error: !ok);
+    }
+
+    if (v2.isCooldown) {
+      return _StepSyncOutcome(
+        persisted: false,
+        cooldown: true,
+        cooldownSeconds: v2.retryAfterSeconds,
+      );
     }
 
     if (v2.diagnostic != null) {
@@ -1840,7 +1856,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     // both have had their chance (hence the awaits, which previously were
     // fire-and-forget). The share-race drain happens later in
     // `_restoreAndFetch`, so this stays ahead of it.
-    await _maybeShowRaceResults();
+    await _coordinateHomeOverlays();
     if (!mounted) return;
     await _maybeShowRankedResults();
     if (!mounted) return;
@@ -1950,6 +1966,120 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       if (mounted) setState(() => _publicRacesCount = races.length);
     } catch (_) {
       // Keep the last known count on error.
+    }
+  }
+
+  /// Results always win over Home invitations. The coordinator is deliberately
+  /// shell-owned: Home rebuilds, tab changes, and refreshes cannot tear down a
+  /// modal route or stack it over a results/reward/quick-create route.
+  Future<void> _coordinateHomeOverlays() async {
+    await _maybeShowRaceResults();
+    if (!mounted) return;
+    await _maybeShowHomeInvites();
+  }
+
+  Future<void> _maybeShowHomeInvites() async {
+    if (!mounted ||
+        _isOnboarding ||
+        _currentTab != _homeTabIndex ||
+        _homeInvitePopupOpen ||
+        _homeInviteSequenceRunning ||
+        _raceResultsPopupOpen) {
+      return;
+    }
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) return;
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) return;
+
+    _homeInviteSequenceRunning = true;
+    final generation = ++_homeInviteRequestGeneration;
+    try {
+      while (mounted && _currentTab == _homeTabIndex) {
+        final payload = await _backendApiService.fetchHomeInvitePreflight(
+          identityToken: token,
+        );
+        if (!mounted ||
+            generation != _homeInviteRequestGeneration ||
+            token != widget.authService.authToken ||
+            _currentTab != _homeTabIndex) {
+          return;
+        }
+        final preflight = HomeInvitePreflight.tryParse(payload);
+        if (!preflight.supported || preflight.invites.isEmpty) return;
+
+        final invite = preflight.invites.first;
+        setState(() => _homeInvitePopupOpen = true);
+        final answered = await Navigator.of(context).push<bool>(
+          PageRouteBuilder(
+            opaque: false,
+            transitionDuration: const Duration(milliseconds: 250),
+            reverseTransitionDuration: const Duration(milliseconds: 200),
+            pageBuilder: (_, _, _) => HomeInviteOverlay(
+              invite: invite,
+              onRespond: (accept) => _respondToHomeInvite(invite, accept),
+            ),
+            transitionsBuilder: (_, animation, _, child) =>
+                FadeTransition(opacity: animation, child: child),
+          ),
+        );
+        if (!mounted) return;
+        setState(() => _homeInvitePopupOpen = false);
+        if (answered != true) {
+          // X/back is non-mutating. Re-read the existing card to restore its
+          // normal inline fallback after this route has fully popped.
+          unawaited(_fetchRaceCard());
+          return;
+        }
+        // Accept/decline/reconciliation is never optimistic. Refresh the
+        // authoritative personal list + Home card before the next preflight.
+        await Future.wait([_fetchRacesCore(), _fetchRaceCard()]);
+      }
+    } catch (_) {
+      // Unsupported/offline/malformed preflight is intentionally invisible:
+      // the established inline and detail invite routes remain usable.
+    } finally {
+      _homeInviteSequenceRunning = false;
+    }
+  }
+
+  Future<void> _respondToHomeInvite(HomeInvite invite, bool accept) async {
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) {
+      throw const ApiException('Sign in again to answer this invitation.');
+    }
+    try {
+      if (invite.isTournament) {
+        await _backendApiService.respondToTournamentInvite(
+          identityToken: token,
+          tournamentId: invite.id,
+          accept: accept,
+        );
+      } else {
+        await _backendApiService.respondToRaceInvite(
+          identityToken: token,
+          raceId: invite.id,
+          accept: accept,
+        );
+      }
+    } on ApiException catch (error) {
+      // These mean a concurrent answer/withdrawal won. Route pop triggers the
+      // required authoritative fresh preflight rather than retaining a stale
+      // unanswerable card.
+      if (error.code == 'ALREADY_RESPONDED' ||
+          error.code == 'NOT_INVITED' ||
+          error.statusCode == 404) {
+        return;
+      }
+      throw ApiException(
+        error.code == 'TEAM_FULL'
+            ? 'That team is full. Try another invitation.'
+            : error.code == 'INSUFFICIENT_COINS'
+            ? 'You need more coins to accept this invitation.'
+            : error.message,
+        statusCode: error.statusCode,
+        code: error.code,
+      );
     }
   }
 
@@ -2487,10 +2617,26 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _StepSyncOutcome outcome;
     try {
       // Stages 2-4: read health, persist (v2/legacy), update _stepData.
-      outcome = await _persistSteps();
+      outcome = await _persistSteps(homePull: true);
     } catch (_) {
       // Local health read failed: keep prior server-derived surfaces and end
       // the pull (existing error presentation lives in the step display).
+      return;
+    }
+
+    // The authoritative server cooldown is deliberately a no-work result for
+    // a deliberate Home pull. Keep every current card in place: do not fetch
+    // Home/discovery, do not call legacy sync, and do not begin job polling.
+    final cooldownSeconds = outcome.cooldownSeconds;
+    if (outcome.cooldown) {
+      if (mounted) {
+        showInfoToast(
+          context,
+          cooldownSeconds == null
+              ? 'You just synced. Try again shortly.'
+              : 'You just synced. Try again in $cooldownSeconds seconds.',
+        );
+      }
       return;
     }
 
@@ -3381,10 +3527,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     child: PageView(
                       key: const Key('main-shell-pages'),
                       controller: _pageController,
-                      physics:
-                          _currentTab == _racesTabIndex && _racesGateBlocking
-                          ? const NeverScrollableScrollPhysics()
-                          : const PageScrollPhysics(),
+                      physics: const PageScrollPhysics(),
                       onPageChanged: (index) {
                         final enteringHome =
                             index == _homeTabIndex &&
@@ -3394,13 +3537,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                           if (enteringHome) {
                             _homeSuggestionsImpressionRecorded = false;
                           }
-                          if (index == _racesTabIndex &&
-                              widget
-                                  .authService
-                                  .racesInviteDecisionGateEnabled) {
-                            _racesGateEpoch++;
-                            _racesGateBlocking = true;
-                          }
                           // Clear the incoming-friend-request badge when the Friends
                           // tab is revealed (mirrors _openFriendsTab's old behavior).
                           if (index == _friendsTabIndex &&
@@ -3408,12 +3544,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                             _incomingFriendRequests = 0;
                           }
                         });
-                        if (index == _racesTabIndex &&
-                            !widget
-                                .authService
-                                .racesInviteDecisionGateEnabled) {
-                          _refreshRacesTab();
-                        }
+                        if (index == _racesTabIndex) _refreshRacesTab();
                         if (enteringHome &&
                             (_homeSuggestions.state.isSuccess ||
                                 _homeSuggestions.state.hasData)) {
@@ -3477,57 +3608,23 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                           onStartQuickRace: () {
                             unawaited(_showQuickCreateRaceSheet());
                           },
+                          suppressPendingInvite: _homeInvitePopupOpen,
                         ),
-                        RaceInviteDecisionGate(
-                          enabled:
-                              widget.authService.racesInviteDecisionGateEnabled,
-                          active: _currentTab == _racesTabIndex,
-                          entryEpoch: _racesGateEpoch,
+                        RacesTab(
                           authService: widget.authService,
-                          backendApiService: _backendApiService,
-                          onVerifiedData: (data) {
-                            if (!mounted) return;
-                            setState(() {
-                              _racesData = data;
-                              _racesState = Loadable.success(data);
-                            });
-                          },
-                          onExitHome: () {
-                            if (!mounted) return;
-                            setState(() {
-                              _racesGateBlocking = false;
-                              _currentTab = _homeTabIndex;
-                            });
-                            _pageController.jumpToPage(_homeTabIndex);
-                          },
-                          onBlockingChanged: (blocking) {
-                            if (!mounted || _racesGateBlocking == blocking) {
-                              return;
-                            }
-                            setState(() => _racesGateBlocking = blocking);
-                            if (!blocking && _currentTab == _racesTabIndex) {
-                              unawaited(_refreshRacesDiscovery());
-                            }
-                          },
-                          child: RacesTab(
-                            inviteDecisionGateEnabled: widget
-                                .authService
-                                .racesInviteDecisionGateEnabled,
-                            authService: widget.authService,
-                            racesData: _racesData,
-                            racesState: _racesState,
-                            friendsSteps: _friendsSteps,
-                            featuredRaces: _featuredRaces,
-                            featuredTournaments: _featuredTournaments,
-                            onRacesChanged: _fetchRaces,
-                            onRefresh: _refreshRacesTab,
-                            onJoinFeaturedRace: _joinFeaturedRace,
-                            onJoinFeaturedTournament: _joinFeaturedTournament,
-                            publicRacesCount: _publicRacesCount,
-                            displayName: _displayName,
-                            notificationService: widget.notificationService,
-                            onOpenProfile: _openProfile,
-                          ),
+                          racesData: _racesData,
+                          racesState: _racesState,
+                          friendsSteps: _friendsSteps,
+                          featuredRaces: _featuredRaces,
+                          featuredTournaments: _featuredTournaments,
+                          onRacesChanged: _fetchRaces,
+                          onRefresh: _refreshRacesTab,
+                          onJoinFeaturedRace: _joinFeaturedRace,
+                          onJoinFeaturedTournament: _joinFeaturedTournament,
+                          publicRacesCount: _publicRacesCount,
+                          displayName: _displayName,
+                          notificationService: widget.notificationService,
+                          onOpenProfile: _openProfile,
                         ),
                         FriendsTab(
                           authService: widget.authService,
@@ -3622,9 +3719,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
               child: WoodenTabBar(
                 currentIndex: _currentTab,
                 onTap: (index) {
-                  if (_currentTab == _racesTabIndex && _racesGateBlocking) {
-                    return;
-                  }
                   _pageController.animateToPage(
                     index,
                     duration: const Duration(milliseconds: 250),
@@ -3706,6 +3800,8 @@ class _StepSyncOutcome {
     this.error = false,
     this.jobId,
     this.generation,
+    this.cooldown = false,
+    this.cooldownSeconds,
   });
 
   /// Step/sample data is (very likely) on the server.
@@ -3720,4 +3816,6 @@ class _StepSyncOutcome {
 
   final String? jobId;
   final int? generation;
+  final bool cooldown;
+  final int? cooldownSeconds;
 }

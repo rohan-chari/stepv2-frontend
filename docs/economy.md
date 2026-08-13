@@ -754,6 +754,22 @@ Non-funded seeded races only (retired for funded).
 
 Split by descending linear weights (`computeGradedPayouts`).
 
+### 4.5 Live Daily/Weekly challenge configuration — verified 2026-08-12
+
+| Item | Daily (`seed-daily-10k`) | Weekly (`seed-weekly-50k`) | Source |
+|---|---:|---:|---|
+| Seed cap / duration / target | 500 / 24h / 0 | 500 / 168h / 0 | `DB race_seeds` |
+| New-race payout preset | `TOP_HALF` | `TOP_HALF` | `CODE races/jobs/seededRaceRenewal.js:83-122` |
+| Funding | app-funded | app-funded | `DB app_settings` has no `fundedPrizePoolsEnabled` row, so `CODE` default is `true` |
+| New-race curve | `GEOMETRIC` | `GEOMETRIC` | `DB app_settings.seededGeometricPayoutsEnabled=true`; stamped by renewal |
+| Pool EV per eligible walker | 20 coins / 1-day race | 80 coins / 7-day race | `CODE shared/economy/prizePool.js`; pool = walkers × durationPoints × 20 |
+
+The active rows observed at verification had 61 accepted / 50 walkers (Daily)
+and 68 accepted / 57 walkers (Weekly). These are live operational counts, not
+configuration. `race_seeds.powerup_step_interval=2500` in DB is legacy stored
+data; renewal deliberately stamps the global fixed 2,000 raw-steps/box cadence
+(§3.3).
+
 ---
 
 ## 5. Daily spinner (daily reward box)
