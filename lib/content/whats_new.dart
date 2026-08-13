@@ -35,6 +35,15 @@ class WhatsNewEntry {
 /// Newest first.
 const List<WhatsNewEntry> kWhatsNewEntries = <WhatsNewEntry>[
   WhatsNewEntry(
+    version: '2.3.3',
+    title: 'RACE TOGETHER',
+    bullets: <String>[
+      'Daily and Weekly Challenges now match you into a private, smaller race group.',
+      'Bring a bigger crew: tournament brackets can now include up to 8 racers.',
+      'Home and race updates are smoother, so your latest progress appears sooner.',
+    ],
+  ),
+  WhatsNewEntry(
     version: '2.2.0',
     title: 'PODIUMS & PAYOUTS',
     bullets: <String>[
