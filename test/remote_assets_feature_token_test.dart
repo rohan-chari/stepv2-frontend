@@ -20,6 +20,11 @@ void main() {
     expect(tokens, contains('remote_assets'));
   });
 
+  test('clientFeaturesHeader advertises the remote_asset_preferred token', () {
+    final tokens = BackendApiService.clientFeaturesHeader.split(',');
+    expect(tokens, contains('remote_asset_preferred'));
+  });
+
   test('existing feature tokens survive alongside remote_assets', () {
     final tokens = BackendApiService.clientFeaturesHeader.split(',');
     for (final token in const [
@@ -34,21 +39,22 @@ void main() {
     }
   });
 
-  test('remote_assets is in BOTH branches of the header ternary', () {
+  test('remote asset capability tokens are in BOTH header variants', () {
     final source = File(
       'lib/services/backend_api_service.dart',
     ).readAsStringSync();
-    final match = RegExp(
-      r"clientFeaturesHeader\s*=\s*_adsSupported\s*\?\s*'([^']*)'\s*:\s*'([^']*)'",
-    ).firstMatch(source);
-
-    expect(
-      match,
-      isNotNull,
-      reason: 'the header ternary shape changed — re-check this guard',
-    );
-    expect(match!.group(1)!.split(','), contains('remote_assets'));
-    expect(match.group(2)!.split(','), contains('remote_assets'));
+    final start = source.indexOf('clientFeaturesHeader = _adsSupported');
+    final end = source.indexOf('/// Replays a persisted results dismissal');
+    expect(start, greaterThanOrEqualTo(0));
+    expect(end, greaterThan(start));
+    final headerDefinition = source.substring(start, end);
+    for (final token in const ['remote_assets', 'remote_asset_preferred']) {
+      expect(
+        RegExp(token).allMatches(headerDefinition),
+        hasLength(2),
+        reason: '$token must occur in both the ads and ad-less header variants',
+      );
+    }
   });
 
   // CLAUDE.md's "structural guard over source" carve-out (precedent:

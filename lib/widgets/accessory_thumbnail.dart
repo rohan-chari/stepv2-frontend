@@ -48,10 +48,18 @@ class AccessoryThumbnail extends StatelessWidget {
         this.assetPath ?? 'assets/images/accessories/$assetKey.png';
     final frames = animationFrames < 1 ? 1 : animationFrames;
 
+    final cache = RemoteAssetCache.instance;
+    final hasRemoteManifestEntry =
+        cache.remoteAssetPreferred && cache.entry(remoteKind, assetKey) != null;
+
     // CDN-served art ships no bundled `_thumb.png` to try, so skip straight to
     // the resolver (an Image.asset miss here would just cost a frame and log a
-    // bundle error). Everything bundled keeps the thumb-first path below.
-    if (!RemoteOrBundledAccessoryImage.isBundledPath(assetPath)) {
+    // bundle error). A current remote-first build does the same for a
+    // same-key bundle: the full PNG is the fallback only if its CDN version
+    // cannot be resolved. Legacy binaries retain their compiled thumb-first
+    // behavior.
+    if (hasRemoteManifestEntry ||
+        !RemoteOrBundledAccessoryImage.isBundledPath(assetPath)) {
       if (frames == 1) return _remoteImage(assetPath, fit: BoxFit.contain);
       return _frameZeroCrop(assetPath, frames);
     }

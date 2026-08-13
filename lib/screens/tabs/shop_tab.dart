@@ -349,7 +349,9 @@ class _ShopTabState extends State<ShopTab> {
         showInfoToast(context, '${item['name'] ?? 'Accessory'} unlocked.');
       }
     } on ApiException catch (error) {
-      if (mounted) showErrorToast(context, error.message);
+      if (mounted) {
+        showErrorToast(context, error.message);
+      }
     } catch (_) {
       if (mounted) {
         showErrorToast(
@@ -360,6 +362,16 @@ class _ShopTabState extends State<ShopTab> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  String _equipErrorMessage(ApiException error) {
+    // ACCESSORY_CONFLICT is additive: frozen backends and all existing
+    // failures still retain their original server-provided copy. A malformed
+    // newer error payload gets a useful message instead of a blank toast.
+    if (error.code == 'ACCESSORY_CONFLICT' && error.message.trim().isEmpty) {
+      return 'That accessory conflicts with your current outfit.';
+    }
+    return error.message;
   }
 
   Future<void> _purchasePowerup(Map<String, dynamic> item) async {
@@ -414,7 +426,7 @@ class _ShopTabState extends State<ShopTab> {
       );
       await _loadCatalog();
     } on ApiException catch (error) {
-      if (mounted) showErrorToast(context, error.message);
+      if (mounted) showErrorToast(context, _equipErrorMessage(error));
     } catch (_) {
       if (mounted) {
         showErrorToast(

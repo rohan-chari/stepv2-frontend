@@ -7,16 +7,29 @@ Cosmetics live in the backend's **`shop_items` table — the DB is the single
 source of truth** (the old `data/cosmetics.json` is gone). Prod and staging stay
 in lockstep automatically: every admin create/edit is mirrored to the peer DB by
 sku (`PEER_DATABASE_URL`). The frontend is slot-agnostic: it reads each item's
-`slot` + `renderMetadata` and renders the PNG. So a new item is normally **one
-PNG asset (frontend) + one admin API create (backend)** — no Dart code change
-required.
+`slot` + `renderMetadata` and renders the PNG. Art can be bundled in the app or
+remote-served through the backend's immutable, fingerprinted `/assets` tree for
+clients that advertise `remote_assets`; a new item normally needs one art
+artifact plus one admin API create, with no Dart code change.
 
 ## ⚠️ Read this first: old-app compatibility
 
-A cosmetic's PNG is bundled into the **app binary**. The `assetKey` points at
-`assets/images/accessories/<assetKey>.png`, which only exists in builds that
-shipped that file. Per the repo's core rule (`CLAUDE.md`), older app versions
-stay in users' hands for ~a week+ after release.
+A cosmetic's PNG may be bundled into the **app binary** at
+`assets/images/accessories/<assetKey>.png`, or remote-served at
+`/assets/accessories/<assetKey>@<sha>.png`. Remote URLs are immutable and
+Cloudflare-cached: create them with `npm run assets:add -- <png> accessories
+<assetKey>`, deploy the backend and verify the URL, then set `assetVersion` on
+the catalog row. Never create/update the row first: a cached 404 is unsafe.
+Clients that do not advertise `remote_assets` are filtered from remote-only
+rows. Per the repo's core rule (`CLAUDE.md`), older app versions stay in users'
+hands for ~a week+ after release.
+
+Remote-first clients prefer a manifest-listed CDN file but fall back to the
+bundle on an unavailable manifest/download. Refreshing Gold Chain ships the
+replacement bundle PNG in the paired iOS/Android release; after its fingerprinted
+CDN artifact is deployed and checksum-verified and that build is available, set
+`assetVersion: "bde871582fef"` with `remoteOnly: false`. This keeps the catalog
+row available to pre-CDN clients while remote-first clients use CDN art.
 
 If you make a new item prod-visible immediately, an **older app that doesn't
 bundle the PNG** will try to render it the moment anyone equips it. Two things

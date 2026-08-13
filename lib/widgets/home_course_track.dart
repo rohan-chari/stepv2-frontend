@@ -28,6 +28,9 @@ List<Map<String, dynamic>> normalizedAccessoriesForAnimal(
         assetKey.trim().isEmpty) {
       continue;
     }
+    // CHARACTER is the body selection, not an overlay. A newer backend or a
+    // malformed fixture must never make a character asset render as a hat.
+    if (slot.trim() == 'CHARACTER') continue;
 
     final rawMetadata = accessory['renderMetadata'];
     if (rawMetadata != null && rawMetadata is! Map) continue;
@@ -47,7 +50,45 @@ List<Map<String, dynamic>> normalizedAccessoriesForAnimal(
       'renderMetadata': metadata,
     });
   }
+  // Server ordering is not an API guarantee. Keep accessory composition
+  // identical across every renderer that shares this normalizer, including
+  // cached payloads and hand-authored tutorial fixtures.
+  result.sort(_compareAccessoriesInCanonicalOrder);
   return result;
+}
+
+const _accessorySlotOrder = <String, int>{
+  'BACK': 0,
+  'FEET': 1,
+  'NECK': 2,
+  'FACE': 3,
+  'HEAD': 4,
+};
+
+int _compareAccessoriesInCanonicalOrder(
+  Map<String, dynamic> left,
+  Map<String, dynamic> right,
+) {
+  final leftSlot = left['slot'] as String;
+  final rightSlot = right['slot'] as String;
+  final slotComparison =
+      (_accessorySlotOrder[leftSlot] ?? _accessorySlotOrder.length).compareTo(
+        _accessorySlotOrder[rightSlot] ?? _accessorySlotOrder.length,
+      );
+  if (slotComparison != 0) return slotComparison;
+
+  // Unknown future slots remain safe and deterministic rather than relying on
+  // server iteration order. The asset/id tie-breakers also make malformed
+  // duplicate rows stable.
+  final slotNameComparison = leftSlot.compareTo(rightSlot);
+  if (slotNameComparison != 0) return slotNameComparison;
+  final assetComparison = (left['assetKey'] as String).compareTo(
+    right['assetKey'] as String,
+  );
+  if (assetComparison != 0) return assetComparison;
+  return (left['id'] is String ? left['id'] as String : '').compareTo(
+    right['id'] is String ? right['id'] as String : '',
+  );
 }
 
 Map<String, dynamic>? _normalizedAccessoryMetadata(

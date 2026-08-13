@@ -90,6 +90,7 @@ class _ShareApi extends BackendApiService {
     required String identityToken,
     required String idempotencyKey,
     required Map<String, dynamic> payload,
+    bool homePull = false,
   }) async => const StepSyncV2Result(kind: StepSyncV2Kind.unsupported);
 
   @override
@@ -110,13 +111,12 @@ class _ShareApi extends BackendApiService {
   }) async => const [];
 
   @override
-  Future<Map<String, dynamic>> fetchMe({
-    required String identityToken,
-  }) async => const {
-    'displayName': 'Trail Walker',
-    'firstRaceOnboardingSeen': true,
-    'tutorialOnboardingSeen': true,
-  };
+  Future<Map<String, dynamic>> fetchMe({required String identityToken}) async =>
+      const {
+        'displayName': 'Trail Walker',
+        'firstRaceOnboardingSeen': true,
+        'tutorialOnboardingSeen': true,
+      };
 
   @override
   Future<Map<String, dynamic>> fetchRaces({
@@ -148,18 +148,18 @@ class _ShareApi extends BackendApiService {
 }
 
 Map<String, dynamic> _teamPreview({String status = 'PENDING'}) => {
-      'id': 'race-shared',
-      'name': 'Shared Team Race',
-      'status': status,
-      'isTeamRace': true,
-      'teamSize': 2,
-      'teamAName': 'Red',
-      'teamBName': 'Blue',
-      'teams': {
-        'teamA': {'memberCount': 2},
-        'teamB': {'memberCount': 1},
-      },
-    };
+  'id': 'race-shared',
+  'name': 'Shared Team Race',
+  'status': status,
+  'isTeamRace': true,
+  'teamSize': 2,
+  'teamAName': 'Red',
+  'teamBName': 'Blue',
+  'teams': {
+    'teamA': {'memberCount': 2},
+    'teamB': {'memberCount': 1},
+  },
+};
 
 Future<AuthService> _authService() async {
   SharedPreferences.setMockInitialValues({
@@ -201,21 +201,24 @@ Future<void> _pumpShell(WidgetTester tester, _ShareApi api) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('TR-201: a PENDING team share link asks for a side and joins it',
-      (tester) async {
-    final api = _ShareApi(preview: _teamPreview());
-    await _pumpShell(tester, api);
+  testWidgets(
+    'TR-201: a PENDING team share link asks for a side and joins it',
+    (tester) async {
+      final api = _ShareApi(preview: _teamPreview());
+      await _pumpShell(tester, api);
 
-    expect(find.text('PICK YOUR SIDE'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('side-pick-B')));
-    await _settle(tester);
+      expect(find.text('PICK YOUR SIDE'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('side-pick-B')));
+      await _settle(tester);
 
-    expect(api.joinedWithTeam, 'TEAM_B');
-    expect(api.plainJoinCalled, isFalse);
-  });
+      expect(api.joinedWithTeam, 'TEAM_B');
+      expect(api.plainJoinCalled, isFalse);
+    },
+  );
 
-  testWidgets('TR-204: a share link to an ACTIVE team race never joins',
-      (tester) async {
+  testWidgets('TR-204: a share link to an ACTIVE team race never joins', (
+    tester,
+  ) async {
     final api = _ShareApi(preview: _teamPreview(status: 'ACTIVE'));
     await _pumpShell(tester, api);
 
@@ -224,8 +227,9 @@ void main() {
     expect(api.plainJoinCalled, isFalse);
   });
 
-  testWidgets('TR-705: an individual share link joins directly, no picker',
-      (tester) async {
+  testWidgets('TR-705: an individual share link joins directly, no picker', (
+    tester,
+  ) async {
     final api = _ShareApi(
       preview: const {
         'id': 'race-shared',

@@ -24,23 +24,29 @@ class ContentBoard extends StatelessWidget {
         color: AppColors.of(context).parchment,
         border: Border.all(color: AppColors.of(context).textDark, width: 2),
       ),
-      child: ClipRect(
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: CustomPaint(
-                painter: PixelSurfacePainter(
-                  dotColor: AppColors.of(
-                    context,
-                  ).parchmentDark.withValues(alpha: 0.32),
+      child: Material(
+        color: Colors.transparent,
+        child: ClipRect(
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: PixelSurfacePainter(
+                    dotColor: AppColors.of(
+                      context,
+                    ).parchmentDark.withValues(alpha: 0.32),
+                  ),
                 ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              child: SizedBox(width: double.infinity, child: child),
-            ),
-          ],
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 16,
+                ),
+                child: SizedBox(width: double.infinity, child: child),
+              ),
+            ],
+          ),
         ),
       ),
     );

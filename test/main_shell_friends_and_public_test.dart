@@ -74,6 +74,7 @@ class _FakeBackendApiService extends BackendApiService {
     required String identityToken,
     required String idempotencyKey,
     required Map<String, dynamic> payload,
+    bool homePull = false,
   }) async => const StepSyncV2Result(kind: StepSyncV2Kind.unsupported);
 
   @override
@@ -266,10 +267,7 @@ void main() {
   testWidgets('tab item 2 is labeled Friends and the Profile badge moved', (
     WidgetTester tester,
   ) async {
-    await _pumpShell(
-      tester,
-      _FakeBackendApiService(incomingFriendRequests: 2),
-    );
+    await _pumpShell(tester, _FakeBackendApiService(incomingFriendRequests: 2));
 
     final tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
     expect(tabBar.items[2].label, 'Friends');
@@ -282,10 +280,7 @@ void main() {
   testWidgets('selecting the Friends tab clears the incoming-request badge', (
     WidgetTester tester,
   ) async {
-    await _pumpShell(
-      tester,
-      _FakeBackendApiService(incomingFriendRequests: 2),
-    );
+    await _pumpShell(tester, _FakeBackendApiService(incomingFriendRequests: 2));
 
     var tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
     expect(tabBar.items[2].badgeCount, 2);

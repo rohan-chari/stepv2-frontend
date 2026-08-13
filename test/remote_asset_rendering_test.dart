@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -33,9 +34,9 @@ Future<void> _seedCachedFile(
   String key,
   String version,
 ) async {
-  File('${_tmp.path}/${kind.name}-$key@$version.png').writeAsBytesSync(
-    _pngBytes,
-  );
+  File(
+    '${_tmp.path}/${kind.name}-$key@$version.png',
+  ).writeAsBytesSync(_pngBytes);
   await RemoteAssetCache.instance.debugRescan();
 }
 
@@ -116,6 +117,171 @@ void main() {
     );
   });
 
+  testWidgets(
+    'a current cached manifest entry overrides a same-key bundled accessory',
+    (tester) async {
+      RemoteAssetCache.instance.debugApplyManifest({
+        'accessories': {
+          'sunglasses': {
+            'url': 'https://cdn/accessories/sunglasses@aabbcc.png',
+          },
+        },
+      });
+      await _seedCachedFile(
+        RemoteAssetKind.accessories,
+        'sunglasses',
+        'aabbcc',
+      );
+
+      await pumpSprite(
+        tester,
+        accessories: const [
+          {'slot': 'FACE', 'assetKey': 'sunglasses', 'renderMetadata': {}},
+        ],
+      );
+
+      expect(_fileImages(tester, 'sunglasses@aabbcc'), hasLength(1));
+      expect(
+        _images(tester).where(
+          (image) =>
+              image.image is AssetImage &&
+              (image.image as AssetImage).assetName.contains('sunglasses'),
+        ),
+        isEmpty,
+      );
+    },
+  );
+
+  testWidgets(
+    'a stale cached version falls back to a same-key bundled accessory',
+    (tester) async {
+      await _seedCachedFile(
+        RemoteAssetKind.accessories,
+        'sunglasses',
+        'oldversion',
+      );
+      RemoteAssetCache.instance.debugApplyManifest({
+        'accessories': {
+          'sunglasses': {
+            'url': 'https://cdn/accessories/sunglasses@newversion.png',
+          },
+        },
+      });
+
+      await pumpSprite(
+        tester,
+        accessories: const [
+          {'slot': 'FACE', 'assetKey': 'sunglasses', 'renderMetadata': {}},
+        ],
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(_fileImages(tester, 'sunglasses'), isEmpty);
+      expect(
+        _images(tester).where(
+          (image) =>
+              image.image is AssetImage &&
+              (image.image as AssetImage).assetName.contains('sunglasses'),
+        ),
+        hasLength(1),
+      );
+    },
+  );
+
+  testWidgets(
+    'a failed remote download falls back to a same-key bundled accessory',
+    (tester) async {
+      RemoteAssetCache.instance.debugApplyManifest({
+        'accessories': {
+          'sunglasses': {
+            'url': 'https://cdn/accessories/sunglasses@aabbcc.png',
+          },
+        },
+      });
+
+      await pumpSprite(
+        tester,
+        accessories: const [
+          {'slot': 'FACE', 'assetKey': 'sunglasses', 'renderMetadata': {}},
+        ],
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        _images(tester).where(
+          (image) =>
+              image.image is AssetImage &&
+              (image.image as AssetImage).assetName.contains('sunglasses'),
+        ),
+        hasLength(1),
+      );
+    },
+  );
+
+  testWidgets('a malformed manifest entry keeps the bundled accessory', (
+    tester,
+  ) async {
+    RemoteAssetCache.instance.debugApplyManifest({
+      'accessories': {
+        'sunglasses': {'url': false},
+      },
+    });
+
+    await pumpSprite(
+      tester,
+      accessories: const [
+        {'slot': 'FACE', 'assetKey': 'sunglasses', 'renderMetadata': {}},
+      ],
+    );
+
+    expect(
+      _images(tester).where(
+        (image) =>
+            image.image is AssetImage &&
+            (image.image as AssetImage).assetName.contains('sunglasses'),
+      ),
+      hasLength(1),
+    );
+  });
+
+  testWidgets('legacy bundled-first behavior ignores a cached manifest entry', (
+    tester,
+  ) async {
+    await RemoteAssetCache.instance.debugConfigure(
+      cacheDir: _tmp,
+      bundledAssets: {
+        'assets/images/accessories/baseball_cap.png',
+        'assets/images/accessories/sunglasses.png',
+      },
+      remoteAssetPreferred: false,
+    );
+    RemoteAssetCache.instance.debugApplyManifest({
+      'accessories': {
+        'sunglasses': {'url': 'https://cdn/accessories/sunglasses@aabbcc.png'},
+      },
+    });
+    await _seedCachedFile(RemoteAssetKind.accessories, 'sunglasses', 'aabbcc');
+
+    await pumpSprite(
+      tester,
+      accessories: const [
+        {'slot': 'FACE', 'assetKey': 'sunglasses', 'renderMetadata': {}},
+      ],
+    );
+
+    expect(_fileImages(tester, 'sunglasses@aabbcc'), isEmpty);
+    expect(
+      _images(tester).where(
+        (image) =>
+            image.image is AssetImage &&
+            (image.image as AssetImage).assetName.contains('sunglasses'),
+      ),
+      hasLength(1),
+    );
+  });
+
   testWidgets('a cached remote accessory renders from its cached file', (
     tester,
   ) async {
@@ -150,7 +316,9 @@ void main() {
   ) async {
     RemoteAssetCache.instance.debugApplyManifest({
       'accessories': {
-        'pirate_flag': {'url': 'https://cdn/accessories/pirate_flag@abc123.png'},
+        'pirate_flag': {
+          'url': 'https://cdn/accessories/pirate_flag@abc123.png',
+        },
       },
     });
     await _seedCachedFile(RemoteAssetKind.accessories, 'pirate_flag', 'abc123');
@@ -172,10 +340,9 @@ void main() {
     // The sheet is laid out six frames wide against a one-frame-tall box, the
     // same math the bundled path uses.
     final overlayBox = tester.getSize(
-      find.ancestor(
-        of: find.byWidget(sheet),
-        matching: find.byType(ClipRect),
-      ).first,
+      find
+          .ancestor(of: find.byWidget(sheet), matching: find.byType(ClipRect))
+          .first,
     );
     expect(sheet.width, closeTo(overlayBox.width * 6, 0.01));
     expect(sheet.height, closeTo(overlayBox.height, 0.01));
@@ -225,14 +392,58 @@ void main() {
     expect(_fileImages(tester, 'boots@aabbcc'), hasLength(4));
   });
 
+  testWidgets(
+    'a delayed cold-cache FEET download renders every shoe once it completes',
+    (tester) async {
+      final response = Completer<List<int>?>();
+      var requests = 0;
+      await RemoteAssetCache.instance.debugConfigure(
+        cacheDir: _tmp,
+        bundledAssets: {'assets/images/capybara_walk_right.png'},
+        fetcher: (uri, headers) {
+          requests++;
+          return response.future;
+        },
+      );
+      RemoteAssetCache.instance.debugApplyManifest({
+        'accessories': {
+          'boots': {'url': 'https://cdn/accessories/boots@aabbcc.png'},
+        },
+      });
+      late Future<File?> sharedFetch;
+      await tester.runAsync(() async {
+        sharedFetch = RemoteAssetCache.instance.fetch(
+          RemoteAssetKind.accessories,
+          'boots',
+        );
+      });
+
+      await pumpSprite(
+        tester,
+        accessories: const [
+          {'slot': 'FEET', 'assetKey': 'boots', 'renderMetadata': {}},
+        ],
+      );
+      expect(requests, 1);
+      expect(_fileImages(tester, 'boots@aabbcc'), isEmpty);
+
+      await tester.runAsync(() async {
+        response.complete(_pngBytes);
+        expect(await sharedFetch, isNotNull);
+      });
+      await tester.pump();
+      expect(_fileImages(tester, 'boots@aabbcc'), hasLength(4));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   group('AccessoryThumbnail', () {
-    Future<void> pumpThumb(
-      WidgetTester tester,
-      Widget thumb,
-    ) async {
+    Future<void> pumpThumb(WidgetTester tester, Widget thumb) async {
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(body: Center(child: SizedBox.square(dimension: 48, child: thumb))),
+          home: Scaffold(
+            body: Center(child: SizedBox.square(dimension: 48, child: thumb)),
+          ),
         ),
       );
       await tester.pump();
@@ -241,10 +452,7 @@ void main() {
     testWidgets('bundled keys keep the thumb-first Image.asset path', (
       tester,
     ) async {
-      await pumpThumb(
-        tester,
-        const AccessoryThumbnail(assetKey: 'sunglasses'),
-      );
+      await pumpThumb(tester, const AccessoryThumbnail(assetKey: 'sunglasses'));
 
       expect(
         _images(tester).where(
@@ -256,20 +464,53 @@ void main() {
       );
     });
 
+    testWidgets(
+      'a current cached manifest entry overrides a bundled thumbnail',
+      (tester) async {
+        RemoteAssetCache.instance.debugApplyManifest({
+          'accessories': {
+            'sunglasses': {
+              'url': 'https://cdn/accessories/sunglasses@aabbcc.png',
+            },
+          },
+        });
+        await _seedCachedFile(
+          RemoteAssetKind.accessories,
+          'sunglasses',
+          'aabbcc',
+        );
+
+        await pumpThumb(
+          tester,
+          const AccessoryThumbnail(assetKey: 'sunglasses'),
+        );
+
+        expect(_fileImages(tester, 'sunglasses@aabbcc'), hasLength(1));
+        expect(
+          _images(tester).where((image) => image.image is AssetImage),
+          isEmpty,
+          reason: 'the bundled _thumb must not outrank a manifest entry',
+        );
+      },
+    );
+
     testWidgets('remote keys skip the _thumb attempt and use the cache', (
       tester,
     ) async {
       RemoteAssetCache.instance.debugApplyManifest({
         'accessories': {
-          'pirate_hat': {'url': 'https://cdn/accessories/pirate_hat@aabbcc.png'},
+          'pirate_hat': {
+            'url': 'https://cdn/accessories/pirate_hat@aabbcc.png',
+          },
         },
       });
-      await _seedCachedFile(RemoteAssetKind.accessories, 'pirate_hat', 'aabbcc');
-
-      await pumpThumb(
-        tester,
-        const AccessoryThumbnail(assetKey: 'pirate_hat'),
+      await _seedCachedFile(
+        RemoteAssetKind.accessories,
+        'pirate_hat',
+        'aabbcc',
       );
+
+      await pumpThumb(tester, const AccessoryThumbnail(assetKey: 'pirate_hat'));
 
       expect(_fileImages(tester, 'pirate_hat@aabbcc'), hasLength(1));
       expect(
@@ -358,7 +599,9 @@ void main() {
     Future<void> pumpIcon(WidgetTester tester, String type) async {
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(body: Center(child: PowerupIcon(type: type, size: 32))),
+          home: Scaffold(
+            body: Center(child: PowerupIcon(type: type, size: 32)),
+          ),
         ),
       );
       await tester.pump();

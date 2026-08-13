@@ -8,10 +8,10 @@ import '../services/remote_asset_cache.dart';
 ///
 /// The bundled path is byte-identical to what the app did before CDN art
 /// existed — a plain [Image.asset], resolving synchronously to an [AssetImage]
-/// (several suites assert exactly that). Only a key the binary does NOT bundle
-/// takes the remote path: cached file first (synchronous, no flicker), then a
-/// one-shot download, then the caller's [errorBuilder] — which everywhere in
-/// this app is the existing CustomPaint / fallback-tile placeholder.
+/// (several suites assert exactly that). This current binary is remote-first:
+/// a valid manifest row takes the cached-file then one-shot-download path even
+/// for a same-key bundled asset. Failed remote resolution returns to that
+/// bundle; a genuinely remote-only key uses the caller's existing placeholder.
 class RemoteOrBundledAccessoryImage extends StatelessWidget {
   const RemoteOrBundledAccessoryImage({
     super.key,
@@ -48,22 +48,19 @@ class RemoteOrBundledAccessoryImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final path = assetPath;
-    if (isBundledPath(path)) {
-      return Image.asset(
-        path!,
-        width: width,
-        height: height,
-        fit: fit,
-        filterQuality: filterQuality,
-        errorBuilder: errorBuilder,
-      );
-    }
-
     final cache = RemoteAssetCache.instance;
+    final bundled = isBundledPath(path);
+    // Older binaries never reach this branch because their resolver was
+    // bundled-first. Keeping the policy explicit gives the contract a focused
+    // regression seam while this binary always advertises the capability.
+    if (bundled && !cache.remoteAssetPreferred) return _bundledImage(path!);
+
     final cached = cache.cachedFile(kind, remoteKey);
     if (cached != null) return _fileImage(cached);
 
-    if (cache.entry(kind, remoteKey) == null) return _placeholder(context);
+    if (cache.entry(kind, remoteKey) == null) {
+      return bundled ? _bundledImage(path!) : _placeholder(context);
+    }
 
     return FutureBuilder<File?>(
       future: cache.fetch(kind, remoteKey),
@@ -74,11 +71,22 @@ class RemoteOrBundledAccessoryImage extends StatelessWidget {
           return SizedBox(width: width, height: height);
         }
         final file = snapshot.data;
-        if (file == null) return _placeholder(context);
+        if (file == null) {
+          return bundled ? _bundledImage(path!) : _placeholder(context);
+        }
         return _fileImage(file);
       },
     );
   }
+
+  Widget _bundledImage(String path) => Image.asset(
+    path,
+    width: width,
+    height: height,
+    fit: fit,
+    filterQuality: filterQuality,
+    errorBuilder: errorBuilder,
+  );
 
   Widget _fileImage(File file) => Image.file(
     file,

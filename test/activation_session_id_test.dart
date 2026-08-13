@@ -58,10 +58,8 @@ Future<List<String?>> idsOf(String name) async =>
       return e['onboardingSessionId'] as String?;
     }).toList();
 
-Future<String?> storedId() async =>
-    (await SharedPreferences.getInstance()).getString(
-      OnboardingStateService.keyOnboardingSessionId,
-    );
+Future<String?> storedId() async => (await SharedPreferences.getInstance())
+    .getString(OnboardingStateService.keyOnboardingSessionId);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -87,15 +85,17 @@ void main() {
       await analytics.record('onboarding_started');
       await analytics.record('health_cta_tapped');
       await analytics.record('health_result', context: {'result': 'granted'});
-      await analytics.record('tutorial_opened', context: {
-        'source': 'onboarding',
-      });
+      await analytics.record(
+        'tutorial_opened',
+        context: {'source': 'onboarding'},
+      );
       await analytics.record('demo_box_opened');
       await analytics.record('demo_powerup_used');
       await analytics.record('demo_won');
-      await analytics.record('tutorial_completed', context: {
-        'source': 'onboarding',
-      });
+      await analytics.record(
+        'tutorial_completed',
+        context: {'source': 'onboarding'},
+      );
       await analytics.record('home_reached');
 
       final events = await queue();
@@ -190,78 +190,89 @@ void main() {
   });
 
   group('a run ends at home_reached', () {
-    test('home_reached is recorded under the run id and then closes it',
-        () async {
-      final analytics = service();
-      await analytics.record('onboarding_started');
-      final runId = await storedId();
-      await analytics.record('home_reached');
+    test(
+      'home_reached is recorded under the run id and then closes it',
+      () async {
+        final analytics = service();
+        await analytics.record('onboarding_started');
+        final runId = await storedId();
+        await analytics.record('home_reached');
 
-      expect(await idOf('home_reached'), runId);
-      expect(
-        await storedId(),
-        isNull,
-        reason: 'the run is over; nothing after it belongs to that funnel',
-      );
-    });
+        expect(await idOf('home_reached'), runId);
+        expect(
+          await storedId(),
+          isNull,
+          reason: 'the run is over; nothing after it belongs to that funnel',
+        );
+      },
+    );
 
-    test('a settings-tutorial replay does NOT inherit the onboarding run id',
-        () async {
-      final analytics = service();
-      await analytics.record('onboarding_started');
-      await analytics.record('tutorial_opened', context: {
-        'source': 'onboarding',
-      });
-      await analytics.record('tutorial_completed', context: {
-        'source': 'onboarding',
-      });
-      final runId = await idOf('onboarding_started');
-      await analytics.record('home_reached');
+    test(
+      'a settings-tutorial replay does NOT inherit the onboarding run id',
+      () async {
+        final analytics = service();
+        await analytics.record('onboarding_started');
+        await analytics.record(
+          'tutorial_opened',
+          context: {'source': 'onboarding'},
+        );
+        await analytics.record(
+          'tutorial_completed',
+          context: {'source': 'onboarding'},
+        );
+        final runId = await idOf('onboarding_started');
+        await analytics.record('home_reached');
 
-      // …months later, from Profile → Settings → VIEW TUTORIAL.
-      await analytics.record('tutorial_opened', context: {
-        'source': 'profile',
-      });
-      await analytics.record('tutorial_completed', context: {
-        'source': 'profile',
-      });
+        // …months later, from Profile → Settings → VIEW TUTORIAL.
+        await analytics.record(
+          'tutorial_opened',
+          context: {'source': 'profile'},
+        );
+        await analytics.record(
+          'tutorial_completed',
+          context: {'source': 'profile'},
+        );
 
-      final replayIds = (await queue())
-          .where((e) => (e['context'] as Map)['source'] == 'profile')
-          .map((e) => e['onboardingSessionId'])
-          .toSet();
-      expect(replayIds, hasLength(1));
-      expect(
-        replayIds.first,
-        isNot(runId),
-        reason:
-            'the replay must not be counted inside the onboarding funnel — '
-            'this is the bug the per-run id exists to fix',
-      );
-    });
+        final replayIds = (await queue())
+            .where((e) => (e['context'] as Map)['source'] == 'profile')
+            .map((e) => e['onboardingSessionId'])
+            .toSet();
+        expect(replayIds, hasLength(1));
+        expect(
+          replayIds.first,
+          isNot(runId),
+          reason:
+              'the replay must not be counted inside the onboarding funnel — '
+              'this is the bug the per-run id exists to fix',
+        );
+      },
+    );
 
-    test('a replayed run is unanchored, so the backend anchor drops it',
-        () async {
-      final analytics = service();
-      await analytics.record('onboarding_started');
-      await analytics.record('home_reached');
-      await analytics.record('tutorial_opened', context: {
-        'source': 'profile',
-      });
+    test(
+      'a replayed run is unanchored, so the backend anchor drops it',
+      () async {
+        final analytics = service();
+        await analytics.record('onboarding_started');
+        await analytics.record('home_reached');
+        await analytics.record(
+          'tutorial_opened',
+          context: {'source': 'profile'},
+        );
 
-      final events = await queue();
-      final replayId = events.last['onboardingSessionId'];
-      final anchored = events.any(
-        (e) =>
-            e['name'] == 'onboarding_started' &&
-            e['onboardingSessionId'] == replayId,
-      );
-      expect(
-        anchored,
-        isFalse,
-        reason: 'no onboarding_started under this id == not a funnel session',
-      );
-    });
+        final events = await queue();
+        final replayId = events.last['onboardingSessionId'];
+        final anchored = events.any(
+          (e) =>
+              e['name'] == 'onboarding_started' &&
+              e['onboardingSessionId'] == replayId,
+        );
+        expect(
+          anchored,
+          isFalse,
+          reason: 'no onboarding_started under this id == not a funnel session',
+        );
+      },
+    );
 
     test('a later launch by an already-onboarded user is its own unanchored '
         'id', () async {
@@ -377,7 +388,6 @@ void main() {
       expect(await storedId(), isNull);
     });
   });
-
 }
 
 // -- MainShell harness --------------------------------------------------------
@@ -444,6 +454,7 @@ class _ShellApi extends BackendApiService {
     required String identityToken,
     required String idempotencyKey,
     required Map<String, dynamic> payload,
+    bool homePull = false,
   }) async => const StepSyncV2Result(kind: StepSyncV2Kind.unsupported);
 
   @override

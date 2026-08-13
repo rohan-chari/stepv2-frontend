@@ -252,6 +252,7 @@ class _ShellApi extends BackendApiService {
     required String identityToken,
     required String idempotencyKey,
     required Map<String, dynamic> payload,
+    bool homePull = false,
   }) async => const StepSyncV2Result(kind: StepSyncV2Kind.unsupported);
 
   @override
@@ -491,43 +492,44 @@ void main() {
       );
     });
 
-    testWidgets('race results modal hosts an AdBannerSlot and NICE still pops', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: RaceResultsSummaryScreen(
-            races: [
-              {
-                'id': 'r1',
-                'name': 'Weekend Sprint',
-                'participantCount': 4,
-                'myPlacement': 2,
-                'myPayoutCoins': 120,
-                'myStatus': 'ACCEPTED',
-                'winner': {'displayName': 'Alex'},
-              },
-            ],
+    testWidgets(
+      'race results modal hosts an AdBannerSlot and NICE still pops',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: RaceResultsSummaryScreen(
+              races: [
+                {
+                  'id': 'r1',
+                  'name': 'Weekend Sprint',
+                  'participantCount': 4,
+                  'myPlacement': 2,
+                  'myPayoutCoins': 120,
+                  'myStatus': 'ACCEPTED',
+                  'winner': {'displayName': 'Alex'},
+                },
+              ],
+            ),
           ),
-        ),
-      );
-      await tester.pump();
+        );
+        await tester.pump();
 
-      expect(find.byType(AdBannerSlot), findsOneWidget);
-      // Footer style: the banner sits at the screen bottom, not nested
-      // inside the parchment results card.
-      expect(
-        find.descendant(
-          of: find.byType(GameContainer),
-          matching: find.byType(AdBannerSlot),
-        ),
-        findsNothing,
-      );
+        expect(find.byType(AdBannerSlot), findsOneWidget);
+        // Footer style: the banner sits at the screen bottom, not nested
+        // inside the parchment results card.
+        expect(
+          find.descendant(
+            of: find.byType(GameContainer),
+            matching: find.byType(AdBannerSlot),
+          ),
+          findsNothing,
+        );
 
-      await tester.tap(find.widgetWithText(PillButton, 'NICE'));
-      await tester.pumpAndSettle();
-      expect(find.text('RACE FINISHED'), findsNothing);
-    });
+        await tester.tap(find.widgetWithText(PillButton, 'NICE'));
+        await tester.pumpAndSettle();
+        expect(find.text('RACE FINISHED'), findsNothing);
+      },
+    );
 
     testWidgets('DailyRewardScreen hosts a footer AdBannerSlot', (
       tester,

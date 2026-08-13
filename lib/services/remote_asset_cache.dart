@@ -69,17 +69,31 @@ class RemoteAssetCache {
 
   Set<String> _bundledAssets = <String>{};
   final Map<RemoteAssetKind, Map<String, RemoteAssetEntry>> _registry = {
-    for (final kind in RemoteAssetKind.values) kind: <String, RemoteAssetEntry>{},
+    for (final kind in RemoteAssetKind.values)
+      kind: <String, RemoteAssetEntry>{},
   };
 
   /// Filenames present in [_cacheDir], so [cachedFile] answers without a
   /// syscall on every frame.
   final Set<String> _onDisk = <String>{};
-  final Set<String> _inFlight = <String>{};
+
+  /// One logical asset request per `(kind, key)`. A manifest refresh can
+  /// change the versioned filename while a download is pending; callers still
+  /// share one request, which retries against the replacement manifest entry
+  /// before publishing anything visible to a renderer.
+  final Map<String, Future<File?>> _inFlight = <String, Future<File?>>{};
 
   Directory? _cacheDir;
   RemoteAssetFetcher? _fetcher;
   bool _initialized = false;
+
+  // This binary advertises `remote_asset_preferred`, so a valid manifest row
+  // wins over a same-key bundle asset. Frozen binaries retain their compiled
+  // bundled-first resolver; the mutable test seam documents that compatibility
+  // boundary without ever requiring a backend flag at render time.
+  bool _remoteAssetPreferred = true;
+
+  bool get remoteAssetPreferred => _remoteAssetPreferred;
 
   /// Loads the compiled asset manifest, the on-disk cache index and the last
   /// known remote manifest. Awaited once from `main()`. Never throws: every
@@ -117,8 +131,7 @@ class RemoteAssetCache {
   RemoteAssetEntry? entry(RemoteAssetKind kind, String key) =>
       _registry[kind]![key];
 
-  bool get hasEntries =>
-      _registry.values.any((entries) => entries.isNotEmpty);
+  bool get hasEntries => _registry.values.any((entries) => entries.isNotEmpty);
 
   /// Character keys the manifest knows about (used by the tuner's animal
   /// picker alongside the bundled ones).
@@ -142,35 +155,83 @@ class RemoteAssetCache {
 
   /// Downloads [key] into the cache and returns the file. Returns null on any
   /// failure — callers render their existing placeholder rather than crash.
-  Future<File?> fetch(RemoteAssetKind kind, String key) async {
+  Future<File?> fetch(RemoteAssetKind kind, String key) {
     final dir = _cacheDir;
-    final entry = _registry[kind]![key];
-    if (dir == null || entry == null) return null;
+    if (dir == null || _registry[kind]![key] == null) {
+      return Future<File?>.value();
+    }
 
-    final name = _fileNameFor(kind, key, entry.version);
-    if (_onDisk.contains(name)) return File('${dir.path}/$name');
-    if (_inFlight.contains(name)) return null;
-    _inFlight.add(name);
+    final requestKey = '${kind.name}-${_sanitize(key)}';
+    final inFlight = _inFlight[requestKey];
+    if (inFlight != null) return inFlight;
+
+    late final Future<File?> request;
+    request = _fetchCurrent(dir: dir, kind: kind, key: key).whenComplete(() {
+      if (identical(_inFlight[requestKey], request)) {
+        _inFlight.remove(requestKey);
+      }
+    });
+    _inFlight[requestKey] = request;
+    return request;
+  }
+
+  Future<File?> _fetchCurrent({
+    required Directory dir,
+    required RemoteAssetKind kind,
+    required String key,
+  }) async {
+    // A fetched entry can be superseded by a manifest refresh at any await.
+    // Do not publish the obsolete bytes; keep the same Future alive and retry
+    // with the entry that current renderers resolve.
+    while (true) {
+      final entry = _registry[kind]![key];
+      if (entry == null) return null;
+      final name = _fileNameFor(kind, key, entry.version);
+      if (_onDisk.contains(name)) return File('${dir.path}/$name');
+
+      final bytes = await _fetchBytes(entry);
+      if (!_isCurrentEntry(kind, key, entry)) continue;
+      if (bytes == null || bytes.isEmpty) return null;
+
+      try {
+        if (!dir.existsSync()) await dir.create(recursive: true);
+        if (!_isCurrentEntry(kind, key, entry)) continue;
+        // Atomic publish: a half-written file must never be visible under the
+        // name the renderer reads.
+        final tmp = File('${dir.path}/$name.tmp');
+        await tmp.writeAsBytes(bytes, flush: true);
+        if (!_isCurrentEntry(kind, key, entry)) {
+          try {
+            await tmp.delete();
+          } catch (_) {}
+          continue;
+        }
+        final target = File('${dir.path}/$name');
+        await tmp.rename(target.path);
+        _onDisk.add(name);
+        if (!_isCurrentEntry(kind, key, entry)) continue;
+        await _deleteStaleSiblings(dir, kind, key, keep: name);
+        if (!_isCurrentEntry(kind, key, entry)) continue;
+        return target;
+      } catch (_) {
+        return null;
+      }
+    }
+  }
+
+  bool _isCurrentEntry(
+    RemoteAssetKind kind,
+    String key,
+    RemoteAssetEntry entry,
+  ) => identical(_registry[kind]![key], entry);
+
+  Future<List<int>?> _fetchBytes(RemoteAssetEntry entry) async {
     try {
       final uri = Uri.tryParse(entry.url);
       if (uri == null) return null;
-      final bytes = await (_fetcher ?? _httpFetch)(uri, const {});
-      if (bytes == null || bytes.isEmpty) return null;
-
-      if (!dir.existsSync()) await dir.create(recursive: true);
-      // Atomic publish: a half-written file must never be visible under the
-      // name the renderer reads.
-      final tmp = File('${dir.path}/$name.tmp');
-      await tmp.writeAsBytes(bytes, flush: true);
-      final target = File('${dir.path}/$name');
-      await tmp.rename(target.path);
-      _onDisk.add(name);
-      await _deleteStaleSiblings(dir, kind, key, keep: name);
-      return target;
+      return await (_fetcher ?? _httpFetch)(uri, const {});
     } catch (_) {
       return null;
-    } finally {
-      _inFlight.remove(name);
     }
   }
 
@@ -247,18 +308,19 @@ class RemoteAssetCache {
     if (json == null) return;
     for (final kind in RemoteAssetKind.values) {
       final section = json[kind.name];
-      if (section is! Map) continue;
       final parsed = <String, RemoteAssetEntry>{};
-      section.forEach((key, value) {
-        if (key is! String || value is! Map) return;
-        final url = value['url'];
-        if (url is! String || url.isEmpty) return;
-        parsed[key] = RemoteAssetEntry(
-          url: url,
-          animationFrames: _asInt(value['animationFrames']),
-          baselineOffset: _asDouble(value['baselineOffset']),
-        );
-      });
+      if (section is Map) {
+        section.forEach((key, value) {
+          if (key is! String || value is! Map) return;
+          final url = value['url'];
+          if (url is! String || url.isEmpty) return;
+          parsed[key] = RemoteAssetEntry(
+            url: url,
+            animationFrames: _asInt(value['animationFrames']),
+            baselineOffset: _asDouble(value['baselineOffset']),
+          );
+        });
+      }
       _registry[kind]!
         ..clear()
         ..addAll(parsed);
@@ -309,7 +371,8 @@ class RemoteAssetCache {
     Uri uri,
     Map<String, String> headers,
   ) async {
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 15);
     try {
       final request = await client.openUrl('GET', uri);
       headers.forEach(request.headers.set);
@@ -348,12 +411,15 @@ class RemoteAssetCache {
     Directory? cacheDir,
     Set<String>? bundledAssets,
     RemoteAssetFetcher? fetcher,
+    bool? remoteAssetPreferred,
     bool keepRegistry = false,
   }) async {
     _initialized = true;
     _cacheDir = cacheDir ?? _cacheDir;
-    _bundledAssets = bundledAssets ?? (keepRegistry ? _bundledAssets : <String>{});
+    _bundledAssets =
+        bundledAssets ?? (keepRegistry ? _bundledAssets : <String>{});
     _fetcher = fetcher ?? (keepRegistry ? _fetcher : null);
+    _remoteAssetPreferred = remoteAssetPreferred ?? true;
     if (!keepRegistry) {
       for (final entries in _registry.values) {
         entries.clear();
@@ -374,6 +440,7 @@ class RemoteAssetCache {
   @visibleForTesting
   void debugReset() {
     _initialized = false;
+    _remoteAssetPreferred = true;
     _cacheDir = null;
     _fetcher = null;
     _bundledAssets = <String>{};

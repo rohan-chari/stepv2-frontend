@@ -16,8 +16,13 @@ import '../widgets/trail_sign.dart';
 
 class AdminAccessoryTunerScreen extends StatefulWidget {
   final AuthService authService;
+  final BackendApiService? backendApiService;
 
-  const AdminAccessoryTunerScreen({super.key, required this.authService});
+  const AdminAccessoryTunerScreen({
+    super.key,
+    required this.authService,
+    this.backendApiService,
+  });
 
   @override
   State<AdminAccessoryTunerScreen> createState() =>
@@ -25,7 +30,7 @@ class AdminAccessoryTunerScreen extends StatefulWidget {
 }
 
 class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
-  final _api = BackendApiService();
+  late final BackendApiService _api;
 
   List<Map<String, dynamic>> _items = const [];
   Loadable<List<Map<String, dynamic>>> _itemsState = const Loadable.initial();
@@ -49,7 +54,36 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
   bool _active = true;
   bool _testOnly = false;
   bool _bobble = false;
+  bool _simulateFullLoadout = false;
   final _priceController = TextEditingController(text: '0');
+
+  static const _fullLoadoutFixture = <Map<String, dynamic>>[
+    <String, dynamic>{
+      'slot': 'BACK',
+      'assetKey': 'backpack',
+      'renderMetadata': <String, dynamic>{'renderLayer': 'behind'},
+    },
+    <String, dynamic>{
+      'slot': 'FEET',
+      'assetKey': 'shoes',
+      'renderMetadata': <String, dynamic>{},
+    },
+    <String, dynamic>{
+      'slot': 'NECK',
+      'assetKey': 'gold_chain',
+      'renderMetadata': <String, dynamic>{},
+    },
+    <String, dynamic>{
+      'slot': 'FACE',
+      'assetKey': 'sunglasses',
+      'renderMetadata': <String, dynamic>{},
+    },
+    <String, dynamic>{
+      'slot': 'HEAD',
+      'assetKey': 'baseball_cap',
+      'renderMetadata': <String, dynamic>{},
+    },
+  ];
 
   @override
   void dispose() {
@@ -60,6 +94,7 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
   @override
   void initState() {
     super.initState();
+    _api = widget.backendApiService ?? BackendApiService();
     _load();
   }
 
@@ -228,6 +263,9 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
       'renderMetadata': _composeMetadata(),
     };
   }
+
+  List<Map<String, dynamic>> get _previewAccessories =>
+      _simulateFullLoadout ? _fullLoadoutFixture : [_previewAccessory()];
 
   Future<void> _save() async {
     final id = _selectedItemId;
@@ -416,6 +454,35 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
                                 activeThumbColor: AppColors.of(context).accent,
                                 onChanged: (v) => setState(() => _bobble = v),
                               ),
+                              SwitchListTile(
+                                key: const Key(
+                                  'admin-accessory-tuner-full-loadout-toggle',
+                                ),
+                                contentPadding: EdgeInsets.zero,
+                                dense: true,
+                                title: Text(
+                                  'SIMULATE FULL LOADOUT',
+                                  style: PixelText.body(
+                                    size: 14,
+                                    color: AppColors.of(context).textDark,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  'Preview one compatible accessory per slot',
+                                  style: PixelText.body(
+                                    size: 11,
+                                    color: AppColors.of(context).textMid,
+                                  ),
+                                ),
+                                value: _simulateFullLoadout,
+                                activeThumbColor: AppColors.of(context).accent,
+                                onChanged:
+                                    item != null && item['slot'] != 'CHARACTER'
+                                    ? (value) => setState(
+                                        () => _simulateFullLoadout = value,
+                                      )
+                                    : null,
+                              ),
                               const SizedBox(height: 4),
                               TextField(
                                 controller: _priceController,
@@ -448,7 +515,7 @@ class _AdminAccessoryTunerScreenState extends State<AdminAccessoryTunerScreen> {
                                           animal: item['assetKey'] as String?,
                                         )
                                       : CapybaraCustomizationPreview(
-                                          accessories: [_previewAccessory()],
+                                          accessories: _previewAccessories,
                                           size: 140,
                                           animal: _tunerAnimal == kDefaultAnimal
                                               ? null

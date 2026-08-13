@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -65,7 +66,9 @@ void main() {
     test('reads accessories, characters and powerups', () {
       RemoteAssetCache.instance.debugApplyManifest({
         'accessories': {
-          'pirate_hat': {'url': 'https://cdn/accessories/pirate_hat@aabbcc.png'},
+          'pirate_hat': {
+            'url': 'https://cdn/accessories/pirate_hat@aabbcc.png',
+          },
         },
         'characters': {
           'red_panda': {
@@ -151,7 +154,9 @@ void main() {
     test('cachedFile finds the versioned file written for an entry', () async {
       RemoteAssetCache.instance.debugApplyManifest({
         'accessories': {
-          'pirate_hat': {'url': 'https://cdn/accessories/pirate_hat@aabbcc.png'},
+          'pirate_hat': {
+            'url': 'https://cdn/accessories/pirate_hat@aabbcc.png',
+          },
         },
       });
       expect(
@@ -182,7 +187,9 @@ void main() {
       await RemoteAssetCache.instance.debugRescan();
       RemoteAssetCache.instance.debugApplyManifest({
         'accessories': {
-          'pirate_hat': {'url': 'https://cdn/accessories/pirate_hat@aabbcc.png'},
+          'pirate_hat': {
+            'url': 'https://cdn/accessories/pirate_hat@aabbcc.png',
+          },
         },
       });
 
@@ -195,41 +202,44 @@ void main() {
       );
     });
 
-    test('fetch writes the versioned file and deletes stale siblings',
-        () async {
-      File(
-        '${tmp.path}/accessories-pirate_hat@000000.png',
-      ).writeAsBytesSync(const [1]);
-      await RemoteAssetCache.instance.debugConfigure(
-        cacheDir: tmp,
-        fetcher: (uri, headers) async => const [7, 7, 7],
-      );
-      await RemoteAssetCache.instance.debugRescan();
-      RemoteAssetCache.instance.debugApplyManifest({
-        'accessories': {
-          'pirate_hat': {'url': 'https://cdn/accessories/pirate_hat@aabbcc.png'},
-        },
-      });
+    test(
+      'fetch writes the versioned file and deletes stale siblings',
+      () async {
+        File(
+          '${tmp.path}/accessories-pirate_hat@000000.png',
+        ).writeAsBytesSync(const [1]);
+        await RemoteAssetCache.instance.debugConfigure(
+          cacheDir: tmp,
+          fetcher: (uri, headers) async => const [7, 7, 7],
+        );
+        await RemoteAssetCache.instance.debugRescan();
+        RemoteAssetCache.instance.debugApplyManifest({
+          'accessories': {
+            'pirate_hat': {
+              'url': 'https://cdn/accessories/pirate_hat@aabbcc.png',
+            },
+          },
+        });
 
-      final file = await RemoteAssetCache.instance.fetch(
-        RemoteAssetKind.accessories,
-        'pirate_hat',
-      );
+        final file = await RemoteAssetCache.instance.fetch(
+          RemoteAssetKind.accessories,
+          'pirate_hat',
+        );
 
-      expect(file, isNotNull);
-      expect(file!.path, endsWith('accessories-pirate_hat@aabbcc.png'));
-      expect(file.readAsBytesSync(), const [7, 7, 7]);
-      expect(
-        File('${tmp.path}/accessories-pirate_hat@000000.png').existsSync(),
-        isFalse,
-        reason: 'the superseded version must be deleted, not accumulated',
-      );
-      // No temp files left behind by the atomic write.
-      expect(
-        tmp.listSync().map((e) => e.path.split('/').last).toList(),
-        ['accessories-pirate_hat@aabbcc.png'],
-      );
-    });
+        expect(file, isNotNull);
+        expect(file!.path, endsWith('accessories-pirate_hat@aabbcc.png'));
+        expect(file.readAsBytesSync(), const [7, 7, 7]);
+        expect(
+          File('${tmp.path}/accessories-pirate_hat@000000.png').existsSync(),
+          isFalse,
+          reason: 'the superseded version must be deleted, not accumulated',
+        );
+        // No temp files left behind by the atomic write.
+        expect(tmp.listSync().map((e) => e.path.split('/').last).toList(), [
+          'accessories-pirate_hat@aabbcc.png',
+        ]);
+      },
+    );
 
     test('a failing download resolves to null instead of throwing', () async {
       await RemoteAssetCache.instance.debugConfigure(
@@ -238,7 +248,9 @@ void main() {
       );
       RemoteAssetCache.instance.debugApplyManifest({
         'accessories': {
-          'pirate_hat': {'url': 'https://cdn/accessories/pirate_hat@aabbcc.png'},
+          'pirate_hat': {
+            'url': 'https://cdn/accessories/pirate_hat@aabbcc.png',
+          },
         },
       });
 
@@ -250,6 +262,136 @@ void main() {
         isNull,
       );
     });
+
+    test(
+      'concurrent cold-cache callers await the same completed download',
+      () async {
+        final response = Completer<List<int>?>();
+        var requests = 0;
+        await RemoteAssetCache.instance.debugConfigure(
+          cacheDir: tmp,
+          fetcher: (uri, headers) {
+            requests++;
+            return response.future;
+          },
+        );
+        RemoteAssetCache.instance.debugApplyManifest({
+          'accessories': {
+            'boots': {'url': 'https://cdn/accessories/boots@aabbcc.png'},
+          },
+        });
+
+        final first = RemoteAssetCache.instance.fetch(
+          RemoteAssetKind.accessories,
+          'boots',
+        );
+        final second = RemoteAssetCache.instance.fetch(
+          RemoteAssetKind.accessories,
+          'boots',
+        );
+
+        expect(identical(first, second), isTrue);
+        expect(requests, 1);
+        response.complete(const [7, 7, 7]);
+
+        final files = await Future.wait([first, second]);
+        expect(files, everyElement(isNotNull));
+        expect(files[0]!.path, files[1]!.path);
+      },
+    );
+
+    test(
+      'a manifest refresh retries a shared request without publishing stale art',
+      () async {
+        final firstResponse = Completer<List<int>?>();
+        final secondResponse = Completer<List<int>?>();
+        final requested = <String>[];
+        await RemoteAssetCache.instance.debugConfigure(
+          cacheDir: tmp,
+          fetcher: (uri, headers) {
+            requested.add(uri.path);
+            return requested.length == 1
+                ? firstResponse.future
+                : secondResponse.future;
+          },
+        );
+        RemoteAssetCache.instance.debugApplyManifest({
+          'accessories': {
+            'boots': {'url': 'https://cdn/accessories/boots@old111.png'},
+          },
+        });
+
+        final first = RemoteAssetCache.instance.fetch(
+          RemoteAssetKind.accessories,
+          'boots',
+        );
+        RemoteAssetCache.instance.debugApplyManifest({
+          'accessories': {
+            'boots': {'url': 'https://cdn/accessories/boots@new222.png'},
+          },
+        });
+        final second = RemoteAssetCache.instance.fetch(
+          RemoteAssetKind.accessories,
+          'boots',
+        );
+        expect(identical(first, second), isTrue);
+
+        firstResponse.complete(const [1, 1, 1]);
+        await Future<void>.delayed(Duration.zero);
+        expect(requested, hasLength(2));
+        secondResponse.complete(const [2, 2, 2]);
+
+        final file = await first;
+        expect(file, isNotNull);
+        expect(file!.path, endsWith('accessories-boots@new222.png'));
+        expect(file.readAsBytesSync(), const [2, 2, 2]);
+        expect(
+          RemoteAssetCache.instance
+              .cachedFile(RemoteAssetKind.accessories, 'boots')
+              ?.path,
+          endsWith('accessories-boots@new222.png'),
+        );
+        expect(
+          File('${tmp.path}/accessories-boots@old111.png').existsSync(),
+          isFalse,
+        );
+      },
+    );
+
+    test(
+      'a stale failed download retries the replacement manifest version',
+      () async {
+        final firstResponse = Completer<List<int>?>();
+        var requests = 0;
+        await RemoteAssetCache.instance.debugConfigure(
+          cacheDir: tmp,
+          fetcher: (uri, headers) {
+            requests++;
+            return requests == 1 ? firstResponse.future : Future.value([2]);
+          },
+        );
+        RemoteAssetCache.instance.debugApplyManifest({
+          'accessories': {
+            'boots': {'url': 'https://cdn/accessories/boots@old111.png'},
+          },
+        });
+
+        final fetch = RemoteAssetCache.instance.fetch(
+          RemoteAssetKind.accessories,
+          'boots',
+        );
+        RemoteAssetCache.instance.debugApplyManifest({
+          'accessories': {
+            'boots': {'url': 'https://cdn/accessories/boots@new222.png'},
+          },
+        });
+        firstResponse.complete(null);
+
+        final file = await fetch;
+        expect(file?.path, endsWith('accessories-boots@new222.png'));
+        expect(requests, 2);
+      },
+    );
 
     test('fetch of an unknown key is a null no-op', () async {
       expect(
@@ -323,6 +465,67 @@ void main() {
         isNotNull,
       );
     });
+
+    test(
+      'an accepted manifest clears categories omitted by the new response',
+      () async {
+        RemoteAssetCache.instance.debugApplyManifest({
+          'accessories': {
+            'old_hat': {'url': 'https://cdn/accessories/old_hat@aaa111.png'},
+          },
+          'characters': {
+            'old_cat': {'url': 'https://cdn/characters/old_cat@aaa111.png'},
+          },
+          'powerups': {
+            'OLD_POWER': {'url': 'https://cdn/powerups/old_power@aaa111.png'},
+          },
+        });
+        await RemoteAssetCache.instance.debugConfigure(
+          cacheDir: tmp,
+          fetcher: (uri, headers) async => utf8.encode(
+            jsonEncode({
+              'accessories': {
+                'new_hat': {
+                  'url': 'https://cdn/accessories/new_hat@bbb222.png',
+                },
+              },
+            }),
+          ),
+          keepRegistry: true,
+        );
+
+        await RemoteAssetCache.instance.refreshManifest();
+
+        expect(
+          RemoteAssetCache.instance.entry(
+            RemoteAssetKind.accessories,
+            'old_hat',
+          ),
+          isNull,
+        );
+        expect(
+          RemoteAssetCache.instance.entry(
+            RemoteAssetKind.accessories,
+            'new_hat',
+          ),
+          isNotNull,
+        );
+        expect(
+          RemoteAssetCache.instance.entry(
+            RemoteAssetKind.characters,
+            'old_cat',
+          ),
+          isNull,
+        );
+        expect(
+          RemoteAssetCache.instance.entry(
+            RemoteAssetKind.powerups,
+            'OLD_POWER',
+          ),
+          isNull,
+        );
+      },
+    );
 
     test('restores the persisted manifest on init when offline', () async {
       SharedPreferences.setMockInitialValues({

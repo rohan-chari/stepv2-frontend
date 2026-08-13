@@ -371,13 +371,23 @@ Example sequence on `1.1.5`:
 
 ## Shop accessory assets
 
-Accessory PNGs (`assets/images/accessories/{assetKey}.png`) are **baked into
-the binary** — there is no image upload or CDN, so a new accessory only reaches
-users via a TestFlight/App Store build. The catalog entry (price, slot,
-positioning, `testOnly` flag) lives in the backend DBs and deploys
-independently. The full add → tune-on-staging → TestFlight → flip-`testOnly`
-flow is documented in the backend repo's `DEPLOYMENT.md` under "Deploying shop
-accessories (cosmetics)". Two app-side notes:
+Accessory PNGs can be bundled at `assets/images/accessories/{assetKey}.png` or
+remote-served through the backend's versioned `/assets` tree and Cloudflare edge
+cache for clients advertising `remote_assets`. Remote filenames include a
+SHA-256 prefix and are immutable: run `npm run assets:add -- <png> accessories
+<assetKey>`, deploy and verify the printed URL, then—and only then—set the
+catalog row's `assetVersion`. Clients without `remote_assets` are intentionally
+filtered from remote-only rows.
+
+Remote-first clients prefer a manifest-listed CDN file but fall back to the
+bundle when offline or when the manifest/download fails. For the Gold Chain
+thickening, ship the updated bundle PNG in the paired iOS/Android release;
+after the backend artifact is deployed and checksum-verified and that build is
+available, set `assetVersion: "bde871582fef"` and `remoteOnly: false` in the
+catalog. This keeps the row visible to pre-CDN clients while remote-first
+clients use the CDN copy. The catalog entry (price, slot, positioning,
+`testOnly` flag) lives in the backend DBs and deploys independently. Two
+app-side notes:
 
 - A newly added PNG needs a full `flutter run` (or at least hot restart), not
   hot reload, to land in the asset bundle.

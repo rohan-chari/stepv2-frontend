@@ -98,6 +98,7 @@ class _FakeApi extends BackendApiService {
     required String identityToken,
     required String idempotencyKey,
     required Map<String, dynamic> payload,
+    bool homePull = false,
   }) async => const StepSyncV2Result(kind: StepSyncV2Kind.unsupported);
 
   @override
