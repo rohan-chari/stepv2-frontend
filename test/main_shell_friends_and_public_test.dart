@@ -1,11 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/models/step_data.dart';
 import 'package:step_tracker/models/step_sample_data.dart';
+import 'package:step_tracker/models/home_race_suggestion.dart';
 import 'package:step_tracker/screens/main_shell.dart';
 import 'package:step_tracker/screens/ranked_results_summary_screen.dart';
 import 'package:step_tracker/screens/tabs/friends_tab.dart';
+import 'package:step_tracker/screens/tabs/home_tab.dart';
 import 'package:step_tracker/screens/tabs/ranked_tab.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
@@ -39,6 +43,48 @@ class _FakeBackgroundSyncBootstrapService
   Future<void> enableHealthKitBackgroundDelivery() async {}
 }
 
+Map<String, dynamic> _compactAuthUser({
+  bool omitEmail = false,
+  bool invalidCoins = false,
+}) => {
+  'id': 'user-1',
+  if (!omitEmail) 'email': 'compact@example.com',
+  'displayName': 'Compact Walker',
+  'firstName': 'Compact',
+  'lastName': null,
+  'profilePhotoUrl': null,
+  'profilePhotoPromptDismissedAt': null,
+  'referredByCode': null,
+  'nameSetupOnboardingRequired': false,
+  'nameSetupCompletedAt': null,
+  'renameChipShownCount': 0,
+  'renameChipDismissedAt': null,
+  'isAdmin': false,
+  'coins': invalidCoins ? 'bad' : 0,
+  'heldCoins': 0,
+  'firstRaceOnboardingSeen': true,
+  'tutorialOnboardingSeen': true,
+  'hiddenFromLeaderboard': false,
+  'autoJoinFeaturedRaces': false,
+  'incomingFriendRequests': 0,
+  'characterPowersEnabled': false,
+  'featureFlags': {
+    'bannerAdsEnabled': false,
+    'dualBoxBannersEnabled': false,
+    'teamRacesEnabled': true,
+    'onboardingV2Enabled': false,
+    'onboardingV3Enabled': false,
+    'onboardingInviteCodeEnabled': true,
+    'openUserRaceDiscoveryEnabled': false,
+    'quickCreateRaceCtaEnabled': false,
+    'setupInviteCodePromptEnabled': false,
+    'racesInviteDecisionGateEnabled': false,
+    'quickRaceShareAutoFriendEnabled': false,
+    'tutorialMandatoryEnabled': false,
+    'stepSampleBucketMinutes': 60,
+  },
+};
+
 class _FakeBackendApiService extends BackendApiService {
   _FakeBackendApiService({
     this.publicRacesError = false,
@@ -47,6 +93,11 @@ class _FakeBackendApiService extends BackendApiService {
     this.publicTournamentCount = 0,
     this.incomingFriendRequests = 0,
     this.rankedLastWeek,
+    this.homeRaceCard = const {'state': 'EMPTY'},
+    this.joinPublicRaceError,
+    this.compactSession = false,
+    this.malformedCompactIdentity = false,
+    this.invalidCompactCoins = false,
   });
 
   final bool publicRacesError;
@@ -55,14 +106,32 @@ class _FakeBackendApiService extends BackendApiService {
   final int publicTournamentCount;
   final int incomingFriendRequests;
   final Map<String, dynamic>? rankedLastWeek;
+  final Map<String, dynamic> homeRaceCard;
+  final ApiException? joinPublicRaceError;
+  final bool compactSession;
+  final bool malformedCompactIdentity;
+  final bool invalidCompactCoins;
+  int fetchMeCalls = 0;
+  int fetchFriendsCalls = 0;
+  int fetchShopCalls = 0;
 
   @override
   Future<Map<String, dynamic>> refreshSessionToken({
     required String authToken,
   }) async {
     return {
+      if (compactSession) 'contract': 'auth-shell-v1',
       'sessionToken': authToken,
-      'user': {'firstRaceOnboardingSeen': true, 'tutorialOnboardingSeen': true},
+      'user': compactSession
+          ? _compactAuthUser(
+              omitEmail: malformedCompactIdentity,
+              invalidCoins: invalidCompactCoins,
+            )
+          : const {
+              'id': 'user-1',
+              'firstRaceOnboardingSeen': true,
+              'tutorialOnboardingSeen': true,
+            },
     };
   }
 
@@ -87,11 +156,31 @@ class _FakeBackendApiService extends BackendApiService {
   }) async => RaceDiscoverySummary.unsupportedResult;
 
   @override
+  Future<HomeSuggestedRacesRefresh> fetchHomeSuggestedRaces({
+    required String identityToken,
+  }) async => const HomeSuggestedRacesRefresh(
+    featuredRaces: [],
+    publicRaces: [],
+    tournaments: [],
+  );
+
+  @override
   Future<Map<String, dynamic>> fetchHomeRaceCard({
     required String identityToken,
     bool usePersistedTotals = false,
+  }) async => homeRaceCard;
+
+  @override
+  Future<Map<String, dynamic>> joinPublicRace({
+    required String identityToken,
+    required String raceId,
+    bool onboarding = false,
   }) async {
-    return const {'state': 'EMPTY'};
+    final error = joinPublicRaceError;
+    if (error != null) throw error;
+    return {
+      'participant': {'raceId': raceId},
+    };
   }
 
   @override
@@ -104,6 +193,7 @@ class _FakeBackendApiService extends BackendApiService {
 
   @override
   Future<Map<String, dynamic>> fetchMe({required String identityToken}) async {
+    fetchMeCalls += 1;
     return {
       'displayName': 'Trail Walker',
       'incomingFriendRequests': incomingFriendRequests,
@@ -161,6 +251,7 @@ class _FakeBackendApiService extends BackendApiService {
   Future<Map<String, dynamic>> fetchShopCatalog({
     required String identityToken,
   }) async {
+    fetchShopCalls += 1;
     return const {
       'coins': 0,
       'equipped': <String, dynamic>{},
@@ -186,6 +277,7 @@ class _FakeBackendApiService extends BackendApiService {
   Future<Map<String, dynamic>> fetchFriends({
     required String identityToken,
   }) async {
+    fetchFriendsCalls += 1;
     return const {
       'friends': <Map<String, dynamic>>[],
       'incoming': <Map<String, dynamic>>[],
@@ -250,6 +342,100 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
+    'compact auth skips only the cold-start me read, not a later Home refresh',
+    (WidgetTester tester) async {
+      final api = _FakeBackendApiService(compactSession: true);
+      await _pumpShell(tester, api);
+      expect(api.fetchMeCalls, 0);
+
+      final home = tester.widget<HomeTab>(find.byType(HomeTab));
+      unawaited(home.onRefresh());
+      await _settle(tester);
+
+      expect(api.fetchMeCalls, 1);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets('compact auth hydrates Profile identity before skipping me', (
+    WidgetTester tester,
+  ) async {
+    final api = _FakeBackendApiService(compactSession: true);
+    await _pumpShell(tester, api);
+
+    await _tapTab(tester, 4);
+
+    expect(find.text('compact@example.com'), findsOneWidget);
+    expect(find.text('@Compact Walker'), findsOneWidget);
+    expect(api.fetchMeCalls, 0);
+  });
+
+  testWidgets('malformed compact identity retains the cold me fallback', (
+    WidgetTester tester,
+  ) async {
+    final api = _FakeBackendApiService(
+      compactSession: true,
+      malformedCompactIdentity: true,
+    );
+    await _pumpShell(tester, api);
+
+    expect(api.fetchMeCalls, 1);
+  });
+
+  testWidgets('wrong-typed compact required field retains the me fallback', (
+    WidgetTester tester,
+  ) async {
+    final api = _FakeBackendApiService(
+      compactSession: true,
+      invalidCompactCoins: true,
+    );
+    await _pumpShell(tester, api);
+
+    expect(api.fetchMeCalls, 1);
+  });
+
+  testWidgets(
+    'malformed compact Home blocks fall back only presentation and friends',
+    (WidgetTester tester) async {
+      final api = _FakeBackendApiService(
+        compactSession: true,
+        homeRaceCard: const {
+          'contract': 'home-shell-v1',
+          'state': 'EMPTY',
+          'resolved': {'presentation': true, 'friends': true},
+          'presentation': {'coins': 10},
+          'friends': {
+            'friends': [],
+            'pending': {'incoming': []},
+          },
+        },
+      );
+      await _pumpShell(tester, api);
+
+      expect(api.fetchShopCalls, 1);
+      expect(api.fetchFriendsCalls, 1);
+      expect(api.fetchMeCalls, 0);
+    },
+  );
+
+  testWidgets('compact Home presentation missing cape falls back to catalog', (
+    WidgetTester tester,
+  ) async {
+    final api = _FakeBackendApiService(
+      compactSession: true,
+      homeRaceCard: const {
+        'contract': 'home-shell-v1',
+        'state': 'EMPTY',
+        'resolved': {'presentation': true},
+        'presentation': {'coins': 10, 'equipped': <String, dynamic>{}},
+      },
+    );
+    await _pumpShell(tester, api);
+
+    expect(api.fetchShopCalls, 1);
+  });
+
+  testWidgets(
     'PUBLIC RACES count falls back to (0) when the fetch fails (no throw)',
     (WidgetTester tester) async {
       await _pumpShell(tester, _FakeBackendApiService(publicRacesError: true));
@@ -285,6 +471,51 @@ void main() {
     await _tapTab(tester, 1);
     expect(find.text('PUBLIC RACES (6)'), findsOneWidget);
   });
+
+  testWidgets(
+    'Next Race join shows the five-race limit instead of generic copy',
+    (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      const message =
+          "You're already in 5 races that start automatically. Try again after one is over.";
+      await _pumpShell(
+        tester,
+        _FakeBackendApiService(
+          homeRaceCard: const {
+            'state': 'EMPTY',
+            'nextRace': {
+              'resolved': true,
+              'eligible': true,
+              'discoveryEnabled': true,
+              'createEnabled': false,
+              'openRaces': [
+                {
+                  'id': 'race-limit',
+                  'name': 'Trail Mix',
+                  'participantCount': 3,
+                },
+              ],
+            },
+          },
+          joinPublicRaceError: const ApiException(
+            message,
+            statusCode: 409,
+            code: 'QUICK_RACE_MEMBERSHIP_LIMIT',
+          ),
+        ),
+      );
+
+      await tester.tap(find.byKey(const Key('home-join-race-limit')));
+      await tester.pump();
+
+      expect(find.text(message), findsOneWidget);
+      expect(
+        find.text('Something went sideways. Give it another try!'),
+        findsNothing,
+      );
+    },
+  );
 
   testWidgets('tab index 2 renders the Friends tab, not the Ranked tab', (
     WidgetTester tester,

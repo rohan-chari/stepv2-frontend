@@ -692,11 +692,7 @@ void main() {
       await _pumpRaceDetail(tester, api: api, ad: ad);
 
       // Open one box the normal way and let its reel land.
-      final boxSlot = find
-          .byWidgetPredicate(
-            (w) => w is ItemSlot && w.state == ItemSlotState.mysteryBox,
-          )
-          .first;
+      final boxSlot = find.byType(MysteryBoxButton).first;
       await tester.ensureVisible(boxSlot);
       await tester.pump(const Duration(milliseconds: 100));
       await tester.tap(boxSlot);

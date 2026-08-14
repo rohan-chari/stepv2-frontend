@@ -284,6 +284,7 @@ class _RacesTabState extends State<RacesTab> {
             builder: (context) => TournamentDetailScreen(
               authService: widget.authService,
               tournamentId: tournamentId,
+              backendApiService: widget.backendApiService,
               friends: widget.friendsSteps,
             ),
           ),
@@ -303,11 +304,30 @@ class _RacesTabState extends State<RacesTab> {
     if (token == null || token.isEmpty) return;
     setState(() => _respondingTournamentId = tournamentId);
     try {
-      await _api.respondToTournamentInvite(
+      final response = await _api.respondToTournamentInvite(
         identityToken: token,
         tournamentId: tournamentId,
         accept: accept,
       );
+      final wallet = response['wallet'];
+      if (wallet is Map &&
+          wallet['coins'] is num &&
+          wallet['heldCoins'] is num) {
+        await widget.authService.updateCoins((wallet['coins'] as num).toInt());
+        await widget.authService.updateHeldCoins(
+          (wallet['heldCoins'] as num).toInt(),
+        );
+      } else {
+        try {
+          final me = await _api.fetchMe(identityToken: token);
+          final coins = me['coins'];
+          final held = me['heldCoins'];
+          if (coins is num) await widget.authService.updateCoins(coins.toInt());
+          if (held is num) {
+            await widget.authService.updateHeldCoins(held.toInt());
+          }
+        } catch (_) {}
+      }
       if (mounted) {
         showInfoToast(
           context,
@@ -389,6 +409,7 @@ class _RacesTabState extends State<RacesTab> {
             builder: (context) => RaceDetailScreen(
               authService: widget.authService,
               raceId: raceId,
+              backendApiService: widget.backendApiService,
               friends: widget.friendsSteps,
               notificationService: widget.notificationService,
             ),

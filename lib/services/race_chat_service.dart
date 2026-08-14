@@ -34,23 +34,46 @@ class RaceChatMessage {
     this.failed = false,
   });
 
-  factory RaceChatMessage.fromJson(Map<String, dynamic> json) {
-    final createdRaw = json['createdAt'] as String?;
+  static RaceChatMessage? tryFromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final id = raw['id'];
+    if (id is! String || id.isEmpty) return null;
+    final createdRaw = raw['createdAt'];
     return RaceChatMessage(
-      id: json['id'] as String,
-      kind: (json['kind'] as String?) ?? 'USER',
-      body: (json['body'] as String?) ?? '',
-      senderId: json['senderId'] as String?,
-      senderName: json['senderName'] as String?,
-      senderPhotoUrl: json['senderPhotoUrl'] as String?,
-      eventType: json['eventType'] as String?,
-      powerupType: json['powerupType'] as String?,
-      actorUserId: json['actorUserId'] as String?,
+      id: id,
+      kind: raw['kind'] is String ? raw['kind'] as String : 'USER',
+      body: raw['body'] is String ? raw['body'] as String : '',
+      senderId: raw['senderId'] is String ? raw['senderId'] as String : null,
+      senderName: raw['senderName'] is String
+          ? raw['senderName'] as String
+          : null,
+      senderPhotoUrl: raw['senderPhotoUrl'] is String
+          ? raw['senderPhotoUrl'] as String
+          : null,
+      eventType: raw['eventType'] is String ? raw['eventType'] as String : null,
+      powerupType: raw['powerupType'] is String
+          ? raw['powerupType'] as String
+          : null,
+      actorUserId: raw['actorUserId'] is String
+          ? raw['actorUserId'] as String
+          : null,
       createdAt: createdRaw != null
-          ? DateTime.tryParse(createdRaw)?.toLocal() ?? DateTime.now()
+          ? DateTime.tryParse(
+                  createdRaw is String ? createdRaw : '',
+                )?.toLocal() ??
+                DateTime.now()
           : DateTime.now(),
     );
   }
+
+  factory RaceChatMessage.fromJson(Map<String, dynamic> json) =>
+      tryFromJson(json) ??
+      RaceChatMessage(
+        id: 'invalid_${DateTime.now().microsecondsSinceEpoch}',
+        kind: 'USER',
+        body: '',
+        createdAt: DateTime.now(),
+      );
 
   RaceChatMessage copyWith({bool? pending, bool? failed, String? id}) {
     return RaceChatMessage(
@@ -123,12 +146,7 @@ class RaceChatService extends ChangeNotifier {
         kind: 'USER',
       );
       if (_disposed) return;
-      final list =
-          (result['messages'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-      _messages
-        ..clear()
-        ..addAll(list.map(RaceChatMessage.fromJson));
-      _cursor = result['nextCursor'] as String?;
+      applyInitialStream(result);
       _hasMore = _cursor != null;
     } catch (e) {
       _lastError = e;
@@ -153,10 +171,13 @@ class RaceChatService extends ChangeNotifier {
         kind: 'USER',
       );
       if (_disposed) return;
-      final list =
-          (result['messages'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-      _messages.addAll(list.map(RaceChatMessage.fromJson));
-      _cursor = result['nextCursor'] as String?;
+      final list = result['messages'];
+      if (list is List) {
+        _messages.addAll(list.map(RaceChatMessage.tryFromJson).whereType());
+      }
+      _cursor = result['nextCursor'] is String
+          ? result['nextCursor'] as String
+          : null;
       _hasMore = _cursor != null;
     } catch (e) {
       _lastError = e;
@@ -179,23 +200,81 @@ class RaceChatService extends ChangeNotifier {
         kind: 'USER',
       );
       if (_disposed) return;
-      final list =
-          (result['messages'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-      final fresh = list.map(RaceChatMessage.fromJson).toList();
-      final existingIds = _messages.map((m) => m.id).toSet();
-      final newMessages = fresh
-          .where((m) => !existingIds.contains(m.id))
-          .toList();
-      if (newMessages.isEmpty) return;
-      // Incoming messages from polling (not the user's own optimistic sends)
-      // mark the chat as unread until the user views it.
-      _hasUnread = true;
-      _messages.insertAll(0, newMessages);
-      _messages.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      _safeNotify();
+      applyTopStream(result);
     } catch (_) {
       // Silent — polling.
     }
+  }
+
+  void beginCombinedLoad() {
+    if (_disposed) return;
+    _loading = true;
+    _lastError = null;
+    _safeNotify();
+  }
+
+  void endCombinedLoad() {
+    if (_disposed) return;
+    _loading = false;
+  }
+
+  void clearUnread() {
+    if (_disposed || !_hasUnread) return;
+    _hasUnread = false;
+    _safeNotify();
+  }
+
+  void applyInitialStream(Map<String, dynamic> stream) {
+    if (_disposed) return;
+    final list = stream['messages'];
+    final fresh = list is List
+        ? list.map(RaceChatMessage.tryFromJson).whereType<RaceChatMessage>()
+        : const Iterable<RaceChatMessage>.empty();
+    // Preserve optimistic sends created while the initial request was in
+    // flight, then merge server rows by stable id.
+    final optimistic = _messages.where((message) => message.pending).toList();
+    final byId = <String, RaceChatMessage>{
+      for (final message in fresh) message.id: message,
+      for (final message in optimistic) message.id: message,
+    };
+    _messages
+      ..clear()
+      ..addAll(byId.values)
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    _cursor = stream['nextCursor'] is String
+        ? stream['nextCursor'] as String
+        : null;
+    _hasMore = _cursor != null;
+    _loading = false;
+    _lastError = null;
+    _safeNotify();
+  }
+
+  void applyTopStream(Map<String, dynamic> stream) {
+    if (_disposed) return;
+    final list = stream['messages'];
+    final fresh = list is List
+        ? list.map(RaceChatMessage.tryFromJson).whereType<RaceChatMessage>()
+        : const Iterable<RaceChatMessage>.empty();
+    final existingIds = _messages.map((message) => message.id).toSet();
+    final additions = fresh
+        .where((message) => !existingIds.contains(message.id))
+        .toList();
+    if (additions.isNotEmpty) {
+      _hasUnread = true;
+      _messages.insertAll(0, additions);
+      _messages.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }
+    _loading = false;
+    _lastError = null;
+    _safeNotify();
+  }
+
+  void applyCombinedError(Object error) {
+    if (_disposed) return;
+    _loading = false;
+    _lastError = error;
+    _safeNotify();
   }
 
   void startPolling({Duration interval = const Duration(seconds: 5)}) {
@@ -326,10 +405,8 @@ class RaceChatService extends ChangeNotifier {
   /// Call when the user opens/views the Chat tab.
   void markChatViewed() {
     if (_disposed) return;
-    final wasUnread = _hasUnread;
-    _hasUnread = false;
+    clearUnread();
     markRead();
-    if (wasUnread) _safeNotify();
   }
 
   @override

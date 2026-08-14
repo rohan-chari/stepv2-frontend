@@ -14,15 +14,29 @@ import 'package:step_tracker/widgets/tournament_bracket_board.dart';
 // CelebrationConfetti ONLY when the viewer is the champion.
 
 class _FakeApi extends BackendApiService {
-  _FakeApi(this.payload);
+  _FakeApi(this.payload, {this.startResponse});
   final Map<String, dynamic> payload;
+  final Map<String, dynamic>? startResponse;
+  int fetchCalls = 0;
+  int startCalls = 0;
 
   @override
   Future<Map<String, dynamic>> fetchTournament({
     required String identityToken,
     required String tournamentId,
-  }) async =>
-      {'tournament': payload};
+  }) async {
+    fetchCalls += 1;
+    return {'tournament': payload};
+  }
+
+  @override
+  Future<Map<String, dynamic>> startTournament({
+    required String identityToken,
+    required String tournamentId,
+  }) async {
+    startCalls += 1;
+    return startResponse ?? const {};
+  }
 }
 
 Future<AuthService> _auth() async {
@@ -64,8 +78,9 @@ Future<void> _teardown(WidgetTester tester) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('PENDING renders the bracket board with OPEN leaf slots',
-      (tester) async {
+  testWidgets('PENDING renders the bracket board with OPEN leaf slots', (
+    tester,
+  ) async {
     await _pump(tester, {
       'id': 't1',
       'name': 'Lobby Bracket',
@@ -90,8 +105,67 @@ void main() {
     await _teardown(tester);
   });
 
-  testWidgets('featured PENDING shows prize tile, no creator START',
-      (tester) async {
+  testWidgets(
+    'valid compact start response replaces detail without a second GET',
+    (tester) async {
+      final auth = await _auth();
+      final api = _FakeApi(
+        {
+          'id': 't1',
+          'name': 'Lobby Bracket',
+          'status': 'PENDING',
+          'bracketSize': 2,
+          'creatorId': 'me',
+          'acceptedCount': 2,
+          'myStatus': 'ACCEPTED',
+          'participants': const [
+            {'userId': 'me', 'displayName': 'Me', 'status': 'ACCEPTED'},
+            {'userId': 'u2', 'displayName': 'Jo', 'status': 'ACCEPTED'},
+          ],
+          'rounds': const [],
+        },
+        startResponse: const {
+          'contract': 'tournament-action-v1',
+          'projectionError': null,
+          'tournament': {
+            'id': 't1',
+            'name': 'Lobby Bracket',
+            'status': 'ACTIVE',
+            'bracketSize': 2,
+            'currentRound': 1,
+            'participants': [
+              {'userId': 'me', 'displayName': 'Me', 'status': 'ACCEPTED'},
+              {'userId': 'u2', 'displayName': 'Jo', 'status': 'ACCEPTED'},
+            ],
+            'rounds': [],
+          },
+        },
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TournamentDetailScreen(
+            authService: auth,
+            tournamentId: 't1',
+            backendApiService: api,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      await tester.tap(find.text('START TOURNAMENT'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(api.startCalls, 1);
+      expect(api.fetchCalls, 1);
+      await _teardown(tester);
+    },
+  );
+
+  testWidgets('featured PENDING shows prize tile, no creator START', (
+    tester,
+  ) async {
     await _pump(tester, {
       'id': 't1',
       'name': 'Daily Dash',
@@ -113,8 +187,9 @@ void main() {
     await _teardown(tester);
   });
 
-  testWidgets('ACTIVE bracket draws round labels, TBD, and my-matchup CTA',
-      (tester) async {
+  testWidgets('ACTIVE bracket draws round labels, TBD, and my-matchup CTA', (
+    tester,
+  ) async {
     await _pump(tester, {
       'id': 't1',
       'name': 'Gauntlet',
@@ -168,8 +243,9 @@ void main() {
     await _teardown(tester);
   });
 
-  testWidgets('COMPLETED: confetti ONLY when the viewer is the champion',
-      (tester) async {
+  testWidgets('COMPLETED: confetti ONLY when the viewer is the champion', (
+    tester,
+  ) async {
     await _pump(tester, {
       'id': 't1',
       'name': 'Gauntlet',
@@ -193,8 +269,9 @@ void main() {
     await _teardown(tester);
   });
 
-  testWidgets('COMPLETED: no confetti for a non-champion viewer',
-      (tester) async {
+  testWidgets('COMPLETED: no confetti for a non-champion viewer', (
+    tester,
+  ) async {
     await _pump(tester, {
       'id': 't1',
       'name': 'Gauntlet',

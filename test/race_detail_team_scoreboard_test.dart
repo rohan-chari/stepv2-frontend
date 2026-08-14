@@ -504,7 +504,9 @@ void main() {
 
     final scoreboardShell = find.byKey(const ValueKey('team-scoreboard-shell'));
     final standingsShell = find.byKey(const ValueKey('team-standings-shell'));
+    final powerupsHeader = find.text('POWERUPS');
     final standingsHeader = find.text('STANDINGS');
+    expect(powerupsHeader, findsOneWidget);
     expect(find.byType(TeamVsChips), findsOneWidget);
     expect(find.byType(TeamScoreboardCards), findsOneWidget);
     expect(_banner, findsOneWidget);
@@ -513,6 +515,11 @@ void main() {
     expect(standingsShell, findsOneWidget);
     expect(_cardA, findsOneWidget);
     expect(_cardB, findsOneWidget);
+    expect(
+      tester.getTopLeft(powerupsHeader).dy,
+      lessThan(tester.getTopLeft(scoreboardShell).dy),
+      reason: 'POWERUPS should precede the team scoreboard on race detail',
+    );
     expect(
       tester.getTopLeft(_cardA).dy,
       lessThan(tester.getTopLeft(_banner).dy),

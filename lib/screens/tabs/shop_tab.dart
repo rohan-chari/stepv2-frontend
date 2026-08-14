@@ -232,16 +232,54 @@ class _ShopTabState extends State<ShopTab> {
         return;
       }
 
-      final catalog = await _backendApiService.fetchShopCatalog(
+      final bootstrap = await _backendApiService.fetchShopBootstrap(
         identityToken: token,
+        localDate: _localDate(),
       );
-      final coins = catalog['coins'] as int?;
+      final catalog = bootstrap.cosmetics;
+      if (!_isValidCosmeticsCatalog(
+        catalog,
+        requireCompleteItems: bootstrap.supported,
+      )) {
+        throw const ApiException('Could not load the shop. Please try again.');
+      }
+      final coins = catalog['coins'];
       if (coins != null) {
-        await widget.authService.updateCoins(coins);
+        if (coins is num) await widget.authService.updateCoins(coins.toInt());
       }
 
-      // Powerups are loaded best-effort and never block the cosmetics catalog.
-      await _loadPowerups(token);
+      var powerups = bootstrap.powerups;
+      var inventory = bootstrap.inventory;
+      if (!_isValidPowerupCatalog(
+        powerups,
+        requireOwnedQuantity: bootstrap.supported,
+      )) {
+        powerups = null;
+      }
+      if (!_isValidPowerupInventory(inventory)) inventory = null;
+      if (bootstrap.supported && powerups == null) {
+        try {
+          powerups = await _backendApiService.fetchPowerupShopCatalog(
+            identityToken: token,
+          );
+        } catch (_) {}
+      }
+      if (bootstrap.supported && inventory == null) {
+        try {
+          inventory = await _backendApiService.fetchPowerupInventory(
+            identityToken: token,
+          );
+        } catch (_) {}
+      }
+      if (powerups != null && inventory != null) {
+        _applyPowerupComponents(powerups, inventory);
+        final powerupCoins = powerups['coins'];
+        if (powerupCoins is num) {
+          await widget.authService.updateCoins(powerupCoins.toInt());
+        }
+      } else {
+        _powerupsAvailable = false;
+      }
 
       // The ad-unlock rules ride on either catalog (contract §4.3). Prefer the
       // powerup store's copy when it carried one, else the cosmetics catalog's,
@@ -287,43 +325,154 @@ class _ShopTabState extends State<ShopTab> {
         _backendApiService.fetchPowerupShopCatalog(identityToken: token),
         _backendApiService.fetchPowerupInventory(identityToken: token),
       ]);
-      final storeItems =
-          (results[0]['items'] as List?)?.cast<Map<String, dynamic>>() ??
-          const [];
-      final inventoryItems =
-          (results[1]['items'] as List?)?.cast<Map<String, dynamic>>() ??
-          const [];
-
-      final inventory = <String, int>{};
-      for (final row in inventoryItems) {
-        final type = row['powerupType'] as String?;
-        final qty = (row['quantity'] as num?)?.toInt() ?? 0;
-        if (type != null && qty > 0) inventory[type] = qty;
-      }
-
-      // Imposter is disabled on this build (item #3). The backend catalog also
-      // filters it out, but guard here too so a not-yet-deployed backend can't
-      // surface a purchasable-but-inert Imposter tile.
-      _powerupStoreItems = storeItems
-          .where(
-            (item) => !_hiddenShopPowerupTypes.contains(item['powerupType']),
-          )
-          .toList();
-      _powerupInventory = inventory;
-      _powerupsAvailable = true;
-      final adUnlock = results[0]['adUnlock'];
-      _powerupAdUnlockBlock = adUnlock is Map ? adUnlock : null;
+      _applyPowerupComponents(results[0], results[1]);
+      final coins = results[0]['coins'];
+      if (coins is num) await widget.authService.updateCoins(coins.toInt());
     } catch (_) {
       _powerupStoreItems = const [];
       _powerupInventory = const {};
       _powerupsAvailable = false;
       _powerupAdUnlockBlock = null;
+      _recomputeAdUnlock();
     }
+  }
+
+  void _applyPowerupComponents(
+    Map<String, dynamic> powerups,
+    Map<String, dynamic> inventoryEnvelope,
+  ) {
+    final rawStore = powerups['items'];
+    final storeItems = <Map<String, dynamic>>[];
+    if (rawStore is List) {
+      for (final raw in rawStore) {
+        if (raw is! Map ||
+            !_isValidPowerupItem(raw, requireOwnedQuantity: false)) {
+          continue;
+        }
+        storeItems.add({
+          for (final entry in raw.entries)
+            if (entry.key is String) entry.key as String: entry.value,
+        });
+      }
+    }
+    final inventory = <String, int>{};
+    final rawInventory = inventoryEnvelope['items'];
+    if (rawInventory is List) {
+      for (final raw in rawInventory) {
+        if (raw is! Map || !_isValidInventoryItem(raw)) continue;
+        final type = raw['powerupType'];
+        final quantity = raw['quantity'];
+        if (type is String && quantity is num && quantity.toInt() > 0) {
+          inventory[type] = quantity.toInt();
+        }
+      }
+    }
+    _powerupStoreItems = storeItems
+        .where((item) => !_hiddenShopPowerupTypes.contains(item['powerupType']))
+        .toList();
+    _powerupInventory = inventory;
+    _powerupsAvailable = true;
+    final adUnlock = powerups['adUnlock'];
+    _powerupAdUnlockBlock = adUnlock is Map ? adUnlock : null;
+    _recomputeAdUnlock();
+  }
+
+  bool _hasItemListWhere(
+    Map<String, dynamic>? component,
+    bool Function(Map<dynamic, dynamic>) isValid,
+  ) {
+    final items = component?['items'];
+    return items is List && items.every((row) => row is Map && isValid(row));
+  }
+
+  bool _isValidCosmeticItem(
+    Map<dynamic, dynamic> item, {
+    required bool requireCompleteFields,
+  }) {
+    return item['id'] is String &&
+        (item['id'] as String).isNotEmpty &&
+        item['sku'] is String &&
+        (item['sku'] as String).isNotEmpty &&
+        item['name'] is String &&
+        (!requireCompleteFields || item.containsKey('description')) &&
+        (!item.containsKey('description') ||
+            item['description'] == null ||
+            item['description'] is String) &&
+        item['slot'] is String &&
+        item['priceCoins'] is num &&
+        item['assetKey'] is String &&
+        (!requireCompleteFields || item['owned'] is bool) &&
+        (!requireCompleteFields || item['equipped'] is bool);
+  }
+
+  bool _isValidPowerupItem(
+    Map<dynamic, dynamic> item, {
+    required bool requireOwnedQuantity,
+  }) {
+    return item['sku'] is String &&
+        (item['sku'] as String).isNotEmpty &&
+        item['name'] is String &&
+        item.containsKey('description') &&
+        (item['description'] == null || item['description'] is String) &&
+        item['priceCoins'] is num &&
+        item['powerupType'] is String &&
+        (item['powerupType'] as String).isNotEmpty &&
+        (!item.containsKey('category') || item['category'] is String) &&
+        (!item.containsKey('ownedQuantity') || item['ownedQuantity'] is num) &&
+        (!requireOwnedQuantity || item['ownedQuantity'] is num);
+  }
+
+  bool _isValidInventoryItem(Map<dynamic, dynamic> item) {
+    return item['powerupType'] is String &&
+        (item['powerupType'] as String).isNotEmpty &&
+        item['quantity'] is num;
+  }
+
+  bool _isValidPowerupCatalog(
+    Map<String, dynamic>? catalog, {
+    required bool requireOwnedQuantity,
+  }) {
+    return catalog?['coins'] is num &&
+        _hasItemListWhere(
+          catalog,
+          (item) => _isValidPowerupItem(
+            item,
+            requireOwnedQuantity: requireOwnedQuantity,
+          ),
+        );
+  }
+
+  bool _isValidPowerupInventory(Map<String, dynamic>? inventory) {
+    return _hasItemListWhere(inventory, _isValidInventoryItem);
+  }
+
+  bool _isValidCosmeticsCatalog(
+    Map<String, dynamic>? catalog, {
+    required bool requireCompleteItems,
+  }) {
+    return catalog != null &&
+        catalog['coins'] is num &&
+        catalog['ownedItemIds'] is List &&
+        (catalog['ownedItemIds'] as List).every((id) => id is String) &&
+        catalog['equipped'] is Map &&
+        _hasItemListWhere(
+          catalog,
+          (item) => _isValidCosmeticItem(
+            item,
+            requireCompleteFields: requireCompleteItems,
+          ),
+        );
   }
 
   /// The raw `adUnlock` block from the powerup store catalog, or null when the
   /// backend didn't serve one.
   Map<dynamic, dynamic>? _powerupAdUnlockBlock;
+
+  void _recomputeAdUnlock() {
+    _adUnlock = _powerupAdUnlockBlock != null
+        ? _AdUnlockConfig.fromJson(_powerupAdUnlockBlock)
+        : _AdUnlockConfig.fromJson(_catalog?['adUnlock']);
+  }
 
   Future<void> _purchase(Map<String, dynamic> item) async {
     if (_saving) return;
@@ -340,11 +489,15 @@ class _ShopTabState extends State<ShopTab> {
         idempotencyKey:
             '${widget.authService.userId ?? 'user'}-${DateTime.now().microsecondsSinceEpoch}',
       );
-      final coins = result['coins'] as int?;
-      if (coins != null) {
-        await widget.authService.updateCoins(coins);
+      final idempotent = _isIdempotent(result);
+      if (idempotent || !_patchCosmeticPurchase(result)) {
+        await _refreshCosmetics(token);
+      } else {
+        final coins = result['coins'];
+        if (coins is num) {
+          await widget.authService.updateCoins(coins.toInt());
+        }
       }
-      await _loadCatalog();
       if (mounted) {
         showInfoToast(context, '${item['name'] ?? 'Accessory'} unlocked.');
       }
@@ -389,11 +542,15 @@ class _ShopTabState extends State<ShopTab> {
         idempotencyKey:
             '${widget.authService.userId ?? 'user'}-pw-${DateTime.now().microsecondsSinceEpoch}',
       );
-      final coins = result['coins'] as int?;
-      if (coins != null) {
-        await widget.authService.updateCoins(coins);
+      final idempotent = _isIdempotent(result);
+      if (idempotent || !_patchPowerupMutation(result, item)) {
+        await _loadPowerups(token);
+      } else {
+        final coins = result['coins'];
+        if (coins is num) {
+          await widget.authService.updateCoins(coins.toInt());
+        }
       }
-      await _loadCatalog();
       if (mounted) {
         showInfoToast(context, '${item['name'] ?? 'Powerup'} purchased.');
       }
@@ -419,12 +576,22 @@ class _ShopTabState extends State<ShopTab> {
 
     setState(() => _saving = true);
     try {
-      await _backendApiService.equipAccessory(
+      final result = await _backendApiService.equipAccessory(
         identityToken: token,
         slot: slot,
         itemId: itemId,
       );
-      await _loadCatalog();
+      final equipped = result['equipped'];
+      if (equipped is Map && _catalog != null) {
+        final next = {..._catalog!, 'equipped': equipped};
+        setState(() {
+          _catalog = next;
+          _catalogState = Loadable.success(next);
+        });
+        widget.onShopChanged?.call(next);
+      } else {
+        await _refreshCosmetics(token);
+      }
     } on ApiException catch (error) {
       if (mounted) showErrorToast(context, _equipErrorMessage(error));
     } catch (_) {
@@ -437,6 +604,112 @@ class _ShopTabState extends State<ShopTab> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  bool _isIdempotent(Map<String, dynamic> result) {
+    final purchase = result['purchase'];
+    return result['idempotent'] == true ||
+        (purchase is Map && purchase['idempotent'] == true);
+  }
+
+  Future<void> _refreshCosmetics(String token) async {
+    final catalog = await _backendApiService.fetchShopCatalog(
+      identityToken: token,
+    );
+    final coins = catalog['coins'];
+    if (coins is num) await widget.authService.updateCoins(coins.toInt());
+    if (!mounted) return;
+    final adUnlock = catalog['adUnlock'];
+    if (adUnlock is Map) _powerupAdUnlockBlock = adUnlock;
+    setState(() {
+      _catalog = catalog;
+      _catalogState = Loadable.success(catalog);
+      _recomputeAdUnlock();
+    });
+    widget.onShopChanged?.call(catalog);
+  }
+
+  bool _patchCosmeticPurchase(Map<String, dynamic> result) {
+    final current = _catalog;
+    final rawItem = result['item'];
+    final coins = result['coins'];
+    if (current == null || rawItem is! Map || coins is! num) return false;
+    final item = <String, dynamic>{
+      for (final entry in rawItem.entries)
+        if (entry.key is String) entry.key as String: entry.value,
+    };
+    if (!_isValidCosmeticItem(item, requireCompleteFields: true)) return false;
+    final itemId = item['id'];
+    if (itemId is! String || itemId.isEmpty) return false;
+    final items = _safeShopItems(current['items']);
+    final index = items.indexWhere((row) => row['id'] == itemId);
+    if (index == -1) {
+      items.add(item);
+    } else {
+      items[index] = item;
+    }
+    final owned = current['ownedItemIds'] is List
+        ? (current['ownedItemIds'] as List).whereType<String>().toSet()
+        : <String>{};
+    owned.add(itemId);
+    final next = {
+      ...current,
+      'coins': coins.toInt(),
+      'items': items,
+      'ownedItemIds': owned.toList(growable: false),
+      if (result['adUnlock'] is Map) 'adUnlock': result['adUnlock'],
+    };
+    final adUnlock = result['adUnlock'];
+    if (adUnlock is Map) _powerupAdUnlockBlock = adUnlock;
+    setState(() {
+      _catalog = next;
+      _catalogState = Loadable.success(next);
+      _recomputeAdUnlock();
+    });
+    widget.onShopChanged?.call(next);
+    return true;
+  }
+
+  List<Map<String, dynamic>> _safeShopItems(Object? raw) {
+    if (raw is! List) return <Map<String, dynamic>>[];
+    return [
+      for (final row in raw)
+        if (row is Map)
+          <String, dynamic>{
+            for (final entry in row.entries)
+              if (entry.key is String) entry.key as String: entry.value,
+          },
+    ];
+  }
+
+  bool _patchPowerupMutation(
+    Map<String, dynamic> result,
+    Map<String, dynamic> storeItem,
+  ) {
+    final coins = result['coins'];
+    final rawInventory = result['inventory'];
+    final powerupType = storeItem['powerupType'];
+    if (coins is! num || rawInventory is! Map || powerupType is! String) {
+      return false;
+    }
+    final quantity = rawInventory['quantity'];
+    if (quantity is! num ||
+        rawInventory['powerupType'] != powerupType ||
+        !mounted) {
+      return false;
+    }
+    _powerupInventory = {..._powerupInventory, powerupType: quantity.toInt()};
+    _powerupStoreItems = [
+      for (final row in _powerupStoreItems)
+        if (row['powerupType'] == powerupType)
+          {...row, 'ownedQuantity': quantity.toInt()}
+        else
+          row,
+    ];
+    final adUnlock = result['adUnlock'];
+    if (adUnlock is Map) _powerupAdUnlockBlock = adUnlock;
+    setState(_recomputeAdUnlock);
+    return true;
   }
 
   @override
@@ -917,7 +1190,10 @@ class _ShopTabState extends State<ShopTab> {
   /// than throwing. The backend may be a different version than this build.
   String? _equippedCharacterAssetKey() {
     final row = (_catalog?['equipped'] as Map?)?['CHARACTER'];
-    if (row is Map) return row['assetKey'] as String?;
+    if (row is Map) {
+      final assetKey = row['assetKey'];
+      return assetKey is String ? assetKey : null;
+    }
     if (row is String) return row; // defensive: never emitted today
     return null;
   }
@@ -995,7 +1271,8 @@ class _ShopTabState extends State<ShopTab> {
   /// charged. The sheet's BUY button is the only purchase path.
   Widget _storeCosmeticTile(Map<String, dynamic> item) {
     final name = item['name'] as String? ?? 'Accessory';
-    final price = item['priceCoins'] as int? ?? 0;
+    final rawPrice = item['priceCoins'];
+    final price = rawPrice is num ? rawPrice.toInt() : 0;
     // Cosmetics get the same watch-ads top-up powerups have (spec §7), driven
     // by the same server-served rules.
     final route = _routeFor(price);
@@ -1468,11 +1745,13 @@ class _ShopTabState extends State<ShopTab> {
             '${widget.authService.userId ?? 'user'}-pwunlock-${DateTime.now().microsecondsSinceEpoch}',
         localDate: _localDate(),
       );
-      final coins = result['coins'] as int?;
-      if (coins != null) {
+      final rawCoins = result['coins'];
+      final coins = rawCoins is num ? rawCoins.toInt() : null;
+      if (_isIdempotent(result) || !_patchPowerupMutation(result, item)) {
+        await _loadPowerups(token);
+      } else if (coins != null) {
         await widget.authService.updateCoins(coins);
       }
-      await _loadCatalog();
       if (mounted) showInfoToast(context, '$name unlocked!');
     } on ApiException catch (error) {
       if (mounted) showErrorToast(context, error.message);
@@ -1555,11 +1834,13 @@ class _ShopTabState extends State<ShopTab> {
             '${widget.authService.userId ?? 'user'}-shopunlock-${DateTime.now().microsecondsSinceEpoch}',
         localDate: _localDate(),
       );
-      final coins = result['coins'] as int?;
-      if (coins != null) {
+      final rawCoins = result['coins'];
+      final coins = rawCoins is num ? rawCoins.toInt() : null;
+      if (_isIdempotent(result) || !_patchCosmeticPurchase(result)) {
+        await _refreshCosmetics(token);
+      } else if (coins != null) {
         await widget.authService.updateCoins(coins);
       }
-      await _loadCatalog();
       if (mounted) showInfoToast(context, '$name unlocked!');
     } on ApiException catch (error) {
       if (!mounted) return;

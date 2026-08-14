@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/race_detail_screen.dart';
+import 'package:step_tracker/services/app_route_observer.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/styles.dart';
@@ -230,6 +231,169 @@ class _FailingProgressRaceBackendApiService
   }
 }
 
+class _CompactRaceRequestApi extends BackendApiService {
+  _CompactRaceRequestApi({
+    this.bootstrapCompleter,
+    this.bootstrapSupported = true,
+    this.malformedStreams = false,
+    this.streamError = false,
+    this.streamsUnsupported = false,
+    this.raceStatus = 'ACTIVE',
+    this.streamCompleter,
+    this.legacyMessagesCompleter,
+    this.compactProgressCompleter,
+  });
+
+  final Completer<RaceBootstrapResult>? bootstrapCompleter;
+  final bool bootstrapSupported;
+  final bool malformedStreams;
+  final bool streamError;
+  final bool streamsUnsupported;
+  final String raceStatus;
+  final Completer<RaceMessageStreamsResult>? streamCompleter;
+  final Completer<Map<String, dynamic>>? legacyMessagesCompleter;
+  final Completer<RaceProgressResult>? compactProgressCompleter;
+  int bootstrapCalls = 0;
+  int legacyDetailsCalls = 0;
+  int legacyProgressCalls = 0;
+  int readAcks = 0;
+  int legacyMessageCalls = 0;
+  final List<bool> streamCalls = [];
+
+  Map<String, dynamic> get _race => {
+    'id': 'race-compact',
+    'name': 'Compact Sprint',
+    'status': raceStatus,
+    'targetSteps': 10000,
+    'maxDurationDays': 1,
+    'buyInAmount': 0,
+    'payoutPreset': 'WINNER_TAKES_ALL',
+    'myStatus': 'ACCEPTED',
+    'isCreator': false,
+    'powerupsEnabled': false,
+    'endsAt': '2026-08-20T12:00:00.000Z',
+    'participants': const [
+      {'userId': 'user-1', 'displayName': 'Trail Walker', 'status': 'ACCEPTED'},
+    ],
+  };
+
+  Map<String, dynamic> get _progress => {
+    'status': raceStatus,
+    'participants': const [
+      {'userId': 'user-1', 'displayName': 'Trail Walker', 'totalSteps': 1200},
+    ],
+    'powerupData': {
+      'enabled': false,
+      'inventory': [],
+      'powerupSlots': 3,
+      'queuedBoxCount': 0,
+      'activeEffects': [],
+    },
+  };
+
+  @override
+  Future<RaceBootstrapResult> fetchRaceBootstrap({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    bootstrapCalls += 1;
+    final pending = bootstrapCompleter;
+    if (pending != null) return pending.future;
+    if (!bootstrapSupported) return RaceBootstrapResult.unsupported;
+    return RaceBootstrapResult(
+      supported: true,
+      race: _race,
+      progress: _progress,
+      globalPowerupInventory: const {'items': []},
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceDetails({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    legacyDetailsCalls += 1;
+    return _race;
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceProgress({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    legacyProgressCalls += 1;
+    return _progress;
+  }
+
+  @override
+  Future<RaceProgressResult> fetchRaceProgressCompact({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    final pending = compactProgressCompleter;
+    if (pending != null && !pending.isCompleted) return pending.future;
+    return RaceProgressResult(
+      progress: _progress,
+      globalPowerupInventory: const {'items': []},
+      hasCompactInventory: true,
+    );
+  }
+
+  @override
+  Future<RaceMessageStreamsResult> fetchRaceMessageStreams({
+    required String identityToken,
+    required String raceId,
+    required bool includeUser,
+    int limit = 50,
+  }) async {
+    streamCalls.add(includeUser);
+    final pending = streamCompleter;
+    if (pending != null && !pending.isCompleted) return pending.future;
+    if (streamsUnsupported) return RaceMessageStreamsResult.unsupported;
+    if (streamError) throw const ApiException('Connection timed out.');
+    if (malformedStreams) return RaceMessageStreamsResult.malformedResult;
+    return RaceMessageStreamsResult(
+      supported: true,
+      systemResolved: true,
+      systemStream: const {'messages': [], 'nextCursor': null},
+      userResolved: includeUser,
+      userStream: includeUser
+          ? const {'messages': [], 'nextCursor': null}
+          : null,
+      chatWatermark: const {'recentIds': <String>[]},
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceMessages({
+    required String identityToken,
+    required String raceId,
+    String? cursor,
+    int? limit,
+    String? kind,
+  }) async {
+    legacyMessageCalls += 1;
+    final pending = legacyMessagesCompleter;
+    if (pending != null && !pending.isCompleted) return pending.future;
+    return const {'messages': [], 'nextCursor': null};
+  }
+
+  @override
+  Future<Map<String, dynamic>> markRaceChatRead({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    readAcks += 1;
+    return const {};
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchPowerupInventory({
+    required String identityToken,
+  }) async => const {'items': []};
+}
+
 // A field-scaled preset (top half) that pays five places, so the detail card
 // shows the podium inline plus a "+2 MORE" affordance backed by payoutTiers.
 class _FieldScaledPayoutRaceBackendApiService
@@ -315,6 +479,457 @@ void main() {
     expect(find.text('Failed to load race'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
+
+  testWidgets(
+    'compact race waits to initialize streams until a covering route pops',
+    (WidgetTester tester) async {
+      final authService = await _createAuthService();
+      final bootstrap = Completer<RaceBootstrapResult>();
+      final api = _CompactRaceRequestApi(bootstrapCompleter: bootstrap);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorObservers: [appRouteObserver],
+          home: RaceDetailScreen(
+            authService: authService,
+            raceId: 'race-compact',
+            backendApiService: api,
+          ),
+        ),
+      );
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      unawaited(
+        navigator.push<void>(
+          MaterialPageRoute(
+            builder: (_) => const Scaffold(body: Text('MODAL')),
+          ),
+        ),
+      );
+      await tester.pump();
+      bootstrap.complete(
+        RaceBootstrapResult(
+          supported: true,
+          race: api._race,
+          progress: api._progress,
+          globalPowerupInventory: const {'items': []},
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(api.streamCalls, isEmpty);
+      navigator.pop();
+      await tester.pump();
+      await tester.pump();
+      expect(api.streamCalls, [false]);
+    },
+  );
+
+  testWidgets(
+    'covered completed race performs its one stream read after route pop',
+    (WidgetTester tester) async {
+      final authService = await _createAuthService();
+      final bootstrap = Completer<RaceBootstrapResult>();
+      final api = _CompactRaceRequestApi(
+        bootstrapCompleter: bootstrap,
+        raceStatus: 'COMPLETED',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorObservers: [appRouteObserver],
+          home: RaceDetailScreen(
+            authService: authService,
+            raceId: 'race-compact',
+            backendApiService: api,
+          ),
+        ),
+      );
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      unawaited(
+        navigator.push<void>(
+          MaterialPageRoute(
+            builder: (_) => const Scaffold(body: Text('MODAL')),
+          ),
+        ),
+      );
+      await tester.pump();
+      bootstrap.complete(
+        RaceBootstrapResult(
+          supported: true,
+          race: api._race,
+          progress: api._progress,
+          globalPowerupInventory: const {'items': []},
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(api.streamCalls, isEmpty);
+      navigator.pop();
+      await tester.pump();
+      await tester.pump();
+      expect(api.streamCalls, [false]);
+    },
+  );
+
+  testWidgets(
+    'completed race retries an initial stream read discarded while covered',
+    (WidgetTester tester) async {
+      final authService = await _createAuthService();
+      final streams = Completer<RaceMessageStreamsResult>();
+      final api = _CompactRaceRequestApi(
+        raceStatus: 'COMPLETED',
+        streamCompleter: streams,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorObservers: [appRouteObserver],
+          home: RaceDetailScreen(
+            authService: authService,
+            raceId: 'race-compact',
+            backendApiService: api,
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(api.streamCalls, [false]);
+
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      unawaited(
+        navigator.push<void>(
+          MaterialPageRoute(
+            builder: (_) => const Scaffold(body: Text('MODAL')),
+          ),
+        ),
+      );
+      await tester.pump();
+      streams.complete(
+        RaceMessageStreamsResult(
+          supported: true,
+          systemResolved: true,
+          systemStream: const {'messages': [], 'nextCursor': null},
+          userResolved: false,
+          chatWatermark: const {'recentIds': <String>[]},
+        ),
+      );
+      await tester.pump();
+
+      navigator.pop();
+      await tester.pump();
+      await tester.pump();
+      expect(api.streamCalls, [false, false]);
+      expect(api.readAcks, 1);
+    },
+  );
+
+  testWidgets(
+    'discarded initial stream retains malformed retry semantics after pop',
+    (WidgetTester tester) async {
+      final authService = await _createAuthService();
+      final streams = Completer<RaceMessageStreamsResult>();
+      final api = _CompactRaceRequestApi(
+        streamCompleter: streams,
+        malformedStreams: true,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorObservers: [appRouteObserver],
+          home: RaceDetailScreen(
+            authService: authService,
+            raceId: 'race-compact',
+            backendApiService: api,
+          ),
+        ),
+      );
+      await tester.pump();
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      unawaited(
+        navigator.push<void>(
+          MaterialPageRoute(
+            builder: (_) => const Scaffold(body: Text('MODAL')),
+          ),
+        ),
+      );
+      await tester.pump();
+      streams.complete(
+        RaceMessageStreamsResult(
+          supported: true,
+          systemResolved: true,
+          systemStream: const {'messages': [], 'nextCursor': null},
+          userResolved: false,
+          chatWatermark: const {'recentIds': <String>[]},
+        ),
+      );
+      await tester.pump();
+      navigator.pop();
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Couldn’t load activity'), findsOneWidget);
+      expect(find.text('TRY AGAIN'), findsOneWidget);
+      expect(api.readAcks, 1);
+    },
+  );
+
+  testWidgets(
+    'discarded initial stream retains transport retry semantics after pop',
+    (WidgetTester tester) async {
+      final authService = await _createAuthService();
+      final streams = Completer<RaceMessageStreamsResult>();
+      final api = _CompactRaceRequestApi(
+        streamCompleter: streams,
+        streamError: true,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorObservers: [appRouteObserver],
+          home: RaceDetailScreen(
+            authService: authService,
+            raceId: 'race-compact',
+            backendApiService: api,
+          ),
+        ),
+      );
+      await tester.pump();
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      unawaited(
+        navigator.push<void>(
+          MaterialPageRoute(
+            builder: (_) => const Scaffold(body: Text('MODAL')),
+          ),
+        ),
+      );
+      await tester.pump();
+      streams.complete(
+        RaceMessageStreamsResult(
+          supported: true,
+          systemResolved: true,
+          systemStream: const {'messages': [], 'nextCursor': null},
+          userResolved: false,
+          chatWatermark: const {'recentIds': <String>[]},
+        ),
+      );
+      await tester.pump();
+      navigator.pop();
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Couldn’t load activity'), findsOneWidget);
+      expect(find.text('TRY AGAIN'), findsOneWidget);
+      expect(api.readAcks, 1);
+    },
+  );
+
+  testWidgets(
+    'covered legacy fallback acknowledges initial Chat read after pop',
+    (WidgetTester tester) async {
+      final authService = await _createAuthService();
+      final legacyMessages = Completer<Map<String, dynamic>>();
+      final api = _CompactRaceRequestApi(
+        streamsUnsupported: true,
+        legacyMessagesCompleter: legacyMessages,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorObservers: [appRouteObserver],
+          home: RaceDetailScreen(
+            authService: authService,
+            raceId: 'race-compact',
+            backendApiService: api,
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(api.legacyMessageCalls, 2);
+
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      unawaited(
+        navigator.push<void>(
+          MaterialPageRoute(
+            builder: (_) => const Scaffold(body: Text('MODAL')),
+          ),
+        ),
+      );
+      await tester.pump();
+      legacyMessages.complete(const {'messages': [], 'nextCursor': null});
+      await tester.pump();
+      expect(api.readAcks, 0);
+
+      navigator.pop();
+      await tester.pump();
+      await tester.pump();
+
+      expect(api.legacyMessageCalls, 4);
+      expect(api.readAcks, 1);
+    },
+  );
+
+  testWidgets(
+    'return refresh does not resume streams if another route covers it',
+    (WidgetTester tester) async {
+      final authService = await _createAuthService();
+      final progress = Completer<RaceProgressResult>();
+      final api = _CompactRaceRequestApi(compactProgressCompleter: progress);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorObservers: [appRouteObserver],
+          home: RaceDetailScreen(
+            authService: authService,
+            raceId: 'race-compact',
+            backendApiService: api,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(api.streamCalls, [false]);
+
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      unawaited(
+        navigator.push<void>(
+          MaterialPageRoute(
+            builder: (_) => const Scaffold(body: Text('FIRST MODAL')),
+          ),
+        ),
+      );
+      await tester.pump();
+      navigator.pop();
+      await tester.pump();
+
+      unawaited(
+        navigator.push<void>(
+          MaterialPageRoute(
+            builder: (_) => const Scaffold(body: Text('SECOND MODAL')),
+          ),
+        ),
+      );
+      await tester.pump();
+      progress.complete(
+        RaceProgressResult(
+          progress: api._progress,
+          globalPowerupInventory: const {'items': []},
+          hasCompactInventory: true,
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 6));
+
+      expect(api.streamCalls, [false]);
+    },
+  );
+
+  testWidgets(
+    'malformed initial message streams leave Activity in retry state',
+    (WidgetTester tester) async {
+      final authService = await _createAuthService();
+      final api = _CompactRaceRequestApi(malformedStreams: true);
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorObservers: [appRouteObserver],
+          home: RaceDetailScreen(
+            authService: authService,
+            raceId: 'race-compact',
+            backendApiService: api,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Couldn’t load activity'), findsOneWidget);
+      expect(find.text('TRY AGAIN'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'transport-failed initial streams leave Activity in retry state',
+    (WidgetTester tester) async {
+      final authService = await _createAuthService();
+      final api = _CompactRaceRequestApi(streamError: true);
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorObservers: [appRouteObserver],
+          home: RaceDetailScreen(
+            authService: authService,
+            raceId: 'race-compact',
+            backendApiService: api,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Couldn’t load activity'), findsOneWidget);
+      expect(find.text('TRY AGAIN'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'compact bootstrap avoids legacy reads and Chat stays lazy until tapped',
+    (WidgetTester tester) async {
+      final authService = await _createAuthService();
+      final api = _CompactRaceRequestApi();
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorObservers: [appRouteObserver],
+          home: RaceDetailScreen(
+            authService: authService,
+            raceId: 'race-compact',
+            backendApiService: api,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(api.bootstrapCalls, 1);
+      expect(api.legacyDetailsCalls, 0);
+      expect(api.legacyProgressCalls, 0);
+      expect(api.streamCalls, [false]);
+
+      await tester.ensureVisible(find.text('CHAT'));
+      await tester.tap(find.text('CHAT'));
+      await tester.pump();
+      await tester.pump();
+      expect(api.streamCalls, [false, true]);
+      expect(api.readAcks, 2);
+
+      await tester.tap(find.text('ACTIVITY'));
+      await tester.pump();
+      await tester.tap(find.text('CHAT'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(api.streamCalls, [false, true]);
+    },
+  );
+
+  testWidgets(
+    'unsupported bootstrap performs one legacy detail/progress pair',
+    (WidgetTester tester) async {
+      final authService = await _createAuthService();
+      final api = _CompactRaceRequestApi(bootstrapSupported: false);
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorObservers: [appRouteObserver],
+          home: RaceDetailScreen(
+            authService: authService,
+            raceId: 'race-compact',
+            backendApiService: api,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(api.bootstrapCalls, 1);
+      expect(api.legacyDetailsCalls, 1);
+      expect(api.legacyProgressCalls, 1);
+    },
+  );
 
   testWidgets(
     'RaceDetailScreen shows a progress skeleton while active race progress loads',
@@ -605,9 +1220,7 @@ void main() {
       expect(find.byType(HomeCourseTrack), findsOneWidget);
       expect(find.text('PRIZE POOL'), findsOneWidget);
       expect(
-        find.text(
-          'You earn a powerup every 5,000 steps this race. 1,240 to go.',
-        ),
+        find.text('NEXT POWERUP IN 1,240 · EVERY 5,000 STEPS'),
         findsOneWidget,
       );
     },
@@ -642,9 +1255,7 @@ void main() {
       await tester.pump();
 
       expect(
-        find.text(
-          'You earn a powerup every 5,000 steps this race. 1,240 to go.',
-        ),
+        find.text('NEXT POWERUP IN 1,240 · EVERY 5,000 STEPS'),
         findsOneWidget,
       );
     },
@@ -679,12 +1290,10 @@ void main() {
       await tester.pump();
 
       expect(
-        find.text(
-          'You earn a powerup every 5,000 steps this race. 1,240 to go.',
-        ),
+        find.text('NEXT POWERUP IN 1,240 · EVERY 5,000 STEPS'),
         findsNothing,
       );
-      expect(find.textContaining('You earn a powerup every'), findsNothing);
+      expect(find.textContaining('NEXT POWERUP IN'), findsNothing);
     },
   );
 

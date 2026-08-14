@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../screens/daily_reward_screen.dart';
 import '../services/ad_service.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
+import '../services/activation_analytics_service.dart';
+import 'extra_spin_reward_ticket.dart';
 import 'pill_button.dart';
 
 String _todayLocalDate() {
@@ -27,11 +31,16 @@ class StreakChip extends StatefulWidget {
     this.awaitingBatch = false,
     this.onClaimedToday,
     this.adController,
+    this.analytics,
   });
 
   /// Test seam for the rewarded-ad extra spin; defaults to a real [AdService]
   /// owned by the chip.
   final ExtraSpinAdController? adController;
+
+  /// Shared with the destination sheet so Home and Daily Reward write to the
+  /// same bounded best-effort analytics queue.
+  final ActivationAnalyticsService? analytics;
 
   final AuthService authService;
   final BackendApiService backendApiService;
@@ -70,6 +79,10 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
   // channels; ads only load once the screen sees a live offer.
   late final ExtraSpinAdController _adController =
       widget.adController ?? AdService();
+  late final ActivationAnalyticsService _analytics =
+      widget.analytics ?? ActivationAnalyticsService();
+  bool _ticketOfferShown = false;
+  bool _ticketAdPreparationStarted = false;
 
   @override
   void initState() {
@@ -95,12 +108,16 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
     // Only trust a batch payload computed for today's local date — a cached
     // batch from before midnight would resurrect yesterday's claim state.
     if (data != null && data['localDate'] == today) {
+      final wasAvailable = _extraSpinAvailable;
+      final available = _extraSpinFrom(data);
       setState(() {
         _unclaimed = data['claimedToday'] != true;
-        _extraSpinAvailable = _extraSpinFrom(data);
+        _extraSpinAvailable = available;
         _loaded = true;
         _lastFetchedDate = today;
       });
+      _recordTicketShownIfNew(wasAvailable: wasAvailable, available: available);
+      _maybePreloadTicketAd(available);
     } else if (!widget.awaitingBatch) {
       // Old backend (no embedded dailyReward), stale batch, or batch failure:
       // standalone fetch, same as before the batching change.
@@ -140,12 +157,16 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
         localDate: localDate,
       );
       if (!mounted) return;
+      final wasAvailable = _extraSpinAvailable;
+      final available = _extraSpinFrom(res);
       setState(() {
         _unclaimed = res['claimedToday'] != true;
-        _extraSpinAvailable = _extraSpinFrom(res);
+        _extraSpinAvailable = available;
         _loaded = true;
         _lastFetchedDate = localDate;
       });
+      _recordTicketShownIfNew(wasAvailable: wasAvailable, available: available);
+      _maybePreloadTicketAd(available);
     } catch (_) {
       if (mounted) setState(() => _loaded = true);
     }
@@ -164,6 +185,41 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
     return extra['available'] == true || extra['pendingGrant'] == true;
   }
 
+  void _recordTicketShownIfNew({
+    required bool wasAvailable,
+    required bool available,
+  }) {
+    if (!wasAvailable && available && !_ticketOfferShown) {
+      _ticketOfferShown = true;
+      unawaited(
+        _analytics.record(
+          'extra_spin_offer_shown',
+          context: const {'surface': 'home'},
+        ),
+      );
+    }
+  }
+
+  /// Warm the extra-spin controller while the ticket is visible. The sheet
+  /// borrows this same controller, so a ready ad survives navigation. A
+  /// failed preload is retried by the sheet, which owns the user-visible
+  /// loading state and its associated readiness telemetry.
+  void _maybePreloadTicketAd(bool available) {
+    if (!available ||
+        _ticketAdPreparationStarted ||
+        !_adController.isSupported) {
+      return;
+    }
+    final userId = widget.authService.userId;
+    if (userId == null || userId.isEmpty) return;
+    _ticketAdPreparationStarted = true;
+    if (!_adController.isReady) {
+      unawaited(
+        _adController.load(userId: userId, localDate: _todayLocalDate()),
+      );
+    }
+  }
+
   Future<void> _open() async {
     final claimed = await Navigator.of(context).push<bool>(
       PageRouteBuilder(
@@ -172,6 +228,8 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
           authService: widget.authService,
           backendApiService: widget.backendApiService,
           adController: _adController,
+          analytics: _analytics,
+          analyticsSurface: 'home',
         ),
         transitionsBuilder: (_, anim, _, child) =>
             FadeTransition(opacity: anim, child: child),
@@ -193,18 +251,23 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
     if (!_loaded) {
       return const SizedBox(height: 48);
     }
-    final label = _unclaimed
-        ? 'CLAIM'
-        : _extraSpinAvailable
-        ? 'EXTRA SPIN'
-        : 'CLAIMED';
+    if (_extraSpinAvailable) {
+      return ExtraSpinRewardTicket(
+        onPressed: () {
+          unawaited(
+            _analytics.record(
+              'extra_spin_cta_tapped',
+              context: const {'surface': 'home'},
+            ),
+          );
+          _open();
+        },
+      );
+    }
+    final label = _unclaimed ? 'CLAIM' : 'CLAIMED';
     return PillButton(
       label: label,
-      icon: _unclaimed
-          ? Icons.card_giftcard_rounded
-          : _extraSpinAvailable
-          ? Icons.replay_rounded
-          : Icons.check_box_rounded,
+      icon: _unclaimed ? Icons.card_giftcard_rounded : Icons.check_box_rounded,
       variant: PillButtonVariant.secondary,
       fullWidth: true,
       onPressed: _open,

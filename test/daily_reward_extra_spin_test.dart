@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/daily_reward_screen.dart';
 import 'package:step_tracker/services/ad_service.dart';
+import 'package:step_tracker/services/activation_analytics_service.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/widgets/case_opening_strip.dart';
+import 'package:step_tracker/widgets/extra_spin_reward_ticket.dart';
+import 'package:step_tracker/widgets/pill_button.dart';
 import 'package:step_tracker/widgets/streak_chip.dart';
 
 // ---------------------------------------------------------------------------
@@ -116,6 +120,42 @@ class _FakeAdController implements ExtraSpinAdController {
   void dispose() {}
 }
 
+class _UnsupportedAdController implements ExtraSpinAdController {
+  @override
+  bool get isReady => false;
+
+  @override
+  bool get isSupported => false;
+
+  @override
+  void dispose() {}
+
+  @override
+  Future<void> load({
+    required String userId,
+    required String localDate,
+  }) async {}
+
+  @override
+  Future<bool> showAndAwaitReward() async => false;
+}
+
+class _RecordingAnalytics extends ActivationAnalyticsService {
+  _RecordingAnalytics()
+    : super(backendApiService: _FakeBackendApiService(status: _status()));
+
+  final events = <(String, Map<String, String>)>[];
+
+  @override
+  Future<void> record(
+    String name, {
+    String? sessionId,
+    Map<String, String> context = const {},
+  }) async {
+    events.add((name, context));
+  }
+}
+
 Future<AuthService> _createAuthService() async {
   SharedPreferences.setMockInitialValues(<String, Object>{
     'auth_identity_token': 'apple-token',
@@ -133,6 +173,7 @@ Future<void> _pumpScreen(
   required _FakeBackendApiService api,
   ExtraSpinAdController? adController,
   AuthService? authService,
+  ActivationAnalyticsService? analytics,
 }) async {
   final auth = authService ?? await _createAuthService();
   await tester.pumpWidget(
@@ -141,6 +182,7 @@ Future<void> _pumpScreen(
         authService: auth,
         backendApiService: api,
         adController: adController,
+        analytics: analytics,
       ),
     ),
   );
@@ -150,21 +192,36 @@ Future<void> _pumpScreen(
 }
 
 void main() {
-  testWidgets('extra spin is the primary action when adExtraSpin is available', (
-    tester,
-  ) async {
-    final api = _FakeBackendApiService(
-      status: _status(
-        adExtraSpin: {'available': true, 'pendingGrant': false, 'used': false},
-      ),
+  setUp(() {
+    PackageInfo.setMockInitialValues(
+      appName: 'Step Tracker',
+      packageName: 'com.example.steptracker',
+      version: '1.0.0',
+      buildNumber: '1',
+      buildSignature: '',
     );
-    final ads = _FakeAdController();
-    await _pumpScreen(tester, api: api, adController: ads);
-
-    expect(find.text('WATCH AD · +1 SPIN'), findsOneWidget);
-    expect(find.text('COME BACK TOMORROW'), findsNothing);
-    expect(ads.loadCalls, 1, reason: 'ad should preload when offer is live');
   });
+
+  testWidgets(
+    'extra spin is the primary action when adExtraSpin is available',
+    (tester) async {
+      final api = _FakeBackendApiService(
+        status: _status(
+          adExtraSpin: {
+            'available': true,
+            'pendingGrant': false,
+            'used': false,
+          },
+        ),
+      );
+      final ads = _FakeAdController();
+      await _pumpScreen(tester, api: api, adController: ads);
+
+      expect(find.text('WATCH A SHORT AD · +1 SPIN'), findsOneWidget);
+      expect(find.text('COME BACK TOMORROW'), findsNothing);
+      expect(ads.loadCalls, 1, reason: 'ad should preload when offer is live');
+    },
+  );
 
   testWidgets('no button when the backend omits adExtraSpin (old backend)', (
     tester,
@@ -173,7 +230,7 @@ void main() {
     final ads = _FakeAdController();
     await _pumpScreen(tester, api: api, adController: ads);
 
-    expect(find.text('WATCH AD · +1 SPIN'), findsNothing);
+    expect(find.text('WATCH A SHORT AD · +1 SPIN'), findsNothing);
     expect(ads.loadCalls, 0);
   });
 
@@ -187,45 +244,191 @@ void main() {
     );
     await _pumpScreen(tester, api: api, adController: _FakeAdController());
 
-    expect(find.text('WATCH AD · +1 SPIN'), findsNothing);
+    expect(find.text('WATCH A SHORT AD · +1 SPIN'), findsNothing);
     expect(find.text('COME BACK TOMORROW'), findsOneWidget);
   });
 
-  testWidgets('home chip shows EXTRA SPIN from the batch payload', (
+  testWidgets(
+    'home chip renders an accessible reward ticket from the batch payload',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      final auth = await _createAuthService();
+      final now = DateTime.now();
+      String two(int n) => n.toString().padLeft(2, '0');
+      final localDate = '${now.year}-${two(now.month)}-${two(now.day)}';
+
+      Widget chip(Map<String, dynamic> adExtraSpin) => MaterialApp(
+        home: Scaffold(
+          body: StreakChip(
+            authService: auth,
+            backendApiService: _FakeBackendApiService(status: _status()),
+            adController: _FakeAdController(),
+            initialData: {
+              'claimedToday': true,
+              'localDate': localDate,
+              'adExtraSpin': adExtraSpin,
+            },
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(
+        chip({'available': true, 'pendingGrant': false, 'used': false}),
+      );
+      await tester.pump();
+      expect(find.byType(ExtraSpinRewardTicket), findsOneWidget);
+      expect(find.text('EXTRA SPIN'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel(
+          'Extra spin. Watch a short ad for one extra spin.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester.getSemantics(
+          find.bySemanticsLabel(
+            'Extra spin. Watch a short ad for one extra spin.',
+          ),
+        ),
+        matchesSemantics(
+          isButton: true,
+          hasTapAction: true,
+          label: 'Extra spin. Watch a short ad for one extra spin.',
+        ),
+      );
+      semantics.dispose();
+
+      // Used-up offer degrades to the plain claimed state.
+      await tester.pumpWidget(
+        chip({'available': false, 'pendingGrant': false, 'used': true}),
+      );
+      await tester.pump();
+      expect(find.text('CLAIMED'), findsOneWidget);
+    },
+  );
+
+  testWidgets('extra-spin pill keeps the existing quick-action footprint', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(320, 700));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final auth = await _createAuthService();
     final now = DateTime.now();
     String two(int n) => n.toString().padLeft(2, '0');
     final localDate = '${now.year}-${two(now.month)}-${two(now.day)}';
 
-    Widget chip(Map<String, dynamic> adExtraSpin) => MaterialApp(
-      home: Scaffold(
-        body: StreakChip(
-          authService: auth,
-          backendApiService: _FakeBackendApiService(status: _status()),
-          adController: _FakeAdController(),
-          initialData: {
-            'claimedToday': true,
-            'localDate': localDate,
-            'adExtraSpin': adExtraSpin,
-          },
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Row(
+            children: [
+              Expanded(
+                child: StreakChip(
+                  authService: auth,
+                  backendApiService: _FakeBackendApiService(status: _status()),
+                  adController: _FakeAdController(),
+                  initialData: {
+                    'claimedToday': true,
+                    'localDate': localDate,
+                    'adExtraSpin': const {
+                      'available': true,
+                      'pendingGrant': false,
+                      'used': false,
+                    },
+                  },
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: PillButton(
+                  key: const Key('reference-shop-pill'),
+                  label: 'SHOP',
+                  icon: Icons.storefront_rounded,
+                  variant: PillButtonVariant.secondary,
+                  fullWidth: true,
+                  onPressed: () {},
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
+    await tester.pump(const Duration(milliseconds: 1000));
 
+    expect(tester.takeException(), isNull);
+    // The 900ms shimmer/pop repeats every six seconds, so its controller stays
+    // alive even while the button has returned to its resting size.
+    expect(tester.binding.hasScheduledFrame, isTrue);
+    final ticket = tester.getRect(find.byType(ExtraSpinRewardTicket));
+    final shop = tester.getRect(find.byKey(const Key('reference-shop-pill')));
+    expect(ticket.size, shop.size);
+  });
+
+  testWidgets('ticket immediately settles when Reduce Motion turns on', (
+    tester,
+  ) async {
+    Widget ticket({required bool disableAnimations}) => MaterialApp(
+      home: MediaQuery(
+        data: MediaQueryData(disableAnimations: disableAnimations),
+        child: Scaffold(body: ExtraSpinRewardTicket(onPressed: () {})),
+      ),
+    );
+
+    await tester.pumpWidget(ticket(disableAnimations: false));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tester.binding.hasScheduledFrame, isTrue);
+
+    await tester.pumpWidget(ticket(disableAnimations: true));
+    await tester.pump();
+    expect(tester.binding.hasScheduledFrame, isFalse);
+  });
+
+  testWidgets('ticket tap records Home context then opens the shared sheet', (
+    tester,
+  ) async {
+    final auth = await _createAuthService();
+    final analytics = _RecordingAnalytics();
+    final now = DateTime.now();
+    String two(int n) => n.toString().padLeft(2, '0');
+    final localDate = '${now.year}-${two(now.month)}-${two(now.day)}';
+    final api = _FakeBackendApiService(
+      status: _status(
+        adExtraSpin: {'available': true, 'pendingGrant': false, 'used': false},
+      ),
+    );
     await tester.pumpWidget(
-      chip({'available': true, 'pendingGrant': false, 'used': false}),
+      MaterialApp(
+        home: Scaffold(
+          body: StreakChip(
+            authService: auth,
+            backendApiService: api,
+            adController: _FakeAdController(),
+            analytics: analytics,
+            initialData: {
+              'claimedToday': true,
+              'localDate': localDate,
+              'adExtraSpin': const {
+                'available': true,
+                'pendingGrant': false,
+                'used': false,
+              },
+            },
+          ),
+        ),
+      ),
     );
     await tester.pump();
-    expect(find.text('EXTRA SPIN'), findsOneWidget);
 
-    // Used-up offer degrades to the plain claimed state.
-    await tester.pumpWidget(
-      chip({'available': false, 'pendingGrant': false, 'used': true}),
-    );
+    await tester.tap(find.byType(ExtraSpinRewardTicket));
     await tester.pump();
-    expect(find.text('CLAIMED'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+      analytics.events,
+      contains(('extra_spin_cta_tapped', const {'surface': 'home'})),
+    );
+    expect(find.byType(DailyRewardScreen), findsOneWidget);
   });
 
   testWidgets('button disabled while the ad has not loaded', (tester) async {
@@ -240,6 +443,110 @@ void main() {
     expect(find.text('LOADING AD...'), findsOneWidget);
   });
 
+  testWidgets('daily screen records ready, tap, completion, and claim stages', (
+    tester,
+  ) async {
+    final analytics = _RecordingAnalytics();
+    final api = _FakeBackendApiService(
+      status: _status(
+        adExtraSpin: {'available': true, 'pendingGrant': false, 'used': false},
+      ),
+    );
+    await _pumpScreen(
+      tester,
+      api: api,
+      adController: _FakeAdController(),
+      analytics: analytics,
+    );
+
+    await tester.tap(find.text('WATCH A SHORT AD · +1 SPIN'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(
+      analytics.events.map((event) => event.$1),
+      containsAllInOrder(const [
+        'extra_spin_offer_shown',
+        'extra_spin_ad_ready',
+        'extra_spin_cta_tapped',
+        'extra_spin_ad_completed',
+        'extra_spin_claim_succeeded',
+      ]),
+    );
+    expect(
+      analytics.events.every((event) => event.$2.isEmpty),
+      isTrue,
+      reason: 'shared routes without a known source must not invent surface',
+    );
+  });
+
+  testWidgets('not-ready load records a bounded failure result', (
+    tester,
+  ) async {
+    final analytics = _RecordingAnalytics();
+    await _pumpScreen(
+      tester,
+      api: _FakeBackendApiService(
+        status: _status(
+          adExtraSpin: {
+            'available': true,
+            'pendingGrant': false,
+            'used': false,
+          },
+        ),
+      ),
+      adController: _FakeAdController(readyAfterLoad: false),
+      analytics: analytics,
+    );
+
+    expect(
+      analytics.events.any(
+        (event) =>
+            event.$1 == 'extra_spin_ad_not_ready' &&
+            event.$2['result'] == 'load_failed' &&
+            event.$2.length == 1,
+      ),
+      isTrue,
+    );
+  });
+
+  testWidgets('missing or malformed adExtraSpin never advertises an ad', (
+    tester,
+  ) async {
+    final malformed = _status(
+      adExtraSpin: {'available': 'yes', 'pendingGrant': false, 'used': false},
+    );
+    final ads = _FakeAdController();
+    await _pumpScreen(
+      tester,
+      api: _FakeBackendApiService(status: malformed),
+      adController: ads,
+    );
+
+    expect(find.text('WATCH A SHORT AD · +1 SPIN'), findsNothing);
+    expect(ads.loadCalls, 0);
+  });
+
+  testWidgets('unsupported builds do not render the CTA or load an ad', (
+    tester,
+  ) async {
+    await _pumpScreen(
+      tester,
+      api: _FakeBackendApiService(
+        status: _status(
+          adExtraSpin: {
+            'available': true,
+            'pendingGrant': false,
+            'used': false,
+          },
+        ),
+      ),
+      adController: _UnsupportedAdController(),
+    );
+
+    expect(find.text('WATCH A SHORT AD · +1 SPIN'), findsNothing);
+  });
+
   testWidgets('tap: shows the ad, claims, and spins the reel again', (
     tester,
   ) async {
@@ -251,7 +558,7 @@ void main() {
     final ads = _FakeAdController();
     await _pumpScreen(tester, api: api, adController: ads);
 
-    await tester.tap(find.text('WATCH AD · +1 SPIN'));
+    await tester.tap(find.text('WATCH A SHORT AD · +1 SPIN'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -259,7 +566,7 @@ void main() {
     expect(api.claimCalls, 1);
     expect(find.byType(CaseOpeningReel), findsOneWidget);
     // Offer is single-use: no second button behind the reel.
-    expect(find.text('WATCH AD · +1 SPIN'), findsNothing);
+    expect(find.text('WATCH A SHORT AD · +1 SPIN'), findsNothing);
   });
 
   testWidgets('pendingGrant claims directly without showing another ad', (
@@ -299,7 +606,7 @@ void main() {
     final ads = _FakeAdController();
     await _pumpScreen(tester, api: api, adController: ads);
 
-    await tester.tap(find.text('WATCH AD · +1 SPIN'));
+    await tester.tap(find.text('WATCH A SHORT AD · +1 SPIN'));
     await tester.pump();
     expect(api.claimCalls, 1);
 
@@ -321,7 +628,7 @@ void main() {
     final ads = _FakeAdController()..earnReward = false;
     await _pumpScreen(tester, api: api, adController: ads);
 
-    await tester.tap(find.text('WATCH AD · +1 SPIN'));
+    await tester.tap(find.text('WATCH A SHORT AD · +1 SPIN'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 

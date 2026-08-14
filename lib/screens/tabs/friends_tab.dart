@@ -7,6 +7,7 @@ import '../../widgets/arcade_fx.dart';
 import '../../models/step_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/backend_api_service.dart';
+import '../../services/friends_summary_repository.dart';
 import '../../styles.dart';
 import '../../widgets/coach_tip.dart';
 import '../../widgets/app_refresh_indicator.dart';
@@ -27,6 +28,8 @@ class FriendsTab extends StatefulWidget {
   final StepData? stepData;
   final String? displayName;
   final VoidCallback? onOpenProfile;
+  final FriendsSummaryRepository? friendsRepository;
+  final ValueChanged<Map<String, dynamic>>? onSnapshot;
   // Optional tutorial spotlight anchor for the search field. Null in the
   // shipped app (transparent KeyedSubtree); the tutorial passes a key so its
   // overlay can measure the real search box.
@@ -45,6 +48,8 @@ class FriendsTab extends StatefulWidget {
     this.stepData,
     this.displayName,
     this.onOpenProfile,
+    this.friendsRepository,
+    this.onSnapshot,
     this.tutorialSearchKey,
     this.tutorialInviteKey,
   });
@@ -55,6 +60,7 @@ class FriendsTab extends StatefulWidget {
 
 class _FriendsTabState extends State<FriendsTab> {
   late final BackendApiService _backendApiService;
+  late final FriendsSummaryRepository _friendsRepository;
   final TextEditingController _searchController = TextEditingController();
 
   List<Map<String, dynamic>> _friends = [];
@@ -77,6 +83,9 @@ class _FriendsTabState extends State<FriendsTab> {
   void initState() {
     super.initState();
     _backendApiService = widget.backendApiService ?? BackendApiService();
+    _friendsRepository =
+        widget.friendsRepository ??
+        FriendsSummaryRepository(_backendApiService);
     _loadFriends();
   }
 
@@ -122,9 +131,7 @@ class _FriendsTabState extends State<FriendsTab> {
         return;
       }
 
-      final data = await _backendApiService.fetchFriends(
-        identityToken: identityToken,
-      );
+      final data = await _friendsRepository.fetch(identityToken: identityToken);
 
       if (!mounted) return;
 
@@ -133,9 +140,15 @@ class _FriendsTabState extends State<FriendsTab> {
       // backends return insertion order).
       final friends = _safeRows(data['friends'])
         ..sort(
-          (a, b) => (a['displayName'] as String? ?? '').toLowerCase().compareTo(
-            (b['displayName'] as String? ?? '').toLowerCase(),
-          ),
+          (a, b) =>
+              (a['displayName'] is String ? a['displayName'] as String : '')
+                  .toLowerCase()
+                  .compareTo(
+                    (b['displayName'] is String
+                            ? b['displayName'] as String
+                            : '')
+                        .toLowerCase(),
+                  ),
         );
       final pending = _safeMap(data['pending']);
       final incoming = _safeRows(pending['incoming']);
@@ -152,6 +165,7 @@ class _FriendsTabState extends State<FriendsTab> {
         });
         _isLoading = false;
       });
+      widget.onSnapshot?.call(data);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -237,6 +251,7 @@ class _FriendsTabState extends State<FriendsTab> {
         _showDropdown = false;
       });
       _searchController.clear();
+      _friendsRepository.invalidate();
       await _loadFriends();
       widget.onFriendsChanged();
     } catch (e) {
@@ -265,6 +280,7 @@ class _FriendsTabState extends State<FriendsTab> {
       );
 
       if (!mounted) return;
+      _friendsRepository.invalidate();
       await _loadFriends();
       widget.onFriendsChanged();
     } catch (e) {
@@ -277,6 +293,7 @@ class _FriendsTabState extends State<FriendsTab> {
   }
 
   Future<void> _handleRefresh() async {
+    _friendsRepository.invalidate();
     await _loadFriends();
     if (widget.onRefresh != null) {
       await widget.onRefresh!();
@@ -294,6 +311,7 @@ class _FriendsTabState extends State<FriendsTab> {
       );
 
       if (!mounted) return;
+      _friendsRepository.invalidate();
       await _loadFriends();
       widget.onFriendsChanged();
     } catch (e) {
@@ -1158,6 +1176,7 @@ class _FriendsTabState extends State<FriendsTab> {
       );
 
       if (!mounted) return;
+      _friendsRepository.invalidate();
       await _loadFriends();
       widget.onFriendsChanged();
     } catch (_) {

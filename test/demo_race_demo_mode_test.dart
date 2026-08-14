@@ -138,12 +138,7 @@ void main() {
       ),
     );
     await settleDemo(tester);
-    return (
-      engine: engine,
-      api: api,
-      notifications: notifications,
-      real: real,
-    );
+    return (engine: engine, api: api, notifications: notifications, real: real);
   }
 
   testWidgets('15 — no AdBannerSlot renders an ad in demoMode', (tester) async {
@@ -187,9 +182,7 @@ void main() {
     await pumpDemoScreen(tester);
 
     // Tap the first mystery box: the real CaseOpeningScreen is pushed.
-    final boxes = find.byWidgetPredicate(
-      (w) => w is ItemSlot && w.state == ItemSlotState.mysteryBox,
-    );
+    final boxes = find.byType(MysteryBoxButton);
     expect(boxes, findsNWidgets(3));
     await tester.tap(boxes.first);
     await settleDemo(tester);
@@ -253,12 +246,11 @@ void main() {
 
     // The real standings, from the real screen, with the real user's name and
     // the real "(you)" self-marker the plank renders.
-    expect(
-      find.textContaining('${ctx.real.displayName!} (you)'),
-      findsWidgets,
-    );
+    expect(find.textContaining('${ctx.real.displayName!} (you)'), findsWidgets);
     expect(find.textContaining('CapyBot'), findsWidgets);
-    // Three real inventory slots: one held + two boxes.
-    expect(find.byType(ItemSlot), findsNWidgets(3));
+    // Real inventory: three unopened boxes use the standalone focus layout,
+    // without the old slot-card shells.
+    expect(find.byType(ItemSlot), findsNothing);
+    expect(find.byType(MysteryBoxButton), findsNWidgets(3));
   });
 }

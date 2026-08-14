@@ -35,10 +35,30 @@ class _TeamPowerupApi extends BackendApiService {
       'powerupsEnabled': true,
       'endsAt': '2026-12-10T12:00:00.000Z',
       'participants': const [
-        {'userId': 'user-1', 'displayName': 'Trail Walker', 'status': 'ACCEPTED', 'team': 'TEAM_A'},
-        {'userId': 'ally-1', 'displayName': 'Ally Alice', 'status': 'ACCEPTED', 'team': 'TEAM_A'},
-        {'userId': 'enemy-1', 'displayName': 'Enemy Eve', 'status': 'ACCEPTED', 'team': 'TEAM_B'},
-        {'userId': 'quit-1', 'displayName': 'Quitter Quinn', 'status': 'ACCEPTED', 'team': 'TEAM_B'},
+        {
+          'userId': 'user-1',
+          'displayName': 'Trail Walker',
+          'status': 'ACCEPTED',
+          'team': 'TEAM_A',
+        },
+        {
+          'userId': 'ally-1',
+          'displayName': 'Ally Alice',
+          'status': 'ACCEPTED',
+          'team': 'TEAM_A',
+        },
+        {
+          'userId': 'enemy-1',
+          'displayName': 'Enemy Eve',
+          'status': 'ACCEPTED',
+          'team': 'TEAM_B',
+        },
+        {
+          'userId': 'quit-1',
+          'displayName': 'Quitter Quinn',
+          'status': 'ACCEPTED',
+          'team': 'TEAM_B',
+        },
       ],
     };
   }
@@ -111,6 +131,7 @@ class _TeamPowerupApi extends BackendApiService {
     required String powerupId,
     String? targetUserId,
     String? targetDirection,
+    String? targetEffectId,
     int upgradeLevel = 0,
   }) async {
     lastTargetUserId = targetUserId;
@@ -118,9 +139,8 @@ class _TeamPowerupApi extends BackendApiService {
   }
 
   @override
-  Future<Map<String, dynamic>> fetchMe({
-    required String identityToken,
-  }) async => const {'coins': 320, 'heldCoins': 0};
+  Future<Map<String, dynamic>> fetchMe({required String identityToken}) async =>
+      const {'coins': 320, 'heldCoins': 0};
 }
 
 Future<AuthService> _createAuthService() async {
@@ -173,8 +193,9 @@ Future<void> _openPicker(WidgetTester tester, _TeamPowerupApi api) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('TR-651: the picker lists enemies only — no teammates',
-      (tester) async {
+  testWidgets('TR-651: the picker lists enemies only — no teammates', (
+    tester,
+  ) async {
     final api = _TeamPowerupApi();
     await _openPicker(tester, api);
 
@@ -202,8 +223,9 @@ void main() {
     );
   });
 
-  testWidgets('TR-651: tapping the only enemy sends them as the target',
-      (tester) async {
+  testWidgets('TR-651: tapping the only enemy sends them as the target', (
+    tester,
+  ) async {
     final api = _TeamPowerupApi();
     await _openPicker(tester, api);
 

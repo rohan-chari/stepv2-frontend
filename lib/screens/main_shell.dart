@@ -27,6 +27,7 @@ import '../widgets/notification_ask_dialog.dart';
 import '../widgets/steps_disconnected_banner.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
+import '../services/friends_summary_repository.dart';
 import '../services/remote_asset_cache.dart';
 import '../services/background_sync_bootstrap_service.dart';
 import '../services/discovery_join_coordinator.dart';
@@ -114,6 +115,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   late final ReviewPromptService _reviewPromptService;
   late final ActivationAnalyticsService _activationAnalytics;
   late final RaceResultsAcknowledgementQueue _raceResultsAckQueue;
+  late final FriendsSummaryRepository _friendsRepository;
 
   int _currentTab = 0;
   late final PageController _pageController;
@@ -180,6 +182,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   Loadable<Map<String, dynamic>> _shopCatalogState = const Loadable.initial();
   Map<String, dynamic>? _raceCard;
   bool _raceCardLoading = true;
+  bool _homePresentationResolved = false;
+  bool _homeFriendsResolved = false;
+  bool _skipNextMeRefresh = false;
   final HomeSuggestedRacesStore _homeSuggestions = HomeSuggestedRacesStore();
   String? _homeSuggestionsUserId;
   final Set<String> _joiningHomeSuggestionKeys = {};
@@ -421,6 +426,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           builder: (_) => RaceDetailScreen(
             authService: widget.authService,
             raceId: id,
+            backendApiService: _backendApiService,
             friends: _friendsSteps,
             notificationService: widget.notificationService,
             showPostCreateSharePrompt: persistedAsQuick,
@@ -659,6 +665,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     super.initState();
     _healthService = widget.healthService ?? HealthService();
     _backendApiService = widget.backendApiService ?? BackendApiService();
+    _friendsRepository = FriendsSummaryRepository(_backendApiService);
     _backgroundSyncBootstrapService =
         widget.backgroundSyncBootstrapService ??
         BackgroundSyncBootstrapService();
@@ -763,8 +770,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   /// Opens the daily-reward reveal screen as a non-opaque overlay (matching the
   /// StreakChip / Get Coins entry points). Reached from a DAILY_REWARD_REMINDER
-  /// push tap. The rewarded-ad extra spin is omitted here (no ad controller in
-  /// the shell); the core claim flow is unaffected.
+  /// push tap. The rewarded-ad extra spin owns its fallback controller when the
+  /// shell has none, so its core claim flow remains available.
   void _openDailyReward() {
     if (_openingDailyReward) return;
     _openingDailyReward = true;
@@ -1165,14 +1172,44 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       final data = await _backendApiService.refreshSessionToken(
         authToken: token,
       );
-      final newToken = data['sessionToken'] as String?;
-      final user = data['user'] as Map<String, dynamic>?;
+      final rawToken = data['sessionToken'];
+      final newToken = rawToken is String && rawToken.isNotEmpty
+          ? rawToken
+          : null;
+      final rawUser = data['user'];
+      final user = rawUser is Map
+          ? <String, dynamic>{
+              for (final entry in rawUser.entries)
+                if (entry.key is String) entry.key as String: entry.value,
+            }
+          : null;
+      final rawEmail = user?['email'];
+      final rawDisplayName = user?['displayName'];
+      final validShellIdentity = _isValidAuthShellUser(user);
+      final skipNextMeRefresh =
+          data['contract'] == 'auth-shell-v1' &&
+          user?['id'] is String &&
+          (user?['id'] as String).isNotEmpty &&
+          newToken != null &&
+          validShellIdentity;
       if (newToken != null) {
         await widget.authService.updateSessionToken(newToken);
       }
       if (user != null) {
         await widget.authService.syncFromBackendUser(user, authoritative: true);
       }
+      if (skipNextMeRefresh) {
+        if (mounted) {
+          setState(() {
+            _email = rawEmail as String?;
+            _displayName = rawDisplayName as String?;
+          });
+        } else {
+          _email = rawEmail as String?;
+          _displayName = rawDisplayName as String?;
+        }
+      }
+      _skipNextMeRefresh = skipNextMeRefresh;
       return true;
     } catch (error) {
       if (isAuthenticationFailure(error)) {
@@ -1193,6 +1230,71 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       }
       return true;
     }
+  }
+
+  bool _isValidAuthShellUser(Map<String, dynamic>? user) {
+    if (user == null) return false;
+    bool nullableString(String key) =>
+        user.containsKey(key) && (user[key] == null || user[key] is String);
+    bool requiredBool(String key) => user[key] is bool;
+    bool requiredNum(String key) => user[key] is num;
+
+    final id = user['id'];
+    final email = user['email'];
+    if (id is! String || id.isEmpty || email is! String || email.isEmpty) {
+      return false;
+    }
+    for (final key in const [
+      'displayName',
+      'firstName',
+      'lastName',
+      'profilePhotoUrl',
+      'profilePhotoPromptDismissedAt',
+      'referredByCode',
+      'nameSetupCompletedAt',
+      'renameChipDismissedAt',
+    ]) {
+      if (!nullableString(key)) return false;
+    }
+    for (final key in const [
+      'nameSetupOnboardingRequired',
+      'isAdmin',
+      'firstRaceOnboardingSeen',
+      'tutorialOnboardingSeen',
+      'hiddenFromLeaderboard',
+      'autoJoinFeaturedRaces',
+      'characterPowersEnabled',
+    ]) {
+      if (!requiredBool(key)) return false;
+    }
+    for (final key in const [
+      'renameChipShownCount',
+      'coins',
+      'heldCoins',
+      'incomingFriendRequests',
+    ]) {
+      if (!requiredNum(key)) return false;
+    }
+    final flags = user['featureFlags'];
+    if (flags is! Map) return false;
+    for (final key in const [
+      'bannerAdsEnabled',
+      'dualBoxBannersEnabled',
+      'teamRacesEnabled',
+      'onboardingV2Enabled',
+      'onboardingV3Enabled',
+      'onboardingInviteCodeEnabled',
+      'openUserRaceDiscoveryEnabled',
+      'quickCreateRaceCtaEnabled',
+      'setupInviteCodePromptEnabled',
+      'racesInviteDecisionGateEnabled',
+      'quickRaceShareAutoFriendEnabled',
+      'tutorialMandatoryEnabled',
+    ]) {
+      if (flags[key] is! bool) return false;
+    }
+    final bucketMinutes = flags['stepSampleBucketMinutes'];
+    return bucketMinutes == null || bucketMinutes is num;
   }
 
   Future<void> _enableHealthData() async {
@@ -1562,20 +1664,34 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         return;
       }
 
-      final now = DateTime.now();
-      final date =
-          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-
-      final friends = await _backendApiService.fetchFriendsSteps(
+      final snapshot = await _friendsRepository.fetch(
         identityToken: identityToken,
-        date: date,
       );
+      final rawFriends = snapshot['friends'];
+      if (rawFriends is! List || rawFriends.any((row) => row is! Map)) {
+        throw const ApiException('Couldn’t load friends. Please try again.');
+      }
+      final friends = [
+        for (final raw in rawFriends)
+          <String, dynamic>{
+            for (final entry in (raw as Map).entries)
+              if (entry.key is String) entry.key as String: entry.value,
+          },
+      ];
+      final pending = snapshot['pending'];
+      final rawIncoming = snapshot['incomingFriendRequests'];
+      final incoming = rawIncoming is num
+          ? rawIncoming.toInt()
+          : pending is Map && pending['incoming'] is List
+          ? (pending['incoming'] as List).length
+          : 0;
 
       _friendsFetchedAt = DateTime.now();
       if (mounted) {
         setState(() {
           _friendsSteps = friends;
           _friendsStepsState = Loadable.success(friends);
+          _incomingFriendRequests = incoming;
         });
       }
     } catch (e) {
@@ -1836,15 +1952,22 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     // Home discovery runs beside the modal-critical work but never gates result
     // or What's New presentation.
     unawaited(_refreshHomeSuggestions());
-    await Future.wait([
-      _fetchRaceCard(usePersistedTotals: outcome?.usePersistedHome ?? false),
+    final raceCardFuture = _fetchRaceCard(
+      usePersistedTotals: outcome?.usePersistedHome ?? false,
+    );
+    final requiredFutures = <Future<void>>[
+      raceCardFuture,
       // Await ONLY the core race list — result-modal detection consumes
       // completed races. Discovery must not gate the load (§9.4).
       _fetchRacesCore(),
-      _fetchShopCatalog(),
-      _fetchFriendsSteps(),
-      _refreshMe(),
-    ]);
+    ];
+    await raceCardFuture;
+    if (!_homePresentationResolved) requiredFutures.add(_fetchShopCatalog());
+    if (!_homeFriendsResolved) requiredFutures.add(_fetchFriendsSteps());
+    final skipColdStartMeRefresh = _skipNextMeRefresh;
+    _skipNextMeRefresh = false;
+    if (!skipColdStartMeRefresh) requiredFutures.add(_refreshMe());
+    await Future.wait(requiredFutures);
 
     if (outcome?.jobId != null && outcome?.generation != null) {
       _startJobPolling(outcome!.jobId!, outcome.generation!);
@@ -2559,19 +2682,32 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     // it's also where a newly-shipped remote item's art gets picked up.
     unawaited(_refreshRemoteAssetManifest());
 
-    final equipped = catalog['equipped'] as Map<String, dynamic>? ?? {};
+    final rawEquipped = catalog['equipped'];
+    final equipped = rawEquipped is Map
+        ? <String, dynamic>{
+            for (final entry in rawEquipped.entries)
+              if (entry.key is String) entry.key as String: entry.value,
+          }
+        : <String, dynamic>{};
     // The CHARACTER entry is the base animal, not a wearable — keep it out of
     // the accessory overlay list.
     final accessories = equipped.entries
         .where((entry) => entry.key != 'CHARACTER')
         .map((entry) => entry.value)
-        .whereType<Map<String, dynamic>>()
+        .whereType<Map>()
+        .map(
+          (item) => <String, dynamic>{
+            for (final entry in item.entries)
+              if (entry.key is String) entry.key as String: entry.value,
+          },
+        )
         .toList(growable: false);
     final character = equipped['CHARACTER'];
     final animal = character is Map<String, dynamic>
         ? animalFromJson(character['assetKey'])
         : null;
-    final coins = catalog['coins'] as int?;
+    final rawCoins = catalog['coins'];
+    final coins = rawCoins is num ? rawCoins.toInt() : null;
 
     if (coins != null) {
       widget.authService.updateCoins(coins);
@@ -2591,7 +2727,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     final items = catalog['items'];
     if (items is List) {
       for (final item in items) {
-        if (item is Map<String, dynamic> && item['assetKey'] == 'cape') {
+        if (item is Map && item['assetKey'] == 'cape') {
           final metadata = item['renderMetadata'];
           if (metadata is Map<String, dynamic> && metadata.isNotEmpty) {
             unawaited(
@@ -2680,9 +2816,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     // now consume dailyReward/stepMilestones from the batch above; their
     // standalone fallback only runs when the field is absent (see the widgets).
     unawaited(_refreshMe());
-    unawaited(_fetchFriendsSteps());
-    // Shop only touches the network when the 15-minute cache is absent/expired.
-    unawaited(_fetchShopCatalog());
+    if (!_homeFriendsResolved) unawaited(_fetchFriendsSteps());
+    if (!_homePresentationResolved) unawaited(_fetchShopCatalog());
     if (outcome.jobId != null && outcome.generation != null) {
       _startJobPolling(outcome.jobId!, outcome.generation!);
     }
@@ -2702,6 +2837,68 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         identityToken: identityToken,
         usePersistedTotals: usePersistedTotals,
       );
+      _homePresentationResolved = false;
+      _homeFriendsResolved = false;
+      if (data['contract'] == 'home-shell-v1') {
+        final resolved = data['resolved'];
+        final presentation = data['presentation'];
+        if (resolved is Map &&
+            resolved['presentation'] == true &&
+            presentation is Map) {
+          final equipped = presentation['equipped'];
+          final coins = presentation['coins'];
+          final cape = presentation['cape'];
+          if (equipped is Map &&
+              coins is num &&
+              presentation.containsKey('cape') &&
+              (cape == null || cape is Map)) {
+            final compactCatalog = <String, dynamic>{
+              'coins': coins.toInt(),
+              'equipped': equipped,
+              'items': [if (cape is Map) cape],
+            };
+            _applyShopCatalog(compactCatalog);
+            _shopCatalogState = Loadable.success(compactCatalog);
+            _homePresentationResolved = true;
+          }
+        }
+        final friends = data['friends'];
+        if (resolved is Map &&
+            resolved['friends'] == true &&
+            friends is Map &&
+            friends['friends'] is List &&
+            (friends['friends'] as List).every((row) => row is Map) &&
+            friends['pending'] is Map &&
+            (friends['pending'] as Map)['incoming'] is List &&
+            (friends['pending'] as Map)['outgoing'] is List) {
+          final rows = <Map<String, dynamic>>[];
+          for (final raw in friends['friends'] as List) {
+            if (raw is! Map) continue;
+            rows.add({
+              for (final entry in raw.entries)
+                if (entry.key is String) entry.key as String: entry.value,
+            });
+          }
+          final rawIncoming = friends['incomingFriendRequests'];
+          final pending = friends['pending'];
+          final incoming = rawIncoming is num
+              ? rawIncoming.toInt()
+              : pending is Map && pending['incoming'] is List
+              ? (pending['incoming'] as List).length
+              : 0;
+          _friendsSteps = rows;
+          _friendsStepsState = Loadable.success(rows);
+          _incomingFriendRequests = incoming;
+          _friendsFetchedAt = DateTime.now();
+          _homeFriendsResolved = true;
+          _friendsRepository.seed({
+            'contract': 'friends-summary-v1',
+            'incomingFriendRequests': incoming,
+            'friends': rows,
+            'pending': pending is Map ? pending : const {},
+          });
+        }
+      }
       if (mounted) {
         setState(() {
           _raceCard = data;
@@ -2760,6 +2957,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
             builder: (_) => RaceDetailScreen(
               authService: widget.authService,
               raceId: raceId,
+              backendApiService: _backendApiService,
               friends: _friendsSteps,
               notificationService: widget.notificationService,
               onBoxOpened: () =>
@@ -2799,6 +2997,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
             builder: (_) => TournamentDetailScreen(
               authService: widget.authService,
               tournamentId: tournamentId,
+              backendApiService: _backendApiService,
               friends: _friendsSteps,
             ),
           ),
@@ -2831,9 +3030,17 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       return null;
     } on ApiException catch (e) {
       if (mounted) {
+        // This economy guard is not a team-race error. Prefer the backend's
+        // authoritative copy so this app stays accurate against both the old
+        // three-race backend and the newer five-race backend during rollout.
+        final membershipLimitMessage = e.message.trim();
         showErrorToast(
           context,
-          e.code != null
+          e.code == 'QUICK_RACE_MEMBERSHIP_LIMIT'
+              ? (membershipLimitMessage.isNotEmpty
+                    ? membershipLimitMessage
+                    : 'You’re already in the maximum number of races that start automatically. Try again after one is over.')
+              : e.code != null
               ? teamRaceErrorCopy(e.code)
               : (e.message.trim().isNotEmpty
                     ? e.message
@@ -3193,10 +3400,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _refreshFriendsTab() async {
-    await _refreshMe();
-  }
-
   Future<void> _refreshProfileTab() async {
     await _refreshMe();
   }
@@ -3410,14 +3613,18 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       );
       // Key session capability caches to the authenticated user; a plain token
       // rotation for the same user is a no-op (§9.1).
-      final userId = user['id'] as String?;
+      final rawUserId = user['id'];
+      final userId = rawUserId is String ? rawUserId : null;
       if (userId != null && userId.isNotEmpty) {
         _backendApiService.onAuthenticatedUser(userId);
       }
       unawaited(_refreshRemoteAssetManifest());
-      final incoming = user['incomingFriendRequests'] as int? ?? 0;
-      final displayName = user['displayName'] as String?;
-      final email = user['email'] as String?;
+      final rawIncoming = user['incomingFriendRequests'];
+      final incoming = rawIncoming is num ? rawIncoming.toInt() : 0;
+      final rawDisplayName = user['displayName'];
+      final displayName = rawDisplayName is String ? rawDisplayName : null;
+      final rawEmail = user['email'];
+      final email = rawEmail is String ? rawEmail : null;
       await widget.authService.syncFromBackendUser(user, authoritative: true);
       if (mounted) {
         setState(() {
@@ -3639,6 +3846,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                         ),
                         RacesTab(
                           authService: widget.authService,
+                          backendApiService: _backendApiService,
                           racesData: _racesData,
                           racesState: _racesState,
                           friendsSteps: _friendsSteps,
@@ -3655,11 +3863,32 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                         ),
                         FriendsTab(
                           authService: widget.authService,
-                          onFriendsChanged: () {
-                            _refreshMe();
-                            _fetchFriendsSteps();
+                          onFriendsChanged: () {},
+                          friendsRepository: _friendsRepository,
+                          onSnapshot: (snapshot) {
+                            final rows = snapshot['friends'];
+                            final pending = snapshot['pending'];
+                            final rawIncoming =
+                                snapshot['incomingFriendRequests'];
+                            final incoming = rawIncoming is num
+                                ? rawIncoming.toInt()
+                                : pending is Map && pending['incoming'] is List
+                                ? (pending['incoming'] as List).length
+                                : 0;
+                            if (rows is List) {
+                              _friendsSteps = [
+                                for (final row in rows)
+                                  if (row is Map)
+                                    <String, dynamic>{
+                                      for (final entry in row.entries)
+                                        if (entry.key is String)
+                                          entry.key as String: entry.value,
+                                    },
+                              ];
+                            }
+                            _incomingFriendRequests = incoming;
+                            if (mounted) setState(() {});
                           },
-                          onRefresh: _refreshFriendsTab,
                           backendApiService: _backendApiService,
                           stepData: _stepData,
                           displayName: _displayName,

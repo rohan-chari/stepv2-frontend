@@ -36,15 +36,11 @@ void main() {
     );
   });
 
-  Finder boxSlots() => find.byWidgetPredicate(
-    (w) => w is ItemSlot && w.state == ItemSlotState.mysteryBox,
-  );
+  Finder boxSlots() => find.byType(MysteryBoxButton);
 
   Finder heldSlotOf(String type) => find.byWidgetPredicate(
     (w) =>
-        w is ItemSlot &&
-        w.state == ItemSlotState.held &&
-        w.powerupType == type,
+        w is ItemSlot && w.state == ItemSlotState.held && w.powerupType == type,
   );
 
   Future<void> pumpHost(WidgetTester tester, DemoRaceEngine engine) async {
@@ -102,10 +98,7 @@ void main() {
     expect(boxSlots(), findsNWidgets(2));
     expect(engine.beat, DemoBeat.useBoost);
     // The coach is still asking for the same thing, not a skipped-ahead step.
-    expect(
-      find.text(kDemoBeatCopy[DemoBeat.useBoost]!.title),
-      findsOneWidget,
-    );
+    expect(find.text(kDemoBeatCopy[DemoBeat.useBoost]!.title), findsOneWidget);
   });
 
   testWidgets('the on-script powerup is still tappable on the same beat', (

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:ui';
 
@@ -6,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../services/ad_service.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
+import '../services/activation_analytics_service.dart';
 import '../styles.dart';
 import '../widgets/accessory_thumbnail.dart';
 import '../widgets/ad_banner_slot.dart';
@@ -34,6 +36,11 @@ class DailyRewardScreen extends StatefulWidget {
   // platform the offer stays hidden either way — the screen works exactly as
   // before ads existed.
   final ExtraSpinAdController? adController;
+  final ActivationAnalyticsService? analytics;
+
+  /// Only Home and Results are valid backend `surface` values. Other entry
+  /// points intentionally omit it rather than inventing a new contract value.
+  final String? analyticsSurface;
 
   const DailyRewardScreen({
     super.key,
@@ -41,6 +48,8 @@ class DailyRewardScreen extends StatefulWidget {
     required this.backendApiService,
     this.onClaimed,
     this.adController,
+    this.analytics,
+    this.analyticsSurface,
   });
 
   @override
@@ -70,6 +79,8 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
   /// would mint a coin grant instead of an extra spin.
   late final ExtraSpinAdController _adCtrl;
   late final bool _ownsAdCtrl;
+  late final ActivationAnalyticsService _analytics;
+  bool _extraSpinOfferShown = false;
 
   @override
   void initState() {
@@ -77,6 +88,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
     final provided = widget.adController;
     _ownsAdCtrl = provided == null;
     _adCtrl = provided ?? AdService();
+    _analytics = widget.analytics ?? ActivationAnalyticsService();
     _load();
   }
 
@@ -102,6 +114,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
         _status = res;
         _isLoading = false;
       });
+      _recordExtraSpinOfferArrival();
       // Box mode goes straight to the reel, still unclaimed — the claim only
       // fires when the user swipes, same as opening a race mystery box.
       if (_box != null && res['claimedToday'] != true) {
@@ -136,18 +149,64 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
     return extra is Map<String, dynamic> ? extra : null;
   }
 
+  bool get _hasAvailableExtraSpin {
+    final extra = _adExtraSpin;
+    return extra != null &&
+        extra['used'] != true &&
+        (extra['available'] == true || extra['pendingGrant'] == true);
+  }
+
+  Map<String, String> get _analyticsSurfaceContext {
+    final surface = widget.analyticsSurface;
+    return surface == 'home' || surface == 'results'
+        ? {'surface': surface!}
+        : const {};
+  }
+
+  void _record(String name, {Map<String, String> context = const {}}) {
+    unawaited(_analytics.record(name, context: context));
+  }
+
+  void _recordExtraSpinOfferArrival() {
+    if (!_hasAvailableExtraSpin) return;
+    if (!_adCtrl.isSupported) {
+      _record(
+        'extra_spin_ad_not_ready',
+        context: {..._analyticsSurfaceContext, 'result': 'unsupported'},
+      );
+      return;
+    }
+    if (_extraSpinOfferShown) return;
+    _extraSpinOfferShown = true;
+    _record('extra_spin_offer_shown', context: _analyticsSurfaceContext);
+  }
+
   // Preload the rewarded ad as soon as the offer is live, so the button is
   // tappable by the time the free box's reveal settles. Skipped when a
   // verified-but-unredeemed watch already exists (claim needs no new ad).
   Future<void> _maybePrepareExtraSpin() async {
     final extra = _adExtraSpin;
     final ctrl = _adCtrl;
-    if (extra == null || !ctrl.isSupported) return;
-    if (extra['used'] == true || extra['pendingGrant'] == true) return;
+    if (extra == null || !_hasAvailableExtraSpin || !ctrl.isSupported) return;
+    if (extra['pendingGrant'] == true) return;
     final userId = widget.authService.userId;
-    if (userId == null || userId.isEmpty) return;
+    if (userId == null || userId.isEmpty) {
+      _record(
+        'extra_spin_ad_not_ready',
+        context: {..._analyticsSurfaceContext, 'result': 'load_failed'},
+      );
+      return;
+    }
     if (!ctrl.isReady) {
       await ctrl.load(userId: userId, localDate: _todayLocalDate());
+    }
+    if (ctrl.isReady) {
+      _record('extra_spin_ad_ready', context: _analyticsSurfaceContext);
+    } else {
+      _record(
+        'extra_spin_ad_not_ready',
+        context: {..._analyticsSurfaceContext, 'result': 'load_failed'},
+      );
     }
     if (mounted) setState(() => _adReady = ctrl.isReady);
   }
@@ -237,6 +296,8 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
     final ctrl = _adCtrl;
     final pending = _adExtraSpin?['pendingGrant'] == true;
 
+    _record('extra_spin_cta_tapped', context: _analyticsSurfaceContext);
+
     setState(() => _adFlowBusy = true);
     // Snapshot for restore if the flow dies before the new roll lands.
     final priorClaimed = _claimedReward;
@@ -248,7 +309,15 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
         if (!ctrl.isReady) return;
         setState(() => _adReady = false);
         final earned = await ctrl.showAndAwaitReward();
-        if (!earned || !mounted) return;
+        if (!earned) {
+          _record(
+            'extra_spin_ad_not_ready',
+            context: {..._analyticsSurfaceContext, 'result': 'dismissed'},
+          );
+          return;
+        }
+        _record('extra_spin_ad_completed', context: _analyticsSurfaceContext);
+        if (!mounted) return;
       }
       setState(() {
         // Back to the reel screen; the reveal-once guard resets so the extra
@@ -262,6 +331,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
       });
       final res = await _claimExtraWithRetry(token);
       if (!mounted) return;
+      _record('extra_spin_claim_succeeded', context: _analyticsSurfaceContext);
       setState(() {
         _boxResult = res;
         _stripItems = _generateStrip(res);
@@ -598,7 +668,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
                   : _adExtraSpin?['pendingGrant'] == true
                   ? 'CLAIM EXTRA SPIN'
                   : _adReady
-                  ? 'WATCH AD · +1 SPIN'
+                  ? 'WATCH A SHORT AD · +1 SPIN'
                   : 'LOADING AD...',
               variant: PillButtonVariant.primary,
               fullWidth: true,
@@ -624,11 +694,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
   /// hasn't been used or already run this session, and this platform can show
   /// ads.
   bool get _extraSpinOffered {
-    final extra = _adExtraSpin;
-    return extra != null &&
-        extra['used'] != true &&
-        !_extraSpinDone &&
-        _adCtrl.isSupported;
+    return _hasAvailableExtraSpin && !_extraSpinDone && _adCtrl.isSupported;
   }
 
   // Reel screen — same chrome as the race mystery box (CaseOpeningScreen):

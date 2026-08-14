@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart' show CupertinoSwitch;
 import 'package:flutter/material.dart';
 
@@ -97,15 +99,40 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
           ? const Loadable.loading()
           : Loadable.refreshing(_races);
     });
-    // Load tournaments + featured races best-effort in parallel — never let a
-    // missing/older endpoint break the public races list.
-    _loadTournaments(token);
-    _loadFeaturedRaces(token);
-
     try {
-      final races = await widget.backendApiService.fetchPublicRaces(
+      final browser = await widget.backendApiService.fetchPublicRaceBrowser(
         identityToken: token,
       );
+      final races = _safeMapList(browser['races']);
+      final resolved = browser['contract'] == 'public-race-browser-v1'
+          ? browser['resolved']
+          : null;
+      final resolvedMap = resolved is Map ? resolved : const {};
+
+      if (resolvedMap['featuredRaces'] == true &&
+          _isMapList(browser['featuredRaces'])) {
+        _featuredRaces = _safeMapList(browser['featuredRaces']);
+      } else {
+        unawaited(_loadFeaturedRaces(token));
+      }
+
+      final tournaments = browser['tournaments'];
+      if (resolvedMap['tournaments'] == true &&
+          tournaments is Map &&
+          _isMapList(tournaments['featured']) &&
+          _isMapList(tournaments['public'])) {
+        _featuredTournaments = _safeMapList(tournaments['featured']);
+        _userTournaments = _safeMapList(tournaments['public']);
+      } else {
+        unawaited(_loadPublicTournamentBuckets(token));
+      }
+      if (resolvedMap['mine'] == true &&
+          tournaments is Map &&
+          _isMapList(tournaments['mine'])) {
+        _myTournaments = _safeMapList(tournaments['mine']);
+      } else {
+        unawaited(_loadMyTournamentBucket(token));
+      }
       if (!mounted) return;
       setState(() {
         _races = races;
@@ -124,6 +151,21 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
       showErrorToast(context, e.toString());
     }
   }
+
+  List<Map<String, dynamic>> _safeMapList(Object? raw) {
+    if (raw is! List) return const [];
+    return [
+      for (final row in raw)
+        if (row is Map)
+          <String, dynamic>{
+            for (final entry in row.entries)
+              if (entry.key is String) entry.key as String: entry.value,
+          },
+    ];
+  }
+
+  bool _isMapList(Object? raw) =>
+      raw is List && raw.every((item) => item is Map);
 
   Future<void> _navigateToCreateRace() async {
     final race = await Navigator.of(context).push<Map<String, dynamic>>(
@@ -164,33 +206,29 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
     }
   }
 
-  Future<void> _loadTournaments(String token) async {
+  Future<void> _loadPublicTournamentBuckets(String token) async {
     try {
       final res = await widget.backendApiService.fetchPublicTournaments(
         identityToken: token,
       );
       if (!mounted) return;
       setState(() {
-        _featuredTournaments =
-            (res['featured'] as List?)?.cast<Map<String, dynamic>>() ??
-            const [];
-        _userTournaments =
-            (res['tournaments'] as List?)?.cast<Map<String, dynamic>>() ??
-            const [];
+        _featuredTournaments = _safeMapList(res['featured']);
+        _userTournaments = _safeMapList(res['tournaments']);
       });
     } catch (_) {
       // Older backend / offline → no tournament section.
     }
-    // My tournaments bucket (for the D12 same-seed alive check). Best-effort.
+  }
+
+  Future<void> _loadMyTournamentBucket(String token) async {
     try {
       final racesRes = await widget.backendApiService.fetchRaces(
         identityToken: token,
       );
       if (!mounted) return;
       setState(() {
-        _myTournaments =
-            (racesRes['tournaments'] as List?)?.cast<Map<String, dynamic>>() ??
-            const [];
+        _myTournaments = _safeMapList(racesRes['tournaments']);
       });
     } catch (_) {}
   }
@@ -276,6 +314,7 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
             builder: (_) => TournamentDetailScreen(
               authService: widget.authService,
               tournamentId: tournamentId,
+              backendApiService: widget.backendApiService,
             ),
           ),
         )

@@ -129,7 +129,7 @@ class DiscoveryJoinCoordinator {
         identityToken: token,
         tournamentId: id,
       );
-      await _refreshWallet(token);
+      if (!await _applyWallet(response)) await _refreshWallet(token);
       final payload = response['tournament'];
       final status = payload is Map ? _string(payload['status']) : null;
       return DiscoveryJoinResult(
@@ -165,6 +165,18 @@ class DiscoveryJoinCoordinator {
       // Joining already succeeded. Wallet refresh remains best effort exactly
       // as it was on the existing discovery screen.
     }
+  }
+
+  Future<bool> _applyWallet(Map<String, dynamic> response) async {
+    final wallet = response['wallet'];
+    if (wallet is! Map ||
+        wallet['coins'] is! num ||
+        wallet['heldCoins'] is! num) {
+      return false;
+    }
+    await authService.updateCoins((wallet['coins'] as num).toInt());
+    await authService.updateHeldCoins((wallet['heldCoins'] as num).toInt());
+    return true;
   }
 
   Future<bool?> _confirmBuyIn(

@@ -87,6 +87,14 @@ class ActivationAnalyticsService {
     'install_attr_code_captured',
     'install_attr_install_referrer',
     'install_attr_error',
+    // Extra-spin CTA funnel. Unknown names are deliberately dropped locally;
+    // an older backend then soft-drops only these additive events per batch.
+    'extra_spin_offer_shown',
+    'extra_spin_cta_tapped',
+    'extra_spin_ad_ready',
+    'extra_spin_ad_not_ready',
+    'extra_spin_ad_completed',
+    'extra_spin_claim_succeeded',
   };
 
   static const allowedContext = <String, Set<String>>{
@@ -99,7 +107,14 @@ class ActivationAnalyticsService {
       'next_race',
     },
     'race_state': {'active', 'pending'},
-    'result': {'granted', 'denied', 'dismissed', 'unsupported', 'failed'},
+    'result': {
+      'granted',
+      'denied',
+      'dismissed',
+      'unsupported',
+      'failed',
+      'load_failed',
+    },
     'mode': {'solo', 'team', 'tournament'},
     'surface': {'home', 'results'},
     'preset': {'2_day', '7_day'},

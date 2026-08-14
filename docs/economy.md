@@ -175,15 +175,15 @@ players convert at well under 1.49.
 
 ## 3. Powerups
 
-### 3.1 Store catalog — `DB powerup_shop_items`, verified 2026-08-08
+### 3.1 Store catalog — `DB powerup_shop_items`, verified 2026-08-13
 
 Enum labels in this table are **lowercase**.
 
 | Price | Active | Inactive (`active=false`) |
 |---|---|---|
 | 40 | `defense_scan` | `coin_flip`, `mystery_potion`(testOnly), `piggy_bank`, `pocket_watch` |
-| 75 | `rainstorm`, `quick_rinse` | `imposter`, `signal_jammer`, `umbrella`, `bounty` |
-| 150 | `ghost_pepper`, `decoy`, `power_outage` | `cleanse`, `hitchhike`, `rally_flag`, `drill_sergeant` |
+| 75 | `rainstorm`, `quick_rinse`, `decoy` | `imposter`, `signal_jammer`, `umbrella`, `bounty` |
+| 150 | `ghost_pepper`, `power_outage` | `cleanse`, `hitchhike`, `rally_flag`, `drill_sergeant` |
 | 300 | `leech` | `quicksand`, `uprising` |
 
 **Cheapest purchasable powerup = 40 coins.** `SEED prisma/seed.js` still carries
@@ -191,7 +191,12 @@ different prices for some rows; its `update` block deliberately omits
 `priceCoins`/`active` for the powerup upsert (see `admin/routes.js:492`) — do not
 re-add them.
 
-### 3.2 Rarity + drop pool — `DB balance_config` **v4** (`86a0d190-a45d-4937-bfe4-80badee7f82b`, created 2026-08-10 15:37:51) — verified 2026-08-10
+`decoy` is a concrete live drift: **DB = 75 coins, active, non-test-only**;
+`SEED prisma/seed.js:327-335` still says 150 coins and test-only. DB is the
+runtime authority because the seed update deliberately preserves admin-tuned
+price/activation fields.
+
+### 3.2 Rarity + drop pool — `DB balance_config` **v4** (`86a0d190-a45d-4937-bfe4-80badee7f82b`, created 2026-08-10 15:37:51) — verified 2026-08-13
 
 Batch 2026-08-09 landed as config **version 4**. The live row now differs from
 the v3 description that follows it; v4 is authoritative:
@@ -267,7 +272,7 @@ still `type IS NULL` unopened boxes). Rare drops by type, 30d: `sneaky_swap` 408
 the boxes for the same steps. Prod: mean 3.49 concurrent races/user-day, max 13.
 Measured 11,826 box-sourced powerups + 659 non-box (spin/store/grant) in 30d.
 
-### 3.3b Position-aware drop rules — `DB balance_config.positionRules`, verified 2026-08-08
+### 3.3b Position-aware drop rules — `DB balance_config.positionRules`, verified 2026-08-13
 
 Mechanics: `CODE powerups/powerupOdds.js`. Spec:
 `stepv2-backend/docs/position-aware-drops-requirements.md`.
@@ -285,7 +290,7 @@ Two independent layers:
 |---|---|---|
 | `leaderExcluded` | `RED_CARD`, `SECOND_WIND` | hard-removed when player is at/tied for max steps (both 400 at use time for a leader) |
 | `lastPlaceExcluded` | `TRAIL_MINE` | hard-removed when nobody is behind |
-| `leadingDownweight` | `{ RUNNERS_HIGH: 0.5 }` | full strength at npos ≤ 0.4, lerps to 1.0 at npos 0.5 |
+| `leadingDownweight` | `{ RUNNERS_HIGH: 0.5, POWER_OUTAGE: 0.3 }` | full strength at npos ≤ 0.4, lerps to 1.0 at npos 0.5 |
 | `trailingDownweight` | `{ CLEANSE: 0.5, MIRROR: 0.5, STEALTH_MODE: 0.5 }` | full strength at npos ≥ 0.6, lerps to 1.0 at npos 0.5 |
 | `leadingDownweightFrom` / `trailingDownweightFrom` | 0.4 / 0.6 | ramp endpoints |
 | neutral point | 0.5 | `CODE powerupOdds.js:71` (not config) |
@@ -307,11 +312,12 @@ no deploy).
 | WRONG_TURN | 8.33 | 9.00 | 9.67 | 12.40 | 13.20 | 14.00 |
 | STEALTH_MODE | 8.33 | 9.00 | 9.67 | 6.20 | 6.60 | 7.00 |
 | RALLY_FLAG | 0 | 0 | 0 | 0 | 0 | 0 (team-only gate) |
-| RED_CARD | 0 | 1.61 | 1.80 | 2.22 | 2.44 | 3.00 |
-| SECOND_WIND | 0 | 3.22 | 3.60 | 4.45 | 4.87 | 6.00 |
-| TRAIL_MINE | 3.38 | 3.22 | 3.60 | 4.45 | 4.87 | 0 |
-| CLEANSE / MIRROR | 3.38 | 3.22 | 3.60 | 2.22 | 2.44 | 3.00 |
-| COMPRESSION_SOCKS / FANNY_PACK / LUCKY_HORSESHOE / SHORTCUT / SNEAKY_SWAP | 3.38 | 3.22 | 3.60 | 4.45 | 4.87 | 6.00 |
+| RED_CARD | 0 | 1.74 | 1.94 | 2.22 | 2.44 | 3.00 |
+| SECOND_WIND | 0 | 3.48 | 3.89 | 4.45 | 4.87 | 6.00 |
+| TRAIL_MINE | 3.70 | 3.48 | 3.89 | 4.45 | 4.87 | 0 |
+| CLEANSE / MIRROR | 3.70 | 3.48 | 3.89 | 2.22 | 2.44 | 3.00 |
+| COMPRESSION_SOCKS / LUCKY_HORSESHOE / SHORTCUT / SNEAKY_SWAP | 3.70 | 3.48 | 3.89 | 4.45 | 4.87 | 6.00 |
+| POWER_OUTAGE | 1.11 | 1.04 | 1.17 | 4.45 | 4.87 | 6.00 |
 
 Because `RALLY_FLAG` is team-gated out of solo races, the UNCOMMON tier in a
 solo race is only `LEG_CRAMP` / `STEALTH_MODE` / `WRONG_TURN`, and
@@ -446,7 +452,25 @@ Box hoarding: gap between box mint and box open — mean 16.0h, **p50 1.1h, p90
 28.9h, p99 285h** (n = 8,818). Position is read at **open** time
 (`openMysteryBox.js:120-149`), not mint time.
 
-### 3.3f Config drift to flag
+### 3.3f Red Card × Decoy — verified 2026-08-13
+
+Red Card auto-targets the current leader, then removes
+`round(landingTarget.totalSteps × 10%)`. Decoy is resolved first: it consumes
+the leader's Decoy and replaces the landing target with a uniformly random
+alive third participant (excluding attacker and Decoy holder). The 10% basis is
+therefore the **redirected participant's** total, not the leader's original
+total. Source: `CODE powerups/commands/usePowerup.js:353,1604-1625,2261-2316,2756-2772`.
+
+Prod example, August 13 Daily Challenge: the leader had 56,240 stored steps, so
+a direct Red Card was worth 5,624. Their Decoy expired 14 ms before the use
+event; the randomly redirected participant had 4,550 steps, producing the
+stored penalty `round(4,550 × 0.10) = 455`. The HTTP result identifies
+`outcome=REDIRECTED` / `redirectedBy=DECOY`, but the durable `POWERUP_USED`
+feed metadata stores only `{penalty:455}`. Source: `DB races`,
+`race_participants`, `race_active_effects`, `race_powerup_events` (aggregate,
+read-only forensic query).
+
+### 3.3g Config drift to flag
 
 | Key | `DB balance_config` v3 | `CODE balanceConfig.defaults.js` | Consequence |
 |---|---|---|---|
@@ -856,8 +880,9 @@ Affordability at p50 income (3/day): 250 ⇒ 83 days. At p90 (98/day): 2.5 days.
   ~1.48×.
 - **Box progress** uses raw walked steps only — never buffed/debuffed.
 - **Position-aware drops**: `positionRules` excludes RED_CARD/SECOND_WIND from
-  the leader, TRAIL_MINE from last place, and down-weights RUNNERS_HIGH (leader)
-  / MIRROR, CLEANSE, STEALTH_MODE (trailing). See §3.3b–§3.3f and §8.
+  the leader, TRAIL_MINE from last place, and down-weights RUNNERS_HIGH and
+  POWER_OUTAGE (leader) / MIRROR, CLEANSE, STEALTH_MODE (trailing). See
+  §3.3b–§3.3f and §8.
 - **Box supply is uncapped and purely step-linear**, so the front-runner's
   powerup income scales with the very quantity the race scores. This dominates
   every drop-table knob (§8).

@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/services.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/backend_config.dart';
 import '../constants/powerup_copy.dart';
@@ -22,9 +23,81 @@ import '../models/step_sync_v2_result.dart';
 
 /// Session-scoped support state for an additive endpoint. Only a definite `404`
 /// downgrades an endpoint to [unsupported] (spec §9.1 / D6); a timeout or `5xx`
-/// never does. Reset on sign-out, authenticated-user change, or backend base URL
-/// change — but NOT on ordinary session-token rotation.
+/// never does. Additive endpoint support is process-scoped so sign-out and
+/// ordinary token/user rotation do not probe a known-missing route again.
 enum EndpointSupport { unknown, supported, unsupported }
+
+/// Screen-facing result of the additive race-open endpoint. Maps are kept raw
+/// because the existing race widgets already own defensive field parsing.
+class RaceBootstrapResult {
+  const RaceBootstrapResult({
+    required this.supported,
+    this.race,
+    this.progress,
+    this.globalPowerupInventory,
+    this.progressUnavailable = false,
+  });
+
+  static const unsupported = RaceBootstrapResult(supported: false);
+
+  final bool supported;
+  final Map<String, dynamic>? race;
+  final Map<String, dynamic>? progress;
+  final Map<String, dynamic>? globalPowerupInventory;
+  final bool progressUnavailable;
+}
+
+class RaceProgressResult {
+  const RaceProgressResult({
+    required this.progress,
+    this.globalPowerupInventory,
+    required this.hasCompactInventory,
+  });
+
+  final Map<String, dynamic> progress;
+  final Map<String, dynamic>? globalPowerupInventory;
+  final bool hasCompactInventory;
+}
+
+class RaceMessageStreamsResult {
+  const RaceMessageStreamsResult({
+    required this.supported,
+    this.malformed = false,
+    this.userStream,
+    this.systemStream,
+    this.chatWatermark,
+    this.userResolved = false,
+    this.systemResolved = false,
+  });
+
+  static const unsupported = RaceMessageStreamsResult(supported: false);
+  static const malformedResult = RaceMessageStreamsResult(
+    supported: true,
+    malformed: true,
+  );
+
+  final bool supported;
+  final bool malformed;
+  final Map<String, dynamic>? userStream;
+  final Map<String, dynamic>? systemStream;
+  final Map<String, dynamic>? chatWatermark;
+  final bool userResolved;
+  final bool systemResolved;
+}
+
+class ShopBootstrapResult {
+  const ShopBootstrapResult({
+    required this.supported,
+    required this.cosmetics,
+    this.powerups,
+    this.inventory,
+  });
+
+  final bool supported;
+  final Map<String, dynamic> cosmetics;
+  final Map<String, dynamic>? powerups;
+  final Map<String, dynamic>? inventory;
+}
 
 /// A definite POST-search 404 selected the frozen backend contract. The
 /// current real-name query must not be replayed into a GET URL.
@@ -194,6 +267,9 @@ class BackendApiService {
   EndpointSupport _shopAdUnlockSupport = EndpointSupport.unknown;
   EndpointSupport _friendIdentitySearchSupport = EndpointSupport.unknown;
   EndpointSupport _racePayoutDoubleSupport = EndpointSupport.unknown;
+  static EndpointSupport _raceBootstrapSupport = EndpointSupport.unknown;
+  static EndpointSupport _raceMessageStreamsSupport = EndpointSupport.unknown;
+  static EndpointSupport _shopBootstrapSupport = EndpointSupport.unknown;
   // Identity guards: capability caches are keyed to (user, base URL). A plain
   // token refresh for the SAME user must not clear them.
   String? _sessionUserId;
@@ -418,7 +494,7 @@ class BackendApiService {
     required String authToken,
   }) async {
     final response = await _sendGetRequest(
-      path: '/auth/session',
+      path: '/auth/session?view=shell-v1',
       identityToken: authToken,
     );
 
@@ -432,15 +508,17 @@ class BackendApiService {
   /// convenience flags. Throws [ApiException] on any failure (incl. a 404 from
   /// an older backend that predates this endpoint); callers fail open.
   Future<Map<String, dynamic>> fetchVersionPolicy() async {
-    final response = await _sendGetRequest(path: '/app-version/policy');
-    return _decodeJsonResponse(response);
+    return _fetchConditionally(
+      path: '/app-version/policy',
+      storageKey: 'http_etag_version_policy',
+    );
   }
 
   /// §9.5.3 — the backend-served powerup copy catalog.
   ///
-  /// Unauthenticated and client-feature-independent: copy is not a capability,
-  /// so this returns every user-renderable type regardless of what this build
-  /// can actually acquire.
+  /// Unauthenticated, with validation storage partitioned by the complete
+  /// sorted client-feature fingerprint because capable builds may receive a
+  /// different catalog projection.
   ///
   /// Throws [PowerupCopyUnavailable] for a 404 (older backend) or a 5xx so the
   /// caller can treat it as TRANSIENT. This endpoint deliberately does NOT get
@@ -448,11 +526,68 @@ class BackendApiService {
   /// installed app, so marking it unsupported for the session would strand the
   /// client on stale copy until the next cold start for no reason.
   Future<Map<String, dynamic>> fetchPowerupCatalog() async {
-    final response = await _sendGetRequest(path: '/powerups/catalog');
-    if (response.statusCode == 404 || response.statusCode >= 500) {
-      throw PowerupCopyUnavailable(response.statusCode);
+    final fingerprint =
+        clientFeaturesHeader
+            .split(',')
+            .where((token) => token.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    try {
+      return await _fetchConditionally(
+        path: '/powerups/catalog',
+        storageKey:
+            'http_etag_powerup_catalog_${base64Url.encode(utf8.encode(fingerprint.join(','))).replaceAll('=', '')}',
+      );
+    } on ApiException catch (error) {
+      if (error.statusCode == 404 || (error.statusCode ?? 0) >= 500) {
+        throw PowerupCopyUnavailable(error.statusCode ?? 500);
+      }
+      rethrow;
     }
-    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> _fetchConditionally({
+    required String path,
+    required String storageKey,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final etag = prefs.getString('${storageKey}_etag');
+    final response = await _sendGetRequest(
+      path: path,
+      headers: {if (etag != null && etag.isNotEmpty) 'If-None-Match': etag},
+    );
+    if (response.statusCode == HttpStatus.notModified) {
+      final cached = prefs.getString('${storageKey}_body');
+      if (cached != null) {
+        try {
+          final decoded = jsonDecode(cached);
+          if (decoded is Map<String, dynamic>) return decoded;
+        } catch (_) {}
+      }
+      // A validator is useless without its exact representation. Retry once
+      // unconditionally, never loop.
+      final retry = await _sendGetRequest(path: path);
+      return _decodeAndPersistConditional(retry, prefs, storageKey);
+    }
+    return _decodeAndPersistConditional(response, prefs, storageKey);
+  }
+
+  Future<Map<String, dynamic>> _decodeAndPersistConditional(
+    HttpClientResponse response,
+    SharedPreferences prefs,
+    String storageKey,
+  ) async {
+    final payload = await _decodeJsonResponse(response);
+    String? etag;
+    try {
+      etag = response.headers.value(HttpHeaders.etagHeader);
+    } catch (_) {}
+    if (etag != null && etag.isNotEmpty) {
+      await prefs.setString('${storageKey}_etag', etag);
+      await prefs.setString('${storageKey}_body', jsonEncode(payload));
+    }
+    return payload;
   }
 
   Future<void> recordSteps({
@@ -996,9 +1131,31 @@ class BackendApiService {
       if (entry.key is String) entry.key as String: entry.value,
   };
 
+  Map<String, dynamic>? _safeStringMap(Object? raw) {
+    if (raw is! Map) return null;
+    final result = <String, dynamic>{};
+    for (final entry in raw.entries) {
+      if (entry.key is! String) return null;
+      result[entry.key as String] = entry.value;
+    }
+    return result;
+  }
+
+  ApiException _apiExceptionFromRaw(_RawResponse raw) {
+    final message = raw.json?['error'];
+    return ApiException(
+      message is String && message.isNotEmpty
+          ? message
+          : 'Something went wrong. Please try again.',
+      statusCode: raw.statusCode,
+      code: raw.code,
+      details: raw.json,
+    );
+  }
+
   Future<Map<String, dynamic>> fetchMe({required String identityToken}) async {
     final response = await _sendGetRequest(
-      path: '/auth/me',
+      path: '/auth/me?view=shell-v1',
       identityToken: identityToken,
     );
 
@@ -1543,7 +1700,7 @@ class BackendApiService {
     required String identityToken,
   }) async {
     final response = await _sendGetRequest(
-      path: '/friends',
+      path: '/friends?view=summary-v1',
       identityToken: identityToken,
     );
 
@@ -1661,7 +1818,7 @@ class BackendApiService {
     required String identityToken,
   }) async {
     final response = await _sendGetRequest(
-      path: '/ranked/v2',
+      path: '/ranked/v2?view=compact-v1',
       identityToken: identityToken,
     );
 
@@ -1693,7 +1850,7 @@ class BackendApiService {
     final persistedParam = usePersistedTotals ? '&homePersistedTotals=1' : '';
     final response = await _sendGetRequest(
       path:
-          '/home/race-card?homeActiveRaces=1&localDate=$localDate'
+          '/home/race-card?view=shell-v1&homeActiveRaces=1&localDate=$localDate'
           '$persistedParam',
       identityToken: identityToken,
     );
@@ -1705,7 +1862,7 @@ class BackendApiService {
     required String identityToken,
   }) async {
     final response = await _sendGetRequest(
-      path: '/steps/stats',
+      path: '/steps/stats?view=profile-v1',
       identityToken: identityToken,
     );
 
@@ -2208,6 +2365,56 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  /// One race-open request on a capable backend. Only a definite 404 is
+  /// remembered; malformed/5xx responses remain transient and must not select
+  /// the legacy path for the rest of the process.
+  Future<RaceBootstrapResult> fetchRaceBootstrap({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    // Constructor-injected test/demo services subclass this class and override
+    // the legacy methods. Never let a newly added base method escape that fake
+    // to a configured backend; production constructs BackendApiService itself.
+    if (runtimeType != BackendApiService) {
+      return RaceBootstrapResult.unsupported;
+    }
+    if (_raceBootstrapSupport == EndpointSupport.unsupported) {
+      return RaceBootstrapResult.unsupported;
+    }
+    final response = await _sendGetRequest(
+      path: '/races/${Uri.encodeComponent(raceId)}/bootstrap',
+      identityToken: identityToken,
+    );
+    final raw = await _readRawResponse(response);
+    if (raw.statusCode == 404) {
+      _raceBootstrapSupport = EndpointSupport.unsupported;
+      return RaceBootstrapResult.unsupported;
+    }
+    if (raw.statusCode < 200 || raw.statusCode >= 300) {
+      throw _apiExceptionFromRaw(raw);
+    }
+    final payload = raw.json;
+    final race = _safeStringMap(payload?['race']);
+    if (raw.decodeFailed ||
+        payload?['contract'] != 'race-bootstrap-v1' ||
+        race == null) {
+      throw const ApiException('Couldn’t load this race. Please try again.');
+    }
+    _raceBootstrapSupport = EndpointSupport.supported;
+    final progress = _safeStringMap(payload?['progress']);
+    final progressError = _safeStringMap(payload?['progressError']);
+    return RaceBootstrapResult(
+      supported: true,
+      race: race,
+      progress: progress,
+      globalPowerupInventory: _safeStringMap(
+        payload?['globalPowerupInventory'],
+      ),
+      progressUnavailable:
+          progress == null && progressError?['code'] == 'PROGRESS_UNAVAILABLE',
+    );
+  }
+
   Future<Map<String, dynamic>> inviteToRace({
     required String identityToken,
     required String raceId,
@@ -2270,6 +2477,28 @@ class BackendApiService {
         .whereType<Map>()
         .map((race) => Map<String, dynamic>.from(race))
         .toList(growable: false);
+  }
+
+  /// One compact browser read. A legacy `{races}` response remains usable and
+  /// deliberately carries unresolved optional branches for the screen to fill
+  /// with its existing calls.
+  Future<Map<String, dynamic>> fetchPublicRaceBrowser({
+    required String identityToken,
+  }) async {
+    if (runtimeType != BackendApiService) {
+      final races = await fetchPublicRaces(identityToken: identityToken);
+      return {'races': races};
+    }
+    final response = await _sendGetRequest(
+      path: '/races/public?view=browser-v1',
+      identityToken: identityToken,
+    );
+    final decoded = await _decodeJsonResponse(response);
+    final races = decoded['races'];
+    if (races is! List) {
+      throw const ApiException('Couldn’t load public races. Please try again.');
+    }
+    return decoded;
   }
 
   /// The live seeded daily/weekly races for the Featured section. Each entry
@@ -2490,7 +2719,7 @@ class BackendApiService {
     required String tournamentId,
   }) async {
     final response = await _sendGetRequest(
-      path: '/tournaments/$tournamentId',
+      path: '/tournaments/$tournamentId?view=detail-v1',
       identityToken: identityToken,
     );
 
@@ -2527,7 +2756,7 @@ class BackendApiService {
   }) async {
     final response = await _sendJsonRequest(
       method: 'POST',
-      path: '/tournaments/$tournamentId/join',
+      path: '/tournaments/$tournamentId/join?view=detail-v1',
       body: const <String, dynamic>{},
       identityToken: identityToken,
     );
@@ -2542,7 +2771,7 @@ class BackendApiService {
   }) async {
     final response = await _sendJsonRequest(
       method: 'POST',
-      path: '/tournaments/share/$token/join',
+      path: '/tournaments/share/$token/join?view=detail-v1',
       body: const <String, dynamic>{},
       identityToken: identityToken,
     );
@@ -2575,7 +2804,7 @@ class BackendApiService {
   }) async {
     final response = await _sendJsonRequest(
       method: 'PUT',
-      path: '/tournaments/$tournamentId/respond',
+      path: '/tournaments/$tournamentId/respond?view=detail-v1',
       body: {'accept': accept},
       identityToken: identityToken,
     );
@@ -2592,7 +2821,7 @@ class BackendApiService {
   }) async {
     final response = await _sendJsonRequest(
       method: 'POST',
-      path: '/tournaments/$tournamentId/invite',
+      path: '/tournaments/$tournamentId/invite?view=detail-v1',
       body: {'userIds': userIds},
       identityToken: identityToken,
     );
@@ -2607,7 +2836,7 @@ class BackendApiService {
   }) async {
     final response = await _sendJsonRequest(
       method: 'POST',
-      path: '/tournaments/$tournamentId/leave',
+      path: '/tournaments/$tournamentId/leave?view=detail-v1',
       body: const <String, dynamic>{},
       identityToken: identityToken,
     );
@@ -2622,7 +2851,7 @@ class BackendApiService {
   }) async {
     final response = await _sendJsonRequest(
       method: 'POST',
-      path: '/tournaments/$tournamentId/kick',
+      path: '/tournaments/$tournamentId/kick?view=detail-v1',
       body: {'userId': userId},
       identityToken: identityToken,
     );
@@ -2636,7 +2865,7 @@ class BackendApiService {
   }) async {
     final response = await _sendJsonRequest(
       method: 'POST',
-      path: '/tournaments/$tournamentId/start',
+      path: '/tournaments/$tournamentId/start?view=detail-v1',
       body: const <String, dynamic>{},
       identityToken: identityToken,
     );
@@ -2651,7 +2880,7 @@ class BackendApiService {
   }) async {
     final response = await _sendJsonRequest(
       method: 'POST',
-      path: '/tournaments/$tournamentId/forfeit',
+      path: '/tournaments/$tournamentId/forfeit?view=detail-v1',
       body: const <String, dynamic>{},
       identityToken: identityToken,
     );
@@ -2660,17 +2889,17 @@ class BackendApiService {
 
   /// Creator-only cancel of a PENDING bracket (§6.8) — refunds every held
   /// buy-in.
-  Future<void> cancelTournament({
+  Future<Map<String, dynamic>> cancelTournament({
     required String identityToken,
     required String tournamentId,
   }) async {
     final response = await _sendJsonRequest(
       method: 'DELETE',
-      path: '/tournaments/$tournamentId',
+      path: '/tournaments/$tournamentId?view=detail-v1',
       body: const <String, dynamic>{},
       identityToken: identityToken,
     );
-    await _decodeJsonResponse(response);
+    return _decodeJsonResponse(response);
   }
 
   /// Mints (or returns) the shareable link for a tournament. Returns the backend
@@ -3092,7 +3321,49 @@ class BackendApiService {
     );
 
     final payload = await _decodeJsonResponse(response);
-    return payload['progress'] as Map<String, dynamic>;
+    final progress = _safeStringMap(payload['progress']);
+    if (progress == null) {
+      throw const ApiException(
+        'Couldn’t load race progress. Please try again.',
+      );
+    }
+    return progress;
+  }
+
+  Future<RaceProgressResult> fetchRaceProgressCompact({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    if (runtimeType != BackendApiService) {
+      return RaceProgressResult(
+        progress: await fetchRaceProgress(
+          identityToken: identityToken,
+          raceId: raceId,
+        ),
+        hasCompactInventory: false,
+      );
+    }
+    final response = await _sendGetRequest(
+      path: '/races/${Uri.encodeComponent(raceId)}/progress?view=compact-v1',
+      identityToken: identityToken,
+    );
+    final payload = await _decodeJsonResponse(response);
+    final progress = _safeStringMap(payload['progress']);
+    if (progress == null) {
+      throw const ApiException(
+        'Couldn’t load race progress. Please try again.',
+      );
+    }
+    final compact = payload['contract'] == 'race-progress-compact-v1';
+    final inventory = _safeStringMap(payload['globalPowerupInventory']);
+    final validInventory = _isValidPowerupInventory(inventory)
+        ? inventory
+        : null;
+    return RaceProgressResult(
+      progress: progress,
+      globalPowerupInventory: validInventory,
+      hasCompactInventory: compact && validInventory != null,
+    );
   }
 
   Future<void> cancelRace({
@@ -3328,6 +3599,81 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  Future<RaceMessageStreamsResult> fetchRaceMessageStreams({
+    required String identityToken,
+    required String raceId,
+    required bool includeUser,
+    int limit = 50,
+  }) async {
+    if (runtimeType != BackendApiService) {
+      return RaceMessageStreamsResult.unsupported;
+    }
+    if (_raceMessageStreamsSupport == EndpointSupport.unsupported) {
+      return RaceMessageStreamsResult.unsupported;
+    }
+    final uri = Uri(
+      path: '/races/$raceId/message-streams',
+      queryParameters: {
+        'limit': '$limit',
+        'includeUser': includeUser ? 'true' : 'false',
+      },
+    );
+    final response = await _sendGetRequest(
+      path: uri.toString(),
+      identityToken: identityToken,
+    );
+    final raw = await _readRawResponse(response);
+    if (raw.statusCode == 404) {
+      _raceMessageStreamsSupport = EndpointSupport.unsupported;
+      return RaceMessageStreamsResult.unsupported;
+    }
+    if (raw.statusCode < 200 || raw.statusCode >= 300) {
+      throw _apiExceptionFromRaw(raw);
+    }
+    _raceMessageStreamsSupport = EndpointSupport.supported;
+    final payload = raw.json;
+    final requested = _safeStringMap(payload?['requested']);
+    final resolved = _safeStringMap(payload?['resolved']);
+    final streams = _safeStringMap(payload?['streams']);
+    if (raw.decodeFailed ||
+        payload?['contract'] != 'race-message-streams-v1' ||
+        requested == null ||
+        resolved == null ||
+        streams == null ||
+        requested['USER'] != includeUser ||
+        requested['SYSTEM'] != true) {
+      return RaceMessageStreamsResult.malformedResult;
+    }
+    final systemResolved = resolved['SYSTEM'] == true;
+    final userResolved = includeUser && resolved['USER'] == true;
+    final system = systemResolved ? _safeStringMap(streams['SYSTEM']) : null;
+    final user = userResolved ? _safeStringMap(streams['USER']) : null;
+    if ((systemResolved && !_isValidMessageStream(system)) ||
+        (userResolved && !_isValidMessageStream(user)) ||
+        (!systemResolved && streams['SYSTEM'] != null) ||
+        (includeUser && !userResolved && streams['USER'] != null) ||
+        (!includeUser && streams['USER'] != null)) {
+      return RaceMessageStreamsResult.malformedResult;
+    }
+    return RaceMessageStreamsResult(
+      supported: true,
+      userStream: user,
+      systemStream: system,
+      chatWatermark: _safeStringMap(payload?['chatWatermark']),
+      userResolved: userResolved,
+      systemResolved: systemResolved,
+    );
+  }
+
+  bool _isValidMessageStream(Map<String, dynamic>? stream) {
+    if (stream == null || !stream.containsKey('nextCursor')) return false;
+    final messages = stream['messages'];
+    final cursor = stream['nextCursor'];
+    return messages is List &&
+        messages.every((row) => row is Map) &&
+        (cursor == null || cursor is String);
+  }
+
   Future<Map<String, dynamic>> sendRaceMessage({
     required String identityToken,
     required String raceId,
@@ -3401,15 +3747,172 @@ class BackendApiService {
 
   // -- Shop --
 
+  Future<ShopBootstrapResult> fetchShopBootstrap({
+    required String identityToken,
+    required String localDate,
+  }) async {
+    if (runtimeType != BackendApiService) {
+      return _fetchLegacyShopBootstrap(identityToken);
+    }
+    if (_shopBootstrapSupport == EndpointSupport.unsupported) {
+      return _fetchLegacyShopBootstrap(identityToken);
+    }
+    final uri = Uri(
+      path: '/shop/bootstrap',
+      queryParameters: {'localDate': localDate},
+    );
+    final response = await _sendGetRequest(
+      path: uri.toString(),
+      identityToken: identityToken,
+    );
+    final raw = await _readRawResponse(response);
+    if (raw.statusCode == 404) {
+      _shopBootstrapSupport = EndpointSupport.unsupported;
+      return _fetchLegacyShopBootstrap(identityToken);
+    }
+    if (raw.statusCode < 200 || raw.statusCode >= 300) {
+      throw _apiExceptionFromRaw(raw);
+    }
+    final payload = raw.json;
+    final cosmetics = _safeStringMap(payload?['cosmetics']);
+    final resolved = _safeStringMap(payload?['resolved']);
+    if (raw.decodeFailed ||
+        payload?['contract'] != 'shop-bootstrap-v1' ||
+        cosmetics == null ||
+        !_isValidCosmeticsCatalog(cosmetics) ||
+        resolved == null) {
+      throw const ApiException('Couldn’t load the shop. Please try again.');
+    }
+    _shopBootstrapSupport = EndpointSupport.supported;
+    final powerups = _safeStringMap(payload?['powerups']);
+    final inventory = _safeStringMap(payload?['inventory']);
+    return ShopBootstrapResult(
+      supported: true,
+      cosmetics: cosmetics,
+      powerups: resolved['powerups'] == true && _isValidPowerupCatalog(powerups)
+          ? powerups
+          : null,
+      inventory:
+          resolved['inventory'] == true && _isValidPowerupInventory(inventory)
+          ? inventory
+          : null,
+    );
+  }
+
+  bool _hasItemListWhere(
+    Map<String, dynamic>? component,
+    bool Function(Map<dynamic, dynamic>) isValid,
+  ) {
+    final items = component?['items'];
+    return items is List && items.every((row) => row is Map && isValid(row));
+  }
+
+  bool _isValidCosmeticItem(Map<dynamic, dynamic> item) {
+    return item['id'] is String &&
+        (item['id'] as String).isNotEmpty &&
+        item['sku'] is String &&
+        (item['sku'] as String).isNotEmpty &&
+        item['name'] is String &&
+        item.containsKey('description') &&
+        (item['description'] == null || item['description'] is String) &&
+        item['slot'] is String &&
+        item['priceCoins'] is num &&
+        item['assetKey'] is String &&
+        item['owned'] is bool &&
+        item['equipped'] is bool;
+  }
+
+  bool _isValidPowerupItem(Map<dynamic, dynamic> item) {
+    return item['sku'] is String &&
+        (item['sku'] as String).isNotEmpty &&
+        item['name'] is String &&
+        item.containsKey('description') &&
+        (item['description'] == null || item['description'] is String) &&
+        item['priceCoins'] is num &&
+        item['powerupType'] is String &&
+        (item['powerupType'] as String).isNotEmpty &&
+        item['ownedQuantity'] is num;
+  }
+
+  bool _isValidInventoryItem(Map<dynamic, dynamic> item) {
+    return item['powerupType'] is String &&
+        (item['powerupType'] as String).isNotEmpty &&
+        item['quantity'] is num;
+  }
+
+  bool _isValidPowerupCatalog(Map<String, dynamic>? catalog) {
+    return catalog?['coins'] is num &&
+        _hasItemListWhere(catalog, _isValidPowerupItem);
+  }
+
+  bool _isValidPowerupInventory(Map<String, dynamic>? inventory) {
+    return _hasItemListWhere(inventory, _isValidInventoryItem);
+  }
+
+  bool _isValidCosmeticsCatalog(Map<String, dynamic>? catalog) {
+    if (catalog == null ||
+        catalog['coins'] is! num ||
+        catalog['ownedItemIds'] is! List ||
+        (catalog['ownedItemIds'] as List).any((id) => id is! String) ||
+        catalog['equipped'] is! Map ||
+        !_hasItemListWhere(catalog, _isValidCosmeticItem)) {
+      return false;
+    }
+    return true;
+  }
+
+  Future<ShopBootstrapResult> _fetchLegacyShopBootstrap(
+    String identityToken,
+  ) async {
+    // Start all three before awaiting any result so an unavailable optional
+    // powerup branch never serializes the mandatory cosmetics paint.
+    final cosmeticsFuture = fetchShopCatalog(identityToken: identityToken);
+    final powerupsFuture = fetchPowerupShopCatalog(
+      identityToken: identityToken,
+    ).catchError((_) => <String, dynamic>{});
+    final inventoryFuture = fetchPowerupInventory(
+      identityToken: identityToken,
+    ).catchError((_) => <String, dynamic>{});
+    final results = await Future.wait([
+      cosmeticsFuture,
+      powerupsFuture,
+      inventoryFuture,
+    ]);
+    return ShopBootstrapResult(
+      supported: false,
+      cosmetics: results[0],
+      powerups: results[1].isEmpty ? null : results[1],
+      inventory: results[2].isEmpty ? null : results[2],
+    );
+  }
+
   Future<Map<String, dynamic>> fetchDailyRewardStatus({
     required String identityToken,
     required String localDate,
   }) async {
     final response = await _sendGetRequest(
-      path: '/daily-reward/status?localDate=$localDate',
+      path: '/daily-reward/status?localDate=${Uri.encodeComponent(localDate)}',
       identityToken: identityToken,
     );
 
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> fetchGetCoinsStatus({
+    required String identityToken,
+    required String localDate,
+  }) async {
+    if (runtimeType != BackendApiService) {
+      return fetchDailyRewardStatus(
+        identityToken: identityToken,
+        localDate: localDate,
+      );
+    }
+    final response = await _sendGetRequest(
+      path:
+          '/daily-reward/status?view=get-coins-v1&localDate=${Uri.encodeComponent(localDate)}',
+      identityToken: identityToken,
+    );
     return _decodeJsonResponse(response);
   }
 
@@ -3673,6 +4176,7 @@ class BackendApiService {
   Future<HttpClientResponse> _sendGetRequest({
     required String path,
     String? identityToken,
+    Map<String, String>? headers,
   }) async {
     final uri = Uri.parse('${BackendConfig.baseUrl}$path');
 
@@ -3691,6 +4195,7 @@ class BackendApiService {
       // items (base animals) and the rewarded-ad extra-spin offer from clients
       // that don't send the matching capability.
       request.headers.set('X-Client-Features', clientFeaturesHeader);
+      headers?.forEach(request.headers.set);
       return await request.close().timeout(_requestTimeout);
     } on SocketException catch (error) {
       throw ApiException(describeBackendConnectionError(error, uri: uri));

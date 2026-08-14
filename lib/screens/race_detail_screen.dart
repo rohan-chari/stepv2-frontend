@@ -14,6 +14,8 @@ import '../services/backend_api_service.dart';
 import '../services/notification_service.dart';
 import '../services/race_chat_service.dart';
 import '../services/race_feed_service.dart';
+import '../services/race_stream_coordinator.dart';
+import '../services/app_route_observer.dart';
 import '../styles.dart';
 import '../widgets/app_refresh_indicator.dart';
 import '../utils/at_name.dart';
@@ -156,6 +158,29 @@ const _rarityColors = {
 // (item #3); the DB rows are left intact so re-enabling is a single flag flip.
 const _hiddenPowerupTypes = {'IMPOSTER'};
 
+/// Converts the versioned `powerupData.inventory` payload into a safe local
+/// projection. Older backends can omit it, and malformed entries must never
+/// prevent the race detail from rendering.
+List<Map<String, dynamic>> normalizePowerupInventory(Object? rawInventory) {
+  if (rawInventory is! List) return const [];
+
+  return [
+    for (final rawEntry in rawInventory)
+      if (rawEntry is Map)
+        <String, dynamic>{
+          for (final MapEntry(:key, :value) in rawEntry.entries)
+            if (key is String) key: value,
+        },
+  ];
+}
+
+bool _isUnopenedMysteryBoxSlot(Map<String, dynamic> powerup) {
+  final id = powerup['id'];
+  return powerup['status'] == 'MYSTERY_BOX' &&
+      id is String &&
+      id.trim().isNotEmpty;
+}
+
 // Powerup upgrade price tables — FALLBACK ONLY. The backend is authoritative:
 // getRaceProgress powerupData.upgradeCosts carries the live ladders and wins
 // when present (see _upgradeCostFor). These bundled copies are used only
@@ -232,7 +257,7 @@ RacePollLifecycleAction racePollLifecycleAction(
 }
 
 class _RaceDetailScreenState extends State<RaceDetailScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, RouteAware {
   Map<String, dynamic>? _race;
   Map<String, dynamic>? _progress;
   Map<String, dynamic>? _powerupData;
@@ -327,6 +352,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   // Monotonic id of the newest fetchRaceProgress request — see _loadProgress.
   int _progressFetchSeq = 0;
   late DateTime _countdownNow;
+  bool _routeVisible = true;
+  bool _appResumed = true;
+  bool _returnRefreshRunning = false;
+  ModalRoute<dynamic>? _subscribedRoute;
 
   // Activity/Chat tabs state.
   // 0 = Activity (system/powerup events, default), 1 = Chat (user messages).
@@ -334,7 +363,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
   // Chat tab (user messages).
   RaceChatService? _chat;
-  bool _chatInitialized = false;
   bool _chatHasUnread = false;
   final TextEditingController _messageInput = TextEditingController();
   final FocusNode _messageFocus = FocusNode();
@@ -356,6 +384,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   // Activity tab (system/powerup events).
   RaceFeedService? _feed;
   bool _feedInitialized = false;
+  bool _chatInitialized = false;
+  RaceStreamCoordinator? _streams;
 
   /// Whether the user opened up the full standings board. Held on the State so
   /// the 5s progress poll can't collapse a board the user deliberately opened.
@@ -363,6 +393,54 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
   String get _myUserId => widget.authService.userId ?? '';
   BackendApiService get _api => widget.backendApiService;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route != null && !identical(route, _subscribedRoute)) {
+      if (_subscribedRoute != null) appRouteObserver.unsubscribe(this);
+      _subscribedRoute = route;
+      appRouteObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void didPushNext() {
+    _routeVisible = false;
+    _pauseCoveredTimers();
+  }
+
+  @override
+  void didPopNext() {
+    _routeVisible = true;
+    unawaited(_refreshAfterCoverage());
+  }
+
+  void _pauseCoveredTimers() {
+    _pollTimer?.cancel();
+    _countdownTimer?.cancel();
+    _streams?.pause();
+  }
+
+  Future<void> _refreshAfterCoverage() async {
+    if (!_routeVisible || !_appResumed || _returnRefreshRunning) return;
+    _returnRefreshRunning = true;
+    try {
+      if (_pollingActive) await _loadProgress();
+      if (!_routeVisible || !_appResumed) return;
+      if (!_feedInitialized) {
+        _ensureFeedInitialized(poll: _pollingActive);
+      } else {
+        await _streams?.resume(chatVisible: _activityTabIndex == 1);
+      }
+      if (!_routeVisible || !_appResumed) return;
+      if (_pollingActive) _startPolling();
+      if (_countdownActive) _startCountdown();
+    } finally {
+      _returnRefreshRunning = false;
+    }
+  }
 
   int _readInt(dynamic value, {required int fallback}) {
     if (value is num) return value.toInt();
@@ -592,6 +670,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _appResumed = false;
+    } else if (state == AppLifecycleState.resumed) {
+      _appResumed = true;
+    }
     switch (racePollLifecycleAction(state, wasPolling: _pollingActive)) {
       case RacePollLifecycleAction.pause:
         // Off-screen: stop the network poll AND the 1s countdown ticker. The
@@ -600,14 +684,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         // the flags below. The flags stay set so resume knows to restart.
         _pollTimer?.cancel();
         _countdownTimer?.cancel();
+        _streams?.pause();
         break;
       case RacePollLifecycleAction.resume:
         // Foreground again after having polled: fetch once immediately for an
         // instant catch-up (the seq guard in _loadProgress keeps ordering
         // correct), then restart the periodic poll. _startPolling re-guards
         // its own timer.
-        _loadProgress();
-        _startPolling();
+        if (_routeVisible) unawaited(_refreshAfterCoverage());
         break;
       case RacePollLifecycleAction.none:
         break;
@@ -615,7 +699,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     // Restart the countdown ticker on any resume where it was running — covers
     // both ACTIVE races (which also resumed polling above) and PENDING
     // scheduled races (which tick a countdown but never poll).
-    if (state == AppLifecycleState.resumed && _countdownActive) {
+    if (state == AppLifecycleState.resumed &&
+        _routeVisible &&
+        _countdownActive) {
       _startCountdown();
     }
   }
@@ -640,6 +726,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    appRouteObserver.unsubscribe(this);
     // Only dispose a controller we created; an injected one belongs to the
     // caller (tests).
     if (widget.boxRerollAdController == null) _rerollAdCtrl?.dispose();
@@ -647,71 +734,54 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     _countdownTimer?.cancel();
     _messageInput.dispose();
     _messageFocus.dispose();
-    final chat = _chat;
-    if (chat != null) {
-      chat.markRead();
-      chat.dispose();
-    }
-    final feed = _feed;
-    if (feed != null) {
-      feed.dispose();
-    }
+    _streams?.dispose();
     super.dispose();
   }
 
   void _ensureChatInitialized({bool poll = true}) {
-    if (_chatInitialized) return;
-    final race = _race;
-    if (race == null) return;
+    final streams = _streams;
+    if (streams == null) return;
+    if (_chatInitialized) {
+      _chat = streams.chat;
+      return;
+    }
     _chatInitialized = true;
-    final chat = RaceChatService(
-      authService: widget.authService,
-      raceId: widget.raceId,
-      api: widget.backendApiService,
+    unawaited(
+      streams.openChat(muted: _race?['myChatMuted'] == true).then((_) {
+        if (!mounted) return;
+        _chat = streams.chat;
+        setState(() {});
+      }),
     );
-    chat.setMutedFromServer(race['myChatMuted'] as bool? ?? false);
-    _chat = chat;
-    chat.addListener(_onChatChanged);
-    chat.loadInitial().then((_) {
-      if (!mounted) return;
-      // Initial chat load shouldn't count as unread; the user just opened the
-      // race. Clear any unread set during load if we're already on Chat.
-      if (_activityTabIndex == 1) {
-        chat.markChatViewed();
-      } else {
-        chat.markRead();
-      }
-    });
-    if (poll) chat.startPolling();
+    _chat = streams.chat;
   }
 
   void _ensureFeedInitialized({bool poll = true}) {
     if (_feedInitialized) return;
     if (_race == null) return;
+    if (!_routeVisible || !_appResumed) return;
     _feedInitialized = true;
-    final feed = RaceFeedService(
+    final streams = RaceStreamCoordinator(
       authService: widget.authService,
       raceId: widget.raceId,
       api: widget.backendApiService,
     );
-    _feed = feed;
-    feed.addListener(_onFeedChanged);
-    feed.loadInitial();
-    if (poll) feed.startPolling();
+    _streams = streams;
+    _feed = streams.feed;
+    streams.addListener(_onStreamsChanged);
+    unawaited(
+      streams.initialize(live: poll, muted: _race?['myChatMuted'] == true),
+    );
   }
 
-  void _onChatChanged() {
+  void _onStreamsChanged() {
     if (!mounted) return;
-    final chat = _chat;
-    // New incoming messages arrived while the user is not on the Chat tab.
-    if (chat != null && chat.hasUnread && _activityTabIndex != 1) {
+    final streams = _streams;
+    _chat = streams?.chat;
+    if (streams?.chatHasUnread == true && _activityTabIndex != 1) {
       _chatHasUnread = true;
     }
     setState(() {});
-  }
-
-  void _onFeedChanged() {
-    if (mounted) setState(() {});
   }
 
   void _onTabChanged(int index) {
@@ -720,9 +790,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     if (index == 1) {
       // Switched to Chat: clear unread + persist read state on the server.
       _chatHasUnread = false;
-      _chat?.markChatViewed();
+      if (_chatInitialized) {
+        _streams?.setChatVisible(true);
+      } else {
+        _ensureChatInitialized(poll: _pollingActive);
+      }
     } else {
       // Switched away from Chat: persist read state.
+      _streams?.setChatVisible(false);
       _chat?.markRead();
     }
   }
@@ -735,21 +810,32 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         return;
       }
 
-      // Fire progress alongside details instead of after it — the two are
-      // independent and progress is the slower call, so this removes a full
-      // serial round-trip from screen open. If the race turns out not to be
-      // ACTIVE the prefetched result is simply discarded (errors included:
-      // the catchError below keeps a non-ACTIVE race's progress fetch from
-      // surfacing as an unhandled async error).
-      final progressPrefetch = _api
-          .fetchRaceProgress(identityToken: token, raceId: widget.raceId)
-          .then((p) => p as Map<String, dynamic>?)
-          .catchError((_) => null);
-
-      final details = await _api.fetchRaceDetails(
+      final bootstrap = await _api.fetchRaceBootstrap(
         identityToken: token,
         raceId: widget.raceId,
       );
+      Map<String, dynamic> details;
+      Future<Map<String, dynamic>?>? progressPrefetch;
+      var bootstrapProgressUnavailable = false;
+      if (bootstrap.supported && bootstrap.race != null) {
+        details = bootstrap.race!;
+        progressPrefetch = Future.value(bootstrap.progress);
+        bootstrapProgressUnavailable = bootstrap.progressUnavailable;
+        _applyGlobalPowerupInventory(bootstrap.globalPowerupInventory);
+      } else {
+        // Frozen backend: restore the existing parallel detail/progress path.
+        progressPrefetch = _api
+            .fetchRaceProgress(identityToken: token, raceId: widget.raceId)
+            .then((progress) => progress as Map<String, dynamic>?)
+            .catchError((_) => null);
+        details = await _api.fetchRaceDetails(
+          identityToken: token,
+          raceId: widget.raceId,
+        );
+        if (details['status'] == 'ACTIVE') {
+          unawaited(_loadGlobalPowerupInventory(token));
+        }
+      }
 
       if (!mounted) return;
       setState(() {
@@ -758,22 +844,31 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         // One mute covers both placement and chat; treat the race as muted if
         // either flag is set. Defaults false for older backends missing the keys.
         _placementMuted =
-            (details['myPlacementAlertsMuted'] as bool? ?? false) ||
-            (details['myChatMuted'] as bool? ?? false);
+            details['myPlacementAlertsMuted'] == true ||
+            details['myChatMuted'] == true;
       });
 
       if (details['status'] == 'ACTIVE') {
         _maybeShowStarterRewardModal();
-        _loadProgress(prefetched: progressPrefetch);
+        if (bootstrapProgressUnavailable) {
+          setState(() {
+            _progressState = const Loadable.error(
+              'Couldn’t load race progress. Please try again.',
+            );
+          });
+        } else {
+          _loadProgress(
+            prefetched: progressPrefetch,
+            refetchOnNullPrefetch: !bootstrap.supported,
+          );
+        }
         _startPolling();
         _startCountdown();
-        _ensureChatInitialized();
         _ensureFeedInitialized();
       } else if (details['status'] == 'COMPLETED') {
         // Finished races keep their chat + activity viewable (read-only —
         // _canPostMessage is false and the backend rejects posts). Load once,
         // no polling: the conversation can't change anymore.
-        _ensureChatInitialized(poll: false);
         _ensureFeedInitialized(poll: false);
       } else if (details['status'] == 'PENDING') {
         // Scheduled races show a live countdown to their auto-start; the
@@ -814,6 +909,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     _countdownTimer?.cancel();
     _chat?.stopPolling();
     _feed?.stopPolling();
+    _streams?.pause();
     if (!mounted) return;
     setState(() {
       _isLoading = false;
@@ -823,6 +919,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
   Future<void> _loadProgress({
     Future<Map<String, dynamic>?>? prefetched,
+    bool refetchOnNullPrefetch = true,
   }) async {
     // Ordering guard: concurrent fetches (30s poll vs the refresh fired right
     // after opening a box) can resolve out of order, and a stale snapshot
@@ -853,17 +950,36 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       // A prefetched result (fired in parallel with details) is used when it
       // succeeded; a failed prefetch falls back to a fresh request so errors
       // still surface through the normal path below.
+      final prefetchedProgress = prefetched != null ? await prefetched : null;
+      if (prefetched != null &&
+          prefetchedProgress == null &&
+          !refetchOnNullPrefetch) {
+        throw const ApiException(
+          'Couldn’t load race progress. Please try again.',
+        );
+      }
+      RaceProgressResult? compactResult;
       final progress =
-          (prefetched != null ? await prefetched : null) ??
-          await _api.fetchRaceProgress(
+          prefetchedProgress ??
+          (compactResult = await _api.fetchRaceProgressCompact(
             identityToken: token,
             raceId: widget.raceId,
-          );
+          )).progress;
+
+      if (compactResult?.hasCompactInventory == true) {
+        _applyGlobalPowerupInventory(compactResult?.globalPowerupInventory);
+      }
 
       if (!mounted || fetchSeq != _progressFetchSeq) return;
       setState(() {
         _progress = progress;
-        _powerupData = progress['powerupData'] as Map<String, dynamic>?;
+        final rawPowerupData = progress['powerupData'];
+        _powerupData = rawPowerupData is Map
+            ? <String, dynamic>{
+                for (final entry in rawPowerupData.entries)
+                  if (entry.key is String) entry.key as String: entry.value,
+              }
+            : null;
         final rawEvent = progress['globalEvent'];
         _globalEvent = rawEvent is Map
             ? Map<String, dynamic>.from(rawEvent)
@@ -872,18 +988,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       });
 
       if (_powerupData?['enabled'] == true) {
-        // Skip the chat/feed refresh on the FIRST progress load: it lands
-        // right after loadInitial() fetched the same pages, so refreshing
-        // again just duplicated both message requests. Later loads (30s poll,
-        // powerup actions) refresh as before to pick up new events.
-        if (previous != null) {
-          _chat?.refreshTop();
-          _feed?.refreshTop();
+        // A compact progress response carries the 30-second global inventory.
+        // Legacy/malformed responses retain the standalone refresh.
+        if (compactResult?.hasCompactInventory != true) {
+          _loadGlobalPowerupInventory(token);
         }
-
-        // Best-effort: load the user's GLOBAL powerup stash so they can spend a
-        // coin-purchased powerup (e.g. Imposter) into this race.
-        _loadGlobalPowerupInventory(token);
 
         _queuedBoxCount = _readInt(
           _powerupData?['queuedBoxCount'],
@@ -960,6 +1069,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   void _startPolling() {
     _pollingActive = true;
     _pollTimer?.cancel();
+    if (!_routeVisible || !_appResumed) return;
     // The demo's clock is floored at 0:20 (§5.5), but `endsAt` is read from the
     // race DETAILS payload, which the live screen fetches exactly once. A slow
     // reader would therefore watch the local 1s ticker run past 0:00 while the
@@ -983,6 +1093,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   void _startCountdown() {
     _countdownActive = true;
     _countdownTimer?.cancel();
+    if (!_routeVisible || !_appResumed) return;
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       setState(() => _countdownNow = DateTime.now());
@@ -1872,22 +1983,27 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   Future<void> _loadGlobalPowerupInventory(String token) async {
     try {
       final result = await _api.fetchPowerupInventory(identityToken: token);
-      final items =
-          (result['items'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
-      final inventory = <String, int>{};
-      for (final row in items) {
-        final type = row['powerupType'] as String?;
-        final qty = (row['quantity'] as num?)?.toInt() ?? 0;
-        if (type != null && qty > 0) inventory[type] = qty;
-      }
-      if (mounted) {
-        setState(() => _globalPowerupInventory = inventory);
-      }
+      _applyGlobalPowerupInventory(result);
     } catch (_) {
       if (mounted) {
         setState(() => _globalPowerupInventory = const {});
       }
     }
+  }
+
+  void _applyGlobalPowerupInventory(Map<String, dynamic>? envelope) {
+    final rawItems = envelope?['items'];
+    if (rawItems is! List) return;
+    final inventory = <String, int>{};
+    for (final raw in rawItems) {
+      if (raw is! Map) continue;
+      final type = raw['powerupType'];
+      final quantity = raw['quantity'];
+      if (type is String && quantity is num && quantity.toInt() > 0) {
+        inventory[type] = quantity.toInt();
+      }
+    }
+    if (mounted) setState(() => _globalPowerupInventory = inventory);
   }
 
   /// Spends a globally-owned powerup (e.g. Imposter) into this race: redeems it
@@ -2814,8 +2930,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   }
 
   void _showPowerupActions(Map<String, dynamic> powerup) {
-    final type = powerup['type'] as String;
-    final rarity = (powerup['rarity'] as String?) ?? 'COMMON';
+    final rawType = powerup['type'];
+    if (rawType is! String || rawType.trim().isEmpty) return;
+    final type = rawType;
+    final rawRarity = powerup['rarity'];
+    final rarity = rawRarity is String ? rawRarity : 'COMMON';
     final upgradeable = _isUpgradeable(type);
     final tierLabels = PowerupCopy.upgradeTierLabelsFor(type);
     final myCoins = widget.authService.coins;
@@ -4665,13 +4784,73 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           ),
         const SizedBox(height: 18),
 
+        // POWERUPS — slots, stash, and active effects on one card. Hidden for
+        // a spectator (they hold no powerups and can take no actions here).
+        if (!_isSpectator) ...[
+          StaggerIn(
+            index: 0,
+            child: Column(
+              children: [
+                _checkerSectionHeader(
+                  'POWERUPS',
+                  trailing: _powerupsHeaderTrailing(),
+                ),
+                _sectionCard(
+                  key: const Key('race-powerups-card'),
+                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (_powerupData != null &&
+                          _powerupData!['enabled'] == true) ...[
+                        // §3.2 — the "X steps to go" helper sits ABOVE the
+                        // box/item slots so the earn-progress reads before the
+                        // slots it fills.
+                        if (_buildNextPowerupHelper() case final helper?)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: helper,
+                          ),
+                        _buildInventoryContent(),
+                      ] else
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.block_rounded,
+                              size: 18,
+                              color: AppColors.of(
+                                context,
+                              ).textMid.withValues(alpha: 0.5),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Powerups are disabled for this race',
+                                style: PixelText.body(
+                                  size: 14,
+                                  color: AppColors.of(context).textMid,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      _buildActiveEffectsSection(),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+        ],
+
         // SCOREBOARD (team) — honest combined totals + lead on top, then the
         // two rosters as color-matched columns beneath their plaques. Totals
         // come from the backend team block (always honest, TR-658), falling
         // back to summing visible planks on older payloads. Solo races keep the
-        // single STANDINGS list.
+        // single STANDINGS list. This sits below the actionable POWERUPS card.
         StaggerIn(
-          index: 0,
+          index: 1,
           child: Column(
             children: [
               _checkerSectionHeader(isTeamRace ? 'SCOREBOARD' : 'STANDINGS'),
@@ -4770,63 +4949,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             ],
           ),
         ),
-        const SizedBox(height: 18),
-
-        // POWERUPS — slots, stash, and active effects on one card. Hidden for
-        // a spectator (they hold no powerups and can take no actions here).
-        if (!_isSpectator)
-          StaggerIn(
-            index: 1,
-            child: Column(
-              children: [
-                _checkerSectionHeader(
-                  'POWERUPS',
-                  trailing: _powerupsHeaderTrailing(),
-                ),
-                _sectionCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (_powerupData != null &&
-                          _powerupData!['enabled'] == true) ...[
-                        // §3.2 — the "X steps to go" helper sits ABOVE the
-                        // box/item slots so the earn-progress reads before the
-                        // slots it fills.
-                        if (_buildNextPowerupHelper() case final helper?)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: helper,
-                          ),
-                        _buildInventoryContent(),
-                      ] else
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.block_rounded,
-                              size: 18,
-                              color: AppColors.of(
-                                context,
-                              ).textMid.withValues(alpha: 0.5),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Powerups are disabled for this race',
-                                style: PixelText.body(
-                                  size: 14,
-                                  color: AppColors.of(context).textMid,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      _buildActiveEffectsSection(),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
         const SizedBox(height: 18),
 
         // ACTIVITY & CHAT
@@ -4938,6 +5060,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             builder: (_) => TournamentDetailScreen(
               authService: widget.authService,
               tournamentId: tournamentId,
+              backendApiService: widget.backendApiService,
               friends: widget.friends,
             ),
           ),
@@ -5036,21 +5159,26 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       return null;
     }
 
-    return Text(
-      'You earn a powerup every ${_formatSteps(powerupStepInterval)} steps this race. ${_formatSteps(stepsUntilNextPowerup)} to go.',
-      style: PixelText.body(size: 13, color: AppColors.of(context).textMid),
+    return SizedBox(
+      width: double.infinity,
+      child: Text(
+        'NEXT POWERUP IN ${_formatSteps(stepsUntilNextPowerup)} · EVERY ${_formatSteps(powerupStepInterval)} STEPS',
+        textAlign: TextAlign.center,
+        style: PixelText.title(size: 11, color: AppColors.of(context).textMid),
+      ),
     );
   }
 
-  /// Slot mystery boxes the user can open right now (status MYSTERY_BOX).
+  List<Map<String, dynamic>> get _normalizedPowerupInventory =>
+      normalizePowerupInventory(_powerupData?['inventory']);
+
+  /// Slot mystery boxes the user can open right now. IDs are validated before
+  /// they can reach the opening route, which also keeps malformed old/new
+  /// payloads from producing a misleading alert or Open All affordance.
   List<String> get _openableSlotBoxIds {
-    final inventory =
-        (_powerupData?['inventory'] as List?)?.cast<Map<String, dynamic>>() ??
-        const [];
     return [
-      for (final p in inventory)
-        if ((p['status'] as String?) == 'MYSTERY_BOX' && p['id'] is String)
-          p['id'] as String,
+      for (final powerup in _normalizedPowerupInventory)
+        if (_isUnopenedMysteryBoxSlot(powerup)) powerup['id'] as String,
     ];
   }
 
@@ -5058,8 +5186,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// affordance, which only appears when there are at least two.
   int get _openableBoxCount => _openableSlotBoxIds.length + _queuedBoxCount;
 
-  /// Trailing widget for the POWERUPS header: the "Open All" button (when ≥2
-  /// boxes are openable) alongside the existing queued-count chip.
+  /// Trailing POWERUPS controls: "Open All" when ≥2 boxes are openable plus
+  /// the queue chip.
   Widget? _powerupsHeaderTrailing() {
     final chip = _queuedBoxesChip();
     // §5.7b: OPEN ALL would open both demo boxes at once and skip beats 4-5
@@ -5125,7 +5253,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     } finally {
       _endAction();
       if (mounted) {
-        _loadProgress();
         unawaited(widget.onBoxOpened?.call());
       }
     }
@@ -5490,8 +5617,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       if (!mounted) return;
       setState(() => _isActing = false);
 
-      // Refresh after closing
-      _loadProgress();
       unawaited(widget.onBoxOpened?.call());
     } catch (e) {
       if (mounted) {
@@ -5796,60 +5921,110 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   }
 
   Widget _buildInventoryContent() {
-    final inventory =
-        (_powerupData?['inventory'] as List?)?.cast<Map<String, dynamic>>() ??
-        [];
+    final inventory = _normalizedPowerupInventory;
     final slotCount = _readInt(_powerupData?['powerupSlots'], fallback: 3);
+    final visibleEntries = inventory
+        .asMap()
+        .entries
+        .where((entry) => entry.key < slotCount)
+        .toList(growable: false);
+    final boxEntries = visibleEntries
+        .where((entry) => entry.value['status'] == 'MYSTERY_BOX')
+        .toList(growable: false);
+    final heldEntries = visibleEntries
+        .where((entry) => entry.value['status'] != 'MYSTERY_BOX')
+        .toList(growable: false);
+
+    bool allowed(Map<String, dynamic> powerup) =>
+        widget.demoTapGate?.call(powerup) ?? true;
+
+    ItemSlot heldSlot(MapEntry<int, Map<String, dynamic>> entry) {
+      final powerup = entry.value;
+      final rawType = powerup['type'];
+      final rawRarity = powerup['rarity'];
+      return ItemSlot(
+        state: ItemSlotState.held,
+        powerupType: rawType is String ? rawType : '',
+        rarity: rawRarity is String ? rawRarity : null,
+        isExtraSlot: entry.key >= 3,
+        onTap: _isActing || rawType is! String || rawType.trim().isEmpty
+            ? null
+            : () {
+                if (!allowed(powerup)) return;
+                _showPowerupActions(powerup);
+              },
+      );
+    }
+
+    Widget focusedBoxes() {
+      final count = boxEntries.length;
+      final crateSize = switch (count) {
+        1 => 76.0,
+        2 => 68.0,
+        3 => 60.0,
+        _ => 52.0,
+      };
+
+      Widget boxButton(MapEntry<int, Map<String, dynamic>> entry) {
+        final powerup = entry.value;
+        final rawId = powerup['id'];
+        final boxId = rawId is String && rawId.trim().isNotEmpty ? rawId : null;
+        final button = MysteryBoxButton(
+          key: ValueKey('mystery-box-${entry.key}'),
+          crateSize: crateSize,
+          expandTapTarget: count > 1,
+          onTap: _isActing || boxId == null
+              ? null
+              : () {
+                  if (!allowed(powerup)) return;
+                  _openMysteryBox(boxId);
+                },
+        );
+        return count > 1 ? Expanded(child: button) : button;
+      }
+
+      return Row(
+        key: const Key('mystery-box-focus-row'),
+        mainAxisAlignment: count == 1
+            ? MainAxisAlignment.center
+            : MainAxisAlignment.spaceEvenly,
+        children: [for (final entry in boxEntries) boxButton(entry)],
+      );
+    }
+
+    Widget heldPowerupsUnderBoxes() {
+      final slots = [for (final entry in heldEntries) heldSlot(entry)];
+      if (slots.length == 1) {
+        return Row(children: [const Spacer(), slots.single, const Spacer()]);
+      }
+      if (slots.length == 2) {
+        return Row(children: [slots.first, const Spacer(), slots.last]);
+      }
+      return Row(children: slots);
+    }
 
     return Column(
       key: widget.tutorialPowerupsKey,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: List.generate(slotCount, (i) {
-            final isExtraSlot = i >= 3;
-            if (i < inventory.length) {
-              final pw = inventory[i];
-              final status = pw['status'] as String? ?? 'HELD';
-              final isMysteryBox = status == 'MYSTERY_BOX';
-
-              // The gate is consulted BEFORE either branch acts. It stays null
-              // in the real app, so this is a no-op outside the demo.
-              bool allowed() => widget.demoTapGate?.call(pw) ?? true;
-
-              if (isMysteryBox) {
-                return ItemSlot(
-                  state: ItemSlotState.mysteryBox,
-                  isExtraSlot: isExtraSlot,
-                  onTap: _isActing
-                      ? null
-                      : () {
-                          if (!allowed()) return;
-                          _openMysteryBox(pw['id'] as String);
-                        },
-                );
+        if (boxEntries.isNotEmpty) ...[
+          focusedBoxes(),
+          if (heldEntries.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            heldPowerupsUnderBoxes(),
+          ],
+        ] else
+          Row(
+            children: List.generate(slotCount, (index) {
+              if (index < visibleEntries.length) {
+                return heldSlot(visibleEntries[index]);
               }
-
-              return ItemSlot(
-                state: ItemSlotState.held,
-                powerupType: pw['type'] as String? ?? '',
-                rarity: pw['rarity'] as String?,
-                isExtraSlot: isExtraSlot,
-                onTap: _isActing
-                    ? null
-                    : () {
-                        if (!allowed()) return;
-                        _showPowerupActions(pw);
-                      },
-              );
-            } else {
               return ItemSlot(
                 state: ItemSlotState.empty,
-                isExtraSlot: isExtraSlot,
+                isExtraSlot: index >= 3,
               );
-            }
-          }),
-        ),
+            }),
+          ),
         ..._buildGlobalPowerupStash(),
       ],
     );
@@ -6435,7 +6610,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       return LoadErrorPanel(
         title: 'Couldn’t load activity',
         message: 'Check your connection and try again.',
-        onRetry: feed.loadInitial,
+        onRetry: _streams?.refreshNow ?? feed.loadInitial,
       );
     }
     if (events.isEmpty) {
@@ -6498,7 +6673,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       body = LoadErrorPanel(
         title: 'Couldn’t load chat',
         message: 'Check your connection and try again.',
-        onRetry: chat.loadInitial,
+        onRetry: () => _streams?.openChat(muted: _race?['myChatMuted'] == true),
       );
     } else if (messages.isEmpty) {
       body = _buildTabEmptyState('No messages yet. Say hi!');

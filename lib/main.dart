@@ -12,6 +12,7 @@ import 'screens/main_shell.dart';
 import 'screens/start_screen.dart';
 import 'screens/update_required_screen.dart';
 import 'services/auth_service.dart';
+import 'services/app_route_observer.dart';
 import 'services/backend_api_service.dart';
 import 'services/background_sync_bootstrap_service.dart';
 import 'services/deep_link_service.dart';
@@ -133,6 +134,7 @@ class StepTrackerApp extends StatelessWidget {
           return MaterialApp(
             title: 'Bara',
             debugShowCheckedModeBanner: false,
+            navigatorObservers: [appRouteObserver],
             theme: AppThemeData.light(),
             darkTheme: AppThemeData.night(),
             themeMode: themeController.resolvedMode,

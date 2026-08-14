@@ -17,29 +17,54 @@ class _FakeApi extends BackendApiService {
     this.featured = const [],
     this.userTournaments = const [],
     this.myTournaments = const [],
+    this.browser,
   });
 
   final List<Map<String, dynamic>> featured;
   final List<Map<String, dynamic>> userTournaments;
   final List<Map<String, dynamic>> myTournaments;
+  final Map<String, dynamic>? browser;
+  int featuredRaceCalls = 0;
+  int publicTournamentCalls = 0;
+  int myRaceCalls = 0;
+
+  @override
+  Future<Map<String, dynamic>> fetchPublicRaceBrowser({
+    required String identityToken,
+  }) async => browser ?? {'races': const <Map<String, dynamic>>[]};
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchFeaturedRaces({
+    required String identityToken,
+  }) async {
+    featuredRaceCalls += 1;
+    return const [];
+  }
 
   @override
   Future<List<Map<String, dynamic>>> fetchPublicRaces({
     required String identityToken,
-  }) async =>
-      const [];
+  }) async => const [];
 
   @override
   Future<Map<String, dynamic>> fetchPublicTournaments({
     required String identityToken,
-  }) async =>
-      {'featured': featured, 'tournaments': userTournaments};
+  }) async {
+    publicTournamentCalls += 1;
+    return {'featured': featured, 'tournaments': userTournaments};
+  }
 
   @override
   Future<Map<String, dynamic>> fetchRaces({
     required String identityToken,
-  }) async =>
-      {'active': const [], 'pending': const [], 'tournaments': myTournaments};
+  }) async {
+    myRaceCalls += 1;
+    return {
+      'active': const [],
+      'pending': const [],
+      'tournaments': myTournaments,
+    };
+  }
 }
 
 Future<AuthService> _auth() async {
@@ -75,21 +100,20 @@ Map<String, dynamic> _featured({
   String id = 'seed1',
   String? myStatus,
   int accepted = 2,
-}) =>
-    {
-      'id': id,
-      'name': 'Daily Dash',
-      'status': 'PENDING',
-      'seedId': 'seed-tournament-daily-dash',
-      'seedKind': 'DAILY_DASH',
-      'bracketSize': 4,
-      'matchupDurationDays': 1,
-      'buyInAmount': 0,
-      'potCoins': 0,
-      'championPrizeCoins': 150,
-      'acceptedCount': accepted,
-      if (myStatus != null) 'myStatus': myStatus,
-    };
+}) => {
+  'id': id,
+  'name': 'Daily Dash',
+  'status': 'PENDING',
+  'seedId': 'seed-tournament-daily-dash',
+  'seedKind': 'DAILY_DASH',
+  'bracketSize': 4,
+  'matchupDurationDays': 1,
+  'buyInAmount': 0,
+  'potCoins': 0,
+  'championPrizeCoins': 150,
+  'acceptedCount': accepted,
+  'myStatus': ?myStatus,
+};
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -124,6 +148,35 @@ void main() {
     }
   });
 
+  testWidgets(
+    'compact browser falls back only malformed featured and mine branches',
+    (tester) async {
+      final api = _FakeApi(
+        browser: const {
+          'contract': 'public-race-browser-v1',
+          'races': <Map<String, dynamic>>[],
+          'resolved': {
+            'featuredRaces': true,
+            'tournaments': true,
+            'mine': true,
+          },
+          'featuredRaces': 'malformed',
+          'tournaments': {
+            'featured': <Map<String, dynamic>>[],
+            'public': <Map<String, dynamic>>[],
+            'mine': 'malformed',
+          },
+        },
+      );
+
+      await _pump(tester, api);
+
+      expect(api.featuredRaceCalls, 1);
+      expect(api.publicTournamentCalls, 0);
+      expect(api.myRaceCalls, 1);
+    },
+  );
+
   testWidgets('open featured card shows JOIN and the prize', (tester) async {
     await _pump(tester, _FakeApi(featured: [_featured()]));
     // 'FEATURED' now appears twice — the filter-pill segment and the section
@@ -139,10 +192,7 @@ void main() {
   });
 
   testWidgets('joined featured card flips to VIEW', (tester) async {
-    await _pump(
-      tester,
-      _FakeApi(featured: [_featured(myStatus: 'ACCEPTED')]),
-    );
+    await _pump(tester, _FakeApi(featured: [_featured(myStatus: 'ACCEPTED')]));
     final btn = tester.widget<PillButton>(
       find.byKey(const Key('featured-tournament-join-seed1')),
     );
@@ -150,8 +200,9 @@ void main() {
     expect(btn.onPressed, isNotNull);
   });
 
-  testWidgets('nearly-full featured card still joinable; full disables',
-      (tester) async {
+  testWidgets('nearly-full featured card still joinable; full disables', (
+    tester,
+  ) async {
     await _pump(tester, _FakeApi(featured: [_featured(accepted: 4)]));
     final btn = tester.widget<PillButton>(
       find.byKey(const Key('featured-tournament-join-seed1')),
@@ -161,40 +212,43 @@ void main() {
   });
 
   testWidgets(
-      'D12: JOIN disabled while still alive in another same-seed bracket',
-      (tester) async {
-    await _pump(
-      tester,
-      _FakeApi(
-        featured: [_featured()],
-        // I'm mid-run in an ACTIVE bracket minted from the same seed.
-        myTournaments: [
-          {
-            'id': 'other',
-            'seedKind': 'DAILY_DASH',
-            'status': 'ACTIVE',
-            'myStatus': 'ACCEPTED',
-            'bracketSize': 4,
-          },
-        ],
-      ),
-    );
-    final btn = tester.widget<PillButton>(
-      find.byKey(const Key('featured-tournament-join-seed1')),
-    );
-    expect(btn.label, 'IN A BRACKET');
-    expect(btn.onPressed, isNull);
-  });
+    'D12: JOIN disabled while still alive in another same-seed bracket',
+    (tester) async {
+      await _pump(
+        tester,
+        _FakeApi(
+          featured: [_featured()],
+          // I'm mid-run in an ACTIVE bracket minted from the same seed.
+          myTournaments: [
+            {
+              'id': 'other',
+              'seedKind': 'DAILY_DASH',
+              'status': 'ACTIVE',
+              'myStatus': 'ACCEPTED',
+              'bracketSize': 4,
+            },
+          ],
+        ),
+      );
+      final btn = tester.widget<PillButton>(
+        find.byKey(const Key('featured-tournament-join-seed1')),
+      );
+      expect(btn.label, 'IN A BRACKET');
+      expect(btn.onPressed, isNull);
+    },
+  );
 
-  testWidgets('missing featured key → no featured section (older backend)',
-      (tester) async {
+  testWidgets('missing featured key → no featured section (older backend)', (
+    tester,
+  ) async {
     // fetchPublicTournaments returns empty lists; nothing pins.
     await _pump(tester, _FakeApi());
     expect(find.text('FEATURED'), findsNothing);
   });
 
-  testWidgets('user-created public tournament card renders below featured',
-      (tester) async {
+  testWidgets('user-created public tournament card renders below featured', (
+    tester,
+  ) async {
     await _pump(
       tester,
       _FakeApi(

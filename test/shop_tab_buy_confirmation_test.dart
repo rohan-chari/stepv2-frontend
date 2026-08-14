@@ -18,14 +18,39 @@ class _FakeShopApi extends BackendApiService {
     required this.catalog,
     required this.powerupCatalog,
     required this.inventory,
+    this.idempotentPowerupPurchase = false,
+    this.bootstrapResult,
+    this.powerupPurchaseCoins = 700,
+    this.mutationAdUnlock,
+    this.cosmeticPurchaseResult,
   });
 
   final Map<String, dynamic> catalog;
   final Map<String, dynamic> powerupCatalog;
   final Map<String, dynamic> inventory;
+  final bool idempotentPowerupPurchase;
+  final ShopBootstrapResult? bootstrapResult;
+  final int powerupPurchaseCoins;
+  final Map<String, dynamic>? mutationAdUnlock;
+  final Map<String, dynamic>? cosmeticPurchaseResult;
 
   int cosmeticPurchases = 0;
   int powerupPurchases = 0;
+  int powerupCatalogReads = 0;
+  int inventoryReads = 0;
+
+  @override
+  Future<ShopBootstrapResult> fetchShopBootstrap({
+    required String identityToken,
+    required String localDate,
+  }) async {
+    final result = bootstrapResult;
+    if (result != null) return result;
+    return super.fetchShopBootstrap(
+      identityToken: identityToken,
+      localDate: localDate,
+    );
+  }
 
   @override
   Future<Map<String, dynamic>> fetchShopCatalog({
@@ -38,6 +63,7 @@ class _FakeShopApi extends BackendApiService {
   Future<Map<String, dynamic>> fetchPowerupShopCatalog({
     required String identityToken,
   }) async {
+    powerupCatalogReads += 1;
     return powerupCatalog;
   }
 
@@ -45,6 +71,7 @@ class _FakeShopApi extends BackendApiService {
   Future<Map<String, dynamic>> fetchPowerupInventory({
     required String identityToken,
   }) async {
+    inventoryReads += 1;
     return inventory;
   }
 
@@ -55,7 +82,7 @@ class _FakeShopApi extends BackendApiService {
     required String idempotencyKey,
   }) async {
     cosmeticPurchases++;
-    return {'coins': 900};
+    return cosmeticPurchaseResult ?? {'coins': 900};
   }
 
   @override
@@ -67,8 +94,10 @@ class _FakeShopApi extends BackendApiService {
   }) async {
     powerupPurchases++;
     return {
-      'coins': 700,
+      if (idempotentPowerupPurchase) 'idempotent': true,
+      'coins': powerupPurchaseCoins,
       'inventory': {'powerupType': 'SIGNAL_JAMMER', 'quantity': 1},
+      if (mutationAdUnlock != null) 'adUnlock': mutationAdUnlock,
     };
   }
 }
@@ -88,42 +117,54 @@ Future<AuthService> _createAuthService() async {
   return authService;
 }
 
-const _jammerDescription =
-    'Jam a rival — they cannot use powerups for 1 hour';
+const _jammerDescription = 'Jam a rival — they cannot use powerups for 1 hour';
 const _hatDescription = 'A very readable blue hat';
 
 Map<String, dynamic> _catalog() => {
-      'coins': 1000,
-      'ownedItemIds': <String>[],
-      'equipped': <String, dynamic>{},
-      'items': [
-        {
-          'id': 'item-hat',
-          'sku': 'HAT_BLUE',
-          'name': 'Blue Hat',
-          'description': _hatDescription,
-          'slot': 'HEAD',
-          'priceCoins': 100,
-          'assetKey': 'hat_blue',
-          'owned': false,
-          'equipped': false,
-        },
-      ],
-    };
+  'coins': 1000,
+  'ownedItemIds': <String>[],
+  'equipped': <String, dynamic>{},
+  'adUnlock': {
+    'coinsPerAd': 100,
+    'maxAds': 3,
+    'maxShortfall': 500,
+    'remainingToday': 3,
+  },
+  'items': [
+    {
+      'id': 'item-hat',
+      'sku': 'HAT_BLUE',
+      'name': 'Blue Hat',
+      'description': _hatDescription,
+      'slot': 'HEAD',
+      'priceCoins': 100,
+      'assetKey': 'hat_blue',
+      'owned': false,
+      'equipped': false,
+    },
+  ],
+};
 
-Map<String, dynamic> _powerupCatalog() => {
-      'coins': 1000,
-      'items': [
-        {
-          'sku': 'POWERUP_SIGNAL_JAMMER',
-          'name': 'Signal Jammer',
-          'description': _jammerDescription,
-          'priceCoins': 300,
-          'powerupType': 'SIGNAL_JAMMER',
-          'ownedQuantity': 0,
-        },
-      ],
-    };
+Map<String, dynamic> _powerupCatalog({int? remainingToday}) => {
+  'coins': 1000,
+  if (remainingToday != null)
+    'adUnlock': {
+      'coinsPerAd': 100,
+      'maxAds': 3,
+      'maxShortfall': 500,
+      'remainingToday': remainingToday,
+    },
+  'items': [
+    {
+      'sku': 'POWERUP_SIGNAL_JAMMER',
+      'name': 'Signal Jammer',
+      'description': _jammerDescription,
+      'priceCoins': 300,
+      'powerupType': 'SIGNAL_JAMMER',
+      'ownedQuantity': 0,
+    },
+  ],
+};
 
 Map<String, dynamic> _inventory() => {'items': <Map<String, dynamic>>[]};
 
@@ -161,33 +202,36 @@ Future<void> _selectCategory(WidgetTester tester, String label) async {
 
 void main() {
   testWidgets(
-      'tapping the price strip on a store powerup opens the detail sheet '
-      'and does NOT purchase', (tester) async {
-    final auth = await _createAuthService();
-    final api = _FakeShopApi(
-      catalog: _catalog(),
-      powerupCatalog: _powerupCatalog(),
-      inventory: _inventory(),
-    );
+    'tapping the price strip on a store powerup opens the detail sheet '
+    'and does NOT purchase',
+    (tester) async {
+      final auth = await _createAuthService();
+      final api = _FakeShopApi(
+        catalog: _catalog(),
+        powerupCatalog: _powerupCatalog(),
+        inventory: _inventory(),
+      );
 
-    await _pumpShop(tester, auth, api);
-    await _selectSegment(tester, 'STORE');
+      await _pumpShop(tester, auth, api);
+      await _selectSegment(tester, 'STORE');
 
-    // The tile's price strip shows the bare price.
-    expect(find.text('300'), findsOneWidget);
+      // The tile's price strip shows the bare price.
+      expect(find.text('300'), findsOneWidget);
 
-    await tester.tap(find.text('300'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('300'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
-    // The detail sheet is open (full description visible), nothing was bought.
-    expect(find.text(_jammerDescription), findsOneWidget);
-    expect(find.text('BUY · 300'), findsOneWidget);
-    expect(api.powerupPurchases, 0);
-  });
+      // The detail sheet is open (full description visible), nothing was bought.
+      expect(find.text(_jammerDescription), findsOneWidget);
+      expect(find.text('BUY · 300'), findsOneWidget);
+      expect(api.powerupPurchases, 0);
+    },
+  );
 
-  testWidgets('the sheet BUY button is what actually purchases the powerup',
-      (tester) async {
+  testWidgets('the sheet BUY button is what actually purchases the powerup', (
+    tester,
+  ) async {
     final auth = await _createAuthService();
     final api = _FakeShopApi(
       catalog: _catalog(),
@@ -207,30 +251,297 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(api.powerupPurchases, 1);
+    expect(api.powerupCatalogReads, 1);
+    expect(api.inventoryReads, 1);
+    expect(auth.coins, 700);
+  });
+
+  testWidgets('idempotent powerup purchase refreshes only powerup components', (
+    tester,
+  ) async {
+    final auth = await _createAuthService();
+    final api = _FakeShopApi(
+      catalog: _catalog(),
+      powerupCatalog: {..._powerupCatalog(), 'coins': 625},
+      inventory: _inventory(),
+      idempotentPowerupPurchase: true,
+    );
+
+    await _pumpShop(tester, auth, api);
+    await _selectSegment(tester, 'STORE');
+    await tester.ensureVisible(find.text('Signal Jammer'));
+    await tester.tap(find.text('Signal Jammer'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('BUY · 300'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(api.powerupPurchases, 1);
+    expect(api.powerupCatalogReads, 2);
+    expect(api.inventoryReads, 2);
+    expect(auth.coins, 625);
   });
 
   testWidgets(
-      'tapping the price strip on a store cosmetic opens the detail sheet '
-      'and does NOT purchase', (tester) async {
+    'malformed compact powerups fall back without refetching valid inventory',
+    (tester) async {
+      final auth = await _createAuthService();
+      final api = _FakeShopApi(
+        catalog: _catalog(),
+        powerupCatalog: _powerupCatalog(),
+        inventory: _inventory(),
+        bootstrapResult: ShopBootstrapResult(
+          supported: true,
+          cosmetics: _catalog(),
+          powerups: const {
+            'coins': 1000,
+            'items': [
+              {
+                'sku': 'BROKEN',
+                'name': 'Broken',
+                'description': 'Bad row',
+                'priceCoins': 'malformed',
+                'powerupType': 'SIGNAL_JAMMER',
+                'ownedQuantity': 0,
+              },
+            ],
+            'adUnlock': {},
+          },
+          inventory: _inventory(),
+        ),
+      );
+
+      await _pumpShop(tester, auth, api);
+      await _selectSegment(tester, 'STORE');
+
+      expect(find.text('Signal Jammer'), findsOneWidget);
+      expect(api.powerupCatalogReads, 1);
+      expect(api.inventoryReads, 0);
+    },
+  );
+
+  testWidgets(
+    'malformed compact inventory falls back without refetching valid powerups',
+    (tester) async {
+      final auth = await _createAuthService();
+      final api = _FakeShopApi(
+        catalog: _catalog(),
+        powerupCatalog: _powerupCatalog(),
+        inventory: _inventory(),
+        bootstrapResult: ShopBootstrapResult(
+          supported: true,
+          cosmetics: _catalog(),
+          powerups: _powerupCatalog(remainingToday: 3),
+          inventory: const {
+            'items': [
+              {'powerupType': 'SIGNAL_JAMMER', 'quantity': 'malformed'},
+            ],
+          },
+        ),
+      );
+
+      await _pumpShop(tester, auth, api);
+
+      expect(api.powerupCatalogReads, 0);
+      expect(api.inventoryReads, 1);
+    },
+  );
+
+  testWidgets('powerup mutation applies the returned ad-unlock cap', (
+    tester,
+  ) async {
+    final auth = await _createAuthService();
+    final api = _FakeShopApi(
+      catalog: _catalog(),
+      powerupCatalog: _powerupCatalog(remainingToday: 1),
+      inventory: _inventory(),
+      powerupPurchaseCoins: 0,
+      mutationAdUnlock: const {
+        'coinsPerAd': 100,
+        'maxAds': 3,
+        'maxShortfall': 500,
+        'remainingToday': 0,
+      },
+    );
+
+    await _pumpShop(tester, auth, api);
+    await _selectSegment(tester, 'STORE');
+    await tester.ensureVisible(find.text('Signal Jammer'));
+    await tester.tap(find.text('Signal Jammer'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('BUY · 300'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.ensureVisible(find.text('Signal Jammer'));
+    await tester.tap(find.text('Signal Jammer'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('GET MORE COINS'), findsOneWidget);
+    expect(find.textContaining('WATCH 1 AD'), findsNothing);
+  });
+
+  testWidgets('cosmetic mutation overrides a stale powerup ad-unlock cap', (
+    tester,
+  ) async {
+    final auth = await _createAuthService();
+    final api = _FakeShopApi(
+      catalog: _catalog(),
+      powerupCatalog: _powerupCatalog(remainingToday: 1),
+      inventory: _inventory(),
+      cosmeticPurchaseResult: {
+        'coins': 0,
+        'item': {
+          ...((_catalog()['items'] as List).first as Map<String, dynamic>),
+          'owned': true,
+        },
+        'adUnlock': const {
+          'coinsPerAd': 100,
+          'maxAds': 3,
+          'maxShortfall': 500,
+          'remainingToday': 0,
+        },
+      },
+    );
+
+    await _pumpShop(tester, auth, api);
+    await _selectSegment(tester, 'STORE');
+    await _selectCategory(tester, 'ACCESSORIES');
+    await tester.tap(find.text('Blue Hat'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('BUY · 100'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await _selectCategory(tester, 'POWERUPS');
+    await tester.tap(find.text('Signal Jammer'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('GET MORE COINS'), findsOneWidget);
+    expect(find.textContaining('WATCH 1 AD'), findsNothing);
+  });
+
+  testWidgets('malformed mandatory compact cosmetics use the error state', (
+    tester,
+  ) async {
     final auth = await _createAuthService();
     final api = _FakeShopApi(
       catalog: _catalog(),
       powerupCatalog: _powerupCatalog(),
       inventory: _inventory(),
+      bootstrapResult: const ShopBootstrapResult(
+        supported: true,
+        cosmetics: <String, dynamic>{
+          'coins': 1000,
+          'ownedItemIds': <String>[],
+          'equipped': <String, dynamic>{},
+          'adUnlock': <String, dynamic>{},
+          'items': <Map<String, dynamic>>[
+            {
+              'id': 'broken',
+              'sku': 'BROKEN',
+              'name': 'Broken',
+              'description': 'Bad row',
+              'slot': 'HEAD',
+              'priceCoins': 'malformed',
+              'assetKey': 'broken',
+              'owned': false,
+              'equipped': false,
+            },
+          ],
+        },
+        powerups: {'coins': 1, 'items': [], 'adUnlock': {}},
+        inventory: {'items': []},
+      ),
+    );
+
+    await _pumpShop(tester, auth, api);
+
+    expect(find.textContaining('Could not load the shop'), findsWidgets);
+    expect(api.powerupCatalogReads, 0);
+    expect(api.inventoryReads, 0);
+  });
+
+  testWidgets('compact cosmetics render when ad-unlock policy is unavailable', (
+    tester,
+  ) async {
+    final auth = await _createAuthService();
+    final cosmetics = {..._catalog()}..remove('adUnlock');
+    final powerups = {..._powerupCatalog()}..remove('adUnlock');
+    final api = _FakeShopApi(
+      catalog: _catalog(),
+      powerupCatalog: _powerupCatalog(),
+      inventory: _inventory(),
+      bootstrapResult: ShopBootstrapResult(
+        supported: true,
+        cosmetics: cosmetics,
+        powerups: powerups,
+        inventory: _inventory(),
+      ),
     );
 
     await _pumpShop(tester, auth, api);
     await _selectSegment(tester, 'STORE');
     await _selectCategory(tester, 'ACCESSORIES');
 
-    expect(find.text('100'), findsOneWidget);
-
-    await tester.tap(find.text('100'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(find.text(_hatDescription), findsOneWidget);
-    expect(find.text('BUY · 100'), findsOneWidget);
-    expect(api.cosmeticPurchases, 0);
+    expect(find.text('Blue Hat'), findsOneWidget);
+    expect(api.powerupCatalogReads, 0);
+    expect(api.inventoryReads, 0);
   });
+
+  testWidgets(
+    'completed legacy bootstrap does not retry absent optional reads',
+    (tester) async {
+      final auth = await _createAuthService();
+      final api = _FakeShopApi(
+        catalog: _catalog(),
+        powerupCatalog: _powerupCatalog(),
+        inventory: _inventory(),
+        bootstrapResult: ShopBootstrapResult(
+          supported: false,
+          cosmetics: _catalog(),
+          powerups: null,
+          inventory: null,
+        ),
+      );
+
+      await _pumpShop(tester, auth, api);
+      await _selectSegment(tester, 'STORE');
+      await _selectCategory(tester, 'ACCESSORIES');
+
+      expect(find.text('Blue Hat'), findsOneWidget);
+      expect(api.powerupCatalogReads, 0);
+      expect(api.inventoryReads, 0);
+    },
+  );
+
+  testWidgets(
+    'tapping the price strip on a store cosmetic opens the detail sheet '
+    'and does NOT purchase',
+    (tester) async {
+      final auth = await _createAuthService();
+      final api = _FakeShopApi(
+        catalog: _catalog(),
+        powerupCatalog: _powerupCatalog(),
+        inventory: _inventory(),
+      );
+
+      await _pumpShop(tester, auth, api);
+      await _selectSegment(tester, 'STORE');
+      await _selectCategory(tester, 'ACCESSORIES');
+
+      expect(find.text('100'), findsOneWidget);
+
+      await tester.tap(find.text('100'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text(_hatDescription), findsOneWidget);
+      expect(find.text('BUY · 100'), findsOneWidget);
+      expect(api.cosmeticPurchases, 0);
+    },
+  );
 }

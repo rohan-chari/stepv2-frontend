@@ -50,6 +50,48 @@ void main() {
     expect((events.first as Map)['context'], {'source': 'races'});
   });
 
+  test(
+    'extra-spin funnel events retain only their bounded contract context',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final service = ActivationAnalyticsService(
+        backendApiService: _AnalyticsApi(),
+      );
+
+      const names = <String>[
+        'extra_spin_offer_shown',
+        'extra_spin_cta_tapped',
+        'extra_spin_ad_ready',
+        'extra_spin_ad_not_ready',
+        'extra_spin_ad_completed',
+        'extra_spin_claim_succeeded',
+      ];
+      for (final name in names) {
+        await service.record(
+          name,
+          context: const {
+            'surface': 'home',
+            'result': 'load_failed',
+            'unapproved': 'must-not-send',
+          },
+        );
+      }
+      await service.record(
+        'not_an_extra_spin_event',
+        context: const {'surface': 'home'},
+      );
+
+      final prefs = await SharedPreferences.getInstance();
+      final events =
+          jsonDecode(prefs.getString('activation_events_v1')!) as List;
+      expect(events, hasLength(names.length));
+      expect(events.map((event) => (event as Map)['name']), names);
+      for (final event in events.cast<Map>()) {
+        expect(event['context'], {'surface': 'home', 'result': 'load_failed'});
+      }
+    },
+  );
+
   test('next-race analytics keep only validated UUID identifiers', () async {
     SharedPreferences.setMockInitialValues({});
     final service = ActivationAnalyticsService(

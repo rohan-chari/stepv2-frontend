@@ -25,21 +25,45 @@ class RaceFeedEvent {
     this.targetUserId,
   });
 
-  factory RaceFeedEvent.fromJson(Map<String, dynamic> json) {
-    final createdRaw = json['createdAt'] as String?;
+  static RaceFeedEvent? tryFromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final id = raw['id'];
+    if (id is! String || id.isEmpty) return null;
+    final createdRaw = raw['createdAt'];
     return RaceFeedEvent(
-      id: json['id'] as String,
-      eventType: (json['eventType'] as String?) ?? '',
-      powerupType: json['powerupType'] as String?,
-      description:
-          (json['body'] as String?) ?? (json['description'] as String?) ?? '',
-      actorUserId: json['actorUserId'] as String?,
-      targetUserId: json['targetUserId'] as String?,
+      id: id,
+      eventType: raw['eventType'] is String ? raw['eventType'] as String : '',
+      powerupType: raw['powerupType'] is String
+          ? raw['powerupType'] as String
+          : null,
+      description: raw['body'] is String
+          ? raw['body'] as String
+          : raw['description'] is String
+          ? raw['description'] as String
+          : '',
+      actorUserId: raw['actorUserId'] is String
+          ? raw['actorUserId'] as String
+          : null,
+      targetUserId: raw['targetUserId'] is String
+          ? raw['targetUserId'] as String
+          : null,
       createdAt: createdRaw != null
-          ? DateTime.tryParse(createdRaw)?.toLocal() ?? DateTime.now()
+          ? DateTime.tryParse(
+                  createdRaw is String ? createdRaw : '',
+                )?.toLocal() ??
+                DateTime.now()
           : DateTime.now(),
     );
   }
+
+  factory RaceFeedEvent.fromJson(Map<String, dynamic> json) =>
+      tryFromJson(json) ??
+      RaceFeedEvent(
+        id: 'invalid_${DateTime.now().microsecondsSinceEpoch}',
+        eventType: '',
+        description: '',
+        createdAt: DateTime.now(),
+      );
 }
 
 /// Per-race Activity (system/powerup events) state. Read-only feed that mirrors
@@ -68,6 +92,18 @@ class RaceFeedService extends ChangeNotifier {
   bool get hasMore => _hasMore;
   Object? get lastError => _lastError;
 
+  void beginCombinedLoad() {
+    if (_disposed) return;
+    _loading = true;
+    _lastError = null;
+    _safeNotify();
+  }
+
+  void endCombinedLoad() {
+    if (_disposed) return;
+    _loading = false;
+  }
+
   String? get _token => authService.authToken;
 
   void _safeNotify() {
@@ -89,13 +125,7 @@ class RaceFeedService extends ChangeNotifier {
         kind: 'SYSTEM',
       );
       if (_disposed) return;
-      final list =
-          (result['messages'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-      _events
-        ..clear()
-        ..addAll(list.map(RaceFeedEvent.fromJson));
-      _cursor = result['nextCursor'] as String?;
-      _hasMore = _cursor != null;
+      applyInitialStream(result);
     } catch (e) {
       _lastError = e;
     } finally {
@@ -119,10 +149,15 @@ class RaceFeedService extends ChangeNotifier {
         kind: 'SYSTEM',
       );
       if (_disposed) return;
-      final list =
-          (result['messages'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-      _events.addAll(list.map(RaceFeedEvent.fromJson));
-      _cursor = result['nextCursor'] as String?;
+      final list = result['messages'];
+      if (list is List) {
+        _events.addAll(
+          list.map(RaceFeedEvent.tryFromJson).whereType<RaceFeedEvent>(),
+        );
+      }
+      _cursor = result['nextCursor'] is String
+          ? result['nextCursor'] as String
+          : null;
       _hasMore = _cursor != null;
     } catch (e) {
       _lastError = e;
@@ -145,20 +180,52 @@ class RaceFeedService extends ChangeNotifier {
         kind: 'SYSTEM',
       );
       if (_disposed) return;
-      final list =
-          (result['messages'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-      final fresh = list.map(RaceFeedEvent.fromJson).toList();
-      final existingIds = _events.map((e) => e.id).toSet();
-      final newEvents = fresh
-          .where((e) => !existingIds.contains(e.id))
-          .toList();
-      if (newEvents.isEmpty) return;
-      _events.insertAll(0, newEvents);
-      _events.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      _safeNotify();
+      applyTopStream(result);
     } catch (_) {
       // Silent — polling.
     }
+  }
+
+  void applyInitialStream(Map<String, dynamic> stream) {
+    if (_disposed) return;
+    final list = stream['messages'];
+    _events
+      ..clear()
+      ..addAll(
+        list is List
+            ? list.map(RaceFeedEvent.tryFromJson).whereType<RaceFeedEvent>()
+            : const <RaceFeedEvent>[],
+      );
+    _cursor = stream['nextCursor'] is String
+        ? stream['nextCursor'] as String
+        : null;
+    _hasMore = _cursor != null;
+    _loading = false;
+    _lastError = null;
+    _safeNotify();
+  }
+
+  void applyTopStream(Map<String, dynamic> stream) {
+    if (_disposed) return;
+    final list = stream['messages'];
+    final fresh = list is List
+        ? list.map(RaceFeedEvent.tryFromJson).whereType<RaceFeedEvent>()
+        : const Iterable<RaceFeedEvent>.empty();
+    final existingIds = _events.map((event) => event.id).toSet();
+    final additions = fresh
+        .where((event) => !existingIds.contains(event.id))
+        .toList();
+    if (additions.isEmpty) return;
+    _events.insertAll(0, additions);
+    _events.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    _safeNotify();
+  }
+
+  void applyCombinedError(Object error) {
+    if (_disposed) return;
+    _loading = false;
+    _lastError = error;
+    _safeNotify();
   }
 
   void startPolling({Duration interval = const Duration(seconds: 5)}) {

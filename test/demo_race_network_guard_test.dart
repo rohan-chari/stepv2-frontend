@@ -22,6 +22,9 @@ void main() {
   final demoSource = File(
     'lib/demo/demo_race_api_service.dart',
   ).readAsStringSync();
+  final tutorialSource = File(
+    'lib/tutorial/tutorial_preview_data.dart',
+  ).readAsStringSync();
 
   /// Every `<receiver>.<method>(` name called on an injected api handle in
   /// [path], for the given receiver names.
@@ -36,6 +39,10 @@ void main() {
   bool overridesMethod(String name) =>
       RegExp('\\b$name\\(\\s*\\{').hasMatch(demoSource) ||
       RegExp('\\b$name\\(').hasMatch(demoSource);
+
+  bool tutorialOverridesMethod(String name) =>
+      RegExp('\\b$name\\(\\s*\\{').hasMatch(tutorialSource) ||
+      RegExp('\\b$name\\(').hasMatch(tutorialSource);
 
   test('DemoRaceApiService overrides every _api call in RaceDetailScreen', () {
     final calls = apiCallsIn('lib/screens/race_detail_screen.dart', ['_api']);
@@ -105,6 +112,10 @@ void main() {
     final calls = {
       ...apiCallsIn('lib/services/race_chat_service.dart', ['api', '_api']),
       ...apiCallsIn('lib/services/race_feed_service.dart', ['api', '_api']),
+      ...apiCallsIn('lib/services/race_stream_coordinator.dart', [
+        'api',
+        '_api',
+      ]),
     };
 
     final missing = calls.where((m) => !overridesMethod(m)).toList()..sort();
@@ -112,6 +123,25 @@ void main() {
       missing,
       isEmpty,
       reason: 'unoverridden chat/feed api calls: $missing',
+    );
+  });
+
+  test('tutorial preview overrides every race-detail stream call', () {
+    const calls = {
+      'fetchRaceBootstrap',
+      'fetchRaceProgressCompact',
+      'fetchRaceMessageStreams',
+    };
+
+    final missing =
+        calls.where((method) => !tutorialOverridesMethod(method)).toList()
+          ..sort();
+    expect(
+      missing,
+      isEmpty,
+      reason:
+          'TutorialPreviewBackendApiService does not override these calls; '
+          'the real tutorial could reach the network: $missing',
     );
   });
 

@@ -41,9 +41,21 @@ class _SignalJammerBackendApiService extends BackendApiService {
       'powerupsEnabled': true,
       'endsAt': '2026-12-10T12:00:00.000Z',
       'participants': const [
-        {'userId': 'user-1', 'displayName': 'Trail Walker', 'status': 'ACCEPTED'},
-        {'userId': 'user-2', 'displayName': 'Hill Climber', 'status': 'ACCEPTED'},
-        {'userId': 'user-3', 'displayName': 'Ridge Runner', 'status': 'ACCEPTED'},
+        {
+          'userId': 'user-1',
+          'displayName': 'Trail Walker',
+          'status': 'ACCEPTED',
+        },
+        {
+          'userId': 'user-2',
+          'displayName': 'Hill Climber',
+          'status': 'ACCEPTED',
+        },
+        {
+          'userId': 'user-3',
+          'displayName': 'Ridge Runner',
+          'status': 'ACCEPTED',
+        },
       ],
     };
   }
@@ -117,6 +129,7 @@ class _SignalJammerBackendApiService extends BackendApiService {
     required String powerupId,
     String? targetUserId,
     String? targetDirection,
+    String? targetEffectId,
     int upgradeLevel = 0,
   }) async {
     usePowerupCalls += 1;

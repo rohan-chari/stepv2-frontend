@@ -262,7 +262,7 @@ user lock around eligibility check → race create → creator participant creat
 The lock covers no notification, baseline, or network work, so two simultaneous
 requests cannot both create a race.
 
-Separately, each user may be an accepted participant in at most three live
+Separately, each user may be an accepted participant in at most five live
 `QUICK_CREATE` races across creator and joiner roles. A quick join acquires the
 user lock and then the existing race lock, always in that global order across
 both public-ID and share-token joins. Membership count and participant insert
@@ -538,11 +538,11 @@ persisted `creationSource`/`startPolicy` pair, it treats the race as a normal
 manual-start race and never shows automatic-start copy.
 
 Both existing join endpoints keep their request/success shapes. When joining a
-quick-created race would exceed three live quick memberships, return HTTP 409:
+quick-created race would exceed five live quick memberships, return HTTP 409:
 
 ```json
 {
-  "error": "Finish or leave a quick race before joining another.",
+  "error": "You're already in 5 races that start automatically. Try again after one is over.",
   "code": "QUICK_RACE_MEMBERSHIP_LIMIT"
 }
 ```
@@ -906,7 +906,7 @@ A frozen client against the new backend:
 - does not send `creationSource` or `startPolicy`;
 - retains manual-start behavior;
 - cannot create a normalized quick race because it sends no quick metadata, but
-  is subject to the server-authoritative three-live-quick-membership safety cap
+  is subject to the server-authoritative five-live-quick-membership safety cap
   when joining a persisted quick race; a legacy UI receives the existing
   friendly join-error path rather than silently exceeding the economy limit;
 - can still join public races through existing surfaces; and
@@ -999,7 +999,7 @@ tests and are not represented as deterministic integration coverage.
 11. Two concurrent quick-create requests from one eligible creator produce one
     race; the loser receives `QUICK_RACE_ALREADY_LIVE`, while customized and
     frozen-client creation paths are unaffected.
-12. A user joining a fourth live quick-created race receives
+12. A user joining a sixth live quick-created race receives
     `QUICK_RACE_MEMBERSHIP_LIMIT`; customized/frozen-client races do not count.
     Concurrent joins by the same user into two different quick races acquire the
     shared user lock and exactly one succeeds when only one slot remains.
@@ -1158,10 +1158,14 @@ Only consider these after V1 data is reviewed:
 - **Final architect re-review — APPROVE:** No required changes or suggestions
   remain; the contract is ready for backend-first implementation after the
   explicit approval gate.
-- **Combined code-review correction:** Made the three-live-quick-membership cap
+- **Combined code-review correction:** Made the live-quick-membership cap
   server-authoritative for every join client. Capability headers may gate new UI
   and query cost, but never an abuse control; this resolves the earlier frozen-
   client exception in favor of economy safety for newly introduced quick races.
+- **Owner adjustment (2026-08-13):** Raised the server-authoritative live quick
+  membership cap from three to five. Replaced the invisible internal “quick
+  race” wording and unavailable leave instruction with dynamic, user-visible
+  automatic-start race copy.
 - **Implementation review — APPROVE:** Repaired combined iOS/Android deferred
   attribution, provisioned race provenance, made referral velocity decisions
   concurrency-safe, added durable lifecycle analytics, refreshed authoritative

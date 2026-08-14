@@ -330,6 +330,31 @@ class TutorialPreviewBackendApiService extends BackendApiService {
   }
 
   @override
+  Future<RaceBootstrapResult> fetchRaceBootstrap({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    return RaceBootstrapResult(
+      supported: true,
+      race: tutorialPreviewRaceDetail(),
+      progress: tutorialPreviewRaceProgress(),
+      globalPowerupInventory: const {'items': []},
+    );
+  }
+
+  @override
+  Future<RaceProgressResult> fetchRaceProgressCompact({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    return RaceProgressResult(
+      progress: tutorialPreviewRaceProgress(),
+      globalPowerupInventory: const {'items': []},
+      hasCompactInventory: true,
+    );
+  }
+
+  @override
   Future<Map<String, dynamic>> fetchRaceMessages({
     required String identityToken,
     required String raceId,
@@ -338,6 +363,34 @@ class TutorialPreviewBackendApiService extends BackendApiService {
     String? kind,
   }) async {
     return tutorialPreviewRaceMessages(kind);
+  }
+
+  @override
+  Future<RaceMessageStreamsResult> fetchRaceMessageStreams({
+    required String identityToken,
+    required String raceId,
+    required bool includeUser,
+    int limit = 50,
+  }) async {
+    final system = tutorialPreviewRaceMessages('SYSTEM');
+    final user = includeUser ? tutorialPreviewRaceMessages('USER') : null;
+    final userRows = user?['messages'];
+    final recentIds = userRows is List
+        ? userRows
+              .whereType<Map>()
+              .map((row) => row['id'])
+              .whereType<String>()
+              .take(limit)
+              .toList(growable: false)
+        : const <String>[];
+    return RaceMessageStreamsResult(
+      supported: true,
+      systemStream: system,
+      userStream: user,
+      systemResolved: true,
+      userResolved: includeUser,
+      chatWatermark: {'recentIds': recentIds},
+    );
   }
 
   // No-op so the race screen's read-receipt ping never hits the network.

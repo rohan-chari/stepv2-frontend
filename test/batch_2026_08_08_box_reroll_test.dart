@@ -64,7 +64,6 @@ Future<void> _pumpCase(
   await tester.pump(const Duration(milliseconds: 100));
 }
 
-
 // ── Fix-1 harness: the real RaceDetailScreen -> AdService -> API chain ──────
 
 class _FakeAdController implements ExtraSpinAdController {
@@ -82,10 +81,7 @@ class _FakeAdController implements ExtraSpinAdController {
   bool get isReady => _loaded;
 
   @override
-  Future<void> load({
-    required String userId,
-    required String localDate,
-  }) async {
+  Future<void> load({required String userId, required String localDate}) async {
     lastUserId = userId;
     lastLocalDate = localDate;
     _loaded = true;
@@ -256,9 +252,7 @@ Future<void> _pumpRaceDetail(
 
 /// Taps the mystery-box slot and drives its reel to the reveal.
 Future<void> _openBoxAndReveal(WidgetTester tester) async {
-  final boxSlot = find.byWidgetPredicate(
-    (w) => w is ItemSlot && w.state == ItemSlotState.mysteryBox,
-  );
+  final boxSlot = find.byType(MysteryBoxButton);
   await tester.ensureVisible(boxSlot);
   await tester.pump(const Duration(milliseconds: 100));
   await tester.tap(boxSlot);
@@ -373,8 +367,11 @@ void main() {
               opens++;
               return _openResult();
             },
-            onReroll: (id) async =>
-                {'id': id, 'type': 'COMPRESSION_SOCKS', 'rarity': 'RARE'},
+            onReroll: (id) async => {
+              'id': id,
+              'type': 'COMPRESSION_SOCKS',
+              'rarity': 'RARE',
+            },
             onRevealed: revealed.add,
           ),
         ),
@@ -623,7 +620,6 @@ void main() {
       },
     );
   });
-
 }
 
 String _readSource(String relativePath) {

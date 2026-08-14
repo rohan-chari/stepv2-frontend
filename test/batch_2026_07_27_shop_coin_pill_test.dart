@@ -129,7 +129,9 @@ Future<void> _pump(
   addTearDown(() => tester.binding.setSurfaceSize(null));
   final auth = await _auth(coins: coins);
   await tester.pumpWidget(
-    MaterialApp(home: ShopTab(authService: auth, backendApiService: api)),
+    MaterialApp(
+      home: ShopTab(authService: auth, backendApiService: api),
+    ),
   );
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
@@ -143,7 +145,7 @@ Future<void> _openInventoryCharacters(WidgetTester tester) async {
 }
 
 /// True when the laid-out label was clipped by `maxLines: 1` — i.e. the user
-/// sees "EXTRA SP…" instead of "EXTRA SPIN".
+/// clips a value-forward ticket label instead of scaling it to fit.
 bool _truncated(WidgetTester tester, String label) {
   final paragraph = tester.renderObject<RenderParagraph>(
     find.text(label, skipOffstage: false),
@@ -236,7 +238,9 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(
-        const MaterialApp(home: Scaffold(body: Center(child: CoinGlyph()))),
+        const MaterialApp(
+          home: Scaffold(body: Center(child: CoinGlyph())),
+        ),
       );
       await tester.pump();
       // A spinning coin drives an AnimationController, so the tester would
@@ -245,9 +249,9 @@ void main() {
     });
   });
 
-  group('item 4 — PillButton shrinks its label instead of truncating it', () {
+  group('item 4 — quick-action labels fit rather than truncate', () {
     for (final width in <double>[320, 375]) {
-      testWidgets('EXTRA SPIN is not ellipsized at ${width.toInt()}pt', (
+      testWidgets('extra-spin pill fits at ${width.toInt()}pt', (
         tester,
       ) async {
         await tester.binding.setSurfaceSize(Size(width, 700));
@@ -277,11 +281,11 @@ void main() {
         );
         await tester.pump();
 
-        expect(find.text('EXTRA SPIN'), findsOneWidget);
+        expect(find.text('BONUS SPIN'), findsOneWidget);
         expect(
-          _truncated(tester, 'EXTRA SPIN'),
+          _truncated(tester, 'BONUS SPIN'),
           isFalse,
-          reason: 'EXTRA SPIN must not ellipsize at ${width.toInt()}pt',
+          reason: 'bonus-spin pill must fit at ${width.toInt()}pt',
         );
         expect(_truncated(tester, 'SHOP'), isFalse);
       });
@@ -391,30 +395,31 @@ void main() {
       );
     });
 
-    testWidgets('an explicit padding override still wins on a fullWidth button', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: PillButton(
-              label: 'GO',
-              fullWidth: true,
-              padding: EdgeInsets.zero,
-              onPressed: () {},
+    testWidgets(
+      'an explicit padding override still wins on a fullWidth button',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: PillButton(
+                label: 'GO',
+                fullWidth: true,
+                padding: EdgeInsets.zero,
+                onPressed: () {},
+              ),
             ),
           ),
-        ),
-      );
-      await tester.pump();
-      final container = tester.widget<AnimatedContainer>(
-        find.descendant(
-          of: find.byType(PillButton),
-          matching: find.byType(AnimatedContainer),
-        ),
-      );
-      expect(container.padding, EdgeInsets.zero);
-    });
+        );
+        await tester.pump();
+        final container = tester.widget<AnimatedContainer>(
+          find.descendant(
+            of: find.byType(PillButton),
+            matching: find.byType(AnimatedContainer),
+          ),
+        );
+        expect(container.padding, EdgeInsets.zero);
+      },
+    );
 
     testWidgets('a leading widget takes precedence over icon', (tester) async {
       await tester.pumpWidget(

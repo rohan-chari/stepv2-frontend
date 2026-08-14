@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
+import '../services/app_route_observer.dart';
 import '../styles.dart';
 import '../utils/share_helper.dart';
 import '../utils/tournament.dart';
@@ -52,7 +53,7 @@ class TournamentDetailScreen extends StatefulWidget {
 }
 
 class _TournamentDetailScreenState extends State<TournamentDetailScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, RouteAware {
   BackendApiService get _api => widget.backendApiService;
   String get _myUserId => widget.authService.userId ?? '';
 
@@ -69,6 +70,10 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
 
   // Guards against overlapping loads clobbering a fresher result out of order.
   int _loadSeq = 0;
+  bool _routeVisible = true;
+  bool _appResumed = true;
+  bool _returnRefreshRunning = false;
+  ModalRoute<dynamic>? _subscribedRoute;
 
   @override
   void initState() {
@@ -78,8 +83,45 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route != null && !identical(route, _subscribedRoute)) {
+      if (_subscribedRoute != null) appRouteObserver.unsubscribe(this);
+      _subscribedRoute = route;
+      appRouteObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void didPushNext() {
+    _routeVisible = false;
+    _pollTimer?.cancel();
+    _countdownTimer?.cancel();
+  }
+
+  @override
+  void didPopNext() {
+    _routeVisible = true;
+    unawaited(_refreshAfterCoverage());
+  }
+
+  Future<void> _refreshAfterCoverage() async {
+    if (!_routeVisible || !_appResumed || _returnRefreshRunning) return;
+    _returnRefreshRunning = true;
+    try {
+      if (_pollingActive) await _load();
+      if (_pollingActive) _startPolling();
+      if (_tournament != null) _syncLifecycleTimers();
+    } finally {
+      _returnRefreshRunning = false;
+    }
+  }
+
+  @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    appRouteObserver.unsubscribe(this);
     _pollTimer?.cancel();
     _countdownTimer?.cancel();
     super.dispose();
@@ -87,6 +129,12 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _appResumed = false;
+    } else if (state == AppLifecycleState.resumed) {
+      _appResumed = true;
+    }
     // Reuse the race screen's pure pause/resume decision so backgrounding stops
     // the network poll + countdown, and foregrounding (after we'd been polling)
     // refreshes once then re-arms (spec §9, race_detail_screen.dart:263-296).
@@ -96,8 +144,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
         _countdownTimer?.cancel();
         break;
       case RacePollLifecycleAction.resume:
-        _load();
-        _startPolling();
+        if (_routeVisible) unawaited(_refreshAfterCoverage());
         break;
       case RacePollLifecycleAction.none:
         break;
@@ -168,11 +215,13 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
   void _startPolling() {
     _pollingActive = true;
     _pollTimer?.cancel();
+    if (!_routeVisible || !_appResumed) return;
     _pollTimer = Timer.periodic(const Duration(seconds: 60), (_) => _load());
   }
 
   void _startCountdown() {
     _countdownTimer?.cancel();
+    if (!_routeVisible || !_appResumed) return;
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       TournamentDetailScreen.debugCountdownTicks++;
@@ -219,33 +268,95 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
   Future<void> _refreshWallet(String token) async {
     try {
       final me = await _api.fetchMe(identityToken: token);
+      final coins = me['coins'];
+      final heldCoins = me['heldCoins'];
       await widget.authService.updateCoins(
-        me['coins'] as int? ?? widget.authService.coins,
+        coins is num ? coins.toInt() : widget.authService.coins,
       );
       await widget.authService.updateHeldCoins(
-        me['heldCoins'] as int? ?? widget.authService.heldCoins,
+        heldCoins is num ? heldCoins.toInt() : widget.authService.heldCoins,
       );
     } catch (_) {}
   }
 
+  bool _applyReturnedTournament(Map<String, dynamic> response) {
+    final raw = response['tournament'];
+    if (raw is! Map ||
+        raw['id'] is! String ||
+        raw['id'] != widget.tournamentId ||
+        raw['name'] is! String ||
+        raw['status'] is! String ||
+        raw['bracketSize'] is! num ||
+        raw['participants'] is! List ||
+        raw['rounds'] is! List) {
+      return false;
+    }
+    final tournament = <String, dynamic>{
+      for (final entry in raw.entries)
+        if (entry.key is String) entry.key as String: entry.value,
+    };
+    setState(() {
+      _tournament = tournament;
+      _error = null;
+      _loading = false;
+    });
+    _syncLifecycleTimers();
+    return true;
+  }
+
+  Future<bool> _applyReturnedWallet(Map<String, dynamic> response) async {
+    final wallet = response['wallet'];
+    if (wallet is! Map) return false;
+    final coins = wallet['coins'];
+    final heldCoins = wallet['heldCoins'];
+    if (coins is! num || heldCoins is! num) return false;
+    await widget.authService.updateCoins(coins.toInt());
+    await widget.authService.updateHeldCoins(heldCoins.toInt());
+    return true;
+  }
+
+  Future<void> _consumeActionResult(
+    String token,
+    Map<String, dynamic> response, {
+    required bool screenRemains,
+    required bool walletExpected,
+  }) async {
+    if (screenRemains && mounted && !_applyReturnedTournament(response)) {
+      await _load();
+    }
+    if (walletExpected && !await _applyReturnedWallet(response)) {
+      await _refreshWallet(token);
+    }
+  }
+
   Future<void> _start() async {
     await _act((token) async {
-      await _api.startTournament(
+      final response = await _api.startTournament(
         identityToken: token,
         tournamentId: widget.tournamentId,
       );
+      await _consumeActionResult(
+        token,
+        response,
+        screenRemains: true,
+        walletExpected: false,
+      );
       if (mounted) showInfoToast(context, 'The bracket is set. Go!');
     });
-    await _load();
   }
 
   Future<void> _leave() async {
     await _act((token) async {
-      await _api.leaveTournament(
+      final response = await _api.leaveTournament(
         identityToken: token,
         tournamentId: widget.tournamentId,
       );
-      await _refreshWallet(token);
+      await _consumeActionResult(
+        token,
+        response,
+        screenRemains: false,
+        walletExpected: true,
+      );
       if (mounted) Navigator.of(context).pop(true);
     });
   }
@@ -258,11 +369,16 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     );
     if (ok != true) return;
     await _act((token) async {
-      await _api.cancelTournament(
+      final response = await _api.cancelTournament(
         identityToken: token,
         tournamentId: widget.tournamentId,
       );
-      await _refreshWallet(token);
+      await _consumeActionResult(
+        token,
+        response,
+        screenRemains: false,
+        walletExpected: true,
+      );
       if (mounted) Navigator.of(context).pop(true);
     });
   }
@@ -271,14 +387,18 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     final ok = await _confirmBuyInIfNeeded();
     if (!ok) return;
     await _act((token) async {
-      await _api.joinTournament(
+      final response = await _api.joinTournament(
         identityToken: token,
         tournamentId: widget.tournamentId,
       );
-      await _refreshWallet(token);
+      await _consumeActionResult(
+        token,
+        response,
+        screenRemains: true,
+        walletExpected: true,
+      );
       if (mounted) showInfoToast(context, "You're in the bracket!");
     });
-    await _load();
   }
 
   Future<void> _respond(bool accept) async {
@@ -287,17 +407,21 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
       if (!ok) return;
     }
     await _act((token) async {
-      await _api.respondToTournamentInvite(
+      final response = await _api.respondToTournamentInvite(
         identityToken: token,
         tournamentId: widget.tournamentId,
         accept: accept,
       );
-      await _refreshWallet(token);
+      await _consumeActionResult(
+        token,
+        response,
+        screenRemains: accept,
+        walletExpected: true,
+      );
       if (!accept && mounted) {
         Navigator.of(context).pop(true);
       }
     });
-    if (accept) await _load();
   }
 
   Future<void> _forfeit() async {
@@ -313,12 +437,17 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     );
     if (ok != true) return;
     await _act((token) async {
-      await _api.forfeitTournament(
+      final response = await _api.forfeitTournament(
         identityToken: token,
         tournamentId: widget.tournamentId,
       );
+      await _consumeActionResult(
+        token,
+        response,
+        screenRemains: true,
+        walletExpected: false,
+      );
     });
-    await _load();
   }
 
   Future<void> _invite() async {
@@ -334,6 +463,12 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
         tournamentId: widget.tournamentId,
         userIds: [picked.$1],
       );
+      await _consumeActionResult(
+        token,
+        res,
+        screenRemains: true,
+        walletExpected: false,
+      );
       final needsUpdate = (res['needsUpdate'] as List?) ?? const [];
       if (mounted) {
         if (needsUpdate.isNotEmpty) {
@@ -346,7 +481,6 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
         }
       }
     });
-    await _load();
   }
 
   Future<void> _share() async {
@@ -460,19 +594,16 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
   }
 
   void _openMatchup(String raceId) {
-    Navigator.of(context)
-        .push(
-          MaterialPageRoute(
-            builder: (_) => RaceDetailScreen(
-              authService: widget.authService,
-              raceId: raceId,
-              friends: widget.friends,
-            ),
-          ),
-        )
-        .then((_) {
-          if (mounted) _load();
-        });
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => RaceDetailScreen(
+          authService: widget.authService,
+          raceId: raceId,
+          backendApiService: widget.backendApiService,
+          friends: widget.friends,
+        ),
+      ),
+    );
   }
 
   // -- Build ---------------------------------------------------------------

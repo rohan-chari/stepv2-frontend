@@ -36,6 +36,27 @@ class DemoRaceApiService extends BackendApiService {
     required String raceId,
   }) async => engine.raceProgress(_now);
 
+  @override
+  Future<RaceBootstrapResult> fetchRaceBootstrap({
+    required String identityToken,
+    required String raceId,
+  }) async => RaceBootstrapResult(
+    supported: true,
+    race: engine.raceDetails(_now, wallNow: DateTime.now()),
+    progress: engine.raceProgress(_now),
+    globalPowerupInventory: const {'items': []},
+  );
+
+  @override
+  Future<RaceProgressResult> fetchRaceProgressCompact({
+    required String identityToken,
+    required String raceId,
+  }) async => RaceProgressResult(
+    progress: engine.raceProgress(_now),
+    globalPowerupInventory: const {'items': []},
+    hasCompactInventory: true,
+  );
+
   /// Empty global stash: the demo's lesson is the in-race slots, and a stash
   /// row would offer a "USE" button that spends real coins.
   @override
@@ -304,6 +325,34 @@ class DemoRaceApiService extends BackendApiService {
     int? limit,
     String? kind,
   }) async => engine.messages(kind);
+
+  @override
+  Future<RaceMessageStreamsResult> fetchRaceMessageStreams({
+    required String identityToken,
+    required String raceId,
+    required bool includeUser,
+    int limit = 50,
+  }) async {
+    final system = engine.messages('SYSTEM');
+    final user = includeUser ? engine.messages('USER') : null;
+    final userRows = user?['messages'];
+    final ids = userRows is List
+        ? userRows
+              .whereType<Map>()
+              .map((row) => row['id'])
+              .whereType<String>()
+              .take(50)
+              .toList(growable: false)
+        : const <String>[];
+    return RaceMessageStreamsResult(
+      supported: true,
+      systemStream: system,
+      userStream: user,
+      systemResolved: true,
+      userResolved: includeUser,
+      chatWatermark: {'recentIds': ids},
+    );
+  }
 
   @override
   Future<Map<String, dynamic>> markRaceChatRead({

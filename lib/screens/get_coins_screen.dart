@@ -86,14 +86,31 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
   Future<void> _load() async {
     final token = widget.authService.authToken;
     if (token == null || token.isEmpty) return;
-    unawaited(_loadReferralRewards(token));
     try {
-      final res = await _api.fetchDailyRewardStatus(
+      final res = await _api.fetchGetCoinsStatus(
         identityToken: token,
         localDate: _todayLocalDate(),
       );
       if (!mounted) return;
-      setState(() => _status = res);
+      final referralRewards = res['referralRewards'];
+      final referrer = referralRewards is Map
+          ? referralRewards['referrerCoins']
+          : null;
+      final referee = referralRewards is Map
+          ? referralRewards['refereeCoins']
+          : null;
+      if (referrer is num && referee is num) {
+        setState(() {
+          _status = res;
+          _referrerCoins = referrer.toInt();
+          _refereeCoins = referee.toInt();
+        });
+      } else {
+        setState(() => _status = res);
+        // Frozen/legacy backend: only the two referral numbers need the
+        // dashboard fallback; claimed/ad status is already usable.
+        unawaited(_loadReferralRewards(token));
+      }
       await _maybePrepareAd();
     } catch (_) {
       // Status is progressive enhancement here: without it the hub still

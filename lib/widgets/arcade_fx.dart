@@ -227,7 +227,9 @@ class _WobbleBadgeState extends State<WobbleBadge>
       _controller.stop();
       _controller.value = 0.9;
     } else if (!_controller.isAnimating) {
-      _controller.repeat();
+      _controller
+        ..value = 0
+        ..repeat();
     }
   }
 
