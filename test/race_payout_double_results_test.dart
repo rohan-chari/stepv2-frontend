@@ -263,6 +263,31 @@ void main() {
     expect(find.textContaining('DOUBLE +800'), findsNothing);
   });
 
+  testWidgets(
+    'maximum-partial copy tracks a lower server cap instead of assuming 500',
+    (tester) async {
+      final offer = RacePayoutDoubleOffer.tryParse(
+        _offerJson(
+          baseCoins: 300,
+          bonusCoins: 100,
+          maxBonusCoins: 100,
+          remaining: 100,
+        ),
+        popupRaceIds: const ['race-a'],
+      );
+      await _pump(
+        tester,
+        offer: offer,
+        api: _FakeRacePayoutApi(),
+        ads: _FakeRacePayoutAdController(),
+        races: _races(payout: 300),
+      );
+
+      expect(find.text('GET THE MAX +100 BONUS'), findsOneWidget);
+      expect(find.textContaining('MAX +500'), findsNothing);
+    },
+  );
+
   testWidgets('malformed and out-of-popup offers leave no reserved gap', (
     tester,
   ) async {

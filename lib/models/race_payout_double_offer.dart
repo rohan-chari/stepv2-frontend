@@ -24,7 +24,8 @@ class RacePayoutDoubleOffer {
   final int rolling24hRemainingBeforeClaim;
 
   bool get isFullDouble => bonusCoins == baseCoins;
-  bool get isMaximumPartial => bonusCoins == 500 && bonusCoins < baseCoins;
+  bool get isMaximumPartial =>
+      bonusCoins == maxBonusCoins && bonusCoins < baseCoins;
 
   static final RegExp _canonicalUuid = RegExp(
     r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',

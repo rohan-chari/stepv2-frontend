@@ -472,7 +472,7 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
           ? 'Watch one ad to get another $bonus on qualifying race prizes.'
           : 'Watch one ad to get another $bonus.';
     } else if (offer.isMaximumPartial) {
-      title = 'GET THE MAX +500 BONUS';
+      title = 'GET THE MAX +${offer.maxBonusCoins} BONUS';
       body = 'Your qualifying race prizes earn the maximum ad bonus.';
     } else {
       title = 'GET +$bonus BONUS COINS';
