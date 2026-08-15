@@ -36,7 +36,9 @@ void main() {
     );
   });
 
-  Finder boxSlots() => find.byType(MysteryBoxButton);
+  Finder boxSlots() => find.byWidgetPredicate(
+    (w) => w is ItemSlot && w.state == ItemSlotState.mysteryBox,
+  );
 
   Finder heldSlotOf(String type) => find.byWidgetPredicate(
     (w) =>

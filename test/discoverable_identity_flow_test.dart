@@ -378,10 +378,7 @@ void main() {
         ),
       );
 
-      for (final key in const [
-        Key('identity-first-name-field'),
-        Key('identity-last-name-field'),
-      ]) {
+      void expectLegible(Key key) {
         final field = find.byKey(key);
         final fill = tester.widget<TextField>(field).decoration!.fillColor!;
         final text = tester
@@ -400,6 +397,20 @@ void main() {
         // the device into night.
         expect(fill, AppPalette.light.parchmentLight, reason: '$key fill');
       }
+
+      expectLegible(const Key('identity-first-name-field'));
+      expectLegible(const Key('identity-last-name-field'));
+
+      // Page 2's race-name field goes through the same _field helper and is the
+      // one users are most likely to edit, so cover that call site too.
+      await tester.enterText(
+        find.byKey(const Key('identity-first-name-field')),
+        'Nathan',
+      );
+      await tester.tap(find.text("THAT'S ME"));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('identity-race-name-field')), findsOneWidget);
+      expectLegible(const Key('identity-race-name-field'));
     });
   }
 }

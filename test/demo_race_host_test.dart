@@ -602,7 +602,9 @@ void main() {
 
 Finder coachCta() => find.byKey(const Key('demo-coach-cta'));
 
-Finder boxSlots() => find.byType(MysteryBoxButton);
+Finder boxSlots() => find.byWidgetPredicate(
+  (w) => w is ItemSlot && w.state == ItemSlotState.mysteryBox,
+);
 
 Finder heldSlots() => find.byWidgetPredicate(
   (w) => w is ItemSlot && w.state == ItemSlotState.held,

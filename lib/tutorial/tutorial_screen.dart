@@ -7,6 +7,7 @@ import '../services/activation_analytics_service.dart';
 import '../services/auth_service.dart';
 import '../styles.dart';
 import '../widgets/game_container.dart';
+import '../widgets/onboarding_scene.dart' show OnboardingTheme;
 import '../widgets/pill_button.dart';
 import '../widgets/spinning_coin.dart';
 import 'spotlight_overlay.dart';
@@ -312,52 +313,58 @@ class _TutorialScreenState extends State<TutorialScreen> {
       barrierDismissible: false,
       barrierColor: Colors.black.withValues(alpha: 0.62),
       builder: (dialogContext) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 40),
-          child: GameContainer(
-            padding: const EdgeInsets.fromLTRB(28, 32, 28, 24),
-            frameColor: AppColors.of(context).accent,
-            surfaceColor: AppColors.of(context).parchmentLight,
-            glowColor: AppColors.of(context).coinMid,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SpinningCoin(size: 44),
-                const SizedBox(height: 12),
-                Text(
-                  'TUTORIAL COMPLETE',
-                  style: PixelText.title(
-                    size: 13,
-                    color: AppColors.of(context).textMid,
+        // The reward modal is built from the State's context, which sits ABOVE
+        // the daytime pin in build() — without this wrap a night-mode device
+        // flashed a night-palette dialog in the middle of a light-pinned
+        // tutorial. `context` below is the pinned one.
+        return OnboardingTheme(
+          builder: (context) => Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 40),
+            child: GameContainer(
+              padding: const EdgeInsets.fromLTRB(28, 32, 28, 24),
+              frameColor: AppColors.of(context).accent,
+              surfaceColor: AppColors.of(context).parchmentLight,
+              glowColor: AppColors.of(context).coinMid,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SpinningCoin(size: 44),
+                  const SizedBox(height: 12),
+                  Text(
+                    'TUTORIAL COMPLETE',
+                    style: PixelText.title(
+                      size: 13,
+                      color: AppColors.of(context).textMid,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '+$kTutorialRewardCoins coins',
-                  style: PixelText.title(
-                    size: 30,
-                    color: AppColors.of(context).textDark,
+                  const SizedBox(height: 8),
+                  Text(
+                    '+$kTutorialRewardCoins coins',
+                    style: PixelText.title(
+                      size: 30,
+                      color: AppColors.of(context).textDark,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Nice work. Your reward is in the bag. Now go earn some more!',
-                  style: PixelText.body(
-                    size: 15,
-                    color: AppColors.of(context).textMid,
+                  const SizedBox(height: 8),
+                  Text(
+                    'Nice work. Your reward is in the bag. Now go earn some more!',
+                    style: PixelText.body(
+                      size: 15,
+                      color: AppColors.of(context).textMid,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 22),
-                PillButton(
-                  label: 'LET’S GO',
-                  fullWidth: true,
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                ),
-              ],
+                  const SizedBox(height: 22),
+                  PillButton(
+                    label: 'LET’S GO',
+                    fullWidth: true,
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                  ),
+                ],
+              ),
             ),
           ),
         );

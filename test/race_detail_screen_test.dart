@@ -295,6 +295,7 @@ class _CompactRaceRequestApi extends BackendApiService {
   Future<RaceBootstrapResult> fetchRaceBootstrap({
     required String identityToken,
     required String raceId,
+    int? participantsLimit,
   }) async {
     bootstrapCalls += 1;
     final pending = bootstrapCompleter;
@@ -1220,7 +1221,7 @@ void main() {
       expect(find.byType(HomeCourseTrack), findsOneWidget);
       expect(find.text('PRIZE POOL'), findsOneWidget);
       expect(
-        find.text('NEXT POWERUP IN 1,240 · EVERY 5,000 STEPS'),
+        find.text('You earn a powerup every 5,000 steps this race. 1,240 to go.'),
         findsOneWidget,
       );
     },
@@ -1255,7 +1256,7 @@ void main() {
       await tester.pump();
 
       expect(
-        find.text('NEXT POWERUP IN 1,240 · EVERY 5,000 STEPS'),
+        find.text('You earn a powerup every 5,000 steps this race. 1,240 to go.'),
         findsOneWidget,
       );
     },
@@ -1290,10 +1291,10 @@ void main() {
       await tester.pump();
 
       expect(
-        find.text('NEXT POWERUP IN 1,240 · EVERY 5,000 STEPS'),
+        find.text('You earn a powerup every 5,000 steps this race. 1,240 to go.'),
         findsNothing,
       );
-      expect(find.textContaining('NEXT POWERUP IN'), findsNothing);
+      expect(find.textContaining('You earn a powerup every'), findsNothing);
     },
   );
 

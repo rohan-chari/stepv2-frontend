@@ -4962,8 +4962,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                   trailing: _powerupsHeaderTrailing(),
                 ),
                 _sectionCard(
-                  key: const Key('race-powerups-card'),
-                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -4974,7 +4972,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                         // slots it fills.
                         if (_buildNextPowerupHelper() case final helper?)
                           Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
+                            padding: const EdgeInsets.only(bottom: 10),
                             child: helper,
                           ),
                         _buildInventoryContent(),
@@ -5329,13 +5327,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       return null;
     }
 
-    return SizedBox(
-      width: double.infinity,
-      child: Text(
-        'NEXT POWERUP IN ${_formatSteps(stepsUntilNextPowerup)} · EVERY ${_formatSteps(powerupStepInterval)} STEPS',
-        textAlign: TextAlign.center,
-        style: PixelText.title(size: 11, color: AppColors.of(context).textMid),
-      ),
+    return Text(
+      'You earn a powerup every ${_formatSteps(powerupStepInterval)} steps this race. ${_formatSteps(stepsUntilNextPowerup)} to go.',
+      style: PixelText.body(size: 13, color: AppColors.of(context).textMid),
     );
   }
 
@@ -6093,108 +6087,61 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   Widget _buildInventoryContent() {
     final inventory = _normalizedPowerupInventory;
     final slotCount = _readInt(_powerupData?['powerupSlots'], fallback: 3);
-    final visibleEntries = inventory
-        .asMap()
-        .entries
-        .where((entry) => entry.key < slotCount)
-        .toList(growable: false);
-    final boxEntries = visibleEntries
-        .where((entry) => entry.value['status'] == 'MYSTERY_BOX')
-        .toList(growable: false);
-    final heldEntries = visibleEntries
-        .where((entry) => entry.value['status'] != 'MYSTERY_BOX')
-        .toList(growable: false);
-
-    bool allowed(Map<String, dynamic> powerup) =>
-        widget.demoTapGate?.call(powerup) ?? true;
-
-    ItemSlot heldSlot(MapEntry<int, Map<String, dynamic>> entry) {
-      final powerup = entry.value;
-      final rawType = powerup['type'];
-      final rawRarity = powerup['rarity'];
-      return ItemSlot(
-        state: ItemSlotState.held,
-        powerupType: rawType is String ? rawType : '',
-        rarity: rawRarity is String ? rawRarity : null,
-        isExtraSlot: entry.key >= 3,
-        onTap: _isActing || rawType is! String || rawType.trim().isEmpty
-            ? null
-            : () {
-                if (!allowed(powerup)) return;
-                _showPowerupActions(powerup);
-              },
-      );
-    }
-
-    Widget focusedBoxes() {
-      final count = boxEntries.length;
-      final crateSize = switch (count) {
-        1 => 76.0,
-        2 => 68.0,
-        3 => 60.0,
-        _ => 52.0,
-      };
-
-      Widget boxButton(MapEntry<int, Map<String, dynamic>> entry) {
-        final powerup = entry.value;
-        final rawId = powerup['id'];
-        final boxId = rawId is String && rawId.trim().isNotEmpty ? rawId : null;
-        final button = MysteryBoxButton(
-          key: ValueKey('mystery-box-${entry.key}'),
-          crateSize: crateSize,
-          expandTapTarget: count > 1,
-          onTap: _isActing || boxId == null
-              ? null
-              : () {
-                  if (!allowed(powerup)) return;
-                  _openMysteryBox(boxId);
-                },
-        );
-        return count > 1 ? Expanded(child: button) : button;
-      }
-
-      return Row(
-        key: const Key('mystery-box-focus-row'),
-        mainAxisAlignment: count == 1
-            ? MainAxisAlignment.center
-            : MainAxisAlignment.spaceEvenly,
-        children: [for (final entry in boxEntries) boxButton(entry)],
-      );
-    }
-
-    Widget heldPowerupsUnderBoxes() {
-      final slots = [for (final entry in heldEntries) heldSlot(entry)];
-      if (slots.length == 1) {
-        return Row(children: [const Spacer(), slots.single, const Spacer()]);
-      }
-      if (slots.length == 2) {
-        return Row(children: [slots.first, const Spacer(), slots.last]);
-      }
-      return Row(children: slots);
-    }
 
     return Column(
       key: widget.tutorialPowerupsKey,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (boxEntries.isNotEmpty) ...[
-          focusedBoxes(),
-          if (heldEntries.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            heldPowerupsUnderBoxes(),
-          ],
-        ] else
-          Row(
-            children: List.generate(slotCount, (index) {
-              if (index < visibleEntries.length) {
-                return heldSlot(visibleEntries[index]);
+        Row(
+          children: List.generate(slotCount, (i) {
+            final isExtraSlot = i >= 3;
+            if (i < inventory.length) {
+              final pw = inventory[i];
+              final status = pw['status'] as String? ?? 'HELD';
+              final isMysteryBox = status == 'MYSTERY_BOX';
+
+              // The gate is consulted BEFORE either branch acts. It stays null
+              // in the real app, so this is a no-op outside the demo.
+              bool allowed() => widget.demoTapGate?.call(pw) ?? true;
+
+              if (isMysteryBox) {
+                final boxId = _isUnopenedMysteryBoxSlot(pw)
+                    ? pw['id'] as String
+                    : null;
+                return ItemSlot(
+                  state: ItemSlotState.mysteryBox,
+                  isExtraSlot: isExtraSlot,
+                  onTap: _isActing || boxId == null
+                      ? null
+                      : () {
+                          if (!allowed()) return;
+                          _openMysteryBox(boxId);
+                        },
+                );
               }
+
+              final rawType = pw['type'];
+              final rawRarity = pw['rarity'];
+              return ItemSlot(
+                state: ItemSlotState.held,
+                powerupType: rawType is String ? rawType : '',
+                rarity: rawRarity is String ? rawRarity : null,
+                isExtraSlot: isExtraSlot,
+                onTap: _isActing || rawType is! String || rawType.trim().isEmpty
+                    ? null
+                    : () {
+                        if (!allowed()) return;
+                        _showPowerupActions(pw);
+                      },
+              );
+            } else {
               return ItemSlot(
                 state: ItemSlotState.empty,
-                isExtraSlot: index >= 3,
+                isExtraSlot: isExtraSlot,
               );
-            }),
-          ),
+            }
+          }),
+        ),
         ..._buildGlobalPowerupStash(),
       ],
     );

@@ -113,7 +113,7 @@ void main() {
   ) async {
     await _pump(tester, _HelperApi());
 
-    final helper = find.textContaining('NEXT POWERUP IN');
+    final helper = find.textContaining('You earn a powerup every');
     expect(helper, findsOneWidget);
 
     final slots = find.byWidgetPredicate((widget) => widget is ItemSlot);
@@ -150,7 +150,9 @@ void main() {
     (tester) async {
       await _pump(tester, _HelperApi());
 
-      final box = find.byType(MysteryBoxButton);
+      final box = find.byWidgetPredicate(
+        (w) => w is ItemSlot && w.state == ItemSlotState.mysteryBox,
+      );
       expect(box, findsNWidgets(2));
       expect(find.text('POWERUPS'), findsOneWidget);
       expect(find.text('2 unopened boxes. Open them now'), findsNothing);
@@ -159,17 +161,17 @@ void main() {
     },
   );
 
-  testWidgets('unopened boxes remain actionable in the focus row', (
+  testWidgets('unopened boxes remain actionable in their inventory slots', (
     tester,
   ) async {
     await _pump(tester, _HelperApi());
 
-    final boxes = find.byType(MysteryBoxButton);
+    final boxes = find.byWidgetPredicate(
+      (w) => w is ItemSlot && w.state == ItemSlotState.mysteryBox,
+    );
     expect(boxes, findsNWidgets(2));
     expect(
-      tester
-          .widgetList<MysteryBoxButton>(boxes)
-          .every((box) => box.onTap != null && box.crateSize == 68),
+      tester.widgetList<ItemSlot>(boxes).every((box) => box.onTap != null),
       isTrue,
     );
     expect(
@@ -179,127 +181,6 @@ void main() {
       findsNothing,
       reason: 'an unopened box must occupy its original inventory slot',
     );
-  });
-
-  testWidgets('one unopened box is centered with no empty slot cards', (
-    tester,
-  ) async {
-    await _pump(
-      tester,
-      _HelperApi(
-        inventory: const [
-          {'id': 'box-1', 'type': 'MYSTERY_BOX', 'status': 'MYSTERY_BOX'},
-        ],
-      ),
-    );
-
-    final focusRow = find.byKey(const Key('mystery-box-focus-row'));
-    expect(focusRow, findsOneWidget);
-    expect(
-      tester.widget<Row>(focusRow).mainAxisAlignment,
-      MainAxisAlignment.center,
-    );
-    expect(
-      tester.widget<MysteryBoxButton>(find.byType(MysteryBoxButton)).crateSize,
-      76,
-    );
-    expect(
-      find.byWidgetPredicate(
-        (widget) => widget is ItemSlot && widget.state == ItemSlotState.empty,
-      ),
-      findsNothing,
-    );
-  });
-
-  testWidgets('one-box POWERUPS card stays compact with wrapped helper copy', (
-    tester,
-  ) async {
-    await _pump(
-      tester,
-      _HelperApi(
-        inventory: const [
-          {'id': 'box-1', 'type': 'MYSTERY_BOX', 'status': 'MYSTERY_BOX'},
-        ],
-      ),
-      surfaceSize: const Size(320, 2400),
-    );
-
-    final card = find.byKey(const Key('race-powerups-card'));
-    expect(card, findsOneWidget);
-    expect(
-      tester.widget<Text>(find.textContaining('NEXT POWERUP IN')).textAlign,
-      TextAlign.center,
-    );
-    expect(
-      tester.getSize(card).height,
-      lessThanOrEqualTo(170),
-      reason: 'helper, crate, and OPEN label should read as one compact group',
-    );
-  });
-
-  testWidgets('two and three unopened boxes distribute across one row', (
-    tester,
-  ) async {
-    for (final count in [2, 3]) {
-      await _pump(
-        tester,
-        _HelperApi(
-          inventory: [
-            for (var i = 0; i < count; i++)
-              {'id': 'box-$i', 'type': 'MYSTERY_BOX', 'status': 'MYSTERY_BOX'},
-          ],
-        ),
-      );
-
-      final focusRow = find.byKey(const Key('mystery-box-focus-row'));
-      expect(focusRow, findsOneWidget);
-      expect(
-        tester.widget<Row>(focusRow).mainAxisAlignment,
-        MainAxisAlignment.spaceEvenly,
-      );
-      final boxes = find.byType(MysteryBoxButton);
-      expect(boxes, findsNWidgets(count));
-      expect(
-        tester
-            .widgetList<MysteryBoxButton>(boxes)
-            .every((box) => box.crateSize == (count == 2 ? 68 : 60)),
-        isTrue,
-      );
-      if (count == 3) {
-        final tops = [
-          for (final box in boxes.evaluate())
-            tester.getTopLeft(find.byWidget(box.widget)).dy,
-        ];
-        expect(tops.toSet(), hasLength(1));
-      }
-    }
-  });
-
-  testWidgets('three standalone boxes fit a compact phone width', (
-    tester,
-  ) async {
-    await _pump(
-      tester,
-      _HelperApi(
-        inventory: const [
-          {'id': 'box-1', 'type': 'MYSTERY_BOX', 'status': 'MYSTERY_BOX'},
-          {'id': 'box-2', 'type': 'MYSTERY_BOX', 'status': 'MYSTERY_BOX'},
-          {'id': 'box-3', 'type': 'MYSTERY_BOX', 'status': 'MYSTERY_BOX'},
-        ],
-      ),
-      surfaceSize: const Size(320, 2400),
-    );
-
-    final boxes = find.byType(MysteryBoxButton);
-    expect(boxes, findsNWidgets(3));
-    expect(
-      boxes.evaluate().every(
-        (element) => tester.getSize(find.byWidget(element.widget)).width <= 90,
-      ),
-      isTrue,
-      reason: 'equal flexible targets must fit the 268px POWERUPS card width',
-    );
-    expect(tester.takeException(), isNull);
   });
 
   testWidgets('malformed unopened-box ids are visibly disabled', (
@@ -315,10 +196,11 @@ void main() {
       ),
     );
 
+    final boxes = find.byWidgetPredicate(
+      (w) => w is ItemSlot && w.state == ItemSlotState.mysteryBox,
+    );
     expect(
-      tester
-          .widgetList<MysteryBoxButton>(find.byType(MysteryBoxButton))
-          .every((box) => box.onTap == null),
+      tester.widgetList<ItemSlot>(boxes).every((box) => box.onTap == null),
       isTrue,
     );
   });

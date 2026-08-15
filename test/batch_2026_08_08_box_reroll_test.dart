@@ -252,7 +252,9 @@ Future<void> _pumpRaceDetail(
 
 /// Taps the mystery-box slot and drives its reel to the reveal.
 Future<void> _openBoxAndReveal(WidgetTester tester) async {
-  final boxSlot = find.byType(MysteryBoxButton);
+  final boxSlot = find.byWidgetPredicate(
+    (w) => w is ItemSlot && w.state == ItemSlotState.mysteryBox,
+  );
   await tester.ensureVisible(boxSlot);
   await tester.pump(const Duration(milliseconds: 100));
   await tester.tap(boxSlot);

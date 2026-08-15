@@ -500,7 +500,12 @@ class _OnboardingInviterRaceStepState extends State<OnboardingInviterRaceStep> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => OnboardingTheme(builder: _buildStep);
+
+  // Pinned to the daytime palette: this step's scene args are built here,
+  // above OnboardingScene's own Theme, so they must read the palette the
+  // scene renders under rather than the device's.
+  Widget _buildStep(BuildContext context) {
     if (widget.skipForPendingShare || _loading) {
       return const OnboardingSceneLoading();
     }
@@ -632,7 +637,12 @@ class _OnboardingReferralWelcomeStepState
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => OnboardingTheme(builder: _buildStep);
+
+  // Pinned to the daytime palette: this step's scene args are built here,
+  // above OnboardingScene's own Theme, so they must read the palette the
+  // scene renders under rather than the device's.
+  Widget _buildStep(BuildContext context) {
     final inviter = _inviterName;
     final headline = inviter != null && inviter.isNotEmpty
         ? '${atName(inviter)} invited you to Bara'
@@ -710,7 +720,12 @@ class OnboardingTutorialStep extends StatelessWidget {
   final bool mandatory;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => OnboardingTheme(builder: _buildStep);
+
+  // Pinned to the daytime palette: this step's scene args are built here,
+  // above OnboardingScene's own Theme, so they must read the palette the
+  // scene renders under rather than the device's.
+  Widget _buildStep(BuildContext context) {
     final colors = AppColors.of(context);
     return OnboardingScene(
       headline: 'Earn your first 100 coins',
@@ -794,7 +809,12 @@ class OnboardingDemoRaceStep extends StatelessWidget {
   final bool mandatory;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => OnboardingTheme(builder: _buildStep);
+
+  // Pinned to the daytime palette: this step's scene args are built here,
+  // above OnboardingScene's own Theme, so they must read the palette the
+  // scene renders under rather than the device's.
+  Widget _buildStep(BuildContext context) {
     final colors = AppColors.of(context);
     return OnboardingScene(
       // Framed as learning, not winning. "Win your first race" reads like a

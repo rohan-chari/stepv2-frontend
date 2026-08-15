@@ -105,10 +105,19 @@ class OnboardingPermissionGate extends StatelessWidget {
             onPressed: onEscape,
             child: Text(
               'Continue without steps',
-              style: PixelText.body(
-                size: 14,
-                color: colors.textMid,
-              ).copyWith(fontWeight: FontWeight.w800),
+              // textMid is a dark ink meant for parchment; on the dock's green
+              // checkers it was near-invisible. Cream + the same sky outline the
+              // headline uses makes it legible without turning a deliberately
+              // quiet escape hatch into a second button. Matches the 'Skip for
+              // now' treatment on the tutorial and demo-race steps.
+              style:
+                  PixelText.body(
+                    size: 14,
+                    color: colors.textLight.withValues(alpha: 0.92),
+                  ).copyWith(
+                    fontWeight: FontWeight.w800,
+                    shadows: PixelText.skyOutline(1.4),
+                  ),
             ),
           ),
         ],

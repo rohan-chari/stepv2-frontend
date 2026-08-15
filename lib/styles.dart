@@ -580,8 +580,18 @@ class AppThemeAssets extends ThemeExtension<AppThemeAssets> {
 }
 
 abstract final class AppThemeData {
-  static ThemeData light() => _build(AppPalette.light, AppThemeAssets.light);
-  static ThemeData night() => _build(AppPalette.night, AppThemeAssets.night);
+  // Memoized: _build runs ColorScheme.fromSeed (HCT palette computation), and
+  // the pre-auth surfaces now nest two pins (OnboardingTheme + OnboardingScene)
+  // per step build. ThemeData is immutable and depends on nothing but its
+  // palette, so one instance each is safe — and the nested Themes compare equal,
+  // which stops the inner one from notifying dependents.
+  static ThemeData? _light;
+  static ThemeData? _night;
+
+  static ThemeData light() =>
+      _light ??= _build(AppPalette.light, AppThemeAssets.light);
+  static ThemeData night() =>
+      _night ??= _build(AppPalette.night, AppThemeAssets.night);
 
   static ThemeData _build(AppPalette palette, AppThemeAssets assets) {
     final brightness = palette.isDark ? Brightness.dark : Brightness.light;

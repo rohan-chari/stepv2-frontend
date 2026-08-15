@@ -37,8 +37,10 @@ class OnboardingTheme extends StatelessWidget {
   final WidgetBuilder builder;
 
   @override
-  Widget build(BuildContext context) =>
-      Theme(data: AppThemeData.light(), child: Builder(builder: builder));
+  Widget build(BuildContext context) => Theme(
+    data: AppThemeData.light(),
+    child: Builder(builder: builder),
+  );
 }
 
 /// Shared scaffold for every onboarding step, mirroring the title screen's
