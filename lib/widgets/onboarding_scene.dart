@@ -18,6 +18,29 @@ bool get onboardingSceneInTestEnv {
   }
 }
 
+/// Pins the daytime/light palette for a WHOLE onboarding step.
+///
+/// [OnboardingScene] already pins the light theme around what it renders, but
+/// a step builds its dock contents in its own `build` — above that Theme — so
+/// an `AppColors.of(context)` there resolves the device's palette while the
+/// widget it decorates renders under the light one. That split is what painted
+/// a night-palette fill behind light-theme black text on the name-setup
+/// fields. Wrap a step's build in this so both halves read one palette:
+///
+/// ```dart
+/// Widget build(BuildContext context) =>
+///     OnboardingTheme(builder: _buildStep);
+/// ```
+class OnboardingTheme extends StatelessWidget {
+  const OnboardingTheme({super.key, required this.builder});
+
+  final WidgetBuilder builder;
+
+  @override
+  Widget build(BuildContext context) =>
+      Theme(data: AppThemeData.light(), child: Builder(builder: builder));
+}
+
 /// Shared scaffold for every onboarding step, mirroring the title screen's
 /// composition exactly: the [HomeHeroScene] daytime sky/sun/clouds with the
 /// walking capybara on the scrolling ground strip up top, and the green

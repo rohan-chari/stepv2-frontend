@@ -323,7 +323,12 @@ class _OnboardingDailyIntroStepState extends State<OnboardingDailyIntroStep> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => OnboardingTheme(builder: _buildStep);
+
+  // Pinned to the daytime palette: the racer-tag card below is built here,
+  // above OnboardingScene's own Theme, so its fill and its text have to come
+  // from the palette the scene renders under.
+  Widget _buildStep(BuildContext context) {
     if (widget.skipForPendingShare || _loading) {
       return const OnboardingSceneLoading();
     }

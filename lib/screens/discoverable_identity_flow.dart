@@ -251,6 +251,14 @@ class _DiscoverableIdentityFlowState extends State<DiscoverableIdentityFlow> {
 
   @override
   Widget build(BuildContext context) {
+    // The dock's fields are built here, above OnboardingScene's own Theme, so
+    // this subtree has to pin the same daytime palette the scene renders
+    // under. Without it a night-mode device painted a dark field fill from the
+    // device palette behind the light theme's black input text.
+    return OnboardingTheme(builder: _buildFlow);
+  }
+
+  Widget _buildFlow(BuildContext context) {
     final isNamePage = _page == 0;
     final colors = AppColors.of(context);
     return PopScope(
@@ -331,6 +339,7 @@ class _DiscoverableIdentityFlowState extends State<DiscoverableIdentityFlow> {
     children: [
       _field(
         key: const Key('identity-first-name-field'),
+        colors: colors,
         controller: _firstName,
         focusNode: _firstFocus,
         label: 'First name',
@@ -339,6 +348,7 @@ class _DiscoverableIdentityFlowState extends State<DiscoverableIdentityFlow> {
       const SizedBox(height: 10),
       _field(
         key: const Key('identity-last-name-field'),
+        colors: colors,
         controller: _lastName,
         label: 'Last name (optional)',
         action: TextInputAction.done,
@@ -353,6 +363,7 @@ class _DiscoverableIdentityFlowState extends State<DiscoverableIdentityFlow> {
     children: [
       _field(
         key: const Key('identity-race-name-field'),
+        colors: colors,
         controller: _raceName,
         focusNode: _raceFocus,
         label: 'Race name',
@@ -389,8 +400,12 @@ class _DiscoverableIdentityFlowState extends State<DiscoverableIdentityFlow> {
     ),
   );
 
+  // `colors` is passed in rather than read from `context` so the fill and the
+  // input text always come from ONE palette. Reading them from two places is
+  // what made the typed name black-on-black at night.
   Widget _field({
     required Key key,
+    required AppPalette colors,
     required TextEditingController controller,
     required String label,
     required TextInputAction action,
@@ -405,7 +420,7 @@ class _DiscoverableIdentityFlowState extends State<DiscoverableIdentityFlow> {
           label,
           style: PixelText.body(
             size: 11.5,
-            color: AppColors.of(context).textLight.withValues(alpha: 0.9),
+            color: colors.textLight.withValues(alpha: 0.9),
           ).copyWith(fontWeight: FontWeight.w700),
         ),
       ),
@@ -422,26 +437,26 @@ class _DiscoverableIdentityFlowState extends State<DiscoverableIdentityFlow> {
         onChanged: (_) {
           if (_error != null) setState(() => _error = null);
         },
+        style: PixelText.body(size: 15, color: colors.textDark),
+        cursorColor: colors.accent,
         decoration: InputDecoration(
           filled: true,
-          fillColor: AppColors.of(context).parchmentLight,
+          fillColor: colors.parchmentLight,
+          hintStyle: PixelText.body(
+            size: 15,
+            color: colors.textMid,
+          ),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 14,
             vertical: 14,
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(9),
-            borderSide: BorderSide(
-              color: AppColors.of(context).parchmentBorder,
-              width: 1.5,
-            ),
+            borderSide: BorderSide(color: colors.parchmentBorder, width: 1.5),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(9),
-            borderSide: BorderSide(
-              color: AppColors.of(context).accent,
-              width: 2,
-            ),
+            borderSide: BorderSide(color: colors.accent, width: 2),
           ),
         ),
       ),

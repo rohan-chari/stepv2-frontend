@@ -52,7 +52,12 @@ class OnboardingPermissionGate extends StatelessWidget {
   final VoidCallback? onEscape;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => OnboardingTheme(builder: _buildGate);
+
+  // Pinned to the daytime palette: the dock contents are built here, above
+  // OnboardingScene's own Theme, so they must read the palette the scene
+  // renders under rather than the device's.
+  Widget _buildGate(BuildContext context) {
     final colors = AppColors.of(context);
     return OnboardingScene(
       headline: headline,

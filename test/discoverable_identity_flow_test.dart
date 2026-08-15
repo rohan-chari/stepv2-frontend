@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/discoverable_identity_flow.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/styles.dart';
 
 class _IdentityApi extends BackendApiService {
   bool collide = false;
@@ -353,4 +354,61 @@ void main() {
       );
     },
   );
+
+  // Regression: the fields are built above OnboardingScene's pinned light
+  // Theme, so a night-mode device used to paint the night palette's near-black
+  // fill behind the light theme's black input text — the typed name vanished.
+  // Assert the color the EditableText ACTUALLY resolves (not just the style we
+  // pass) contrasts with the fill it sits on, under either device theme.
+  for (final mode in [ThemeMode.light, ThemeMode.dark]) {
+    testWidgets('name fields stay legible in $mode', (tester) async {
+      final api = _IdentityApi();
+      final auth = AuthService(backendApiService: api);
+      await auth.restoreSession();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppThemeData.light(),
+          darkTheme: AppThemeData.night(),
+          themeMode: mode,
+          home: DiscoverableIdentityFlow(
+            authService: auth,
+            backendApiService: api,
+          ),
+        ),
+      );
+
+      for (final key in const [
+        Key('identity-first-name-field'),
+        Key('identity-last-name-field'),
+      ]) {
+        final field = find.byKey(key);
+        final fill = tester.widget<TextField>(field).decoration!.fillColor!;
+        final text = tester
+            .widget<EditableText>(
+              find.descendant(of: field, matching: find.byType(EditableText)),
+            )
+            .style
+            .color!;
+
+        expect(
+          _contrastRatio(text, fill),
+          greaterThanOrEqualTo(4.5),
+          reason: '$key input text is illegible on its own fill in $mode',
+        );
+        // Onboarding pins to the daytime palette, so the fill must not follow
+        // the device into night.
+        expect(fill, AppPalette.light.parchmentLight, reason: '$key fill');
+      }
+    });
+  }
+}
+
+/// WCAG relative-luminance contrast ratio (1.0 = identical, 21.0 = black/white).
+double _contrastRatio(Color a, Color b) {
+  final la = a.computeLuminance();
+  final lb = b.computeLuminance();
+  final lighter = la > lb ? la : lb;
+  final darker = la > lb ? lb : la;
+  return (lighter + 0.05) / (darker + 0.05);
 }
