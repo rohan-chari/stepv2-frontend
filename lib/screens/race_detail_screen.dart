@@ -351,15 +351,17 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   bool _countdownActive = false;
   // Monotonic id of the newest fetchRaceProgress request — see _loadProgress.
   int _progressFetchSeq = 0;
-  int _participantsLoadedCount = 0;
-  int _participantsPageLimit = 10;
 
-  /// How many racers each "show more" tap actually appends.
+  /// Rank of the first racer on the page currently displayed, zero-based.
   ///
-  /// The first page stays small (10) so the race opens fast; taps after that
-  /// pull a bigger chunk, because the alternative on a 446-racer board is
-  /// forty-odd taps. The server clamps a page to 50.
-  static const int _kParticipantsAppendSize = 25;
+  /// The board shows exactly ONE page at a time and NEXT/PREV move this
+  /// window — it does not accumulate. An append model made the control lie
+  /// about itself ("SHOW 376 MORE" appending 25) and grew the page without
+  /// bound; a window has a fixed height and an honest position readout.
+  int _participantsOffset = 0;
+
+  /// Racers per page. The server clamps a page to 50.
+  static const int _kParticipantsPageSize = 25;
   int? _participantsTotal;
   bool _participantsHasMore = false;
   bool _participantsLoadingMore = false;
@@ -829,7 +831,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         // packet carries the entire field, `_loadProgress` is satisfied by it,
         // and the paged request below never runs — which is why paging looked
         // like it did nothing.
-        participantsLimit: _participantsPageLimit,
+        participantsLimit: _kParticipantsPageSize,
       );
       Map<String, dynamic> details;
       Future<Map<String, dynamic>?>? progressPrefetch;
@@ -867,9 +869,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
       if (details['status'] == 'ACTIVE') {
         setState(() {
-          _participantsLoadedCount = 0;
           _participantsTotal = null;
-          _participantsPageLimit = 10;
+          // Re-opening a race starts at the top of the board, never wherever
+          // the last visit happened to be paged to.
+          _participantsOffset = 0;
           _participantsHasMore = false;
           _participantsLoadingMore = false;
         });
@@ -989,11 +992,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         );
       }
       RaceProgressResult? compactResult;
-      final limit = _participantsPageLimit;
-      final requestedOffset = append ? _participantsLoadedCount : 0;
-      final requestedLimit = append
-          ? _kParticipantsAppendSize
-          : (_participantsLoadedCount > 0 ? _participantsLoadedCount : limit);
+      // One page in flight, always: a refresh or poll re-reads the page the
+      // viewer is on rather than snapping them back to the top.
+      final requestedOffset = append ? _participantsOffset : 0;
+      final requestedLimit = _kParticipantsPageSize;
       final progress =
           prefetchedProgress ??
           (compactResult = await _api.fetchRaceProgressParticipants(
@@ -1024,27 +1026,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       final existingParticipants =
           (previous?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
           const [];
-      final mergedParticipants = append
-          ? () {
-              final merged = [...existingParticipants];
-              final indexByUserId = {
-                for (var i = 0; i < merged.length; i++)
-                  if (merged[i]['userId'] is String)
-                    merged[i]['userId'] as String: i,
-              };
-              for (final p in participants) {
-                final userId = p['userId'];
-                if (userId is! String) continue;
-                final index = indexByUserId[userId];
-                if (index == null) {
-                  merged.add(p);
-                  indexByUserId[userId] = merged.length - 1;
-                } else {
-                  merged[index] = p;
-                }
-              }
-              return merged;
-            }()
+      // A paged response IS the board: it replaces what was on screen, so
+      // NEXT/PREV land on a page of exactly one page's height. Only an
+      // UNPAGED response (older backend, or a race served whole) keeps the
+      // old union behaviour, where dropping a row the server omitted this
+      // tick would make racers flicker in and out.
+      final mergedParticipants = pagination != null
+          ? participants
           : () {
               final merged = [...participants];
               final currentIds = {
@@ -1067,12 +1055,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           : rawTotal is num
               ? rawTotal.toInt()
               : int.tryParse(rawTotal?.toString() ?? '');
-      final rawLimit = pagination?['limit'];
-      if (rawLimit is int) {
-        _participantsPageLimit = rawLimit;
-      } else if (rawLimit is num) {
-        _participantsPageLimit = rawLimit.toInt();
-      }
+      // Trust the server's echoed offset over the local guess: a clamped or
+      // rejected page must not leave the readout claiming a window the
+      // response does not contain.
+      final rawOffset = pagination?['offset'];
+      final offsetFromServer = rawOffset is int
+          ? rawOffset
+          : rawOffset is num
+              ? rawOffset.toInt()
+              : null;
 
       final resolvedProgress = Map<String, dynamic>.from(progress)
         ..['participants'] = mergedParticipants;
@@ -1080,12 +1071,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       if (fetchSeq == _progressFetchSeq) {
         setState(() {
           _progress = resolvedProgress;
-          _participantsLoadedCount = mergedParticipants.length;
           _participantsTotal = totalFromServer;
+          if (pagination != null) {
+            _participantsOffset = offsetFromServer ?? requestedOffset;
+          }
           _participantsHasMore =
               pagination?['hasMore'] == true ||
               (totalFromServer != null &&
-                  mergedParticipants.length < totalFromServer);
+                  _participantsOffset + mergedParticipants.length <
+                      totalFromServer);
           _participantsLoadingMore = false;
           final rawPowerupData = resolvedProgress['powerupData'];
           _powerupData = rawPowerupData is Map
@@ -8422,8 +8416,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// When the viewer's own plank falls below the cut it is pinned beneath the
   /// visible rows, because their own placement is the number they opened the
   /// race for.
-  Future<void> _loadMoreParticipants() async {
-    if (_participantsLoadingMore || !_participantsHasMore) return;
+  Future<void> _goToParticipantsPage(int offset) async {
+    if (_participantsLoadingMore) return;
+    final total = _participantsTotal;
+    final clamped = offset < 0
+        ? 0
+        : (total != null && offset >= total)
+            ? _participantsOffset
+            : offset;
+    if (clamped == _participantsOffset) return;
+    _participantsOffset = clamped;
     await _loadProgress(append: true);
   }
 
@@ -8434,30 +8436,54 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   }) {
     final rows = _buildLeaderboardRows(participants);
     // The local collapse exists for the UNPAGED board, where the server hands
-    // back the entire field at once and 300 planks would bury the page. When
-    // the server is paging, that job is already done — the loaded set is only
-    // ever as long as the pages the user asked for — and keeping both leaves
-    // two near-identical pills stacked on each other ("SHOW 406 MORE" over
-    // "SHOW LESS") that look like a rendering bug. Paged boards therefore get
-    // exactly one control: fetch the next page.
+    // back the entire field at once and 300 planks would bury the page. A
+    // paged board is already exactly one page tall, so it gets the pager
+    // instead — stacking both left two near-identical pills on top of each
+    // other with counts that disagreed.
     final paginated = _participantsTotal != null;
     final collapsible = !paginated && rows.length > _kStandingsCollapseAbove;
+
+    if (paginated) {
+      final canGoBack = _participantsOffset > 0;
+      final canGoForward = hasMore;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ...rows,
+          // The pager renders even on a single-page race so the position
+          // readout ("1-12 of 12") is always available; both buttons simply
+          // sit disabled.
+          _standingsPagerRow(
+            loadedCount: participants.length,
+            isLoading: isLoadingMore,
+            onPrevious: !canGoBack || isLoadingMore
+                ? null
+                : () {
+                    unawaited(
+                      _goToParticipantsPage(
+                        _participantsOffset - _kParticipantsPageSize,
+                      ),
+                    );
+                  },
+            onNext: !canGoForward || isLoadingMore
+                ? null
+                : () {
+                    unawaited(
+                      _goToParticipantsPage(
+                        _participantsOffset + participants.length,
+                      ),
+                    );
+                  },
+          ),
+        ],
+      );
+    }
 
     if (!collapsible || _standingsExpanded) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           ...rows,
-          if (hasMore)
-            _standingsLoadMoreRow(
-              nextCount: _nextParticipantBatchCount(participants.length),
-              loadedCount: participants.length,
-              onLoadMore: isLoadingMore
-                  ? null
-                  : () {
-                      unawaited(_loadMoreParticipants());
-                    },
-            ),
           if (collapsible) _standingsToggle(hiddenCount: 0),
         ],
       );
@@ -8488,84 +8514,75 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     );
   }
 
-  int _remainingParticipantCount(int loadedCount) {
-    if (_participantsTotal == null) return 0;
-    final remaining = _participantsTotal! - loadedCount;
-    return remaining > 0 ? remaining : 0;
-  }
-
-  /// How many racers the NEXT tap will actually add.
+  /// PREV / NEXT pager beneath a paged standings board.
   ///
-  /// The label has to promise this, not the whole remainder: a button reading
-  /// "SHOW 376 MORE" that appends ten is simply lying, and the reader learns
-  /// to distrust the number. The remainder is still worth showing — as
-  /// context ("70 of 446"), where it makes no promise about the tap.
-  int _nextParticipantBatchCount(int loadedCount) {
-    final remaining = _remainingParticipantCount(loadedCount);
-    if (remaining <= 0) return 0;
-    return remaining < _kParticipantsAppendSize
-        ? remaining
-        : _kParticipantsAppendSize;
-  }
-
-  Widget _standingsLoadMoreRow({
-    required int nextCount,
+  /// The position readout sits ABOVE the buttons and states the window the
+  /// board is actually showing ("26-50 of 446"). Each button then does one
+  /// obvious thing, so neither has to carry a number that could disagree with
+  /// what the tap delivers — the failure that made the old single "SHOW N
+  /// MORE" control read as broken.
+  Widget _standingsPagerRow({
     required int loadedCount,
-    required VoidCallback? onLoadMore,
+    required VoidCallback? onPrevious,
+    required VoidCallback? onNext,
+    required bool isLoading,
   }) {
     final colors = AppColors.of(context);
-    final loadMoreLabel = nextCount > 0 ? 'SHOW $nextCount MORE' : 'SHOW MORE';
     final total = _participantsTotal;
+    final first = loadedCount == 0 ? 0 : _participantsOffset + 1;
+    final last = _participantsOffset + loadedCount;
 
     return Padding(
-      padding: const EdgeInsets.only(top: 6),
-      child: GestureDetector(
-        key: const Key('standings-load-more'),
-        behavior: HitTestBehavior.opaque,
-        onTap: onLoadMore,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: colors.parchmentDark.withValues(alpha: 0.4),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: colors.parchmentBorder.withValues(alpha: 0.3),
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (total != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                '$first-$last of $total',
+                textAlign: TextAlign.center,
+                style: PixelText.body(
+                  size: 12,
+                  color: colors.textDark.withValues(alpha: 0.6),
+                ),
+              ),
             ),
-          ),
-          child: Center(
-            child: onLoadMore == null
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        loadMoreLabel,
-                        style: PixelText.body(
-                          size: 14,
-                          color: colors.textDark.withValues(alpha: 0.8),
-                        ),
-                      ),
-                      // Where you are in the field. Separated from the button
-                      // label on purpose: this is context, not a promise about
-                      // what the tap does.
-                      if (total != null) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          '$loadedCount of $total',
-                          style: PixelText.body(
-                            size: 11,
-                            color: colors.textDark.withValues(alpha: 0.5),
-                          ),
-                        ),
-                      ],
-                    ],
+          Row(
+            children: [
+              Expanded(
+                child: PillButton(
+                  key: const Key('standings-prev-page'),
+                  label: 'PREV',
+                  variant: PillButtonVariant.secondary,
+                  fontSize: 13,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 11,
                   ),
+                  loading: isLoading,
+                  onPressed: onPrevious,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: PillButton(
+                  key: const Key('standings-next-page'),
+                  label: 'NEXT',
+                  variant: PillButtonVariant.accent,
+                  fontSize: 13,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 11,
+                  ),
+                  loading: isLoading,
+                  onPressed: onNext,
+                ),
+              ),
+            ],
           ),
-        ),
+        ],
       ),
     );
   }

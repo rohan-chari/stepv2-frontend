@@ -5,6 +5,7 @@ import 'package:step_tracker/screens/race_detail_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/widgets/leaderboard_plank.dart';
+import 'package:step_tracker/widgets/pill_button.dart';
 
 // A big race must not turn the detail page into an endless wall of planks, and
 // it must not trap the drag inside an inner scroller either. Past ten runners
@@ -132,7 +133,8 @@ Future<void> _teardown(WidgetTester tester) async {
 }
 
 Finder get _toggle => find.byKey(const Key('standings-toggle'));
-Finder get _loadMore => find.byKey(const Key('standings-load-more'));
+Finder get _prevPage => find.byKey(const Key('standings-prev-page'));
+Finder get _nextPage => find.byKey(const Key('standings-next-page'));
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -161,36 +163,57 @@ void main() {
     await _teardown(tester);
   });
 
-  testWidgets('a paged board shows every loaded plank and ONE control', (
-    tester,
-  ) async {
-    // 20 of 445 loaded. The unpaged board would collapse this to 8 behind a
-    // local toggle; a paged board must not, because the two controls then
-    // stack as near-identical pills with counts that describe different
-    // things ("SHOW 425 MORE" fetches, "SHOW 12 MORE" reveals).
+  testWidgets('a paged board pages instead of collapsing', (tester) async {
+    // Page one of 445. The unpaged board would collapse this behind a local
+    // toggle; a paged board must not, because the two controls then stack as
+    // near-identical pills with counts that describe different things.
+    await _pump(
+      tester,
+      25,
+      pagination: const {
+        'offset': 0,
+        'limit': 25,
+        'total': 445,
+        'hasMore': true,
+        'nextOffset': 25,
+      },
+    );
+
+    expect(find.byType(LeaderboardPlank), findsNWidgets(25));
+    expect(_toggle, findsNothing);
+    expect(find.text('SHOW LESS'), findsNothing);
+
+    // Position readout states the window actually on screen, and neither
+    // button carries a number that could disagree with what its tap does.
+    expect(find.text('1-25 of 445'), findsOneWidget);
+    expect(_prevPage, findsOneWidget);
+    expect(_nextPage, findsOneWidget);
+
+    // On page one there is nowhere back to go.
+    final prev = tester.widget<PillButton>(_prevPage);
+    expect(prev.onPressed, isNull);
+    final next = tester.widget<PillButton>(_nextPage);
+    expect(next.onPressed, isNotNull);
+
+    await _teardown(tester);
+  });
+
+  testWidgets('the last page disables NEXT and enables PREV', (tester) async {
     await _pump(
       tester,
       20,
       pagination: const {
-        'offset': 0,
-        'limit': 20,
+        'offset': 425,
+        'limit': 25,
         'total': 445,
-        'hasMore': true,
-        'nextOffset': 20,
+        'hasMore': false,
+        'nextOffset': 445,
       },
     );
 
-    expect(find.byType(LeaderboardPlank), findsNWidgets(20));
-    expect(_toggle, findsNothing);
-    expect(find.text('SHOW LESS'), findsNothing);
-    expect(_loadMore, findsOneWidget);
-    // The label promises exactly what the tap delivers — one append batch —
-    // NOT the whole remainder. "SHOW 425 MORE" that appends 25 is a lie, and
-    // it is the reason this row was confusing on a 445-runner board.
-    expect(find.text('SHOW 25 MORE'), findsOneWidget);
-    expect(find.text('SHOW 425 MORE'), findsNothing);
-    // The remainder still appears, as context that promises nothing.
-    expect(find.text('20 of 445'), findsOneWidget);
+    expect(find.text('426-445 of 445'), findsOneWidget);
+    expect(tester.widget<PillButton>(_nextPage).onPressed, isNull);
+    expect(tester.widget<PillButton>(_prevPage).onPressed, isNotNull);
 
     await _teardown(tester);
   });
