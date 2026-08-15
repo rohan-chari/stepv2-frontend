@@ -361,7 +361,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   int _participantsOffset = 0;
 
   /// Racers per page. The server clamps a page to 50.
-  static const int _kParticipantsPageSize = 25;
+  static const int _kParticipantsPageSize = 15;
   int? _participantsTotal;
   bool _participantsHasMore = false;
   bool _participantsLoadingMore = false;

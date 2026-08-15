@@ -169,23 +169,23 @@ void main() {
     // near-identical pills with counts that describe different things.
     await _pump(
       tester,
-      25,
+      15,
       pagination: const {
         'offset': 0,
-        'limit': 25,
+        'limit': 15,
         'total': 445,
         'hasMore': true,
-        'nextOffset': 25,
+        'nextOffset': 15,
       },
     );
 
-    expect(find.byType(LeaderboardPlank), findsNWidgets(25));
+    expect(find.byType(LeaderboardPlank), findsNWidgets(15));
     expect(_toggle, findsNothing);
     expect(find.text('SHOW LESS'), findsNothing);
 
     // Position readout states the window actually on screen, and neither
     // button carries a number that could disagree with what its tap does.
-    expect(find.text('1-25 of 445'), findsOneWidget);
+    expect(find.text('1-15 of 445'), findsOneWidget);
     expect(_prevPage, findsOneWidget);
     expect(_nextPage, findsOneWidget);
 
@@ -204,7 +204,7 @@ void main() {
       20,
       pagination: const {
         'offset': 425,
-        'limit': 25,
+        'limit': 15,
         'total': 445,
         'hasMore': false,
         'nextOffset': 445,
