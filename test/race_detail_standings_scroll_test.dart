@@ -45,9 +45,13 @@ Map<String, dynamic> _race(int count) => {
 };
 
 class _StubApi extends BackendApiService {
-  _StubApi(this.count);
+  _StubApi(this.count, {this.pagination});
 
   final int count;
+
+  /// When set, the progress payload carries server pagination metadata, as it
+  /// does for a race whose roster is larger than one page.
+  final Map<String, dynamic>? pagination;
 
   @override
   Future<Map<String, dynamic>> fetchRaceDetails({
@@ -69,6 +73,7 @@ class _StubApi extends BackendApiService {
       'queuedBoxCount': 0,
       'activeEffects': [],
     },
+    if (pagination != null) 'pagination': pagination,
   };
 
   @override
@@ -102,6 +107,7 @@ Future<void> _pump(
   WidgetTester tester,
   int count, {
   String myUserId = 'user-1',
+  Map<String, dynamic>? pagination,
 }) async {
   final authService = await _authService(myUserId: myUserId);
   await tester.pumpWidget(
@@ -109,7 +115,7 @@ Future<void> _pump(
       home: RaceDetailScreen(
         authService: authService,
         raceId: 'race-1',
-        backendApiService: _StubApi(count),
+        backendApiService: _StubApi(count, pagination: pagination),
       ),
     ),
   );
@@ -126,6 +132,7 @@ Future<void> _teardown(WidgetTester tester) async {
 }
 
 Finder get _toggle => find.byKey(const Key('standings-toggle'));
+Finder get _loadMore => find.byKey(const Key('standings-load-more'));
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -150,6 +157,44 @@ void main() {
     expect(_toggle, findsOneWidget);
     // 16 runners, 8 shown, viewer is Runner 1 and already visible.
     expect(find.text('SHOW 8 MORE'), findsOneWidget);
+
+    await _teardown(tester);
+  });
+
+  testWidgets('a collapsed paged board offers exactly one control', (
+    tester,
+  ) async {
+    // 20 of 445 loaded: the roster is both collapsed locally AND incomplete on
+    // the server, the state that used to stack "SHOW 425 MORE" on top of
+    // "SHOW 12 MORE" with disagreeing counts.
+    await _pump(
+      tester,
+      20,
+      pagination: const {
+        'offset': 0,
+        'limit': 20,
+        'total': 445,
+        'hasMore': true,
+        'nextOffset': 20,
+      },
+    );
+
+    expect(find.byType(LeaderboardPlank), findsNWidgets(8));
+    expect(_toggle, findsOneWidget);
+    expect(_loadMore, findsNothing);
+    // The count describes what THIS tap does: reveal the 12 already loaded.
+    expect(find.text('SHOW 12 MORE'), findsOneWidget);
+
+    // Expanding reveals the rest of the page and only then offers the fetch.
+    await tester.ensureVisible(_toggle);
+    await tester.pump();
+    await tester.tap(_toggle);
+    await tester.pump();
+
+    expect(find.byType(LeaderboardPlank), findsNWidgets(20));
+    expect(_loadMore, findsOneWidget);
+    expect(find.text('SHOW 425 MORE'), findsOneWidget);
+    expect(find.text('SHOW LESS'), findsOneWidget);
 
     await _teardown(tester);
   });

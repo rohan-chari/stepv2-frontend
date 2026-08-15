@@ -8457,15 +8457,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       children: [
         ...rows.take(_kStandingsCollapsedRows),
         if (selfIsHidden) ...[_standingsGapMarker(), rows[myIndex]],
-        if (hasMore)
-          _standingsLoadMoreRow(
-            nextCount: _remainingParticipantCount(participants.length),
-            onLoadMore: isLoadingMore
-                ? null
-                : () {
-                    unawaited(_loadMoreParticipants());
-                  },
-          ),
+        // Deliberately NO load-more row while collapsed. Two stacked "show N
+        // more" controls read as a bug — one fetching the next page from the
+        // server, one revealing planks already downloaded but hidden — and
+        // their counts disagree (e.g. "SHOW 425 MORE" above "SHOW 12 MORE").
+        // Collapsed, the only offer is to reveal what is already here, and the
+        // toggle's count says exactly what its tap does; the page-fetch row
+        // appears once expanded, when it is the only thing left to do.
         _standingsToggle(
           hiddenCount:
               rows.length - _kStandingsCollapsedRows - (selfIsHidden ? 1 : 0),
