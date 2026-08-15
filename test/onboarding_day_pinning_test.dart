@@ -57,7 +57,7 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 20));
     expect(
-      _textColor(tester, 'Entered in the Daily & Weekly challenge'),
+      _textColor(tester, 'The Daily and Weekly are yours to win'),
       AppPalette.light.textLight,
     );
 

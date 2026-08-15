@@ -442,10 +442,6 @@ class _DiscoverableIdentityFlowState extends State<DiscoverableIdentityFlow> {
         decoration: InputDecoration(
           filled: true,
           fillColor: colors.parchmentLight,
-          hintStyle: PixelText.body(
-            size: 15,
-            color: colors.textMid,
-          ),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 14,
             vertical: 14,
