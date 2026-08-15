@@ -353,6 +353,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   int _progressFetchSeq = 0;
   int _participantsLoadedCount = 0;
   int _participantsPageLimit = 10;
+
+  /// How many racers each "show more" tap actually appends.
+  ///
+  /// The first page stays small (10) so the race opens fast; taps after that
+  /// pull a bigger chunk, because the alternative on a 446-racer board is
+  /// forty-odd taps. The server clamps a page to 50.
+  static const int _kParticipantsAppendSize = 25;
   int? _participantsTotal;
   bool _participantsHasMore = false;
   bool _participantsLoadingMore = false;
@@ -985,7 +992,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       final limit = _participantsPageLimit;
       final requestedOffset = append ? _participantsLoadedCount : 0;
       final requestedLimit = append
-          ? limit
+          ? _kParticipantsAppendSize
           : (_participantsLoadedCount > 0 ? _participantsLoadedCount : limit);
       final progress =
           prefetchedProgress ??
@@ -8426,7 +8433,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     bool isLoadingMore = false,
   }) {
     final rows = _buildLeaderboardRows(participants);
-    final collapsible = rows.length > _kStandingsCollapseAbove;
+    // The local collapse exists for the UNPAGED board, where the server hands
+    // back the entire field at once and 300 planks would bury the page. When
+    // the server is paging, that job is already done — the loaded set is only
+    // ever as long as the pages the user asked for — and keeping both leaves
+    // two near-identical pills stacked on each other ("SHOW 406 MORE" over
+    // "SHOW LESS") that look like a rendering bug. Paged boards therefore get
+    // exactly one control: fetch the next page.
+    final paginated = _participantsTotal != null;
+    final collapsible = !paginated && rows.length > _kStandingsCollapseAbove;
 
     if (!collapsible || _standingsExpanded) {
       return Column(
@@ -8435,7 +8450,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           ...rows,
           if (hasMore)
             _standingsLoadMoreRow(
-              nextCount: _remainingParticipantCount(participants.length),
+              nextCount: _nextParticipantBatchCount(participants.length),
+              loadedCount: participants.length,
               onLoadMore: isLoadingMore
                   ? null
                   : () {
@@ -8478,12 +8494,28 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     return remaining > 0 ? remaining : 0;
   }
 
+  /// How many racers the NEXT tap will actually add.
+  ///
+  /// The label has to promise this, not the whole remainder: a button reading
+  /// "SHOW 376 MORE" that appends ten is simply lying, and the reader learns
+  /// to distrust the number. The remainder is still worth showing — as
+  /// context ("70 of 446"), where it makes no promise about the tap.
+  int _nextParticipantBatchCount(int loadedCount) {
+    final remaining = _remainingParticipantCount(loadedCount);
+    if (remaining <= 0) return 0;
+    return remaining < _kParticipantsAppendSize
+        ? remaining
+        : _kParticipantsAppendSize;
+  }
+
   Widget _standingsLoadMoreRow({
     required int nextCount,
+    required int loadedCount,
     required VoidCallback? onLoadMore,
   }) {
     final colors = AppColors.of(context);
     final loadMoreLabel = nextCount > 0 ? 'SHOW $nextCount MORE' : 'SHOW MORE';
+    final total = _participantsTotal;
 
     return Padding(
       padding: const EdgeInsets.only(top: 6),
@@ -8507,12 +8539,30 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : Text(
-                    loadMoreLabel,
-                    style: PixelText.body(
-                      size: 14,
-                      color: colors.textDark.withValues(alpha: 0.8),
-                    ),
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        loadMoreLabel,
+                        style: PixelText.body(
+                          size: 14,
+                          color: colors.textDark.withValues(alpha: 0.8),
+                        ),
+                      ),
+                      // Where you are in the field. Separated from the button
+                      // label on purpose: this is context, not a promise about
+                      // what the tap does.
+                      if (total != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          '$loadedCount of $total',
+                          style: PixelText.body(
+                            size: 11,
+                            color: colors.textDark.withValues(alpha: 0.5),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
           ),
         ),

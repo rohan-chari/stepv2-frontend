@@ -161,12 +161,13 @@ void main() {
     await _teardown(tester);
   });
 
-  testWidgets('a collapsed paged board offers exactly one control', (
+  testWidgets('a paged board shows every loaded plank and ONE control', (
     tester,
   ) async {
-    // 20 of 445 loaded: the roster is both collapsed locally AND incomplete on
-    // the server, the state that used to stack "SHOW 425 MORE" on top of
-    // "SHOW 12 MORE" with disagreeing counts.
+    // 20 of 445 loaded. The unpaged board would collapse this to 8 behind a
+    // local toggle; a paged board must not, because the two controls then
+    // stack as near-identical pills with counts that describe different
+    // things ("SHOW 425 MORE" fetches, "SHOW 12 MORE" reveals).
     await _pump(
       tester,
       20,
@@ -179,22 +180,17 @@ void main() {
       },
     );
 
-    expect(find.byType(LeaderboardPlank), findsNWidgets(8));
-    expect(_toggle, findsOneWidget);
-    expect(_loadMore, findsNothing);
-    // The count describes what THIS tap does: reveal the 12 already loaded.
-    expect(find.text('SHOW 12 MORE'), findsOneWidget);
-
-    // Expanding reveals the rest of the page and only then offers the fetch.
-    await tester.ensureVisible(_toggle);
-    await tester.pump();
-    await tester.tap(_toggle);
-    await tester.pump();
-
     expect(find.byType(LeaderboardPlank), findsNWidgets(20));
+    expect(_toggle, findsNothing);
+    expect(find.text('SHOW LESS'), findsNothing);
     expect(_loadMore, findsOneWidget);
-    expect(find.text('SHOW 425 MORE'), findsOneWidget);
-    expect(find.text('SHOW LESS'), findsOneWidget);
+    // The label promises exactly what the tap delivers — one append batch —
+    // NOT the whole remainder. "SHOW 425 MORE" that appends 25 is a lie, and
+    // it is the reason this row was confusing on a 445-runner board.
+    expect(find.text('SHOW 25 MORE'), findsOneWidget);
+    expect(find.text('SHOW 425 MORE'), findsNothing);
+    // The remainder still appears, as context that promises nothing.
+    expect(find.text('20 of 445'), findsOneWidget);
 
     await _teardown(tester);
   });
