@@ -36,6 +36,7 @@ class RaceBootstrapResult {
     this.progress,
     this.globalPowerupInventory,
     this.progressUnavailable = false,
+    this.participantsPagination,
   });
 
   static const unsupported = RaceBootstrapResult(supported: false);
@@ -45,6 +46,7 @@ class RaceBootstrapResult {
   final Map<String, dynamic>? progress;
   final Map<String, dynamic>? globalPowerupInventory;
   final bool progressUnavailable;
+  final Map<String, dynamic>? participantsPagination;
 }
 
 class RaceProgressResult {
@@ -52,11 +54,13 @@ class RaceProgressResult {
     required this.progress,
     this.globalPowerupInventory,
     required this.hasCompactInventory,
+    this.participantsPagination,
   });
 
   final Map<String, dynamic> progress;
   final Map<String, dynamic>? globalPowerupInventory;
   final bool hasCompactInventory;
+  final Map<String, dynamic>? participantsPagination;
 }
 
 class RaceMessageStreamsResult {
@@ -266,7 +270,9 @@ class BackendApiService {
   EndpointSupport _raceResolutionStatusSupport = EndpointSupport.unknown;
   EndpointSupport _shopAdUnlockSupport = EndpointSupport.unknown;
   EndpointSupport _friendIdentitySearchSupport = EndpointSupport.unknown;
+  EndpointSupport _raceProgressParticipantsSupport = EndpointSupport.unknown;
   EndpointSupport _racePayoutDoubleSupport = EndpointSupport.unknown;
+  EndpointSupport _racePowerupUseContextSupport = EndpointSupport.unknown;
   static EndpointSupport _raceBootstrapSupport = EndpointSupport.unknown;
   static EndpointSupport _raceMessageStreamsSupport = EndpointSupport.unknown;
   static EndpointSupport _shopBootstrapSupport = EndpointSupport.unknown;
@@ -300,6 +306,8 @@ class BackendApiService {
     _raceResolutionStatusSupport = EndpointSupport.unknown;
     _shopAdUnlockSupport = EndpointSupport.unknown;
     _friendIdentitySearchSupport = EndpointSupport.unknown;
+    _raceProgressParticipantsSupport = EndpointSupport.unknown;
+    _racePowerupUseContextSupport = EndpointSupport.unknown;
     _racePayoutDoubleSupport = EndpointSupport.unknown;
     _sessionUserId = null;
   }
@@ -316,6 +324,8 @@ class BackendApiService {
       _raceResolutionStatusSupport = EndpointSupport.unknown;
       _shopAdUnlockSupport = EndpointSupport.unknown;
       _friendIdentitySearchSupport = EndpointSupport.unknown;
+      _raceProgressParticipantsSupport = EndpointSupport.unknown;
+      _racePowerupUseContextSupport = EndpointSupport.unknown;
       _racePayoutDoubleSupport = EndpointSupport.unknown;
       _sessionUserId = userId;
       _sessionBaseUrl = baseUrl;
@@ -2371,6 +2381,11 @@ class BackendApiService {
   Future<RaceBootstrapResult> fetchRaceBootstrap({
     required String identityToken,
     required String raceId,
+    // When set, the race-open packet returns only the first page of
+    // participants instead of the whole field. Omitted => unchanged full
+    // payload, which is what every older build and every non-race-detail
+    // caller keeps getting.
+    int? participantsLimit,
   }) async {
     // Constructor-injected test/demo services subclass this class and override
     // the legacy methods. Never let a newly added base method escape that fake
@@ -2381,8 +2396,11 @@ class BackendApiService {
     if (_raceBootstrapSupport == EndpointSupport.unsupported) {
       return RaceBootstrapResult.unsupported;
     }
+    final pagingQuery = participantsLimit == null
+        ? ''
+        : '?view=participants-v1&offset=0&limit=$participantsLimit';
     final response = await _sendGetRequest(
-      path: '/races/${Uri.encodeComponent(raceId)}/bootstrap',
+      path: '/races/${Uri.encodeComponent(raceId)}/bootstrap$pagingQuery',
       identityToken: identityToken,
     );
     final raw = await _readRawResponse(response);
@@ -2412,6 +2430,9 @@ class BackendApiService {
       ),
       progressUnavailable:
           progress == null && progressError?['code'] == 'PROGRESS_UNAVAILABLE',
+      // Absent on a backend that ignored the paging query, which is exactly
+      // the signal the screen uses to fall back to "everything already here".
+      participantsPagination: _safeStringMap(progress?['pagination']),
     );
   }
 
@@ -3363,7 +3384,109 @@ class BackendApiService {
       progress: progress,
       globalPowerupInventory: validInventory,
       hasCompactInventory: compact && validInventory != null,
+      participantsPagination: null,
     );
+  }
+
+  Future<RaceProgressResult> fetchRaceProgressParticipants({
+    required String identityToken,
+    required String raceId,
+    int offset = 0,
+    int limit = 10,
+  }) async {
+    if (runtimeType != BackendApiService) {
+      return fetchRaceProgressCompact(
+        identityToken: identityToken,
+        raceId: raceId,
+      );
+    }
+    if (_raceProgressParticipantsSupport == EndpointSupport.unsupported) {
+      return fetchRaceProgressCompact(
+        identityToken: identityToken,
+        raceId: raceId,
+      );
+    }
+
+    final safeOffset = offset < 0 ? 0 : offset;
+    final safeLimit = limit <= 0
+        ? 10
+        : (limit > 50 ? 50 : limit);
+    final response = await _sendGetRequest(
+      path:
+          '/races/${Uri.encodeComponent(raceId)}/progress?view=participants-v1&offset=$safeOffset&limit=$safeLimit',
+      identityToken: identityToken,
+    );
+
+    final raw = await _readRawResponse(response);
+    if (raw.statusCode == 404) {
+      _raceProgressParticipantsSupport = EndpointSupport.unsupported;
+      return fetchRaceProgressCompact(
+        identityToken: identityToken,
+        raceId: raceId,
+      );
+    }
+    if (raw.statusCode < 200 || raw.statusCode >= 300) {
+      throw _apiExceptionFromRaw(raw);
+    }
+    final payload = raw.json;
+    if (raw.decodeFailed || payload == null) {
+      throw const ApiException(
+        'Couldn’t load race progress. Please try again.',
+      );
+    }
+
+    final progress = _safeStringMap(payload['progress']);
+    final participantsPagination = _safeStringMap(payload['pagination']);
+    if (progress == null) {
+      throw const ApiException(
+        'Couldn’t load race progress. Please try again.',
+      );
+    }
+    _raceProgressParticipantsSupport = EndpointSupport.supported;
+    return RaceProgressResult(
+      progress: progress,
+      globalPowerupInventory: null,
+      hasCompactInventory: false,
+      participantsPagination: participantsPagination,
+    );
+  }
+
+  Future<Map<String, dynamic>> fetchRacePowerupUseContext({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    if (runtimeType != BackendApiService) {
+      throw const ApiException(
+        'Couldn’t load race powerup context. Please try again.',
+        statusCode: 404,
+      );
+    }
+    if (_racePowerupUseContextSupport == EndpointSupport.unsupported) {
+      throw const ApiException(
+        'Couldn’t load race powerup context. Please try again.',
+        statusCode: 404,
+      );
+    }
+
+    final response = await _sendGetRequest(
+      path: '/races/${Uri.encodeComponent(raceId)}/powerups/use-context',
+      identityToken: identityToken,
+    );
+    final raw = await _readRawResponse(response);
+    if (raw.statusCode == 404) {
+      _racePowerupUseContextSupport = EndpointSupport.unsupported;
+      throw _apiExceptionFromRaw(raw);
+    }
+    if (raw.statusCode < 200 || raw.statusCode >= 300) {
+      throw _apiExceptionFromRaw(raw);
+    }
+    if (raw.decodeFailed) {
+      throw const ApiException(
+        'Couldn’t load race powerup context. Please try again.',
+      );
+    }
+    _racePowerupUseContextSupport = EndpointSupport.supported;
+    return raw.json!;
   }
 
   Future<void> cancelRace({

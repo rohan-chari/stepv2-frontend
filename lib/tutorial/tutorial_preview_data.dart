@@ -333,6 +333,11 @@ class TutorialPreviewBackendApiService extends BackendApiService {
   Future<RaceBootstrapResult> fetchRaceBootstrap({
     required String identityToken,
     required String raceId,
+    // Accepted and ignored: the tutorial's fixture roster is far smaller than
+    // any page size, so it is always "one full page". Returning no pagination
+    // metadata keeps the screen on its unpaged path, which is what the
+    // deterministic tutorial walkthrough expects.
+    int? participantsLimit,
   }) async {
     return RaceBootstrapResult(
       supported: true,
@@ -352,6 +357,67 @@ class TutorialPreviewBackendApiService extends BackendApiService {
       globalPowerupInventory: const {'items': []},
       hasCompactInventory: true,
     );
+  }
+
+  @override
+  Future<RaceProgressResult> fetchRaceProgressParticipants({
+    required String identityToken,
+    required String raceId,
+    int offset = 0,
+    int limit = 10,
+  }) async {
+    final progress = tutorialPreviewRaceProgress();
+    final full =
+        (progress['participants'] as List?)?.cast<Map<String, dynamic>>() ??
+        const [];
+    final start = offset < 0 ? 0 : offset;
+    final safeLimit = limit <= 0
+        ? 10
+        : (limit > 50 ? 50 : limit);
+    final participants = full.skip(start).take(safeLimit).toList();
+    return RaceProgressResult(
+      progress: {
+        ...progress,
+        'participants': participants,
+      },
+      globalPowerupInventory: const {'items': []},
+      hasCompactInventory: true,
+      participantsPagination: {
+        'offset': start,
+        'limit': safeLimit,
+        'total': full.length,
+        'hasMore': start + participants.length < full.length,
+        'nextOffset': start + participants.length,
+      },
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchRacePowerupUseContext({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    final progress = tutorialPreviewRaceProgress();
+    final participants =
+        (progress['participants'] as List?)?.cast<Map<String, dynamic>>() ??
+        const [];
+    final powerupData =
+        (progress['powerupData'] as Map?)?.cast<String, dynamic>();
+    final inventory =
+        powerupData?['inventory'] is List
+            ? (powerupData?['inventory'] as List)
+                .whereType<Map<String, dynamic>>()
+                .toList()
+            : const [];
+    return {
+      'participants': participants,
+      'powerupData': {
+        'powerupSlots': powerupData?['powerupSlots'] ?? 3,
+        'inventory': inventory,
+        'queuedBoxCount': powerupData?['queuedBoxCount'] ?? 0,
+        'myPlacement': (progress['myPlacement'] as num?)?.toInt() ?? 0,
+      },
+    };
   }
 
   @override

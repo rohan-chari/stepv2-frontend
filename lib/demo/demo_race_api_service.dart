@@ -40,6 +40,9 @@ class DemoRaceApiService extends BackendApiService {
   Future<RaceBootstrapResult> fetchRaceBootstrap({
     required String identityToken,
     required String raceId,
+    // Accepted and ignored — the demo roster is smaller than a page, and the
+    // engine is the only source of truth here. Never let this reach a network.
+    int? participantsLimit,
   }) async => RaceBootstrapResult(
     supported: true,
     race: engine.raceDetails(_now, wallNow: DateTime.now()),
@@ -56,6 +59,63 @@ class DemoRaceApiService extends BackendApiService {
     globalPowerupInventory: const {'items': []},
     hasCompactInventory: true,
   );
+
+  @override
+  Future<RaceProgressResult> fetchRaceProgressParticipants({
+    required String identityToken,
+    required String raceId,
+    int offset = 0,
+    int limit = 10,
+  }) async {
+    final full =
+        (engine.raceProgress(_now)['participants'] as List?)
+            ?.cast<Map<String, dynamic>>() ??
+        const [];
+    final start = offset < 0 ? 0 : offset;
+    final take = limit <= 0 ? 10 : (limit > 50 ? 50 : limit);
+    final participants = full.skip(start).take(take).toList();
+    return RaceProgressResult(
+      progress: {
+        ...engine.raceProgress(_now),
+        'participants': participants,
+      },
+      globalPowerupInventory: const {'items': []},
+      hasCompactInventory: true,
+      participantsPagination: {
+        'offset': offset,
+        'limit': limit,
+        'total': full.length,
+        'hasMore': start + participants.length < full.length,
+        'nextOffset': start + participants.length,
+      },
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchRacePowerupUseContext({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    final powerupData =
+        (engine.raceProgress(_now)['powerupData'] as Map?)?.cast<String, dynamic>();
+    final inventory =
+        powerupData?['inventory'] is List
+            ? (powerupData?['inventory'] as List)
+                .whereType<Map<String, dynamic>>()
+                .toList()
+            : const [];
+    return {
+      'participants': (engine.raceProgress(_now)['participants'] as List?)
+              ?.cast<Map<String, dynamic>>() ??
+          const [],
+      'powerupData': {
+        'powerupSlots': powerupData?['powerupSlots'] ?? 3,
+        'inventory': inventory,
+        'queuedBoxCount': powerupData?['queuedBoxCount'] ?? 0,
+        'myPlacement': engine.myPlacement,
+      },
+    };
+  }
 
   /// Empty global stash: the demo's lesson is the in-race slots, and a stash
   /// row would offer a "USE" button that spends real coins.

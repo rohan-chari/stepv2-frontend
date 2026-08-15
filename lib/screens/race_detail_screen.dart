@@ -351,6 +351,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   bool _countdownActive = false;
   // Monotonic id of the newest fetchRaceProgress request — see _loadProgress.
   int _progressFetchSeq = 0;
+  int _participantsLoadedCount = 0;
+  int _participantsPageLimit = 10;
+  int? _participantsTotal;
+  bool _participantsHasMore = false;
+  bool _participantsLoadingMore = false;
   late DateTime _countdownNow;
   bool _routeVisible = true;
   bool _appResumed = true;
@@ -813,6 +818,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       final bootstrap = await _api.fetchRaceBootstrap(
         identityToken: token,
         raceId: widget.raceId,
+        // Ask the race-open packet for just the first page. Without this the
+        // packet carries the entire field, `_loadProgress` is satisfied by it,
+        // and the paged request below never runs — which is why paging looked
+        // like it did nothing.
+        participantsLimit: _participantsPageLimit,
       );
       Map<String, dynamic> details;
       Future<Map<String, dynamic>?>? progressPrefetch;
@@ -849,6 +859,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       });
 
       if (details['status'] == 'ACTIVE') {
+        setState(() {
+          _participantsLoadedCount = 0;
+          _participantsTotal = null;
+          _participantsPageLimit = 10;
+          _participantsHasMore = false;
+          _participantsLoadingMore = false;
+        });
         _maybeShowStarterRewardModal();
         if (bootstrapProgressUnavailable) {
           setState(() {
@@ -920,6 +937,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   Future<void> _loadProgress({
     Future<Map<String, dynamic>?>? prefetched,
     bool refetchOnNullPrefetch = true,
+    bool append = false,
   }) async {
     // Ordering guard: concurrent fetches (30s poll vs the refresh fired right
     // after opening a box) can resolve out of order, and a stale snapshot
@@ -929,11 +947,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final fetchSeq = ++_progressFetchSeq;
     final previous = _progress;
     if (mounted) {
-      setState(() {
-        _progressState = previous == null
-            ? const Loadable.loading()
-            : Loadable.refreshing(previous);
-      });
+      if (append) {
+        setState(() => _participantsLoadingMore = true);
+      } else {
+        setState(() {
+          _progressState = previous == null
+              ? const Loadable.loading()
+              : Loadable.refreshing(previous);
+        });
+      }
     }
 
     try {
@@ -942,6 +964,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         if (mounted) {
           setState(() {
             _progressState = Loadable.error('Not signed in.', data: previous);
+            _participantsLoadingMore = false;
           });
         }
         return;
@@ -959,33 +982,118 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         );
       }
       RaceProgressResult? compactResult;
+      final limit = _participantsPageLimit;
+      final requestedOffset = append ? _participantsLoadedCount : 0;
+      final requestedLimit = append
+          ? limit
+          : (_participantsLoadedCount > 0 ? _participantsLoadedCount : limit);
       final progress =
           prefetchedProgress ??
-          (compactResult = await _api.fetchRaceProgressCompact(
+          (compactResult = await _api.fetchRaceProgressParticipants(
             identityToken: token,
             raceId: widget.raceId,
+            offset: requestedOffset,
+            limit: requestedLimit,
           )).progress;
 
       if (compactResult?.hasCompactInventory == true) {
         _applyGlobalPowerupInventory(compactResult?.globalPowerupInventory);
       }
 
-      if (!mounted || fetchSeq != _progressFetchSeq) return;
-      setState(() {
-        _progress = progress;
-        final rawPowerupData = progress['powerupData'];
-        _powerupData = rawPowerupData is Map
-            ? <String, dynamic>{
-                for (final entry in rawPowerupData.entries)
-                  if (entry.key is String) entry.key as String: entry.value,
+      if (!mounted) return;
+      final participants =
+          (progress['participants'] as List?)?.cast<Map<String, dynamic>>() ??
+          const [];
+      // The paged fetch supplies this directly; when a prefetched race-open
+      // packet satisfied the request instead, its own metadata rides along
+      // inside the progress payload. Null on either path (an older backend,
+      // or a full non-paged response) leaves the list unpaged, which is the
+      // pre-existing behaviour.
+      final pagination =
+          compactResult?.participantsPagination ??
+          (progress['pagination'] is Map
+              ? Map<String, dynamic>.from(progress['pagination'] as Map)
+              : null);
+      final existingParticipants =
+          (previous?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
+          const [];
+      final mergedParticipants = append
+          ? () {
+              final merged = [...existingParticipants];
+              final indexByUserId = {
+                for (var i = 0; i < merged.length; i++)
+                  if (merged[i]['userId'] is String)
+                    merged[i]['userId'] as String: i,
+              };
+              for (final p in participants) {
+                final userId = p['userId'];
+                if (userId is! String) continue;
+                final index = indexByUserId[userId];
+                if (index == null) {
+                  merged.add(p);
+                  indexByUserId[userId] = merged.length - 1;
+                } else {
+                  merged[index] = p;
+                }
               }
-            : null;
-        final rawEvent = progress['globalEvent'];
-        _globalEvent = rawEvent is Map
-            ? Map<String, dynamic>.from(rawEvent)
-            : null;
-        _progressState = Loadable.success(progress);
-      });
+              return merged;
+            }()
+          : () {
+              final merged = [...participants];
+              final currentIds = {
+                for (final p in participants)
+                  if (p['userId'] is String) p['userId'] as String,
+              };
+              for (final p in existingParticipants) {
+                final userId = p['userId'];
+                if (userId is! String) continue;
+                if (!currentIds.contains(userId)) {
+                  merged.add(p);
+                }
+              }
+              return merged;
+            }();
+
+      final rawTotal = pagination?['total'];
+      final totalFromServer = rawTotal is int
+          ? rawTotal
+          : rawTotal is num
+              ? rawTotal.toInt()
+              : int.tryParse(rawTotal?.toString() ?? '');
+      final rawLimit = pagination?['limit'];
+      if (rawLimit is int) {
+        _participantsPageLimit = rawLimit;
+      } else if (rawLimit is num) {
+        _participantsPageLimit = rawLimit.toInt();
+      }
+
+      final resolvedProgress = Map<String, dynamic>.from(progress)
+        ..['participants'] = mergedParticipants;
+
+      if (fetchSeq == _progressFetchSeq) {
+        setState(() {
+          _progress = resolvedProgress;
+          _participantsLoadedCount = mergedParticipants.length;
+          _participantsTotal = totalFromServer;
+          _participantsHasMore =
+              pagination?['hasMore'] == true ||
+              (totalFromServer != null &&
+                  mergedParticipants.length < totalFromServer);
+          _participantsLoadingMore = false;
+          final rawPowerupData = resolvedProgress['powerupData'];
+          _powerupData = rawPowerupData is Map
+              ? <String, dynamic>{
+                  for (final entry in rawPowerupData.entries)
+                    if (entry.key is String) entry.key as String: entry.value,
+                }
+              : null;
+          final rawEvent = resolvedProgress['globalEvent'];
+          _globalEvent = rawEvent is Map
+              ? Map<String, dynamic>.from(rawEvent)
+              : null;
+          _progressState = Loadable.success(resolvedProgress);
+        });
+      }
 
       if (_powerupData?['enabled'] == true) {
         // A compact progress response carries the 30-second global inventory.
@@ -1029,26 +1137,44 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         _loadDetails();
       }
     } on ApiException catch (e) {
-      // A stale request's failure must not clobber a newer request's result.
-      if (!mounted || fetchSeq != _progressFetchSeq) return;
+      if (!mounted) return;
       if (e.statusCode == 403) {
         _enterNotAParticipant();
         return;
       }
-      setState(() {
-        _progressState = Loadable.error(e.message, data: previous);
-      });
+      if (fetchSeq == _progressFetchSeq) {
+        setState(() {
+          _progressState = Loadable.error(e.message, data: previous);
+        });
+      }
+      if (append) {
+        setState(() {
+          _participantsLoadingMore = false;
+        });
+      }
       if (previous != null) {
         showErrorToast(context, 'Couldn’t refresh race progress.');
       }
     } catch (e) {
-      // A stale request's failure must not clobber a newer request's result.
-      if (!mounted || fetchSeq != _progressFetchSeq) return;
-      setState(() {
-        _progressState = Loadable.error(e.toString(), data: previous);
-      });
+      if (!mounted) return;
+      if (fetchSeq == _progressFetchSeq) {
+        setState(() {
+          _progressState = Loadable.error(e.toString(), data: previous);
+        });
+      }
+      if (append) {
+        setState(() {
+          _participantsLoadingMore = false;
+        });
+      }
       if (previous != null) {
         showErrorToast(context, 'Couldn’t refresh race progress.');
+      }
+    } finally {
+      if (mounted && append) {
+        setState(() {
+          _participantsLoadingMore = false;
+        });
       }
     }
   }
@@ -1711,9 +1837,22 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     List<String>? targetUserIds;
     String? targetDirection;
 
-    final participants =
+    var participants =
         (_progress?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
         [];
+    final needsTargetingContext = _participantsHasMore ||
+        (_participantsTotal != null && participants.length < _participantsTotal!);
+    final typeTargets =
+        type == 'QUICKSAND' ||
+        type == 'PINECONE_TOSS' ||
+        type == 'SNEAKY_SWAP' ||
+        kTargetedPowerupTypes.contains(type);
+    if (typeTargets && needsTargetingContext) {
+      final useContextParticipants = await _loadRacePowerupUseContext(token);
+      if (useContextParticipants.isNotEmpty) {
+        participants = useContextParticipants;
+      }
+    }
     // TR-651/657: enemy-team members only (no friendly fire) and no
     // forfeiters — an invalid target is never presented. Individual races keep
     // today's "everyone but me, minus stealthed" pool.
@@ -1920,6 +2059,32 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       if (mounted) showErrorToast(context, powerupUseErrorCopy(e));
     } finally {
       if (mounted) setState(() => _isActing = false);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _loadRacePowerupUseContext(
+    String token,
+  ) async {
+    try {
+      final result = await _api.fetchRacePowerupUseContext(
+        identityToken: token,
+        raceId: widget.raceId,
+      );
+      final rawParticipants =
+          (result['participants'] as List?)?.cast<Map<String, dynamic>>() ??
+          const [];
+      final rawPowerupData = result['powerupData'];
+      if (rawPowerupData is Map) {
+        setState(() {
+          _powerupData = {
+            for (final entry in rawPowerupData.entries)
+              if (entry.key is String) entry.key as String: entry.value,
+          };
+        });
+      }
+      return rawParticipants;
+    } catch (_) {
+      return const [];
     }
   }
 
@@ -4917,7 +5082,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                           );
                         },
                       )
-                    : _standingsList(participants),
+                    : _standingsList(
+                        participants,
+                        hasMore: _participantsHasMore,
+                        isLoadingMore: _participantsLoadingMore,
+                      ),
               ),
               if (isTeamRace) ...[
                 const SizedBox(height: 18),
@@ -6990,12 +7159,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               _checkerSectionHeader('FINAL STANDINGS'),
               _sectionCard(
                 padding: const EdgeInsets.all(8),
-                child: isTeamRace
+              child: isTeamRace
                     ? Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: _buildTeamGroupedRows(participants),
                       )
-                    : _standingsList(participants),
+                    : _standingsList(
+                        participants,
+                        hasMore: _participantsHasMore,
+                        isLoadingMore: _participantsLoadingMore,
+                      ),
               ),
             ],
           ),
@@ -8242,14 +8415,35 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// When the viewer's own plank falls below the cut it is pinned beneath the
   /// visible rows, because their own placement is the number they opened the
   /// race for.
-  Widget _standingsList(List<Map<String, dynamic>> participants) {
+  Future<void> _loadMoreParticipants() async {
+    if (_participantsLoadingMore || !_participantsHasMore) return;
+    await _loadProgress(append: true);
+  }
+
+  Widget _standingsList(
+    List<Map<String, dynamic>> participants, {
+    bool hasMore = false,
+    bool isLoadingMore = false,
+  }) {
     final rows = _buildLeaderboardRows(participants);
     final collapsible = rows.length > _kStandingsCollapseAbove;
 
     if (!collapsible || _standingsExpanded) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [...rows, if (collapsible) _standingsToggle(hiddenCount: 0)],
+        children: [
+          ...rows,
+          if (hasMore)
+            _standingsLoadMoreRow(
+              nextCount: _remainingParticipantCount(participants.length),
+              onLoadMore: isLoadingMore
+                  ? null
+                  : () {
+                      unawaited(_loadMoreParticipants());
+                    },
+            ),
+          if (collapsible) _standingsToggle(hiddenCount: 0),
+        ],
       );
     }
 
@@ -8263,11 +8457,68 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       children: [
         ...rows.take(_kStandingsCollapsedRows),
         if (selfIsHidden) ...[_standingsGapMarker(), rows[myIndex]],
+        if (hasMore)
+          _standingsLoadMoreRow(
+            nextCount: _remainingParticipantCount(participants.length),
+            onLoadMore: isLoadingMore
+                ? null
+                : () {
+                    unawaited(_loadMoreParticipants());
+                  },
+          ),
         _standingsToggle(
           hiddenCount:
               rows.length - _kStandingsCollapsedRows - (selfIsHidden ? 1 : 0),
         ),
       ],
+    );
+  }
+
+  int _remainingParticipantCount(int loadedCount) {
+    if (_participantsTotal == null) return 0;
+    final remaining = _participantsTotal! - loadedCount;
+    return remaining > 0 ? remaining : 0;
+  }
+
+  Widget _standingsLoadMoreRow({
+    required int nextCount,
+    required VoidCallback? onLoadMore,
+  }) {
+    final colors = AppColors.of(context);
+    final loadMoreLabel = nextCount > 0 ? 'SHOW $nextCount MORE' : 'SHOW MORE';
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: GestureDetector(
+        key: const Key('standings-load-more'),
+        behavior: HitTestBehavior.opaque,
+        onTap: onLoadMore,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: colors.parchmentDark.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: colors.parchmentBorder.withValues(alpha: 0.3),
+            ),
+          ),
+          child: Center(
+            child: onLoadMore == null
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Text(
+                    loadMoreLabel,
+                    style: PixelText.body(
+                      size: 14,
+                      color: colors.textDark.withValues(alpha: 0.8),
+                    ),
+                  ),
+          ),
+        ),
+      ),
     );
   }
 
