@@ -297,6 +297,17 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   bool _isLoading = true;
   bool _isActing = false;
   bool? _acceptingInvite;
+  // Set only by the missing-token early return in _loadDetails, so the
+  // failed-load panel can tell "you're signed out" (no retry can fix that)
+  // apart from a real network/server failure (retry might).
+  bool _authMissing = false;
+  // The last details-load failure message, shown on the failed-load panel
+  // instead of a generic "pull to retry" so the user knows what happened —
+  // mirrors tournament_detail_screen's equivalent panel.
+  String? _detailsError;
+  // Shared by the pull-to-refresh gesture and the panel's TRY AGAIN button so
+  // a user mashing both doesn't fire concurrent detail fetches.
+  Future<void>? _detailsInFlight;
   late bool _postCreateSharePromptVisible;
 
   /// WHICH action is in flight (batch 2026-08-08, item 12).
@@ -816,13 +827,24 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     }
   }
 
-  Future<void> _loadDetails() async {
+  Future<void> _loadDetails() =>
+      _detailsInFlight ??= _loadDetailsImpl().whenComplete(
+        () => _detailsInFlight = null,
+      );
+
+  Future<void> _loadDetailsImpl() async {
     try {
       final token = widget.authService.authToken;
       if (token == null || token.isEmpty) {
-        if (mounted) setState(() => _isLoading = false);
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _authMissing = true;
+          });
+        }
         return;
       }
+      _authMissing = false;
 
       final bootstrap = await _api.fetchRaceBootstrap(
         identityToken: token,
@@ -860,6 +882,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       setState(() {
         _race = details;
         _isLoading = false;
+        _detailsError = null;
         // One mute covers both placement and chat; treat the race as muted if
         // either flag is set. Defaults false for older backends missing the keys.
         _placementMuted =
@@ -916,11 +939,17 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         _enterNotAParticipant();
         return;
       }
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+        _detailsError = e.message;
+      });
       showErrorToast(context, e.message);
     } catch (e) {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _isLoading = false;
+          _detailsError = e.toString();
+        });
         showErrorToast(context, e.toString());
       }
     }
@@ -3447,13 +3476,27 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                           ),
                         )
                       : _race == null
-                      ? Center(
-                          child: Text(
-                            'Failed to load race',
-                            style: PixelText.body(
-                              size: 14,
-                              color: AppColors.of(context).textLight,
-                            ),
+                      ? AppRefreshIndicator(
+                          onRefresh: _loadDetails,
+                          child: ListView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.fromLTRB(12, 80, 12, 0),
+                            children: [
+                              // Missing auth can't be fixed by retrying the same
+                              // request, so it gets its own copy and no button
+                              // that would silently do nothing when tapped.
+                              _authMissing
+                                  ? const LoadErrorPanel(
+                                      icon: Icons.lock_outline,
+                                      title: 'Signed out',
+                                      message: 'Sign back in to view this race.',
+                                    )
+                                  : LoadErrorPanel(
+                                      title: 'Failed to load race',
+                                      message: _detailsError ?? 'Pull to retry.',
+                                      onRetry: () => _loadDetails(),
+                                    ),
+                            ],
                           ),
                         )
                       : AppRefreshIndicator(

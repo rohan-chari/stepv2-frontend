@@ -231,6 +231,61 @@ class _FailingProgressRaceBackendApiService
   }
 }
 
+/// Fails the details fetch once (simulating a dropped connection on first
+/// load), then succeeds on every call after — so a retry (pull-to-refresh)
+/// is what recovers the screen, not a second automatic attempt.
+class _FailsOnceThenLoadsRaceApi extends _ActivePaidRaceBackendApiService {
+  int detailCalls = 0;
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceDetails({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    detailCalls++;
+    if (detailCalls == 1) {
+      throw const ApiException('Connection timed out.');
+    }
+    return super.fetchRaceDetails(identityToken: identityToken, raceId: raceId);
+  }
+}
+
+/// Never resolves fetchRaceDetails until the test completes it — lets a test
+/// fire two retry entry points (button + pull) while the first fetch is
+/// still in flight and assert only one request actually went out.
+class _SlowDetailsRaceApi extends _ActivePaidRaceBackendApiService {
+  int detailCalls = 0;
+  final Completer<Map<String, dynamic>> detailsCompleter =
+      Completer<Map<String, dynamic>>();
+
+  @override
+  Future<Map<String, dynamic>> fetchRaceDetails({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    detailCalls++;
+    // Fail fast the first time so the test can reach the failed-load panel
+    // and its TRY AGAIN button; every retry after that hangs on the shared
+    // completer so the test can assert only one of them is truly in flight.
+    if (detailCalls == 1) {
+      throw const ApiException('Connection timed out.');
+    }
+    return detailsCompleter.future;
+  }
+}
+
+/// Fails every call with a distinct, identifiable message so a test can
+/// confirm the failed-load panel shows the real error, not a generic one.
+class _AlwaysFailsWithMessageRaceApi extends _ActivePaidRaceBackendApiService {
+  @override
+  Future<Map<String, dynamic>> fetchRaceDetails({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    throw const ApiException('Race server is on a coffee break.');
+  }
+}
+
 class _CompactRaceRequestApi extends BackendApiService {
   _CompactRaceRequestApi({
     this.bootstrapCompleter,
@@ -477,9 +532,153 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Failed to load race'), findsOneWidget);
+    // Missing auth can't be fixed by retrying the same request, so it gets
+    // its own distinct copy and no dead TRY AGAIN button.
+    expect(find.text('Signed out'), findsOneWidget);
+    expect(find.text('Failed to load race'), findsNothing);
     expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(
+      find.text('TRY AGAIN'),
+      findsNothing,
+      reason: 'Retrying the same request can never recover from no auth token.',
+    );
   });
+
+  testWidgets(
+    'pull-to-refresh recovers the failed-to-load state after a network error',
+    (WidgetTester tester) async {
+      final api = _FailsOnceThenLoadsRaceApi();
+      await tester.binding.setSurfaceSize(const Size(400, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorObservers: [appRouteObserver],
+          home: RaceDetailScreen(
+            authService: await _createAuthService(),
+            raceId: 'race-flaky-1',
+            backendApiService: api,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Failed to load race'), findsOneWidget);
+      expect(api.detailCalls, 1);
+
+      // The failed state must still be a pull-to-refresh surface, not a dead
+      // end — drag it down like a real pull gesture and let it settle.
+      expect(find.byType(RefreshIndicator), findsOneWidget);
+      await tester.fling(
+        find.byType(RefreshIndicator),
+        const Offset(0, 300),
+        1000,
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+      await tester.pump();
+
+      expect(api.detailCalls, greaterThanOrEqualTo(2));
+      expect(find.text('Failed to load race'), findsNothing);
+      expect(find.text('Gold Sprint'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'failed-to-load panel shows the real error instead of a generic message',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorObservers: [appRouteObserver],
+          home: RaceDetailScreen(
+            authService: await _createAuthService(),
+            raceId: 'race-flaky-2',
+            backendApiService: _AlwaysFailsWithMessageRaceApi(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Failed to load race'), findsOneWidget);
+      // findsWidgets, not findsOneWidget: the same message also flashes as a
+      // transient error toast — this assertion is about the PERSISTED copy
+      // on the panel outliving that toast, not about there being exactly one
+      // widget with this text on screen.
+      expect(find.text('Race server is on a coffee break.'), findsWidgets);
+      expect(find.text('Pull to retry.'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'TRY AGAIN and pull-to-refresh share one in-flight fetch, not two',
+    (WidgetTester tester) async {
+      final api = _SlowDetailsRaceApi();
+      await tester.binding.setSurfaceSize(const Size(400, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorObservers: [appRouteObserver],
+          home: RaceDetailScreen(
+            authService: await _createAuthService(),
+            raceId: 'race-slow-1',
+            backendApiService: api,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      // Initial load fails fast, landing on the failed-load panel with its
+      // TRY AGAIN button. Mash it twice in a row before the retry it starts
+      // has a chance to resolve — the second tap must reuse the first
+      // retry's in-flight fetch instead of starting a third request.
+      expect(api.detailCalls, 1);
+      expect(find.text('TRY AGAIN'), findsOneWidget);
+      await tester.tap(find.text('TRY AGAIN'));
+      await tester.pump();
+      expect(api.detailCalls, 2);
+      await tester.tap(find.text('TRY AGAIN'));
+      await tester.pump();
+
+      expect(
+        api.detailCalls,
+        2,
+        reason: 'A concurrent retry must reuse the in-flight fetch, not start another.',
+      );
+
+      api.detailsCompleter.complete(<String, dynamic>{
+        'id': 'race-slow-1',
+        'name': 'Gold Sprint',
+        'status': 'ACTIVE',
+        'targetSteps': 100000,
+        'maxDurationDays': 7,
+        'buyInAmount': 100,
+        'payoutPreset': 'TOP3_70_20_10',
+        'potCoins': 600,
+        'heldPotCoins': 0,
+        'projectedPotCoins': 600,
+        'payouts': {'first': 420, 'second': 120, 'third': 60},
+        'myStatus': 'ACCEPTED',
+        'isCreator': false,
+        'powerupsEnabled': false,
+        'participants': const [
+          {
+            'userId': 'user-1',
+            'displayName': 'Trail Walker',
+            'status': 'ACCEPTED',
+          },
+        ],
+      });
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Gold Sprint'), findsOneWidget);
+    },
+  );
 
   testWidgets(
     'compact race waits to initialize streams until a covering route pops',
