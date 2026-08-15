@@ -88,7 +88,13 @@ void main() {
     });
 
     test('no bundled ladder still advertises the retired 2h+ durations', () {
-      for (final type in ['LEG_CRAMP', 'WRONG_TURN']) {
+      for (final type in [
+        'LEG_CRAMP',
+        'WRONG_TURN',
+        'RUNNERS_HIGH',
+        'DETOUR_SIGN',
+        'STEALTH_MODE',
+      ]) {
         final tiers = PowerupCopy.upgradeTierLabelsFor(type)!;
         for (final label in tiers) {
           expect(
@@ -100,12 +106,15 @@ void main() {
       }
     });
 
-    test('STEALTH_MODE ladder matches the real 1/2/3/4h backend values', () {
+    // 2026-08-15: Stealth Mode joined the 15-min upgrade ladder alongside
+    // Leg Cramp / Wrong Turn, superseding the 1/2/3/4h values this test used
+    // to pin.
+    test('STEALTH_MODE ladder matches the real 1h/1h15m/1h30m/1h45m backend values', () {
       expect(PowerupCopy.upgradeTierLabelsFor('STEALTH_MODE'), [
         'Hide 1h',
-        'Hide 2h',
-        'Hide 3h',
-        'Hide 4h',
+        'Hide 1h 15m',
+        'Hide 1h 30m',
+        'Hide 1h 45m',
       ]);
     });
   });

@@ -419,14 +419,18 @@ abstract final class PowerupCopy {
     'SHORTCUT': 'Steal 1,000 steps from a rival',
     'COMPRESSION_SOCKS': 'Shield against the next attack',
     'PROTEIN_SHAKE': '+1,500 bonus steps instantly',
-    'RUNNERS_HIGH': '2x steps for 3 hours',
+    // 2026-08-15: base is (and always was) 1 hour — "3 hours" was stale
+    // bundled copy. Upgrades now add 15 min, not an hour.
+    'RUNNERS_HIGH': '2x steps for 1 hour',
     'SECOND_WIND': 'Bonus steps based on how far behind you are',
     'STEALTH_MODE':
         'Hide your name, steps, and track position while Stealth is active',
     'WRONG_TURN': "Reverse a rival's steps for 1 hour",
     'FANNY_PACK': 'Unlock an extra powerup slot',
     'TRAIL_MIX': '+100 steps per unique powerup type used',
-    'DETOUR_SIGN': 'Hide the entire leaderboard from a rival for 3 hours',
+    // 2026-08-15: base is (and always was) 1 hour — "3 hours" was stale
+    // bundled copy. Upgrades now add 15 min, not an hour.
+    'DETOUR_SIGN': 'Hide the entire leaderboard from a rival for 1 hour',
     // Batch 2026-08-09 item 8b: guaranteed rare at every level, and a forced
     // box can never hand back another Horseshoe.
     'LUCKY_HORSESHOE':
@@ -530,11 +534,13 @@ abstract final class PowerupCopy {
       'Steal up to 2,000 steps',
       'Steal up to 3,000 steps',
     ],
+    // 2026-08-15: joined the 15-min upgrade ladder (was 3/4/5/7h here, never
+    // matched the backend's real 1/2/3/4h ladder either).
     'DETOUR_SIGN': [
-      'Hide leaderboard 3h',
-      'Hide leaderboard 4h',
-      'Hide leaderboard 5h',
-      'Hide leaderboard 7h',
+      'Hide leaderboard 1h',
+      'Hide leaderboard 1h 15m',
+      'Hide leaderboard 1h 30m',
+      'Hide leaderboard 1h 45m',
     ],
     'TRAIL_MIX': [
       '+100 steps per unique type',
@@ -542,7 +548,9 @@ abstract final class PowerupCopy {
       '+200 steps per unique type',
       '+300 steps per unique type',
     ],
-    'RUNNERS_HIGH': ['2x for 3h', '2x for 4h', '2x for 5h', '2x for 7h'],
+    // 2026-08-15: joined the 15-min upgrade ladder (was 3/4/5/7h here, never
+    // matched the backend's real 1/2/3/4h ladder either).
+    'RUNNERS_HIGH': ['2x for 1h', '2x for 1h 15m', '2x for 1h 30m', '2x for 1h 45m'],
     // Item 1 — each upgrade adds 15 minutes on top of the 1h base.
     'LEG_CRAMP': [
       'Freeze 1h',
@@ -550,8 +558,9 @@ abstract final class PowerupCopy {
       'Freeze 1h 30m',
       'Freeze 1h 45m',
     ],
-    // Was 4/5/6.5/8h here — never matched the backend's real 1/2/3/4h ladder.
-    'STEALTH_MODE': ['Hide 1h', 'Hide 2h', 'Hide 3h', 'Hide 4h'],
+    // 2026-08-15: joined the 15-min upgrade ladder (was 4/5/6.5/8h here
+    // originally, then fixed to the old 1/2/3/4h ladder — now stale again).
+    'STEALTH_MODE': ['Hide 1h', 'Hide 1h 15m', 'Hide 1h 30m', 'Hide 1h 45m'],
     'WRONG_TURN': [
       'Reverse 1h',
       'Reverse 1h 15m',
