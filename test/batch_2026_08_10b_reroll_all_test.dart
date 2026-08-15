@@ -124,6 +124,7 @@ class _BatchStubApi extends BackendApiService {
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
     required String raceId,
+    int? participantsLimit,
   }) async => {
     'id': 'race-1',
     'name': 'Trail Blazers',

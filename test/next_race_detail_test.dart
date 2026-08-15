@@ -14,6 +14,7 @@ class _PendingRaceApi extends BackendApiService {
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
     required String raceId,
+    int? participantsLimit,
   }) async => {
     'id': raceId,
     'name': automatic ? 'Weekend Sprint' : 'Custom Race',

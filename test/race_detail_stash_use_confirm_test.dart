@@ -19,6 +19,7 @@ class _StashApi extends BackendApiService {
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
     required String raceId,
+    int? participantsLimit,
   }) async => {
     'id': raceId,
     'name': 'Stash Alley',

@@ -20,11 +20,23 @@ class EditRaceScreen extends StatefulWidget {
   final String raceId;
   final Map<String, dynamic> race;
 
+  /// True field sizes, passed in by the parent screen rather than re-derived
+  /// here. [race] may carry only a PAGE of `participants` (race-details
+  /// participants pagination), and counting that page would let the creator
+  /// set `maxParticipants`/`teamSize` BELOW the real field. Null => no count
+  /// was available, so the legacy array scan below is used.
+  final int? acceptedCount;
+  final int? teamAAcceptedCount;
+  final int? teamBAcceptedCount;
+
   EditRaceScreen({
     super.key,
     required this.authService,
     required this.raceId,
     required this.race,
+    this.acceptedCount,
+    this.teamAAcceptedCount,
+    this.teamBAcceptedCount,
     BackendApiService? backendApiService,
   }) : backendApiService = backendApiService ?? BackendApiService();
 
@@ -110,9 +122,13 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
 
     final participants =
         (race['participants'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    _acceptedCount = participants
-        .where((p) => p['status'] == 'ACCEPTED')
-        .length;
+    // Prefer the counts handed down by the parent (or, failing that, the
+    // additive summary fields on the payload itself). The array is only a page
+    // once the backend pages this route, so scanning it is the last resort.
+    _acceptedCount =
+        widget.acceptedCount ??
+        _readNullableCount(race['acceptedCount']) ??
+        participants.where((p) => p['status'] == 'ACCEPTED').length;
     _isTeamRace = TeamRace.isTeamRace(race);
     _initialTeamAName = TeamRace.teamName(race, RaceTeam.teamA);
     _initialTeamBName = TeamRace.teamName(race, RaceTeam.teamB);
@@ -120,20 +136,26 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
     _teamSize = _initialTeamSize;
     _teamANameController = TextEditingController(text: _initialTeamAName);
     _teamBNameController = TextEditingController(text: _initialTeamBName);
-    _teamACount = participants
-        .where(
-          (p) =>
-              p['status'] == 'ACCEPTED' &&
-              TeamRace.participantTeam(p) == RaceTeam.teamA,
-        )
-        .length;
-    _teamBCount = participants
-        .where(
-          (p) =>
-              p['status'] == 'ACCEPTED' &&
-              TeamRace.participantTeam(p) == RaceTeam.teamB,
-        )
-        .length;
+    _teamACount =
+        widget.teamAAcceptedCount ??
+        _readNullableCount(race['teamAAcceptedCount']) ??
+        participants
+            .where(
+              (p) =>
+                  p['status'] == 'ACCEPTED' &&
+                  TeamRace.participantTeam(p) == RaceTeam.teamA,
+            )
+            .length;
+    _teamBCount =
+        widget.teamBAcceptedCount ??
+        _readNullableCount(race['teamBAcceptedCount']) ??
+        participants
+            .where(
+              (p) =>
+                  p['status'] == 'ACCEPTED' &&
+                  TeamRace.participantTeam(p) == RaceTeam.teamB,
+            )
+            .length;
 
     _nameController = TextEditingController(text: _initialName);
 
@@ -539,6 +561,20 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
     if (value is num) return value.toInt();
     if (value is String) return int.tryParse(value) ?? fallback;
     return fallback;
+  }
+
+  /// Reads an additive count field: absent, null, negative or non-numeric all
+  /// degrade to null so the caller falls through to its own fallback.
+  int? _readNullableCount(dynamic value) {
+    final int? parsed = value is int
+        ? value
+        : value is num
+        ? value.toInt()
+        : value is String
+        ? int.tryParse(value)
+        : null;
+    if (parsed == null || parsed < 0) return null;
+    return parsed;
   }
 
   /// Reads maxParticipants where a null/absent value means "no limit"

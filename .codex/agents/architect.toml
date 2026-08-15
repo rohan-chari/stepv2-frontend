@@ -115,7 +115,18 @@ review.
 - **Cron.** `buildX` (pure tick) + `scheduleX`, registered only in
   `src/index.js` behind its kill switch. Dedup is insert-first/CAS on
   `job_runs` (`src/shared/db/jobRun.js`) — **never an advisory lock held
-  across a job** (the 3e6c827 outage).
+  across a job** (the 3e6c827 outage). **pm2 runs both prod and staging in
+  cluster mode with 2 instances each** (shipped 2026-08-15, commit
+  `d23ec2e`) — all `startCrons()` scheduling in `src/index.js` is gated
+  behind `process.env.NODE_APP_INSTANCE === "0"`, so only one of the two
+  workers ever runs crons; the other serves HTTP only. This guard is the
+  only thing preventing every scheduler (race resolution, live placement
+  push, payout reconcile, etc.) from double-firing across both workers. A
+  spec that adds a new top-level `schedule*` call outside `startCrons()`'s
+  existing structure must either call it from inside `startCrons()` (and
+  inherit the guard for free) or add its own `NODE_APP_INSTANCE === "0"`
+  check — flag this as a REQUIRED item if a spec's cron addition doesn't
+  make clear which. See `docs/pm2-cluster-scaling-plan.md`.
 - **Coins.** Exactly two writers of `users.coins` — `awardCoins` and
   `deductCoinsAtomic` in `src/shared/economy/` — structurally guarded by
   test. Every award/deduct passes a deterministic `refId`; the

@@ -46,6 +46,7 @@ class _RailApi extends BackendApiService {
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
     required String raceId,
+    int? participantsLimit,
   }) async => {
     'id': raceId,
     'name': 'Rail Race',

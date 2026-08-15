@@ -238,9 +238,19 @@ class BackendApiService {
   // placeholder, and worse, be purchasable. `remote_asset_preferred` further
   // says this build treats a valid manifest entry as authoritative over a
   // same-key bundle fallback. Both are additive and must be in BOTH branches.
+  // `race_participants_paging` tells the backend this build can survive a
+  // PAGED `race.participants` array on the details/bootstrap payload — i.e.
+  // every count, membership check, team assignment and "my steps" read here
+  // comes from the top-level summary fields (`acceptedCount`,
+  // `teamAAcceptedCount`/`teamBAcceptedCount`, `myStatus`, `myTeam`,
+  // `myTotalSteps`, `participantUserIds`) and not from scanning the array,
+  // whose page is NOT guaranteed to contain the viewer's own row. Older
+  // binaries omit it and keep getting the full array even though they already
+  // send `view=participants-v1` (which only ever paged `progress`). Must
+  // appear in BOTH branches of the ternary.
   static final String clientFeaturesHeader = _adsSupported
-      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal${_racePayoutDoubleSupported ? ',race_payout_double' : ''}'
-      : 'characters,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal${_racePayoutDoubleSupported ? ',race_payout_double' : ''}';
+      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging${_racePayoutDoubleSupported ? ',race_payout_double' : ''}'
+      : 'characters,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging${_racePayoutDoubleSupported ? ',race_payout_double' : ''}';
 
   /// Replays a persisted results dismissal with the capability it originally
   /// advertised. A later app build may have gained or lost the dedicated ad
@@ -2366,9 +2376,18 @@ class BackendApiService {
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
     required String raceId,
+    // Same opt-in the bootstrap route already takes: when set, `participants`
+    // comes back as the first page instead of the whole field. The backend
+    // only honours it for builds that also advertise the
+    // `race_participants_paging` capability token, so omitting it here (every
+    // non-race-detail caller) keeps today's unchanged full payload.
+    int? participantsLimit,
   }) async {
+    final pagingQuery = participantsLimit == null
+        ? ''
+        : '?view=participants-v1&offset=0&limit=$participantsLimit';
     final response = await _sendGetRequest(
-      path: '/races/$raceId',
+      path: '/races/$raceId$pagingQuery',
       identityToken: identityToken,
     );
 

@@ -488,6 +488,68 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     return (_readNullableInt(value) ?? value ?? 0).toString();
   }
 
+  // -- Server-paginated participants ----------------------------------------
+  //
+  // `_race['participants']` is a PAGE, not the field, once this build's
+  // `race_participants_paging` capability token meets a backend that honours
+  // it. The load-bearing consequence is that THE VIEWER'S OWN ROW IS NOT
+  // GUARANTEED TO BE IN IT — so no count, membership test, team assignment or
+  // "my steps" read may scan the array. Each accessor below reads the additive
+  // top-level summary field and returns null when it is absent (an older
+  // backend, or a response served whole); every caller then falls back to the
+  // pre-pagination array scan, which is exactly today's behaviour.
+
+  /// The race's true ACCEPTED field size, or null when the backend didn't say.
+  int? get _summaryAcceptedCount {
+    final value = _readNullableInt(_race?['acceptedCount']);
+    return (value == null || value < 0) ? null : value;
+  }
+
+  /// Per-side ACCEPTED counts for a team race; null on non-team races and on
+  /// any backend that doesn't send them.
+  int? get _summaryTeamAAcceptedCount {
+    final value = _readNullableInt(_race?['teamAAcceptedCount']);
+    return (value == null || value < 0) ? null : value;
+  }
+
+  int? get _summaryTeamBAcceptedCount {
+    final value = _readNullableInt(_race?['teamBAcceptedCount']);
+    return (value == null || value < 0) ? null : value;
+  }
+
+  /// The viewer's own step total in this race, served top-level precisely
+  /// because their participant row may be off-page. Null => unavailable.
+  int? get _summaryMyTotalSteps {
+    final value = _readNullableInt(_race?['myTotalSteps']);
+    return (value == null || value < 0) ? null : value;
+  }
+
+  /// Every user id in the race (bare strings, not profiles) — sent only when
+  /// the array is actually truncated. Null when absent/malformed, in which
+  /// case `participants` itself is the full roster.
+  List<String>? get _summaryParticipantUserIds {
+    final raw = _race?['participantUserIds'];
+    if (raw is! List) return null;
+    return raw.whereType<String>().toList(growable: false);
+  }
+
+  /// True when the server honoured our paging capability token for this
+  /// response — NOT "the array is truncated". The backend sends
+  /// `participantsPagination` whenever the token was honoured, including the
+  /// "I returned everyone anyway" case, so this only means the response's
+  /// `my*`/summary fields are the paging-safe ones, not that rows are
+  /// missing. Read defensively: the key is only ever present when the
+  /// capability token was honoured.
+  bool get _serverHonouredParticipantsPaging =>
+      _race?['participantsPagination'] is Map;
+
+  /// The viewer's own participant status, from the top-level field the backend
+  /// derives via a dedicated `(raceId, userId)` lookup — never from the page.
+  String? get _myParticipantStatus {
+    final value = _race?['myStatus'];
+    return value is String && value.isNotEmpty ? value : null;
+  }
+
   static const _scheduledMonthAbbrev = [
     'Jan',
     'Feb',
@@ -872,6 +934,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         details = await _api.fetchRaceDetails(
           identityToken: token,
           raceId: widget.raceId,
+          // Same one-page ask the bootstrap route gets. A backend that doesn't
+          // honour this build's capability token ignores it and answers whole.
+          participantsLimit: _kParticipantsPageSize,
         );
         if (details['status'] == 'ACTIVE') {
           unawaited(_loadGlobalPowerupInventory(token));
@@ -1435,22 +1500,38 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     if (race == null || !TeamRace.isTeamRace(race)) return false;
     final size = TeamRace.teamSize(race);
     if (size == null || size <= 0) return false;
+    final (a, b) = _teamAcceptedCounts();
+    return a >= size && b >= size;
+  }
+
+  /// ACCEPTED members per side. Prefers the additive summary fields — the
+  /// `participants` array may be a page, and undercounting here would let a
+  /// surplus invitee tap onto a side that's already full.
+  (int, int) _teamAcceptedCounts() {
+    final summaryA = _summaryTeamAAcceptedCount;
+    final summaryB = _summaryTeamBAcceptedCount;
+    if (summaryA != null && summaryB != null) return (summaryA, summaryB);
     final participants =
-        (race['participants'] as List?)?.cast<Map<String, dynamic>>() ??
+        (_race?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
         const <Map<String, dynamic>>[];
     final accepted = participants
         .where((p) => p['status'] == 'ACCEPTED')
         .toList();
-    final a = accepted
-        .where((p) => TeamRace.participantTeam(p) == RaceTeam.teamA)
-        .length;
-    final b = accepted
-        .where((p) => TeamRace.participantTeam(p) == RaceTeam.teamB)
-        .length;
-    return a >= size && b >= size;
+    return (
+      accepted
+          .where((p) => TeamRace.participantTeam(p) == RaceTeam.teamA)
+          .length,
+      accepted
+          .where((p) => TeamRace.participantTeam(p) == RaceTeam.teamB)
+          .length,
+    );
   }
 
   RaceTeam? _myLobbyTeam() {
+    // `myTeam` is served top-level exactly because my own row may be off-page.
+    final myTeam = parseRaceTeam(_race?['myTeam']);
+    if (myTeam != null) return myTeam;
+    if (_serverHonouredParticipantsPaging) return null;
     final participants =
         (_race?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
         const [];
@@ -1781,6 +1862,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           backendApiService: _api,
           raceId: widget.raceId,
           race: race,
+          // Hand the true field sizes down: `race['participants']` may be a
+          // page, and letting the editor re-derive from it would validate
+          // maxParticipants/teamSize against an undercount.
+          acceptedCount: _summaryAcceptedCount,
+          teamAAcceptedCount: _summaryTeamAAcceptedCount,
+          teamBAcceptedCount: _summaryTeamBAcceptedCount,
         ),
       ),
     );
@@ -1815,9 +1902,19 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       return;
     }
 
-    final participants =
-        (_race?['participants'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final existingIds = participants.map((p) => p['userId'] as String).toSet();
+    // `participantUserIds` is the whole roster as bare ids, sent precisely
+    // because `participants` may be a page — filtering against the page alone
+    // re-offers friends who are already in the race. Falls back to the array
+    // when the field is absent (older backend / unpaged response), reading
+    // each id defensively rather than casting.
+    final existingIds =
+        _summaryParticipantUserIds?.toSet() ??
+        {
+          for (final p
+              in (_race?['participants'] as List?)?.whereType<Map>() ??
+                  const <Map>[])
+            if (p['userId'] is String) p['userId'] as String,
+        };
 
     final selectedIds = await Navigator.of(context).push<List<String>>(
       MaterialPageRoute(
@@ -4194,9 +4291,28 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final isTeamRace = TeamRace.isTeamRace(_race!);
     final participants =
         (_race!['participants'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final acceptedCount = participants
-        .where((p) => p['status'] == 'ACCEPTED')
-        .length;
+    // The true field size. `participants` may be one page of it, so the array
+    // scan is only the fallback for a backend that doesn't send the summary.
+    final acceptedCount =
+        _summaryAcceptedCount ??
+        participants.where((p) => p['status'] == 'ACCEPTED').length;
+    // The rows/sprites actually rendered. Capped independently of the wire:
+    // a 473-participant PENDING race built 473 full sprite widgets before this
+    // cap, whatever the payload looked like.
+    final shownParticipants = participants
+        .take(_kParticipantsPageSize)
+        .toList(growable: false);
+    // "+N more": the remainder of the ROW list the capped view can't show —
+    // deliberately counted against every status (not just ACCEPTED), since
+    // the rows above render every status. `participantsPagination.total`
+    // covers every participant regardless of status; `participants.length`
+    // is the same population when paging wasn't honoured. Never negative,
+    // and absent entirely when the page already shows everyone.
+    final totalParticipantRows =
+        (_race?['participantsPagination'] as Map?)?['total'] as int? ??
+        participants.length;
+    final hiddenParticipantCount =
+        totalParticipantRows - shownParticipants.length;
 
     // 1.1.7: a scheduled race auto-starts at scheduledStartAt; manual start is
     // blocked (and rejected server-side) until then. Read defensively — older
@@ -4210,7 +4326,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
     // Everyone who's in lines up at the start line of the race-day scene.
     final startLineRunners = <GoalTrackRunner>[
-      for (final p in participants)
+      for (final p in shownParticipants)
         if (p['status'] == 'ACCEPTED')
           GoalTrackRunner(
             name: p['displayName'] as String? ?? '???',
@@ -4391,7 +4507,24 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [for (final p in participants) _buildParticipantRow(p)],
+              children: [
+                for (final p in shownParticipants) _buildParticipantRow(p),
+                // The header Pill shows the true total; without this row the
+                // list below it would silently disagree with no affordance
+                // explaining the gap.
+                if (hiddenParticipantCount > 0)
+                  Padding(
+                    key: const Key('participants-more-row'),
+                    padding: const EdgeInsets.only(bottom: 8, top: 2),
+                    child: Text(
+                      '+$hiddenParticipantCount more',
+                      style: PixelText.body(
+                        size: 14,
+                        color: AppColors.of(context).textMid,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ],
@@ -4438,18 +4571,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     // TR-301 gating for team races: both sides equal and nonzero. The lever
     // stays visibly disabled with live "Teams must be even — 2v1" copy.
     final isTeamRace = TeamRace.isTeamRace(_race ?? const {});
-    final participants =
-        (_race?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
-        const <Map<String, dynamic>>[];
-    final accepted = participants
-        .where((p) => p['status'] == 'ACCEPTED')
-        .toList();
-    final teamACount = accepted
-        .where((p) => TeamRace.participantTeam(p) == RaceTeam.teamA)
-        .length;
-    final teamBCount = accepted
-        .where((p) => TeamRace.participantTeam(p) == RaceTeam.teamB)
-        .length;
+    // Summary counts first — scanning a paged `participants` array would show
+    // "Teams must be even — 1v0" on a full 2v2 lobby and disarm the lever.
+    final (teamACount, teamBCount) = _teamAcceptedCounts();
     final teamsEvenAndReady = teamACount == teamBCount && teamACount > 0;
     final startBlocked = isTeamRace ? !teamsEvenAndReady : acceptedCount < 2;
 
@@ -5212,6 +5336,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   bool get _isSpectator {
     final race = _race;
     if (race == null) return false;
+    // Once the server has honoured our paging capability, absence from the
+    // (possibly truncated) array proves nothing — a real racer's own row
+    // routinely falls outside it. `myStatus` comes from the backend's
+    // dedicated (raceId, userId) lookup and is the only trustworthy
+    // membership signal once paging is in play.
+    if (_serverHonouredParticipantsPaging) return _myParticipantStatus == null;
+    // Unpaged payload: keep the established array test verbatim. It is
+    // deliberately stricter than `myStatus` — a differently-versioned backend
+    // must not be able to hand a spectator a composer whose posts would 403.
     final participants = (race['participants'] as List?)
         ?.whereType<Map>()
         .toList();
@@ -6304,13 +6437,18 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       );
       // Taunt with my live step count in this race when available — a
       // personal challenge opens better than a generic invite.
+      // `myTotalSteps` is served top-level because my own row may be off-page;
+      // the array scan stays as the fallback for a backend that omits it, and
+      // a null on both paths keeps the existing generic copy.
       final participants =
           (_race?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
           const [];
-      final mySteps = participants
-          .where((p) => (p['userId'] as String?) == _myUserId)
-          .map((p) => (p['totalSteps'] as num?)?.toInt() ?? 0)
-          .fold<int>(0, (a, b) => a > b ? a : b);
+      final mySteps =
+          _summaryMyTotalSteps ??
+          participants
+              .where((p) => (p['userId'] as String?) == _myUserId)
+              .map((p) => (p['totalSteps'] as num?)?.toInt() ?? 0)
+              .fold<int>(0, (a, b) => a > b ? a : b);
       final text = mySteps > 0
           ? 'I\'ve logged ${_formatSteps(mySteps)} steps in "$raceName" on '
                 'Bara. Think you can catch me? $url'
@@ -6362,10 +6500,17 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     if (race['myStatus'] != 'ACCEPTED' || race['isCreator'] == true) {
       return null;
     }
-    final participants = race['participants'];
-    if (participants is! List ||
-        !participants.whereType<Map>().any((p) => p['userId'] == _myUserId)) {
-      return null;
+    // The membership re-check is only meaningful against a FULL roster. On a
+    // paged payload the viewer's own row is routinely off-page, and re-scanning
+    // would silently withhold the leave/forfeit control from a real
+    // participant; `myStatus == 'ACCEPTED'` (checked just above, from the
+    // backend's own lookup) already establishes membership there.
+    if (!_serverHonouredParticipantsPaging) {
+      final participants = race['participants'];
+      if (participants is! List ||
+          !participants.whereType<Map>().any((p) => p['userId'] == _myUserId)) {
+        return null;
+      }
     }
     final action = race['leaveAction'];
     if (action == 'LEAVE' && race['status'] == 'PENDING') return action;
@@ -7002,7 +7147,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final winnerTeam = TeamRace.winnerTeam(_race!);
     final participants = orderRaceParticipantsForDisplay(
       (_progress?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
-          (_race!['participants'] as List?)?.cast<Map<String, dynamic>>() ??
+          // Only fall back to the details array when it's known-full — once
+          // paging is honoured that array can be a single page, and a failed
+          // progress load must not render a truncated "final standings"
+          // board as if it were authoritative.
+          (_serverHonouredParticipantsPaging
+              ? null
+              : (_race!['participants'] as List?)?.cast<Map<String, dynamic>>()) ??
           [],
     );
     final completedLeaderSteps = _leaderSteps(participants);
@@ -7286,6 +7437,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// without a usable participant list yields 0, and the cut line then drops
   /// the "of N" half rather than printing "of 0".
   int get _acceptedFieldSize {
+    // The true field, not the page: this drives the "of N" payout cut line.
+    final summary = _summaryAcceptedCount;
+    if (summary != null) return summary;
     final raw = _race?['participants'];
     if (raw is! List) return 0;
     return raw.where((p) => p is Map && p['status'] == 'ACCEPTED').length;

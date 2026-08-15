@@ -229,6 +229,15 @@ abstract final class TeamRace {
     return a > b ? RaceTeam.teamA : RaceTeam.teamB;
   }
 
+  /// Defensive read of an additive numeric field: absent, null, or a
+  /// non-numeric value all degrade to null rather than throwing.
+  static int? _readNullableInt(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
   static int? _blockInt(Map<String, dynamic> race, String side, String field) {
     final teams = race['teams'];
     if (teams is! Map) return null;
@@ -249,11 +258,22 @@ abstract final class TeamRace {
   }
 
   /// Accepted member counts per side: prefers the `teams` block's
-  /// memberCount, falls back to counting ACCEPTED participants, else null.
+  /// memberCount, then the details payload's top-level summary counts, and
+  /// only then falls back to counting ACCEPTED participants; else null.
+  ///
+  /// The array fallback is a landmine on a details/bootstrap payload, whose
+  /// `participants` may be a server-side PAGE (race-details participants
+  /// pagination) — counting it would under-report both sides. The summary
+  /// fields are additive: absent on an older backend, in which case the old
+  /// array scan is still the best available answer.
   static (int, int)? sideCounts(Map<String, dynamic> race) {
     final a = _blockInt(race, 'teamA', 'memberCount');
     final b = _blockInt(race, 'teamB', 'memberCount');
     if (a != null && b != null) return (a, b);
+
+    final summaryA = _readNullableInt(race['teamAAcceptedCount']);
+    final summaryB = _readNullableInt(race['teamBAcceptedCount']);
+    if (summaryA != null && summaryB != null) return (summaryA, summaryB);
 
     final participants = (race['participants'] as List?)
         ?.whereType<Map>()

@@ -18,6 +18,7 @@ class _TargetEraActiveRaceApi extends BackendApiService {
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
     required String raceId,
+    int? participantsLimit,
   }) async {
     return {
       'id': raceId,
@@ -94,6 +95,7 @@ class _TargetEraCompletedRaceApi extends _TargetEraActiveRaceApi {
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
     required String raceId,
+    int? participantsLimit,
   }) async {
     final base = await super.fetchRaceDetails(
       identityToken: identityToken,

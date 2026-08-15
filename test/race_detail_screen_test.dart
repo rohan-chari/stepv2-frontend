@@ -18,6 +18,7 @@ class _FakeBackendApiService extends BackendApiService {
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
     required String raceId,
+    int? participantsLimit,
   }) async {
     return {
       'id': raceId,
@@ -102,6 +103,7 @@ class _ActivePaidRaceBackendApiService extends BackendApiService {
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
     required String raceId,
+    int? participantsLimit,
   }) async {
     return {
       'id': raceId,
@@ -178,6 +180,7 @@ class _PendingAcceptedRaceBackendApiService extends BackendApiService {
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
     required String raceId,
+    int? participantsLimit,
   }) async {
     return {
       'id': raceId,
@@ -241,6 +244,7 @@ class _FailsOnceThenLoadsRaceApi extends _ActivePaidRaceBackendApiService {
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
     required String raceId,
+    int? participantsLimit,
   }) async {
     detailCalls++;
     if (detailCalls == 1) {
@@ -262,6 +266,7 @@ class _SlowDetailsRaceApi extends _ActivePaidRaceBackendApiService {
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
     required String raceId,
+    int? participantsLimit,
   }) async {
     detailCalls++;
     // Fail fast the first time so the test can reach the failed-load panel
@@ -281,6 +286,7 @@ class _AlwaysFailsWithMessageRaceApi extends _ActivePaidRaceBackendApiService {
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
     required String raceId,
+    int? participantsLimit,
   }) async {
     throw const ApiException('Race server is on a coffee break.');
   }
@@ -368,6 +374,7 @@ class _CompactRaceRequestApi extends BackendApiService {
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
     required String raceId,
+    int? participantsLimit,
   }) async {
     legacyDetailsCalls += 1;
     return _race;
@@ -458,6 +465,7 @@ class _FieldScaledPayoutRaceBackendApiService
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
     required String raceId,
+    int? participantsLimit,
   }) async {
     final base = await super.fetchRaceDetails(
       identityToken: identityToken,
@@ -481,6 +489,7 @@ class _FinishRewardRaceBackendApiService
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
     required String raceId,
+    int? participantsLimit,
   }) async {
     final race = await super.fetchRaceDetails(
       identityToken: identityToken,

@@ -38,7 +38,15 @@ class RacePayoutPresentation {
         ? race!['payoutPreset'] as String
         : null;
     final pool = RacePrizePool.fromRace(race);
-    final accepted = race?['participants'] is List
+    // The details payload's `participants` may be a server-side PAGE
+    // (race-details participants pagination), so counting it under-reports the
+    // field and prints the wrong "of N" cut line. The additive `acceptedCount`
+    // is the true total; fall back to the array scan only when it is absent
+    // (older backend), which is exactly today's behaviour.
+    final acceptedFromSummary = safeInt(race?['acceptedCount'], fallback: -1);
+    final accepted = acceptedFromSummary >= 0
+        ? acceptedFromSummary
+        : race?['participants'] is List
         ? (race!['participants'] as List)
               .where((entry) => entry is Map && entry['status'] == 'ACCEPTED')
               .length

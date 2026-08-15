@@ -43,6 +43,7 @@ class _NotAParticipantApi extends BackendApiService {
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
     required String raceId,
+    int? participantsLimit,
   }) async {
     detailsCalls += 1;
     if (detailsFail) throw forbidden;
@@ -271,6 +272,7 @@ class _Failing500Api extends _NotAParticipantApi {
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
     required String raceId,
+    int? participantsLimit,
   }) async {
     throw const ApiException('Something went wrong.', statusCode: 500);
   }

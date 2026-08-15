@@ -28,6 +28,10 @@ class DemoRaceApiService extends BackendApiService {
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
     required String raceId,
+    // Accepted and ignored, exactly like fetchRaceBootstrap below — the demo
+    // roster is smaller than a page, and the engine is the only source of
+    // truth here. Never let this reach a network.
+    int? participantsLimit,
   }) async => engine.raceDetails(_now, wallNow: DateTime.now());
 
   @override

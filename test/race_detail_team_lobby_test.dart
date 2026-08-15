@@ -32,6 +32,7 @@ class _TeamLobbyApi extends BackendApiService {
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
     required String raceId,
+    int? participantsLimit,
   }) async {
     Map<String, dynamic> member(String id, String team) => {
       'userId': id,
@@ -112,6 +113,7 @@ class _IndividualPendingApi extends BackendApiService {
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
     required String raceId,
+    int? participantsLimit,
   }) async {
     return {
       'id': raceId,

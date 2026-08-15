@@ -22,6 +22,7 @@ class _SpectateApi extends BackendApiService {
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
     required String raceId,
+    int? participantsLimit,
   }) async => {
     'id': raceId,
     'name': 'Daily Dash — Semifinals',
@@ -106,6 +107,7 @@ class _ParticipantApi extends _SpectateApi {
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
     required String raceId,
+    int? participantsLimit,
   }) async {
     final base = await super.fetchRaceDetails(
       identityToken: identityToken,

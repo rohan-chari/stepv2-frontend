@@ -317,6 +317,11 @@ class TutorialPreviewBackendApiService extends BackendApiService {
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
     required String raceId,
+    // Accepted and ignored, exactly like fetchRaceBootstrap below: the
+    // tutorial's fixture roster is far smaller than any page size, so it is
+    // always "one full page". Emitting no pagination metadata keeps the screen
+    // on its unpaged path, which is what the deterministic walkthrough expects.
+    int? participantsLimit,
   }) async {
     return tutorialPreviewRaceDetail();
   }

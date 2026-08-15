@@ -82,6 +82,7 @@ class _RaceStubApi extends BackendApiService {
   Future<Map<String, dynamic>> fetchRaceDetails({
     required String identityToken,
     required String raceId,
+    int? participantsLimit,
   }) async => _race();
 
   @override
