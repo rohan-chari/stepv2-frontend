@@ -11,6 +11,7 @@ import '../models/race_prize_pool.dart';
 import '../services/activation_analytics_service.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
+import '../services/discovery_join_coordinator.dart';
 import '../services/notification_service.dart';
 import '../services/race_chat_service.dart';
 import '../services/race_feed_service.dart';
@@ -408,6 +409,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
   // Activity tab (system/powerup events).
   RaceFeedService? _feed;
+  /// In flight for the spectator banner's JOIN CTA (preview mode).
+  bool _joiningFromPreview = false;
   bool _feedInitialized = false;
   bool _chatInitialized = false;
   RaceStreamCoordinator? _streams;
@@ -454,9 +457,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     try {
       if (_pollingActive) await _loadProgress();
       if (!_routeVisible || !_appResumed) return;
-      if (!_feedInitialized) {
+      // A preview viewer has no access to the feed/chat endpoints (they still
+      // 403 for non-participants), so returning to the screen must not open
+      // them either.
+      if (!_feedInitialized && !_isPreviewViewer) {
         _ensureFeedInitialized(poll: _pollingActive);
-      } else {
+      } else if (_feedInitialized) {
         await _streams?.resume(chatVisible: _activityTabIndex == 1);
       }
       if (!_routeVisible || !_appResumed) return;
@@ -826,6 +832,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   }
 
   void _ensureChatInitialized({bool poll = true}) {
+    // Chat 403s a non-participant preview viewer; the tab renders locked.
+    if (_isPreviewViewer) return;
     final streams = _streams;
     if (streams == null) return;
     if (_chatInitialized) {
@@ -846,6 +854,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   void _ensureFeedInitialized({bool poll = true}) {
     if (_feedInitialized) return;
     if (_race == null) return;
+    // Belt-and-braces: the activity feed 403s a non-participant preview viewer.
+    if (_isPreviewViewer) return;
     if (!_routeVisible || !_appResumed) return;
     _feedInitialized = true;
     final streams = RaceStreamCoordinator(
@@ -955,6 +965,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             details['myChatMuted'] == true;
       });
 
+      // Preview mode (a non-participant on a public, non-tournament race) is a
+      // SINGLE fetch plus pull-to-refresh: the backend's read-only preview path
+      // is built for occasional reads, and a 30s poll from every browser would
+      // defeat it. Chat/activity are locked rather than fetched — those
+      // endpoints still 403 a non-participant.
+      final previewViewer = _isPreviewViewer;
+
       if (details['status'] == 'ACTIVE') {
         setState(() {
           _participantsTotal = null;
@@ -977,14 +994,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             refetchOnNullPrefetch: !bootstrap.supported,
           );
         }
-        _startPolling();
+        if (!previewViewer) _startPolling();
         _startCountdown();
-        _ensureFeedInitialized();
+        if (!previewViewer) _ensureFeedInitialized();
       } else if (details['status'] == 'COMPLETED') {
         // Finished races keep their chat + activity viewable (read-only —
         // _canPostMessage is false and the backend rejects posts). Load once,
         // no polling: the conversation can't change anymore.
-        _ensureFeedInitialized(poll: false);
+        if (!previewViewer) _ensureFeedInitialized(poll: false);
       } else if (details['status'] == 'PENDING') {
         // Scheduled races show a live countdown to their auto-start; the
         // ticker otherwise only runs for ACTIVE races.
@@ -4406,6 +4423,17 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         ],
         const SizedBox(height: 16),
 
+        // SPECTATING indicator (+ JOIN CTA in public preview) — the ACTIVE
+        // board carries the same banner; a PENDING race needs it too, since a
+        // not-yet-started public race is the commonest thing to preview.
+        if (_isSpectator) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+            child: _buildSpectatorBanner(),
+          ),
+          const SizedBox(height: 16),
+        ],
+
         _checkerSectionHeader('RACE DETAILS'),
         _sectionCard(
           padding: const EdgeInsets.fromLTRB(12, 9, 8, 9),
@@ -4432,7 +4460,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                   race: _race!,
                   participants: participants,
                   myUserId: _myUserId,
-                  onTapEmptySlot: (_isActing || myStatus == 'DECLINED')
+                  // A spectator/preview viewer sees the team split read-only:
+                  // picking a side happens inside the JOIN flow's team-side
+                  // picker, never by tapping a peg they have no row for.
+                  onTapEmptySlot:
+                      (_isActing || _isSpectator || myStatus == 'DECLINED')
                       ? null
                       : _onLobbySlotTap,
                 ),
@@ -4676,8 +4708,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           const SizedBox(height: 12),
         ],
 
-        // Actions
-        if (!widget.demoMode && isAutomaticStartRace(_race ?? const {})) ...[
+        // Actions. A spectator/preview viewer owns none of them — the
+        // "waiting for another walker / share your race" card is the creator's
+        // status, not a bystander's.
+        if (_isSpectator) ...[
+          const SizedBox.shrink(),
+        ] else if (!widget.demoMode &&
+            isAutomaticStartRace(_race ?? const {})) ...[
           RetroCard(
             key: const Key('quick-race-auto-start-pending'),
             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
@@ -5352,7 +5389,53 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     return !participants.any((p) => p['userId'] == _myUserId);
   }
 
+  /// A non-participant previewing a PUBLIC, NON-TOURNAMENT race served by the
+  /// backend's `race_preview` carve-out. Deliberately NOT a second state
+  /// alongside `_isSpectator`: it is `_isSpectator` plus the discriminator the
+  /// backend predicate itself uses, mirroring `_canShowCreatorOptions` /
+  /// `_stampedLeaveAction`'s existing guard shape in this file.
+  ///
+  /// `myStatus == null` alone is NOT usable here — a tournament-bracket
+  /// spectator reads null too, and offering them a JOIN would 400
+  /// (`TOURNAMENT_RACE_LOCKED`).
+  bool get _isPreviewViewer {
+    final race = _race;
+    if (widget.demoMode || race == null) return false;
+    if (!_isSpectator) return false;
+    return race['tournamentId'] == null && race['isPublic'] == true;
+  }
+
+  /// The preview viewer can actually join right now. Read defensively: an
+  /// unknown/absent status is treated as not joinable.
+  bool get _canJoinFromPreview {
+    if (!_isPreviewViewer) return false;
+    final status = _race?['status'] as String? ?? '';
+    return status == 'PENDING' || status == 'ACTIVE';
+  }
+
+  /// Joins the previewed race through the SHARED discovery join flow — the same
+  /// buy-in confirmation and team-side picker the public-races list and home
+  /// cards use. No new dialog is introduced here.
+  Future<void> _joinFromPreview() async {
+    final race = _race;
+    if (race == null || _joiningFromPreview || !_canJoinFromPreview) return;
+    setState(() => _joiningFromPreview = true);
+    try {
+      final result = await DiscoveryJoinCoordinator(
+        authService: widget.authService,
+        backendApiService: _api,
+      ).joinRace(context, race);
+      if (result == null || !mounted) return;
+      // Re-read as a participant: the reload takes the normal path, which is
+      // what arms polling, the feed and the chat for the first time.
+      await _loadDetails();
+    } finally {
+      if (mounted) setState(() => _joiningFromPreview = false);
+    }
+  }
+
   Widget _buildSpectatorBanner() {
+    final canJoin = _canJoinFromPreview;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
@@ -5361,22 +5444,50 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.of(context).roofEdge, width: 2),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.visibility_rounded,
-            size: 16,
-            color: Colors.white.withValues(alpha: 0.9),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.visibility_rounded,
+                size: 16,
+                color: Colors.white.withValues(alpha: 0.9),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'SPECTATING · READ-ONLY',
+                style: PixelText.title(
+                  size: 12,
+                  color: Colors.white.withValues(alpha: 0.92),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Text(
-            'SPECTATING · READ-ONLY',
-            style: PixelText.title(
-              size: 12,
-              color: Colors.white.withValues(alpha: 0.92),
+          // Public, non-tournament races get the way in. Tournament matchups
+          // never do — that JOIN would be rejected server-side.
+          if (canJoin) ...[
+            const SizedBox(height: 4),
+            Text(
+              'You’re not in this one yet.',
+              textAlign: TextAlign.center,
+              style: PixelText.body(
+                size: 11.5,
+                color: Colors.white.withValues(alpha: 0.75),
+              ),
             ),
-          ),
+            const SizedBox(height: 9),
+            PillButton(
+              key: const Key('race-preview-join-cta'),
+              label: _joiningFromPreview ? 'JOINING…' : 'JOIN THIS RACE',
+              variant: PillButtonVariant.accent,
+              fontSize: 13,
+              fullWidth: true,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 11),
+              onPressed: _joiningFromPreview ? null : _joinFromPreview,
+            ),
+          ],
         ],
       ),
     );
@@ -5504,7 +5615,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     }
 
     return Text(
-      'You earn a powerup every ${_formatSteps(powerupStepInterval)} steps this race. ${_formatSteps(stepsUntilNextPowerup)} to go.',
+      'You earn a powerup every ${_formatSteps(powerupStepInterval)} steps. ${_formatSteps(stepsUntilNextPowerup)} to go.',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
       style: PixelText.body(size: 13, color: AppColors.of(context).textMid),
     );
   }
@@ -6893,7 +7006,53 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     );
   }
 
+  /// Preview mode's stand-in for the two tabs whose endpoints still 403 a
+  /// non-participant. Nothing is fetched behind it.
+  Widget _buildPreviewLockedTab(Key key, String line) {
+    final colors = AppColors.of(context);
+    return Center(
+      key: key,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.lock_outline_rounded,
+              size: 30,
+              color: colors.textMid.withValues(alpha: 0.55),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              line,
+              textAlign: TextAlign.center,
+              style: PixelText.body(
+                size: 15,
+                color: colors.textMid.withValues(alpha: 0.75),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'JOIN TO SEE THIS',
+              textAlign: TextAlign.center,
+              style: PixelText.title(
+                size: 12,
+                color: colors.textMid.withValues(alpha: 0.55),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildActivityTab() {
+    if (_isPreviewViewer) {
+      return _buildPreviewLockedTab(
+        const Key('race-preview-locked-activity'),
+        'The race feed opens up once you’re in.',
+      );
+    }
     final feed = _feed;
     final actorNames = _participantNames();
     final events = feed?.events ?? const <RaceFeedEvent>[];
@@ -6958,6 +7117,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   }
 
   Widget _buildChatTab() {
+    if (_isPreviewViewer) {
+      return _buildPreviewLockedTab(
+        const Key('race-preview-locked-chat'),
+        'Race chat is for the runners in it.',
+      );
+    }
     final chat = _chat;
     final messages = chat?.messages ?? const <RaceChatMessage>[];
     final isLoading = chat?.isLoading ?? false;

@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../config/animals.dart';
 import '../../models/loadable.dart';
@@ -70,6 +73,14 @@ class LeaderboardTab extends StatefulWidget {
   // a key so its overlay can measure the highlighted "you" row.
   final GlobalKey? tutorialMyRowKey;
 
+  /// SharedPreferences key holding the last Friends/Global choice, so it
+  /// survives the PageView disposing this tab and survives app restarts.
+  /// Deliberately named `_pref` to stay distinct from the `leaderboard_scope`
+  /// string that lives *inside* `coach_tip.dart`'s seen-tips list.
+  /// Not cleared by `AuthService.signOut()` (an explicit per-key remove list):
+  /// it is a UI preference, not account state.
+  static const scopePreferenceKey = 'leaderboard_scope_pref';
+
   const LeaderboardTab({
     super.key,
     required this.authService,
@@ -114,7 +125,42 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     super.initState();
     _api = widget.backendApiService ?? BackendApiService();
     _selectedPeriod = widget.requestedPeriod;
-    _loadLeaderboard();
+    _restoreScopeThenLoad();
+  }
+
+  /// Reads the stored scope BEFORE the first fetch — never after. Loading it
+  /// afterwards would fire a second `fetchLeaderboard` on every tab open and
+  /// briefly show the wrong board.
+  Future<void> _restoreScopeThenLoad() async {
+    final stored = await _loadScopePreference();
+    if (!mounted) return;
+    if (stored != _selectedScope) {
+      setState(() => _selectedScope = stored);
+    }
+    await _loadLeaderboard();
+  }
+
+  static Future<_LeaderboardScope> _loadScopePreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stored = prefs.getString(LeaderboardTab.scopePreferenceKey);
+      return _LeaderboardScope.values.firstWhere(
+        (scope) => scope.name == stored,
+        orElse: () => _LeaderboardScope.global,
+      );
+    } catch (_) {
+      // Preferences unavailable: fall back to today's behaviour.
+      return _LeaderboardScope.global;
+    }
+  }
+
+  static Future<void> _saveScopePreference(_LeaderboardScope scope) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(LeaderboardTab.scopePreferenceKey, scope.name);
+    } catch (_) {
+      // A failed write only costs stickiness; never break the toggle.
+    }
   }
 
   @override
@@ -203,6 +249,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   void _selectScope(_LeaderboardScope scope) {
     if (scope == _selectedScope) return;
     setState(() => _selectedScope = scope);
+    unawaited(_saveScopePreference(scope));
     _loadLeaderboard();
   }
 

@@ -3830,6 +3830,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                             unawaited(_openPublicRacesFromHome());
                           },
                           onOpenRace: _openRaceFromCard,
+                          // Card-body tap on a suggested TOURNAMENT opens the
+                          // bracket read-only — the same navigation the
+                          // post-join path already uses.
+                          onOpenTournament: _openTournament,
                           onJoinRaceFromCard: _joinRaceFromCard,
                           onJoinDiscoveredRace: _joinDiscoveredRace,
                           onAcceptRaceInvite: _acceptRaceInviteFromCard,

@@ -519,9 +519,7 @@ class _RacesTabState extends State<RacesTab> {
     final winnings = Tournament.prizeCoins(t);
     final elim = Tournament.myEliminatedInRound(t);
     final isChamp = Tournament.isChampion(t, widget.authService.userId);
-    final stripeColor = index.isOdd
-        ? AppColors.of(context).parchmentLight
-        : AppColors.of(context).parchment;
+    final cardColor = AppColors.of(context).parchment;
     final responding = _respondingTournamentId == id;
 
     Color badgeColor;
@@ -550,7 +548,7 @@ class _RacesTabState extends State<RacesTab> {
       onTap: () => _navigateToTournamentDetail(id),
       behavior: HitTestBehavior.opaque,
       child: Container(
-        color: stripeColor,
+        color: cardColor,
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -858,7 +856,6 @@ class _RacesTabState extends State<RacesTab> {
             ? _buildTournamentTicket(tournamentInvites[i], i, isInvite: true)
             : _buildRaceRow(
                 raceInvites[i - tournamentInvites.length],
-                i,
                 isInvite: true,
               );
         final isLast = i == tournamentInvites.length + raceInvites.length - 1;
@@ -1123,7 +1120,6 @@ class _RacesTabState extends State<RacesTab> {
             }
             return _buildRaceRow(
               entry.data,
-              rowIndex,
               cardKey: rowIndex == 0 ? widget.tutorialCardKey : null,
               boxKey: rowIndex == 0 ? widget.tutorialBoxKey : null,
             );
@@ -1209,9 +1205,7 @@ class _RacesTabState extends State<RacesTab> {
     final placementHidden = Tournament.matchPlacementHidden(match);
     final endsAt = Tournament.matchEndsAt(match);
 
-    final stripeColor = index.isOdd
-        ? AppColors.of(context).parchmentLight
-        : AppColors.of(context).parchment;
+    final cardColor = AppColors.of(context).parchment;
 
     // Badge language matches the old bracket ticket so the states stay
     // recognisable after the merge.
@@ -1274,7 +1268,7 @@ class _RacesTabState extends State<RacesTab> {
           boxShadow: _raceCardShadow,
         ),
         child: Material(
-          color: stripeColor,
+          color: cardColor,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
             side: BorderSide(
@@ -1454,8 +1448,7 @@ class _RacesTabState extends State<RacesTab> {
   }
 
   Widget _buildRaceRow(
-    Map<String, dynamic> race,
-    int index, {
+    Map<String, dynamic> race, {
     bool isInvite = false,
     GlobalKey? cardKey,
     GlobalKey? boxKey,
@@ -1469,30 +1462,10 @@ class _RacesTabState extends State<RacesTab> {
     final creator = race['creator'] as Map<String, dynamic>?;
     final creatorName = creator?['displayName'] as String? ?? '';
     final isCreator = race['isCreator'] as bool? ?? false;
-    // Additive list-summary identity. Current backends provide `leader`; old
-    // backends do not, so completed races may reuse their existing `winner`
-    // block and every other missing/malformed case falls back to race initials.
-    // The fallback deliberately does not show the creator's photo: creator and
-    // first place are different concepts.
-    final rawLeader = race['leader'] is Map
-        ? race['leader'] as Map
-        : race['winner'] is Map
-        ? race['winner'] as Map
-        : const <Object?, Object?>{};
-    final leaderAccessories = rawLeader['accessories'] is List
-        ? (rawLeader['accessories'] as List)
-              .whereType<Map>()
-              .map(
-                (item) => <String, dynamic>{
-                  for (final entry in item.entries)
-                    if (entry.key is String) entry.key as String: entry.value,
-                },
-              )
-              .toList(growable: false)
-        : const <Map<String, dynamic>>[];
-    final leaderAnimal = rawLeader['animal'] is String
-        ? rawLeader['animal'] as String
-        : null;
+    // NOTE: the row deliberately no longer reads the additive `leader` (or its
+    // `winner` fallback) block. It fed a leading rank-1 portrait that users
+    // mistook for their own racer. The backend still sends the field for
+    // frozen older builds; it is simply ignored here.
     final myPlacement = race['myPlacement'] as int?;
     // Detour Sign: the backend nulls myPlacement and sets this additive flag
     // so the list shows "???" instead of a placement (matches the race-detail
@@ -1549,9 +1522,7 @@ class _RacesTabState extends State<RacesTab> {
       badgeColor = AppColors.of(context).textMid;
     }
 
-    final stripeColor = index.isOdd
-        ? AppColors.of(context).parchmentLight
-        : AppColors.of(context).parchment;
+    final cardColor = AppColors.of(context).parchment;
 
     String timeLabel;
     // Default (non-active rows show "Xd race") stays muted; active rows get a
@@ -1587,8 +1558,29 @@ class _RacesTabState extends State<RacesTab> {
 
     final showTrailingStatus =
         status != 'ACTIVE' && status != 'COMPLETED' && statusLabel.isNotEmpty;
-    final showTrailingContent =
-        myPlacement != null || myPlacementHidden || showTrailingStatus;
+
+    // The viewer's own placement now rides level with the race name (it used
+    // to sit in a trailing column opposite the removed leader portrait).
+    Widget? placementChip;
+    if (myPlacement != null) {
+      placementChip = _buildMetaChip(
+        '${formatOrdinal(myPlacement)} PLACE',
+        backgroundColor: AppColors.of(context).isDark
+            ? AppColors.of(context).pillGreenDark
+            : AppColors.of(context).pillGreenDark.withValues(alpha: 0.16),
+        textColor: AppColors.of(context).isDark
+            ? AppColors.of(context).textLight
+            : AppColors.of(context).pillGreenDark,
+      );
+    } else if (myPlacementHidden) {
+      placementChip = _buildMetaChip(
+        '??? PLACE',
+        backgroundColor: AppColors.of(
+          context,
+        ).textMid.withValues(alpha: 0.16),
+        textColor: AppColors.of(context).textMid,
+      );
+    }
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
@@ -1601,7 +1593,7 @@ class _RacesTabState extends State<RacesTab> {
             boxShadow: _raceCardShadow,
           ),
           child: Material(
-            color: stripeColor,
+            color: cardColor,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
               side: BorderSide(
@@ -1622,15 +1614,6 @@ class _RacesTabState extends State<RacesTab> {
                   key: Key('race-card-header-$raceId'),
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    RacerAvatar(
-                      key: Key('race-leader-avatar-$raceId'),
-                      rank: 1,
-                      accessories: leaderAccessories,
-                      animal: leaderAnimal,
-                      size: 52,
-                      showMedalRing: false,
-                    ),
-                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1652,20 +1635,30 @@ class _RacesTabState extends State<RacesTab> {
                                 const SizedBox(width: 6),
                                 TeamFormatChip(teamSize: teamSize),
                               ],
+                              if (placementChip != null) ...[
+                                const SizedBox(width: 8),
+                                KeyedSubtree(
+                                  key: Key('race-placement-chip-$raceId'),
+                                  child: placementChip,
+                                ),
+                              ],
                             ],
                           ),
                           const SizedBox(height: 3),
-                          // Active races show time-left then the user's race inventory
+                          // One time line for every status, directly under the
+                          // name/placement line.
+                          Text(
+                            timeLabel,
+                            key: Key('race-time-label-$raceId'),
+                            style: PixelText.body(size: 15, color: timeColor),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                          // Active races then show the user's race inventory
                           // (4 slots: held powerup sprites, mystery-box crates, then
                           // queued crates, then empty). Everything else keeps the
                           // runner count.
                           if (status == 'ACTIVE') ...[
-                            Text(
-                              timeLabel,
-                              style: PixelText.body(size: 15, color: timeColor),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                            ),
                             // TR-806: mini team scoreline (only when the payload
                             // carries totals — older backends simply omit it).
                             if (teamTotals != null) ...[
@@ -1736,7 +1729,8 @@ class _RacesTabState extends State<RacesTab> {
                                 ],
                               ),
                             ),
-                          ] else
+                          ] else ...[
+                            const SizedBox(height: 2),
                             Text(
                               '$participantCount runner${participantCount == 1 ? '' : 's'}${isInvite && creatorName.isNotEmpty ? ' \u2022 by ${atName(creatorName)}' : ''}',
                               style: PixelText.body(
@@ -1746,57 +1740,16 @@ class _RacesTabState extends State<RacesTab> {
                               overflow: TextOverflow.ellipsis,
                               maxLines: 1,
                             ),
+                          ],
                         ],
                       ),
                     ),
-                    if (showTrailingContent) ...[
+                    if (showTrailingStatus) ...[
                       const SizedBox(width: 8),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (myPlacement != null)
-                            _buildMetaChip(
-                              '${formatOrdinal(myPlacement)} PLACE',
-                              backgroundColor: AppColors.of(context).isDark
-                                  ? AppColors.of(context).pillGreenDark
-                                  : AppColors.of(
-                                      context,
-                                    ).pillGreenDark.withValues(alpha: 0.16),
-                              textColor: AppColors.of(context).isDark
-                                  ? AppColors.of(context).textLight
-                                  : AppColors.of(context).pillGreenDark,
-                            )
-                          else if (myPlacementHidden)
-                            _buildMetaChip(
-                              '??? PLACE',
-                              backgroundColor: AppColors.of(
-                                context,
-                              ).textMid.withValues(alpha: 0.16),
-                              textColor: AppColors.of(context).textMid,
-                            ),
-                          if (showTrailingStatus) ...[
-                            if (myPlacement != null || myPlacementHidden)
-                              const SizedBox(height: 4),
-                            Text(
-                              statusLabel,
-                              style: PixelText.title(
-                                size: 12,
-                                color: badgeColor,
-                              ),
-                              textAlign: TextAlign.right,
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              timeLabel,
-                              style: PixelText.body(
-                                size: 12,
-                                color: AppColors.of(context).textMid,
-                              ),
-                              textAlign: TextAlign.right,
-                            ),
-                          ],
-                        ],
+                      Text(
+                        statusLabel,
+                        style: PixelText.title(size: 12, color: badgeColor),
+                        textAlign: TextAlign.right,
                       ),
                     ],
                     const SizedBox(width: 4),
@@ -2011,14 +1964,8 @@ class _RacesLoadingSkeleton extends StatelessWidget {
     );
   }
 
-  Widget _row(
-    BuildContext context, {
-    required bool striped,
-    required bool withCrate,
-  }) {
-    final color = striped
-        ? AppColors.of(context).parchmentLight
-        : AppColors.of(context).parchment;
+  Widget _row(BuildContext context, {required bool withCrate}) {
+    final color = AppColors.of(context).parchment;
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
       child: Container(
@@ -2035,13 +1982,18 @@ class _RacesLoadingSkeleton extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const SkeletonBox(width: 52, height: 52, radius: 26),
-            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SkeletonLine(width: 148, height: 15),
+                  // Name + the placement chip that now sits level with it.
+                  Row(
+                    children: const [
+                      SkeletonLine(width: 148, height: 15),
+                      SizedBox(width: 8),
+                      SkeletonBox(width: 54, height: 19, radius: 10),
+                    ],
+                  ),
                   const SizedBox(height: 6),
                   const SkeletonLine(width: 96, height: 13),
                   if (withCrate) ...[
@@ -2058,10 +2010,6 @@ class _RacesLoadingSkeleton extends StatelessWidget {
                 ],
               ),
             ),
-            if (!withCrate) ...[
-              const SizedBox(width: 8),
-              const SkeletonBox(width: 54, height: 22, radius: 11),
-            ],
             const SizedBox(width: 6),
             const SkeletonBox(width: 20, height: 30, radius: 8),
           ],
@@ -2078,7 +2026,7 @@ class _RacesLoadingSkeleton extends StatelessWidget {
     return Column(
       children: [
         for (var i = 0; i < rows; i++)
-          _row(context, striped: i.isOdd, withCrate: withCrate),
+          _row(context, withCrate: withCrate),
       ],
     );
   }

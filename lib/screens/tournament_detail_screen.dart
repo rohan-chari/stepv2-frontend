@@ -346,6 +346,13 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
   }
 
   Future<void> _leave() async {
+    final ok = await _confirm(
+      title: 'LEAVE THE TOURNAMENT?',
+      body: 'Your buy-in is refunded. You can rejoin later if a spot opens '
+          'up.',
+      confirmLabel: 'LEAVE',
+    );
+    if (ok != true) return;
     await _act((token) async {
       final response = await _api.leaveTournament(
         identityToken: token,
@@ -637,10 +644,88 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     );
   }
 
+  /// The single destructive verb this viewer can take on this tournament right
+  /// now — `'LEAVE'`, `'FORFEIT'`, or null when there is nothing to offer.
+  ///
+  /// The branch scoping mirrors [_pendingActionButtons]/[_activeActionButtons]
+  /// exactly, because that's where these actions used to live as inline
+  /// buttons. Notably the creator of a user bracket never gets `'LEAVE'`:
+  /// `leaveTournament` rejects them server-side (`CREATOR_CANNOT_LEAVE`), so
+  /// the option would only ever produce an error toast. They cancel instead.
+  String? _tournamentLeaveAction(Map<String, dynamic>? t) {
+    if (t == null) return null;
+    final status = Tournament.status(t);
+    if (status == TournamentStatus.pending) {
+      // A featured bracket's "creator" is the system, so its participants —
+      // including one who happens to match `creatorId` — take the LEAVE path,
+      // same as the inline button did.
+      final featured = Tournament.isFeatured(t);
+      final isCreator = Tournament.creatorId(t) == _myUserId && !featured;
+      if (isCreator) return null;
+      if (Tournament.amInvited(t) || !Tournament.amIn(t)) return null;
+      return 'LEAVE';
+    }
+    if (status == TournamentStatus.active) {
+      return _myLiveRaceId(t) != null ? 'FORFEIT' : null;
+    }
+    return null;
+  }
+
+  /// Header kebab sheet, mirroring `race_detail_screen.dart`'s
+  /// `_showRaceOptionsSheet`. Both entries reuse the existing [_leave] /
+  /// [_forfeit] paths untouched, confirmation copy and all.
+  void _showTournamentOptionsSheet(String leaveAction) {
+    final isForfeit = leaveAction == 'FORFEIT';
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.of(context).parchment,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'TOURNAMENT OPTIONS',
+              style: PixelText.title(
+                size: 18,
+                color: AppColors.of(context).textDark,
+              ),
+            ),
+            const SizedBox(height: 16),
+            PillButton(
+              label: isForfeit ? 'FORFEIT MATCHUP' : 'LEAVE TOURNAMENT',
+              variant: PillButtonVariant.accent,
+              fontSize: 13,
+              fullWidth: true,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 12,
+              ),
+              onPressed: _isActing
+                  ? null
+                  : () {
+                      Navigator.of(sheetContext).pop();
+                      if (isForfeit) {
+                        _forfeit();
+                      } else {
+                        _leave();
+                      }
+                    },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _header(Map<String, dynamic>? t) {
     final name = t == null ? 'TOURNAMENT' : Tournament.name(t).toUpperCase();
     final canShare =
         t != null && (Tournament.isPending(t) || Tournament.isActive(t));
+    final leaveAction = _tournamentLeaveAction(t);
     final topInset = MediaQuery.of(context).padding.top;
     return Container(
       color: AppColors.of(context).roofLight,
@@ -680,6 +765,19 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
                   Icons.ios_share_rounded,
                   color: AppColors.of(context).textLight,
                   size: 22,
+                ),
+              ),
+            ),
+          if (leaveAction != null)
+            GestureDetector(
+              onTap: () => _showTournamentOptionsSheet(leaveAction),
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Icon(
+                  Icons.more_vert,
+                  color: AppColors.of(context).textLight,
+                  size: 24,
                 ),
               ),
             ),
@@ -1122,32 +1220,15 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
   Widget? _activeActionButtons(Map<String, dynamic> t) {
     final liveRaceId = _myLiveRaceId(t);
     if (liveRaceId != null) {
-      return Row(
-        children: [
-          Expanded(
-            flex: 3,
-            child: PillButton(
-              label: 'GO TO MY MATCHUP',
-              variant: PillButtonVariant.primary,
-              fontSize: 13,
-              fullWidth: true,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
-              onPressed: () => _openMatchup(liveRaceId),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            flex: 2,
-            child: PillButton(
-              label: 'FORFEIT',
-              variant: PillButtonVariant.accent,
-              fontSize: 13,
-              fullWidth: true,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
-              onPressed: _isActing ? null : _forfeit,
-            ),
-          ),
-        ],
+      // FORFEIT moved to the header kebab (`_showTournamentOptionsSheet`), so
+      // the matchup CTA takes the whole bar.
+      return PillButton(
+        label: 'GO TO MY MATCHUP',
+        variant: PillButtonVariant.primary,
+        fontSize: 13,
+        fullWidth: true,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+        onPressed: () => _openMatchup(liveRaceId),
       );
     }
     if (_amEliminated(t)) {
@@ -1278,38 +1359,16 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
         ),
       );
     } else if (Tournament.amIn(t)) {
+      // LEAVE moved to the header kebab (`_showTournamentOptionsSheet`), so
+      // SHARE LINK takes the whole bar.
       buttons.add(
-        Row(
-          children: [
-            Expanded(
-              flex: 2,
-              child: PillButton(
-                label: _sharing ? 'SHARING…' : 'SHARE LINK',
-                variant: PillButtonVariant.secondary,
-                fontSize: 13,
-                fullWidth: true,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 12,
-                ),
-                onPressed: _sharing ? null : _share,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: PillButton(
-                label: 'LEAVE',
-                variant: PillButtonVariant.accent,
-                fontSize: 13,
-                fullWidth: true,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 12,
-                ),
-                onPressed: _isActing ? null : _leave,
-              ),
-            ),
-          ],
+        PillButton(
+          label: _sharing ? 'SHARING…' : 'SHARE LINK',
+          variant: PillButtonVariant.secondary,
+          fontSize: 13,
+          fullWidth: true,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          onPressed: _sharing ? null : _share,
         ),
       );
     } else {

@@ -634,14 +634,6 @@ Map<String, dynamic> tutorialPreviewRacesData() {
         'endsAt': now.add(const Duration(days: 2, hours: 4)).toIso8601String(),
         'participantCount': 6,
         'creator': {'displayName': 'Maya Chen'},
-        // Mirrors GET /races' additive character summary using bundled art so
-        // the tutorial stays deterministic and network-independent.
-        'leader': {
-          'userId': 'maya-preview',
-          'displayName': 'Maya Chen',
-          'animal': null,
-          'accessories': tutorialPreviewAccessories,
-        },
         'isCreator': false,
         'myPlacement': 2,
         // One held powerup (sprite) + one unopened mystery box (crate), plus a

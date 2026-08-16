@@ -24,6 +24,9 @@ Future<AuthService> _auth() async {
   return auth;
 }
 
+/// `leader` is still served by the live backend this round (its removal is a
+/// separate, later backend deploy), so the fixture keeps sending it — the row
+/// must simply ignore it now.
 Map<String, dynamic> _activeRace({bool includeLeader = true}) => {
   'id': 'race-1',
   'name': 'Sunset Sprint',
@@ -60,9 +63,20 @@ Map<String, dynamic> _activeRace({bool includeLeader = true}) => {
     },
 };
 
+Map<String, dynamic> _pendingRace() => {
+  'id': 'race-2',
+  'name': 'Dawn Patrol',
+  'status': 'PENDING',
+  'maxDurationDays': 5,
+  'participantCount': 3,
+  'isCreator': true,
+  'myPlacementHidden': true,
+};
+
 Future<void> _pump(
   WidgetTester tester, {
-  required Map<String, dynamic> race,
+  Map<String, dynamic>? race,
+  Map<String, dynamic>? pendingRace,
   double width = 390,
   double textScaleFactor = 1,
 }) async {
@@ -79,8 +93,8 @@ Future<void> _pump(
         body: RacesTab(
           authService: await _auth(),
           racesData: {
-            'active': [race],
-            'pending': const [],
+            'active': [?race],
+            'pending': [?pendingRace],
             'completed': const [],
           },
           friendsSteps: const [],
@@ -95,44 +109,115 @@ Future<void> _pump(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets(
-    'race ticket leads with first-place racer and ends with a navigation arrow',
-    (tester) async {
-      await _pump(tester, race: _activeRace());
+  // Supersedes the former "race ticket leads with first-place racer" test:
+  // the leading rank-1 RacerAvatar was removed because it reads as the
+  // viewer's own racer.
+  testWidgets('race ticket renders no leading racer avatar', (tester) async {
+    await _pump(tester, race: _activeRace());
 
-      final avatarFinder = find.byKey(const Key('race-leader-avatar-race-1'));
-      final arrowFinder = find.byKey(const Key('race-card-arrow-race-1'));
-      expect(avatarFinder, findsOneWidget);
-      expect(arrowFinder, findsOneWidget);
+    expect(find.byKey(const Key('race-leader-avatar-race-1')), findsNothing);
+    // No race row on this screen renders a racer portrait at all (no
+    // tournaments are in the fixture, so any hit would come from the race
+    // row itself).
+    expect(find.byType(RacerAvatar), findsNothing);
+    expect(find.byType(CapybaraSpriteWithAccessories), findsNothing);
 
-      final avatar = tester.widget<RacerAvatar>(avatarFinder);
-      expect(avatar.rank, 1);
-      expect(avatar.accessories.single['assetKey'], 'trail_hat');
-      expect(avatar.animal, isNull);
-      expect(avatar.size, greaterThanOrEqualTo(48));
-      expect(avatar.showMedalRing, isFalse);
-      expect(
-        find.descendant(
-          of: avatarFinder,
-          matching: find.byType(CapybaraSpriteWithAccessories),
-        ),
-        findsOneWidget,
-      );
+    final arrowFinder = find.byKey(const Key('race-card-arrow-race-1'));
+    expect(arrowFinder, findsOneWidget);
 
-      final avatarRect = tester.getRect(avatarFinder);
-      final titleRect = tester.getRect(find.text('Sunset Sprint'));
-      final arrowRect = tester.getRect(arrowFinder);
-      expect(avatarRect.right, lessThan(titleRect.left));
-      expect(titleRect.right, lessThan(arrowRect.left));
-    },
-  );
+    // The name now starts at the card's content edge instead of behind a
+    // 52px portrait + 12px gutter.
+    final surface = tester.getRect(
+      find.byKey(const Key('race-card-surface-race-1')),
+    );
+    final titleRect = tester.getRect(find.text('Sunset Sprint'));
+    expect(titleRect.left - surface.left, lessThan(30));
+    expect(titleRect.right, lessThan(tester.getRect(arrowFinder).left));
+  });
+
+  // Supersedes the former avatar-geometry ordering assertion
+  // (avatarRect.right < titleRect.left): the placement chip is now the
+  // element whose position relative to the name is under test.
+  testWidgets('placement chip sits level with the race name', (tester) async {
+    await _pump(tester, race: _activeRace());
+
+    final chipFinder = find.byKey(const Key('race-placement-chip-race-1'));
+    expect(chipFinder, findsOneWidget);
+    expect(
+      find.descendant(of: chipFinder, matching: find.text('2ND PLACE')),
+      findsOneWidget,
+    );
+
+    final chipRect = tester.getRect(chipFinder);
+    final titleRect = tester.getRect(find.text('Sunset Sprint'));
+    // Level with the name: to its right, sharing the same line.
+    expect(chipRect.left, greaterThanOrEqualTo(titleRect.right));
+    expect((chipRect.center.dy - titleRect.center.dy).abs(), lessThan(8));
+    // ...and inside the same header row as the name.
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('race-card-header-race-1')),
+        matching: chipFinder,
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('time label renders exactly once, beneath the name row', (
+    tester,
+  ) async {
+    await _pump(tester, race: _activeRace());
+
+    final timeFinder = find.byKey(const Key('race-time-label-race-1'));
+    expect(timeFinder, findsOneWidget);
+    // The old card rendered the label twice (inline for ACTIVE, again in the
+    // trailing column for other statuses).
+    expect(find.textContaining('left'), findsOneWidget);
+
+    final timeRect = tester.getRect(timeFinder);
+    final chipRect = tester.getRect(
+      find.byKey(const Key('race-placement-chip-race-1')),
+    );
+    final titleRect = tester.getRect(find.text('Sunset Sprint'));
+    expect(timeRect.top, greaterThanOrEqualTo(chipRect.bottom - 1));
+    expect(timeRect.left, lessThan(titleRect.left + 4));
+  });
+
+  testWidgets('non-active rows render one time label under a hidden chip', (
+    tester,
+  ) async {
+    await _pump(tester, pendingRace: _pendingRace());
+    // The personal list defaults to the ACTIVE shelf.
+    await tester.tap(find.byKey(const Key('personal-state-pending')));
+    await tester.pump(const Duration(milliseconds: 200));
+
+    final chipFinder = find.byKey(const Key('race-placement-chip-race-2'));
+    expect(chipFinder, findsOneWidget);
+    expect(
+      find.descendant(of: chipFinder, matching: find.text('??? PLACE')),
+      findsOneWidget,
+    );
+
+    final timeFinder = find.byKey(const Key('race-time-label-race-2'));
+    expect(timeFinder, findsOneWidget);
+    expect(find.text('5d race'), findsOneWidget);
+    expect(find.byType(RacerAvatar), findsNothing);
+
+    final timeRect = tester.getRect(timeFinder);
+    final chipRect = tester.getRect(chipFinder);
+    expect(timeRect.top, greaterThanOrEqualTo(chipRect.bottom - 1));
+    // The status badge stays on the trailing edge.
+    expect(find.text('SETUP'), findsOneWidget);
+  });
 
   testWidgets('time, boxes, powerups, and effects use the larger card scale', (
     tester,
   ) async {
     await _pump(tester, race: _activeRace());
 
-    final time = tester.widget<Text>(find.textContaining('left').first);
+    final time = tester.widget<Text>(
+      find.byKey(const Key('race-time-label-race-1')),
+    );
     expect(time.style?.fontSize, greaterThanOrEqualTo(15));
 
     final crates = tester.widgetList<CrateIcon>(find.byType(CrateIcon));
@@ -144,21 +229,31 @@ void main() {
     expect(powerups.every((powerup) => powerup.size >= 18), isTrue);
   });
 
-  testWidgets('missing additive leader data falls back without crashing', (
+  // Supersedes the former "missing additive leader data falls back without
+  // crashing" test: the row no longer reads `leader` at all, so a payload
+  // with or without it must render identically.
+  testWidgets('payload without leader renders the row unchanged', (
     tester,
   ) async {
     await _pump(tester, race: _activeRace(includeLeader: false));
 
-    final avatar = tester.widget<RacerAvatar>(
-      find.byKey(const Key('race-leader-avatar-race-1')),
-    );
-    expect(avatar.accessories, isEmpty);
-    expect(avatar.animal, isNull);
+    expect(tester.takeException(), isNull);
     expect(find.text('Sunset Sprint'), findsOneWidget);
+    expect(find.byType(RacerAvatar), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('race-placement-chip-race-1')),
+        matching: find.text('2ND PLACE'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('race-time-label-race-1')), findsOneWidget);
   });
 
+  // Overflow guard kept from the previous suite, re-pointed at the new
+  // leading content (name + placement chip) now that the portrait is gone.
   testWidgets(
-    'dense ticket keeps portrait and arrow inside a narrow high-text-scale card',
+    'dense ticket keeps name, chip and arrow inside a narrow high-text-scale card',
     (tester) async {
       await _pump(
         tester,
@@ -174,16 +269,18 @@ void main() {
       final surface = tester.getRect(
         find.byKey(const Key('race-card-surface-race-1')),
       );
-      final avatar = tester.getRect(
-        find.byKey(const Key('race-leader-avatar-race-1')),
+      final title = tester.getRect(find.textContaining('Neighborhood'));
+      final chip = tester.getRect(
+        find.byKey(const Key('race-placement-chip-race-1')),
       );
       final arrow = tester.getRect(
         find.byKey(const Key('race-card-arrow-race-1')),
       );
       expect(surface.left, 10);
       expect(surface.right, 310);
-      expect(surface.contains(avatar.topLeft), isTrue);
-      expect(surface.contains(avatar.bottomRight), isTrue);
+      expect(surface.contains(title.topLeft), isTrue);
+      expect(surface.contains(chip.topLeft), isTrue);
+      expect(surface.contains(chip.bottomRight), isTrue);
       expect(surface.contains(arrow.topLeft), isTrue);
       expect(surface.contains(arrow.bottomRight), isTrue);
     },

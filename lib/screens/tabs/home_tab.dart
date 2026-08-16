@@ -91,6 +91,11 @@ class HomeTab extends StatelessWidget {
   final GlobalKey? tutorialShopKey;
   final GlobalKey? tutorialFriendsKey;
   final void Function(String raceId)? onOpenRace;
+
+  /// Opens a tournament bracket screen. Added for preview-before-joining: a
+  /// suggested-race card can be a TOURNAMENT, and its body tap must land on
+  /// TournamentDetailScreen, not RaceDetailScreen.
+  final void Function(String tournamentId)? onOpenTournament;
   final Future<void> Function(String raceId)? onJoinRaceFromCard;
   final Future<void> Function(String raceId)? onJoinDiscoveredRace;
   final Future<void> Function(String raceId)? onAcceptRaceInvite;
@@ -149,6 +154,7 @@ class HomeTab extends StatelessWidget {
     this.tutorialShopKey,
     this.tutorialFriendsKey,
     this.onOpenRace,
+    this.onOpenTournament,
     this.onJoinRaceFromCard,
     this.onJoinDiscoveredRace,
     this.onAcceptRaceInvite,
@@ -345,6 +351,13 @@ class HomeTab extends StatelessWidget {
                                   onJoin:
                                       onJoinDiscoveredRace ??
                                       onJoinRaceFromCard,
+                                  // Row body previews; the "+" still joins.
+                                  // Null inside the tutorial's fake home so a
+                                  // tap can never navigate out of it.
+                                  onPreview:
+                                      isTutorialPreview || onOpenRace == null
+                                      ? null
+                                      : (raceId) => onOpenRace!(raceId),
                                 ),
                               ),
                             // Today's coins sits above the races: it's the one
@@ -473,6 +486,33 @@ class HomeTab extends StatelessWidget {
     );
   }
 
+  /// Card-BODY tap target for "preview before joining": opens the race
+  /// read-only instead of joining it. The JOIN button on every card keeps its
+  /// own direct-join handler untouched.
+  ///
+  /// Returns null — leaving the card body inert exactly as before this feature
+  /// — inside the tutorial's fake home. `tutorial_real_screens.dart` renders
+  /// the real [HomeTab] with `isTutorialPreview: true` and no navigation
+  /// callbacks; the explicit flag is checked first so a live navigation can
+  /// never escape the tutorial even if a callback is wired in later.
+  VoidCallback? _previewRaceTap(String raceId) {
+    final open = onOpenRace;
+    if (isTutorialPreview || open == null || raceId.isEmpty) return null;
+    return () => open(raceId);
+  }
+
+  /// [_previewRaceTap] for a bracket — suggested-race cards can be tournaments.
+  VoidCallback? _previewTournamentTap(String tournamentId) {
+    final open = onOpenTournament;
+    if (isTutorialPreview || open == null || tournamentId.isEmpty) return null;
+    return () => open(tournamentId);
+  }
+
+  VoidCallback? _previewSuggestionTap(HomeRaceSuggestion suggestion) =>
+      suggestion.kind == HomeRaceSuggestionKind.tournament
+      ? _previewTournamentTap(suggestion.id)
+      : _previewRaceTap(suggestion.id);
+
   void _openPublicRaces(BuildContext context) {
     final callback = onOpenPublicRaces;
     if (callback != null) {
@@ -520,6 +560,7 @@ class HomeTab extends StatelessWidget {
                   onJoin: onJoinSuggestion == null
                       ? null
                       : () => onJoinSuggestion!(suggestion),
+                  onPreview: _previewSuggestionTap(suggestion),
                 );
               },
             );
@@ -741,12 +782,20 @@ class HomeTab extends StatelessWidget {
             .length;
         final isPublicJoinable = cardData['isPublicJoinable'] as bool? ?? false;
         return _HomeRaceActionRow(
+          key: const Key('home-race-row-friend-racing'),
           label: 'LIVE',
           title: '${atName(friend?.displayName ?? 'A friend')} is racing',
           subtitle: participants > 0
               ? '$participants racers'
               : 'A race is happening now',
           primaryLabel: isPublicJoinable ? 'JOIN' : 'OPEN',
+          // SCOPE GATE: this row renders for ANY friend race, not only public
+          // ones. Preview-before-joining covers public races only — a private
+          // friend race the viewer has no participant row in still 403s, so
+          // giving it a tap target would just be a dead end. Body tap exists
+          // ONLY when isPublicJoinable is true; the OPEN button (which jumps
+          // to the Races tab) remains the private race's only affordance.
+          onCardTap: isPublicJoinable ? _previewRaceTap(raceId) : null,
           onPrimary:
               isPublicJoinable &&
                   onJoinRaceFromCard != null &&
@@ -779,11 +828,14 @@ class HomeTab extends StatelessWidget {
             (cardData['participantCount'] as num?)?.toInt() ?? 0;
         final endsAt = DateTime.tryParse(cardData['endsAt'] as String? ?? '');
         return _HomeRaceActionRow(
+          key: const Key('home-race-row-public'),
           label: 'PUBLIC',
           title: name,
           subtitle:
               '$participantCount racing${endsAt == null ? '' : ' · ${_formatTimeLeft(endsAt)} left'}',
           primaryLabel: 'JOIN',
+          // Public by definition, so the body always previews.
+          onCardTap: _previewRaceTap(raceId),
           onPrimary: onJoinRaceFromCard == null || raceId.isEmpty
               ? null
               : () => onJoinRaceFromCard!(raceId),
@@ -1722,12 +1774,18 @@ class _NextRaceSection extends StatefulWidget {
     required this.shareFirst,
     required this.onStart,
     required this.onJoin,
+    this.onPreview,
   });
 
   final NextRaceState state;
   final bool shareFirst;
   final VoidCallback? onStart;
   final Future<void> Function(String raceId)? onJoin;
+
+  /// Row-body tap: opens the open race read-only (preview before joining). The
+  /// "+" icon button keeps joining directly; while it is disabled (join in
+  /// flight) its tap falls through to here, which is intended.
+  final void Function(String raceId)? onPreview;
 
   @override
   State<_NextRaceSection> createState() => _NextRaceSectionState();
@@ -1818,47 +1876,54 @@ class _NextRaceSectionState extends State<_NextRaceSection> {
                   for (final race in rows)
                     Padding(
                       padding: const EdgeInsets.only(top: 7),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  race.name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: PixelText.title(
-                                    size: 13,
-                                    color: AppColors.of(context).textDark,
-                                  ),
-                                ),
-                                Text(
-                                  '${race.participantCount} in',
-                                  style: PixelText.body(
-                                    size: 11,
-                                    color: AppColors.of(context).textMid,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            key: Key('home-join-${race.id}'),
-                            tooltip: 'Join ${race.name}',
-                            onPressed: !_joiningIds.contains(race.id)
-                                ? () => _join(race.id)
-                                : null,
-                            icon: _joiningIds.contains(race.id)
-                                ? const SizedBox.square(
-                                    dimension: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
+                      child: GestureDetector(
+                        key: Key('home-next-race-row-${race.id}'),
+                        behavior: HitTestBehavior.opaque,
+                        onTap: widget.onPreview == null || race.id.isEmpty
+                            ? null
+                            : () => widget.onPreview!(race.id),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    race.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: PixelText.title(
+                                      size: 13,
+                                      color: AppColors.of(context).textDark,
                                     ),
-                                  )
-                                : const Icon(Icons.add_circle_rounded),
-                          ),
-                        ],
+                                  ),
+                                  Text(
+                                    '${race.participantCount} in',
+                                    style: PixelText.body(
+                                      size: 11,
+                                      color: AppColors.of(context).textMid,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              key: Key('home-join-${race.id}'),
+                              tooltip: 'Join ${race.name}',
+                              onPressed: !_joiningIds.contains(race.id)
+                                  ? () => _join(race.id)
+                                  : null,
+                              icon: _joiningIds.contains(race.id)
+                                  ? const SizedBox.square(
+                                      dimension: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.add_circle_rounded),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                 ],
@@ -1988,12 +2053,18 @@ class _HomeSuggestionTicket extends StatelessWidget {
     required this.width,
     required this.joining,
     required this.onJoin,
+    this.onPreview,
   });
 
   final HomeRaceSuggestion suggestion;
   final double width;
   final bool joining;
   final VoidCallback? onJoin;
+
+  /// Card-body tap: opens the race/bracket read-only. Null (inert body) in the
+  /// tutorial's fake home. A tap on a DISABLED JOIN pill ("JOINING...") falls
+  /// through to this handler — intended: the card should stay viewable.
+  final VoidCallback? onPreview;
 
   int get _prizeCoins {
     for (final source in [suggestion.prizePool, suggestion.finishReward]) {
@@ -2060,111 +2131,121 @@ class _HomeSuggestionTicket extends StatelessWidget {
       'PUBLIC' => 'Public',
       _ => 'Tournament',
     };
+    // The card body is now a preview tap target and the pill inside it is the
+    // join action, so the old "…, Join {name}" button label no longer
+    // describes what a default tap does. One merged node still fronts the card
+    // (its subtree is excluded), so it has to name both affordances: the
+    // default action is View, and Join lives on the button inside.
     final semanticParts = [
       semanticCategory,
       suggestion.name,
       _availabilitySemantics,
       if (prize > 0) '$prize coin prize',
-      'Join ${suggestion.name}',
+      if (onPreview != null) 'View ${suggestion.name}',
+      'Join ${suggestion.name} button',
     ];
     return Semantics(
       button: true,
-      enabled: onJoin != null && !joining,
+      enabled: onPreview != null || (onJoin != null && !joining),
       label: semanticParts.join(', '),
-      child: ExcludeSemantics(
-        child: SizedBox(
-          width: width,
-          height: 222,
-          child: DecoratedBox(
-            decoration: raceCardDecoration(context),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 14, 14, 13),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Pill(
-                      label: suggestion.eyebrow,
-                      background:
-                          suggestion.kind == HomeRaceSuggestionKind.publicRace
-                          ? AppColors.of(context).pillGreen
-                          : AppColors.of(context).pillGold,
-                      foreground:
-                          suggestion.kind == HomeRaceSuggestionKind.publicRace
-                          ? Colors.white
-                          : null,
-                      fontSize: 10.5,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    suggestion.name.toUpperCase(),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: PixelText.title(
-                      size: 16,
-                      color: AppColors.of(context).textDark,
-                    ),
-                  ),
-                  const SizedBox(height: 7),
-                  Text(
-                    '$_timeLine · $_populationLine',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: PixelText.body(
-                      size: 11.5,
-                      color: AppColors.of(context).textMid,
-                    ),
-                  ),
-                  if (team != null) ...[
-                    const SizedBox(height: 5),
-                    Text(
-                      team,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: PixelText.title(
-                        size: 10.5,
-                        color: AppColors.of(context).successText,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onPreview,
+        child: ExcludeSemantics(
+          child: SizedBox(
+            width: width,
+            height: 222,
+            child: DecoratedBox(
+              decoration: raceCardDecoration(context),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 13),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Pill(
+                        label: suggestion.eyebrow,
+                        background:
+                            suggestion.kind == HomeRaceSuggestionKind.publicRace
+                            ? AppColors.of(context).pillGreen
+                            : AppColors.of(context).pillGold,
+                        foreground:
+                            suggestion.kind == HomeRaceSuggestionKind.publicRace
+                            ? Colors.white
+                            : null,
+                        fontSize: 10.5,
                       ),
                     ),
-                  ],
-                  if (prize > 0) ...[
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        const CoinGlyph(size: 14),
-                        const SizedBox(width: 5),
-                        Expanded(
-                          child: Text(
-                            '$prize COIN PRIZE',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: PixelText.title(
-                              size: 11,
-                              color: AppColors.of(context).coinDark,
+                    const SizedBox(height: 8),
+                    Text(
+                      suggestion.name.toUpperCase(),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: PixelText.title(
+                        size: 16,
+                        color: AppColors.of(context).textDark,
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+                    Text(
+                      '$_timeLine · $_populationLine',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: PixelText.body(
+                        size: 11.5,
+                        color: AppColors.of(context).textMid,
+                      ),
+                    ),
+                    if (team != null) ...[
+                      const SizedBox(height: 5),
+                      Text(
+                        team,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: PixelText.title(
+                          size: 10.5,
+                          color: AppColors.of(context).successText,
+                        ),
+                      ),
+                    ],
+                    if (prize > 0) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          const CoinGlyph(size: 14),
+                          const SizedBox(width: 5),
+                          Expanded(
+                            child: Text(
+                              '$prize COIN PRIZE',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: PixelText.title(
+                                size: 11,
+                                color: AppColors.of(context).coinDark,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
+                    ],
+                    const Spacer(),
+                    PillButton(
+                      key: Key(
+                        'home-suggestion-join-${suggestion.wireKind}-${suggestion.id}',
+                      ),
+                      label: joining ? 'JOINING...' : 'JOIN',
+                      variant: PillButtonVariant.primary,
+                      fontSize: 12.5,
+                      fullWidth: true,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 9,
+                      ),
+                      onPressed: joining ? null : onJoin,
                     ),
                   ],
-                  const Spacer(),
-                  PillButton(
-                    key: Key(
-                      'home-suggestion-join-${suggestion.wireKind}-${suggestion.id}',
-                    ),
-                    label: joining ? 'JOINING...' : 'JOIN',
-                    variant: PillButtonVariant.primary,
-                    fontSize: 12.5,
-                    fullWidth: true,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 9,
-                    ),
-                    onPressed: joining ? null : onJoin,
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -2484,6 +2565,7 @@ class _HomeActiveRaceTicket extends StatelessWidget {
 
 class _HomeRaceActionRow extends StatelessWidget {
   const _HomeRaceActionRow({
+    super.key,
     required this.label,
     required this.title,
     required this.subtitle,
@@ -2491,6 +2573,7 @@ class _HomeRaceActionRow extends StatelessWidget {
     this.secondaryLabel,
     this.onPrimary,
     this.onSecondary,
+    this.onCardTap,
   });
 
   final String label;
@@ -2499,13 +2582,20 @@ class _HomeRaceActionRow extends StatelessWidget {
   final String primaryLabel;
   final String? secondaryLabel;
   final VoidCallback? onPrimary;
+
+  /// Row-BODY tap: opens the race read-only (preview before joining). Only the
+  /// states that can actually be previewed pass one — see
+  /// `_buildRaceOpportunityRow`, where the friend-racing row supplies it only
+  /// for `isPublicJoinable` races (a private friend race would 403). Null
+  /// leaves the body inert, exactly as every row behaved before this feature.
+  final VoidCallback? onCardTap;
   // Receives the secondary button's own BuildContext so callers (e.g. share)
   // can anchor an iPad popover to the button's rect.
   final void Function(BuildContext)? onSecondary;
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
+    final row = DecoratedBox(
       decoration: BoxDecoration(
         color: AppColors.of(context).parchment,
         borderRadius: BorderRadius.circular(12),
@@ -2587,6 +2677,13 @@ class _HomeRaceActionRow extends StatelessWidget {
           ],
         ),
       ),
+    );
+
+    if (onCardTap == null) return row;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onCardTap,
+      child: row,
     );
   }
 }

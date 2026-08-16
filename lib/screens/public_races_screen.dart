@@ -287,7 +287,11 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
     }
   }
 
-  /// Opens the race screen for a featured race I'm in, refreshing on return.
+  /// Opens the race screen for [raceId], refreshing on return. Used both for a
+  /// featured race I'm already in (VIEW) and, since the preview-before-joining
+  /// change, for a card-body tap on a public race I have not joined — the
+  /// detail screen decides between participant chrome and the read-only
+  /// spectator/preview banner from what the backend returns.
   void _viewFeaturedRace(String raceId) {
     if (raceId.isEmpty) return;
     Navigator.of(context)
@@ -893,6 +897,11 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
         ctaLabel: label,
         ctaVariant: variant,
         onPressed: onPressed,
+        // Card body = read-only preview, so a bracket can be inspected before
+        // joining. The JOIN pill above keeps joining directly; when it is
+        // disabled (IN A BRACKET / FULL / JOINING...) the tap falls through
+        // here and previews, which is the intended behavior.
+        onCardTap: id.isEmpty ? null : () => _openTournament(id),
       ),
     );
   }
@@ -941,6 +950,8 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
         ctaLabel: label,
         ctaVariant: variant,
         onPressed: onPressed,
+        // See _buildFeaturedTournamentCard: body previews, pill joins.
+        onCardTap: id.isEmpty ? null : () => _openTournament(id),
       ),
     );
   }
@@ -998,83 +1009,95 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: RetroCard(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              name.toUpperCase(),
-              style: PixelText.title(
-                size: 16,
-                color: AppColors.of(context).textDark,
+      // Tapping the card body opens the race read-only (preview before
+      // joining); the JOIN pill below still joins directly. A disabled JOIN
+      // ("JOINING...") registers no gesture, so its tap falls through here —
+      // intended, not accidental.
+      child: GestureDetector(
+        key: Key('public-race-card-$raceId'),
+        behavior: HitTestBehavior.opaque,
+        onTap: raceId.isEmpty ? null : () => _viewFeaturedRace(raceId),
+        child: RetroCard(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                name.toUpperCase(),
+                style: PixelText.title(
+                  size: 16,
+                  color: AppColors.of(context).textDark,
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'BY ${atName(creatorName)}'.toUpperCase(),
-              style: PixelText.body(
-                size: 11,
-                color: AppColors.of(context).textMid,
+              const SizedBox(height: 4),
+              Text(
+                'BY ${atName(creatorName)}'.toUpperCase(),
+                style: PixelText.body(
+                  size: 11,
+                  color: AppColors.of(context).textMid,
+                ),
               ),
-            ),
-            // TR-206: team format + open-slot line ("2v2 · 1 slot left on
-            // Blue"). Absent entirely for individual races.
-            if (TeamRace.isTeamRace(race)) ...[
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Icon(
-                    Icons.groups_rounded,
-                    size: 14,
-                    // P4 (item 3): icon tint on parchment.
-                    color: TeamRace.textColorOn(RaceTeam.teamA, context),
-                  ),
-                  const SizedBox(width: 5),
-                  Flexible(
-                    child: Text(
-                      TeamRace.publicSlotsLabel(race),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: PixelText.title(
-                        size: 12,
-                        color: AppColors.of(context).textDark,
+              // TR-206: team format + open-slot line ("2v2 · 1 slot left on
+              // Blue"). Absent entirely for individual races.
+              if (TeamRace.isTeamRace(race)) ...[
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.groups_rounded,
+                      size: 14,
+                      // P4 (item 3): icon tint on parchment.
+                      color: TeamRace.textColorOn(RaceTeam.teamA, context),
+                    ),
+                    const SizedBox(width: 5),
+                    Flexible(
+                      child: Text(
+                        TeamRace.publicSlotsLabel(race),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: PixelText.title(
+                          size: 12,
+                          color: AppColors.of(context).textDark,
+                        ),
                       ),
                     ),
-                  ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  _buildStat('ENDS IN', timeLeftLabel),
+                  const SizedBox(width: 16),
+                  _buildStat('RUNNERS', runnersLabel),
+                  if (prizeCoins > 0) ...[
+                    const SizedBox(width: 16),
+                    _buildStat('PRIZE', formatPrizeCoins(prizeCoins)),
+                  ],
+                  if (finishRewardPool > 0) ...[
+                    const SizedBox(width: 16),
+                    _buildStat(finishRewardLabel, '$finishRewardPool'),
+                  ],
+                  if (powerupsEnabled) ...[
+                    const SizedBox(width: 16),
+                    _buildStat('POWERUPS', 'ON'),
+                  ],
                 ],
               ),
+              const SizedBox(height: 14),
+              PillButton(
+                label: isJoining ? 'JOINING...' : 'JOIN',
+                variant: PillButtonVariant.primary,
+                fontSize: 13,
+                fullWidth: true,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
+                onPressed: isJoining ? null : () => _join(race),
+              ),
             ],
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                _buildStat('ENDS IN', timeLeftLabel),
-                const SizedBox(width: 16),
-                _buildStat('RUNNERS', runnersLabel),
-                if (prizeCoins > 0) ...[
-                  const SizedBox(width: 16),
-                  _buildStat('PRIZE', formatPrizeCoins(prizeCoins)),
-                ],
-                if (finishRewardPool > 0) ...[
-                  const SizedBox(width: 16),
-                  _buildStat(finishRewardLabel, '$finishRewardPool'),
-                ],
-                if (powerupsEnabled) ...[
-                  const SizedBox(width: 16),
-                  _buildStat('POWERUPS', 'ON'),
-                ],
-              ],
-            ),
-            const SizedBox(height: 14),
-            PillButton(
-              label: isJoining ? 'JOINING...' : 'JOIN',
-              variant: PillButtonVariant.primary,
-              fontSize: 13,
-              fullWidth: true,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              onPressed: isJoining ? null : () => _join(race),
-            ),
-          ],
+          ),
         ),
       ),
     );

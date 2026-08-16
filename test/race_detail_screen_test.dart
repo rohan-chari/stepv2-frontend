@@ -1429,7 +1429,7 @@ void main() {
       expect(find.byType(HomeCourseTrack), findsOneWidget);
       expect(find.text('PRIZE POOL'), findsOneWidget);
       expect(
-        find.text('You earn a powerup every 5,000 steps this race. 1,240 to go.'),
+        find.text('You earn a powerup every 5,000 steps. 1,240 to go.'),
         findsOneWidget,
       );
     },
@@ -1464,7 +1464,7 @@ void main() {
       await tester.pump();
 
       expect(
-        find.text('You earn a powerup every 5,000 steps this race. 1,240 to go.'),
+        find.text('You earn a powerup every 5,000 steps. 1,240 to go.'),
         findsOneWidget,
       );
     },
@@ -1499,7 +1499,7 @@ void main() {
       await tester.pump();
 
       expect(
-        find.text('You earn a powerup every 5,000 steps this race. 1,240 to go.'),
+        find.text('You earn a powerup every 5,000 steps. 1,240 to go.'),
         findsNothing,
       );
       expect(find.textContaining('You earn a powerup every'), findsNothing);

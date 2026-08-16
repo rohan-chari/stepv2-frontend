@@ -839,7 +839,7 @@ class _AppearancePreferenceControl extends StatelessWidget {
           ),
           const SizedBox(height: 7),
           Text(
-            'Automatic uses dark mode from 7 PM to 7 AM.',
+            'Automatic uses dark mode from 10 PM to 7 AM Eastern.',
             style: PixelText.body(size: 11, color: colors.textMid),
           ),
         ],

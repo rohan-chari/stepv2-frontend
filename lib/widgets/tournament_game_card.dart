@@ -25,6 +25,7 @@ class TournamentGameCard extends StatelessWidget {
     required this.ctaLabel,
     required this.ctaVariant,
     required this.onPressed,
+    this.onCardTap,
     this.ctaGlow = false,
     this.ctaKey,
     this.width,
@@ -47,6 +48,16 @@ class TournamentGameCard extends StatelessWidget {
   final String ctaLabel;
   final PillButtonVariant ctaVariant;
   final VoidCallback? onPressed;
+
+  /// Tapping the card BODY (anywhere outside the CTA) — used to open a
+  /// read-only preview of a bracket the viewer has not joined. Null leaves the
+  /// card body inert, exactly as before this parameter existed.
+  ///
+  /// Deliberate: when the CTA is DISABLED (`FULL`, `IN A BRACKET`,
+  /// `JOINING...`) its own [GestureDetector] registers no recognizers, so a tap
+  /// on the button falls through to this handler and previews instead of doing
+  /// nothing. A full or locked bracket should still be viewable.
+  final VoidCallback? onCardTap;
 
   /// Wraps the CTA in the arcade [PulseGlow] (used for the one actionable JOIN).
   final bool ctaGlow;
@@ -140,8 +151,16 @@ class TournamentGameCard extends StatelessWidget {
       ),
     );
 
-    if (width == null) return card;
-    return SizedBox(width: width, child: card);
+    final tappable = onCardTap == null
+        ? card
+        : GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onCardTap,
+            child: card,
+          );
+
+    if (width == null) return tappable;
+    return SizedBox(width: width, child: tappable);
   }
 
   Widget _cta() {
