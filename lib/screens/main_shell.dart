@@ -2970,6 +2970,21 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           // "Find it on Races" button. This entry point (a push tap or a card
           // on the home tab) is the one that can be sitting on another tab.
           if (mounted && result == true) _openRacesTab();
+          // This is also the preview-tap entry point for a Home suggestion
+          // card the user hasn't joined yet (race_preview): joining from
+          // inside the detail screen, then popping back, used to leave the
+          // stale "JOIN" card sitting in the carousel until the next full
+          // Home refresh. Always resync on return, not just on the
+          // not-a-participant branch above.
+          if (mounted) {
+            unawaited(
+              Future.wait([
+                _refreshHomeSuggestions(),
+                _fetchRaceCard(),
+                _fetchRacesCore(),
+              ]),
+            );
+          }
         })
         .whenComplete(() => _openingRaceDetail = false);
   }
@@ -3004,7 +3019,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         )
         .whenComplete(() {
           _openingTournament = false;
-          if (mounted) _fetchRaces();
+          if (mounted) {
+            _fetchRaces();
+            // Same resync as _openRaceFromCard: this is also the preview-tap
+            // entry point for a not-yet-joined Home tournament suggestion.
+            unawaited(_refreshHomeSuggestions());
+          }
         });
   }
 

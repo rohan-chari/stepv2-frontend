@@ -537,34 +537,51 @@ class HomeTab extends StatelessWidget {
     final suggestions = state.data;
     if (suggestions != null && suggestions.isNotEmpty) {
       return SizedBox(
-        height: 240,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final width = (constraints.maxWidth * 0.72).clamp(220.0, 260.0);
-            return ListView.separated(
-              key: const PageStorageKey('home-suggested-races-carousel'),
-              scrollDirection: Axis.horizontal,
-              physics: const PageScrollPhysics(parent: BouncingScrollPhysics()),
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
-              itemCount: suggestions.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 12),
-              itemBuilder: (context, index) {
-                final suggestion = suggestions[index];
-                return _HomeSuggestionTicket(
-                  key: Key(
-                    'home-suggestion-${suggestion.wireKind}-${suggestion.id}',
-                  ),
-                  suggestion: suggestion,
-                  width: width,
-                  joining: joiningSuggestionKeys.contains(suggestion.stableKey),
-                  onJoin: onJoinSuggestion == null
-                      ? null
-                      : () => onJoinSuggestion!(suggestion),
-                  onPreview: _previewSuggestionTap(suggestion),
-                );
-              },
-            );
-          },
+        height: 214,
+        child: Padding(
+          padding: const EdgeInsets.only(left: 16),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final width = (constraints.maxWidth * 0.72).clamp(220.0, 260.0);
+              // A ListView + PageScrollPhysics used to drive this: that
+              // physics always snaps to multiples of the VIEWPORT extent, but
+              // each item here is narrower than the viewport (a peeking
+              // carousel), so a one-page fling landed the scroll offset
+              // between two cards instead of on one.
+              // PageController(viewportFraction:) makes each "page" exactly
+              // one card + its gutter, so a swipe always settles on a single
+              // card.
+              const gutter = 12.0;
+              final viewportFraction = ((width + gutter) / constraints.maxWidth)
+                  .clamp(0.1, 1.0);
+              return PageView.builder(
+                key: const PageStorageKey('home-suggested-races-carousel'),
+                controller: PageController(viewportFraction: viewportFraction),
+                padEnds: false,
+                itemCount: suggestions.length,
+                itemBuilder: (context, index) {
+                  final suggestion = suggestions[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(right: gutter),
+                    child: _HomeSuggestionTicket(
+                      key: Key(
+                        'home-suggestion-${suggestion.wireKind}-${suggestion.id}',
+                      ),
+                      suggestion: suggestion,
+                      width: width,
+                      joining: joiningSuggestionKeys.contains(
+                        suggestion.stableKey,
+                      ),
+                      onJoin: onJoinSuggestion == null
+                          ? null
+                          : () => onJoinSuggestion!(suggestion),
+                      onPreview: _previewSuggestionTap(suggestion),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
         ),
       );
     }
@@ -639,7 +656,7 @@ class HomeTab extends StatelessWidget {
 
   Widget _buildRaceSkeletonBody() {
     return SizedBox(
-      height: 240,
+      height: 214,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         physics: const NeverScrollableScrollPhysics(),
@@ -2154,32 +2171,31 @@ class _HomeSuggestionTicket extends StatelessWidget {
         child: ExcludeSemantics(
           child: SizedBox(
             width: width,
-            height: 222,
+            height: 196,
             child: DecoratedBox(
               decoration: raceCardDecoration(context),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(14, 14, 14, 13),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Pill(
-                        label: suggestion.eyebrow,
-                        background:
-                            suggestion.kind == HomeRaceSuggestionKind.publicRace
-                            ? AppColors.of(context).pillGreen
-                            : AppColors.of(context).pillGold,
-                        foreground:
-                            suggestion.kind == HomeRaceSuggestionKind.publicRace
-                            ? Colors.white
-                            : null,
-                        fontSize: 10.5,
-                      ),
+                    Pill(
+                      label: suggestion.eyebrow,
+                      background:
+                          suggestion.kind == HomeRaceSuggestionKind.publicRace
+                          ? AppColors.of(context).pillGreen
+                          : AppColors.of(context).pillGold,
+                      foreground:
+                          suggestion.kind == HomeRaceSuggestionKind.publicRace
+                          ? Colors.white
+                          : null,
+                      fontSize: 10.5,
                     ),
                     const SizedBox(height: 8),
                     Text(
                       suggestion.name.toUpperCase(),
+                      textAlign: TextAlign.center,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: PixelText.title(
@@ -2187,9 +2203,10 @@ class _HomeSuggestionTicket extends StatelessWidget {
                         color: AppColors.of(context).textDark,
                       ),
                     ),
-                    const SizedBox(height: 7),
+                    const SizedBox(height: 6),
                     Text(
                       '$_timeLine · $_populationLine',
+                      textAlign: TextAlign.center,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: PixelText.body(
@@ -2198,9 +2215,10 @@ class _HomeSuggestionTicket extends StatelessWidget {
                       ),
                     ),
                     if (team != null) ...[
-                      const SizedBox(height: 5),
+                      const SizedBox(height: 4),
                       Text(
                         team,
+                        textAlign: TextAlign.center,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: PixelText.title(
@@ -2210,12 +2228,14 @@ class _HomeSuggestionTicket extends StatelessWidget {
                       ),
                     ],
                     if (prize > 0) ...[
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 5),
                       Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           const CoinGlyph(size: 14),
                           const SizedBox(width: 5),
-                          Expanded(
+                          Flexible(
                             child: Text(
                               '$prize COIN PRIZE',
                               maxLines: 1,
@@ -2229,7 +2249,7 @@ class _HomeSuggestionTicket extends StatelessWidget {
                         ],
                       ),
                     ],
-                    const Spacer(),
+                    const SizedBox(height: 12),
                     PillButton(
                       key: Key(
                         'home-suggestion-join-${suggestion.wireKind}-${suggestion.id}',
@@ -2320,7 +2340,7 @@ class _HomeRaceSkeletonTicket extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: 168,
-      height: 222,
+      height: 196,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: AppColors.of(context).parchment.withValues(alpha: 0.96),
