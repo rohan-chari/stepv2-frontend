@@ -54,6 +54,7 @@ class _RecordingApi extends BackendApiService {
     bool isPublic = false,
     int? maxParticipants = 10,
     DateTime? scheduledStartAt,
+    DateTime? scheduledEndAt,
   }) async {
     createRaceCalled = true;
     return {

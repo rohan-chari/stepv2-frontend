@@ -26,6 +26,7 @@ class _FakeBackendApiService extends BackendApiService {
     bool isPublic = false,
     int? maxParticipants = 10,
     DateTime? scheduledStartAt,
+    DateTime? scheduledEndAt,
   }) async {
     lastCreateRaceCall = {
       'identityToken': identityToken,
@@ -112,14 +113,14 @@ void main() {
       'Gold Rush',
     );
 
-    // 10 runners x 3 days -> 10 x 2 x 20 = 400.
-    expect(_poolCoins(tester), '400');
+    // 10 runners x the default 7 days -> 10 x 4 x 20 = 800.
+    expect(_poolCoins(tester), '800');
 
     // Growing the field grows the pool, with no coin input anywhere.
     await tester.ensureVisible(find.text('25'));
     await tester.tap(find.text('25'));
     await tester.pump();
-    expect(_poolCoins(tester), '1,000');
+    expect(_poolCoins(tester), '2,000');
 
     tester.testTextInput.hide();
     await tester.pumpAndSettle();

@@ -17,7 +17,6 @@ import google_mobile_ads
   private var hasRegisteredHealthObserver = false
   private lazy var backgroundSyncCoordinator = BackgroundStepSyncCoordinator(
     stateStore: UserDefaultsBackgroundSyncStateStore(),
-    challengeSyncDaysFetcher: URLSessionChallengeSyncDaysFetcher(),
     stepReader: HealthKitStepReader(),
     poster: URLSessionStepPoster()
   )
@@ -441,14 +440,6 @@ extension BackgroundStepSyncStateStoring {
   var stepSampleBucketMinutes: Int { 60 }
 }
 
-protocol ChallengeSyncDaysFetching {
-  func fetchCurrentChallengeSyncDays(
-    baseURL: URL,
-    sessionToken: String,
-    completion: @escaping ([BackgroundSyncDay]?) -> Void
-  )
-}
-
 struct BackgroundSyncDay: Equatable {
   let date: String
   let startsAt: Date
@@ -490,20 +481,17 @@ protocol StepPosting {
 
 final class BackgroundStepSyncCoordinator {
   private let stateStore: BackgroundStepSyncStateStoring
-  private let challengeSyncDaysFetcher: ChallengeSyncDaysFetching
   private let stepReader: StepReading
   private let poster: StepPosting
   private let now: () -> Date
 
   init(
     stateStore: BackgroundStepSyncStateStoring,
-    challengeSyncDaysFetcher: ChallengeSyncDaysFetching,
     stepReader: StepReading,
     poster: StepPosting,
     now: @escaping () -> Date = Date.init
   ) {
     self.stateStore = stateStore
-    self.challengeSyncDaysFetcher = challengeSyncDaysFetcher
     self.stepReader = stepReader
     self.poster = poster
     self.now = now
@@ -547,66 +535,65 @@ final class BackgroundStepSyncCoordinator {
 
     let currentTime = now()
 
-    challengeSyncDaysFetcher.fetchCurrentChallengeSyncDays(
-      baseURL: backendBaseURL,
-      sessionToken: sessionToken
-    ) { [stepReader, poster] syncDays in
-      let resolvedSyncDays =
-        (syncDays?.isEmpty == false)
-        ? syncDays!
-        : BackgroundStepSyncDateFormatter.localFallbackSyncDays(now: currentTime)
+    // The sync window used to come from `GET /challenges/current`, but that
+    // route has never existed on this backend — it answered 404 to every one
+    // of the ~17k requests/day this made, and the result was always discarded
+    // in favour of the local fallback below. Removed 2026-08-16; the challenge
+    // feature itself is dead (no router mounted, tables last written May 2026).
+    let resolvedSyncDays = BackgroundStepSyncDateFormatter.localFallbackSyncDays(
+      now: currentTime
+    )
 
-      stepReader.fetchStepCounts(for: resolvedSyncDays) { [stepReader] result in
-        switch result {
-        case .failure:
-          completion(.failed)
-        case .success(let dailySteps):
-          guard !dailySteps.isEmpty else {
-            completion(.noData)
+    stepReader.fetchStepCounts(for: resolvedSyncDays) { [stepReader, poster] result in
+      switch result {
+      case .failure:
+        completion(.failed)
+      case .success(let dailySteps):
+        guard !dailySteps.isEmpty else {
+          completion(.noData)
+          return
+        }
+
+        Self.postDailySteps(
+          dailySteps,
+          baseURL: backendBaseURL,
+          sessionToken: sessionToken,
+          poster: poster
+        ) { dailyResult in
+          guard dailyResult == .success else {
+            completion(dailyResult)
             return
           }
 
-          Self.postDailySteps(
-            dailySteps,
-            baseURL: backendBaseURL,
-            sessionToken: sessionToken,
-            poster: poster
-          ) { dailyResult in
-            guard dailyResult == .success else {
-              completion(dailyResult)
-              return
-            }
-
-            // After daily sync succeeds, sync hourly samples for today. On a
-            // sub-hourly account, COMPLETED hours only (see hourlySamplesEnd)
-            // — an early-out when no hour has completed yet today.
-            let todayStart = Calendar.current.startOfDay(for: currentTime)
-            let hourlyEnd = Self.hourlySamplesEnd(
-              currentTime: currentTime,
-              bucketMinutes: bucketMinutes
-            )
-            guard hourlyEnd > todayStart else {
+          // After daily sync succeeds, sync hourly samples for today. On a
+          // sub-hourly account, COMPLETED hours only (see hourlySamplesEnd)
+          // — an early-out when no hour has completed yet today.
+          let todayStart = Calendar.current.startOfDay(for: currentTime)
+          let hourlyEnd = Self.hourlySamplesEnd(
+            currentTime: currentTime,
+            bucketMinutes: bucketMinutes
+          )
+          guard hourlyEnd > todayStart else {
+            completion(.success)
+            return
+          }
+          stepReader.fetchHourlyStepCounts(from: todayStart, to: hourlyEnd) { hourlyResult in
+            switch hourlyResult {
+            case .failure:
+              // Don't fail the overall sync if hourly samples fail
               completion(.success)
-              return
-            }
-            stepReader.fetchHourlyStepCounts(from: todayStart, to: hourlyEnd) { hourlyResult in
-              switch hourlyResult {
-              case .failure:
-                // Don't fail the overall sync if hourly samples fail
+            case .success(let samples):
+              guard !samples.isEmpty else {
                 completion(.success)
-              case .success(let samples):
-                guard !samples.isEmpty else {
-                  completion(.success)
-                  return
-                }
-                poster.postStepSamples(
-                  baseURL: backendBaseURL,
-                  sessionToken: sessionToken,
-                  samples: samples
-                ) { _, _ in
-                  // Ignore hourly post failures - daily sync already succeeded
-                  completion(.success)
-                }
+                return
+              }
+              poster.postStepSamples(
+                baseURL: backendBaseURL,
+                sessionToken: sessionToken,
+                samples: samples
+              ) { _, _ in
+                // Ignore hourly post failures - daily sync already succeeded
+                completion(.success)
               }
             }
           }
@@ -739,72 +726,6 @@ final class UserDefaultsBackgroundSyncStateStore: BackgroundStepSyncStateStoring
 struct BackgroundSyncBootstrapKeys {
   // Fix C1: "flutter." prefix to match what Dart's legacy shared_preferences writes.
   static let backendBaseURL = "flutter.background_sync_backend_base_url"
-}
-
-final class URLSessionChallengeSyncDaysFetcher: ChallengeSyncDaysFetching {
-  private let session: URLSession
-  private let iso8601Formatter = ISO8601DateFormatter()
-
-  init(session: URLSession = .shared) {
-    self.session = session
-    iso8601Formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-  }
-
-  func fetchCurrentChallengeSyncDays(
-    baseURL: URL,
-    sessionToken: String,
-    completion: @escaping ([BackgroundSyncDay]?) -> Void
-  ) {
-    guard let url = URL(string: "/challenges/current", relativeTo: baseURL)?.absoluteURL else {
-      completion(nil)
-      return
-    }
-
-    var request = URLRequest(url: url)
-    request.httpMethod = "GET"
-    request.setValue("Bearer \(sessionToken)", forHTTPHeaderField: "Authorization")
-
-    session.dataTask(with: request) { data, response, _ in
-      guard
-        let statusCode = (response as? HTTPURLResponse)?.statusCode,
-        (200..<300).contains(statusCode),
-        let data,
-        let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-      else {
-        completion(nil)
-        return
-      }
-
-      completion(self.parseSyncDays(from: payload))
-    }.resume()
-  }
-
-  private func parseSyncDays(from payload: [String: Any]) -> [BackgroundSyncDay]? {
-    guard let rawSyncDays = payload["syncDays"] as? [[String: Any]] else {
-      return nil
-    }
-
-    let parsedSyncDays: [BackgroundSyncDay] = rawSyncDays.compactMap { entry -> BackgroundSyncDay? in
-      guard
-        let date = entry["date"] as? String,
-        let startsAtValue = entry["startsAt"] as? String,
-        let endsAtValue = entry["endsAt"] as? String,
-        let startsAt = iso8601Formatter.date(from: startsAtValue),
-        let endsAt = iso8601Formatter.date(from: endsAtValue),
-        endsAt > startsAt
-      else {
-        return nil
-      }
-
-      return BackgroundSyncDay(
-        date: date,
-        startsAt: startsAt,
-        endsAt: endsAt
-      )
-    }
-
-    return parsedSyncDays.count == rawSyncDays.count ? parsedSyncDays : nil
-  }
 }
 
 final class HealthKitStepReader: StepReading {

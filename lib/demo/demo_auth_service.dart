@@ -91,6 +91,15 @@ class DemoAuthService extends AuthService {
   @override
   bool get onboardingInviteCodeEnabled => false;
 
+  /// Deliberately false, same rationale as `onboardingV2Enabled` above and for
+  /// a sharper reason (timeline spec §10.1 risk 1): this class inherits every
+  /// flag it does not override, so the moment `customRaceWindowEnabled` flips
+  /// on in prod the CUSTOM chip — with a date picker, a card that grows, and a
+  /// scripted spotlight never designed for either — would appear inside the
+  /// onboarding demo's create beat. The demo prologue is presets only.
+  @override
+  bool get customRaceWindowEnabled => false;
+
   /// The demo never provisions an account, so there is no attribution to read.
   @override
   String? get referredByCode => null;

@@ -164,6 +164,7 @@ class AuthService extends ChangeNotifier {
   bool _bannerAdsEnabled = false;
   bool _dualBoxBannersEnabled = false;
   bool _teamRacesEnabled = true;
+  bool _customRaceWindowEnabled = false;
   bool _onboardingV2Enabled = false;
   bool _onboardingV3Enabled = false;
   // Kill switch, NOT an opt-in: it starts life ON and only a literal `false`
@@ -240,6 +241,19 @@ class AuthService extends ChangeNotifier {
   /// from the backend hides the create-flow team toggle. Existing team races
   /// are unaffected by the switch (they render, run, and pay out normally).
   bool get teamRacesEnabled => _teamRacesEnabled;
+
+  /// Remote gate for the CUSTOM race window (race timeline options spec §5.2a,
+  /// backend `featureFlags.customRaceWindowEnabled`).
+  ///
+  /// OPT-IN, so the polarity is the opposite of [teamRacesEnabled]: absent,
+  /// null, or any non-boolean reads as **false**. An older backend that has
+  /// never heard of the flag must not be shown a control it answers with
+  /// `403 FEATURE_DISABLED`, and this is also the kill switch — flipping it off
+  /// hides the chip while already-created custom races keep their windows.
+  ///
+  /// Deliberately NOT persisted: a cold start before `/auth/me` lands must
+  /// default to "no CUSTOM chip", never to a stale yes.
+  bool get customRaceWindowEnabled => _customRaceWindowEnabled;
 
   /// Server-controlled activation flow. This deliberately defaults to false:
   /// frozen/older backend payloads must continue through the v1 onboarding.
@@ -933,6 +947,10 @@ class AuthService extends ChangeNotifier {
       );
       _quickRaceShareAutoFriendEnabled =
           flags is Map && flags['quickRaceShareAutoFriendEnabled'] == true;
+      // Custom race windows. Opt-in, same envelope guard as everything above:
+      // only the literal boolean true reveals the CUSTOM chip.
+      _customRaceWindowEnabled =
+          flags is Map && flags['customRaceWindowEnabled'] == true;
     } else if (authoritative) {
       // A complete envelope from an older backend is capability evidence too:
       // omission means the create-and-share auto-friend promise is unavailable.
@@ -981,6 +999,12 @@ class AuthService extends ChangeNotifier {
         appSettings.containsKey('tutorialMandatoryEnabled')) {
       _tutorialMandatoryEnabled =
           appSettings['tutorialMandatoryEnabled'] == true;
+    }
+    // Same story for the custom-window flag: it lives in `KNOWN_FLAGS`, which
+    // the backend may serve under either envelope. Opt-in in both.
+    if (appSettings is Map &&
+        appSettings.containsKey('customRaceWindowEnabled')) {
+      _customRaceWindowEnabled = appSettings['customRaceWindowEnabled'] == true;
     }
     if (appSettings is Map &&
         appSettings.containsKey('setupInviteCodePromptEnabled')) {
@@ -1048,6 +1072,7 @@ class AuthService extends ChangeNotifier {
     AdService.remoteBannersEnabled = false;
     _dualBoxBannersEnabled = false;
     AdService.remoteDualBoxBannersEnabled = false;
+    _customRaceWindowEnabled = false;
     _onboardingV2Enabled = false;
     _onboardingV3Enabled = false;
     _onboardingInviteCodeEnabled = true;

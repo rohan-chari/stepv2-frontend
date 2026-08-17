@@ -2232,6 +2232,12 @@ class BackendApiService {
     // 1.1.7: optional future auto-start time. Omitted from the body when null so
     // the backend treats it as an instant/manual race (unchanged behavior).
     DateTime? scheduledStartAt,
+    // Race timeline options: the exact end instant of a CUSTOM window. Same
+    // shape and the same rule as scheduledStartAt — OMITTED from the body when
+    // null, so a preset race's request is byte-identical to today's and an
+    // older backend sees nothing new. The server overwrites maxDurationDays
+    // with its own derivation when this is accepted (spec §5.3).
+    DateTime? scheduledEndAt,
   }) async {
     final body = <String, dynamic>{
       'name': name,
@@ -2247,6 +2253,9 @@ class BackendApiService {
     }
     if (scheduledStartAt != null) {
       body['scheduledStartAt'] = scheduledStartAt.toUtc().toIso8601String();
+    }
+    if (scheduledEndAt != null) {
+      body['scheduledEndAt'] = scheduledEndAt.toUtc().toIso8601String();
     }
 
     final response = await _sendJsonRequest(
@@ -2299,6 +2308,9 @@ class BackendApiService {
     int buyInAmount = 0,
     bool isPublic = false,
     DateTime? scheduledStartAt,
+    // Same optional CUSTOM window as [createRace] — both individual and team
+    // races land in the backend's one `createRace` command.
+    DateTime? scheduledEndAt,
     String? teamAName,
     String? teamBName,
     // The creator's chosen side (TR-104); server defaults TEAM_A when omitted.
@@ -2326,6 +2338,9 @@ class BackendApiService {
     }
     if (scheduledStartAt != null) {
       body['scheduledStartAt'] = scheduledStartAt.toUtc().toIso8601String();
+    }
+    if (scheduledEndAt != null) {
+      body['scheduledEndAt'] = scheduledEndAt.toUtc().toIso8601String();
     }
 
     final response = await _sendJsonRequest(
@@ -3540,6 +3555,20 @@ class BackendApiService {
     String? teamAName,
     String? teamBName,
     int? teamSize,
+    // Race timeline options §5.2 / Q4. `scheduledStartAt` is new to PATCH
+    // entirely; a race's scheduled start was create-only until now.
+    //
+    // NEVER send `scheduledStartAt: null` — the server answers
+    // `400 SCHEDULED_START_NOT_CLEARABLE`, because un-scheduling a private race
+    // actually means "the backstop starts it within 5 minutes". There is
+    // deliberately no flag here to express it.
+    DateTime? scheduledStartAt,
+    DateTime? scheduledEndAt,
+    // Sends an explicit `scheduledEndAt: null`, which CLEARS a custom window
+    // and returns the race to its duration-derived end. Needed as a separate
+    // signal for the same reason as [setMaxParticipantsUnlimited]: a null value
+    // is indistinguishable from "unchanged" in a sparse PATCH.
+    bool clearScheduledEndAt = false,
   }) async {
     final body = <String, dynamic>{};
     if (name != null) body['name'] = name;
@@ -3558,6 +3587,14 @@ class BackendApiService {
       body['maxParticipants'] = null;
     } else if (maxParticipants != null) {
       body['maxParticipants'] = maxParticipants;
+    }
+    if (scheduledStartAt != null) {
+      body['scheduledStartAt'] = scheduledStartAt.toUtc().toIso8601String();
+    }
+    if (clearScheduledEndAt) {
+      body['scheduledEndAt'] = null;
+    } else if (scheduledEndAt != null) {
+      body['scheduledEndAt'] = scheduledEndAt.toUtc().toIso8601String();
     }
 
     final response = await _sendJsonRequest(

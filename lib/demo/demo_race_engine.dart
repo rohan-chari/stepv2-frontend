@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import '../models/race_prize_pool.dart';
 import 'demo_race_script.dart';
 
 /// The demo race simulation (spec §5.2).
@@ -128,7 +129,9 @@ class DemoRaceEngine {
   // somebody else made never starts one.
   bool _raceCreated = false;
   bool _friendsInvited = false;
-  int _durationDays = 3;
+  // 7, not 3: the create picker no longer offers a 3-day race, so a demo that
+  // defaults to one advertises a length the user cannot choose.
+  int _durationDays = 7;
   final List<String> _invitedUserIds = [];
 
   bool _introAcknowledged = false;
@@ -166,6 +169,14 @@ class DemoRaceEngine {
   bool get raceCreated => _raceCreated;
   bool get friendsInvited => _friendsInvited;
   int get durationDays => _durationDays;
+
+  /// The demo race's app-funded pool, computed with the SAME mirrored formula
+  /// the create screen previews with, so the tutorial never shows the user two
+  /// different numbers for one race.
+  int get _demoPrizePool => computePrizePool(
+    playerCount: participants.length,
+    durationDays: _durationDays,
+  );
   List<String> get invitedUserIds => List.unmodifiable(_invitedUserIds);
 
   /// The three rivals, in the shape `RaceInviteScreen` reads (`id` /
@@ -497,22 +508,29 @@ class DemoRaceEngine {
       'maxDurationDays': _durationDays,
       'buyInAmount': 0,
       'payoutPreset': 'TOP3_70_20_10',
-      'projectedPotCoins': 240,
+      'projectedPotCoins': _demoPrizePool,
       'prizePool': {
-        'coins': 240,
+        'coins': _demoPrizePool,
         'projected': !_completed,
         'atMax': false,
         'playerCount': participants.length,
         'durationDays': _durationDays,
-        'durationPoints': _durationDays <= 1 ? 1 : 2,
-        'coinUnit': 20,
-        'maxCoins': 16000,
+        // The REAL mirrored band table (models/race_prize_pool.dart), not a
+        // local `<=1 ? 1 : 2` fork. The fork disagreed hardest at 7 and 14 —
+        // exactly the durations the picker now offers — so the create plaque
+        // and the demo race's scorecard showed two different pools for the
+        // same race inside one tutorial (timeline spec §10.1 risk 4).
+        'durationPoints': prizePoolDurationPoints(_durationDays),
+        'coinUnit': kPrizeCoinUnit,
+        'maxCoins': kPrizePoolMaxCoins,
         'funded': true,
       },
-      'payoutTiers': const [
-        {'placement': 1, 'amount': 168},
-        {'placement': 2, 'amount': 48},
-        {'placement': 3, 'amount': 24},
+      // Derived from the pool above so the podium adds up to what the
+      // scorecard promises (TOP3_70_20_10).
+      'payoutTiers': [
+        {'placement': 1, 'amount': (_demoPrizePool * 70) ~/ 100},
+        {'placement': 2, 'amount': (_demoPrizePool * 20) ~/ 100},
+        {'placement': 3, 'amount': (_demoPrizePool * 10) ~/ 100},
       ],
       'startedAt': _startedAt.toIso8601String(),
       'endsAt': (wallNow ?? now).add(remainingAt(now)).toIso8601String(),

@@ -537,12 +537,12 @@ class HomeTab extends StatelessWidget {
     final suggestions = state.data;
     if (suggestions != null && suggestions.isNotEmpty) {
       return SizedBox(
-        height: 214,
+        height: 170,
         child: Padding(
           padding: const EdgeInsets.only(left: 16),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final width = (constraints.maxWidth * 0.72).clamp(220.0, 260.0);
+              final width = (constraints.maxWidth * 0.86).clamp(240.0, 300.0);
               // A ListView + PageScrollPhysics used to drive this: that
               // physics always snaps to multiples of the VIEWPORT extent, but
               // each item here is narrower than the viewport (a peeking
@@ -551,7 +551,7 @@ class HomeTab extends StatelessWidget {
               // PageController(viewportFraction:) makes each "page" exactly
               // one card + its gutter, so a swipe always settles on a single
               // card.
-              const gutter = 12.0;
+              const gutter = 18.0;
               final viewportFraction = ((width + gutter) / constraints.maxWidth)
                   .clamp(0.1, 1.0);
               return PageView.builder(
@@ -656,7 +656,7 @@ class HomeTab extends StatelessWidget {
 
   Widget _buildRaceSkeletonBody() {
     return SizedBox(
-      height: 214,
+      height: 170,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         physics: const NeverScrollableScrollPhysics(),
@@ -1972,24 +1972,6 @@ class _SkeletonBar extends StatelessWidget {
   }
 }
 
-class _SkeletonCircle extends StatelessWidget {
-  const _SkeletonCircle({required this.size});
-
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: AppColors.of(context).parchmentBorder.withValues(alpha: 0.46),
-        borderRadius: BorderRadius.circular(999),
-      ),
-    );
-  }
-}
-
 class _HomeRaceHeader extends StatelessWidget {
   const _HomeRaceHeader({this.onViewAll});
 
@@ -2171,11 +2153,11 @@ class _HomeSuggestionTicket extends StatelessWidget {
         child: ExcludeSemantics(
           child: SizedBox(
             width: width,
-            height: 196,
+            height: 152,
             child: DecoratedBox(
               decoration: raceCardDecoration(context),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 14, 14, 13),
+                padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -2192,22 +2174,22 @@ class _HomeSuggestionTicket extends StatelessWidget {
                           : null,
                       fontSize: 10.5,
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 5),
                     Text(
                       suggestion.name.toUpperCase(),
                       textAlign: TextAlign.center,
-                      maxLines: 2,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: PixelText.title(
                         size: 16,
                         color: AppColors.of(context).textDark,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 3),
                     Text(
                       '$_timeLine · $_populationLine',
                       textAlign: TextAlign.center,
-                      maxLines: 2,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: PixelText.body(
                         size: 11.5,
@@ -2215,7 +2197,7 @@ class _HomeSuggestionTicket extends StatelessWidget {
                       ),
                     ),
                     if (team != null) ...[
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 2),
                       Text(
                         team,
                         textAlign: TextAlign.center,
@@ -2228,7 +2210,7 @@ class _HomeSuggestionTicket extends StatelessWidget {
                       ),
                     ],
                     if (prize > 0) ...[
-                      const SizedBox(height: 5),
+                      const SizedBox(height: 3),
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -2249,7 +2231,7 @@ class _HomeSuggestionTicket extends StatelessWidget {
                         ],
                       ),
                     ],
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 6),
                     PillButton(
                       key: Key(
                         'home-suggestion-join-${suggestion.wireKind}-${suggestion.id}',
@@ -2260,7 +2242,7 @@ class _HomeSuggestionTicket extends StatelessWidget {
                       fullWidth: true,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 14,
-                        vertical: 9,
+                        vertical: 7,
                       ),
                       onPressed: joining ? null : onJoin,
                     ),
@@ -2340,7 +2322,7 @@ class _HomeRaceSkeletonTicket extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: 168,
-      height: 196,
+      height: 152,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: AppColors.of(context).parchment.withValues(alpha: 0.96),
@@ -2351,28 +2333,18 @@ class _HomeRaceSkeletonTicket extends StatelessWidget {
           ),
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
           child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const _SkeletonBar(width: 48, height: 22),
-              const SizedBox(height: 14),
+              const _SkeletonBar(width: 48, height: 20),
+              const SizedBox(height: 10),
               const _SkeletonBar(width: 104, height: 14),
               const SizedBox(height: 6),
-              const _SkeletonBar(width: 82, height: 14),
-              const SizedBox(height: 14),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  _SkeletonCircle(size: 34),
-                  SizedBox(width: 4),
-                  _SkeletonCircle(size: 34),
-                  SizedBox(width: 4),
-                  _SkeletonCircle(size: 34),
-                ],
-              ),
-              const Spacer(),
-              const _SkeletonBar(width: 92, height: 14),
+              const _SkeletonBar(width: 82, height: 12),
+              const SizedBox(height: 12),
+              const _SkeletonBar(width: 92, height: 28),
             ],
           ),
         ),

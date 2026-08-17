@@ -45,6 +45,32 @@ int prizePoolDurationPoints(int days) {
   return 8;
 }
 
+/// Milliseconds in one day — the same divisor the backend uses.
+const int _kMsPerDay = 86400000;
+
+/// The priced duration of a CUSTOM race window, mirroring the backend's
+/// `durationDaysFromWindow` (race timeline options spec §5.3) **verbatim**:
+///
+/// ```
+/// clamp(floor(windowMs / 86_400_000), 1, 30)
+/// ```
+///
+/// The server OVERWRITES the client's `maxDurationDays` with this number when a
+/// `scheduledEndAt` is accepted, so the create/edit plaque must preview the
+/// same value or it advertises a pool the created race does not have.
+///
+/// `floor`, never `ceil` or `round`: the governed metric is coins minted per
+/// walker per **elapsed day**, and only lower-rounding holds it at today's
+/// ceiling. Under `ceil` a 24h+1min window prices at the 2-day band — a 2.00x
+/// mint rate sitting on top of the most common race length in prod.
+/// `race_prize_pool_test` pins the boundaries.
+int prizePoolDurationDaysForWindow(DateTime start, DateTime end) {
+  final windowMs = end.difference(start).inMilliseconds;
+  if (windowMs < _kMsPerDay) return 1;
+  final days = windowMs ~/ _kMsPerDay;
+  return days > 30 ? 30 : days;
+}
+
 /// `players × durationPoints × unit`, clamped to [max]. A field of fewer than
 /// two players mints nothing.
 int computePrizePool({

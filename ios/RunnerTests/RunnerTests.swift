@@ -11,13 +11,6 @@ class RunnerTests: XCTestCase {
         backendBaseURL: URL(string: "http://127.0.0.1:3000"),
         healthAuthorized: true
       ),
-      challengeSyncDaysFetcher: MockChallengeSyncDaysFetcher(syncDays: [
-        BackgroundSyncDay(
-          date: "2026-03-19",
-          startsAt: isoDate("2026-03-19T04:00:00Z"),
-          endsAt: isoDate("2026-03-19T15:30:00Z")
-        )
-      ]),
       stepReader: MockStepReader(result: .success([
         BackgroundDailyStep(date: "2026-03-19", steps: 1234)
       ])),
@@ -66,33 +59,16 @@ class RunnerTests: XCTestCase {
       BackgroundDailyStep(date: "2026-03-18", steps: 5200),
       BackgroundDailyStep(date: "2026-03-19", steps: 8765),
     ]))
-    let syncDays = [
-      BackgroundSyncDay(
-        date: "2026-03-17",
-        startsAt: isoDate("2026-03-17T04:00:00Z"),
-        endsAt: isoDate("2026-03-18T04:00:00Z")
-      ),
-      BackgroundSyncDay(
-        date: "2026-03-18",
-        startsAt: isoDate("2026-03-18T04:00:00Z"),
-        endsAt: isoDate("2026-03-19T04:00:00Z")
-      ),
-      BackgroundSyncDay(
-        date: "2026-03-19",
-        startsAt: isoDate("2026-03-19T04:00:00Z"),
-        endsAt: isoDate("2026-03-19T15:30:00Z")
-      ),
-    ]
+    let syncNow = isoDate("2026-03-19T15:30:00Z")
     let coordinator = BackgroundStepSyncCoordinator(
       stateStore: MockStateStore(
         sessionToken: "session-token",
         backendBaseURL: URL(string: "http://127.0.0.1:3000"),
         healthAuthorized: true
       ),
-      challengeSyncDaysFetcher: MockChallengeSyncDaysFetcher(syncDays: syncDays),
       stepReader: stepReader,
       poster: poster,
-      now: { isoDate("2026-03-19T15:30:00Z") }
+      now: { syncNow }
     )
 
     let expectation = expectation(description: "sync completion")
@@ -104,7 +80,12 @@ class RunnerTests: XCTestCase {
     wait(for: [expectation], timeout: 1)
     XCTAssertEqual(poster.capturedToken, "session-token")
     XCTAssertEqual(poster.capturedURL?.absoluteString, "http://127.0.0.1:3000")
-    XCTAssertEqual(stepReader.capturedSyncDays, syncDays)
+    // The sync window is derived locally now that `/challenges/current` is
+    // gone; assert the reader still receives exactly that window.
+    XCTAssertEqual(
+      stepReader.capturedSyncDays,
+      BackgroundStepSyncDateFormatter.localFallbackSyncDays(now: syncNow)
+    )
     XCTAssertEqual(
       poster.capturedPosts,
       [
@@ -122,13 +103,6 @@ class RunnerTests: XCTestCase {
         backendBaseURL: URL(string: "http://127.0.0.1:3000"),
         healthAuthorized: true
       ),
-      challengeSyncDaysFetcher: MockChallengeSyncDaysFetcher(syncDays: [
-        BackgroundSyncDay(
-          date: "2026-03-19",
-          startsAt: isoDate("2026-03-19T04:00:00Z"),
-          endsAt: isoDate("2026-03-19T15:30:00Z")
-        )
-      ]),
       stepReader: MockStepReader(result: .success([
         BackgroundDailyStep(date: "2026-03-19", steps: 8765)
       ])),
@@ -145,7 +119,7 @@ class RunnerTests: XCTestCase {
     wait(for: [expectation], timeout: 1)
   }
 
-  func testPerformSyncFallsBackToLocalTodayWhenNoChallengeSyncDaysAreAvailable() {
+  func testPerformSyncUsesLocalTodayWindow() {
     let fallbackNow = isoDate("2026-03-19T15:30:00Z")
     let fallbackDate = BackgroundStepSyncDateFormatter.localDateString(now: fallbackNow)
     let poster = MockPoster()
@@ -158,7 +132,6 @@ class RunnerTests: XCTestCase {
         backendBaseURL: URL(string: "http://127.0.0.1:3000"),
         healthAuthorized: true
       ),
-      challengeSyncDaysFetcher: MockChallengeSyncDaysFetcher(syncDays: nil),
       stepReader: stepReader,
       poster: poster,
       now: { fallbackNow }
@@ -220,13 +193,6 @@ class RunnerTests: XCTestCase {
         healthAuthorized: true,
         stepSampleBucketMinutes: 5
       ),
-      challengeSyncDaysFetcher: MockChallengeSyncDaysFetcher(syncDays: [
-        BackgroundSyncDay(
-          date: "2026-03-19",
-          startsAt: isoDate("2026-03-19T04:00:00Z"),
-          endsAt: nowTime
-        )
-      ]),
       stepReader: stepReader,
       poster: poster,
       now: { nowTime }
@@ -260,13 +226,6 @@ class RunnerTests: XCTestCase {
         backendBaseURL: URL(string: "http://127.0.0.1:3000"),
         healthAuthorized: true
       ),
-      challengeSyncDaysFetcher: MockChallengeSyncDaysFetcher(syncDays: [
-        BackgroundSyncDay(
-          date: "2026-03-19",
-          startsAt: isoDate("2026-03-19T04:00:00Z"),
-          endsAt: nowTime
-        )
-      ]),
       stepReader: stepReader,
       poster: poster,
       now: { nowTime }
@@ -307,21 +266,6 @@ private struct MockStateStore: BackgroundStepSyncStateStoring {
   var stepSampleBucketMinutes: Int = 60
 }
 
-private final class MockChallengeSyncDaysFetcher: ChallengeSyncDaysFetching {
-  let syncDays: [BackgroundSyncDay]?
-
-  init(syncDays: [BackgroundSyncDay]?) {
-    self.syncDays = syncDays
-  }
-
-  func fetchCurrentChallengeSyncDays(
-    baseURL: URL,
-    sessionToken: String,
-    completion: @escaping ([BackgroundSyncDay]?) -> Void
-  ) {
-    completion(syncDays)
-  }
-}
 
 private final class MockStepReader: StepReading {
   private let result: Result<[BackgroundDailyStep], Error>

@@ -46,6 +46,7 @@ class _SilentApi extends BackendApiService {
     bool isPublic = false,
     int? maxParticipants,
     DateTime? scheduledStartAt,
+    DateTime? scheduledEndAt,
   }) async {
     calls.add('createRace');
     return const {};
@@ -169,6 +170,25 @@ void main() {
 
     expect(ctx.engine.durationDays, 7);
     expect(ctx.engine.raceCreated, isTrue);
+  });
+
+  // Race timeline options §10.1 risk 1. `DemoAuthService` inherits every flag
+  // it does not override, so without its explicit
+  // `customRaceWindowEnabled => false` the CUSTOM chip — a date picker, a card
+  // that grows, and a spotlight never scripted for either — appears inside the
+  // onboarding demo the moment the prod flag flips on. That failure is
+  // invisible: it compiles, and nothing else fails.
+  testWidgets('the demo prologue never offers the CUSTOM timeline chip', (
+    tester,
+  ) async {
+    final ctx = build();
+    await pumpHost(tester, ctx);
+
+    expect(find.byKey(const Key('duration-option-custom')), findsNothing);
+    expect(find.text('CUSTOM'), findsNothing);
+    expect(find.byKey(const Key('timeline-ends-row')), findsNothing);
+    // The presets the script drives are still there.
+    expect(find.byKey(const Key('duration-option-7')), findsOneWidget);
   });
 
   testWidgets('CREATE RACE never posts a race to the real backend', (

@@ -20,6 +20,7 @@ class _FakeBackendApiService extends BackendApiService {
     bool isPublic = false,
     int? maxParticipants = 10,
     DateTime? scheduledStartAt,
+    DateTime? scheduledEndAt,
   }) async {
     lastCreateRaceCall = {
       'identityToken': identityToken,

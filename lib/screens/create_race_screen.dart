@@ -11,6 +11,8 @@ import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/powerup_interval_note.dart';
+import '../widgets/prize_pool_plaque.dart';
+import '../widgets/race_timeline_card.dart';
 import '../widgets/retro_card.dart';
 import 'tournament_detail_screen.dart';
 
@@ -55,7 +57,9 @@ class CreateRaceScreen extends StatefulWidget {
 
 class CreateRaceScreenState extends State<CreateRaceScreen> {
   final _nameController = TextEditingController();
-  int _selectedDuration = 3;
+  // 7 is the default now that the 3-day chip is retired from the picker: a
+  // default the picker cannot express would leave nothing selected on open.
+  int _selectedDuration = 7;
   bool _isCreating = false;
   // Powerups are the point of a race, so they start ON. A creator who never
   // opens the customize section still sends powerupsEnabled: true plus the
@@ -69,7 +73,15 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
   int? _maxParticipants = 10;
   bool _noLimit = false;
   // 1.1.7: optional future auto-start. Null = instant/manual race (default).
+  //
+  // Race timeline options §4.3: there is exactly ONE of these in state. The
+  // CUSTOM "STARTS" row and the SCHEDULED START card are two surfaces onto the
+  // same field, and only one of them is ever mounted.
   DateTime? _scheduledStartAt;
+  // The CUSTOM timeline: an exact end instant, honoured verbatim by the
+  // backend. Null (or `!_customSelected`) means today's duration-derived end.
+  bool _customSelected = false;
+  DateTime? _scheduledEndAt;
   late bool _customizeExpanded;
 
   // Team races (TR-801). Plaque names come from the backend's ≥50-name pool
@@ -154,13 +166,117 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
     setState(() => _scheduledStartAt = value);
   }
 
+  /// Same, for the CUSTOM window's end instant.
+  @visibleForTesting
+  void debugSetCustomEnd(DateTime? value) {
+    setState(() => _scheduledEndAt = value);
+  }
+
+  @visibleForTesting
+  DateTime? get debugCustomEnd => _scheduledEndAt;
+
+  /// Reaches the create path directly, past the disabled button — the way a
+  /// stale frame or a queued tap would. Exists so a test can prove `_create`
+  /// refuses an illegal window itself rather than trusting the button.
+  @visibleForTesting
+  Future<void> debugCreateForTest() => _create();
+
+  /// Whether the CUSTOM chip is offered at all. Absent flag => false => the
+  /// screen is behaviorally identical to today (spec §6, "Feature gating").
+  bool get _customWindowAvailable => widget.authService.customRaceWindowEnabled;
+
+  /// The custom window is only ACTIVE where it is both chosen and offered.
+  ///
+  /// The flag is read live off `/auth/me`, so it can flip to false mid-session
+  /// (that is the kill switch). Deriving every consumer from this one getter
+  /// means the screen then degrades cleanly back to the preset UI — the
+  /// SCHEDULED START card returns, the plaque re-prices off the preset, and
+  /// nothing half-hidden can still be feeding the create call.
+  ///
+  /// Tournaments are excluded because the whole TIMELINE card is hidden for
+  /// them: an invalid window left behind by a mode switch must not keep CREATE
+  /// disabled with no visible cause.
+  bool get _customActive =>
+      _customSelected && _customWindowAvailable && !_isTournament;
+
+  /// The instant the window is measured from: the scheduled start when one is
+  /// picked, else now — the server's "effective start".
+  DateTime get _effectiveWindowStart => _scheduledStartAt ?? DateTime.now();
+
+  /// Mirrors the server's validation (spec §4.4) so the user never round-trips
+  /// to a 400. Null when the window is fine (or not in play at all).
+  String? get _customWindowError {
+    if (!_customActive) return null;
+    final end = _scheduledEndAt;
+    if (end == null) return 'Pick an end date and time';
+    final start = _effectiveWindowStart;
+    if (!end.isAfter(start)) return 'The end has to be after the start';
+    if (!end.isAfter(DateTime.now())) return 'Pick an end time in the future';
+    final window = end.difference(start);
+    if (window < const Duration(days: 1)) {
+      return 'A race has to run at least 1 day';
+    }
+    if (window > const Duration(days: 30)) {
+      return 'A race can run at most 30 days';
+    }
+    return null;
+  }
+
+  /// True only while a CUSTOM window is selected AND legal — the one condition
+  /// under which `scheduledEndAt` goes on the wire.
+  bool get _sendsCustomWindow =>
+      _customActive && _scheduledEndAt != null && _customWindowError == null;
+
+  /// The day count the PRIZE POOL is priced on. For a custom window this is the
+  /// server's own derivation (§5.3), mirrored verbatim, so the plaque can never
+  /// disagree with the created race.
+  int get _pricedDurationDays {
+    if (_customActive && _scheduledEndAt != null) {
+      return prizePoolDurationDaysForWindow(
+        _effectiveWindowStart,
+        _scheduledEndAt!,
+      );
+    }
+    return _selectedDuration;
+  }
+
+  /// Entering CUSTOM seeds the window from whatever the user already chose:
+  /// the existing scheduled start (or "when everyone's in"), and the current
+  /// preset's length as the end.
+  void _selectCustomTimeline() {
+    setState(() {
+      _customSelected = true;
+      // Rounded UP, never down: truncating to the hour would shave minutes off
+      // a 1-day preset and seed a window that is instantly under the 24h floor,
+      // greeting the user with an error and a dead CREATE for a choice they
+      // never made.
+      _scheduledEndAt ??= _ceilToHour(
+        _effectiveWindowStart.add(Duration(days: _selectedDuration)),
+      );
+    });
+  }
+
+  /// Leaving CUSTOM keeps `_scheduledStartAt` intact (§4.3) — only the surface
+  /// that renders it changes — and drops the end, which the preset replaces.
+  void _selectPresetTimeline(int days) {
+    setState(() {
+      _customSelected = false;
+      _selectedDuration = days;
+      _scheduledEndAt = null;
+    });
+  }
+
+  static DateTime _ceilToHour(DateTime t) {
+    final floored = DateTime(t.year, t.month, t.day, t.hour);
+    return floored == t ? floored : floored.add(const Duration(hours: 1));
+  }
+
   static const _textShadows = [
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
 
-  // Every option lands on a prize-pool band boundary (D3), so the previewed
-  // pool always reflects the exact multiplier the backend will apply.
-  static const _durationOptions = [1, 3, 7, 14];
+  // The preset chips live in `widgets/race_timeline_card.dart` now
+  // (kRaceTimelinePresets) so the create and edit screens cannot drift.
   static const _maxParticipantsPresets = [5, 10, 25, 50, 100];
 
   @override
@@ -234,132 +350,42 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
     if (field == null) return kPrizePoolMaxCoins;
     return computePrizePool(
       playerCount: field,
-      durationDays: _selectedDuration,
+      durationDays: _pricedDurationDays,
     );
   }
 
   String get _projectedPrizeDerivation {
     final field = _projectedFieldSize;
-    final days = _selectedDuration == 1 ? '1 DAY' : '$_selectedDuration DAYS';
+    final priced = _pricedDurationDays;
+    final days = priced == 1 ? '1 DAY' : '$priced DAYS';
     final players = field == null
         ? 'UNLIMITED PLAYERS'
         : (field == 1 ? '1 PLAYER' : '$field PLAYERS');
     return '$players × $days';
   }
 
-  /// The carved gold plaque that carries a pool figure: an "up to" number that
-  /// re-stamps itself whenever the field or the duration changes, its own
-  /// arithmetic spelled out underneath so the number is never a mystery.
+  /// The carved gold plaque, now shared with the edit screen
+  /// (`widgets/prize_pool_plaque.dart`). This wrapper keeps the call sites and
+  /// their keys byte-identical.
   Widget _prizePoolPlaque({
     required int coins,
     required bool atMax,
     required String derivation,
-    // Optional trailing line. Nothing on this screen sets it any more, but the
-    // plaque keeps the slot for callers that still want one.
     String? footnote,
     Key? key,
     Key? coinsKey,
     Key? derivationKey,
     Key? maxKey,
   }) {
-    final palette = AppColors.of(context);
-    return Container(
+    return PrizePoolPlaque(
       key: key,
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: BoxDecoration(
-        color: palette.coinLight.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: palette.coinDark.withValues(alpha: 0.45),
-          width: 2,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'PRIZE POOL',
-                  style: PixelText.title(size: 12, color: palette.textMid),
-                ),
-              ),
-              if (atMax)
-                Container(
-                  key: maxKey,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: palette.coinDark,
-                    borderRadius: BorderRadius.circular(5),
-                  ),
-                  child: Text(
-                    'MAX',
-                    style: PixelText.title(size: 9, color: Colors.white),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Image.asset(
-                'assets/images/coin.png',
-                width: 24,
-                height: 24,
-                fit: BoxFit.contain,
-                errorBuilder: (_, _, _) =>
-                    Icon(Icons.paid_rounded, size: 22, color: palette.coinDark),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'UP TO',
-                style: PixelText.body(size: 10, color: palette.textMid),
-              ),
-              const SizedBox(width: 6),
-              // Re-stamps with a quick punch on every change, so a bigger
-              // field visibly pays more.
-              Flexible(
-                child: TweenAnimationBuilder<double>(
-                  key: ValueKey(coins),
-                  tween: Tween<double>(begin: 0.84, end: 1),
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeOutBack,
-                  builder: (_, value, child) => Transform.scale(
-                    scale: value,
-                    alignment: Alignment.centerLeft,
-                    child: child,
-                  ),
-                  child: Text(
-                    formatPrizeCoins(coins),
-                    key: coinsKey,
-                    maxLines: 1,
-                    style: PixelText.number(size: 28, color: palette.coinDark),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            derivation,
-            key: derivationKey,
-            style: PixelText.body(size: 11, color: palette.textMid),
-          ),
-          if (footnote != null && footnote.isNotEmpty) ...[
-            const SizedBox(height: 2),
-            Text(
-              footnote,
-              style: PixelText.body(size: 10, color: palette.textMid),
-            ),
-          ],
-        ],
-      ),
+      coins: coins,
+      atMax: atMax,
+      derivation: derivation,
+      footnote: footnote,
+      coinsKey: coinsKey,
+      derivationKey: derivationKey,
+      maxKey: maxKey,
     );
   }
 
@@ -390,59 +416,12 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
     return '${_monthAbbrev[local.month - 1]} ${local.day} · $h:$m $ampm';
   }
 
-  // Bara-themed wrapper for the stock Material date/time pickers: parchment
-  // surfaces, accent-green selection, wood-frame border — so they read like
-  // the app's RetroCard/GameContainer dialogs instead of raw Material 3.
-  Widget _themedPicker(BuildContext context, Widget? child) {
-    final base = Theme.of(context);
-    return Theme(
-      data: base.copyWith(
-        colorScheme: base.colorScheme.copyWith(
-          primary: AppColors.of(context).accent,
-          onPrimary: AppColors.of(context).parchment,
-          secondary: AppColors.of(context).accentLight,
-          surface: AppColors.of(context).parchment,
-          onSurface: AppColors.of(context).textDark,
-          onSurfaceVariant: AppColors.of(context).textMid,
-        ),
-        datePickerTheme: DatePickerThemeData(
-          backgroundColor: AppColors.of(context).parchment,
-          headerBackgroundColor: AppColors.of(context).accent,
-          headerForegroundColor: AppColors.of(context).parchment,
-          weekdayStyle: PixelText.body(
-            size: 13,
-            color: AppColors.of(context).textMid,
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: AppColors.of(context).accent, width: 2),
-          ),
-        ),
-        timePickerTheme: TimePickerThemeData(
-          backgroundColor: AppColors.of(context).parchment,
-          dialBackgroundColor: AppColors.of(context).parchmentDark,
-          dialHandColor: AppColors.of(context).accent,
-          hourMinuteColor: AppColors.of(context).parchmentDark,
-          hourMinuteTextColor: AppColors.of(context).textDark,
-          dayPeriodTextColor: AppColors.of(context).textDark,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: AppColors.of(context).accent, width: 2),
-          ),
-        ),
-        textButtonTheme: TextButtonThemeData(
-          style: TextButton.styleFrom(
-            foregroundColor: AppColors.of(context).accent,
-            textStyle: PixelText.button(
-              size: 14,
-              color: AppColors.of(context).buttonText,
-            ),
-          ),
-        ),
-      ),
-      child: child!,
-    );
-  }
+  // Bara-themed wrapper for the stock Material date/time pickers, now shared
+  // with the edit screen (`widgets/race_timeline_card.dart`). Required, not
+  // decorative: an unthemed picker renders black-on-black under the
+  // onboarding pinned-light theme and at night.
+  Widget _themedPicker(BuildContext context, Widget? child) =>
+      raceThemedPickerBuilder(context, child);
 
   Future<void> _pickScheduledStart() async {
     final now = DateTime.now();
@@ -479,7 +458,69 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
     }
   }
 
+  /// The CUSTOM window's end. Mirrors [_pickScheduledStart] deliberately —
+  /// including `_themedPicker`, which is not optional: an unthemed picker
+  /// renders black-on-black under the onboarding pinned-light theme and at
+  /// night (§10.1 risk 7).
+  Future<void> _pickCustomEnd() async {
+    final now = DateTime.now();
+    // Clamp the anchor to now: a scheduled start can already be in the past
+    // (a PENDING race the cron has not managed to start yet), and an unclamped
+    // anchor produces firstDate > lastDate / initialDate < firstDate, which is
+    // an assertion failure inside showDatePicker rather than a bad value.
+    final rawStart = _effectiveWindowStart;
+    final windowStart = rawStart.isBefore(now) ? now : rawStart;
+    // The floor is a day, so the earliest LEGAL end is start + 24h — but the
+    // picker must never offer, or default to, a value that fails validation the
+    // instant it is accepted. Exactly `start + 24h` is not `> 24h`, so tapping
+    // OK on both pickers without changing anything would kill CREATE with
+    // "A race has to run at least 1 day" while the earliest offered value is
+    // the one that just failed. Ceil an hour past the floor, the same rounding
+    // `_selectCustomTimeline` seeds with, which also absorbs the seconds that
+    // elapse inside the picker on a manual-start race (where the window is
+    // measured against a moving `now`).
+    final earliest = _ceilToHour(
+      windowStart.add(const Duration(days: 1, hours: 1)),
+    );
+    final initial = _scheduledEndAt ?? earliest;
+    final date = await showDatePicker(
+      context: context,
+      initialDate: initial.isBefore(earliest) ? earliest : initial,
+      firstDate: earliest,
+      lastDate: windowStart.add(const Duration(days: 30)),
+      builder: _themedPicker,
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(initial),
+      builder: _themedPicker,
+    );
+    if (time == null || !mounted) return;
+    setState(() {
+      _scheduledEndAt = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      );
+    });
+    // An illegal pick is NOT silently snapped forward: the derived label names
+    // the rule and CREATE stays disabled until the user fixes it (§4.4).
+  }
+
   Future<void> _create() async {
+    // The button is disabled while the window is illegal, but the window can
+    // go stale between rebuilds (the 24h floor is measured against a moving
+    // "now" when there is no scheduled start). Without this the create would
+    // fall through and silently post a PRESET race the user never asked for.
+    final windowError = _customWindowError;
+    if (windowError != null) {
+      showErrorToast(context, windowError);
+      return;
+    }
+
     final name = _nameController.text.trim();
     if (name.isEmpty) {
       showErrorToast(context, 'Enter a race name');
@@ -577,6 +618,9 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                   : null,
               isPublic: _isPublic,
               scheduledStartAt: _scheduledStartAt,
+              // Omitted from the body entirely when null, so a preset race's
+              // request is byte-identical to today's (spec §6).
+              scheduledEndAt: _sendsCustomWindow ? _scheduledEndAt : null,
               teamAName: teamAName,
               teamBName: teamBName,
               creatorTeam: _creatorSide.wireValue,
@@ -594,6 +638,7 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
               isPublic: _isPublic,
               maxParticipants: _noLimit ? null : _maxParticipants,
               scheduledStartAt: _scheduledStartAt,
+              scheduledEndAt: _sendsCustomWindow ? _scheduledEndAt : null,
             );
 
       final createdRace = result['race'] as Map<String, dynamic>?;
@@ -1444,70 +1489,19 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                         // matchup length is fixed by the bracket picker and
                         // tournaments never schedule-auto-start (spec §9).
                         if (!_isTournament) ...[
-                          // Duration
-                          KeyedSubtree(
-                            key: widget.tutorialDurationKey,
-                            child: RetroCard(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'DURATION',
-                                    style: PixelText.title(
-                                      size: 13,
-                                      color: AppColors.of(context).textMid,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 10),
-                                  Row(
-                                    children: _durationOptions.map((days) {
-                                      final selected =
-                                          _selectedDuration == days;
-                                      return Expanded(
-                                        child: GestureDetector(
-                                          key: Key('duration-option-$days'),
-                                          onTap: () => setState(
-                                            () => _selectedDuration = days,
-                                          ),
-                                          child: Container(
-                                            margin: const EdgeInsets.symmetric(
-                                              horizontal: 3,
-                                            ),
-                                            padding: const EdgeInsets.symmetric(
-                                              vertical: 10,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: selected
-                                                  ? AppColors.of(
-                                                      context,
-                                                    ).pillGreenDark
-                                                  : AppColors.of(
-                                                      context,
-                                                    ).parchmentDark,
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                            ),
-                                            alignment: Alignment.center,
-                                            child: Text(
-                                              '${days}d',
-                                              style: PixelText.title(
-                                                size: 15,
-                                                color: selected
-                                                    ? Colors.white
-                                                    : AppColors.of(
-                                                        context,
-                                                      ).textDark,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      );
-                                    }).toList(),
-                                  ),
-                                ],
-                              ),
-                            ),
+                          // TIMELINE — the shared card (create + edit).
+                          RaceTimelineCard(
+                            outerKey: widget.tutorialDurationKey,
+                            selectedDays: _selectedDuration,
+                            customSelected: _customActive,
+                            customChipEnabled: _customWindowAvailable,
+                            customStartAt: _scheduledStartAt,
+                            customEndAt: _scheduledEndAt,
+                            windowError: _customWindowError,
+                            onPresetSelected: _selectPresetTimeline,
+                            onCustomSelected: _selectCustomTimeline,
+                            onPickStart: _pickScheduledStart,
+                            onPickEnd: _pickCustomEnd,
                           ),
                           const SizedBox(height: 12),
 
@@ -1569,8 +1563,15 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                             ),
                           if (!widget.demoMode) const SizedBox(height: 12),
 
-                          // Scheduled start (optional auto-start)
-                          if (_customizeExpanded && !widget.demoMode)
+                          // Scheduled start (optional auto-start).
+                          //
+                          // Hidden — not greyed — while CUSTOM is selected: the
+                          // TIMELINE card's STARTS row owns `scheduledStartAt`
+                          // then, and two controls writing one field is how
+                          // they end up disagreeing (§4.3).
+                          if (_customizeExpanded &&
+                              !widget.demoMode &&
+                              !_customActive)
                             RetroCard(
                               padding: const EdgeInsets.all(16),
                               child: Column(
@@ -1685,7 +1686,14 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                                 ],
                               ),
                             ),
-                          if (_customizeExpanded) const SizedBox(height: 12),
+                          // Gated on the card above, not just on the section:
+                          // an ungated spacer leaves a stray gap inside
+                          // CUSTOMIZE RACE when the card is hidden (§10.1
+                          // risk 8).
+                          if (_customizeExpanded &&
+                              !widget.demoMode &&
+                              !_customActive)
+                            const SizedBox(height: 12),
                         ],
 
                         // Powerups
@@ -1916,7 +1924,11 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                               horizontal: 24,
                               vertical: 14,
                             ),
-                            onPressed: _isCreating ? null : _create,
+                            // Disabled while the custom window is illegal, so
+                            // the user never round-trips to a 400 (§4.4).
+                            onPressed: (_isCreating || _customWindowError != null)
+                                ? null
+                                : _create,
                           ),
                         ),
                         const SizedBox(height: 24),

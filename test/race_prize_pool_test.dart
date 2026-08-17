@@ -173,4 +173,89 @@ void main() {
       expect(formatPrizeCoins(0), '0');
     });
   });
+
+  // Race timeline options, spec §9 test 12b — client/server parity on the
+  // derived duration of a CUSTOM window. The server OVERWRITES the client's
+  // maxDurationDays with `clamp(floor(windowMs / 86_400_000), 1, 30)`; this
+  // mirror is what the create/edit plaque previews, so any drift means the
+  // plaque advertises a pool the created race does not have.
+  //
+  // `floor`, never `ceil`: with `ceil` a 24h+1min window prices at the 2-day
+  // band and doubles the coins minted per player-day (game-analyst R1).
+  group('prizePoolDurationDaysForWindow mirrors the backend derivation', () {
+    final start = DateTime.utc(2026, 8, 16, 9);
+    DateTime end(Duration d) => start.add(d);
+
+    test('boundary set from spec test 12 (floor)', () {
+      expect(
+        prizePoolDurationDaysForWindow(
+          start,
+          end(const Duration(hours: 24) - const Duration(seconds: 1)),
+        ),
+        1,
+      );
+      expect(prizePoolDurationDaysForWindow(start, end(const Duration(hours: 24))), 1);
+      expect(
+        prizePoolDurationDaysForWindow(
+          start,
+          end(const Duration(hours: 48) - const Duration(seconds: 1)),
+        ),
+        1,
+      );
+      expect(prizePoolDurationDaysForWindow(start, end(const Duration(hours: 48))), 2);
+      expect(prizePoolDurationDaysForWindow(start, end(const Duration(days: 30))), 30);
+      expect(
+        prizePoolDurationDaysForWindow(
+          start,
+          end(const Duration(days: 30) + const Duration(seconds: 1)),
+        ),
+        30,
+      );
+    });
+
+    test('24h + 1 minute prices at ONE day, not two (the ceil exploit)', () {
+      final window = end(const Duration(hours: 24, minutes: 1));
+      expect(prizePoolDurationDaysForWindow(start, window), 1);
+      expect(
+        computePrizePool(
+          playerCount: 10,
+          durationDays: prizePoolDurationDaysForWindow(start, window),
+        ),
+        computePrizePool(playerCount: 10, durationDays: 1),
+      );
+    });
+
+    test('clamps a zero or inverted window up to the 1-day floor', () {
+      expect(prizePoolDurationDaysForWindow(start, start), 1);
+      expect(
+        prizePoolDurationDaysForWindow(start, start.subtract(const Duration(days: 3))),
+        1,
+      );
+    });
+
+    test('is timezone-agnostic — it measures the absolute window', () {
+      final localStart = start.toLocal();
+      final localEnd = end(const Duration(days: 5, hours: 7)).toLocal();
+      expect(prizePoolDurationDaysForWindow(localStart, localEnd), 5);
+      // Mixed zones must agree with the pure-UTC answer.
+      expect(
+        prizePoolDurationDaysForWindow(localStart, end(const Duration(days: 5, hours: 7))),
+        5,
+      );
+    });
+
+    test('never exceeds today\'s mint ceiling across the legal range', () {
+      // Monotonic non-decreasing, exactly like the band table it feeds.
+      var previous = 0;
+      for (var hours = 24; hours <= 24 * 31; hours++) {
+        final days = prizePoolDurationDaysForWindow(
+          start,
+          end(Duration(hours: hours)),
+        );
+        expect(days, greaterThanOrEqualTo(previous));
+        expect(days, inInclusiveRange(1, 30));
+        previous = days;
+      }
+    });
+  });
 }

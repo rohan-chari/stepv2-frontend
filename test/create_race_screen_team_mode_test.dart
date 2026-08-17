@@ -43,6 +43,7 @@ class _RecordingApi extends BackendApiService {
     bool isPublic = false,
     int? maxParticipants = 10,
     DateTime? scheduledStartAt,
+    DateTime? scheduledEndAt,
   }) async {
     lastCreateRaceCall = {'name': name, 'maxParticipants': maxParticipants};
     return {
@@ -64,6 +65,7 @@ class _RecordingApi extends BackendApiService {
     String? teamAName,
     String? teamBName,
     String? creatorTeam,
+    DateTime? scheduledEndAt,
   }) async {
     lastCreateTeamRaceCall = {
       'name': name,

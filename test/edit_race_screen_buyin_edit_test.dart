@@ -30,6 +30,9 @@ class _RecordingApi extends BackendApiService {
     String? teamAName,
     String? teamBName,
     int? teamSize,
+    DateTime? scheduledStartAt,
+    DateTime? scheduledEndAt,
+    bool clearScheduledEndAt = false,
   }) async {
     lastUpdate = {
       'buyInAmount': buyInAmount,
@@ -187,9 +190,11 @@ void main() {
   testWidgets('duration options land on the prize-pool bands', (tester) async {
     await _pump(tester, _RecordingApi());
 
-    for (final days in [1, 3, 7, 14]) {
+    for (final days in [1, 7, 14]) {
       expect(find.byKey(Key('duration-option-$days')), findsOneWidget);
     }
     expect(find.byKey(const Key('duration-option-5')), findsNothing);
+    // 3 is retired from the picker too (still legal server-side).
+    expect(find.byKey(const Key('duration-option-3')), findsNothing);
   });
 }

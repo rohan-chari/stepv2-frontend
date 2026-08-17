@@ -722,6 +722,36 @@ Per participant-**day** the mint rate is `durationPoints × 20 / days`, which is
 **higher for shorter races**: 1-day 20 · 2-day 20 · 3-day 13.3 · 7-day 11.4 ·
 14-day 11.4. A quick-create preset menu therefore prices differently per preset.
 
+> **Invariant: 20 coins per player-day is the ceiling.** Verified 2026-08-16 by
+> scanning every legal integer duration 1..30: `max(durationPoints(d) × 20 / d)`
+> = **20**, attained at `d = 1` and `d = 8`. Nothing in the current system can
+> mint faster than 20 coins per walker per elapsed day. Two properties hold it
+> up, and any change to race timing must preserve **both**:
+> 1. `maxDurationDays` is an **integer number of days**, so a race is never
+>    priced at a band it only barely entered (there is no 24h+1min race).
+> 2. `maxDurationDays` equals the race's **actual elapsed length**, because
+>    `endsAt = startedAt + maxDurationDays × 24h` (`CODE
+>    races/commands/startRace.js:124-127`). Priced duration and real duration
+>    are the same number by construction.
+>
+> A fractional window derived with `ceil` breaks (1): a 24h+1min window prices
+> at 2 points over 1.0 elapsed days = **39.97 coins/player-day (2.00×)**.
+> `round` gives 26.67 (1.33×) at a 1.5-day window; `floor` gives exactly 20.00
+> and is the only rounding that preserves the invariant. A stamped end instant
+> decoupled from `startedAt` breaks (2): a race priced at 30 days that actually
+> runs 24h mints 8 points in one day = **160 coins/player-day (8×)**.
+
+**Live footprint — re-verified 2026-08-16 (prod, read-only, pure-SQL dates).**
+`race_prize_pool_payout` over the trailing 30 days: **1,616 coins/day**
+(n=955 credits, 304 distinct users; p50 4 · p90 157 · max 2,163). That is
+**21% of all coin minting** (all positive ledger rows: 7,561/day) against
+3,122/day of sinks — the economy runs ~2.4× net-inflationary, and race pools
+are its single largest source. 79 funded races completed in 30 days minting
+48,600 coins; by `max_duration_days`: 1d n=52 (34,640) · 2d n=8 (2,480) · 3d
+n=8 (1,640) · 7d n=10 (9,520) · 14d n=1 (320). Race durations created in the
+same window: 1d ×107 · 2d ×68 · 7d ×57 · 14d ×28 · 3d ×27.
+`DB coin_transactions`, `DB races`.
+
 **Graded presets cannot be a quick-create default.** `startRace.js:87-95` rejects
 the start of any non-`WINNER_TAKES_ALL` preset below
 `MIN_MULTI_PAYOUT_PARTICIPANTS = 4` accepted, with a 400. `TOP3_70_20_10` and
@@ -741,7 +771,9 @@ the placement check). Projection uses accepted count. Fewer than 2 players mints
 Verified against prod completions 2026-08-08: 4 walkers × 1d → 80; 10 walkers ×
 7d → 800. Formula confirmed.
 
-**Live footprint — verified 2026-08-12 (prod, read-only).** There are 15
+**Live footprint — verified 2026-08-12 (prod, read-only).** *(Superseded by the
+2026-08-16 re-verification above; the 691.5 coins/day figure here has since
+grown to 1,616/day.)* There are 15
 active funded races: individual n=13 (p50 3 accepted / 3 walkers,
 max 104 accepted) and team n=2 (p50 6 / 6); neither has a forfeited row.
 In the preceding 30 calendar days, 37 completed funded individual races minted

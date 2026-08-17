@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/race_payouts.dart';
+import '../models/race_prize_pool.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
@@ -9,6 +10,8 @@ import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/powerup_interval_note.dart';
+import '../widgets/prize_pool_plaque.dart';
+import '../widgets/race_timeline_card.dart';
 import '../widgets/retro_card.dart';
 
 /// Full-screen editor for race settings. Available only to the creator while
@@ -41,10 +44,10 @@ class EditRaceScreen extends StatefulWidget {
   }) : backendApiService = backendApiService ?? BackendApiService();
 
   @override
-  State<EditRaceScreen> createState() => _EditRaceScreenState();
+  State<EditRaceScreen> createState() => EditRaceScreenState();
 }
 
-class _EditRaceScreenState extends State<EditRaceScreen> {
+class EditRaceScreenState extends State<EditRaceScreen> {
   late final TextEditingController _nameController;
 
   bool _isSaving = false;
@@ -90,12 +93,25 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
   late final int _teamACount;
   late final int _teamBCount;
 
+  // Race timeline options. The window is editable only while PENDING: a
+  // started race's end is stamped into `endsAt` and the server answers any
+  // edit with 400 RACE_ALREADY_STARTED, so the card renders read-only instead
+  // of offering a control that cannot work.
+  late final bool _isPending;
+  late final DateTime? _stampedEndsAt;
+  late final DateTime? _initialScheduledStartAt;
+  late final DateTime? _initialScheduledEndAt;
+  late DateTime? _scheduledStartAt;
+  late DateTime? _scheduledEndAt;
+  late bool _customSelected;
+  late final bool _initialCustomSelected;
+
   static const _textShadows = [
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
 
-  // Every option lands on a prize-pool band boundary (D3).
-  static const _durationOptions = [1, 3, 7, 14];
+  // The preset chips live in `widgets/race_timeline_card.dart`
+  // (kRaceTimelinePresets), shared with the create screen so they can't drift.
   static const _maxParticipantsPresets = [5, 10, 25, 50, 100];
 
   @override
@@ -158,6 +174,21 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
             .length;
 
     _nameController = TextEditingController(text: _initialName);
+
+    // Timeline. Every read is defensive: `scheduledStartAt`/`scheduledEndAt`
+    // are additive keys a backend older than this build simply omits, in which
+    // case the screen behaves exactly as it does today (preset chips only).
+    final status = race['status'];
+    // Absent/garbled status reads as NOT pending: the server rejects a window
+    // edit on anything else, so read-only is the safe default.
+    _isPending = status is String && status.toUpperCase() == 'PENDING';
+    _stampedEndsAt = _readInstant(race['endsAt']);
+    _initialScheduledStartAt = _readInstant(race['scheduledStartAt']);
+    _initialScheduledEndAt = _readInstant(race['scheduledEndAt']);
+    _scheduledStartAt = _initialScheduledStartAt;
+    _scheduledEndAt = _initialScheduledEndAt;
+    _initialCustomSelected = _initialScheduledEndAt != null;
+    _customSelected = _initialCustomSelected;
 
     _maxDurationDays = _initialMaxDurationDays;
     _powerupsEnabled = _initialPowerupsEnabled;
@@ -577,6 +608,130 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
     return parsed;
   }
 
+  /// Reads an ISO-8601 instant from a payload. Absent, null, non-string or
+  /// unparseable all degrade to null — never a throw, never a crash on a
+  /// backend that is a different version than this build expects.
+  DateTime? _readInstant(dynamic value) {
+    if (value is! String || value.isEmpty) return null;
+    return DateTime.tryParse(value)?.toLocal();
+  }
+
+  /// Whether the CUSTOM chip is offered (`featureFlags.customRaceWindowEnabled`,
+  /// default false). A race that ALREADY has a custom window still shows it
+  /// with the flag off — hiding the chip would silently misreport the race.
+  bool get _customWindowAvailable =>
+      widget.authService.customRaceWindowEnabled;
+
+  /// Read-only means DEAD END, and only a started race is one: the server
+  /// rejects every field of a non-PENDING edit with a 400, so no chip on the
+  /// card could do anything.
+  ///
+  /// The kill switch deliberately does NOT land here. With
+  /// `customRaceWindowEnabled` off the server still accepts
+  /// `scheduledEndAt: null` — clearing a window stays available so a creator is
+  /// never stranded holding one the server no longer honors. Only SETTING a
+  /// window is killed, so the CUSTOM chip goes and the presets stay live.
+  bool get _timelineReadOnly => !_isPending;
+
+  DateTime get _effectiveWindowStart => _scheduledStartAt ?? DateTime.now();
+
+  /// Whether the user actually MOVED either end of the window in this session.
+  ///
+  /// This is the client twin of the backend's architect-R3 rule
+  /// (`editRace.js:258` gates validation on `startProvided || endProvided`).
+  /// `_effectiveWindowStart` falls back to `now` on a manual-start race, so a
+  /// stored window shrinks in real time; once its end is under 24h out, an
+  /// untouched window is permanently "invalid". Gating the SAVE button on that
+  /// would lock the creator out of renaming their own race, changing the runner
+  /// cap, powerups or the payout — over a field they never touched.
+  bool get _windowMoved =>
+      _scheduledEndAt != _initialScheduledEndAt ||
+      _scheduledStartAt != _initialScheduledStartAt;
+
+  /// The window error, but only where it should BLOCK a save: the user moved
+  /// the window and it is now illegal. The message itself still renders
+  /// unconditionally — a stale window is worth telling the user about, it just
+  /// must not hold their other edits hostage.
+  String? get _blockingWindowError => _windowMoved ? _customWindowError : null;
+
+  /// The same four rules the server enforces, mirrored so SAVE never
+  /// round-trips to a 400 (spec §4.4).
+  String? get _customWindowError {
+    // Nothing to validate when the window cannot be edited: a started race, or
+    // the kill switch being off. Blocking SAVE on an untouchable window would
+    // strand every OTHER edit (a rename, the runner cap) behind it.
+    if (!_customSelected || _timelineReadOnly || !_customWindowAvailable) {
+      return null;
+    }
+    final end = _scheduledEndAt;
+    if (end == null) return 'Pick an end date and time';
+    final start = _effectiveWindowStart;
+    if (!end.isAfter(start)) return 'The end has to be after the start';
+    if (!end.isAfter(DateTime.now())) return 'Pick an end time in the future';
+    final window = end.difference(start);
+    if (window < const Duration(days: 1)) {
+      return 'A race has to run at least 1 day';
+    }
+    if (window > const Duration(days: 30)) {
+      return 'A race can run at most 30 days';
+    }
+    return null;
+  }
+
+  /// The day count the pool is priced on — the server's own derivation for a
+  /// custom window, so the plaque matches the race that comes back.
+  int get _pricedDurationDays {
+    if (_customSelected && _scheduledEndAt != null) {
+      return prizePoolDurationDaysForWindow(
+        _effectiveWindowStart,
+        _scheduledEndAt!,
+      );
+    }
+    return _maxDurationDays;
+  }
+
+  int? get _projectedFieldSize {
+    if (_isTeamRace) return _teamSize * 2;
+    return _maxParticipants;
+  }
+
+  /// Test-only hook: moves the window without driving the platform pickers.
+  @visibleForTesting
+  void debugSetCustomWindow({DateTime? start, DateTime? end}) {
+    setState(() {
+      _customSelected = true;
+      if (start != null) _scheduledStartAt = start;
+      if (end != null) _scheduledEndAt = end;
+    });
+  }
+
+  void _selectCustomTimeline() {
+    setState(() {
+      _customSelected = true;
+      // Rounded UP (see the create screen): truncating shaves minutes off a
+      // 1-day seed and lands under the 24h floor immediately.
+      _scheduledEndAt ??= _ceilToHour(
+        _effectiveWindowStart.add(Duration(days: _maxDurationDays)),
+      );
+    });
+  }
+
+  /// Tapping a preset replaces a custom window. The clear is sent EXPLICITLY on
+  /// save rather than relying on the server's implicit
+  /// "maxDurationDays without scheduledEndAt clears it" rule (spec §6).
+  void _selectPresetTimeline(int days) {
+    setState(() {
+      _customSelected = false;
+      _maxDurationDays = days;
+      _scheduledEndAt = null;
+    });
+  }
+
+  static DateTime _ceilToHour(DateTime t) {
+    final floored = DateTime(t.year, t.month, t.day, t.hour);
+    return floored == t ? floored : floored.add(const Duration(hours: 1));
+  }
+
   /// Reads maxParticipants where a null/absent value means "no limit"
   /// (unlimited). Defensive: a newer backend serializes unlimited races as null.
   int? _readNullableMax(dynamic value) {
@@ -590,6 +745,112 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
     _teamANameController.dispose();
     _teamBNameController.dispose();
     super.dispose();
+  }
+
+  /// The same "up to" plaque the create screen shows, brought along so a
+  /// control that changes the pool also shows the pool (§10.1 risk 6).
+  Widget _buildPrizePoolPreview() {
+    final field = _projectedFieldSize;
+    final coins = field == null
+        ? kPrizePoolMaxCoins
+        : computePrizePool(
+            playerCount: field,
+            durationDays: _pricedDurationDays,
+          );
+    if (coins <= 0) return const SizedBox.shrink();
+    final priced = _pricedDurationDays;
+    final days = priced == 1 ? '1 DAY' : '$priced DAYS';
+    final players = field == null
+        ? 'UNLIMITED PLAYERS'
+        : (field == 1 ? '1 PLAYER' : '$field PLAYERS');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: RetroCard(
+        padding: const EdgeInsets.all(16),
+        child: PrizePoolPlaque(
+          key: const Key('edit-prize-pool-preview'),
+          coinsKey: const Key('edit-prize-pool-coins'),
+          derivationKey: const Key('edit-prize-pool-derivation'),
+          maxKey: const Key('edit-prize-pool-max'),
+          coins: coins,
+          atMax: coins >= kPrizePoolMaxCoins,
+          derivation: '$players × $days',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickScheduledStart() async {
+    final now = DateTime.now();
+    final initial = _scheduledStartAt ?? now.add(const Duration(hours: 1));
+    final date = await showDatePicker(
+      context: context,
+      initialDate: initial.isBefore(now) ? now : initial,
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 365)),
+      builder: raceThemedPickerBuilder,
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(initial),
+      builder: raceThemedPickerBuilder,
+    );
+    if (time == null || !mounted) return;
+    final picked = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
+    if (picked.isAfter(DateTime.now())) {
+      setState(() => _scheduledStartAt = picked);
+    } else if (mounted) {
+      showErrorToast(context, 'Pick a time in the future');
+    }
+  }
+
+  Future<void> _pickCustomEnd() async {
+    final now = DateTime.now();
+    // A PENDING race's scheduledStartAt can already be in the past (the cron
+    // retries a race that never reached two accepted runners). An unclamped
+    // anchor gives showDatePicker firstDate > lastDate, which asserts.
+    final rawStart = _effectiveWindowStart;
+    final windowStart = rawStart.isBefore(now) ? now : rawStart;
+    // Ceil an hour past the 24h floor — see the create screen: `start + 24h`
+    // exactly is not `> 24h`, so an unbuffered default is illegal the moment
+    // it is accepted.
+    final earliest = _ceilToHour(
+      windowStart.add(const Duration(days: 1, hours: 1)),
+    );
+    final stored = _scheduledEndAt;
+    final initial = (stored == null || stored.isBefore(earliest))
+        ? earliest
+        : stored;
+    final date = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: earliest,
+      lastDate: windowStart.add(const Duration(days: 30)),
+      builder: raceThemedPickerBuilder,
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(initial),
+      builder: raceThemedPickerBuilder,
+    );
+    if (time == null || !mounted) return;
+    setState(() {
+      _scheduledEndAt = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      );
+    });
   }
 
   bool get _hasChanges {
@@ -610,6 +871,14 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
     }
 
     if (_payoutPreset != _initialPayoutPreset) return true;
+
+    // Timeline: switching between a custom window and a preset counts, and so
+    // does moving either end of an existing window.
+    if (_customSelected != _initialCustomSelected) return true;
+    if (_customSelected) {
+      if (_scheduledEndAt != _initialScheduledEndAt) return true;
+      if (_scheduledStartAt != _initialScheduledStartAt) return true;
+    }
 
     return false;
   }
@@ -694,6 +963,42 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
       updates['payoutPreset'] = _payoutPreset;
     }
 
+    // Timeline (spec §5.2 / §6). PENDING only — a started race's window is
+    // history and the server rejects the edit outright.
+    if (!_timelineReadOnly) {
+      // Setting or moving a window requires the flag; CLEARING one does not.
+      // Validation runs only when a window field actually moved — never on a
+      // PATCH that just renames the race (architect R3, mirrored).
+      if (_customSelected && _customWindowAvailable && _windowMoved) {
+        final windowError = _customWindowError;
+        if (windowError != null) {
+          showErrorToast(context, windowError);
+          return;
+        }
+        if (_scheduledEndAt != _initialScheduledEndAt) {
+          updates['scheduledEndAt'] = _scheduledEndAt;
+        }
+        // Only ever a real instant. `scheduledStartAt: null` is answered with
+        // 400 SCHEDULED_START_NOT_CLEARABLE, so it is never sent — clearing a
+        // schedule would mean "start within 5 minutes", not "start manually".
+        if (_scheduledStartAt != null &&
+            _scheduledStartAt != _initialScheduledStartAt) {
+          updates['scheduledStartAt'] = _scheduledStartAt;
+        }
+      } else if (!_customSelected && _initialCustomSelected) {
+        // Guarded on the user actually LEAVING custom, not just on the branch
+        // above being skipped: with the flag off `_customSelected` stays true
+        // and an unrelated save (a rename) would otherwise silently clear the
+        // window the user never touched.
+        //
+        // The preset replaces the custom window. Cleared EXPLICITLY rather
+        // than leaning on the server's implicit "maxDurationDays without
+        // scheduledEndAt clears it" compat rule for frozen clients.
+        updates['clearScheduledEndAt'] = true;
+        updates['maxDurationDays'] = _maxDurationDays;
+      }
+    }
+
     if (updates.isEmpty) {
       Navigator.of(context).pop();
       return;
@@ -722,6 +1027,9 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
         teamAName: updates['teamAName'] as String?,
         teamBName: updates['teamBName'] as String?,
         teamSize: updates['teamSize'] as int?,
+        scheduledStartAt: updates['scheduledStartAt'] as DateTime?,
+        scheduledEndAt: updates['scheduledEndAt'] as DateTime?,
+        clearScheduledEndAt: updates['clearScheduledEndAt'] == true,
       );
 
       if (mounted) {
@@ -854,69 +1162,30 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                           const SizedBox(height: 12),
                         ],
 
-                        // Duration
-                        RetroCard(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'DURATION',
-                                style: PixelText.title(
-                                  size: 13,
-                                  color: AppColors.of(context).textMid,
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              Row(
-                                children: _durationOptions.map((days) {
-                                  final selected = _maxDurationDays == days;
-                                  return Expanded(
-                                    child: GestureDetector(
-                                      key: Key('duration-option-$days'),
-                                      onTap: () => setState(
-                                        () => _maxDurationDays = days,
-                                      ),
-                                      child: Container(
-                                        margin: const EdgeInsets.symmetric(
-                                          horizontal: 3,
-                                        ),
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 10,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: selected
-                                              ? AppColors.of(
-                                                  context,
-                                                ).pillGreenDark
-                                              : AppColors.of(
-                                                  context,
-                                                ).parchmentDark,
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                        ),
-                                        alignment: Alignment.center,
-                                        child: Text(
-                                          '${days}d',
-                                          style: PixelText.title(
-                                            size: 15,
-                                            color: selected
-                                                ? Colors.white
-                                                : AppColors.of(
-                                                    context,
-                                                  ).textDark,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                }).toList(),
-                              ),
-                            ],
-                          ),
+                        // TIMELINE — the shared card (create + edit). Editable
+                        // while PENDING; a started race renders it read-only
+                        // against its stamped end.
+                        RaceTimelineCard(
+                          selectedDays: _maxDurationDays,
+                          customSelected: _customSelected,
+                          customChipEnabled: _customWindowAvailable,
+                          customStartAt: _scheduledStartAt,
+                          customEndAt: _scheduledEndAt,
+                          windowError: _customWindowError,
+                          onPresetSelected: _selectPresetTimeline,
+                          onCustomSelected: _selectCustomTimeline,
+                          onPickStart: _pickScheduledStart,
+                          onPickEnd: _pickCustomEnd,
+                          readOnly: _timelineReadOnly,
+                          readOnlyEndsAt: _stampedEndsAt ?? _initialScheduledEndAt,
                         ),
                         const SizedBox(height: 12),
+
+                        // §10.1 risk 6: the timeline moves the pool, so the
+                        // pool has to be visible here too — otherwise re-picking
+                        // a window shows no consequence until the user backs out
+                        // to the race-detail scorecard.
+                        _buildPrizePoolPreview(),
 
                         // Powerups
                         RetroCard(
@@ -1116,7 +1385,12 @@ class _EditRaceScreenState extends State<EditRaceScreen> {
                             horizontal: 24,
                             vertical: 14,
                           ),
-                          onPressed: (_isSaving || !_hasChanges) ? null : _save,
+                          onPressed:
+                              (_isSaving ||
+                                  !_hasChanges ||
+                                  _blockingWindowError != null)
+                              ? null
+                              : _save,
                         ),
                         const SizedBox(height: 12),
                         PillButton(

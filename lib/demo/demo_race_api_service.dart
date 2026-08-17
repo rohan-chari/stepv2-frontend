@@ -248,6 +248,11 @@ class DemoRaceApiService extends BackendApiService {
     bool isPublic = false,
     int? maxParticipants,
     DateTime? scheduledStartAt,
+    // Mirrored, not omitted: an override that drops a param the base class
+    // declares does not compile, and one that silently diverges would let the
+    // create screen fall through to the REAL createRace inside onboarding
+    // (§10.1 risk 2). The demo ignores the value — its window is scripted.
+    DateTime? scheduledEndAt,
   }) async {
     engine.markRaceCreated(durationDays: maxDurationDays);
     return {'race': engine.raceDetails(_now, wallNow: DateTime.now())};
@@ -266,6 +271,7 @@ class DemoRaceApiService extends BackendApiService {
     int? powerupStepInterval,
     bool isPublic = false,
     DateTime? scheduledStartAt,
+    DateTime? scheduledEndAt,
     String? teamAName,
     String? teamBName,
     String? creatorTeam,

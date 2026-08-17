@@ -29,6 +29,9 @@ class _RecordingApi extends BackendApiService {
     String? teamAName,
     String? teamBName,
     int? teamSize,
+    DateTime? scheduledStartAt,
+    DateTime? scheduledEndAt,
+    bool clearScheduledEndAt = false,
   }) async {
     lastUpdate = {
       'name': name,

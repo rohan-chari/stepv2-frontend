@@ -7,8 +7,9 @@ import 'package:step_tracker/services/backend_api_service.dart';
 
 // App-funded prize pools, create screen (spec §7.1 / §9 "create_race_screen").
 // Buy-ins are gone: the screen previews the app-funded pool live from the
-// duration + max-players controls, and the duration picker lands on band
-// boundaries [1,3,7,14].
+// duration + max-players controls, and the TIMELINE picker lands on band
+// boundaries [1,7,14] (the 3-day chip was retired; 3 is still legal
+// server-side and frozen clients still send it).
 
 class _RecordingApi extends BackendApiService {
   Map<String, dynamic>? lastCreateRaceCall;
@@ -25,6 +26,7 @@ class _RecordingApi extends BackendApiService {
     bool isPublic = false,
     int? maxParticipants = 10,
     DateTime? scheduledStartAt,
+    DateTime? scheduledEndAt,
   }) async {
     lastCreateRaceCall = {
       'name': name,
@@ -109,12 +111,12 @@ void main() {
     expect(find.byType(TextField), findsOneWidget);
   });
 
-  testWidgets('duration options are [1,3,7,14] — the band boundaries (D3)', (
+  testWidgets('duration options are [1,7,14] — the band boundaries (D3)', (
     tester,
   ) async {
     await _pump(tester, _RecordingApi());
 
-    for (final days in [1, 3, 7, 14]) {
+    for (final days in [1, 7, 14]) {
       expect(
         find.byKey(Key('duration-option-$days')),
         findsOneWidget,
@@ -134,14 +136,15 @@ void main() {
     expect(_preview(), findsOneWidget);
     expect(find.text('PRIZE POOL'), findsOneWidget);
 
-    // Defaults: 10 max runners, 3 days -> 10 x 2 x 20 = 400.
-    expect(_previewCoins(tester), '400');
-    expect(_previewDerivation(tester), '10 PLAYERS × 3 DAYS');
-
-    // Owner fixture: 10 players / 7 days = 800.
-    await _tapDuration(tester, 7);
+    // Defaults: 10 max runners, 7 days -> 10 x 4 x 20 = 800.
     expect(_previewCoins(tester), '800');
     expect(_previewDerivation(tester), '10 PLAYERS × 7 DAYS');
+
+    // Moving OFF the default has to move the plaque — tapping 7 here proved
+    // nothing once 7 became the default. 10 players / 14 days = 8 points.
+    await _tapDuration(tester, 14);
+    expect(_previewCoins(tester), '1,600');
+    expect(_previewDerivation(tester), '10 PLAYERS × 14 DAYS');
 
     // 1 day -> 1 point.
     await _tapDuration(tester, 1);
@@ -162,9 +165,9 @@ void main() {
     await tester.tap(find.text('25'));
     await tester.pump();
 
-    // 25 x 2 (3 days) x 20 = 1,000.
-    expect(_previewCoins(tester), '1,000');
-    expect(_previewDerivation(tester), '25 PLAYERS × 3 DAYS');
+    // 25 x 4 (the default 7 days) x 20 = 2,000.
+    expect(_previewCoins(tester), '2,000');
+    expect(_previewDerivation(tester), '25 PLAYERS × 7 DAYS');
   });
 
   testWidgets('the preview saturates at the cap and says so', (tester) async {

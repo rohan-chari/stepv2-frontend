@@ -25,6 +25,7 @@ class _FakeBackendApiService extends BackendApiService {
     bool isPublic = false,
     int? maxParticipants = 10,
     DateTime? scheduledStartAt,
+    DateTime? scheduledEndAt,
   }) async {
     lastCreateRaceCall = {
       'buyInAmount': buyInAmount,
@@ -96,9 +97,11 @@ void main() {
   ) async {
     await _pump(tester, _FakeBackendApiService());
 
-    // 50 runners x 3 days -> 50 x 2 x 20 = 2,000, under the 3,200 ceiling.
+    // 50 runners x the default 7 days -> 50 x 4 x 20 = 4,000, under the
+    // ceiling. (The default moved from 3 to 7 when the 3-day chip was retired
+    // from the TIMELINE picker.)
     await _selectField(tester, '50');
-    expect(_poolCoins(tester), '2,000');
+    expect(_poolCoins(tester), '4,000');
     expect(find.byKey(const Key('create-prize-pool-max')), findsNothing);
   });
 
