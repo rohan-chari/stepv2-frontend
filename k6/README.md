@@ -1,11 +1,26 @@
-# k6 load testing
-
-Two scripts live here:
+# k6 load testing + performance profiling
 
 | Script | Use it for |
 |---|---|
 | **`prod-mix-load-test.js`** | **Capacity questions.** Weighted to the real prod request mix, N distinct user identities, fixed arrival rate. This is the one you want. |
+| `mint-staging-users.js` | Mints N staging session tokens for real prod-cloned users (see [Auth](#auth-minting-user-identities)). |
+| **`profile-worker.js`** | **"Which code burns the CPU?"** Attaches to a Node worker's inspector and captures a V8 CPU profile. See [Profiling](#profiling-which-code-burns-cpu). |
+| **`sample-db-queries.sh`** | **"Which SQL burns the database?"** Samples the running statement; a poor-man's `pg_stat_statements`. |
+| `sample-db-state.sh` | Samples `active` / `idle in transaction` / lock-wait counts. |
 | `staging-load-test.js` | The original 2026-08-15 harness. Kept only so old results stay reproducible — see [Why the old script understates load](#why-the-old-script-understates-load). |
+
+**Which tool answers which question** — reach for the right one, because
+inferring hot spots from response times is how three wrong diagnoses got made
+on 2026-08-16:
+
+| Question | Tool |
+|---|---|
+| How many users can we serve? | `prod-mix-load-test.js` |
+| Is it CPU, or waiting on the DB? | `profile-worker.js` (idle % of the profile) |
+| Which *code* is hot? | `profile-worker.js` |
+| Which *SQL* is hot? | `sample-db-queries.sh` |
+| Are connections stuck rather than working? | `sample-db-state.sh` |
+| How many queries does one endpoint issue? | `PRISMA_QUERY_EVENTS_ENABLED=true`, see below |
 
 Everything targets **staging**. Never point either script at production.
 
@@ -107,6 +122,82 @@ Then DAU from prod: `SELECT COUNT(*) FROM users WHERE last_seen_at > NOW() - INT
 **Discard anomalous peak buckets.** The top bucket on 2026-08-16 was a single
 device retry-looping a 404 at 6.5 req/s — 3,907 of the bucket's 5,850 requests.
 Cross-check the top bucket's composition before using it.
+
+---
+
+## Profiling: which code burns CPU
+
+**`pm2 profile:cpu` does NOT work.** It profiles the pm2 God daemon, not your
+app — the result is 97.6% `(idle)` with `amp` / `child_process` / `cluster`
+frames. It looks like a valid profile and is worthless. Use `profile-worker.js`,
+which drives the worker's own inspector.
+
+```bash
+# 1. start load in one shell (background it — k6 blocks)
+cd ~/repos/stepv2-frontend/k6
+k6 run -e FAST=1 -e TARGET_ONLY=dau_5000 -e DURATION_OVERRIDE=120s prod-mix-load-test.js
+
+# 2. ~15s in, attach and capture 50s from the droplet
+scp k6/profile-worker.js root@167.172.225.16:/tmp/
+ssh root@167.172.225.16
+  PID=$(pm2 jlist | python3 -c "import json,sys; print([p['pid'] for p in json.load(sys.stdin) if p['name']=='steps-tracker-staging'][0])")
+  kill -USR1 $PID          # opens the inspector on 127.0.0.1:9229
+  sleep 3
+  node /tmp/profile-worker.js 50000 /tmp/worker.cpuprofile
+```
+
+Then aggregate self-time by module. The headline number is **idle %** — if the
+profile is mostly busy, the app is CPU-bound and the database is not the wall.
+
+Load the `.cpuprofile` in Chrome DevTools (Performance → Load profile) for a
+flame graph, or aggregate by `callFrame.url` for a module breakdown.
+
+**Gotchas:**
+- Attach *while load is running*. A profile of an idle worker says nothing, and
+  a 120s load run with a 50s capture starting at +15s leaves margin.
+- The profiler holds its samples in the worker's heap — a 186k-sample capture
+  pushed the process from ~380 MB to 630 MB. On this droplet that is close to
+  the OOM line. **Restart the worker afterwards** to reclaim it.
+- `SIGUSR1` is a one-way door for the process lifetime; the inspector port stays
+  open until it restarts.
+
+### Which SQL burns the database
+
+`pg_stat_statements` is **not installed** on this cluster. `sample-db-queries.sh`
+substitutes for it: it polls the currently-executing statement in a tight loop,
+so a statement appearing in N% of samples is consuming ~N% of database busy
+time.
+
+```bash
+scp k6/sample-db-queries.sh root@167.172.225.16:/tmp/
+ssh root@167.172.225.16 "bash /tmp/sample-db-queries.sh '<STAGING_DATABASE_URL>' > /tmp/sql.out"
+# then, ranked:
+grep -v '^$' /tmp/sql.out | sed -E 's/\$[0-9]+/?/g' \
+  | awk '{print substr($0,1,95)}' | sort | uniq -c | sort -rn | head
+```
+
+`sample-db-state.sh` answers a different question — whether connections are
+`active` (doing work), `idle in transaction` (held open doing nothing), or
+lock-waiting. A high `idle in transaction` count means transactions are held
+across non-database work.
+
+### Per-endpoint query counts
+
+Set `PRISMA_QUERY_EVENTS_ENABLED=true` in **staging's** `.env` and restart. The
+app then logs one `api_contract_performance` JSON line per response carrying
+`sqlCount`, which is how you find N+1s:
+
+```bash
+pm2 logs steps-tracker-staging --lines 4000 --nostream --out \
+  | grep -o '{"event":"api_contract_performance".*}' > /tmp/api.jsonl
+```
+
+Only responses carrying a `contract` field are instrumented, so coverage is
+partial.
+
+**Leave it `false` in prod, and turn it off on staging when done** — `db.js`
+notes it deliberately adds hot-path work. It inflates absolute latency, so a
+before/after comparison must have it set the same way in both runs.
 
 ---
 
