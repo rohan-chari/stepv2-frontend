@@ -61,12 +61,12 @@ void main() {
       );
 
       // No pump-and-settle needed: the batch payload renders in-frame.
-      expect(find.text('CLAIM'), findsOneWidget);
+      expect(find.text('DAILY REWARD'), findsOneWidget);
       expect(api.statusCalls, 0);
     },
   );
 
-  testWidgets('StreakChip shows CLAIMED from a claimed batch payload', (
+  testWidgets('StreakChip keeps the Daily Reward destination when claimed', (
     WidgetTester tester,
   ) async {
     final authService = await _createAuthService();
@@ -87,7 +87,7 @@ void main() {
       ),
     );
 
-    expect(find.text('CLAIMED'), findsOneWidget);
+    expect(find.text('DAILY REWARD'), findsOneWidget);
     expect(api.statusCalls, 0);
   });
 
@@ -111,7 +111,7 @@ void main() {
       await tester.pump();
 
       expect(api.statusCalls, 1);
-      expect(find.text('CLAIM'), findsOneWidget);
+      expect(find.text('DAILY REWARD'), findsOneWidget);
     },
   );
 
@@ -149,7 +149,7 @@ void main() {
     );
     await tester.pump();
     expect(api.statusCalls, 0);
-    expect(find.text('CLAIMED'), findsOneWidget);
+    expect(find.text('DAILY REWARD'), findsOneWidget);
   });
 
   testWidgets('StreakChip refetches when the batch payload is stale', (
@@ -176,6 +176,6 @@ void main() {
     await tester.pump();
 
     expect(api.statusCalls, 1);
-    expect(find.text('CLAIM'), findsOneWidget);
+    expect(find.text('DAILY REWARD'), findsOneWidget);
   });
 }

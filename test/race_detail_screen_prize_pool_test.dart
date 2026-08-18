@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:step_tracker/screens/edit_race_screen.dart';
 import 'package:step_tracker/screens/race_detail_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/widgets/pill_button.dart';
 import 'package:step_tracker/widgets/race_payout_scorecard.dart';
 
 // App-funded prize pools on the race detail screen (spec §7.2 / §9).
@@ -351,6 +353,51 @@ void main() {
     await _teardown(tester);
   });
 
+  testWidgets('a team payload without an authoritative total omits the total', (
+    tester,
+  ) async {
+    final race = _fundedRace(status: 'PENDING')
+      ..['isTeamRace'] = true
+      ..remove('prizePool')
+      ..remove('projectedPotCoins');
+    await _pump(tester, _StubApi(race));
+
+    expect(find.byKey(const Key('race-prize-pool-board')), findsNothing);
+    expect(find.byKey(const Key('race-info-prize-pool')), findsNothing);
+    expect(find.text('POT'), findsNothing);
+
+    await _teardown(tester);
+  });
+
+  testWidgets(
+    'the exact v1 API marker reaches Edit Race and omits its preview',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final race = _fundedRace(status: 'PENDING')
+        ..['isCreator'] = true
+        ..['payoutRoundingVersion'] = 1;
+      await _pump(tester, _StubApi(race));
+
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pump();
+      final editSettings = find.text('EDIT SETTINGS');
+      // The existing bottom sheet is taller than the test viewport; invoke the
+      // real button callback after confirming the production control exists.
+      final button = tester.widget<PillButton>(
+        find.ancestor(of: editSettings, matching: find.byType(PillButton)),
+    );
+    button.onPressed!.call();
+    await tester.pump();
+    await tester.pump();
+
+      expect(find.byType(EditRaceScreen), findsOneWidget);
+      expect(find.byKey(const Key('edit-prize-pool-preview')), findsNothing);
+
+      await _teardown(tester);
+    },
+  );
+
   testWidgets('a settled pool drops the PROJECTED tag', (tester) async {
     await _pump(
       tester,
@@ -405,6 +452,70 @@ void main() {
       await _teardown(tester);
     },
   );
+
+  testWidgets('legacy payout values stay server-authored and unrounded', (
+    tester,
+  ) async {
+    final race = _legacyPaidRace()
+      ..['projectedPotCoins'] = 10
+      ..['payouts'] = const {'first': 7, 'second': 2, 'third': 1};
+    await _pump(tester, _StubApi(race));
+
+    await tester.tap(find.byKey(const Key('race-prize-pool-board')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    final tiers = find.byKey(const Key('race-prize-pool-tier-list'));
+    expect(tiers, findsOneWidget);
+    expect(
+      find.descendant(of: tiers, matching: find.text('7')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: tiers, matching: find.text('2')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: tiers, matching: find.text('1')),
+      findsOneWidget,
+    );
+    expect(find.descendant(of: tiers, matching: find.text('10')), findsNothing);
+
+    await _teardown(tester);
+  });
+
+  testWidgets('rounded server tiers and total render unchanged', (
+    tester,
+  ) async {
+    final race = _fundedRace(status: 'COMPLETED', projected: false, coins: 20)
+      ..['payoutTiers'] = const [
+        {'placement': 1, 'amount': 10},
+        {'placement': 2, 'amount': 5},
+        {'placement': 3, 'amount': 5},
+      ];
+    await _pump(tester, _StubApi(race));
+
+    final stat = find.byKey(const Key('race-info-prize-pool'));
+    expect(
+      find.descendant(of: stat, matching: find.text('20')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('race-prize-pool-board')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    final tiers = find.byKey(const Key('race-prize-pool-tier-list'));
+    expect(
+      find.descendant(of: tiers, matching: find.text('10')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: tiers, matching: find.text('5')),
+      findsNWidgets(2),
+    );
+
+    await _teardown(tester);
+  });
 
   testWidgets(
     'accepting an invite to a funded race is one tap — no buy-in sheet',

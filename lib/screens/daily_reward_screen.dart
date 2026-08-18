@@ -69,6 +69,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
   List<_DailyStripItem>? _stripItems;
   // Rewarded-ad extra spin state.
   bool _adReady = false;
+  bool _adLoading = false;
   bool _adFlowBusy = false;
   bool _extraSpinDone = false;
 
@@ -198,7 +199,12 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
       return;
     }
     if (!ctrl.isReady) {
-      await ctrl.load(userId: userId, localDate: _todayLocalDate());
+      if (mounted) setState(() => _adLoading = true);
+      try {
+        await ctrl.load(userId: userId, localDate: _todayLocalDate());
+      } finally {
+        if (mounted) setState(() => _adLoading = false);
+      }
     }
     if (ctrl.isReady) {
       _record('extra_spin_ad_ready', context: _analyticsSurfaceContext);
@@ -209,6 +215,18 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
       );
     }
     if (mounted) setState(() => _adReady = ctrl.isReady);
+  }
+
+  /// A failed SDK load is terminal for that request, not for today's server
+  /// offer. Keep the same verified-grant contract and allow an explicit fresh
+  /// load rather than leaving a disabled "LOADING AD…" button on screen.
+  void _retryOrStartExtraSpin() {
+    if (_adFlowBusy || _isClaiming) return;
+    if (_adExtraSpin?['pendingGrant'] == true || _adReady) {
+      unawaited(_startExtraSpin());
+      return;
+    }
+    if (!_adLoading) unawaited(_maybePrepareExtraSpin());
   }
 
   // Legacy ladder claim (old backend without box support).
@@ -395,6 +413,28 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
       widget.authService.updateCoins(coins.toInt());
     }
     widget.onClaimed?.call();
+    // An extra-spin offer becomes available only after the free claim on some
+    // backend versions. Re-read the additive status safely; a failed/old
+    // response leaves the earned reward visible and does not invent an offer.
+    unawaited(_refreshExtraSpinStatus());
+  }
+
+  Future<void> _refreshExtraSpinStatus() async {
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) return;
+    try {
+      final status = await widget.backendApiService.fetchDailyRewardStatus(
+        identityToken: token,
+        localDate: _todayLocalDate(),
+      );
+      if (!mounted) return;
+      setState(() => _status = status);
+      _recordExtraSpinOfferArrival();
+      unawaited(_maybePrepareExtraSpin());
+    } catch (_) {
+      // The free reward has already settled. This optional convenience must
+      // never turn a status refresh failure into a failed claim/reveal.
+    }
   }
 
   @override
@@ -443,6 +483,10 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
                             ? _RewardReveal(
                                 reward: _claimedReward!,
                                 onSettled: () => _applyReward(_claimedReward!),
+                                extraSpinLabel: _extraSpinCtaLabel,
+                                onExtraSpin: _extraSpinOffered
+                                    ? _retryOrStartExtraSpin
+                                    : null,
                                 onClose: () => Navigator.of(context).pop(true),
                               )
                             : _opening
@@ -663,20 +707,12 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
             // The extra spin IS the primary action once today's box is open —
             // this view is reached from the home button's EXTRA SPIN state.
             PillButton(
-              label: _adFlowBusy
-                  ? 'PLEASE WAIT...'
-                  : _adExtraSpin?['pendingGrant'] == true
-                  ? 'CLAIM EXTRA SPIN'
-                  : _adReady
-                  ? 'WATCH A SHORT AD · +1 SPIN'
-                  : 'LOADING AD...',
+              label: _extraSpinCtaLabel,
               variant: PillButtonVariant.primary,
               fullWidth: true,
-              onPressed:
-                  (_adFlowBusy ||
-                      !(_adExtraSpin?['pendingGrant'] == true || _adReady))
+              onPressed: (_adFlowBusy || _adLoading)
                   ? null
-                  : _startExtraSpin,
+                  : _retryOrStartExtraSpin,
             )
           else
             const PillButton(
@@ -695,6 +731,14 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
   /// ads.
   bool get _extraSpinOffered {
     return _hasAvailableExtraSpin && !_extraSpinDone && _adCtrl.isSupported;
+  }
+
+  String get _extraSpinCtaLabel {
+    if (_adFlowBusy) return 'PLEASE WAIT...';
+    if (_adExtraSpin?['pendingGrant'] == true) return 'CLAIM YOUR EXTRA SPIN';
+    if (_adReady) return 'WATCH A SHORT AD · +1 SPIN';
+    if (_adLoading) return 'LOADING AD...';
+    return 'AD NOT READY — TRY AGAIN';
   }
 
   // Reel screen — same chrome as the race mystery box (CaseOpeningScreen):
@@ -1347,9 +1391,13 @@ class _RewardReveal extends StatefulWidget {
     required this.reward,
     required this.onClose,
     this.onSettled,
+    this.extraSpinLabel,
+    this.onExtraSpin,
   });
   final Map<String, dynamic> reward;
   final VoidCallback onClose;
+  final String? extraSpinLabel;
+  final VoidCallback? onExtraSpin;
 
   /// Fired once when the reveal settles — the coin card is shown, or the
   /// accessory spinner has landed. The parent uses this to apply the reward
@@ -1529,6 +1577,15 @@ class _RewardRevealState extends State<_RewardReveal> {
               ],
             ],
             const SizedBox(height: 22),
+            if (widget.onExtraSpin != null && widget.extraSpinLabel != null) ...[
+              PillButton(
+                label: widget.extraSpinLabel!,
+                variant: PillButtonVariant.primary,
+                fullWidth: true,
+                onPressed: widget.onExtraSpin,
+              ),
+              const SizedBox(height: 10),
+            ],
             PillButton(
               label: 'CONTINUE',
               fullWidth: true,

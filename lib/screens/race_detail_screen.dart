@@ -290,6 +290,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   // simply means no banner. { active: true, multiplier, endsAt }.
   Map<String, dynamic>? _globalEvent;
   Loadable<Map<String, dynamic>> _progressState = const Loadable.initial();
+  bool _showingImpactNotices = false;
   int _queuedBoxCount = 0;
   // Globally-owned (coin-purchased) powerups, by type -> quantity. Spendable
   // into this race via the redeem flow. Loaded best-effort; an older backend
@@ -1000,7 +1001,21 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       } else if (details['status'] == 'COMPLETED') {
         // Finished races keep their chat + activity viewable (read-only —
         // _canPostMessage is false and the backend rejects posts). Load once,
-        // no polling: the conversation can't change anymore.
+        // no polling: the conversation can't change anymore. The completed
+        // progress contract is the authoritative, ordered final roster; never
+        // render the (possibly paged) details array as a final standings board.
+        setState(() {
+          _participantsTotal = null;
+          _participantsOffset = 0;
+          _participantsHasMore = false;
+          _participantsLoadingMore = false;
+        });
+        unawaited(
+          _loadCompletedProgressAndImpactNotices(
+            prefetched: progressPrefetch,
+            refetchOnNullPrefetch: !bootstrap.supported,
+          ),
+        );
         if (!previewViewer) _ensureFeedInitialized(poll: false);
       } else if (details['status'] == 'PENDING') {
         // Scheduled races show a live countdown to their auto-start; the
@@ -1034,6 +1049,65 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         });
         showErrorToast(context, e.toString());
       }
+    }
+  }
+
+  Future<void> _loadCompletedProgressAndImpactNotices({
+    Future<Map<String, dynamic>?>? prefetched,
+    required bool refetchOnNullPrefetch,
+  }) async {
+    await _loadProgress(
+      prefetched: prefetched,
+      refetchOnNullPrefetch: refetchOnNullPrefetch,
+    );
+    await _showImpactNotices();
+  }
+
+  Future<void> _showImpactNotices() async {
+    if (!mounted || widget.demoMode || _showingImpactNotices) return;
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) return;
+    _showingImpactNotices = true;
+    try {
+      final notices = await _api.fetchRaceImpactNotices(
+        identityToken: token,
+        raceId: widget.raceId,
+      );
+      for (final notice in notices.take(3)) {
+        if (!mounted) return;
+        final id = notice['id'];
+        final type = notice['powerupType'];
+        final delta = notice['deltaSteps'];
+        if (id is! String || id.isEmpty || type is! String || type.isEmpty ||
+            delta is! num) {
+          continue;
+        }
+        final steps = delta.toInt();
+        final sign = steps >= 0 ? '+' : '−';
+        await showPowerupRevealModal(
+          context,
+          iconType: type,
+          title: PowerupCopy.nameFor(type),
+          subtitle: '$sign${steps.abs()} steps in ${_race?['name'] is String ? _race!['name'] : 'this race'}',
+          accent: steps >= 0
+              ? AppColors.of(context).coinDark
+              : AppColors.of(context).error,
+        );
+        // The backend predicate binds user + race + opaque id. A failed ack
+        // intentionally leaves the notice for a later authorized open.
+        try {
+          await _api.acknowledgeRaceImpactNotice(
+            identityToken: token,
+            raceId: widget.raceId,
+            noticeId: id,
+          );
+        } catch (_) {}
+      }
+    } catch (_) {
+      // Capability disabled/old backend/unauthorized viewer all degrade to no
+      // overlay. The private endpoint remains the actual security boundary.
+    } finally {
+      _showingImpactNotices = false;
     }
   }
 
@@ -4304,7 +4378,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     // Seeded daily/weekly races have no creator and auto-start at their scheduled
     // ET midnight — so an opted-in user must see "you're in", not "waiting for the
     // creator to start".
-    final isSeeded = (_race!['seedKind'] as String?) != null;
     final isTeamRace = TeamRace.isTeamRace(_race!);
     final participants =
         (_race!['participants'] as List?)?.cast<Map<String, dynamic>>() ?? [];
@@ -4377,7 +4450,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      'AT THE START LINE',
+                      'PENDING',
                       style: PixelText.title(size: 13, color: Colors.white),
                     ),
                   ],
@@ -4567,7 +4640,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           child: _buildPendingActions(
             isCreator: isCreator,
             myStatus: myStatus,
-            isSeeded: isSeeded,
             acceptedCount: acceptedCount,
             scheduledInFuture: scheduledInFuture,
             scheduledStartAt: scheduledStartAt,
@@ -4595,7 +4667,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   Widget _buildPendingActions({
     required bool isCreator,
     required String myStatus,
-    required bool isSeeded,
     required int acceptedCount,
     required bool scheduledInFuture,
     required DateTime? scheduledStartAt,
@@ -4818,49 +4889,6 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           ],
         ] else if (myStatus == 'INVITED') ...[
           // The decision row lives immediately under Race Details.
-        ] else if (myStatus == 'ACCEPTED') ...[
-          Row(
-            children: [
-              Expanded(
-                child: RetroCard(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 16,
-                    horizontal: 16,
-                  ),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: Column(
-                      children: [
-                        Icon(
-                          isSeeded
-                              ? Icons.check_circle_rounded
-                              : Icons.hourglass_top_rounded,
-                          size: 32,
-                          color: isSeeded
-                              ? AppColors.of(context).pillGreenDark
-                              : AppColors.of(
-                                  context,
-                                ).textMid.withValues(alpha: 0.6),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          isSeeded
-                              ? "You're in! This race starts automatically. "
-                                    'No action needed.'
-                              : 'Waiting for the creator to start the race',
-                          style: PixelText.body(
-                            size: 14,
-                            color: AppColors.of(context).textMid,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
         ],
       ],
     );
@@ -7304,6 +7332,40 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   }
 
   Widget _buildCompletedContent() {
+    if (_progressState.shouldShowInitialLoading) {
+      return Column(
+        children: [
+          _buildRaceHero(runners: const [], chips: const []),
+          const SizedBox(height: 16),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: KeyedSubtree(
+              key: Key('race-detail-completed-progress-skeleton'),
+              child: _RaceProgressSkeleton(),
+            ),
+          ),
+        ],
+      );
+    }
+    if (_progressState.isError && !_progressState.hasData) {
+      return Column(
+        children: [
+          _buildRaceHero(runners: const [], chips: const []),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: KeyedSubtree(
+              key: const Key('race-detail-completed-progress-error'),
+              child: LoadErrorPanel(
+                title: 'Couldn’t load final standings',
+                message: 'Check your connection and try again.',
+                onRetry: _loadProgress,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
     final winner = _race!['winner'] as Map<String, dynamic>?;
     // TR-402/404: team races record winnerTeam (winnerUserId stays null), and
     // a completed team race with no winnerTeam is a TIE — never the plain
@@ -7311,7 +7373,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final isTeamRace = TeamRace.isTeamRace(_race!);
     final winnerTeam = TeamRace.winnerTeam(_race!);
     final participants = orderRaceParticipantsForDisplay(
-      (_progress?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
+      ((_progressState.data ?? _progress)?['participants'] as List?)
+              ?.cast<Map<String, dynamic>>() ??
           // Only fall back to the details array when it's known-full — once
           // paging is honoured that array can be a single page, and a failed
           // progress load must not render a truncated "final standings"

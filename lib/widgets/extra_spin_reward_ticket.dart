@@ -8,9 +8,16 @@ import 'pill_button.dart';
 /// seconds. Its layout is deliberately the same [PillButton] footprint as
 /// CLAIM/CLAIMED and SHOP beside it.
 class ExtraSpinRewardTicket extends StatefulWidget {
-  const ExtraSpinRewardTicket({super.key, required this.onPressed});
+  const ExtraSpinRewardTicket({
+    super.key,
+    required this.onPressed,
+    this.label = 'EXTRA SPIN',
+    this.semanticsLabel = 'Extra spin. Watch a short ad for one extra spin.',
+  });
 
   final VoidCallback onPressed;
+  final String label;
+  final String semanticsLabel;
 
   @override
   State<ExtraSpinRewardTicket> createState() => _ExtraSpinRewardTicketState();
@@ -49,7 +56,7 @@ class _ExtraSpinRewardTicketState extends State<ExtraSpinRewardTicket>
     return Semantics(
       button: true,
       excludeSemantics: true,
-      label: 'Extra spin. Watch a short ad for one extra spin.',
+      label: widget.semanticsLabel,
       onTap: widget.onPressed,
       child: AnimatedBuilder(
         animation: _attention,
@@ -57,16 +64,14 @@ class _ExtraSpinRewardTicketState extends State<ExtraSpinRewardTicket>
           // The first 900ms of each six-second cycle is the attention beat;
           // the remaining 5.1 seconds are visually still.
           final beat = (_attention.value / 0.15).clamp(0.0, 1.0);
-          final popProgress = Curves.easeOut.transform(
-            const Interval(0, 0.62).transform(beat),
-          );
-          final pop = sin(popProgress * pi);
           final shimmer = Curves.easeInOut.transform(
             const Interval(0.14, 0.88).transform(beat),
           );
-          return Transform.scale(
-            // A brief 2.5% pop draws the eye but never changes row layout.
-            scale: 1 + (0.025 * pop),
+          final nudge = sin(beat * pi * 4) * 1.0;
+          return Transform.translate(
+            // Two one-logical-pixel beats draw the eye without changing the
+            // quick-actions row's footprint.
+            offset: Offset(nudge, 0),
             child: Stack(
               clipBehavior: Clip.none,
               children: [
@@ -95,7 +100,7 @@ class _ExtraSpinRewardTicketState extends State<ExtraSpinRewardTicket>
           );
         },
         child: PillButton(
-          label: 'EXTRA SPIN',
+          label: widget.label,
           icon: Icons.replay_rounded,
           variant: PillButtonVariant.secondary,
           fullWidth: true,

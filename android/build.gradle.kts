@@ -2,6 +2,8 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        // ironSource's SDK artifacts, used by the AdMob mediation adapter.
+        maven(url = "https://android-sdk.is.com/")
     }
 }
 

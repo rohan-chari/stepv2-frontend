@@ -48,6 +48,11 @@ class ReviewPromptService {
     }
   }
 
+  /// Server eligibility is the only v1 review gate. Unlike the legacy
+  /// sentiment flow below, this does not persist an inferred outcome: iOS and
+  /// Android deliberately do not report whether the OS showed a sheet.
+  Future<void> requestEligibleNativeReview() => _requestNativeReview();
+
   /// Records one qualifying happy moment and, if every guard passes, shows the
   /// sentiment dialog over [context]. Call this only when nothing else is
   /// about to be pushed on top (e.g. right after a results modal pops).

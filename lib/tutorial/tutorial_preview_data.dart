@@ -45,6 +45,20 @@ class TutorialPreviewAuthService extends AuthService {
 }
 
 class TutorialPreviewBackendApiService extends BackendApiService {
+  // New recipient-private settlement surfaces are deliberately suppressed in
+  // the deterministic tutorial; no live fetch may cover a scripted beat.
+  @override
+  Future<List<Map<String, dynamic>>> fetchRaceImpactNotices({
+    required String identityToken,
+    required String raceId,
+  }) async => const [];
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchPrivateRaceImpactFeed({
+    required String identityToken,
+    required String raceId,
+  }) async => const [];
+
   // -- Home: feedback card (batch 2026-08-10b item 5) --
   //
   // The home tab renders the real feedback card inside the tutorial preview,

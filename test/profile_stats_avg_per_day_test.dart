@@ -140,6 +140,16 @@ void main() {
     },
   );
 
+  testWidgets('Profile shows podium totals only from a complete additive record', (tester) async {
+    await _pumpProfileTab(tester, {
+      'thisWeek': 1, 'thisMonth': 1, 'thisYear': 1, 'allTime': 1, 'streak': 1,
+      'racePodiums': {'first': 12, 'second': 5, 'third': 3},
+    });
+    expect(find.byKey(const Key('profile-race-podiums')), findsOneWidget);
+    expect(find.text('RACE PODIUMS'), findsOneWidget);
+    expect(find.text('12'), findsOneWidget);
+  });
+
   testWidgets(
     'Old backend without avg fields falls back to showing the total',
     (WidgetTester tester) async {

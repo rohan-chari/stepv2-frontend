@@ -7,6 +7,7 @@ import '../services/ad_service.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../services/activation_analytics_service.dart';
+import '../styles.dart';
 import 'extra_spin_reward_ticket.dart';
 import 'pill_button.dart';
 
@@ -251,8 +252,13 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
     if (!_loaded) {
       return const SizedBox(height: 48);
     }
+    // The Home affordance is deliberately one stable destination. A changing
+    // CLAIM/EXTRA SPIN label made the same tap target feel like two unrelated
+    // systems; availability is communicated by the icon and attention beat.
     if (_extraSpinAvailable) {
       return ExtraSpinRewardTicket(
+        label: 'DAILY REWARD',
+        semanticsLabel: 'Daily reward. One more spin is ready.',
         onPressed: () {
           unawaited(
             _analytics.record(
@@ -264,13 +270,116 @@ class StreakChipState extends State<StreakChip> with WidgetsBindingObserver {
         },
       );
     }
-    final label = _unclaimed ? 'CLAIM' : 'CLAIMED';
-    return PillButton(
-      label: label,
-      icon: _unclaimed ? Icons.card_giftcard_rounded : Icons.check_box_rounded,
-      variant: PillButtonVariant.secondary,
-      fullWidth: true,
-      onPressed: _open,
+    return _DailyRewardAttention(
+      active: _unclaimed,
+      child: PillButton(
+        label: 'DAILY REWARD',
+        icon: _unclaimed
+            ? Icons.card_giftcard_rounded
+            : Icons.check_box_rounded,
+        variant: PillButtonVariant.secondary,
+        fullWidth: true,
+        onPressed: _open,
+      ),
+    );
+  }
+}
+
+/// A deliberately tiny, bounded beat for an actionable Home reward. The
+/// first 700ms contains two one-pixel nudges; the rest of the seven-second
+/// loop is static. Reduced-motion users get a fixed higher-contrast outline.
+class _DailyRewardAttention extends StatefulWidget {
+  const _DailyRewardAttention({required this.active, required this.child});
+
+  final bool active;
+  final Widget child;
+
+  @override
+  State<_DailyRewardAttention> createState() => _DailyRewardAttentionState();
+}
+
+class _DailyRewardAttentionState extends State<_DailyRewardAttention>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 7),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncMotion();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DailyRewardAttention oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.active != widget.active) _syncMotion();
+  }
+
+  void _syncMotion() {
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    if (!widget.active || reduced) {
+      _controller.stop();
+      _controller.value = 0;
+    } else if (!_controller.isAnimating) {
+      _controller.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    if (!widget.active || reduced) {
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(9),
+          border: reduced && widget.active
+              ? Border.all(color: AppColors.of(context).coinDark, width: 2)
+              : null,
+        ),
+        child: widget.child,
+      );
+    }
+    return AnimatedBuilder(
+      animation: _controller,
+      child: widget.child,
+      builder: (context, child) {
+        final t = _controller.value;
+        // Two restrained beats, then a long quiet interval.
+        final offset = t < .025
+            ? 1.0
+            : t < .05
+            ? -1.0
+            : t < .075
+            ? .7
+            : t < .10
+            ? -.7
+            : 0.0;
+        final pulse = t < .10 ? .16 * (1 - (t / .10)) : 0.0;
+        return Transform.translate(
+          offset: Offset(offset, 0),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(9),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.of(context).coinMid.withValues(alpha: pulse),
+                  blurRadius: 8,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+            child: child,
+          ),
+        );
+      },
     );
   }
 }

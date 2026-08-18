@@ -1,120 +1,317 @@
 /**
- * Staging load test weighted to the ACTUAL prod request mix.
+ * Capacity harness for the released client request mix.
  *
- * Differences from `staging-load-test.js`, and why they matter:
- *
- *  1. Endpoint weights come from 24h of real nginx logs (2026-08-16), not from
- *     guesswork. The old script gave /health an 18% weight (prod: ~0%) and
- *     never touched /races/:id/messages (prod: 28% of all requests) or
- *     /home/race-card (prod: 30% of all server time). Load shaped that wrongly
- *     measures nothing useful.
- *
- *  2. `constant-arrival-rate` instead of `ramping-vus`. With ramping VUs, each
- *     VU waits for its own response, so offered load *falls* as the server
- *     slows — the test politely backs off exactly when you need it to push.
- *     Arrival rate holds the offered rps flat and lets the queue build, which
- *     is what a real user population does.
- *
- *  3. Every iteration picks a different one of N pre-minted user identities
- *     (see mint-staging-users.js) instead of reusing the reviewer account, so
- *     writes hit distinct rows and reads miss the cache realistically.
- *
- * Each scenario is one rung of the DAU ladder, using the measured conversion
- * of 0.0122 peak rps per DAU (467 req/DAU/day x 2.26 peak-to-mean factor).
- *
- *   k6 run k6/prod-mix-load-test.js
- *   TARGET_ONLY=dau_5000 k6 run k6/prod-mix-load-test.js   # single rung
+ * This script is staging-only. It uses a fixed arrival rate, status-aware
+ * fixtures, exact released-client headers, tagged metrics, and executable
+ * gates. See k6/README.md before running it.
  */
 
+import exec from "k6/execution";
+import { sleep } from "k6";
 import http from "k6/http";
 import { SharedArray } from "k6/data";
-import { Rate, Trend } from "k6/metrics";
+import { Counter, Gauge, Rate, Trend } from "k6/metrics";
+
+import {
+  ENDPOINTS,
+  HARNESS_SCHEMA_VERSION,
+  RELEASED_CLIENT_COHORTS,
+  RUNG_DEFINITIONS,
+  buildActivationEvent,
+  buildThresholds,
+  classifyCapacityRun,
+  classifyResponse,
+  resolutionStateDisposition,
+  validateFixture,
+} from "./harness-contract.mjs";
 
 const BASE_URL = String(
   __ENV.BASE_URL || "https://staging.steptracker-api.org",
 ).replace(/\/+$/, "");
+const FIXTURE_FILE = __ENV.USERS_FILE || "./users.json";
+const CLIENT_COHORT = __ENV.CLIENT_COHORT || "ios_bara_2_3_7_ads_payout";
+const MODE = __ENV.MODE || "capacity";
+const TARGET_RUNG = __ENV.TARGET_RUNG || "rate_15rps";
+const RUN_ID = String(__ENV.RUN_ID || "").trim();
+const REPEAT_INDEX = String(__ENV.REPEAT_INDEX || "").trim();
+const cohort = RELEASED_CLIENT_COHORTS[CLIENT_COHORT];
+const rung = RUNG_DEFINITIONS[TARGET_RUNG];
+const capacityRun = MODE === "capacity"
+  ? classifyCapacityRun(
+      __ENV.DURATION_OVERRIDE,
+      __ENV.ALLOW_DIAGNOSTIC_OVERRIDE === "1",
+      BASE_URL,
+    )
+  : { capacityCandidate: false, diagnosticReason: "smoke" };
 
-const CLIENT_FEATURES =
-  "characters,ads,jammer,spinpowerups,team_races,tournaments,race_leave," +
-  "powerups2,powerups3,powerups4,powerups5,stealth_runner_duration," +
-  "hitchhike_effective_steps,remote_assets,remote_asset_preferred," +
-  "next_race_cta,discoverable_identity,home_suggested_races," +
-  "seeded_race_buckets,home_invite_modal,race_participants_paging," +
-  "race_preview,race_payout_double";
+if (!RUN_ID) throw new Error("RUN_ID is required");
+if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(RUN_ID)) {
+  throw new Error("RUN_ID must match [A-Za-z0-9][A-Za-z0-9._-]{0,63}");
+}
+if (!REPEAT_INDEX) throw new Error("REPEAT_INDEX is required");
+if (MODE === "capacity" && !["1", "2", "3"].includes(REPEAT_INDEX)) {
+  throw new Error("capacity REPEAT_INDEX must be 1, 2, or 3");
+}
 
-const users = new SharedArray("users", () =>
-  JSON.parse(open(__ENV.USERS_FILE || "./users.json")),
+const requiredCapacityInputs = {
+  backendRevision: __ENV.BACKEND_REVISION,
+  flags: __ENV.BACKEND_FLAGS,
+  config: __ENV.BACKEND_CONFIG,
+  workerCount: __ENV.WORKER_COUNT,
+  pgBouncerPool: __ENV.PGBOUNCER_POOL,
+  redisState: __ENV.REDIS_STATE,
+  cronCohort: __ENV.CRON_COHORT,
+};
+if (MODE === "capacity") {
+  for (const [label, value] of Object.entries(requiredCapacityInputs)) {
+    if (!String(value || "").trim() || String(value).trim().toUpperCase() === "UNRECORDED") {
+      throw new Error(`${label} is required and cannot be UNRECORDED`);
+    }
+  }
+}
+
+const identityTags = Object.freeze({
+  run_id: RUN_ID,
+  repeat_index: REPEAT_INDEX,
+  client_cohort: CLIENT_COHORT,
+});
+
+if (!cohort) {
+  throw new Error(
+    `unknown CLIENT_COHORT=${CLIENT_COHORT}; choose ${Object.keys(RELEASED_CLIENT_COHORTS).join(", ")}`,
+  );
+}
+if (MODE !== "capacity" && MODE !== "smoke") {
+  throw new Error("MODE must be capacity or smoke");
+}
+if (MODE === "capacity" && !rung) {
+  throw new Error(
+    `unknown TARGET_RUNG=${TARGET_RUNG}; choose ${Object.keys(RUNG_DEFINITIONS).join(", ")}`,
+  );
+}
+
+const fixtureDocument = JSON.parse(open(FIXTURE_FILE));
+const users = new SharedArray("capacity fixture users", () =>
+  Array.isArray(fixtureDocument.users) ? fixtureDocument.users : [],
 );
 
-/**
- * Weights are raw 24h request counts from prod nginx logs, so the mix is
- * exactly proportional to reality. `/challenges/current` is entered at its
- * organic 13,400 rather than its logged 17,421 — the difference was a single
- * device stuck retrying a 404, which is a client bug, not user load.
- */
-const ENDPOINTS = [
-  { key: "race_messages",      w: 39207, m: "GET",  p: (u, r) => `/races/${r}/messages?limit=50` },
-  { key: "challenges_current", w: 13400, m: "GET",  p: () => "/challenges/current" },
-  { key: "assets_manifest",    w: 12993, m: "GET",  p: () => "/assets/manifest" },
-  // Takes a resolution JOB id, not a race id. The app gets one back from
-  // /steps/sync-v2 and then polls it, so this pulls from jobs this run created.
-  { key: "race_resolution",    w: 10812, m: "GET",  p: () => `/steps/race-resolution/${takeJobId()}`, needsJob: true },
-  { key: "steps_post",         w: 10462, m: "POST", p: () => "/steps",           b: stepsBody },
-  { key: "races_list",         w:  9937, m: "GET",  p: () => "/races" },
-  { key: "steps_samples",      w:  8648, m: "POST", p: () => "/steps/samples",   b: samplesBody },
-  { key: "race_progress",      w:  8286, m: "GET",  p: (u, r) => `/races/${r}/progress` },
-  { key: "message_streams",    w:  7718, m: "GET",  p: (u, r) => `/races/${r}/message-streams` },
-  { key: "auth_me",            w:  7337, m: "GET",  p: () => "/auth/me" },
-  { key: "powerups_inventory", w:  7297, m: "GET",  p: () => "/powerups/inventory" },
-  { key: "steps_sync_v2",      w:  7294, m: "POST", p: () => "/steps/sync-v2",   b: syncBody, h: idempotencyHeader },
-  { key: "home_race_card",     w:  6591, m: "GET",  p: () => "/home/race-card" },
-  { key: "version_policy",     w:  6143, m: "GET",  p: () => "/app-version/policy" },
-  { key: "powerups_catalog",   w:  5814, m: "GET",  p: () => "/powerups/catalog" },
-  { key: "suggested_races",    w:  5778, m: "GET",  p: () => "/home/suggested-races" },
-  { key: "friends_steps",      w:  4929, m: "GET",  p: () => "/friends/steps" },
-  { key: "invite_preflight",   w:  4720, m: "GET",  p: () => "/races/invite-preflight" },
-  { key: "activation_events",  w:  4257, m: "POST", p: () => "/analytics/activation-events", b: activationBody },
-  { key: "chat_read",          w:  3467, m: "POST", p: (u, r) => `/races/${r}/chat/read`, b: () => ({}) },
-  { key: "discovery_summary",  w:  3444, m: "GET",  p: () => "/races/discovery-summary" },
-  { key: "auth_session",       w:  3188, m: "GET",  p: () => "/auth/session" },
-  { key: "friends_list",       w:  2139, m: "GET",  p: () => "/friends" },
-  { key: "shop_catalog",       w:  2135, m: "GET",  p: () => "/shop/catalog" },
-  { key: "race_detail",        w:  1944, m: "GET",  p: (u, r) => `/races/${r}?view=participants-v1` },
-  { key: "race_bootstrap",     w:  1517, m: "GET",  p: (u, r) => `/races/${r}/bootstrap` },
+const allUsers = [];
+const activeContexts = [];
+const activeOrPendingContexts = [];
+for (const user of users) {
+  allUsers.push({ user, race: null, raceStatus: "none", job: null });
+  for (const race of user.activeRaces || []) {
+    const context = { user, race, raceStatus: "active", job: null };
+    activeContexts.push(context);
+    activeOrPendingContexts.push(context);
+  }
+  for (const race of user.pendingRaces || []) {
+    activeOrPendingContexts.push({
+      user,
+      race,
+      raceStatus: "pending",
+      job: null,
+    });
+  }
+}
+
+const totalWeight = ENDPOINTS.reduce((sum, endpoint) => sum + endpoint.w, 0);
+const cumulativeWeights = [];
+let runningWeight = 0;
+for (const endpoint of ENDPOINTS) {
+  runningWeight += endpoint.w;
+  cumulativeWeights.push(runningWeight);
+}
+
+const selectedEndpointCount = new Counter("selected_endpoint_count");
+const executedEndpointCount = new Counter("executed_endpoint_count");
+const contextFallbackCount = new Counter("context_fallback_count");
+const responseStatusCount = new Counter("response_status_count");
+const successfulResponseCount = new Counter("successful_response_count");
+const expectedChallenge404Count = new Counter("expected_challenge_404_count");
+const capacityFailureCount = new Counter("capacity_failure_count");
+const hardFailureCount = new Counter("hard_failure_count");
+const rateLimitCount = new Counter("rate_limit_429_count");
+const capacityFailureRate = new Rate("capacity_failure_rate");
+const hardFailureRate = new Rate("hard_failure_rate");
+const endpointDuration = new Trend("endpoint_duration_ms", true);
+const persistenceCriticalDuration = new Trend(
+  "persistence_critical_duration_ms",
+  true,
+);
+const resolutionLag = new Trend("resolution_lag_ms", true);
+const resolutionLagSampleCount = new Counter("resolution_lag_sample_count");
+const resolutionStateCount = new Counter("resolution_state_count");
+const finalResolutionOutstanding = new Gauge("final_resolution_outstanding");
+const endpointAccountingCounters = Object.fromEntries(
+  ENDPOINTS.map((endpoint) => [
+    endpoint.key,
+    {
+      selected: new Counter(`summary_endpoint_${endpoint.key}_selected_count`),
+      executed: new Counter(`summary_endpoint_${endpoint.key}_executed_count`),
+      durationSamples: new Counter(
+        `summary_endpoint_${endpoint.key}_duration_sample_count`,
+      ),
+      statusTotal: new Counter(`summary_endpoint_${endpoint.key}_status_count`),
+    },
+  ]),
+);
+const resolutionStateSummaryCounters = Object.fromEntries(
+  ["queued", "running", "succeeded", "failed", "superseded", "missing", "malformed"].map(
+    (state) => [state, new Counter(`resolution_state_${state}_count`)],
+  ),
+);
+const summarizedStatusCodes = [
+  "0",
+  "200",
+  "201",
+  "202",
+  "204",
+  "304",
+  "400",
+  "401",
+  "403",
+  "404",
+  "408",
+  "409",
+  "429",
+  "500",
+  "502",
+  "503",
+  "504",
 ];
+const statusSummaryCounters = Object.fromEntries(
+  [...summarizedStatusCodes, "other"].map((status) => [
+    status,
+    new Counter(`response_status_code_${status}_count`),
+  ]),
+);
 
-// Prefix sums once at init, so endpoint selection is a binary search per
-// iteration rather than a linear scan over 26 entries.
-const CUMULATIVE = [];
-let running = 0;
-for (const e of ENDPOINTS) {
-  running += e.w;
-  CUMULATIVE.push(running);
-}
-const TOTAL_WEIGHT = running;
-
-const RACELESS_FALLBACK = ENDPOINTS.find((e) => e.key === "races_list");
-
-/**
- * Resolution job ids harvested from this VU's own /steps/sync-v2 responses.
- * Bounded so a long run cannot grow it without limit.
- */
-const jobIds = [];
-const JOB_POOL_MAX = 200;
-
-function rememberJobId(id) {
-  if (!id) return;
-  if (jobIds.length >= JOB_POOL_MAX) jobIds.shift();
-  jobIds.push(id);
+function smokeThresholds() {
+  const thresholds = {
+    capacity_failure_rate: ["rate==0"],
+    context_fallback_count: ["count==0"],
+    resolution_lag_sample_count: ["count>0"],
+    final_resolution_outstanding: ["value==0"],
+    resolution_state_failed_count: ["count==0"],
+    resolution_state_superseded_count: ["count==0"],
+  };
+  for (const endpoint of ENDPOINTS) {
+    thresholds[`selected_endpoint_count{endpoint:${endpoint.key}}`] = ["count>0"];
+    thresholds[`executed_endpoint_count{endpoint:${endpoint.key}}`] = ["count>0"];
+  }
+  return thresholds;
 }
 
-function takeJobId() {
-  return jobIds[Math.floor(Math.random() * jobIds.length)];
+function buildScenarios() {
+  if (MODE === "smoke") {
+    return {
+      deterministic_smoke: {
+        executor: "shared-iterations",
+        vus: 1,
+        iterations: ENDPOINTS.length,
+        maxDuration: __ENV.DURATION_OVERRIDE || "5m",
+        exec: "hitApi",
+        tags: { rung: "smoke", mode: "smoke", ...identityTags },
+      },
+    };
+  }
+  return {
+    [TARGET_RUNG]: {
+      executor: "constant-arrival-rate",
+      rate: rung.rate,
+      timeUnit: "1s",
+      duration: __ENV.DURATION_OVERRIDE || rung.duration,
+      preAllocatedVUs: Math.max(50, rung.rate * 4),
+      maxVUs: Math.max(200, rung.rate * 20),
+      exec: "hitApi",
+      tags: { rung: TARGET_RUNG, mode: "capacity", ...identityTags },
+      gracefulStop: "30s",
+    },
+  };
 }
 
-const failureRate = new Rate("hard_failure_rate");
-const unauthorizedRate = new Rate("unauthorized_rate");
-const serverTime = new Trend("server_time_ms", true);
+export const options = {
+  scenarios: buildScenarios(),
+  thresholds:
+    MODE === "smoke" ? smokeThresholds() : buildThresholds([TARGET_RUNG]),
+  discardResponseBodies: true,
+  noConnectionReuse: false,
+  summaryTrendStats: ["count", "avg", "p(50)", "p(95)", "p(99)", "max"],
+};
+
+export function setup() {
+  const validation = validateFixture(fixtureDocument);
+  if (!validation.ok) {
+    throw new Error(`invalid capacity fixture:\n- ${validation.errors.join("\n- ")}`);
+  }
+  const hostname = BASE_URL
+    .replace(/^https?:\/\//, "")
+    .split(/[/:]/, 1)[0]
+    .toLowerCase();
+  const safeHost =
+    hostname === "staging.steptracker-api.org" ||
+    hostname === "localhost" ||
+    hostname === "127.0.0.1";
+  if (!safeHost) {
+    throw new Error(`refusing capacity traffic to non-staging host: ${hostname}`);
+  }
+  const resolutionContexts = fixtureDocument.resolutionSeeds.map((seed) => {
+    const idempotencyKey = randomUuid();
+    const response = http.post(
+      `${BASE_URL}/steps/sync-v2`,
+      JSON.stringify(bodyFor("steps_sync_v2")),
+      {
+        headers: requestHeaders(seed.token, idempotencyKey),
+        tags: {
+          name: "resolution_seed_sync",
+          phase: "setup",
+          client_cohort: CLIENT_COHORT,
+          run_id: RUN_ID,
+          repeat_index: REPEAT_INDEX,
+        },
+        timeout: "30s",
+        responseType: "text",
+      },
+    );
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(
+        `resolution seed sync failed for dedicated user (${response.status})`,
+      );
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(response.body || "");
+    } catch (_) {
+      throw new Error("resolution seed sync returned malformed JSON");
+    }
+    const job = parsed && parsed.raceResolution;
+    if (
+      !job ||
+      typeof job.jobId !== "string" ||
+      !job.jobId ||
+      !Number.isInteger(job.generation) ||
+      job.generation < 1
+    ) {
+      throw new Error("resolution seed sync returned no current job generation");
+    }
+    return {
+      user: { userId: seed.userId, token: seed.token },
+      race: null,
+      raceStatus: "active",
+      job: {
+        id: job.jobId,
+        generation: job.generation,
+        requestedAt: job.requestedAt || null,
+      },
+    };
+  });
+  return {
+    fixtureRevision: fixtureDocument.metadata.fixtureRevision,
+    clientCohort: CLIENT_COHORT,
+    resolutionContexts,
+  };
+}
 
 function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -135,175 +332,379 @@ function makeSample(minuteOffset) {
   };
 }
 
-function stepsBody() {
-  return { date: isoDate(), steps: randomInt(500, 14000) };
+function randomUuid() {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
+    const value = Math.floor(Math.random() * 16);
+    return (char === "x" ? value : (value & 0x3) | 0x8).toString(16);
+  });
 }
 
-function samplesBody() {
-  return { samples: [makeSample(12), makeSample(17)] };
-}
-
-function syncBody() {
-  return {
-    date: isoDate(),
-    steps: randomInt(500, 14000),
-    samples: [makeSample(7), makeSample(12), makeSample(17)],
-  };
-}
-
-function activationBody() {
-  return { events: [{ name: "app_open", occurredAt: new Date().toISOString() }] };
-}
-
-function idempotencyHeader() {
-  return { "Idempotency-Key": `k6-${__VU}-${__ITER}-${Math.random().toString(16).slice(2)}` };
+function bodyFor(endpointKey) {
+  switch (endpointKey) {
+    case "steps_post":
+      return { date: isoDate(), steps: randomInt(500, 14000) };
+    case "steps_samples":
+      return { samples: [makeSample(12), makeSample(17)] };
+    case "steps_sync_v2":
+      return {
+        date: isoDate(),
+        steps: randomInt(500, 14000),
+        samples: [makeSample(7), makeSample(12), makeSample(17)],
+      };
+    case "activation_events":
+      return {
+        events: [
+          buildActivationEvent({
+            id: randomUuid(),
+            now: new Date(),
+            appVersion: cohort.appVersion,
+            platform: cohort.platform,
+          }),
+        ],
+      };
+    default:
+      return {};
+  }
 }
 
 function pickEndpoint() {
-  const roll = Math.random() * TOTAL_WEIGHT;
-  let lo = 0;
-  let hi = CUMULATIVE.length - 1;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (roll < CUMULATIVE[mid]) hi = mid;
-    else lo = mid + 1;
+  if (MODE === "smoke") {
+    return ENDPOINTS[exec.scenario.iterationInTest % ENDPOINTS.length];
   }
-  return ENDPOINTS[lo];
+  const roll = Math.random() * totalWeight;
+  let low = 0;
+  let high = cumulativeWeights.length - 1;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (roll < cumulativeWeights[middle]) high = middle;
+    else low = middle + 1;
+  }
+  return ENDPOINTS[low];
 }
 
-const LADDER_RUNGS = [
-  { name: "dau_1250", rate: 15,  duration: "3m", start: "0s" },
-  { name: "dau_2500", rate: 31,  duration: "3m", start: "3m30s" },
-  { name: "dau_5000", rate: 61,  duration: "4m", start: "7m" },
-  { name: "dau_10000", rate: 122, duration: "3m", start: "11m30s" },
-  { name: "dau_20000", rate: 244, duration: "3m", start: "15m" },
-];
-
-/**
- * FAST=1: skip the low rungs entirely and jump straight to the interesting
- * ones, one minute each. The gaps are 20s so that in-flight requests from the
- * previous rung (30s timeout, 30s gracefulStop) drain before the next starts
- * and don't contaminate its numbers. ~3m40s total.
- *
- * The dau_10000 rung carries an ABORTING threshold: if it is drowning in 5xx
- * there is nothing to learn from dau_20000, so the run stops instead.
- */
-const FAST_RUNGS = [
-  { name: "dau_5000",  rate: 61,  duration: "1m", start: "0s" },
-  { name: "dau_10000", rate: 122, duration: "1m", start: "1m20s" },
-  { name: "dau_20000", rate: 244, duration: "1m", start: "2m40s" },
-];
-
-const FAST = __ENV.FAST === "1";
-const RUNGS = FAST ? FAST_RUNGS : LADDER_RUNGS;
-
-function buildScenarios() {
-  const only = __ENV.TARGET_ONLY;
-  const scenarios = {};
-  for (const rung of RUNGS) {
-    if (only && rung.name !== only) continue;
-    scenarios[rung.name] = {
-      executor: "constant-arrival-rate",
-      rate: rung.rate,
-      timeUnit: "1s",
-      duration: __ENV.DURATION_OVERRIDE || rung.duration,
-      startTime: only ? "0s" : rung.start,
-      // Headroom so k6 itself is never the limiter: at 244 rps with a 4s
-      // response the run needs ~1000 concurrent VUs.
-      preAllocatedVUs: Math.max(50, rung.rate * 4),
-      maxVUs: Math.max(200, rung.rate * 20),
-      exec: "hitApi",
-      tags: { rung: rung.name },
-      gracefulStop: "30s",
-    };
+function poolFor(context, setupData) {
+  switch (context) {
+    case "none":
+      return allUsers;
+    case "active_race":
+      return activeContexts;
+    case "active_or_pending_race":
+      return activeOrPendingContexts;
+    case "seeded_resolution_job":
+      return setupData.resolutionContexts;
+    default:
+      return [];
   }
-  return scenarios;
 }
 
-export const options = {
-  scenarios: buildScenarios(),
-  // The ladder observes the whole breakdown, so nothing aborts. FAST mode
-  // stops after dau_10000 when that rung is already drowning in 5xx — pushing
-  // on to dau_20000 would only re-measure a box that has fallen over.
-  thresholds: {
-    "hard_failure_rate{rung:dau_5000}": [
-      { threshold: "rate<0.01", abortOnFail: false },
-    ],
-    "http_req_duration{rung:dau_5000}": [
-      { threshold: "p(95)<2000", abortOnFail: false },
-    ],
-    ...(FAST
-      ? {
-          "hard_failure_rate{rung:dau_10000}": [
-            {
-              threshold: `rate<${__ENV.ABORT_5XX_RATE || 0.25}`,
-              abortOnFail: true,
-              // Let the rung accumulate a real sample before judging it;
-              // the first seconds are cold-connection noise.
-              delayAbortEval: "30s",
-            },
-          ],
-        }
-      : {}),
-  },
-  discardResponseBodies: true,
-  noConnectionReuse: false,
-};
+function contextTags(context) {
+  const race = context.race;
+  return {
+    race_status: context.raceStatus,
+    race_mode: race ? (race.isTeamRace ? "team" : "solo") : "none",
+    roster_size_stratum: race ? race.rosterSizeStratum : "none",
+  };
+}
 
-export function hitApi() {
-  const user = users[randomInt(0, users.length - 1)];
-  const endpoint = pickEndpoint();
+function recordResolutionLag(response, extraTags = {}) {
+  const resolutionTags = { ...identityTags, ...extraTags };
+  let parsed;
+  try {
+    parsed = JSON.parse(response.body || "");
+  } catch (_) {
+    resolutionStateCount.add(1, { state: "malformed", ...resolutionTags });
+    resolutionStateSummaryCounters.malformed.add(1, resolutionTags);
+    return;
+  }
+  const status = parsed && parsed.raceResolution;
+  const state = status && typeof status.state === "string"
+    ? status.state.toLowerCase()
+    : "missing";
+  resolutionStateCount.add(1, { state, ...resolutionTags });
+  const stateSummary = resolutionStateSummaryCounters[state] || resolutionStateSummaryCounters.missing;
+  stateSummary.add(1, resolutionTags);
+  if (state !== "failed") resolutionStateSummaryCounters.failed.add(0, resolutionTags);
+  if (state !== "superseded") {
+    resolutionStateSummaryCounters.superseded.add(0, resolutionTags);
+  }
+  if (resolutionStateDisposition(state) === "abort") {
+    exec.test.abort(
+      `resolution seed ${status?.jobId || "unknown"} became SUPERSEDED; isolated seed stability is invalid`,
+    );
+  }
+  const requestedAt = Date.parse(status && status.requestedAt);
+  const completedAt = Date.parse(status && status.completedAt);
+  if (!Number.isFinite(requestedAt)) return;
+  if (Number.isFinite(completedAt)) {
+    resolutionLag.add(Math.max(0, completedAt - requestedAt), resolutionTags);
+    resolutionLagSampleCount.add(1, resolutionTags);
+  } else if (state === "queued" || state === "running") {
+    resolutionLag.add(Math.max(0, Date.now() - requestedAt), resolutionTags);
+    resolutionLagSampleCount.add(1, resolutionTags);
+  }
+}
 
-  // Endpoints that need a race id fall back to the races list for users who
-  // happen to have none, rather than firing a request at `/races/undefined`.
-  const raceId = user.raceIds.length
-    ? user.raceIds[randomInt(0, user.raceIds.length - 1)]
-    : null;
-  // Fall back to the races list rather than firing at `/races/undefined` when
-  // the picked endpoint needs context this VU does not have yet.
-  const needsRace = endpoint.p.length > 1;
-  const missingContext =
-    (needsRace && !raceId) || (endpoint.needsJob && jobIds.length === 0);
-  const active = missingContext ? RACELESS_FALLBACK : endpoint;
-
-  const headers = {
+function requestHeaders(token, idempotencyKey = null) {
+  return {
     "Content-Type": "application/json",
     Accept: "application/json",
-    Authorization: `Bearer ${user.token}`,
-    "X-App-Version": "2.3.7",
-    "X-Client-Features": CLIENT_FEATURES,
-    "User-Agent": "Bara/2.3.7 CFNetwork/3860.700.1 Darwin/25.6.0",
-    ...(active.h ? active.h() : {}),
+    Authorization: `Bearer ${token}`,
+    "X-App-Version": cohort.appVersion,
+    "X-Client-Features": cohort.features,
+    "User-Agent": cohort.userAgent,
+    "X-Capacity-Run-Id": RUN_ID,
+    "X-Capacity-Repeat": REPEAT_INDEX,
+    ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
   };
+}
 
-  const url = `${BASE_URL}${active.p(user, raceId)}`;
+export function hitApi(setupData) {
+  const selected = pickEndpoint();
+  selectedEndpointCount.add(1, {
+    endpoint: selected.key,
+    ...identityTags,
+  });
+  endpointAccountingCounters[selected.key].selected.add(1, identityTags);
+
+  const candidates = poolFor(selected.context, setupData);
+  let executed = selected;
+  let context;
+  if (candidates.length === 0) {
+    contextFallbackCount.add(1, {
+      endpoint: selected.key,
+      reason: `missing_${selected.context}`,
+      ...identityTags,
+    });
+    executed = ENDPOINTS.find((endpoint) => endpoint.key === "races_list");
+    context = allUsers[randomInt(0, allUsers.length - 1)];
+  } else {
+    contextFallbackCount.add(0, {
+      endpoint: selected.key,
+      reason: "none",
+      ...identityTags,
+    });
+    context = candidates[randomInt(0, candidates.length - 1)];
+  }
+  executedEndpointCount.add(1, {
+    endpoint: executed.key,
+    ...identityTags,
+  });
+  endpointAccountingCounters[executed.key].executed.add(1, identityTags);
+
+  const idempotencyKey = randomUuid();
+  const tags = {
+    name: executed.key,
+    endpoint: executed.key,
+    selected_endpoint: selected.key,
+    executed_endpoint: executed.key,
+    ...identityTags,
+    ...contextTags(context),
+  };
+  const headers = requestHeaders(
+    context.user.token,
+    executed.key === "steps_sync_v2" ? idempotencyKey : null,
+  );
+  const raceId = context.race ? context.race.id : null;
+  const url = `${BASE_URL}${executed.path(raceId, context.job)}`;
   const params = {
     headers,
-    tags: { name: active.key },
+    tags,
     timeout: "30s",
-    // The sync response is the only one whose body we need (for the job id it
-    // hands back); everything else stays discarded to keep k6 cheap.
-    responseType: active.key === "steps_sync_v2" ? "text" : "none",
+    responseType: executed.key === "race_resolution" ? "text" : "none",
   };
+  const response = executed.method === "POST"
+    ? http.post(url, JSON.stringify(bodyFor(executed.key)), params)
+    : http.get(url, params);
 
-  const response =
-    active.m === "POST"
-      ? http.post(url, JSON.stringify(active.b ? active.b() : {}), params)
-      : http.get(url, params);
-
-  if (active.key === "steps_sync_v2" && response.status < 300) {
-    try {
-      const parsed = JSON.parse(response.body);
-      rememberJobId(parsed?.raceResolution?.jobId);
-    } catch (_) {
-      // A malformed body is not what this test is measuring.
-    }
-  }
-
-  const broken = response.status === 0 || response.status >= 500;
-  failureRate.add(broken ? 1 : 0);
-  unauthorizedRate.add(
-    response.status === 401 || response.status === 403 ? 1 : 0,
+  const classification = classifyResponse(executed.key, response.status);
+  const metricTags = {
+    endpoint: executed.key,
+    status: String(response.status),
+    ...identityTags,
+    ...contextTags(context),
+  };
+  responseStatusCount.add(1, metricTags);
+  endpointAccountingCounters[executed.key].statusTotal.add(1, identityTags);
+  const statusKey = summarizedStatusCodes.includes(String(response.status))
+    ? String(response.status)
+    : "other";
+  statusSummaryCounters[statusKey].add(1, {
+    endpoint: executed.key,
+    ...identityTags,
+  });
+  successfulResponseCount.add(
+    response.status >= 200 && response.status < 300 ? 1 : 0,
+    metricTags,
   );
-  if (!broken) serverTime.add(response.timings.duration);
+  expectedChallenge404Count.add(
+    executed.key === "challenges_current" && response.status === 404 ? 1 : 0,
+    metricTags,
+  );
+  capacityFailureCount.add(classification.capacityFailure ? 1 : 0, metricTags);
+  hardFailureCount.add(classification.hardFailure ? 1 : 0, metricTags);
+  rateLimitCount.add(classification.rateLimited ? 1 : 0, metricTags);
+  capacityFailureRate.add(classification.capacityFailure ? 1 : 0, metricTags);
+  hardFailureRate.add(classification.hardFailure ? 1 : 0, metricTags);
+  endpointDuration.add(response.timings.duration, metricTags);
+  endpointAccountingCounters[executed.key].durationSamples.add(1, identityTags);
+  if (executed.critical) {
+    persistenceCriticalDuration.add(response.timings.duration, metricTags);
+  }
+  if (executed.key === "race_resolution" && response.status >= 200 && response.status < 300) {
+    recordResolutionLag(response);
+  }
+}
+
+function fetchResolutionStatus(context, phase) {
+  const response = http.get(
+    `${BASE_URL}/steps/race-resolution/${context.job.id}?generation=${context.job.generation}`,
+    {
+      headers: requestHeaders(context.user.token),
+      tags: {
+        name: "race_resolution_drain",
+        endpoint: "race_resolution",
+        phase,
+        ...identityTags,
+      },
+      timeout: "30s",
+      responseType: "text",
+    },
+  );
+  if (response.status < 200 || response.status >= 300) return "http_failure";
+  recordResolutionLag(response, {
+    rung: MODE === "smoke" ? "smoke" : TARGET_RUNG,
+    phase,
+    client_cohort: CLIENT_COHORT,
+    run_id: RUN_ID,
+    repeat_index: REPEAT_INDEX,
+  });
+  try {
+    const parsed = JSON.parse(response.body || "");
+    return String(parsed?.raceResolution?.state || "missing").toLowerCase();
+  } catch (_) {
+    return "malformed";
+  }
+}
+
+export function teardown(setupData) {
+  const deadline = Date.now() + Number(__ENV.RESOLUTION_DRAIN_TIMEOUT_MS || 15000);
+  const terminal = new Set(["succeeded", "failed"]);
+  const pending = setupData.resolutionContexts.slice();
+  while (pending.length > 0 && Date.now() < deadline) {
+    for (let index = pending.length - 1; index >= 0; index -= 1) {
+      if (terminal.has(fetchResolutionStatus(pending[index], "drain"))) {
+        pending.splice(index, 1);
+      }
+    }
+    if (pending.length > 0) sleep(0.25);
+  }
+  finalResolutionOutstanding.add(pending.length, {
+    rung: MODE === "smoke" ? "smoke" : TARGET_RUNG,
+    ...identityTags,
+  });
+}
+
+function metricValues(data, name) {
+  return data.metrics[name] ? data.metrics[name].values : null;
+}
+
+function metricCount(data, name) {
+  const values = metricValues(data, name);
+  return values && Number.isFinite(values.count) ? values.count : null;
+}
+
+function thresholdResults(data) {
+  const results = {};
+  for (const [metricName, metric] of Object.entries(data.metrics)) {
+    if (!metric.thresholds) continue;
+    results[metricName] = Object.fromEntries(
+      Object.entries(metric.thresholds).map(([expression, result]) => [
+        expression,
+        result.ok === true,
+      ]),
+    );
+  }
+  return results;
+}
+
+export function handleSummary(data) {
+  const rungName = MODE === "smoke" ? "smoke" : TARGET_RUNG;
+  const summary = {
+    schemaVersion: HARNESS_SCHEMA_VERSION,
+    generatedAt: new Date().toISOString(),
+    inputs: {
+      baseUrl: BASE_URL,
+      mode: MODE,
+      claimable: false,
+      capacityCandidate: capacityRun.capacityCandidate,
+      claimability: capacityRun.capacityCandidate
+        ? "pending_three_repeat_aggregation_and_server_telemetry_evidence"
+        : "diagnostic_only",
+      diagnosticReason: capacityRun.diagnosticReason,
+      offeredRateRps: MODE === "smoke" ? null : rung.rate,
+      rung: rungName,
+      duration: __ENV.DURATION_OVERRIDE || (MODE === "smoke" ? null : rung.duration),
+      clientCohort: CLIENT_COHORT,
+      client: cohort,
+      fixture: fixtureDocument.metadata,
+      ...requiredCapacityInputs,
+      runId: RUN_ID,
+      repeatIndex: REPEAT_INDEX,
+    },
+    totals: {
+      requests: metricValues(data, "http_reqs"),
+      duration: metricValues(data, "http_req_duration"),
+      droppedArrivals: metricValues(data, "dropped_iterations"),
+      capacityFailureRate: metricValues(data, "capacity_failure_rate"),
+      capacityFailures: metricValues(data, "capacity_failure_count"),
+      hardFailureRate: metricValues(data, "hard_failure_rate"),
+      hardFailures: metricValues(data, "hard_failure_count"),
+      rateLimited429: metricValues(data, "rate_limit_429_count"),
+      expectedChallenge404: metricValues(data, "expected_challenge_404_count"),
+      contextFallbacks: metricValues(data, "context_fallback_count"),
+      persistenceCriticalDuration: metricValues(
+        data,
+        "persistence_critical_duration_ms",
+      ),
+      resolutionLag: metricValues(data, "resolution_lag_ms"),
+      resolutionLagSamples: metricValues(data, "resolution_lag_sample_count"),
+      finalResolutionOutstanding: metricValues(
+        data,
+        "final_resolution_outstanding",
+      ),
+      resolutionStates: Object.fromEntries(
+        Object.keys(resolutionStateSummaryCounters).map((state) => [
+          state,
+          metricValues(data, `resolution_state_${state}_count`),
+        ]),
+      ),
+      statusCodes: Object.fromEntries(
+        [...summarizedStatusCodes, "other"].map((status) => [
+          status,
+          metricValues(data, `response_status_code_${status}_count`),
+        ]),
+      ),
+    },
+    endpointAccounting: Object.fromEntries(
+      ENDPOINTS.map((endpoint) => {
+        const prefix = `summary_endpoint_${endpoint.key}`;
+        return [
+          endpoint.key,
+          {
+            selected: metricCount(data, `${prefix}_selected_count`),
+            executed: metricCount(data, `${prefix}_executed_count`),
+            durationSamples: metricCount(data, `${prefix}_duration_sample_count`),
+            statusTotal: metricCount(data, `${prefix}_status_count`),
+          },
+        ];
+      }),
+    ),
+    thresholds: thresholdResults(data),
+    aggregateRequired: "A claim requires aggregate-capacity-cohort.mjs over exactly three matched summary/raw/server-telemetry evidence triples. Endpoint accounting and conditional p95 are cohort gates.",
+    taggedRawOutput: "Use --out json=<path>; relevant samples carry run_id, repeat_index, endpoint, exact status, resolution state, rung, race_status, race_mode, roster_size_stratum, and client_cohort tags.",
+  };
+  const json = `${JSON.stringify(summary, null, 2)}\n`;
+  const destinations = { stdout: json };
+  if (__ENV.SUMMARY_JSON) destinations[__ENV.SUMMARY_JSON] = json;
+  return destinations;
 }

@@ -59,6 +59,13 @@ void main() {
     expect(find.text('ENJOYING BARA?'), findsOneWidget);
   });
 
+  test('server-approved native review does not use the legacy sentiment gate', () async {
+    final requests = <int>[];
+    final service = buildService(reviewRequests: requests);
+    await service.requestEligibleNativeReview();
+    expect(requests, hasLength(1));
+  });
+
   testWidgets('warm-up: no dialog within 3 days of first seen', (tester) async {
     SharedPreferences.setMockInitialValues({
       'review_prompt_first_seen_ms': now

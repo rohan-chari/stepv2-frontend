@@ -8,7 +8,7 @@ import '../styles.dart';
 import '../utils/at_name.dart';
 // One shared definition of the qualifying race, so the referred-install scene
 // can't drift from the referral screen / Get Coins copy.
-import 'referral_screen.dart' show kQualifyingRaceShortPhrase;
+import 'referral_screen.dart' show kReferralQualificationCopy;
 
 /// Standalone onboarding flow shown after sign-in until the user has granted
 /// health access, answered the notification prompt, and seen the
@@ -656,13 +656,13 @@ class _OnboardingReferralWelcomeStepState
     // race" but no longer completes the referral, so the qualifying action is
     // named explicitly here too.
     if (mine == null || mine <= 0) {
-      body = 'Finish $kQualifyingRaceShortPhrase and the coins start landing.';
+      body = 'Coins start landing after you qualify. '
+          '$kReferralQualificationCopy';
     } else if (theirs != null && theirs == mine) {
-      body =
-          'Finish $kQualifyingRaceShortPhrase and you each pocket $mine '
-          'coins. Yours to spend right away.';
+      body = 'You each pocket $mine coins. Yours to spend right away. '
+          '$kReferralQualificationCopy';
     } else {
-      body = 'Finish $kQualifyingRaceShortPhrase and $mine coins are yours.';
+      body = '$mine coins are yours. $kReferralQualificationCopy';
     }
 
     if (_loading) {

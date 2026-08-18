@@ -112,6 +112,12 @@ flutter {
 }
 
 dependencies {
+    // AdMob Open Bidding adapter for ironSource. 9.4.2.0 requires Ads 25.2;
+    // Gradle therefore retains the plugin's existing Ads 25.3.0 instead of
+    // silently upgrading it. This is the newest adapter compatible with this
+    // app's pinned Google Mobile Ads SDK.
+    implementation("com.google.ads.mediation:ironsource:9.4.2.0")
+
     // Backports java.time etc. for core library desugaring (flutter_local_notifications).
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 

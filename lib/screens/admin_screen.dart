@@ -43,6 +43,8 @@ class _AdminFlagsPanelState extends State<AdminFlagsPanel> {
   Map<String, dynamic>? _settings;
   bool _loading = true;
   bool _saving = false;
+  final TextEditingController _serviceBannerMessage = TextEditingController();
+  bool _serviceBannerEnabled = false;
 
   @override
   void initState() {
@@ -58,11 +60,57 @@ class _AdminFlagsPanelState extends State<AdminFlagsPanel> {
       if (mounted) {
         setState(() {
           _settings = settings;
+          _serviceBannerEnabled = settings['homeServiceBannerEnabled'] == true;
+          final message = settings['homeServiceBannerMessage'];
+          _serviceBannerMessage.text = message is String ? message : '';
           _loading = false;
         });
       }
     } catch (_) {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _serviceBannerMessage.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveHomeServiceBanner() async {
+    final token = widget.authService.authToken;
+    final message = _serviceBannerMessage.text.trim();
+    if (token == null || token.isEmpty || _saving) return;
+    if (_serviceBannerEnabled && (message.isEmpty || message.length > 240)) {
+      widget.showErrorToast(context, 'Enter a 1–240 character banner message.');
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      final updated = await _api.updateAdminHomeServiceBanner(
+        identityToken: token,
+        enabled: _serviceBannerEnabled,
+        message: _serviceBannerEnabled ? message : '',
+      );
+      // The endpoint must echo the standard full settings envelope. A malformed
+      // or legacy response must not erase the settings this panel already has.
+      if (updated.isEmpty) {
+        throw const ApiException('Invalid settings response');
+      }
+      if (mounted) {
+        setState(() {
+          _settings = updated;
+          _serviceBannerEnabled = updated['homeServiceBannerEnabled'] == true;
+          final returnedMessage = updated['homeServiceBannerMessage'];
+          _serviceBannerMessage.text = returnedMessage is String
+              ? returnedMessage
+              : '';
+        });
+      }
+    } catch (_) {
+      if (mounted) widget.showErrorToast(context, 'Couldn\'t save the banner.');
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -104,10 +152,50 @@ class _AdminFlagsPanelState extends State<AdminFlagsPanel> {
         style: PixelText.body(size: 12, color: AppColors.of(context).textMid),
       );
     }
-    return AdminSettingsCardBody(
-      settings: _settings!,
-      saving: _saving,
-      onChanged: _setSetting,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AdminSettingsCardBody(
+          settings: _settings!,
+          saving: _saving,
+          onChanged: _setSetting,
+        ),
+        const SizedBox(height: 18),
+        Text(
+          'HOME SERVICE BANNER',
+          style: PixelText.title(
+            size: 13,
+            color: AppColors.of(context).textDark,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Persistent plain-text status notice on Home.',
+          style: PixelText.body(size: 11, color: AppColors.of(context).textMid),
+        ),
+        SwitchListTile.adaptive(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Enabled'),
+          value: _serviceBannerEnabled,
+          onChanged: _saving
+              ? null
+              : (value) => setState(() => _serviceBannerEnabled = value),
+        ),
+        TextField(
+          key: const Key('admin-home-service-banner-message'),
+          controller: _serviceBannerMessage,
+          enabled: !_saving,
+          maxLength: 240,
+          minLines: 2,
+          maxLines: 4,
+          decoration: const InputDecoration(hintText: 'Service status message'),
+        ),
+        PillButton(
+          label: _saving ? 'SAVING…' : 'SAVE SERVICE BANNER',
+          fullWidth: true,
+          onPressed: _saving ? null : _saveHomeServiceBanner,
+        ),
+      ],
     );
   }
 }
@@ -165,7 +253,8 @@ class AdminSettingsCardBody extends StatelessWidget {
     (
       key: 'onboardingInviteCodeEnabled',
       title: 'Onboarding invite code',
-      blurb: 'KILL SWITCH (defaults ON): the "got an invite code?" step at '
+      blurb:
+          'KILL SWITCH (defaults ON): the "got an invite code?" step at '
           'the top of the v3 flow. Off removes it with no app release.',
     ),
     // Batch 2026-08-09 item 9. Flip ON only once the carrying build has

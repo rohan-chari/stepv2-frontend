@@ -18,6 +18,20 @@ class DemoRaceApiService extends BackendApiService {
 
   final DemoRaceEngine engine;
 
+  // Demo/tutorial narratives must never request live recipient-private impact
+  // data or present an unscripted settlement overlay over a spotlight beat.
+  @override
+  Future<List<Map<String, dynamic>>> fetchPrivateRaceImpactFeed({
+    required String identityToken,
+    required String raceId,
+  }) async => const [];
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchRaceImpactNotices({
+    required String identityToken,
+    required String raceId,
+  }) async => const [];
+
   /// The engine owns the clock (and the tests own the engine's), so the served
   /// `endsAt` and the engine's countdown can never disagree.
   DateTime get _now => engine.now();

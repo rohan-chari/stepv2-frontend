@@ -183,6 +183,53 @@ Future<void> _pump(
 }
 
 void main() {
+  testWidgets(
+    'full rounded server values render without a cap field or Dart rounding',
+    (tester) async {
+      final offer = RacePayoutDoubleOffer.tryParse(
+        const {
+          'raceIds': ['race-a'],
+          'baseCoins': 10,
+          'bonusCoins': 10,
+        },
+        popupRaceIds: const ['race-a'],
+      );
+
+      await _pump(
+        tester,
+        offer: offer,
+        api: _FakeRacePayoutApi(),
+        ads: _FakeRacePayoutAdController(),
+        races: _races(payout: 10),
+      );
+
+      expect(offer, isNotNull);
+      expect(find.text('DOUBLE +10 COINS'), findsOneWidget);
+      expect(find.text('WATCH AD · +10 COINS'), findsOneWidget);
+      expect(find.textContaining('+7'), findsNothing);
+    },
+  );
+
+  test('capless partial payout-double values are rejected', () {
+    for (final raw in <Map<String, dynamic>>[
+      const {
+        'raceIds': ['race-a'],
+        'baseCoins': 10,
+        'bonusCoins': 5,
+      },
+      const {
+        'raceIds': ['race-a'],
+        'baseCoins': 10,
+        'bonusCoins': 7,
+      },
+    ]) {
+      expect(
+        RacePayoutDoubleOffer.tryParse(raw, popupRaceIds: const ['race-a']),
+        isNull,
+      );
+    }
+  });
+
   testWidgets('real result screen places one exact double plaque before NICE', (
     tester,
   ) async {
@@ -209,70 +256,31 @@ void main() {
     );
   });
 
-  testWidgets(
-    'partial allowance uses the actual amount in copy and semantics',
-    (tester) async {
-      final semantics = tester.ensureSemantics();
-      final offer = RacePayoutDoubleOffer.tryParse(
-        _offerJson(baseCoins: 120, bonusCoins: 50, remaining: 50),
-        popupRaceIds: const ['race-a'],
-      );
-      await _pump(
-        tester,
-        offer: offer,
-        api: _FakeRacePayoutApi(),
-        ads: _FakeRacePayoutAdController(),
-      );
-
-      expect(find.text('GET +50 BONUS COINS'), findsOneWidget);
-      expect(find.textContaining('qualifying race prizes'), findsOneWidget);
-      expect(find.textContaining('DOUBLE'), findsNothing);
-      expect(find.textContaining('MAX +500'), findsNothing);
-      expect(
-        tester
-            .getSemantics(find.byKey(const Key('race-payout-double-semantics')))
-            .label,
-        contains(
-          'Watch an ad to earn 50 bonus coins on your qualifying race prizes',
-        ),
-      );
-      semantics.dispose();
-    },
-  );
-
-  testWidgets('actual 500 partial award uses truthful maximum copy', (
+  testWidgets('legacy capped payout-double values retain their actual copy', (
     tester,
   ) async {
-    final offer = RacePayoutDoubleOffer.tryParse(
-      _offerJson(baseCoins: 800, bonusCoins: 500),
-      popupRaceIds: const ['race-a'],
-    );
-    await _pump(
-      tester,
-      offer: offer,
-      api: _FakeRacePayoutApi(),
-      ads: _FakeRacePayoutAdController(),
-      races: _races(payout: 800),
-    );
-
-    expect(find.text('GET THE MAX +500 BONUS'), findsOneWidget);
-    expect(
-      find.text('Your qualifying race prizes earn the maximum ad bonus.'),
-      findsOneWidget,
-    );
-    expect(find.textContaining('DOUBLE +800'), findsNothing);
-  });
-
-  testWidgets(
-    'maximum-partial copy tracks a lower server cap instead of assuming 500',
-    (tester) async {
-      final offer = RacePayoutDoubleOffer.tryParse(
-        _offerJson(
+    final cases = <({Map<String, dynamic> raw, String title})>[
+      (
+        raw: _offerJson(baseCoins: 120, bonusCoins: 50, remaining: 50),
+        title: 'GET +50 BONUS COINS',
+      ),
+      (
+        raw: _offerJson(baseCoins: 800, bonusCoins: 500),
+        title: 'GET THE MAX +500 BONUS',
+      ),
+      (
+        raw: _offerJson(
           baseCoins: 300,
           bonusCoins: 100,
           maxBonusCoins: 100,
           remaining: 100,
         ),
+        title: 'GET THE MAX +100 BONUS',
+      ),
+    ];
+    for (final entry in cases) {
+      final offer = RacePayoutDoubleOffer.tryParse(
+        entry.raw,
         popupRaceIds: const ['race-a'],
       );
       await _pump(
@@ -280,13 +288,18 @@ void main() {
         offer: offer,
         api: _FakeRacePayoutApi(),
         ads: _FakeRacePayoutAdController(),
-        races: _races(payout: 300),
       );
 
-      expect(find.text('GET THE MAX +100 BONUS'), findsOneWidget);
-      expect(find.textContaining('MAX +500'), findsNothing);
-    },
-  );
+      expect(offer, isNotNull);
+      expect(find.byKey(const Key('race-payout-double-panel')), findsOneWidget);
+      expect(find.text(entry.title), findsOneWidget);
+
+      // A new screen instance is required for the next server snapshot: the
+      // real result popup owns its offer state in initState.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    }
+  });
 
   testWidgets('malformed and out-of-popup offers leave no reserved gap', (
     tester,
@@ -294,7 +307,11 @@ void main() {
     for (final raw in <Map<String, dynamic>>[
       _offerJson(bonusCoins: 0),
       _offerJson(bonusCoins: 121, baseCoins: 120),
-      _offerJson(maxBonusCoins: 501),
+      const {
+        'raceIds': ['race-a'],
+        'baseCoins': 120,
+        'bonusCoins': 119,
+      },
       _offerJson(raceIds: const ['other-race']),
       <String, dynamic>{..._offerJson()}..remove('bonusCoins'),
     ]) {

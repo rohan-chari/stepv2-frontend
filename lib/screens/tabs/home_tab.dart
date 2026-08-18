@@ -109,6 +109,7 @@ class HomeTab extends StatelessWidget {
   final VoidCallback? onEnterInviteCode;
   final VoidCallback? onSkipInviteCode;
   final VoidCallback? onStartQuickRace;
+  final VoidCallback? onOpenInbox;
 
   /// Shell-owned Home invite overlay is showing this same invitation. Keep the
   /// inline fallback out of the underlying Home tree until it is dismissed.
@@ -166,6 +167,7 @@ class HomeTab extends StatelessWidget {
     this.onEnterInviteCode,
     this.onSkipInviteCode,
     this.onStartQuickRace,
+    this.onOpenInbox,
     this.suppressPendingInvite = false,
   });
 
@@ -262,6 +264,11 @@ class HomeTab extends StatelessWidget {
                                 ),
                               ),
                             ),
+                            if (_buildServiceBanner(context) case final banner?)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                                child: banner,
+                              ),
                             // Streak + shop live just under the hero scene so the
                             // world stays clean; they're the first card to bounce in.
                             StaggerIn(
@@ -444,6 +451,34 @@ class HomeTab extends StatelessWidget {
       key: const Key('home-global-event-banner'),
       multiplier: multiplier,
       endsAt: endsAt,
+    );
+  }
+
+  int? get _inboxUnreadCount {
+    final raw = raceCard?['inboxUnreadCount'];
+    final count = raw is num ? raw.toInt() : null;
+    return count == null || count < 0 ? null : count;
+  }
+
+  Widget? _buildServiceBanner(BuildContext context) {
+    final raw = raceCard?['homeServiceBanner'];
+    if (raw is! Map || raw['enabled'] != true) return null;
+    final message = raw['message'];
+    if (message is! String || message.trim().isEmpty || message.length > 240) {
+      return null;
+    }
+    return Container(
+      key: const Key('home-service-banner'),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.of(context).parchment,
+        border: Border.all(color: AppColors.of(context).coinDark, width: 2),
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Text(
+        message,
+        style: PixelText.body(size: 13, color: AppColors.of(context).textDark),
+      ),
     );
   }
 
@@ -1162,9 +1197,25 @@ class HomeTab extends StatelessWidget {
                 ),
               ),
             ),
-            // Item 8: the hero "?" help button was removed — the baked-in sun in
-            // the sky PNG visually covered it. Help/tutorial is still reachable
-            // from the Profile tab, so nothing is orphaned.
+            if (!isTutorialPreview)
+              if (_inboxUnreadCount case final int unread)
+              Positioned(
+                right: 8,
+                top: topInset + 4,
+                child: IconButton(
+                  key: const Key('home-inbox-button'),
+                  tooltip: unread > 0 ? '$unread unread alerts' : 'Inbox',
+                  onPressed: onOpenInbox,
+                  icon: Badge(
+                    isLabelVisible: unread > 0,
+                    label: Text('$unread'),
+                    child: Icon(
+                      Icons.mail_outline_rounded,
+                      color: AppColors.of(context).textLight,
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

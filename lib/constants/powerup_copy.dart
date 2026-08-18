@@ -462,7 +462,7 @@ abstract final class PowerupCopy {
     'HITCHHIKE':
         "Copy a rival's effective steps into your score while Hitchhike is active. Boosts and reversals carry over",
     'QUICK_RINSE':
-        'Cut the remaining time on every opponent effect currently on you in half',
+        'Cut the remaining time on every opponent effect currently on you in half. Once an hour per race',
     'QUICKSAND':
         "Freeze up to three rivals' steps for 2 hours. Compression Socks resolve separately for each target",
     // §7 powerups5 store-only additions.

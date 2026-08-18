@@ -533,15 +533,18 @@ class _ReferralScreenState extends State<ReferralScreen> {
 // ---------------------------------------------------------------------------
 
 /// Full definition, for surfaces with room for a sentence.
+const String kReferralQualificationCopy =
+    'Finish any race with at least one other player to earn your referral reward. '
+    'Daily and Weekly challenges don’t count.';
+
 const String kQualifyingRacePhrase =
-    'a race with at least one other real player who logs steps';
+    'a race with at least one other player';
 
 /// Compact definition, for toasts and share sheets.
-const String kQualifyingRaceShortPhrase = 'a race against another real player';
+const String kQualifyingRaceShortPhrase = 'any race with at least one other player';
 
 /// The exclusion, stated explicitly wherever the full phrase is used.
-const String kQualifyingRaceCaveat =
-    'Official daily and weekly challenges don’t count.';
+const String kQualifyingRaceCaveat = 'Daily and Weekly challenges don’t count.';
 
 /// True when both figures are present and payable, i.e. safe to state.
 bool _statable(int? referrerCoins, int? refereeCoins) =>
@@ -554,16 +557,16 @@ bool _statable(int? referrerCoins, int? refereeCoins) =>
 String referralHeadlineCopy({int? referrerCoins, int? refereeCoins}) {
   if (!_statable(referrerCoins, refereeCoins)) {
     return 'Send your link. Coins land in both bags when your friend '
-        'finishes $kQualifyingRacePhrase. $kQualifyingRaceCaveat';
+        '$kReferralQualificationCopy';
   }
   if (referrerCoins == refereeCoins) {
     return 'Send your link. When your friend finishes $kQualifyingRacePhrase, '
         'you each pocket ${formatCoinsWithCommas(referrerCoins!)} coins. '
-        '$kQualifyingRaceCaveat';
+        '$kReferralQualificationCopy';
   }
   return 'Send your link. When your friend finishes $kQualifyingRacePhrase, '
       'you pocket ${formatCoinsWithCommas(referrerCoins!)} coins and they get '
-      '${formatCoinsWithCommas(refereeCoins!)}. $kQualifyingRaceCaveat';
+      '${formatCoinsWithCommas(refereeCoins!)}. $kReferralQualificationCopy';
 }
 
 /// The Get Coins hub's invite row. Names the qualifying action — the old line
@@ -571,27 +574,26 @@ String referralHeadlineCopy({int? referrerCoins, int? refereeCoins}) {
 String referralInviteRowCopy({int? referrerCoins, int? refereeCoins}) {
   if (!_statable(referrerCoins, refereeCoins)) {
     return 'Coins land in both bags when a friend finishes '
-        '$kQualifyingRaceShortPhrase. $kQualifyingRaceCaveat';
+        '$kReferralQualificationCopy';
   }
   if (referrerCoins == refereeCoins) {
     return 'You each pocket ${formatCoinsWithCommas(referrerCoins!)} coins '
         'when a friend finishes $kQualifyingRaceShortPhrase. '
-        '$kQualifyingRaceCaveat';
+        '$kReferralQualificationCopy';
   }
   return 'Pocket ${formatCoinsWithCommas(referrerCoins!)} coins when a friend '
       'finishes $kQualifyingRaceShortPhrase. They get '
-      '${formatCoinsWithCommas(refereeCoins!)}. $kQualifyingRaceCaveat';
+      '${formatCoinsWithCommas(refereeCoins!)}. $kReferralQualificationCopy';
 }
 
 /// Toast after a code is redeemed. Speaks only for the referee's side, so the
 /// referee figure alone is enough here.
 String referralRedeemedCopy({int? refereeCoins}) {
   if (refereeCoins == null || refereeCoins <= 0) {
-    return "You're in. Finish $kQualifyingRaceShortPhrase and the coins are "
-        'yours.';
+    return "You're in. $kReferralQualificationCopy";
   }
-  return "You're in. Finish $kQualifyingRaceShortPhrase and "
-      '${formatCoinsWithCommas(refereeCoins)} coins are yours.';
+  return "You're in. ${formatCoinsWithCommas(refereeCoins)} coins are yours. "
+      '$kReferralQualificationCopy';
 }
 
 /// The outbound share message. Opens with a taunt (this is a competitive app
@@ -621,8 +623,8 @@ String referralShareText({
         "you'll get ${formatCoinsWithCommas(refereeCoins!)}";
   }
 
-  return '$opener Race me on Bara with code $code. $reward once you finish '
-      '$kQualifyingRaceShortPhrase: $url';
+  return '$opener Race me on Bara with code $code. $reward. '
+      '$kReferralQualificationCopy $url';
 }
 
 /// Challenge-framed share copy: a personal taunt with today's live step count

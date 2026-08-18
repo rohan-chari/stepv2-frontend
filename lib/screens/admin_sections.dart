@@ -5,6 +5,7 @@ import '../services/backend_api_service.dart';
 import '../styles.dart';
 import '../widgets/content_board.dart';
 import 'admin_onboarding_funnel.dart';
+import 'inbox_screen.dart';
 
 /// Batch 2026-08-09 item 10 — the admin hub's section widgets.
 ///
@@ -649,13 +650,13 @@ class _AdminInboxBodyState extends State<AdminInboxBody> {
       _failed = false;
     });
     try {
-      final page = await _api.fetchAdminSuggestions(identityToken: token);
+      final page = await _api.fetchAdminFeedbackThreads(identityToken: token);
       if (!mounted) return;
       setState(() {
         // An older backend, or one that changed the envelope, yields an empty
         // inbox rather than an error — there is nothing an operator can do
         // about a shape change from here.
-        _suggestions = adminRows(page['suggestions']);
+        _suggestions = adminRows(page['threads']);
         _loading = false;
       });
     } catch (_) {
@@ -687,7 +688,7 @@ class _AdminInboxBodyState extends State<AdminInboxBody> {
     final suggestions = _suggestions ?? const <Map<String, dynamic>>[];
     if (suggestions.isEmpty) {
       return Text(
-        'No suggestions yet.',
+        'No support threads yet.',
         style: PixelText.body(size: 12, color: colors.textMid),
       );
     }
@@ -698,19 +699,33 @@ class _AdminInboxBodyState extends State<AdminInboxBody> {
         for (final row in suggestions) ...[
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _byline(row),
-                  style: PixelText.title(size: 11, color: colors.textMid),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${row['text'] ?? ''}',
-                  style: PixelText.body(size: 13, color: colors.textDark),
-                ),
-              ],
+            child: InkWell(
+              onTap: () {
+                final id = row['id'];
+                if (id is! String || id.isEmpty) return;
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => SupportThreadScreen(
+                    authService: widget.authService,
+                    backendApiService: _api,
+                    threadId: id,
+                    admin: true,
+                  ),
+                ));
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'SUPPORT THREAD · ${_byline(row)}',
+                    style: PixelText.title(size: 11, color: colors.textMid),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    row['preview'] is String ? row['preview'] as String : '',
+                    style: PixelText.body(size: 13, color: colors.textDark),
+                  ),
+                ],
+              ),
             ),
           ),
         ],

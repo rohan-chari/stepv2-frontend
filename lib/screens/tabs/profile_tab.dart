@@ -55,6 +55,19 @@ class _ProfileTabState extends State<ProfileTab> {
 
   late final BackendApiService _api;
   final GlobalKey<_StatsSectionState> _statsKey = GlobalKey();
+  Map<String, int>? _racePodiums;
+
+  void _onRacePodiumsChanged(Map<String, int>? podiums) {
+    final current = _racePodiums;
+    final unchanged = current == null && podiums == null ||
+        current != null &&
+            podiums != null &&
+            current['first'] == podiums['first'] &&
+            current['second'] == podiums['second'] &&
+            current['third'] == podiums['third'];
+    if (!mounted || unchanged) return;
+    setState(() => _racePodiums = podiums);
+  }
 
   void _handleAuthServiceChanged() {
     if (!mounted) return;
@@ -434,6 +447,7 @@ class _ProfileTabState extends State<ProfileTab> {
                         key: _statsKey,
                         authService: widget.authService,
                         backendApiService: _api,
+                        onRacePodiumsChanged: _onRacePodiumsChanged,
                       ),
                     ),
                   ),
@@ -441,6 +455,45 @@ class _ProfileTabState extends State<ProfileTab> {
               ],
             ),
           ),
+          if (_racePodiums case final podiums?)
+            StaggerIn(
+              index: 2,
+              child: Column(
+                children: [
+                  _buildSectionHeader('RACE PODIUMS'),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
+                    child: Container(
+                      key: const Key('profile-race-podiums'),
+                      decoration: _profileCardDecoration(),
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          _PodiumRecord(
+                            icon: Icons.looks_one_rounded,
+                            label: 'FIRST',
+                            value: podiums['first'] ?? 0,
+                            color: AppColors.of(context).pillGold,
+                          ),
+                          _PodiumRecord(
+                            icon: Icons.looks_two_rounded,
+                            label: 'SECOND',
+                            value: podiums['second'] ?? 0,
+                            color: AppColors.of(context).textMid,
+                          ),
+                          _PodiumRecord(
+                            icon: Icons.looks_3_rounded,
+                            label: 'THIRD',
+                            value: podiums['third'] ?? 0,
+                            color: AppColors.of(context).accent,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -494,14 +547,58 @@ class _ProfileTabState extends State<ProfileTab> {
   }
 }
 
+class _PodiumRecord extends StatelessWidget {
+  const _PodiumRecord({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final int value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 25, color: color),
+          const SizedBox(height: 4),
+          Text(
+            '$value',
+            style: PixelText.number(
+              size: 22,
+              color: AppColors.of(context).textDark,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: PixelText.title(
+              size: 10,
+              color: AppColors.of(context).textMid,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _StatsSection extends StatefulWidget {
   final AuthService authService;
   final BackendApiService backendApiService;
+  final ValueChanged<Map<String, int>?>? onRacePodiumsChanged;
 
   const _StatsSection({
     super.key,
     required this.authService,
     required this.backendApiService,
+    this.onRacePodiumsChanged,
   });
 
   @override
@@ -554,6 +651,7 @@ class _StatsSectionState extends State<_StatsSection> {
       );
 
       if (mounted) {
+        final podiums = _parseRacePodiums(stats['racePodiums']);
         setState(() {
           _thisWeek = (stats['thisWeek'] as num?)?.toInt() ?? 0;
           _thisMonth = (stats['thisMonth'] as num?)?.toInt() ?? 0;
@@ -566,6 +664,7 @@ class _StatsSectionState extends State<_StatsSection> {
           _statsState = Loadable.success(stats);
           _isLoading = false;
         });
+        widget.onRacePodiumsChanged?.call(podiums);
       }
     } catch (_) {
       if (mounted) {
@@ -575,6 +674,21 @@ class _StatsSectionState extends State<_StatsSection> {
         });
       }
     }
+  }
+
+  Map<String, int>? _parseRacePodiums(Object? raw) {
+    if (raw is! Map) return null;
+    int? read(String key) {
+      final value = raw[key];
+      if (value is! num) return null;
+      final parsed = value.toInt();
+      return parsed < 0 ? null : parsed;
+    }
+    final first = read('first');
+    final second = read('second');
+    final third = read('third');
+    if (first == null || second == null || third == null) return null;
+    return {'first': first, 'second': second, 'third': third};
   }
 
   String _formatSteps(int steps) {

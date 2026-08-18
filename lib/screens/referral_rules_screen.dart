@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../styles.dart';
+import 'referral_screen.dart' show kReferralQualificationCopy;
 
 /// Official referral-program rules. Google Play expects a reward program to
 /// publish its terms in-app (eligibility, the qualifying action, caps, and the
@@ -25,9 +26,9 @@ class ReferralRulesScreen extends StatelessWidget {
     ),
     (
       "What's a qualifying race",
-      'A qualifying race is a race you create or join with at least one other '
-          'real player who logs steps. Official daily and weekly challenges '
-          'don’t count, and neither does a solo race you create for yourself. '
+      '$kReferralQualificationCopy That means at least one other real player. '
+          'A solo race you create for yourself does '
+          'not qualify. '
           'Coins are awarded by Bara’s servers after the race settles; '
           'finishing is required, not just joining.',
     ),

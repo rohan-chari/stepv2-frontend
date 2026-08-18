@@ -363,7 +363,9 @@ void main() {
       final api = _RecordingApi();
       await _pumpCreate(tester, auth, api);
 
-      await tester.ensureVisible(find.byKey(const Key('race-visibility-public')));
+      await tester.ensureVisible(
+        find.byKey(const Key('race-visibility-public')),
+      );
       await tester.tap(find.byKey(const Key('race-visibility-public')));
       await tester.pump();
       await tester.tap(find.byKey(const Key('race-visibility-private')));
@@ -457,13 +459,15 @@ void main() {
     }
   });
 
-  // ── Item 8 — no "FUNDED BY BARA" footnote ────────────────────────────────
-  group('item 8: the create-screen prize plaque drops the funding footnote', () {
-    testWidgets('the race preview plaque has no footnote', (tester) async {
+  // ── Item 8 — creation defers rounded payouts to the server ───────────────
+  group('item 8: creation does not invent a payout total', () {
+    testWidgets('the race form has no local prize-pool projection', (
+      tester,
+    ) async {
       final auth = await _createAuthService();
       await _pumpCreate(tester, auth, _RecordingApi());
 
-      expect(find.byKey(const Key('create-prize-pool-preview')), findsOneWidget);
+      expect(find.byKey(const Key('create-prize-pool-preview')), findsNothing);
       expect(find.text('FUNDED BY BARA · FREE TO ENTER'), findsNothing);
       expect(
         find.textContaining('FUNDED BY BARA', findRichText: true),
@@ -473,11 +477,12 @@ void main() {
         find.textContaining('FREE TO ENTER', findRichText: true),
         findsNothing,
       );
-      // The pool figure itself is untouched.
-      expect(find.byKey(const Key('create-prize-pool-coins')), findsOneWidget);
+      expect(find.byKey(const Key('create-prize-pool-coins')), findsNothing);
     });
 
-    testWidgets('the tournament plaque has no footnote either', (tester) async {
+    testWidgets('the tournament form has no local prize-pool projection', (
+      tester,
+    ) async {
       final auth = await _createAuthService();
       await _pumpCreate(tester, auth, _RecordingApi());
 
@@ -489,7 +494,7 @@ void main() {
 
       expect(
         find.byKey(const Key('tournament-prize-pool-preview')),
-        findsOneWidget,
+        findsNothing,
       );
       expect(
         find.textContaining('FREE TO ENTER', findRichText: true),
@@ -501,7 +506,7 @@ void main() {
       );
       expect(
         find.byKey(const Key('tournament-prize-pool-coins')),
-        findsOneWidget,
+        findsNothing,
       );
     });
   });

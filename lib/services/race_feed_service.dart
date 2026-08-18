@@ -126,6 +126,19 @@ class RaceFeedService extends ChangeNotifier {
       );
       if (_disposed) return;
       applyInitialStream(result);
+      // This separately-authorized stream intentionally does not share the
+      // message cursor/cache. Its locked response has no nextCursor, so it is
+      // a safe bounded newest-50 window refreshed at the top; this must never
+      // change shared Activity pagination. Old/disabled endpoints simply
+      // contribute no rows; a private-impact outage must not hide the shared
+      // Activity feed.
+      try {
+        final privateEvents = await api.fetchPrivateRaceImpactFeed(
+          identityToken: token,
+          raceId: raceId,
+        );
+        if (!_disposed) _mergePrivateImpactEvents(privateEvents);
+      } catch (_) {}
     } catch (e) {
       _lastError = e;
     } finally {
@@ -181,6 +194,13 @@ class RaceFeedService extends ChangeNotifier {
       );
       if (_disposed) return;
       applyTopStream(result);
+      try {
+        final privateEvents = await api.fetchPrivateRaceImpactFeed(
+          identityToken: token,
+          raceId: raceId,
+        );
+        if (!_disposed) _mergePrivateImpactEvents(privateEvents);
+      } catch (_) {}
     } catch (_) {
       // Silent — polling.
     }
@@ -225,6 +245,19 @@ class RaceFeedService extends ChangeNotifier {
     if (_disposed) return;
     _loading = false;
     _lastError = error;
+    _safeNotify();
+  }
+
+  void _mergePrivateImpactEvents(List<Map<String, dynamic>> raw) {
+    final additions = raw
+        .map(RaceFeedEvent.tryFromJson)
+        .whereType<RaceFeedEvent>()
+        .where((event) => event.id.startsWith('impact:'))
+        .where((event) => !_events.any((existing) => existing.id == event.id))
+        .toList(growable: false);
+    if (additions.isEmpty) return;
+    _events.addAll(additions);
+    _events.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     _safeNotify();
   }
 

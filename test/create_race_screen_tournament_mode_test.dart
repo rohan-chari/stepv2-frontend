@@ -107,14 +107,6 @@ Future<void> _switchToTournament(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-String _poolCoins(WidgetTester tester) => tester
-    .widget<Text>(find.byKey(const Key('tournament-prize-pool-coins')))
-    .data!;
-
-String _poolDerivation(WidgetTester tester) => tester
-    .widget<Text>(find.byKey(const Key('tournament-prize-pool-derivation')))
-    .data!;
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -155,37 +147,32 @@ void main() {
     expect(find.text('DURATION'), findsNothing);
   });
 
-  testWidgets('the bracket prize pool re-derives on a bracket-size change', (
+  testWidgets('tournament creation omits a locally derived payout total', (
     tester,
   ) async {
     final auth = await _createAuthService();
     await _pump(tester, auth, _RecordingApi());
     await _switchToTournament(tester);
 
-    // App-funded prize pools (D9): the old D4 buy-in ladder hint is replaced by
-    // the pool the app puts up, derived from the WHOLE bracket's length.
+    // The backend is the only source of the rounded recipient awards. The
+    // bracket controls stay interactive, but no client projection is shown.
     expect(
       find.byKey(const Key('tournament-prize-pool-preview')),
-      findsOneWidget,
+      findsNothing,
     );
-    // Default 8-bracket, 2-day rounds → 3 rounds x 2 = 6 days (4 points)
-    // → 8 x 4 x 20 = 640.
-    expect(_poolCoins(tester), '640');
-    expect(_poolDerivation(tester), '8 PLAYERS × 6 DAYS');
+    expect(find.byKey(const Key('tournament-prize-pool-coins')), findsNothing);
     expect(find.byKey(const Key('tournament-prize-pool-max')), findsNothing);
 
-    // Switch to 16 → 4 rounds x 2 = 8 days (8 points) → 16 x 8 x 20 = 2,560,
-    // clamped to the bracket ceiling of 1,000.
     await tester.tap(find.byKey(const Key('bracket-size-16')));
     await tester.pumpAndSettle();
-    expect(_poolCoins(tester), '1,000');
-    expect(_poolDerivation(tester), '16 PLAYERS × 8 DAYS');
-    expect(find.byKey(const Key('tournament-prize-pool-max')), findsOneWidget);
-
-    // Longer rounds move it too: 16-bracket x 3-day rounds = 12 days.
     await tester.tap(find.byKey(const Key('matchup-duration-3')));
     await tester.pumpAndSettle();
-    expect(_poolDerivation(tester), '16 PLAYERS × 12 DAYS');
+    expect(find.byKey(const Key('bracket-size-16')), findsOneWidget);
+    expect(find.byKey(const Key('matchup-duration-3')), findsOneWidget);
+    expect(
+      find.byKey(const Key('tournament-prize-pool-preview')),
+      findsNothing,
+    );
   });
 
   testWidgets('submit calls createTournament with the picked shape', (

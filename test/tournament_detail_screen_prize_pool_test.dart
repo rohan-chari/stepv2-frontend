@@ -128,6 +128,30 @@ void main() {
     await _teardown(tester);
   });
 
+  testWidgets('a rounded server champion projection is rendered unchanged', (
+    tester,
+  ) async {
+    final tournament = _funded()
+      ..['prizePool'] = const {
+        'coins': 325,
+        'projected': true,
+        'atMax': false,
+        'playerCount': 4,
+        'durationDays': 4,
+        'durationPoints': 4,
+        'coinUnit': 20,
+        'maxCoins': 1000,
+        'funded': true,
+      };
+    await _pump(tester, _FakeApi(tournament));
+
+    expect(find.text('PRIZE POOL'), findsOneWidget);
+    expect(find.text('325'), findsOneWidget);
+    expect(find.text('320'), findsNothing);
+
+    await _teardown(tester);
+  });
+
   testWidgets('an older backend falls back to the pot figure', (tester) async {
     await _pump(tester, _FakeApi(_legacyPaid()));
 

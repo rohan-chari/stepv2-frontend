@@ -249,8 +249,8 @@ class BackendApiService {
   // send `view=participants-v1` (which only ever paged `progress`). Must
   // appear in BOTH branches of the ternary.
   static final String clientFeaturesHeader = _adsSupported
-      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview${_racePayoutDoubleSupported ? ',race_payout_double' : ''}'
-      : 'characters,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview${_racePayoutDoubleSupported ? ',race_payout_double' : ''}';
+      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,impact_summaries,review_prompt,inbox_v1${_racePayoutDoubleSupported ? ',race_payout_double' : ''}'
+      : 'characters,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,impact_summaries,review_prompt,inbox_v1${_racePayoutDoubleSupported ? ',race_payout_double' : ''}';
 
   /// Replays a persisted results dismissal with the capability it originally
   /// advertised. A later app build may have gained or lost the dedicated ad
@@ -1889,6 +1889,221 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  /// Additive, recipient-private settled effect notices. A 404 is deliberately
+  /// surfaced to the caller so a newer app can downgrade silently against an
+  /// older/disabled backend; no user id ever travels from the client.
+  Future<List<Map<String, dynamic>>> fetchRaceImpactNotices({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    // Test/demo subclasses override this when exercising impacts. Returning no
+    // optional notices by default prevents an inherited real HTTP call from a
+    // legacy fake service and matches old-backend degradation.
+    if (runtimeType != BackendApiService) return const [];
+    final response = await _sendGetRequest(
+      path: '/races/${Uri.encodeComponent(raceId)}/impact-notices',
+      identityToken: identityToken,
+    );
+    final payload = await _decodeJsonResponse(response);
+    final raw = payload['notices'];
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList(growable: false);
+  }
+
+  Future<void> acknowledgeRaceImpactNotice({
+    required String identityToken,
+    required String raceId,
+    required String noticeId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path:
+          '/races/${Uri.encodeComponent(raceId)}/impact-notices/${Uri.encodeComponent(noticeId)}/acknowledge',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+    await _decodeJsonResponse(response);
+  }
+
+  Future<List<Map<String, dynamic>>> fetchPrivateRaceImpactFeed({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    if (runtimeType != BackendApiService) return const [];
+    // The locked endpoint response intentionally has no `nextCursor`. Ask for
+    // its documented bounded newest-first window rather than inventing client
+    // pagination fields that an older backend might not understand.
+    final response = await _sendGetRequest(
+      path:
+          '/races/${Uri.encodeComponent(raceId)}/private-impact-feed?limit=50',
+      identityToken: identityToken,
+    );
+    final payload = await _decodeJsonResponse(response);
+    final raw = payload['events'];
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList(growable: false);
+  }
+
+  Future<void> acknowledgeGlobalEventSummary({
+    required String identityToken,
+    required String summaryId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path:
+          '/home/global-event-summaries/${Uri.encodeComponent(summaryId)}/acknowledge',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+    await _decodeJsonResponse(response);
+  }
+
+  Future<void> claimReviewOpportunity({
+    required String identityToken,
+    required String raceId,
+    required String opportunityId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path:
+          '/races/${Uri.encodeComponent(raceId)}/review-opportunities/${Uri.encodeComponent(opportunityId)}/claim',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+    await _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> fetchInboxAlerts({
+    required String identityToken,
+    String? cursor,
+    int limit = 25,
+  }) async {
+    final safeLimit = limit.clamp(1, 50);
+    final query = cursor == null || cursor.isEmpty
+        ? 'limit=$safeLimit'
+        : 'cursor=${Uri.encodeQueryComponent(cursor)}&limit=$safeLimit';
+    final response = await _sendGetRequest(
+      path: '/inbox/alerts?$query',
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<void> markInboxAlertRead({
+    required String identityToken,
+    required String alertId,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/inbox/alerts/${Uri.encodeComponent(alertId)}/read',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+    await _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> fetchFeedbackThreads({
+    required String identityToken,
+    String? cursor,
+    int limit = 25,
+  }) async {
+    final safeLimit = limit.clamp(1, 50);
+    final query = cursor == null || cursor.isEmpty
+        ? 'limit=$safeLimit'
+        : 'cursor=${Uri.encodeQueryComponent(cursor)}&limit=$safeLimit';
+    final response = await _sendGetRequest(
+      path: '/feedback/threads?$query',
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> fetchFeedbackThread({
+    required String identityToken,
+    required String threadId,
+    String? before,
+    int limit = 25,
+  }) async {
+    final safeLimit = limit.clamp(1, 50);
+    final query = before == null || before.isEmpty
+        ? 'limit=$safeLimit'
+        : 'before=${Uri.encodeQueryComponent(before)}&limit=$safeLimit';
+    final response = await _sendGetRequest(
+      path: '/feedback/threads/${Uri.encodeComponent(threadId)}?$query',
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> sendFeedbackThreadMessage({
+    required String identityToken,
+    required String threadId,
+    required String text,
+    required String idempotencyKey,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/feedback/threads/${Uri.encodeComponent(threadId)}/messages',
+      body: {'text': text, 'idempotencyKey': idempotencyKey},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> fetchAdminFeedbackThreads({
+    required String identityToken,
+    String? cursor,
+    int limit = 25,
+  }) async {
+    final safeLimit = limit.clamp(1, 50);
+    final query = cursor == null || cursor.isEmpty
+        ? 'limit=$safeLimit'
+        : 'cursor=${Uri.encodeQueryComponent(cursor)}&limit=$safeLimit';
+    final response = await _sendGetRequest(
+      path: '/admin/feedback/threads?$query',
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> fetchAdminFeedbackThread({
+    required String identityToken,
+    required String threadId,
+    String? before,
+    int limit = 25,
+  }) async {
+    final safeLimit = limit.clamp(1, 50);
+    final query = before == null || before.isEmpty
+        ? 'limit=$safeLimit'
+        : 'before=${Uri.encodeQueryComponent(before)}&limit=$safeLimit';
+    final response = await _sendGetRequest(
+      path: '/admin/feedback/threads/${Uri.encodeComponent(threadId)}?$query',
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> sendAdminFeedbackThreadMessage({
+    required String identityToken,
+    required String threadId,
+    required String text,
+    required String idempotencyKey,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/admin/feedback/threads/${Uri.encodeComponent(threadId)}/messages',
+      body: {'text': text, 'idempotencyKey': idempotencyKey},
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
   Future<Map<String, dynamic>> fetchStepCalendar({
     required String identityToken,
     required String month,
@@ -1954,6 +2169,24 @@ class BackendApiService {
     final body = await _decodeJsonResponse(response);
     final updated = body['settings'];
     return updated is Map<String, dynamic> ? updated : <String, dynamic>{};
+  }
+
+  /// Atomic settings command for the text-only Home service banner. It is
+  /// intentionally separate from the boolean-only generic settings endpoint.
+  Future<Map<String, dynamic>> updateAdminHomeServiceBanner({
+    required String identityToken,
+    required bool enabled,
+    required String message,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'PATCH',
+      path: '/admin/settings/home-service-banner',
+      body: {'enabled': enabled, 'message': message},
+      identityToken: identityToken,
+    );
+    final body = await _decodeJsonResponse(response);
+    final settings = body['settings'];
+    return settings is Map<String, dynamic> ? settings : <String, dynamic>{};
   }
 
   /// GET /admin/stats -> `{stats: {...}}` product-health snapshot.
@@ -3442,9 +3675,7 @@ class BackendApiService {
     }
 
     final safeOffset = offset < 0 ? 0 : offset;
-    final safeLimit = limit <= 0
-        ? 10
-        : (limit > 50 ? 50 : limit);
+    final safeLimit = limit <= 0 ? 10 : (limit > 50 ? 50 : limit);
     final response = await _sendGetRequest(
       path:
           '/races/${Uri.encodeComponent(raceId)}/progress?view=participants-v1&offset=$safeOffset&limit=$safeLimit',

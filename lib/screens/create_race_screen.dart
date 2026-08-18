@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../models/race_payouts.dart';
-import '../models/race_prize_pool.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
@@ -11,7 +10,6 @@ import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/powerup_interval_note.dart';
-import '../widgets/prize_pool_plaque.dart';
 import '../widgets/race_timeline_card.dart';
 import '../widgets/retro_card.dart';
 import 'tournament_detail_screen.dart';
@@ -227,19 +225,6 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
   bool get _sendsCustomWindow =>
       _customActive && _scheduledEndAt != null && _customWindowError == null;
 
-  /// The day count the PRIZE POOL is priced on. For a custom window this is the
-  /// server's own derivation (§5.3), mirrored verbatim, so the plaque can never
-  /// disagree with the created race.
-  int get _pricedDurationDays {
-    if (_customActive && _scheduledEndAt != null) {
-      return prizePoolDurationDaysForWindow(
-        _effectiveWindowStart,
-        _scheduledEndAt!,
-      );
-    }
-    return _selectedDuration;
-  }
-
   /// Entering CUSTOM seeds the window from whatever the user already chose:
   /// the existing scheduled start (or "when everyone's in"), and the current
   /// preset's length as the end.
@@ -324,86 +309,6 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
             color: selected ? Colors.white : AppColors.of(context).textDark,
           ),
         ),
-      ),
-    );
-  }
-
-  // -- App-funded prize pool preview ---------------------------------------
-  //
-  // The race doesn't exist yet, so the pool is computed client-side from the
-  // mirrored duration table in `models/race_prize_pool.dart` (guarded against
-  // the backend's fixtures by `race_prize_pool_test`). It is a PROJECTION off
-  // the field cap — the settled pool counts only runners who actually walked —
-  // so the copy says "up to", never "you will win".
-
-  /// The field size the preview projects against: the team-race field is fixed
-  /// at 2 × teamSize, otherwise it's the runner cap. Null = NO LIMIT, which
-  /// saturates the ceiling.
-  int? get _projectedFieldSize {
-    if (_isTeamRace) return _teamSize * 2;
-    if (_noLimit) return null;
-    return _maxParticipants;
-  }
-
-  int get _projectedPrizePool {
-    final field = _projectedFieldSize;
-    if (field == null) return kPrizePoolMaxCoins;
-    return computePrizePool(
-      playerCount: field,
-      durationDays: _pricedDurationDays,
-    );
-  }
-
-  String get _projectedPrizeDerivation {
-    final field = _projectedFieldSize;
-    final priced = _pricedDurationDays;
-    final days = priced == 1 ? '1 DAY' : '$priced DAYS';
-    final players = field == null
-        ? 'UNLIMITED PLAYERS'
-        : (field == 1 ? '1 PLAYER' : '$field PLAYERS');
-    return '$players × $days';
-  }
-
-  /// The carved gold plaque, now shared with the edit screen
-  /// (`widgets/prize_pool_plaque.dart`). This wrapper keeps the call sites and
-  /// their keys byte-identical.
-  Widget _prizePoolPlaque({
-    required int coins,
-    required bool atMax,
-    required String derivation,
-    String? footnote,
-    Key? key,
-    Key? coinsKey,
-    Key? derivationKey,
-    Key? maxKey,
-  }) {
-    return PrizePoolPlaque(
-      key: key,
-      coins: coins,
-      atMax: atMax,
-      derivation: derivation,
-      footnote: footnote,
-      coinsKey: coinsKey,
-      derivationKey: derivationKey,
-      maxKey: maxKey,
-    );
-  }
-
-  /// The race-side preview card, shown under the duration picker.
-  Widget _buildPrizePoolPreview() {
-    final coins = _projectedPrizePool;
-    // A field that can't pay anybody shows nothing rather than a hollow 0.
-    if (coins <= 0) return const SizedBox.shrink();
-    return RetroCard(
-      padding: const EdgeInsets.all(16),
-      child: _prizePoolPlaque(
-        key: const Key('create-prize-pool-preview'),
-        coinsKey: const Key('create-prize-pool-coins'),
-        derivationKey: const Key('create-prize-pool-derivation'),
-        maxKey: const Key('create-prize-pool-max'),
-        coins: coins,
-        atMax: coins >= kPrizePoolMaxCoins,
-        derivation: _projectedPrizeDerivation,
       ),
     );
   }
@@ -1128,30 +1033,9 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
           'The champion takes the whole prize pool.',
           style: PixelText.body(size: 11, color: AppColors.of(context).textMid),
         ),
-        const SizedBox(height: 12),
-        _prizePoolPlaque(
-          key: const Key('tournament-prize-pool-preview'),
-          coinsKey: const Key('tournament-prize-pool-coins'),
-          derivationKey: const Key('tournament-prize-pool-derivation'),
-          maxKey: const Key('tournament-prize-pool-max'),
-          coins: _tournamentPrizePool,
-          atMax: _tournamentPrizePool >= kTournamentPrizePoolMaxCoins,
-          derivation: '$_bracketSize PLAYERS × $_tournamentTotalDays DAYS',
-        ),
       ],
     );
   }
-
-  /// The whole bracket's length in days — every round back to back (D9).
-  int get _tournamentTotalDays =>
-      tournamentRoundsForSize(_bracketSize) * _matchupDuration;
-
-  /// A bracket only starts full, so the projected field is the bracket size.
-  int get _tournamentPrizePool => computePrizePool(
-    playerCount: _bracketSize,
-    durationDays: _tournamentTotalDays,
-    max: kTournamentPrizePoolMaxCoins,
-  );
 
   Widget _buildTeamSizeStepper() {
     return Container(
@@ -1503,12 +1387,6 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                             onPickStart: _pickScheduledStart,
                             onPickEnd: _pickCustomEnd,
                           ),
-                          const SizedBox(height: 12),
-
-                          // What the field is racing for. Sits right under the
-                          // duration + (below) the runner cap, because those
-                          // two controls are what move the number.
-                          _buildPrizePoolPreview(),
                           const SizedBox(height: 12),
 
                           if (!widget.demoMode)
@@ -1926,7 +1804,8 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
                             ),
                             // Disabled while the custom window is illegal, so
                             // the user never round-trips to a 400 (§4.4).
-                            onPressed: (_isCreating || _customWindowError != null)
+                            onPressed:
+                                (_isCreating || _customWindowError != null)
                                 ? null
                                 : _create,
                           ),

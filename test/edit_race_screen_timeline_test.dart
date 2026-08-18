@@ -291,12 +291,7 @@ void main() {
     tester,
   ) async {
     final api = _RecordingApi();
-    await _pump(
-      tester,
-      api,
-      race: _customPendingRace(),
-      customWindow: false,
-    );
+    await _pump(tester, api, race: _customPendingRace(), customWindow: false);
 
     await tester.ensureVisible(find.byKey(const Key('duration-option-7')));
     await tester.tap(find.byKey(const Key('duration-option-7')));
@@ -320,12 +315,7 @@ void main() {
     // branch must key off the user actually leaving it — not off the set-window
     // branch being skipped — or an unrelated edit destroys the window.
     final api = _RecordingApi();
-    await _pump(
-      tester,
-      api,
-      race: _customPendingRace(),
-      customWindow: false,
-    );
+    await _pump(tester, api, race: _customPendingRace(), customWindow: false);
 
     await tester.enterText(find.byType(TextField).first, 'Renamed Push');
     await tester.pump();
@@ -344,20 +334,24 @@ void main() {
     // runners, so `scheduledStartAt` can sit days in the past. An unclamped
     // picker anchor gives showDatePicker firstDate > lastDate, which asserts.
     final past = DateTime.now().subtract(const Duration(days: 40));
-    await _pump(tester, _RecordingApi(), race: {
-      'id': 'race-1',
-      'name': 'Stale Schedule',
-      'status': 'PENDING',
-      'maxDurationDays': 4,
-      'payoutPreset': 'WINNER_TAKES_ALL',
-      'isPublic': false,
-      'maxParticipants': 10,
-      'scheduledStartAt': past.toUtc().toIso8601String(),
-      'scheduledEndAt': past
-          .add(const Duration(days: 4))
-          .toUtc()
-          .toIso8601String(),
-    });
+    await _pump(
+      tester,
+      _RecordingApi(),
+      race: {
+        'id': 'race-1',
+        'name': 'Stale Schedule',
+        'status': 'PENDING',
+        'maxDurationDays': 4,
+        'payoutPreset': 'WINNER_TAKES_ALL',
+        'isPublic': false,
+        'maxParticipants': 10,
+        'scheduledStartAt': past.toUtc().toIso8601String(),
+        'scheduledEndAt': past
+            .add(const Duration(days: 4))
+            .toUtc()
+            .toIso8601String(),
+      },
+    );
 
     expect(find.byKey(const Key('timeline-ends-row')), findsOneWidget);
     // The window is in the past, so the client names the rule rather than
@@ -375,7 +369,11 @@ void main() {
 
   // §10.1 risk 6 — a control that moves the pool must show the pool.
   testWidgets('the edit screen carries the prize plaque', (tester) async {
-    final state = await _pump(tester, _RecordingApi(), race: _presetPendingRace());
+    final state = await _pump(
+      tester,
+      _RecordingApi(),
+      race: _presetPendingRace(),
+    );
 
     expect(find.byKey(const Key('edit-prize-pool-preview')), findsOneWidget);
     // 10 runners x 7 days (4 points) x 20 = 800.
@@ -415,6 +413,27 @@ void main() {
     );
   });
 
+  testWidgets('a v1 edit payload omits a locally derived payout total', (
+    tester,
+  ) async {
+    final race = _presetPendingRace()..['payoutRoundingVersion'] = 1;
+    await _pump(tester, _RecordingApi(), race: race);
+
+    expect(find.byType(RaceTimelineCard), findsOneWidget);
+    expect(find.byKey(const Key('edit-prize-pool-preview')), findsNothing);
+    expect(find.byKey(const Key('edit-prize-pool-coins')), findsNothing);
+  });
+
+  testWidgets('a malformed payout version retains the legacy preview', (
+    tester,
+  ) async {
+    final race = _presetPendingRace()..['payoutRoundingVersion'] = 1.5;
+    await _pump(tester, _RecordingApi(), race: race);
+
+    expect(find.byKey(const Key('edit-prize-pool-preview')), findsOneWidget);
+    expect(find.byKey(const Key('edit-prize-pool-coins')), findsOneWidget);
+  });
+
   // A stale-but-untouched window must never hold the rest of the screen
   // hostage. This is the client twin of the backend's architect-R3 rule: a
   // PATCH that only renames a race must not be validated against a window the
@@ -422,18 +441,22 @@ void main() {
   testWidgets('flag ON: a stale window does not disable SAVE', (tester) async {
     final api = _RecordingApi();
     final soon = DateTime.now().add(const Duration(hours: 10));
-    await _pump(tester, api, race: {
-      'id': 'race-1',
-      'name': 'Nearly Due',
-      'status': 'PENDING',
-      'maxDurationDays': 4,
-      'payoutPreset': 'WINNER_TAKES_ALL',
-      'isPublic': false,
-      'maxParticipants': 10,
-      // Manual start, so the window is measured against a moving `now` and has
-      // quietly shrunk under the 24h floor while the race sat PENDING.
-      'scheduledEndAt': soon.toUtc().toIso8601String(),
-    });
+    await _pump(
+      tester,
+      api,
+      race: {
+        'id': 'race-1',
+        'name': 'Nearly Due',
+        'status': 'PENDING',
+        'maxDurationDays': 4,
+        'payoutPreset': 'WINNER_TAKES_ALL',
+        'isPublic': false,
+        'maxParticipants': 10,
+        // Manual start, so the window is measured against a moving `now` and has
+        // quietly shrunk under the 24h floor while the race sat PENDING.
+        'scheduledEndAt': soon.toUtc().toIso8601String(),
+      },
+    );
 
     // The message still shows — it is useful information.
     expect(find.text('A race has to run at least 1 day'), findsOneWidget);
@@ -468,9 +491,7 @@ void main() {
       race: _customPendingRace(),
     );
 
-    state.debugSetCustomWindow(
-      end: _start.add(const Duration(hours: 3)),
-    );
+    state.debugSetCustomWindow(end: _start.add(const Duration(hours: 3)));
     await tester.pump();
 
     expect(find.text('A race has to run at least 1 day'), findsOneWidget);
@@ -484,15 +505,19 @@ void main() {
     tester,
   ) async {
     // An older backend's getRaceDetails carries neither new key.
-    await _pump(tester, _RecordingApi(), race: {
-      'id': 'race-1',
-      'name': 'Old Payload',
-      'status': 'PENDING',
-      'maxDurationDays': 7,
-      'payoutPreset': 'WINNER_TAKES_ALL',
-      'isPublic': false,
-      'maxParticipants': 10,
-    });
+    await _pump(
+      tester,
+      _RecordingApi(),
+      race: {
+        'id': 'race-1',
+        'name': 'Old Payload',
+        'status': 'PENDING',
+        'maxDurationDays': 7,
+        'payoutPreset': 'WINNER_TAKES_ALL',
+        'isPublic': false,
+        'maxParticipants': 10,
+      },
+    );
 
     expect(find.byKey(const Key('timeline-ends-row')), findsNothing);
     expect(find.byKey(const Key('duration-option-7')), findsOneWidget);

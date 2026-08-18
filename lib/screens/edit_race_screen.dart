@@ -594,6 +594,15 @@ class EditRaceScreenState extends State<EditRaceScreen> {
     return fallback;
   }
 
+  /// v1 rounds each server-known recipient award. A PENDING team race has no
+  /// authoritative recipient total yet, so an optional explicit v1 marker
+  /// suppresses the old local preview. Missing, malformed, and v0 payloads
+  /// retain the legacy view.
+  bool get _usesServerRoundedPayouts {
+    final raw = widget.race['payoutRoundingVersion'];
+    return raw is int ? raw == 1 : raw is String && raw == '1';
+  }
+
   /// Reads an additive count field: absent, null, negative or non-numeric all
   /// degrade to null so the caller falls through to its own fallback.
   int? _readNullableCount(dynamic value) {
@@ -619,8 +628,7 @@ class EditRaceScreenState extends State<EditRaceScreen> {
   /// Whether the CUSTOM chip is offered (`featureFlags.customRaceWindowEnabled`,
   /// default false). A race that ALREADY has a custom window still shows it
   /// with the flag off — hiding the chip would silently misreport the race.
-  bool get _customWindowAvailable =>
-      widget.authService.customRaceWindowEnabled;
+  bool get _customWindowAvailable => widget.authService.customRaceWindowEnabled;
 
   /// Read-only means DEAD END, and only a started race is one: the server
   /// rejects every field of a non-PENDING edit with a 400, so no chip on the
@@ -747,8 +755,8 @@ class EditRaceScreenState extends State<EditRaceScreen> {
     super.dispose();
   }
 
-  /// The same "up to" plaque the create screen shows, brought along so a
-  /// control that changes the pool also shows the pool (§10.1 risk 6).
+  /// The legacy "up to" plaque. Version-1 creation/edit flows defer payout
+  /// totals to the backend; historical payloads retain their prior preview.
   Widget _buildPrizePoolPreview() {
     final field = _projectedFieldSize;
     final coins = field == null
@@ -1177,15 +1185,16 @@ class EditRaceScreenState extends State<EditRaceScreen> {
                           onPickStart: _pickScheduledStart,
                           onPickEnd: _pickCustomEnd,
                           readOnly: _timelineReadOnly,
-                          readOnlyEndsAt: _stampedEndsAt ?? _initialScheduledEndAt,
+                          readOnlyEndsAt:
+                              _stampedEndsAt ?? _initialScheduledEndAt,
                         ),
                         const SizedBox(height: 12),
 
-                        // §10.1 risk 6: the timeline moves the pool, so the
-                        // pool has to be visible here too — otherwise re-picking
-                        // a window shows no consequence until the user backs out
-                        // to the race-detail scorecard.
-                        _buildPrizePoolPreview(),
+                        // Legacy payloads preserve their old projection. v1
+                        // awards are owned by the backend and can depend on
+                        // recipients not known while the race is PENDING.
+                        if (!_usesServerRoundedPayouts)
+                          _buildPrizePoolPreview(),
 
                         // Powerups
                         RetroCard(

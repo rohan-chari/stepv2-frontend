@@ -63,6 +63,11 @@ class AdService implements ExtraSpinAdController, RacePayoutDoubleAdController {
   /// Ceiling on how long load() blocks its caller waiting for the SDK.
   static const _loadTimeout = Duration(seconds: 30);
 
+  /// A rewarded ad normally dismisses within the creative's duration. Do not
+  /// leave every caller's action spinner up forever if the SDK loses its
+  /// fullscreen callback during an app/network transition.
+  static const _showTimeout = Duration(minutes: 3);
+
   // Ad unit IDs are per-platform in AdMob. iOS uses the original defines;
   // Android uses the parallel `_ANDROID` defines (added so Android can reach
   // full parity without changing the iOS ids). An absent/empty id for a surface
@@ -382,31 +387,41 @@ class AdService implements ExtraSpinAdController, RacePayoutDoubleAdController {
     if (!isSupported || _loading || _ad != null) return;
     _loading = true;
     try {
-      await ensureInitialized();
+      await ensureInitialized().timeout(_loadTimeout);
 
       final completer = Completer<void>();
       await RewardedAd.load(
         adUnitId: _adUnitId,
         request: const AdRequest(),
         rewardedAdLoadCallback: RewardedAdLoadCallback(
-          onAdLoaded: (ad) async {
-            // SSV identity: the callback Google sends us echoes these back as
-            // user_id / custom_data.
-            await ad.setServerSideOptions(
-              ServerSideVerificationOptions(
-                userId: userId,
-                customData: customData,
-              ),
-            );
-            _ad = ad;
-            completer.complete();
+          onAdLoaded: (ad) {
+            // The callback type is void, so an async callback's exception
+            // would otherwise be unhandled and leave [completer] pending.
+            unawaited(() async {
+              try {
+                // SSV identity: the callback Google sends us echoes these
+                // back as user_id / custom_data.
+                await ad.setServerSideOptions(
+                  ServerSideVerificationOptions(
+                    userId: userId,
+                    customData: customData,
+                  ),
+                );
+                _ad = ad;
+              } catch (error) {
+                debugPrint('Rewarded ad setup failed: $error');
+                ad.dispose();
+              } finally {
+                if (!completer.isCompleted) completer.complete();
+              }
+            }());
           },
           onAdFailedToLoad: (error) {
             debugPrint('Rewarded ad failed to load: $error');
             completer.complete();
           },
         ),
-      );
+      ).timeout(_loadTimeout);
       // Neither callback firing would wedge _loading true forever, and with it
       // every later load() on this controller (the guard above returns early).
       // Time out instead: a slow fill that lands after this still populates
@@ -415,6 +430,10 @@ class AdService implements ExtraSpinAdController, RacePayoutDoubleAdController {
         _loadTimeout,
         onTimeout: () => debugPrint('Rewarded ad load timed out'),
       );
+    } on TimeoutException {
+      debugPrint('Rewarded ad load timed out');
+    } catch (error) {
+      debugPrint('Rewarded ad load threw: $error');
     } finally {
       _loading = false;
     }
@@ -447,8 +466,22 @@ class AdService implements ExtraSpinAdController, RacePayoutDoubleAdController {
         if (!completer.isCompleted) completer.complete(false);
       },
     );
-    await ad.show(onUserEarnedReward: (_, _) => earned = true);
-    return completer.future;
+    try {
+      await ad.show(onUserEarnedReward: (_, _) => earned = true);
+    } catch (error) {
+      debugPrint('Rewarded ad show threw: $error');
+      ad.dispose();
+      if (!completer.isCompleted) completer.complete(false);
+    }
+
+    return completer.future.timeout(
+      _showTimeout,
+      onTimeout: () {
+        debugPrint('Rewarded ad fullscreen callback timed out');
+        ad.dispose();
+        return false;
+      },
+    );
   }
 
   @override

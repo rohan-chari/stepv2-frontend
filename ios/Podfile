@@ -40,6 +40,11 @@ target 'Runner' do
   # google_mobile_ads 9.0.0; it shares the existing Google Ads 13.3.x SDK.
   pod 'GoogleMobileAdsMediationAppLovin', '13.6.3.0'
 
+  # AdMob Open Bidding adapter for ironSource. Pin it to the release tested
+  # with Google Mobile Ads 13.3.0, which is the native SDK constrained by
+  # google_mobile_ads 9.0.0 and shared by the Meta and AppLovin adapters.
+  pod 'GoogleMobileAdsMediationIronSource', '9.4.1.0.1'
+
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   target 'RunnerTests' do
     inherit! :search_paths

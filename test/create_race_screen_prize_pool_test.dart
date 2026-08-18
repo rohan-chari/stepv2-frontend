@@ -5,11 +5,9 @@ import 'package:step_tracker/screens/create_race_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 
-// App-funded prize pools, create screen (spec §7.1 / §9 "create_race_screen").
-// Buy-ins are gone: the screen previews the app-funded pool live from the
-// duration + max-players controls, and the TIMELINE picker lands on band
-// boundaries [1,7,14] (the 3-day chip was retired; 3 is still legal
-// server-side and frozen clients still send it).
+// App-funded creation, real screen. Payout totals are server-owned after
+// creation, so the form deliberately omits a local projection; the timeline
+// still lands on band boundaries [1,7,14] (3 remains legal for frozen apps).
 
 class _RecordingApi extends BackendApiService {
   Map<String, dynamic>? lastCreateRaceCall;
@@ -82,14 +80,6 @@ Future<void> _pump(
 
 Finder _preview() => find.byKey(const Key('create-prize-pool-preview'));
 
-String _previewCoins(WidgetTester tester) => tester
-    .widget<Text>(find.byKey(const Key('create-prize-pool-coins')))
-    .data!;
-
-String _previewDerivation(WidgetTester tester) => tester
-    .widget<Text>(find.byKey(const Key('create-prize-pool-derivation')))
-    .data!;
-
 Future<void> _tapDuration(WidgetTester tester, int days) async {
   final chip = find.byKey(Key('duration-option-$days'));
   await tester.ensureVisible(chip);
@@ -128,72 +118,26 @@ void main() {
     expect(find.text('5d'), findsNothing);
   });
 
-  testWidgets('the pool preview tracks duration and matches the fixtures', (
+  testWidgets('new race creation omits a locally derived payout total', (
     tester,
   ) async {
     await _pump(tester, _RecordingApi());
 
-    expect(_preview(), findsOneWidget);
-    expect(find.text('PRIZE POOL'), findsOneWidget);
-
-    // Defaults: 10 max runners, 7 days -> 10 x 4 x 20 = 800.
-    expect(_previewCoins(tester), '800');
-    expect(_previewDerivation(tester), '10 PLAYERS × 7 DAYS');
-
-    // Moving OFF the default has to move the plaque — tapping 7 here proved
-    // nothing once 7 became the default. 10 players / 14 days = 8 points.
-    await _tapDuration(tester, 14);
-    expect(_previewCoins(tester), '1,600');
-    expect(_previewDerivation(tester), '10 PLAYERS × 14 DAYS');
-
-    // 1 day -> 1 point.
-    await _tapDuration(tester, 1);
-    expect(_previewCoins(tester), '200');
-    expect(_previewDerivation(tester), '10 PLAYERS × 1 DAY');
-
-    // 14 days -> 8 points.
-    await _tapDuration(tester, 14);
-    expect(_previewCoins(tester), '1,600');
-  });
-
-  testWidgets('the pool preview tracks the max-runners selection', (
-    tester,
-  ) async {
-    await _pump(tester, _RecordingApi());
-
-    await tester.ensureVisible(find.text('25'));
-    await tester.tap(find.text('25'));
-    await tester.pump();
-
-    // 25 x 4 (the default 7 days) x 20 = 2,000.
-    expect(_previewCoins(tester), '2,000');
-    expect(_previewDerivation(tester), '25 PLAYERS × 7 DAYS');
-  });
-
-  testWidgets('the preview saturates at the cap and says so', (tester) async {
-    await _pump(tester, _RecordingApi());
-
+    // v1 pays per eligible recipient. Until the backend knows the final
+    // recipient count, a locally computed pool could contradict its rounded
+    // payout tiers, so the creation form intentionally has no total.
+    expect(_preview(), findsNothing);
+    expect(find.byKey(const Key('create-prize-pool-coins')), findsNothing);
+    expect(find.byKey(const Key('create-prize-pool-derivation')), findsNothing);
     expect(find.byKey(const Key('create-prize-pool-max')), findsNothing);
 
-    await tester.ensureVisible(find.text('100'));
-    await tester.tap(find.text('100'));
-    await tester.pump();
+    // Controls remain usable; omitting the numerical preview must not remove
+    // or leave a blank replacement for the timeline flow.
     await _tapDuration(tester, 14);
-
-    // 100 x 8 x 20 = 16,000 -> clamped to 3,200.
-    expect(_previewCoins(tester), '3,200');
-    expect(find.byKey(const Key('create-prize-pool-max')), findsOneWidget);
-  });
-
-  testWidgets('NO LIMIT previews the capped pool', (tester) async {
-    await _pump(tester, _RecordingApi());
-
-    await tester.ensureVisible(find.text('NO LIMIT'));
-    await tester.tap(find.text('NO LIMIT'));
-    await tester.pump();
-
-    expect(_previewCoins(tester), '3,200');
-    expect(find.byKey(const Key('create-prize-pool-max')), findsOneWidget);
+    await _tapDuration(tester, 1);
+    expect(find.byKey(const Key('duration-option-1')), findsOneWidget);
+    expect(find.byKey(const Key('customize-race-toggle')), findsOneWidget);
+    expect(_preview(), findsNothing);
   });
 
   testWidgets(

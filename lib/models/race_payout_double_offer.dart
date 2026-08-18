@@ -20,12 +20,18 @@ class RacePayoutDoubleOffer {
   final List<String> raceIds;
   final int baseCoins;
   final int bonusCoins;
-  final int maxBonusCoins;
-  final int rolling24hRemainingBeforeClaim;
+  final int? maxBonusCoins;
+  final int? rolling24hRemainingBeforeClaim;
 
+  /// v1 is an exact second copy of its server-owned rounded base.
+  ///
+  /// Older capped offers retain their truthful legacy presentation while a
+  /// staged backend rolls forward.
   bool get isFullDouble => bonusCoins == baseCoins;
   bool get isMaximumPartial =>
-      bonusCoins == maxBonusCoins && bonusCoins < baseCoins;
+      maxBonusCoins != null &&
+      bonusCoins == maxBonusCoins &&
+      bonusCoins < baseCoins;
 
   static final RegExp _canonicalUuid = RegExp(
     r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
@@ -80,8 +86,8 @@ class RacePayoutDoubleClaimResult {
   final List<String> raceIds;
   final int baseCoins;
   final int bonusCoins;
-  final int maxBonusCoins;
-  final int rolling24hRemainingBeforeClaim;
+  final int? maxBonusCoins;
+  final int? rolling24hRemainingBeforeClaim;
 
   /// Null means the claim response was otherwise valid but omitted/malformed
   /// the authoritative balance. The caller must refresh `/auth/me` before
@@ -120,8 +126,8 @@ class RacePayoutDoubleClaimResult {
   List<String> raceIds,
   int baseCoins,
   int bonusCoins,
-  int maxBonusCoins,
-  int remaining,
+  int? maxBonusCoins,
+  int? remaining,
 })?
 _tryParseSnapshot(
   Map<String, dynamic> map, {
@@ -147,20 +153,34 @@ _tryParseSnapshot(
 
   final baseCoins = map['baseCoins'];
   final bonusCoins = map['bonusCoins'];
-  final maxBonusCoins = map['maxBonusCoins'];
-  final remaining = map['rolling24hRemainingBeforeClaim'];
-  if (baseCoins is! int ||
-      bonusCoins is! int ||
-      maxBonusCoins is! int ||
-      remaining is! int) {
+  if (baseCoins is! int || bonusCoins is! int) {
     return null;
   }
-  if (baseCoins <= 0 ||
-      bonusCoins <= 0 ||
-      maxBonusCoins <= 0 ||
-      remaining <= 0 ||
+  if (baseCoins <= 0 || bonusCoins <= 0 || bonusCoins > baseCoins) {
+    return null;
+  }
+
+  // Cap-less exact offers are the v1 contract. Ignore optional stale metadata
+  // here: a deployed backend may keep emitting it while the exact base/bonus
+  // values are already authoritative.
+  if (bonusCoins == baseCoins) {
+    return (
+      raceIds: raceIds,
+      baseCoins: baseCoins,
+      bonusCoins: bonusCoins,
+      maxBonusCoins: null,
+      remaining: null,
+    );
+  }
+
+  // A non-exact amount is only valid for the legacy capped contract, whose
+  // fields prove the actual amount is within the old server allowance.
+  final maxBonusCoins = map['maxBonusCoins'];
+  final remaining = map['rolling24hRemainingBeforeClaim'];
+  if (maxBonusCoins is! int || remaining is! int) return null;
+  if (maxBonusCoins <= 0 ||
       maxBonusCoins > 500 ||
-      bonusCoins > baseCoins ||
+      remaining <= 0 ||
       bonusCoins > maxBonusCoins ||
       bonusCoins > remaining) {
     return null;

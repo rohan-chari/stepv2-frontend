@@ -2,8 +2,11 @@
 
 | Script | Use it for |
 |---|---|
-| **`prod-mix-load-test.js`** | **Capacity questions.** Weighted to the real prod request mix, N distinct user identities, fixed arrival rate. This is the one you want. |
-| `mint-staging-users.js` | Mints N staging session tokens for real prod-cloned users (see [Auth](#auth-minting-user-identities)). |
+| **`prod-mix-load-test.js`** | **Capacity questions.** Weighted to the measured app request mix, distinct identities, fixed arrival rate, executable gates. |
+| `harness-contract.mjs` | Shared endpoint/rung/status/fixture contract used by k6 and deterministic Node tests. |
+| `mint-staging-users.js` | Mints a status-aware fixture and reserves dedicated resolution users/races outside workload traffic. |
+| `validate-fixture.mjs` | Validates a fixture without issuing HTTP requests. |
+| `aggregate-capacity-cohort.mjs` | Mandatory exact-three-repeat summary/raw/server-evidence aggregator and aggregate endpoint gate. |
 | **`profile-worker.js`** | **"Which code burns the CPU?"** Attaches to a Node worker's inspector and captures a V8 CPU profile. See [Profiling](#profiling-which-code-burns-cpu). |
 | **`sample-db-queries.sh`** | **"Which SQL burns the database?"** Samples the running statement; a poor-man's `pg_stat_statements`. |
 | `sample-db-state.sh` | Samples `active` / `idle in transaction` / lock-wait counts. |
@@ -26,7 +29,29 @@ Everything targets **staging**. Never point either script at production.
 
 ---
 
-## TL;DR — run a test
+## Safe validation (no load traffic)
+
+```bash
+node --test k6/test/harness-contract.test.mjs k6/test/cohort-aggregator.test.mjs
+node k6/validate-fixture.mjs k6/users.json
+set -a; . k6/capacity-load-test.env.example; set +a
+k6 inspect --include-system-env-vars -e TARGET_RUNG=rate_15rps k6/prod-mix-load-test.js
+k6 inspect --include-system-env-vars -e TARGET_RUNG=rate_31rps k6/prod-mix-load-test.js
+k6 inspect -e MODE=smoke -e RUN_ID=smoke-inspect -e REPEAT_INDEX=smoke k6/prod-mix-load-test.js
+```
+
+`k6 inspect` proves that each offered-rate identity installs its thresholds. It
+does not contact the backend. The ignored legacy array-form `users.json` must be
+re-minted before a smoke or measured run; runtime setup intentionally rejects a
+fixture that cannot distinguish race status or reserve resolution identities.
+
+## Measured-run protocol
+
+Milestone 5.0 does not authorize a run. When a staging run is separately
+authorized, do the deterministic smoke first, then a low-rate run, then three
+matched 15-rps repeats. A 31-rps repeat is allowed only after every 15-rps gate
+passes. Run one offered-rate rung per process so cache/cron cohorts and failures
+cannot be averaged together.
 
 ```bash
 # 0. one-time: brew install k6
@@ -38,28 +63,87 @@ export SESSION_TOKEN_SECRET="$(ssh root@167.172.225.16 \
   'grep "^SESSION_TOKEN_SECRET=" /var/www/step-tracker-backend-staging/.env | cut -d= -f2-')"
 NODE_PATH=/Users/rohan/repos/stepv2-backend/node_modules \
   node ~/repos/stepv2-frontend/k6/mint-staging-users.js \
-  --count=400 --out=~/repos/stepv2-frontend/k6/users.json
+  --count=400 --resolution-seeds=4 \
+  --out=~/repos/stepv2-frontend/k6/users.json
 
-# 3. run (ALWAYS in the background — the full ladder takes ~18 min)
+# 3. validate the generated fixture and script without traffic
 cd ~/repos/stepv2-frontend/k6
-k6 run --summary-trend-stats="avg,p(90),p(95),p(99),max" \
-  --out csv=/tmp/ladder.csv prod-mix-load-test.js > /tmp/ladder.txt 2>&1
+node validate-fixture.mjs users.json
+k6 inspect -e MODE=smoke -e RUN_ID=smoke-inspect -e REPEAT_INDEX=smoke \
+  prod-mix-load-test.js
 
-# 4. per-rung breakdown (the summary alone averages all rungs together and
-#    is therefore useless — always break down by rung)
-awk -F, 'NR>1 && $1=="http_req_duration" {
-  r=$12; st=$14; n[r]++; sum[r]+=$3;
-  if(st=="0") zero[r]++; else if(st>=500) e5[r]++;
-  else if(st==401||st==403) e401[r]++; else if(st>=200&&st<400) ok[r]++;
-} END { printf "%-10s %8s %8s %8s %8s %8s %8s\n","rung","reqs","mean_ms","ok%","timeout%","5xx%","401%";
-  for(r in n) printf "%-10s %8d %8.0f %7.1f%% %7.1f%% %7.1f%% %7.1f%%\n",
-    r,n[r],sum[r]/n[r],100*ok[r]/n[r],100*zero[r]/n[r],100*e5[r]/n[r],100*e401[r]/n[r]
-}' /tmp/ladder.csv | sort
+# 4. only with separate authorization: deterministic endpoint smoke
+k6 run -e MODE=smoke \
+  -e RUN_ID=smoke-$(date +%s) -e REPEAT_INDEX=smoke \
+  -e SUMMARY_JSON=/tmp/capacity-smoke-summary.json \
+  --out json=/tmp/capacity-smoke-samples.json prod-mix-load-test.js
+
+# 5. only with separate authorization: one measured cohort/rung
+k6 run -e TARGET_RUNG=rate_15rps \
+  -e CLIENT_COHORT=ios_bara_2_3_7_ads_payout \
+  -e BACKEND_REVISION=<revision> \
+  -e BACKEND_FLAGS=<flags> -e BACKEND_CONFIG=<config> \
+  -e WORKER_COUNT=1 -e PGBOUNCER_POOL=3 \
+  -e REDIS_STATE=warm-process-warm-redis \
+  -e CRON_COHORT=warm-steady-outside-heavy-tick \
+  -e RUN_ID=pool3-baseline-r1 -e REPEAT_INDEX=1 \
+  -e SUMMARY_JSON=/tmp/capacity-rate-15-summary-1.json \
+  --out json=/tmp/capacity-rate-15-samples-1.json prod-mix-load-test.js
+
+# 6. Export capacity telemetry NDJSON from the server after each repeat, then
+# extract its server-owned evidence in the backend repo. Embed that output as
+# `telemetry` in one harness-owned capacity-telemetry-evidence-v1 JSON file per
+# repeat alongside the matching runId, repeatIndex, booleans, and setting.
+node scripts/extract-capacity-telemetry-evidence.js \
+  --run-id pool3-baseline-r1 --repeat 1 \
+  < /tmp/capacity-metrics-1.ndjson \
+  > /tmp/capacity-rate-15-server-evidence-1.json
+
+jq -n \
+  --slurpfile summary /tmp/capacity-rate-15-summary-1.json \
+  --slurpfile telemetry /tmp/capacity-rate-15-server-evidence-1.json \
+  '{
+    schema: "capacity-telemetry-evidence-v1",
+    runId: $summary[0].inputs.runId,
+    repeatIndex: $summary[0].inputs.repeatIndex,
+    queryCaptureAvailable: $telemetry[0].queryCaptureAvailable,
+    measurementGateEligible: $telemetry[0].measurementGateEligible,
+    setting: ($summary[0].inputs | {
+      backendRevision, flags, config, workerCount, pgBouncerPool, redisState,
+      cronCohort
+    }),
+    telemetry: $telemetry[0]
+  }' > /tmp/capacity-rate-15-evidence-1.json
+
+# 7. after exactly three matched triples, this output is the cohort gate
+node aggregate-capacity-cohort.mjs \
+  --summary /tmp/capacity-rate-15-summary-1.json \
+  --raw /tmp/capacity-rate-15-samples-1.json \
+  --evidence /tmp/capacity-rate-15-evidence-1.json \
+  --summary /tmp/capacity-rate-15-summary-2.json \
+  --raw /tmp/capacity-rate-15-samples-2.json \
+  --evidence /tmp/capacity-rate-15-evidence-2.json \
+  --summary /tmp/capacity-rate-15-summary-3.json \
+  --raw /tmp/capacity-rate-15-samples-3.json \
+  --evidence /tmp/capacity-rate-15-evidence-3.json \
+  --out /tmp/capacity-rate-15-cohort.json
 ```
 
-**`k6 run` blocks for the whole ramp.** Launch it with `run_in_background`, not a
-foreground shell — a 2-minute foreground timeout kills a multi-minute ramp
-mid-run (this ate the first attempt on 2026-08-15).
+The JSON sample stream carries the unique `run_id`, `repeat_index`, `endpoint`,
+exact `status`, `rung`, selected and executed endpoint, client cohort, race
+status, team/solo, and roster-size-stratum tags. `handleSummary` emits the same
+run binding in a separate structured gate/status summary. An individual repeat
+is never claimable before post-run server evidence exists. The mandatory cohort
+aggregator binds each summary/raw/evidence triple, rejects reused IDs or
+mispaired/truncated raw files, requires exact selected = executed = duration
+sample = status totals for every endpoint, and applies endpoint p95 only at 20+
+aggregate samples. Each repeat summary independently records those four
+per-endpoint custom-metric counts, so removing an entire endpoint quartet from a
+raw file also fails reconciliation. Claimable cohorts require the exact
+`https://staging.steptracker-api.org` base URL, a real commit revision, recorded
+flag/config labels, pool size 3, and structured worker/Redis/cron topology
+labels. Localhost remains available only for diagnostic, non-claimable runs. Do
+not parse fixed CSV column positions.
 
 ---
 
@@ -71,40 +155,41 @@ the server slows the test quietly backs off exactly when it should be pushing.
 That is why the 2026-08-15 run flatlined at ~190 rps no matter how many VUs it
 was given.
 
-Convert through **request rate** instead. Measured from 24h of prod nginx logs
-on **2026-08-16** (bots, scanners, and k6's own traffic excluded):
+Convert through **request rate** instead. The evidence window recorded in the
+approved 2026-08-17 capacity spec was:
 
 | Measure | Value |
 |---|---|
-| Real app requests / 24h | 217,144 |
-| DAU (`users.last_seen_at`, agreed with distinct step-sample posters) | 471 |
-| Requests per DAU per day | **467** |
-| Mean rps | 2.51 |
-| Peak 10-min rps (organic) | 5.68 (2.26× daily mean) |
-| **Peak rps per DAU** | **0.0122** |
+| Real app requests / 24h | 280,554 |
+| DAU | 495 |
+| Requests per DAU per day | **566.8** |
+| Mean rps | 3.25 |
+| Peak 10-min rps | 12.82 |
+| **Peak rps per DAU** | **0.0259** |
 
 ```
-peak rps = DAU × 0.0122
+peak rps = DAU × 0.0259
 ```
 
-The rungs in `prod-mix-load-test.js` are built from this:
+Rungs are named only by offered rate. DAU is a later evidence conversion, never
+part of a scenario identity:
 
-| Rung | Offered rate | Models |
-|---|---|---|
-| `dau_1250` | 15 rps | 1,250 DAU |
-| `dau_2500` | 31 rps | 2,500 DAU |
-| `dau_5000` | 61 rps | 5,000 DAU |
-| `dau_10000` | 122 rps | 10,000 DAU |
-| `dau_20000` | 244 rps | 20,000 DAU |
+| Rung | Offered rate | Duration | Role |
+|---|---:|---:|---|
+| `rate_5rps` | 5 rps | 60 s | low-rate harness/telemetry gate |
+| `rate_15rps` | 15 rps | 90 s | conservative capacity gate |
+| `rate_31rps` | 31 rps | 30 s | only after 15-rps gates pass |
 
-Run one rung with `TARGET_ONLY=dau_5000`, and shorten it with
-`DURATION_OVERRIDE=45s` (handy for smoke-testing script edits).
+`DURATION_OVERRIDE` is rejected in capacity mode unless
+`ALLOW_DIAGNOSTIC_OVERRIDE=1` is also set. Such summaries are stamped
+`claimable:false` and the cohort aggregator rejects them.
 
 ### Re-derive the constant
 
-It drifts — it was **0.0452** in the older notes and is 3.7× lower now (DAU grew
-104 → 471 while per-user requests fell 852 → 467/day). Recompute before quoting
-capacity numbers:
+The coefficient drifts. Recompute it before quoting capacity, and publish the
+window, timezone, DAU definition, excluded non-app traffic, peak bucket, and
+coefficient. The 14-day fixture corpus is not the 24-hour DAU denominator; both
+windows are labeled separately in every generated fixture.
 
 ```bash
 ssh root@167.172.225.16 'cat /var/log/nginx/access.log.1 /var/log/nginx/access.log \
@@ -119,9 +204,8 @@ ssh root@167.172.225.16 'cat /var/log/nginx/access.log.1 /var/log/nginx/access.l
 
 Then DAU from prod: `SELECT COUNT(*) FROM users WHERE last_seen_at > NOW() - INTERVAL '24 hours';`
 
-**Discard anomalous peak buckets.** The top bucket on 2026-08-16 was a single
-device retry-looping a 404 at 6.5 req/s — 3,907 of the bucket's 5,850 requests.
-Cross-check the top bucket's composition before using it.
+Cross-check the peak bucket's composition before using it; retry loops and test
+traffic are not organic app demand.
 
 ---
 
@@ -135,7 +219,8 @@ which drives the worker's own inspector.
 ```bash
 # 1. start load in one shell (background it — k6 blocks)
 cd ~/repos/stepv2-frontend/k6
-k6 run -e FAST=1 -e TARGET_ONLY=dau_5000 -e DURATION_OVERRIDE=120s prod-mix-load-test.js
+k6 run -e TARGET_RUNG=rate_15rps -e DURATION_OVERRIDE=120s \
+  -e ALLOW_DIAGNOSTIC_OVERRIDE=1 prod-mix-load-test.js
 
 # 2. ~15s in, attach and capture 50s from the droplet
 scp k6/profile-worker.js root@167.172.225.16:/tmp/
@@ -244,7 +329,12 @@ ssh root@167.172.225.16 'pm2 start steps-tracker-staging; rm /tmp/prod-sync.sql'
 There is no email/password login (Apple/Google Sign-In only). `mint-staging-users.js`
 signs session tokens **directly** with staging's `SESSION_TOKEN_SECRET`
 (HS256, `subject: userId`, `issuer: steps-tracker-api`), for N real
-prod-cloned users, and records each one's live/pending race ids.
+prod-cloned users. It records ACTIVE and PENDING races separately, plus
+team/solo and full accepted-roster size. It reserves dedicated users and every
+live race they share; those users and races are excluded from workload traffic.
+At setup, the harness posts a fresh sync-v2 request for each reserved user and
+polls the returned current job/generation across all VUs. Teardown requires at
+least one lag sample and drains every reserved job to zero outstanding.
 
 This matters: the older harness authenticated every VU as the single App Store
 reviewer account, which serialises all writes onto one user's rows and hands
@@ -284,15 +374,17 @@ literally request counts, so any consistent scale works.
 
 Two endpoint quirks encoded in the script:
 
-- **`/steps/race-resolution/:jobId` takes a JOB id, not a race id.** The client
-  gets one from a `/steps/sync-v2` response and then polls it. The script
-  harvests job ids from its own sync responses; passing a race id returns 400.
+- **`/steps/race-resolution/:jobId` takes a JOB id, not a race id.** Setup
+  creates fresh jobs for dedicated identities and distributes the returned
+  current job/generation globally. New VUs therefore preserve poll weight
+  without stale fixture jobs or empty VU-local history.
 - **`/challenges/current` 404s on every request.** That is faithful to prod —
   the route has never existed. (The iOS caller was removed 2026-08-16; once
   no shipped build sends it, drop it from the mix.)
 
-Expect ~9% non-2xx at rest. That is correct, not a bug: prod's own baseline is
-~10% non-2xx (404s plus 304s).
+Only the documented organic `challenges_current` 404 is excluded from the
+capacity-failure rate, and it remains visible in exact tagged status counts.
+Every other non-2xx response, including 429, is a capacity failure.
 
 ---
 
@@ -338,90 +430,22 @@ Resizing a pool needs a **write-scoped** DO token; the droplet's default
 
 ---
 
-## 2026-08-16 results — the current ceiling
+## Historical results are diagnostic, not a capacity ceiling
 
-Staging on prod-cloned data, 400 distinct users. **Read the pool-size caveat
-below before quoting any of these numbers.**
+The switched/partially corrected harness produced the following one-worker
+measurements at a temporary PgBouncer pool of 20:
 
-| Rung | Offered | reqs | mean | ok | timeout | 5xx | 401 |
-|---|---|---|---|---|---|---|---|
-| `dau_1250` | 15 rps | 2,701 | 402 ms | **90.0%** | 0.0% | 0.0% | 0.0% |
-| `dau_2500` | 31 rps | 5,181 | 9,882 ms | 61.5% | 12.3% | 12.8% | 2.2% |
-| `dau_5000` | 61 rps | 13,935 | 11,487 ms | **31.3%** | 9.4% | 37.0% | 12.4% |
-| `dau_10000` | 122 rps | 20,788 | 9,450 ms | 22.1% | 3.1% | 40.2% | 24.9% |
-| `dau_20000` | 244 rps | 39,384 | 8,842 ms | 5.7% | 66.9% | 6.1% | 18.1% |
+| Offered load | Completed | Hard failures | Dropped | Overall p95 |
+|---|---:|---:|---:|---:|
+| 15 rps for 90 s | 1,351 | 0 | 0 | 3.40 s |
+| 31 rps for 30 s | 882 (23.17/s effective) | 1 timeout | 49 | 14.23 s |
 
-**CAVEAT: this ladder ran while `bara-staging-pool` was size 3** (prod's was
-19). It therefore measured a 3-connection pool, not production, and the DAU
-numbers above are far too pessimistic. Kept for the shape of the curve only.
+Those runs predate the corrected fixture, resolution, status, and summary
+behavior in this harness and used pool 20. They diagnose queueing and hot paths;
+they do not certify any one-worker, pool-3 capacity or DAU count.
 
-### Re-run at pool = 20 (same day)
-
-With `bara-staging-pool` raised to 20, the 5,000-DAU rung improved a lot and
-still failed:
-
-| 61 rps (5,000 DAU) | pool = 3 | pool = 20 |
-|---|---|---|
-| ok | 31.3% | **52.6%** |
-| 5xx | 37.0% | **19.2%** |
-| timeout | 9.4% | 16.5% |
-| mean | 11.5 s | 12.9 s |
-
-The 10,000-DAU rung hit 33.8% 5xx and tripped the abort. **5,000 users does not
-work today**; prod's pool is 25 vs staging's 20, so prod's ceiling is ~25%
-higher, not multiples higher.
-
-### The bottleneck is NOT the droplet's CPU, and NOT Prisma's `connection_limit`
-
-Two dead ends worth recording so nobody re-walks them:
-
-- **Droplet CPU is not the wall.** Through the failing rungs the droplet held
-  **23–52% idle**. Requests took 11 s while two cores sat a third idle. The one
-  genuine CPU event was at 244 rps where `%system` hit 93% — kernel saturation
-  from connection churn, not application work.
-- **`connection_limit` does nothing here.** This backend uses the Prisma
-  **driver adapter**: `src/db.js` builds an explicit
-  `new pg.Pool({ max: 20, connectionTimeoutMillis: 5000 })` and wraps it in
-  `PrismaPg`. Prisma's own pool (and its `num_cpus*2+1` default) is not in play,
-  and a `connection_limit` URL param is silently ignored.
-
-**The wall moves as you fix it.** Two distinct signatures, in order:
-
-1. At pool = 3 — `P2028 Transaction API error: Unable to start a transaction in
-   the given time`, from PgBouncer starvation. Fixed by sizing the pool.
-2. At pool = 20 — `Error: timeout exceeded when trying to connect`, which is
-   node-postgres' own `connectionTimeoutMillis: 5000` in `src/db.js`. The app
-   runs `max: 20` **per process** × 2 pm2 instances = **40 app connections
-   competing for 20 PgBouncer backends**, a 2:1 oversubscription. Deadlocks also
-   appear at this stage (8 of them), which pool = 3 was too starved to reach.
-
-Underneath both sits the **1-vCPU database**. `/home/race-card` costs 1,558
-ms/req and `/races` 648 ms at prod's *current* ~5 rps; a single core is the
-likely floor under everything else. Before spending money on a resize, settle it
-by running one 61-rps minute while sampling connection state — if the pooled
-backends are mostly `active` the DB is saturated and pool tuning is futile; if
-mostly `idle` it is purely app-side config:
-
-```sql
-SELECT state, COUNT(*) FROM pg_stat_activity
- WHERE datname='step-tracker-staging' AND backend_type='client backend'
- GROUP BY state;
-```
-
-### Prod impact
-
-Staging and prod share the droplet *and* the DB cluster, so a run of this size
-is felt in production. Measured on endpoints the test never issues
-(`/leaderboard`, `/coins`, `/daily-reward`, `/tournaments`, `/ranked`, …):
-
-| Window | reqs | mean | 5xx |
-|---|---|---|---|
-| Before (13:30–14:10) | 294 | **69 ms** | 0.0% |
-| During (14:14–14:34) | 136 | **579 ms** | 0.7% |
-
-Real users saw an **8.4× latency increase** but almost no errors. Run in a
-low-traffic window, or accept that.
-
-**Prod and staging share one nginx access log with no vhost field**, and this
-script deliberately sends a realistic `Bara/2.3.7` user-agent — so you cannot
-separate the two by UA. Use endpoints the test never touches, as above.
+The first valid baseline must use one staging worker and PgBouncer pool 3,
+record all inputs named in the structured summary, and pass the exact gates in
+the approved capacity specification. Production capacity is measured
+independently; never multiply a one-worker result by the production worker
+count.

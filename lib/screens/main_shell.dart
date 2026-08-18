@@ -10,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 import '../config/animals.dart';
 import '../config/backend_config.dart';
 import '../config/start_cape_metadata.dart';
+import '../styles.dart';
 import '../models/loadable.dart';
 import '../models/home_race_suggestion.dart';
 import '../models/home_invite_preflight.dart';
@@ -43,6 +44,9 @@ import '../widgets/arcade_page.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/info_toast.dart';
 import '../widgets/invite_code_sheet.dart';
+import '../widgets/game_container.dart';
+import '../widgets/home_chrome.dart';
+import '../widgets/pill_button.dart';
 import '../widgets/quick_create_race_sheet.dart';
 import '../widgets/home_invite_overlay.dart';
 import '../widgets/team_side_picker.dart';
@@ -67,6 +71,7 @@ import 'tabs/leaderboard_tab.dart';
 import 'tabs/profile_tab.dart';
 import 'create_race_screen.dart';
 import 'daily_reward_screen.dart';
+import 'inbox_screen.dart';
 import 'race_detail_screen.dart';
 import 'public_races_screen.dart';
 import 'tournament_detail_screen.dart';
@@ -116,6 +121,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   late final ActivationAnalyticsService _activationAnalytics;
   late final RaceResultsAcknowledgementQueue _raceResultsAckQueue;
   late final FriendsSummaryRepository _friendsRepository;
+  bool _globalSummaryShowing = false;
 
   int _currentTab = 0;
   late final PageController _pageController;
@@ -2405,13 +2411,36 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     // mutating response maps here: injected/demo payloads may be immutable and
     // a backend-version-skewed map should never turn dismissal into a crash.
 
-    // Happy-moment hook: the user just dismissed a results modal that included
-    // a top-3 finish — or, for team races, a strict team WIN (TR-807: ties
-    // and forfeited members never qualify). The service applies its own
-    // warm-up/cooldown/never-again guards, so most calls are no-ops.
-    final placedTop3 = unseen.any(raceCountsAsReviewHappyMoment);
-    if (placedTop3 && mounted) {
-      await _reviewPromptService.recordHappyMomentAndMaybePrompt(context);
+    // The backend emits this opaque opportunity only for the settled
+    // first-place winner and atomically records the 180-day attempt. Never
+    // infer eligibility from a local placement/top-three calculation.
+    Map<String, dynamic>? reviewRace;
+    for (final race in unseen) {
+      if (race['reviewOpportunity'] is Map) {
+        reviewRace = race;
+        break;
+      }
+    }
+    final opportunity = reviewRace?['reviewOpportunity'];
+    final opportunityId = opportunity is Map ? opportunity['id'] : null;
+    final opportunityRaceId = opportunity is Map ? opportunity['raceId'] : null;
+    if (mounted &&
+        identityToken != null &&
+        identityToken.isNotEmpty &&
+        opportunityId is String &&
+        opportunityId.isNotEmpty &&
+        opportunityRaceId is String &&
+        opportunityRaceId.isNotEmpty) {
+      try {
+        await _backendApiService.claimReviewOpportunity(
+          identityToken: identityToken,
+          raceId: opportunityRaceId,
+          opportunityId: opportunityId,
+        );
+        await _reviewPromptService.requestEligibleNativeReview();
+      } catch (_) {
+        // Missing/expired/claimed/old endpoint: no prompt and no disruption.
+      }
     }
     if (startNext == true && mounted) {
       await _showQuickCreateRaceSheet(surface: 'results');
@@ -2904,6 +2933,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           _raceCard = data;
           _raceCardLoading = false;
         });
+        unawaited(_showGlobalEventSummaryIfEligible(data));
         final next = NextRaceState.tryParse(data['nextRace']);
         if (!_nextRaceHomeShownRecorded && next?.visible == true) {
           _nextRaceHomeShownRecorded = true;
@@ -2935,6 +2965,83 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _showGlobalEventSummaryIfEligible(
+    Map<String, dynamic> home,
+  ) async {
+    if (!mounted || _globalSummaryShowing) return;
+    final raw = home['globalEventSummary'];
+    if (raw is! Map) return;
+    final id = raw['id'];
+    final extra = raw['extraRaceSteps'];
+    final count = raw['raceCount'];
+    if (id is! String || id.isEmpty || extra is! num || count is! num) return;
+    final races = count.toInt();
+    if (races <= 0) return;
+    final steps = extra.toInt();
+    _globalSummaryShowing = true;
+    final raceWord = races == 1 ? 'race' : 'races';
+    final summary = steps > 0
+        ? 'You earned +$steps extra race steps across $races $raceWord.'
+        : steps < 0
+        ? 'The event changed your race score by −${steps.abs()} across $races $raceWord.'
+        : 'Gains and losses balanced across $races $raceWord; net 0.';
+    try {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          child: GameContainer(
+            padding: const EdgeInsets.all(18),
+            frameColor: AppColors.of(context).coinDark,
+            surfaceColor: AppColors.of(context).parchmentLight,
+            glowColor: AppColors.of(context).coinMid,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '2× STEPS COMPLETE',
+                  style: HomeText.display(
+                    size: 24,
+                    color: AppColors.of(context).ink,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  summary,
+                  textAlign: TextAlign.center,
+                  style: HomeText.body(
+                    size: 13,
+                    color: AppColors.of(context).muted,
+                    weight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                PillButton(
+                  label: 'CONTINUE',
+                  fullWidth: true,
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      final token = widget.authService.authToken;
+      if (token != null && token.isNotEmpty) {
+        try {
+          await _backendApiService.acknowledgeGlobalEventSummary(
+            identityToken: token,
+            summaryId: id,
+          );
+        } catch (_) {}
+      }
+    } finally {
+      _globalSummaryShowing = false;
+    }
+  }
+
   // Keep the cached race-card batch truthful after a claim, so a remounted
   // StreakChip (home page disposed by the PageView) doesn't briefly show a
   // stale CLAIM state. No setState: nothing on screen reads this until the
@@ -2943,6 +3050,72 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     final dailyReward = _raceCard?['dailyReward'];
     if (dailyReward is Map) {
       dailyReward['claimedToday'] = true;
+    }
+  }
+
+  void _openInbox() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => InboxScreen(
+          authService: widget.authService,
+          backendApiService: _backendApiService,
+          onOpenDestination: _openInboxDestination,
+        ),
+      ),
+    );
+  }
+
+  /// Inbox destinations are backend-allowlisted opaque route payloads. Do not
+  /// accept arbitrary route names/arguments from alert text; malformed or old
+  /// payloads simply leave the user in Inbox after its read attempt.
+  void _openInboxDestination(Map<String, dynamic> destination) {
+    final destinationModel = InboxDestination.tryParse(destination);
+    if (destinationModel == null) return;
+    final navigator = Navigator.of(context);
+    switch (destinationModel.route) {
+      case InboxDestinationRoute.home:
+        navigator.pop();
+        _pageController.animateToPage(
+          _homeTabIndex,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+        );
+      case InboxDestinationRoute.friends:
+        navigator.pop();
+        _openFriendsTab();
+      case InboxDestinationRoute.dailyReward:
+        navigator.pop();
+        navigator.push(
+          MaterialPageRoute(
+            builder: (_) => DailyRewardScreen(
+              authService: widget.authService,
+              backendApiService: _backendApiService,
+            ),
+          ),
+        );
+      case InboxDestinationRoute.raceDetail:
+        final raceId = destinationModel.raceId;
+        if (raceId == null) return;
+        navigator.pop();
+        _openRaceFromCard(raceId);
+      case InboxDestinationRoute.tournamentDetail:
+        final tournamentId = destinationModel.tournamentId;
+        if (tournamentId == null) return;
+        navigator.pop();
+        _openTournament(tournamentId);
+      case InboxDestinationRoute.supportThread:
+        final threadId = destinationModel.threadId;
+        if (threadId == null) return;
+        navigator.pop();
+        navigator.push(
+          MaterialPageRoute(
+            builder: (_) => SupportThreadScreen(
+              authService: widget.authService,
+              backendApiService: _backendApiService,
+              threadId: threadId,
+            ),
+          ),
+        );
     }
   }
 
@@ -3866,6 +4039,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                           onStartQuickRace: () {
                             unawaited(_showQuickCreateRaceSheet());
                           },
+                          onOpenInbox: _openInbox,
                           suppressPendingInvite: _homeInvitePopupOpen,
                         ),
                         RacesTab(
