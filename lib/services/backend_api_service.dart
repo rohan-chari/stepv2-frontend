@@ -67,6 +67,7 @@ class RaceMessageStreamsResult {
   const RaceMessageStreamsResult({
     required this.supported,
     this.malformed = false,
+    this.notModified = false,
     this.userStream,
     this.systemStream,
     this.chatWatermark,
@@ -82,6 +83,7 @@ class RaceMessageStreamsResult {
 
   final bool supported;
   final bool malformed;
+  final bool notModified;
   final Map<String, dynamic>? userStream;
   final Map<String, dynamic>? systemStream;
   final Map<String, dynamic>? chatWatermark;
@@ -249,8 +251,8 @@ class BackendApiService {
   // send `view=participants-v1` (which only ever paged `progress`). Must
   // appear in BOTH branches of the ternary.
   static final String clientFeaturesHeader = _adsSupported
-      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,impact_summaries,review_prompt,inbox_v1${_racePayoutDoubleSupported ? ',race_payout_double' : ''}'
-      : 'characters,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,impact_summaries,review_prompt,inbox_v1${_racePayoutDoubleSupported ? ',race_payout_double' : ''}';
+      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,impact_summaries,review_prompt,inbox_v1,api_payload_compact_v1${_racePayoutDoubleSupported ? ',race_payout_double' : ''}'
+      : 'characters,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,impact_summaries,review_prompt,inbox_v1,api_payload_compact_v1${_racePayoutDoubleSupported ? ',race_payout_double' : ''}';
 
   /// Replays a persisted results dismissal with the capability it originally
   /// advertised. A later app build may have gained or lost the dedicated ad
@@ -290,6 +292,9 @@ class BackendApiService {
   // token refresh for the SAME user must not clear them.
   String? _sessionUserId;
   String? _sessionBaseUrl;
+  String? _raceMessageConditionalIdentity;
+  String? _raceMessageConditionalRaceId;
+  String? _raceMessageConditionalEtag;
 
   static final Random _uuidRandom = Random.secure();
 
@@ -319,6 +324,7 @@ class BackendApiService {
     _raceProgressParticipantsSupport = EndpointSupport.unknown;
     _racePowerupUseContextSupport = EndpointSupport.unknown;
     _racePayoutDoubleSupport = EndpointSupport.unknown;
+    resetRaceMessageConditionalState();
     _sessionUserId = null;
   }
 
@@ -337,6 +343,7 @@ class BackendApiService {
       _raceProgressParticipantsSupport = EndpointSupport.unknown;
       _racePowerupUseContextSupport = EndpointSupport.unknown;
       _racePayoutDoubleSupport = EndpointSupport.unknown;
+      resetRaceMessageConditionalState();
       _sessionUserId = userId;
       _sessionBaseUrl = baseUrl;
     }
@@ -1161,6 +1168,61 @@ class BackendApiService {
     return result;
   }
 
+  bool _isValidCompactRaceBootstrap(
+    Map<String, dynamic> race,
+    Map<String, dynamic>? progress,
+  ) {
+    if (race['status'] != 'ACTIVE' ||
+        race['isTeamRace'] == true ||
+        race.containsKey('participants') ||
+        progress == null) {
+      return false;
+    }
+    final acceptedCount = race['acceptedCount'];
+    final participantUserIds = race['participantUserIds'];
+    if (acceptedCount is! num ||
+        acceptedCount < 0 ||
+        participantUserIds is! List ||
+        participantUserIds.any((id) => id is! String || id.isEmpty) ||
+        participantUserIds.length < acceptedCount.toInt() ||
+        race['myStatus'] is! String ||
+        (race['myStatus'] as String).isEmpty ||
+        race['myTotalSteps'] is! num ||
+        (race['myTotalSteps'] as num) < 0) {
+      return false;
+    }
+    final racePagination = _safeStringMap(race['participantsPagination']);
+    final progressPagination = _safeStringMap(progress['pagination']);
+    final participants = progress['participants'];
+    return _isValidParticipantsPagination(racePagination) &&
+        _isValidParticipantsPagination(progressPagination) &&
+        participants is List &&
+        participants.every((row) {
+          final participant = _safeStringMap(row);
+          return participant != null &&
+              participant['userId'] is String &&
+              (participant['userId'] as String).isNotEmpty;
+        });
+  }
+
+  bool _isValidParticipantsPagination(Map<String, dynamic>? pagination) {
+    if (pagination == null) return false;
+    final offset = pagination['offset'];
+    final limit = pagination['limit'];
+    final total = pagination['total'];
+    final hasMore = pagination['hasMore'];
+    final nextOffset = pagination['nextOffset'];
+    return offset is num &&
+        offset >= 0 &&
+        limit is num &&
+        limit > 0 &&
+        total is num &&
+        total >= 0 &&
+        hasMore is bool &&
+        nextOffset is num &&
+        nextOffset >= 0;
+  }
+
   ApiException _apiExceptionFromRaw(_RawResponse raw) {
     final message = raw.json?['error'];
     return ApiException(
@@ -1810,7 +1872,12 @@ class BackendApiService {
   }) async {
     final uri = Uri(
       path: '/leaderboard',
-      queryParameters: {'type': type, 'period': period, 'scope': scope},
+      queryParameters: {
+        'type': type,
+        'period': period,
+        'scope': scope,
+        'view': 'compact-v1',
+      },
     );
 
     final response = await _sendGetRequest(
@@ -2590,7 +2657,7 @@ class BackendApiService {
     required String identityToken,
   }) async {
     final response = await _sendGetRequest(
-      path: '/races',
+      path: '/races?view=compact-v1',
       identityToken: identityToken,
     );
 
@@ -2663,11 +2730,18 @@ class BackendApiService {
     if (_raceBootstrapSupport == EndpointSupport.unsupported) {
       return RaceBootstrapResult.unsupported;
     }
-    final pagingQuery = participantsLimit == null
+    final query = participantsLimit == null
         ? ''
-        : '?view=participants-v1&offset=0&limit=$participantsLimit';
+        : Uri(
+            queryParameters: {
+              'view': 'participants-v1',
+              'offset': '0',
+              'limit': '$participantsLimit',
+              'shape': 'compact-v1',
+            },
+          ).toString();
     final response = await _sendGetRequest(
-      path: '/races/${Uri.encodeComponent(raceId)}/bootstrap$pagingQuery',
+      path: '/races/${Uri.encodeComponent(raceId)}/bootstrap$query',
       identityToken: identityToken,
     );
     final raw = await _readRawResponse(response);
@@ -2680,14 +2754,20 @@ class BackendApiService {
     }
     final payload = raw.json;
     final race = _safeStringMap(payload?['race']);
+    final contract = payload?['contract'];
+    final legacyContract = contract == 'race-bootstrap-v1';
+    final compactContract = contract == 'race-bootstrap-compact-v1';
     if (raw.decodeFailed ||
-        payload?['contract'] != 'race-bootstrap-v1' ||
+        (!legacyContract && !compactContract) ||
         race == null) {
       throw const ApiException('Couldn’t load this race. Please try again.');
     }
     _raceBootstrapSupport = EndpointSupport.supported;
     final progress = _safeStringMap(payload?['progress']);
     final progressError = _safeStringMap(payload?['progressError']);
+    if (compactContract && !_isValidCompactRaceBootstrap(race, progress)) {
+      return RaceBootstrapResult.unsupported;
+    }
     return RaceBootstrapResult(
       supported: true,
       race: race,
@@ -3754,6 +3834,128 @@ class BackendApiService {
     return raw.json!;
   }
 
+  Future<Map<String, dynamic>> fetchRacePowerupTargetContext({
+    required String identityToken,
+    required String raceId,
+    required String powerupType,
+  }) async {
+    if (runtimeType != BackendApiService ||
+        _racePowerupUseContextSupport == EndpointSupport.unsupported) {
+      throw const ApiException(
+        'Couldn’t load race powerup context. Please try again.',
+        statusCode: 404,
+      );
+    }
+
+    final uri = Uri(
+      path: '/races/${Uri.encodeComponent(raceId)}/powerups/use-context',
+      queryParameters: {'view': 'targets-v1', 'powerupType': powerupType},
+    );
+    final response = await _sendGetRequest(
+      path: uri.toString(),
+      identityToken: identityToken,
+    );
+    final raw = await _readRawResponse(response);
+    if (raw.statusCode == 404) {
+      _racePowerupUseContextSupport = EndpointSupport.unsupported;
+      throw _apiExceptionFromRaw(raw);
+    }
+    if (raw.statusCode < 200 || raw.statusCode >= 300) {
+      throw _apiExceptionFromRaw(raw);
+    }
+    final normalized = _normalizeRacePowerupTargetPayload(
+      raw.json,
+      powerupType: powerupType,
+    );
+    if (raw.decodeFailed || normalized == null) {
+      throw const ApiException(
+        'Couldn’t load race powerup context. Please try again.',
+      );
+    }
+    _racePowerupUseContextSupport = EndpointSupport.supported;
+    return normalized;
+  }
+
+  Map<String, dynamic>? _normalizeRacePowerupTargetPayload(
+    Map<String, dynamic>? payload, {
+    required String powerupType,
+  }) {
+    final contract = payload?['contract'];
+    final typed = contract == 'race-powerup-target-context-v1';
+    final legacy = contract == 'race-powerup-use-context-v1';
+    final participants = payload?['participants'];
+    final powerupData = _safeStringMap(payload?['powerupData']);
+    final inventory = powerupData?['inventory'];
+    if ((!typed && !legacy) ||
+        participants is! List ||
+        participants.isEmpty ||
+        powerupData == null ||
+        inventory is! List) {
+      return null;
+    }
+
+    final normalizedParticipants = <Map<String, dynamic>>[];
+    for (final rawParticipant in participants) {
+      final participant = _safeStringMap(rawParticipant);
+      final userId = participant?['userId'];
+      final displayName = participant?['displayName'];
+      final profilePhotoUrl = participant?['profilePhotoUrl'];
+      final team = participant?['team'];
+      final forfeitedAt = participant?['forfeitedAt'];
+      final stealthed = participant?['stealthed'];
+      final totalSteps = participant?['totalSteps'];
+      if (participant == null ||
+          userId is! String ||
+          userId.isEmpty ||
+          (displayName != null && displayName is! String) ||
+          (profilePhotoUrl != null && profilePhotoUrl is! String) ||
+          (team != null && team is! String) ||
+          (forfeitedAt != null && forfeitedAt is! String) ||
+          (typed && stealthed is! bool) ||
+          (totalSteps != null && totalSteps is! num) ||
+          (typed && powerupType == 'BOUNTY' && totalSteps is! num) ||
+          (typed &&
+              powerupType != 'BOUNTY' &&
+              participant.containsKey('totalSteps'))) {
+        return null;
+      }
+      normalizedParticipants.add({
+        'userId': userId,
+        'displayName': displayName,
+        'profilePhotoUrl': profilePhotoUrl,
+        'team': team,
+        'forfeitedAt': forfeitedAt,
+        'stealthed': participant['stealthed'] == true,
+        if (totalSteps is num) 'totalSteps': totalSteps.toInt(),
+      });
+    }
+
+    final normalizedInventory = <Map<String, dynamic>>[];
+    for (final rawItem in inventory) {
+      final item = _safeStringMap(rawItem);
+      if (item == null) return null;
+      normalizedInventory.add(item);
+    }
+    final powerupSlots = powerupData['powerupSlots'];
+    final queuedBoxCount = powerupData['queuedBoxCount'];
+    final myPlacement = powerupData['myPlacement'];
+    if (powerupSlots is! num ||
+        queuedBoxCount is! num ||
+        (myPlacement != null && myPlacement is! num)) {
+      return null;
+    }
+    return {
+      'contract': contract,
+      'participants': normalizedParticipants,
+      'powerupData': {
+        'powerupSlots': powerupSlots.toInt(),
+        'inventory': normalizedInventory,
+        'queuedBoxCount': queuedBoxCount.toInt(),
+        'myPlacement': myPlacement is num ? myPlacement.toInt() : null,
+      },
+    };
+  }
+
   Future<void> cancelRace({
     required String identityToken,
     required String raceId,
@@ -4009,6 +4211,13 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  void resetRaceMessageConditionalState({String? raceId}) {
+    if (raceId != null && raceId != _raceMessageConditionalRaceId) return;
+    _raceMessageConditionalIdentity = null;
+    _raceMessageConditionalRaceId = null;
+    _raceMessageConditionalEtag = null;
+  }
+
   Future<RaceMessageStreamsResult> fetchRaceMessageStreams({
     required String identityToken,
     required String raceId,
@@ -4021,20 +4230,55 @@ class BackendApiService {
     if (_raceMessageStreamsSupport == EndpointSupport.unsupported) {
       return RaceMessageStreamsResult.unsupported;
     }
+    final requestIdentity = jsonEncode([
+      BackendConfig.baseUrl,
+      _sessionUserId,
+      identityToken,
+      raceId,
+      includeUser,
+      limit,
+    ]);
+    if (_raceMessageConditionalIdentity != requestIdentity) {
+      resetRaceMessageConditionalState();
+      _raceMessageConditionalIdentity = requestIdentity;
+      _raceMessageConditionalRaceId = raceId;
+    }
+    final sentEtag = _raceMessageConditionalEtag;
     final uri = Uri(
-      path: '/races/$raceId/message-streams',
+      path: '/races/${Uri.encodeComponent(raceId)}/message-streams',
       queryParameters: {
         'limit': '$limit',
         'includeUser': includeUser ? 'true' : 'false',
+        'view': 'conditional-v1',
       },
     );
     final response = await _sendGetRequest(
       path: uri.toString(),
       identityToken: identityToken,
+      headers: {
+        if (sentEtag != null && sentEtag.isNotEmpty)
+          HttpHeaders.ifNoneMatchHeader: sentEtag,
+      },
     );
+    String? responseEtag;
+    try {
+      responseEtag = response.headers.value(HttpHeaders.etagHeader);
+    } catch (_) {}
+    if (response.statusCode == HttpStatus.notModified) {
+      if (sentEtag != null && responseEtag == sentEtag) {
+        _raceMessageStreamsSupport = EndpointSupport.supported;
+        return const RaceMessageStreamsResult(
+          supported: true,
+          notModified: true,
+        );
+      }
+      resetRaceMessageConditionalState(raceId: raceId);
+      return RaceMessageStreamsResult.malformedResult;
+    }
     final raw = await _readRawResponse(response);
     if (raw.statusCode == 404) {
       _raceMessageStreamsSupport = EndpointSupport.unsupported;
+      resetRaceMessageConditionalState(raceId: raceId);
       return RaceMessageStreamsResult.unsupported;
     }
     if (raw.statusCode < 200 || raw.statusCode >= 300) {
@@ -4045,13 +4289,18 @@ class BackendApiService {
     final requested = _safeStringMap(payload?['requested']);
     final resolved = _safeStringMap(payload?['resolved']);
     final streams = _safeStringMap(payload?['streams']);
+    final contract = payload?['contract'];
+    final legacyContract = contract == 'race-message-streams-v1';
+    final conditionalContract =
+        contract == 'race-message-streams-conditional-v1';
     if (raw.decodeFailed ||
-        payload?['contract'] != 'race-message-streams-v1' ||
+        (!legacyContract && !conditionalContract) ||
         requested == null ||
         resolved == null ||
         streams == null ||
         requested['USER'] != includeUser ||
         requested['SYSTEM'] != true) {
+      resetRaceMessageConditionalState(raceId: raceId);
       return RaceMessageStreamsResult.malformedResult;
     }
     final systemResolved = resolved['SYSTEM'] == true;
@@ -4063,7 +4312,21 @@ class BackendApiService {
         (!systemResolved && streams['SYSTEM'] != null) ||
         (includeUser && !userResolved && streams['USER'] != null) ||
         (!includeUser && streams['USER'] != null)) {
+      resetRaceMessageConditionalState(raceId: raceId);
       return RaceMessageStreamsResult.malformedResult;
+    }
+    if (conditionalContract) {
+      final revision = payload?['revision'];
+      final expectedEtag = revision is String && revision.isNotEmpty
+          ? '"$revision"'
+          : null;
+      if (expectedEtag == null || responseEtag != expectedEtag) {
+        resetRaceMessageConditionalState(raceId: raceId);
+        return RaceMessageStreamsResult.malformedResult;
+      }
+      _raceMessageConditionalEtag = responseEtag;
+    } else {
+      resetRaceMessageConditionalState(raceId: raceId);
     }
     return RaceMessageStreamsResult(
       supported: true,

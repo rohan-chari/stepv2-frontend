@@ -440,6 +440,38 @@ class TutorialPreviewBackendApiService extends BackendApiService {
   }
 
   @override
+  Future<Map<String, dynamic>> fetchRacePowerupTargetContext({
+    required String identityToken,
+    required String raceId,
+    required String powerupType,
+  }) async {
+    final legacy = await fetchRacePowerupUseContext(
+      identityToken: identityToken,
+      raceId: raceId,
+    );
+    final participants =
+        (legacy['participants'] as List?)?.whereType<Map<String, dynamic>>() ??
+        const <Map<String, dynamic>>[];
+    return {
+      'contract': 'race-powerup-target-context-v1',
+      'participants': [
+        for (final participant in participants)
+          {
+            'userId': participant['userId'],
+            'displayName': participant['displayName'],
+            'profilePhotoUrl': participant['profilePhotoUrl'],
+            'team': participant['team'],
+            'forfeitedAt': participant['forfeitedAt'],
+            'stealthed': participant['stealthed'] == true,
+            if (powerupType == 'BOUNTY')
+              'totalSteps': (participant['totalSteps'] as num?)?.toInt() ?? 0,
+          },
+      ],
+      'powerupData': legacy['powerupData'],
+    };
+  }
+
+  @override
   Future<Map<String, dynamic>> fetchRaceMessages({
     required String identityToken,
     required String raceId,
@@ -477,6 +509,9 @@ class TutorialPreviewBackendApiService extends BackendApiService {
       chatWatermark: {'recentIds': recentIds},
     );
   }
+
+  @override
+  void resetRaceMessageConditionalState({String? raceId}) {}
 
   // No-op so the race screen's read-receipt ping never hits the network.
   @override

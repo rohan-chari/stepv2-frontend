@@ -32,6 +32,13 @@ class DemoRaceApiService extends BackendApiService {
     required String raceId,
   }) async => const [];
 
+  @override
+  Future<void> acknowledgeRaceImpactNotice({
+    required String identityToken,
+    required String raceId,
+    required String noticeId,
+  }) async {}
+
   /// The engine owns the clock (and the tests own the engine's), so the served
   /// `endsAt` and the engine's countdown can never disagree.
   DateTime get _now => engine.now();
@@ -132,6 +139,38 @@ class DemoRaceApiService extends BackendApiService {
         'queuedBoxCount': powerupData?['queuedBoxCount'] ?? 0,
         'myPlacement': engine.myPlacement,
       },
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchRacePowerupTargetContext({
+    required String identityToken,
+    required String raceId,
+    required String powerupType,
+  }) async {
+    final legacy = await fetchRacePowerupUseContext(
+      identityToken: identityToken,
+      raceId: raceId,
+    );
+    final participants =
+        (legacy['participants'] as List?)?.whereType<Map<String, dynamic>>() ??
+        const <Map<String, dynamic>>[];
+    return {
+      'contract': 'race-powerup-target-context-v1',
+      'participants': [
+        for (final participant in participants)
+          {
+            'userId': participant['userId'],
+            'displayName': participant['displayName'],
+            'profilePhotoUrl': participant['profilePhotoUrl'],
+            'team': participant['team'],
+            'forfeitedAt': participant['forfeitedAt'],
+            'stealthed': participant['stealthed'] == true,
+            if (powerupType == 'BOUNTY')
+              'totalSteps': (participant['totalSteps'] as num?)?.toInt() ?? 0,
+          },
+      ],
+      'powerupData': legacy['powerupData'],
     };
   }
 
@@ -437,6 +476,9 @@ class DemoRaceApiService extends BackendApiService {
       chatWatermark: {'recentIds': ids},
     );
   }
+
+  @override
+  void resetRaceMessageConditionalState({String? raceId}) {}
 
   @override
   Future<Map<String, dynamic>> markRaceChatRead({

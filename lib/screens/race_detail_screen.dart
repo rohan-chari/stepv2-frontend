@@ -1195,9 +1195,17 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       }
 
       if (!mounted) return;
-      final participants =
-          (progress['participants'] as List?)?.cast<Map<String, dynamic>>() ??
-          const [];
+      final participants = (progress['participants'] as List?)
+              ?.whereType<Map>()
+              .map(
+                (row) => <String, dynamic>{
+                  for (final entry in row.entries)
+                    if (entry.key is String)
+                      entry.key as String: entry.value,
+                },
+              )
+              .toList(growable: false) ??
+          const <Map<String, dynamic>>[];
       // The paged fetch supplies this directly; when a prefetched race-open
       // packet satisfied the request instead, its own metadata rides along
       // inside the progress payload. Null on either path (an older backend,
@@ -1208,9 +1216,17 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           (progress['pagination'] is Map
               ? Map<String, dynamic>.from(progress['pagination'] as Map)
               : null);
-      final existingParticipants =
-          (previous?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
-          const [];
+      final existingParticipants = (previous?['participants'] as List?)
+              ?.whereType<Map>()
+              .map(
+                (row) => <String, dynamic>{
+                  for (final entry in row.entries)
+                    if (entry.key is String)
+                      entry.key as String: entry.value,
+                },
+              )
+              .toList(growable: false) ??
+          const <Map<String, dynamic>>[];
       // A paged response IS the board: it replaces what was on screen, so
       // NEXT/PREV land on a page of exactly one page's height. Only an
       // UNPAGED response (older backend, or a race served whole) keeps the
@@ -2065,8 +2081,11 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         type == 'PINECONE_TOSS' ||
         type == 'SNEAKY_SWAP' ||
         kTargetedPowerupTypes.contains(type);
-    if (typeTargets && needsTargetingContext) {
-      final useContextParticipants = await _loadRacePowerupUseContext(token);
+    if (typeTargets && type != 'PINECONE_TOSS' && needsTargetingContext) {
+      final useContextParticipants = await _loadRacePowerupTargetContext(
+        token,
+        type,
+      );
       if (useContextParticipants.isNotEmpty) {
         participants = useContextParticipants;
       }
@@ -2280,19 +2299,23 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     }
   }
 
-  Future<List<Map<String, dynamic>>> _loadRacePowerupUseContext(
+  Future<List<Map<String, dynamic>>> _loadRacePowerupTargetContext(
     String token,
+    String powerupType,
   ) async {
     try {
-      final result = await _api.fetchRacePowerupUseContext(
+      final result = await _api.fetchRacePowerupTargetContext(
         identityToken: token,
         raceId: widget.raceId,
+        powerupType: powerupType,
       );
       final rawParticipants =
-          (result['participants'] as List?)?.cast<Map<String, dynamic>>() ??
-          const [];
+          (result['participants'] as List?)
+              ?.whereType<Map<String, dynamic>>()
+              .toList(growable: false) ??
+          const <Map<String, dynamic>>[];
       final rawPowerupData = result['powerupData'];
-      if (rawPowerupData is Map) {
+      if (rawPowerupData is Map && mounted) {
         setState(() {
           _powerupData = {
             for (final entry in rawPowerupData.entries)

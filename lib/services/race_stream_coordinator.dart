@@ -155,6 +155,7 @@ class RaceStreamCoordinator extends ChangeNotifier {
         await _enableLegacy(token: token, muted: muted, generation: generation);
         return;
       }
+      if (result.notModified) return;
       if (initial) _initialPending = false;
       if (result.malformed) {
         if (initial) {
@@ -301,6 +302,7 @@ class RaceStreamCoordinator extends ChangeNotifier {
   }
 
   void pause() {
+    api.resetRaceMessageConditionalState(raceId: raceId);
     _eligible = false;
     _chatVisible = false;
     _visibilityGeneration += 1;

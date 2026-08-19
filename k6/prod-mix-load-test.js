@@ -267,8 +267,8 @@ export function setup() {
   if (!safeHost) {
     throw new Error(`refusing capacity traffic to non-staging host: ${hostname}`);
   }
-  const resolutionContexts = fixtureDocument.resolutionSeeds.map((seed) => {
-    const idempotencyKey = randomUuid();
+  const resolutionContexts = fixtureDocument.resolutionSeeds.map((seed, index) => {
+    const idempotencyKey = runScopedUuid("resolution-seed-sync", index);
     const response = http.post(
       `${BASE_URL}/steps/sync-v2`,
       JSON.stringify(bodyFor("steps_sync_v2", 0)),
@@ -349,11 +349,29 @@ function makeSample(minuteOffset, iterationInTest) {
   };
 }
 
-function randomUuid() {
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
-    const value = Math.floor(Math.random() * 16);
-    return (char === "x" ? value : (value & 0x3) | 0x8).toString(16);
-  });
+function runScopedUuid(namespace, ordinal) {
+  const scope = `${RUN_ID}:${REPEAT_INDEX}:${namespace}:${ordinal}`;
+  const words = [];
+  for (let wordIndex = 0; wordIndex < 4; wordIndex += 1) {
+    let hash = 0x811c9dc5;
+    const input = `${scope}:${wordIndex}`;
+    for (let index = 0; index < input.length; index += 1) {
+      hash ^= input.charCodeAt(index);
+      hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    words.push(hash.toString(16).padStart(8, "0"));
+  }
+  const hexadecimal = words.join("").split("");
+  hexadecimal[12] = "4";
+  hexadecimal[16] = ((parseInt(hexadecimal[16], 16) & 0x3) | 0x8).toString(16);
+  const compact = hexadecimal.join("");
+  return [
+    compact.slice(0, 8),
+    compact.slice(8, 12),
+    compact.slice(12, 16),
+    compact.slice(16, 20),
+    compact.slice(20),
+  ].join("-");
 }
 
 function bodyFor(endpointKey, iterationInTest) {
@@ -378,7 +396,7 @@ function bodyFor(endpointKey, iterationInTest) {
       return {
         events: [
           buildActivationEvent({
-            id: randomUuid(),
+            id: runScopedUuid("activation-event", iterationInTest),
             now: logicalNow(iterationInTest),
             appVersion: cohort.appVersion,
             platform: cohort.platform,
@@ -393,6 +411,21 @@ function bodyFor(endpointKey, iterationInTest) {
 function pickEndpoint() {
   if (MODE === "smoke") {
     return ENDPOINTS[exec.scenario.iterationInTest % ENDPOINTS.length];
+  }
+  // The mandatory three-repeat aggregator requires every configured endpoint
+  // to be represented. Partition one deterministic coverage pass across the
+  // three repeats so rare released-client calls cannot be absent from all
+  // three identical weighted sequences. OFF/ON mates retain the same repeat
+  // index and therefore the same coverage prefix.
+  const coveragePerRepeat = Math.ceil(ENDPOINTS.length / 3);
+  const coverageIndex =
+    (Number(REPEAT_INDEX) - 1) * coveragePerRepeat +
+    exec.scenario.iterationInTest;
+  if (
+    exec.scenario.iterationInTest < coveragePerRepeat &&
+    coverageIndex < ENDPOINTS.length
+  ) {
+    return ENDPOINTS[coverageIndex];
   }
   const roll = Math.random() * totalWeight;
   let low = 0;
@@ -520,7 +553,7 @@ export function hitApi(setupData) {
   });
   endpointAccountingCounters[executed.key].executed.add(1, iterationTags);
 
-  const idempotencyKey = randomUuid();
+  const idempotencyKey = runScopedUuid("steps-sync-v2", iteration);
   const tags = {
     name: executed.key,
     endpoint: executed.key,
