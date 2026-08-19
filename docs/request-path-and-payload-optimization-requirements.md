@@ -1,5 +1,10 @@
 # Request-path and payload optimization requirements
 
+> **Historical k6 note (2026-08-19):** References below to the former local
+> production-simulation and production-log harness are retained as historical
+> implementation evidence. Those commands are obsolete. Use the current
+> [`k6/README.md`](../k6/README.md) smoke/find/confirm/soak workflow.
+
 **Status:** Specification complete; architect approved; awaiting owner approval. No
 measurement or implementation is authorized until the owner explicitly approves the
 final document.
@@ -790,8 +795,9 @@ Required verification uses the existing suites and existing operational tooling:
 - Run `npm run test:integration`; never run bare `npm test`.
 - Run existing Redis-backed suites under their documented test Redis configuration
   and once with Redis unavailable where the existing command supports it.
-- Use the existing k6/local capacity harness and production-log analysis scripts;
-  do not edit their tests as part of this spec.
+- Historical implementation used the former k6/local capacity harness and
+  production-log analysis scripts. Those commands are obsolete; current capacity
+  work uses [`k6/README.md`](../k6/README.md).
 - On a dedicated local/test environment or staging, capture paired authenticated
   legacy and compact responses for the same fixture and compare them with a
   non-committed canonical JSON-diff command that permits only the removals and

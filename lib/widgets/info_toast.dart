@@ -9,6 +9,7 @@ void showInfoToast(
   BuildContext context,
   String message, {
   Duration duration = const Duration(seconds: 3),
+  VoidCallback? onDismissed,
 }) {
   showGameToast(
     context,
@@ -24,5 +25,6 @@ void showInfoToast(
       shadow: AppColors.of(context).pillGreenShadow,
       messageColor: AppColors.of(context).textDark,
     ),
+    onDismissed: onDismissed,
   );
 }

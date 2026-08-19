@@ -74,6 +74,7 @@ class _FakeBackendApiService extends BackendApiService {
   int payoutClaimCalls = 0;
   int seenCalls = 0;
   int homeInvitePreflightCalls = 0;
+  int globalSummaryAckCalls = 0;
   final List<({String token, List<String> raceIds})> seenRequests = [];
 
   @override
@@ -233,6 +234,24 @@ class _FakeBackendApiService extends BackendApiService {
       'items': <Map<String, dynamic>>[],
     };
   }
+
+  @override
+  Future<void> acknowledgeGlobalEventSummary({
+    required String identityToken,
+    required String summaryId,
+  }) async {
+    globalSummaryAckCalls++;
+  }
+}
+
+class _DeferredSummaryApi extends _FakeBackendApiService {
+  final Completer<Map<String, dynamic>> homeCard = Completer();
+
+  @override
+  Future<Map<String, dynamic>> fetchHomeRaceCard({
+    required String identityToken,
+    bool usePersistedTotals = false,
+  }) => homeCard.future;
 }
 
 class _AccountSwitchRaceCardApi extends _FakeBackendApiService {
@@ -367,6 +386,92 @@ void main() {
     ]);
     expect(find.byKey(const Key('home-inbox-button')), findsNothing);
   });
+
+  testWidgets('mixed net-zero 2x summary remains eligible on Home', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _authService();
+    final api = _FakeBackendApiService(
+      homeRaceCard: const {
+        'state': 'EMPTY',
+        'globalEventSummary': {
+          'id': 'summary-net-zero',
+          'extraRaceSteps': 0,
+          'raceCount': 2,
+        },
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+        ),
+      ),
+    );
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(find.text('2× STEPS COMPLETE'), findsOneWidget);
+    expect(find.textContaining('net 0'), findsOneWidget);
+    await tester.tap(find.text('CONTINUE'));
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(api.globalSummaryAckCalls, 1);
+  });
+
+  testWidgets(
+    '2x summary queues off Home and appears when Home becomes visible',
+    (WidgetTester tester) async {
+      final authService = await _authService();
+      final api = _DeferredSummaryApi();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MainShell(
+            authService: authService,
+            healthService: _FakeHealthService(),
+            backendApiService: api,
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+          ),
+        ),
+      );
+      await tester.pump();
+      tester.widget<WoodenTabBar>(find.byType(WoodenTabBar)).onTap(1);
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(
+        tester.widget<WoodenTabBar>(find.byType(WoodenTabBar)).currentIndex,
+        1,
+      );
+
+      api.homeCard.complete(const {
+        'state': 'EMPTY',
+        'globalEventSummary': {
+          'id': 'summary-deferred',
+          'extraRaceSteps': 125,
+          'raceCount': 1,
+        },
+      });
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.text('2× STEPS COMPLETE'), findsNothing);
+
+      tester.widget<WoodenTabBar>(find.byType(WoodenTabBar)).onTap(0);
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.text('2× STEPS COMPLETE'), findsOneWidget);
+      await tester.tap(find.text('CONTINUE'));
+      await tester.pump(const Duration(milliseconds: 350));
+    },
+  );
 
   testWidgets('Home loads suggestions without Races discovery fan-out', (
     WidgetTester tester,

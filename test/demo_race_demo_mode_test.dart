@@ -8,6 +8,7 @@ import 'package:step_tracker/demo/demo_race_engine.dart';
 import 'package:step_tracker/screens/case_opening_screen.dart';
 import 'package:step_tracker/screens/race_detail_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
+import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/services/notification_service.dart';
 import 'package:step_tracker/widgets/ad_banner_slot.dart';
 import 'package:step_tracker/widgets/item_slot.dart';
@@ -44,6 +45,49 @@ class _StarterRewardSpyApi extends DemoRaceApiService {
   int starterClaims = 0;
   int discards = 0;
   int batchOpens = 0;
+  int activeNoticeFetches = 0;
+  int activeNoticeAcks = 0;
+  int activeReceiptAcks = 0;
+
+  @override
+  Future<ActiveImpactNoticesResult> fetchActiveRaceImpactNotices({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    activeNoticeFetches += 1;
+    return super.fetchActiveRaceImpactNotices(
+      identityToken: identityToken,
+      raceId: raceId,
+    );
+  }
+
+  @override
+  Future<bool> acknowledgeActiveRaceImpactNotice({
+    required String identityToken,
+    required String raceId,
+    required String noticeId,
+  }) async {
+    activeNoticeAcks += 1;
+    return super.acknowledgeActiveRaceImpactNotice(
+      identityToken: identityToken,
+      raceId: raceId,
+      noticeId: noticeId,
+    );
+  }
+
+  @override
+  Future<bool> acknowledgeActiveImpactReceipt({
+    required String identityToken,
+    required String raceId,
+    required String receiptId,
+  }) async {
+    activeReceiptAcks += 1;
+    return super.acknowledgeActiveImpactReceipt(
+      identityToken: identityToken,
+      raceId: raceId,
+      receiptId: receiptId,
+    );
+  }
 
   @override
   Future<Map<String, dynamic>> fetchStarterReward({
@@ -159,6 +203,15 @@ void main() {
     final ctx = await pumpDemoScreen(tester);
     expect(ctx.api.starterFetches, 0);
     expect(ctx.api.starterClaims, 0);
+  });
+
+  testWidgets('16b — active-impact APIs stay offline in demoMode', (
+    tester,
+  ) async {
+    final ctx = await pumpDemoScreen(tester);
+    expect(ctx.api.activeNoticeFetches, 0);
+    expect(ctx.api.activeNoticeAcks, 0);
+    expect(ctx.api.activeReceiptAcks, 0);
   });
 
   testWidgets(

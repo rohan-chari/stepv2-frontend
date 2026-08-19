@@ -6,7 +6,8 @@ import 'package:step_tracker/screens/race_detail_screen.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/tutorial/tutorial_preview_data.dart';
 import 'package:step_tracker/tutorial/tutorial_real_screens.dart';
-import 'package:step_tracker/tutorial/tutorial_screen.dart' show TutorialMockPage;
+import 'package:step_tracker/tutorial/tutorial_screen.dart'
+    show TutorialMockPage;
 
 /// Mirror-surface guard for the race-preview feature (spec: "Mirror surfaces").
 ///
@@ -27,6 +28,49 @@ import 'package:step_tracker/tutorial/tutorial_screen.dart' show TutorialMockPag
 class _CountingTutorialApi extends TutorialPreviewBackendApiService {
   int detailsCalls = 0;
   int progressCalls = 0;
+  int activeNoticeFetches = 0;
+  int activeNoticeAcks = 0;
+  int activeReceiptAcks = 0;
+
+  @override
+  Future<ActiveImpactNoticesResult> fetchActiveRaceImpactNotices({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    activeNoticeFetches += 1;
+    return super.fetchActiveRaceImpactNotices(
+      identityToken: identityToken,
+      raceId: raceId,
+    );
+  }
+
+  @override
+  Future<bool> acknowledgeActiveRaceImpactNotice({
+    required String identityToken,
+    required String raceId,
+    required String noticeId,
+  }) async {
+    activeNoticeAcks += 1;
+    return super.acknowledgeActiveRaceImpactNotice(
+      identityToken: identityToken,
+      raceId: raceId,
+      noticeId: noticeId,
+    );
+  }
+
+  @override
+  Future<bool> acknowledgeActiveImpactReceipt({
+    required String identityToken,
+    required String raceId,
+    required String receiptId,
+  }) async {
+    activeReceiptAcks += 1;
+    return super.acknowledgeActiveImpactReceipt(
+      identityToken: identityToken,
+      raceId: raceId,
+      receiptId: receiptId,
+    );
+  }
 
   @override
   Future<RaceBootstrapResult> fetchRaceBootstrap({
@@ -96,8 +140,10 @@ void main() {
       startedAt: DateTime(2026, 8, 15, 9),
       clock: () => DateTime(2026, 8, 15, 9, 5),
     );
-    expect(engine.raceDetails(DateTime(2026, 8, 15, 9, 5))['myStatus'],
-        isNotNull);
+    expect(
+      engine.raceDetails(DateTime(2026, 8, 15, 9, 5))['myStatus'],
+      isNotNull,
+    );
   });
 
   testWidgets(
@@ -124,11 +170,17 @@ void main() {
       // Preview-only chrome must never appear inside the tutorial.
       expect(find.byKey(const Key('race-preview-join-cta')), findsNothing);
       expect(find.text('SPECTATING · READ-ONLY'), findsNothing);
-      expect(find.byKey(const Key('race-preview-locked-activity')), findsNothing);
+      expect(
+        find.byKey(const Key('race-preview-locked-activity')),
+        findsNothing,
+      );
       expect(tester.takeException(), isNull);
 
       // Everything the screen fetched went through the seeded fake.
       expect(api.detailsCalls, greaterThan(0));
+      expect(api.activeNoticeFetches, 0);
+      expect(api.activeNoticeAcks, 0);
+      expect(api.activeReceiptAcks, 0);
       final detailsBefore = api.detailsCalls;
       final progressBefore = api.progressCalls;
 
@@ -144,6 +196,13 @@ void main() {
 
       expect(api.detailsCalls, greaterThanOrEqualTo(detailsBefore));
       expect(api.progressCalls, greaterThanOrEqualTo(progressBefore));
+      expect(
+        api.activeNoticeFetches,
+        0,
+        reason: 'tutorial pull-to-refresh is not a notice delivery event',
+      );
+      expect(api.activeNoticeAcks, 0);
+      expect(api.activeReceiptAcks, 0);
       expect(tester.takeException(), isNull);
 
       await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));

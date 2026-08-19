@@ -63,6 +63,34 @@ class RaceProgressResult {
   final Map<String, dynamic>? participantsPagination;
 }
 
+/// Defensive projection of the additive active-race impact endpoint.
+///
+/// A response is either an immediately usable (possibly empty) notice list or
+/// one opaque race-resolution handoff. Unknown/malformed responses collapse to
+/// [empty], which keeps a newer app usable against older backend versions.
+class ActiveImpactNoticesResult {
+  const ActiveImpactNoticesResult({this.notices = const []})
+    : jobId = null,
+      generation = null,
+      retryAfterMs = null;
+
+  const ActiveImpactNoticesResult.pending({
+    required this.jobId,
+    required this.generation,
+    required this.retryAfterMs,
+  }) : notices = const [];
+
+  static const empty = ActiveImpactNoticesResult();
+
+  final List<Map<String, dynamic>> notices;
+  final String? jobId;
+  final int? generation;
+  final int? retryAfterMs;
+
+  bool get isPending =>
+      jobId != null && generation != null && retryAfterMs != null;
+}
+
 class RaceMessageStreamsResult {
   const RaceMessageStreamsResult({
     required this.supported,
@@ -279,6 +307,7 @@ class BackendApiService {
       'race_participants_paging',
       'race_preview',
       'impact_notices',
+      'active_impact_notices_v1',
       'impact_summaries',
       'review_prompt',
       'inbox_v1',
@@ -292,8 +321,8 @@ class BackendApiService {
   }
 
   static final String clientFeaturesHeader = _adsSupported
-      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,impact_summaries,review_prompt,inbox_v1,api_payload_compact_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_double' : ''}'
-      : 'characters,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,impact_summaries,review_prompt,inbox_v1,api_payload_compact_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_double' : ''}';
+      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,active_impact_notices_v1,impact_summaries,review_prompt,inbox_v1,api_payload_compact_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_double' : ''}'
+      : 'characters,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,active_impact_notices_v1,impact_summaries,review_prompt,inbox_v1,api_payload_compact_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_double' : ''}';
 
   /// Replays a persisted results dismissal with the capability it originally
   /// advertised. A later app build may have gained or lost the dedicated ad
@@ -2031,6 +2060,118 @@ class BackendApiService {
         .whereType<Map>()
         .map((row) => Map<String, dynamic>.from(row))
         .toList(growable: false);
+  }
+
+  /// Recipient-private impact snapshots for a race that is still ACTIVE.
+  ///
+  /// This endpoint is additive and capability-gated. Every version-skew case
+  /// (missing endpoint, disabled flag, malformed JSON, unauthorized viewer, or
+  /// transient failure) degrades to an empty result. A valid 202 carries only
+  /// the opaque existing race-resolution handle; callers use the shared
+  /// bounded status flow and retry this endpoint exactly once after success.
+  Future<ActiveImpactNoticesResult> fetchActiveRaceImpactNotices({
+    required String identityToken,
+    required String raceId,
+  }) async {
+    if (runtimeType != BackendApiService) {
+      return ActiveImpactNoticesResult.empty;
+    }
+
+    try {
+      final response = await _sendGetRequest(
+        path: '/races/${Uri.encodeComponent(raceId)}/active-impact-notices',
+        identityToken: identityToken,
+      );
+      final raw = await _readRawResponse(response);
+      final payload = raw.json;
+
+      if (raw.statusCode == 200 && !raw.decodeFailed && payload != null) {
+        final rawNotices = payload['notices'];
+        if (rawNotices is! List) return ActiveImpactNoticesResult.empty;
+        final notices = rawNotices
+            .whereType<Map>()
+            .map((row) => Map<String, dynamic>.from(row))
+            .toList(growable: false);
+        return ActiveImpactNoticesResult(notices: notices);
+      }
+
+      if (raw.statusCode == 202 && !raw.decodeFailed && payload != null) {
+        final rawNotices = payload['notices'];
+        final resolution = payload['resolution'];
+        if (rawNotices is! List ||
+            rawNotices.isNotEmpty ||
+            resolution is! Map ||
+            resolution['state'] != 'PENDING') {
+          return ActiveImpactNoticesResult.empty;
+        }
+        final jobId = resolution['jobId'];
+        final generation = resolution['generation'];
+        final retryAfterMs = resolution['retryAfterMs'];
+        if (jobId is! String ||
+            jobId.isEmpty ||
+            generation is! int ||
+            generation < 0 ||
+            retryAfterMs is! int ||
+            retryAfterMs < 0) {
+          return ActiveImpactNoticesResult.empty;
+        }
+        return ActiveImpactNoticesResult.pending(
+          jobId: jobId,
+          generation: generation,
+          retryAfterMs: retryAfterMs,
+        );
+      }
+    } catch (_) {
+      // Optional presentation must never make race detail unusable.
+    }
+    return ActiveImpactNoticesResult.empty;
+  }
+
+  /// Acknowledges one dismissed active-race notice. 409 means the race became
+  /// terminal and is intentionally a quiet false result.
+  Future<bool> acknowledgeActiveRaceImpactNotice({
+    required String identityToken,
+    required String raceId,
+    required String noticeId,
+  }) async {
+    if (runtimeType != BackendApiService) return false;
+    try {
+      final response = await _sendJsonRequest(
+        method: 'POST',
+        path:
+            '/races/${Uri.encodeComponent(raceId)}/active-impact-notices/${Uri.encodeComponent(noticeId)}/acknowledge',
+        body: const <String, dynamic>{},
+        identityToken: identityToken,
+      );
+      final raw = await _readRawResponse(response);
+      return raw.statusCode == 200 && raw.json?['acknowledged'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Confirms that the actor actually dismissed an inline powerup result.
+  /// Missing/malformed receipts never call this method; any failure simply
+  /// leaves the later active notice available for at-least-once delivery.
+  Future<bool> acknowledgeActiveImpactReceipt({
+    required String identityToken,
+    required String raceId,
+    required String receiptId,
+  }) async {
+    if (runtimeType != BackendApiService) return false;
+    try {
+      final response = await _sendJsonRequest(
+        method: 'POST',
+        path:
+            '/races/${Uri.encodeComponent(raceId)}/active-impact-receipts/${Uri.encodeComponent(receiptId)}/acknowledge',
+        body: const <String, dynamic>{},
+        identityToken: identityToken,
+      );
+      final raw = await _readRawResponse(response);
+      return raw.statusCode == 200 && raw.json?['acknowledged'] == true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> acknowledgeRaceImpactNotice({

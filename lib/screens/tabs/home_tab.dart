@@ -444,7 +444,7 @@ class HomeTab extends StatelessWidget {
   Widget? _buildGlobalEventBanner() {
     final event = raceCard?['globalEvent'];
     if (event is! Map) return null;
-    if (event['active'] == false) return null;
+    if (event['active'] != true) return null;
 
     final endsAtRaw = event['endsAt'];
     final endsAt = endsAtRaw is String
@@ -454,7 +454,8 @@ class HomeTab extends StatelessWidget {
     if (!endsAt.isAfter(DateTime.now())) return null;
 
     final multiplierRaw = event['multiplier'];
-    final multiplier = multiplierRaw is num ? multiplierRaw.toInt() : 2;
+    if (multiplierRaw is! num || !multiplierRaw.isFinite) return null;
+    final multiplier = multiplierRaw.toInt();
 
     return GlobalEventBanner(
       key: const Key('home-global-event-banner'),

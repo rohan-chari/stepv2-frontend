@@ -124,6 +124,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   late final RaceResultsAcknowledgementQueue _raceResultsAckQueue;
   late final FriendsSummaryRepository _friendsRepository;
   bool _globalSummaryShowing = false;
+  Map<String, dynamic>? _pendingGlobalEventSummary;
 
   int _currentTab = 0;
   late final PageController _pageController;
@@ -680,6 +681,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         _raceCardLoading = nextToken != null && nextToken.isNotEmpty;
         _homePresentationResolved = false;
         _homeFriendsResolved = false;
+        _pendingGlobalEventSummary = null;
       }
     });
     // A cold-start suggestions request can begin before /me establishes the
@@ -2217,6 +2219,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   Future<void> _coordinateHomeOverlays() async {
     await _maybeShowRaceResults();
     if (!mounted) return;
+    await _showPendingGlobalEventSummaryIfEligible();
+    if (!mounted) return;
     await _maybeShowHomeInvites();
   }
 
@@ -2226,6 +2230,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         _currentTab != _homeTabIndex ||
         _homeInvitePopupOpen ||
         _homeInviteSequenceRunning ||
+        _globalSummaryShowing ||
         _raceResultsPopupOpen) {
       return;
     }
@@ -3036,7 +3041,20 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
             _inboxUnreadCount = unread;
           }
         });
-        unawaited(_showGlobalEventSummaryIfEligible(data));
+        final rawGlobalSummary = data['globalEventSummary'];
+        _pendingGlobalEventSummary = rawGlobalSummary is Map
+            ? <String, dynamic>{
+                for (final entry in rawGlobalSummary.entries)
+                  if (entry.key is String) entry.key as String: entry.value,
+              }
+            : null;
+        // During the coordinated Home load, race results cannot be evaluated
+        // until the core race list has settled. The outer loader drains this
+        // summary after both requests complete. Standalone card refreshes can
+        // still surface the summary immediately without advancing invites.
+        if (_homeLoadInFlight == null) {
+          unawaited(_showPendingGlobalEventSummaryIfEligible());
+        }
         final next = NextRaceState.tryParse(data['nextRace']);
         if (!_nextRaceHomeShownRecorded && next?.visible == true) {
           _nextRaceHomeShownRecorded = true;
@@ -3071,12 +3089,19 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _showGlobalEventSummaryIfEligible(
-    Map<String, dynamic> home,
-  ) async {
-    if (!mounted || _globalSummaryShowing) return;
-    final raw = home['globalEventSummary'];
-    if (raw is! Map) return;
+  Future<void> _showPendingGlobalEventSummaryIfEligible() async {
+    if (!mounted ||
+        _globalSummaryShowing ||
+        _currentTab != _homeTabIndex ||
+        _raceResultsPopupOpen ||
+        _homeInvitePopupOpen ||
+        _homeInviteSequenceRunning) {
+      return;
+    }
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) return;
+    final raw = _pendingGlobalEventSummary;
+    if (raw == null) return;
     final id = raw['id'];
     final extra = raw['extraRaceSteps'];
     final count = raw['raceCount'];
@@ -3084,6 +3109,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     final races = count.toInt();
     if (races <= 0) return;
     final steps = extra.toInt();
+    final presentationToken = widget.authService.authToken;
+    final presentationUserId = widget.authService.userId;
+    if (presentationToken == null || presentationToken.isEmpty) return;
     _globalSummaryShowing = true;
     final raceWord = races == 1 ? 'race' : 'races';
     final summary = steps > 0
@@ -3134,14 +3162,17 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           ),
         ),
       );
-      final token = widget.authService.authToken;
-      if (token != null && token.isNotEmpty) {
+      if (presentationToken == widget.authService.authToken &&
+          presentationUserId == widget.authService.userId) {
         try {
           await _backendApiService.acknowledgeGlobalEventSummary(
-            identityToken: token,
+            identityToken: presentationToken,
             summaryId: id,
           );
         } catch (_) {}
+      }
+      if (_pendingGlobalEventSummary?['id'] == id) {
+        _pendingGlobalEventSummary = null;
       }
     } finally {
       _globalSummaryShowing = false;
@@ -4137,6 +4168,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                             (_homeSuggestions.state.isSuccess ||
                                 _homeSuggestions.state.hasData)) {
                           _recordHomeSuggestionsImpression();
+                        }
+                        if (enteringHome) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) unawaited(_coordinateHomeOverlays());
+                          });
                         }
                         // Refresh the friends surface each time it's revealed (mirrors
                         // the races refresh-on-reveal hook). We intentionally refresh

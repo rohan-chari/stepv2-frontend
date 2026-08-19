@@ -202,6 +202,66 @@ const _upgradeCostsByType = <String, List<int>>{};
 
 bool _isUpgradeable(String? type) => PowerupCopy.isUpgradeable(type);
 
+class _ActiveImpactNotice {
+  const _ActiveImpactNotice({
+    required this.id,
+    required this.powerupType,
+    required this.deltaSteps,
+    required this.resolvedAt,
+  });
+
+  final String id;
+  final String powerupType;
+  final int deltaSteps;
+  final DateTime resolvedAt;
+
+  static _ActiveImpactNotice? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final id = raw['id'];
+    final powerupType = raw['powerupType'];
+    final delta = raw['deltaSteps'];
+    final valueStatus = raw['valueStatus'];
+    final resolvedAt = raw['resolvedAt'];
+    if (id is! String ||
+        id.isEmpty ||
+        powerupType is! String ||
+        powerupType.isEmpty ||
+        delta is! num ||
+        !delta.isFinite ||
+        delta != delta.roundToDouble() ||
+        delta == 0 ||
+        valueStatus != 'SYNCED_SNAPSHOT' ||
+        resolvedAt is! String) {
+      return null;
+    }
+    final parsedResolvedAt = DateTime.tryParse(resolvedAt);
+    if (parsedResolvedAt == null) return null;
+    return _ActiveImpactNotice(
+      id: id,
+      powerupType: powerupType,
+      deltaSteps: delta.toInt(),
+      resolvedAt: parsedResolvedAt,
+    );
+  }
+}
+
+class _ActiveImpactReceipt {
+  const _ActiveImpactReceipt({required this.id, required this.raceId});
+
+  final String id;
+  final String raceId;
+
+  static _ActiveImpactReceipt? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final id = raw['id'];
+    final raceId = raw['raceId'];
+    if (id is! String || id.isEmpty || raceId is! String || raceId.isEmpty) {
+      return null;
+    }
+    return _ActiveImpactReceipt(id: id, raceId: raceId);
+  }
+}
+
 // Defensively parse a {KEY: [int, int, int, int]} cost table from the backend.
 // Returns null when absent/malformed so callers can fall back to the bundled
 // tables (older backends don't send upgradeCosts at all).
@@ -292,7 +352,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   // simply means no banner. { active: true, multiplier, endsAt }.
   Map<String, dynamic>? _globalEvent;
   Loadable<Map<String, dynamic>> _progressState = const Loadable.initial();
-  bool _showingImpactNotices = false;
+  int _impactAttemptGeneration = 0;
+  Future<void> _raceOverlayTail = Future<void>.value();
+  int _raceOverlayPending = 0;
+  bool _backgroundedSinceLastResume = false;
   int _queuedBoxCount = 0;
   // Globally-owned (coin-purchased) powerups, by type -> quantity. Spendable
   // into this race via the redeem flow. Loaded best-effort; an older backend
@@ -384,6 +447,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   bool _routeVisible = true;
   bool _appResumed = true;
   bool _returnRefreshRunning = false;
+  bool _returnRefreshImpactRequested = false;
+  bool _initialDetailsLoadCompleted = false;
   ModalRoute<dynamic>? _subscribedRoute;
 
   // Activity/Chat tabs state.
@@ -430,6 +495,43 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   String get _myUserId => widget.authService.userId ?? '';
   BackendApiService get _api => widget.backendApiService;
 
+  /// Serializes the screen's full-screen presentation routes. Starter reward,
+  /// inline powerup outcomes, and active impact notices all use this lane so a
+  /// resume or slow notice response can never stack one dialog over another.
+  Future<void> _runRaceOverlay(Future<void> Function() show) {
+    _raceOverlayPending += 1;
+    final next = _raceOverlayTail.catchError((_) {}).then((_) async {
+      try {
+        if (!mounted) return;
+        await show();
+        // `showDialog` completes when pop begins, before its reverse transition
+        // has left the overlay. Keep the lane occupied through that transition
+        // so the next queued reveal never shares a frame with the prior route.
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      } finally {
+        _raceOverlayPending -= 1;
+      }
+    });
+    _raceOverlayTail = next;
+    return next;
+  }
+
+  bool _canPresentActiveImpact({required int attempt}) {
+    if (!mounted ||
+        widget.demoMode ||
+        attempt != _impactAttemptGeneration ||
+        !_appResumed ||
+        !_routeVisible ||
+        _notAParticipant ||
+        _race?['status'] != 'ACTIVE' ||
+        _progress?['status'] != 'ACTIVE' ||
+        _race?['myStatus'] != 'ACCEPTED') {
+      return false;
+    }
+    final route = ModalRoute.of(context);
+    return route == null || route.isCurrent;
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -452,7 +554,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   void didPopNext() {
     _routeVisible = true;
     _scheduleLeaderboardVisibilityCheck();
-    unawaited(_refreshAfterCoverage());
+    // Route uncover (case opening, picker, or another child page) refreshes
+    // progress but is not a foreground-resume notification opportunity.
+    unawaited(_refreshAfterCoverage(deliverImpactNotices: false));
   }
 
   void _pauseCoveredTimers() {
@@ -461,23 +565,37 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     _streams?.pause();
   }
 
-  Future<void> _refreshAfterCoverage() async {
-    if (!_routeVisible || !_appResumed || _returnRefreshRunning) return;
+  Future<void> _refreshAfterCoverage({
+    required bool deliverImpactNotices,
+  }) async {
+    // Coalesce a genuine foreground request into a route-uncover refresh that
+    // may already be waiting on progress. Dropping it would postpone a notice
+    // until the next background/resume cycle.
+    if (deliverImpactNotices) _returnRefreshImpactRequested = true;
+    if (!_routeVisible || !_appResumed) return;
+    if (_returnRefreshRunning) return;
     _returnRefreshRunning = true;
     try {
-      if (_pollingActive) await _loadProgress();
-      if (!_routeVisible || !_appResumed) return;
-      // A preview viewer has no access to the feed/chat endpoints (they still
-      // 403 for non-participants), so returning to the screen must not open
-      // them either.
-      if (!_feedInitialized && !_isPreviewViewer) {
-        _ensureFeedInitialized(poll: _pollingActive);
-      } else if (_feedInitialized) {
-        await _streams?.resume(chatVisible: _activityTabIndex == 1);
-      }
-      if (!_routeVisible || !_appResumed) return;
-      if (_pollingActive) _startPolling();
-      if (_countdownActive) _startCountdown();
+      do {
+        if (_pollingActive) await _loadProgress();
+        if (!_routeVisible || !_appResumed) return;
+        if (_returnRefreshImpactRequested) {
+          _returnRefreshImpactRequested = false;
+          await _attemptActiveImpactDelivery();
+        }
+        if (!_routeVisible || !_appResumed) return;
+        // A preview viewer has no access to the feed/chat endpoints (they still
+        // 403 for non-participants), so returning to the screen must not open
+        // them either.
+        if (!_feedInitialized && !_isPreviewViewer) {
+          _ensureFeedInitialized(poll: _pollingActive);
+        } else if (_feedInitialized) {
+          await _streams?.resume(chatVisible: _activityTabIndex == 1);
+        }
+        if (!_routeVisible || !_appResumed) return;
+        if (_pollingActive) _startPolling();
+        if (_countdownActive) _startCountdown();
+      } while (_returnRefreshImpactRequested);
     } finally {
       _returnRefreshRunning = false;
     }
@@ -709,67 +827,70 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final amount = (_starterReward?['amount'] as num?)?.toInt() ?? 100;
     var claiming = false;
 
-    return showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      barrierColor: Colors.black.withValues(alpha: 0.62),
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setModalState) => Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-          child: GameContainer(
-            padding: const EdgeInsets.all(28),
-            frameColor: AppColors.of(context).accent,
-            surfaceColor: AppColors.of(context).parchmentLight,
-            glowColor: AppColors.of(context).coinMid,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SpinningCoin(size: 54),
-                const SizedBox(height: 14),
-                Text(
-                  'FIRST RACE BONUS',
-                  textAlign: TextAlign.center,
-                  style: PixelText.title(
-                    size: 22,
-                    color: AppColors.of(context).textDark,
+    return _runRaceOverlay(() async {
+      if (!mounted || _race?['status'] != 'ACTIVE') return;
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        barrierColor: Colors.black.withValues(alpha: 0.62),
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setModalState) => Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+            child: GameContainer(
+              padding: const EdgeInsets.all(28),
+              frameColor: AppColors.of(context).accent,
+              surfaceColor: AppColors.of(context).parchmentLight,
+              glowColor: AppColors.of(context).coinMid,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SpinningCoin(size: 54),
+                  const SizedBox(height: 14),
+                  Text(
+                    'FIRST RACE BONUS',
+                    textAlign: TextAlign.center,
+                    style: PixelText.title(
+                      size: 22,
+                      color: AppColors.of(context).textDark,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'A little fuel for your Bara debut.',
-                  textAlign: TextAlign.center,
-                  style: PixelText.body(
-                    size: 14,
-                    color: AppColors.of(context).textMid,
+                  const SizedBox(height: 8),
+                  Text(
+                    'A little fuel for your Bara debut.',
+                    textAlign: TextAlign.center,
+                    style: PixelText.body(
+                      size: 14,
+                      color: AppColors.of(context).textMid,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 20),
-                PillButton(
-                  key: const Key('claim-starter-reward'),
-                  label: claiming ? 'CLAIMING...' : 'CLAIM $amount COINS',
-                  fullWidth: true,
-                  onPressed: claiming
-                      ? null
-                      : () async {
-                          setModalState(() => claiming = true);
-                          final granted = await _claimStarterReward();
-                          if (!dialogContext.mounted) return;
-                          // Close either way: a refused claim has already
-                          // toasted (or is simply an old backend); a granted
-                          // one confirms via the toast below.
-                          Navigator.of(dialogContext).pop();
-                          if (granted && mounted) {
-                            showInfoToast(context, '+$amount coins added.');
-                          }
-                        },
-                ),
-              ],
+                  const SizedBox(height: 20),
+                  PillButton(
+                    key: const Key('claim-starter-reward'),
+                    label: claiming ? 'CLAIMING...' : 'CLAIM $amount COINS',
+                    fullWidth: true,
+                    onPressed: claiming
+                        ? null
+                        : () async {
+                            setModalState(() => claiming = true);
+                            final granted = await _claimStarterReward();
+                            if (!dialogContext.mounted) return;
+                            // Close either way: a refused claim has already
+                            // toasted (or is simply an old backend); a granted
+                            // one confirms via the toast below.
+                            Navigator.of(dialogContext).pop();
+                            if (granted && mounted) {
+                              showInfoToast(context, '+$amount coins added.');
+                            }
+                          },
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-      ),
-    );
+      );
+    });
   }
 
   @override
@@ -777,6 +898,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       _appResumed = false;
+      _backgroundedSinceLastResume = true;
+      _impactAttemptGeneration += 1;
       _leaderboardWasVisible = false;
     } else if (state == AppLifecycleState.resumed) {
       _appResumed = true;
@@ -797,7 +920,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         // instant catch-up (the seq guard in _loadProgress keeps ordering
         // correct), then restart the periodic poll. _startPolling re-guards
         // its own timer.
-        if (_routeVisible) unawaited(_refreshAfterCoverage());
+        final genuineForegroundResume = _backgroundedSinceLastResume;
+        _backgroundedSinceLastResume = false;
+        if (_routeVisible || _raceOverlayPending > 0) {
+          unawaited(
+            _refreshAfterCoverage(
+              deliverImpactNotices: genuineForegroundResume,
+            ),
+          );
+        }
         break;
       case RacePollLifecycleAction.none:
         break;
@@ -965,6 +1096,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       }
 
       if (!mounted) return;
+      final isInitialRouteLoad = !_initialDetailsLoadCompleted;
+      _initialDetailsLoadCompleted = true;
       setState(() {
         _race = details;
         _isLoading = false;
@@ -1000,9 +1133,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             );
           });
         } else {
-          _loadProgress(
-            prefetched: progressPrefetch,
-            refetchOnNullPrefetch: !bootstrap.supported,
+          unawaited(
+            _loadActiveProgressAndImpactNotices(
+              prefetched: progressPrefetch,
+              refetchOnNullPrefetch: !bootstrap.supported,
+              deliverImpactNotices: isInitialRouteLoad,
+            ),
           );
         }
         if (!previewViewer) _startPolling();
@@ -1021,7 +1157,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           _participantsLoadingMore = false;
         });
         unawaited(
-          _loadCompletedProgressAndImpactNotices(
+          _loadCompletedProgress(
             prefetched: progressPrefetch,
             refetchOnNullPrefetch: !bootstrap.supported,
           ),
@@ -1062,67 +1198,140 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     }
   }
 
-  Future<void> _loadCompletedProgressAndImpactNotices({
+  Future<void> _loadActiveProgressAndImpactNotices({
     Future<Map<String, dynamic>?>? prefetched,
     required bool refetchOnNullPrefetch,
+    required bool deliverImpactNotices,
   }) async {
     await _loadProgress(
       prefetched: prefetched,
       refetchOnNullPrefetch: refetchOnNullPrefetch,
     );
-    await _showImpactNotices();
+    if (deliverImpactNotices) await _attemptActiveImpactDelivery();
   }
 
-  Future<void> _showImpactNotices() async {
-    if (!mounted || widget.demoMode || _showingImpactNotices) return;
+  Future<void> _loadCompletedProgress({
+    Future<Map<String, dynamic>?>? prefetched,
+    required bool refetchOnNullPrefetch,
+  }) => _loadProgress(
+    prefetched: prefetched,
+    refetchOnNullPrefetch: refetchOnNullPrefetch,
+  );
+
+  Future<void> _attemptActiveImpactDelivery() async {
+    if (!mounted ||
+        widget.demoMode ||
+        _notAParticipant ||
+        _race?['status'] != 'ACTIVE' ||
+        _progress?['status'] != 'ACTIVE' ||
+        _race?['myStatus'] != 'ACCEPTED') {
+      return;
+    }
     final token = widget.authService.authToken;
     if (token == null || token.isEmpty) return;
-    _showingImpactNotices = true;
+
+    final attempt = ++_impactAttemptGeneration;
     try {
-      final notices = await _api.fetchRaceImpactNotices(
+      var result = await _api.fetchActiveRaceImpactNotices(
         identityToken: token,
         raceId: widget.raceId,
       );
-      for (final notice in notices.take(3)) {
-        if (!mounted) return;
-        final id = notice['id'];
-        final type = notice['powerupType'];
-        final delta = notice['deltaSteps'];
-        if (id is! String ||
-            id.isEmpty ||
-            type is! String ||
-            type.isEmpty ||
-            delta is! num) {
-          continue;
-        }
-        final steps = delta.toInt();
-        final sign = steps >= 0 ? '+' : '−';
-        await showPowerupRevealModal(
-          context,
-          iconType: type,
-          title: PowerupCopy.nameFor(type),
-          subtitle:
-              '$sign${steps.abs()} steps in ${_race?['name'] is String ? _race!['name'] : 'this race'}',
-          accent: steps >= 0
-              ? AppColors.of(context).coinDark
-              : AppColors.of(context).error,
+      if (!_impactAttemptStillCurrent(attempt, token)) return;
+
+      if (result.isPending) {
+        final succeeded = await _awaitActiveImpactResolution(
+          result,
+          attempt: attempt,
+          identityToken: token,
         );
-        // The backend predicate binds user + race + opaque id. A failed ack
-        // intentionally leaves the notice for a later authorized open.
-        try {
-          await _api.acknowledgeRaceImpactNotice(
+        if (!succeeded || !_impactAttemptStillCurrent(attempt, token)) return;
+        // Exactly one retry after a successful bounded handoff. A second 202
+        // ends this attempt; the next genuine open/resume may try again.
+        result = await _api.fetchActiveRaceImpactNotices(
+          identityToken: token,
+          raceId: widget.raceId,
+        );
+        if (!_impactAttemptStillCurrent(attempt, token) || result.isPending) {
+          return;
+        }
+      }
+
+      final notices = result.notices
+          .map(_ActiveImpactNotice.tryParse)
+          .whereType<_ActiveImpactNotice>()
+          .take(3)
+          .toList(growable: false);
+      for (final notice in notices) {
+        if (!_impactAttemptStillCurrent(attempt, token)) return;
+        await _runRaceOverlay(() async {
+          if (!_canPresentActiveImpact(attempt: attempt)) return;
+          final name = PowerupCopy.nameFor(notice.powerupType);
+          final steps = notice.deltaSteps;
+          final subtitle = steps < 0
+              ? '$name ${notice.powerupType == 'LEECH' ? 'drained' : 'removed'} ${steps.abs()} synced steps'
+              : '$name added $steps synced steps';
+          await showPowerupRevealModal(
+            context,
+            iconType: notice.powerupType,
+            title: name,
+            subtitle: subtitle,
+            accent: steps >= 0
+                ? AppColors.of(context).coinDark
+                : AppColors.of(context).error,
+          );
+          if (!_impactAttemptStillCurrent(attempt, token)) return;
+          await _api.acknowledgeActiveRaceImpactNotice(
             identityToken: token,
             raceId: widget.raceId,
-            noticeId: id,
+            noticeId: notice.id,
           );
-        } catch (_) {}
+        });
       }
     } catch (_) {
       // Capability disabled/old backend/unauthorized viewer all degrade to no
       // overlay. The private endpoint remains the actual security boundary.
-    } finally {
-      _showingImpactNotices = false;
     }
+  }
+
+  bool _impactAttemptStillCurrent(int attempt, String identityToken) =>
+      mounted &&
+      attempt == _impactAttemptGeneration &&
+      identityToken == widget.authService.authToken &&
+      _appResumed &&
+      !_notAParticipant &&
+      _race?['status'] == 'ACTIVE' &&
+      _progress?['status'] == 'ACTIVE';
+
+  Future<bool> _awaitActiveImpactResolution(
+    ActiveImpactNoticesResult pending, {
+    required int attempt,
+    required String identityToken,
+  }) async {
+    final jobId = pending.jobId;
+    final generation = pending.generation;
+    final firstDelayMs = pending.retryAfterMs;
+    if (jobId == null || generation == null || firstDelayMs == null) {
+      return false;
+    }
+    final schedule = <Duration>[
+      Duration(milliseconds: firstDelayMs),
+      const Duration(milliseconds: 1500),
+      const Duration(seconds: 3),
+      const Duration(seconds: 5),
+    ];
+    for (final delay in schedule) {
+      await Future<void>.delayed(delay);
+      if (!_impactAttemptStillCurrent(attempt, identityToken)) return false;
+      final status = await _api.fetchRaceResolutionStatus(
+        identityToken: identityToken,
+        jobId: jobId,
+        generation: generation,
+      );
+      if (!_impactAttemptStillCurrent(attempt, identityToken)) return false;
+      if (status.isSucceeded) return true;
+      if (status.isTerminal) return false;
+    }
+    return false;
   }
 
   /// Switch the screen to the not-a-participant state and shut every poller
@@ -1305,7 +1514,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               : null;
           final rawEvent = resolvedProgress['globalEvent'];
           _globalEvent = rawEvent is Map
-              ? Map<String, dynamic>.from(rawEvent)
+              ? <String, dynamic>{
+                  for (final entry in rawEvent.entries)
+                    if (entry.key is String) entry.key as String: entry.value,
+                }
               : null;
           _progressState = Loadable.success(resolvedProgress);
         });
@@ -2207,6 +2419,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             );
 
       final res = result['result'] as Map<String, dynamic>?;
+      final parsedReceipt = _ActiveImpactReceipt.tryParse(
+        result['activeImpactReceipt'],
+      );
+      final activeImpactReceipt = parsedReceipt?.raceId == widget.raceId
+          ? parsedReceipt
+          : null;
       final coinsSpent = _readInt(res?['coinsSpent'], fallback: 0);
       if (coinsSpent > 0) {
         await widget.authService.updateCoins(
@@ -2221,8 +2439,28 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       // Blocked/Reflected get a reveal-style modal (matching the mystery-box
       // UNBOX reveal); a normal/APPLIED outcome keeps the success toast.
       final outcome = attackOutcomeFromResult(res);
+      var inlineModalDismissed = false;
+      var inlineToastAckScheduled = false;
+
+      void showOutcomeToast(String message) {
+        inlineToastAckScheduled = activeImpactReceipt != null;
+        showInfoToast(
+          context,
+          message,
+          onDismissed: activeImpactReceipt == null
+              ? null
+              : () => unawaited(
+                  _acknowledgeActiveImpactReceipt(
+                    activeImpactReceipt,
+                    identityToken: token,
+                  ),
+                ),
+        );
+      }
+
       if (type == 'QUICKSAND') {
-        await _showQuicksandResults(res, targets);
+        await _runRaceOverlay(() => _showQuicksandResults(res, targets));
+        inlineModalDismissed = true;
       } else if (type == 'DEFENSE_SCAN') {
         // X-Ray is an instantaneous intel read: the reveal rides back on the
         // use response as `scan` (contract puts it top-level; also check the
@@ -2231,45 +2469,55 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         final scan =
             (result['scan'] as Map<String, dynamic>?) ??
             (res?['scan'] as Map<String, dynamic>?);
-        await _showDefenseScanSheet(scan);
+        await _runRaceOverlay(() => _showDefenseScanSheet(scan));
+        inlineModalDismissed = true;
       } else if (outcome == AttackOutcome.blocked ||
           outcome == AttackOutcome.reflected ||
           outcome == AttackOutcome.redirected ||
           outcome == AttackOutcome.reflectedBlocked) {
         // Blocked / Reflected / Decoy-redirected / reflected-then-blocked all
         // get the reveal modal.
-        await showAttackOutcomeModal(context, res ?? const {});
+        await _runRaceOverlay(
+          () => showAttackOutcomeModal(context, res ?? const {}),
+        );
+        inlineModalDismissed = true;
       } else if (type == 'COIN_FLIP') {
         // Server-rolled 2x/0.5x. A missing `flip` (older backend) degrades to
         // the generic toast below rather than a blank reveal.
         final reveal = CoinFlipReveal.fromResult(res);
         if (reveal != null) {
-          await showPowerupRevealModal(
-            context,
-            iconType: 'COIN_FLIP',
-            title: reveal.won ? 'HEADS!' : 'TAILS!',
-            subtitle: reveal.won
-                ? 'Your steps are doubled for the next hour!'
-                : 'Tough luck. Your steps are halved for the next hour.',
-            accent: reveal.won
-                ? AppColors.of(context).coinDark
-                : AppColors.of(context).error,
+          await _runRaceOverlay(
+            () => showPowerupRevealModal(
+              context,
+              iconType: 'COIN_FLIP',
+              title: reveal.won ? 'HEADS!' : 'TAILS!',
+              subtitle: reveal.won
+                  ? 'Your steps are doubled for the next hour!'
+                  : 'Tough luck. Your steps are halved for the next hour.',
+              accent: reveal.won
+                  ? AppColors.of(context).coinDark
+                  : AppColors.of(context).error,
+            ),
           );
+          inlineModalDismissed = true;
         } else {
-          showInfoToast(context, '${PowerupCopy.nameFor(type)} activated!');
+          showOutcomeToast('${PowerupCopy.nameFor(type)} activated!');
         }
       } else if (type == 'MYSTERY_POTION') {
         // Server-rolled outcome. A missing `rolled` degrades to generic toast.
         final reveal = MysteryPotionReveal.fromResult(res);
         if (reveal != null) {
-          await showPowerupRevealModal(
-            context,
-            iconType: reveal.iconType,
-            title: 'MYSTERY POTION',
-            subtitle: reveal.subtitle(),
+          await _runRaceOverlay(
+            () => showPowerupRevealModal(
+              context,
+              iconType: reveal.iconType,
+              title: 'MYSTERY POTION',
+              subtitle: reveal.subtitle(),
+            ),
           );
+          inlineModalDismissed = true;
         } else {
-          showInfoToast(context, '${PowerupCopy.nameFor(type)} activated!');
+          showOutcomeToast('${PowerupCopy.nameFor(type)} activated!');
         }
       } else if (type == 'UPRISING' ||
           type == 'POWER_OUTAGE' ||
@@ -2278,8 +2526,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         // is additive — absent on an older backend → plain activation toast.
         final affected = _readInt(res?['affected'], fallback: -1);
         final name = PowerupCopy.nameFor(type);
-        showInfoToast(
-          context,
+        showOutcomeToast(
           affected >= 0
               ? '$name activated. $affected racer${affected == 1 ? '' : 's'} affected!'
               : '$name activated!',
@@ -2289,17 +2536,22 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         // swap) return no stolenPowerup, so fall back to the generic toast.
         final stolen = res?['stolenPowerup'] as Map<String, dynamic>?;
         final stolenType = stolen?['type'] as String?;
-        showInfoToast(
-          context,
+        showOutcomeToast(
           stolenType != null
               ? 'You stole a ${PowerupCopy.nameFor(stolenType)}!'
               : '${PowerupCopy.nameFor(type)} activated!',
         );
       } else {
         final tierTag = upgradeLevel > 0 ? ' (Lvl $upgradeLevel)' : '';
-        showInfoToast(
-          context,
-          '${PowerupCopy.nameFor(type)}$tierTag activated!',
+        showOutcomeToast('${PowerupCopy.nameFor(type)}$tierTag activated!');
+      }
+
+      if (inlineModalDismissed &&
+          !inlineToastAckScheduled &&
+          activeImpactReceipt != null) {
+        await _acknowledgeActiveImpactReceipt(
+          activeImpactReceipt,
+          identityToken: token,
         );
       }
 
@@ -2313,6 +2565,22 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     } finally {
       if (mounted) setState(() => _isActing = false);
     }
+  }
+
+  Future<void> _acknowledgeActiveImpactReceipt(
+    _ActiveImpactReceipt receipt, {
+    required String identityToken,
+  }) async {
+    if (!mounted ||
+        receipt.raceId != widget.raceId ||
+        identityToken != widget.authService.authToken) {
+      return;
+    }
+    await _api.acknowledgeActiveImpactReceipt(
+      identityToken: identityToken,
+      raceId: receipt.raceId,
+      receiptId: receipt.id,
+    );
   }
 
   Future<List<Map<String, dynamic>>> _loadRacePowerupTargetContext(
@@ -5708,7 +5976,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   Widget? _buildGlobalEventBanner() {
     final event = _globalEvent;
     if (event == null) return null;
-    if (event['active'] == false) return null;
+    if (event['active'] != true) return null;
 
     final endsAtRaw = event['endsAt'];
     final endsAt = endsAtRaw is String
@@ -5719,7 +5987,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final remaining = endsAt.difference(_countdownNow);
     if (remaining.isNegative || remaining == Duration.zero) return null;
 
-    final multiplier = _readNullableInt(event['multiplier']) ?? 2;
+    final multiplierRaw = event['multiplier'];
+    if (multiplierRaw is! num || !multiplierRaw.isFinite) return null;
+    final multiplier = multiplierRaw.toInt();
 
     // Shared, self-ticking banner — same look on the race page and home screen.
     return GlobalEventBanner(

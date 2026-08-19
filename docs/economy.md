@@ -275,7 +275,7 @@ re-add them.
 runtime authority because the seed update deliberately preserves admin-tuned
 price/activation fields.
 
-### 3.2 Rarity + drop pool — `DB balance_config` **v4** (`86a0d190-a45d-4937-bfe4-80badee7f82b`, created 2026-08-10 15:37:51) — verified 2026-08-13
+### 3.2 Rarity + drop pool — `DB balance_config` **v4** (`86a0d190-a45d-4937-bfe4-80badee7f82b`, created 2026-08-10 15:37:51) — verified 2026-08-19
 
 Batch 2026-08-09 landed as config **version 4**. The live row now differs from
 the v3 description that follows it; v4 is authoritative:
@@ -301,6 +301,15 @@ Consequence for §3.4: `LEG_CRAMP` and `WRONG_TURN` now charge the **arithmetic
 drift is now priced around rather than reconciled (`rarityByType.WRONG_TURN` is
 still `RARE`). `FANNY_PACK` is no longer rollable, so the Fanny-Pack rejection
 loops in `openMysteryBox.js` / `rerollMysteryBox.js` are dead code.
+
+`TRAIL_MAGNET` is likewise retired from generation: it is absent from every
+live v4 `dropPool` tier and from the code-default pool. Prod retains 45
+historical `race_powerups` rows, all box-sourced between 2026-05-16 and
+2026-05-22; 44 are `used`, one `expired`, and none are held. Global inventory
+also has zero positive quantity. Its rarity, enum, copy, and effect code remain
+for historical/old-client compatibility. Sources: `DB balance_config`,
+`race_powerups`, `race_powerup_events`, `user_powerup_items`; `CODE
+balanceConfig.defaults.js:144-155`, `powerupOdds.js:6-9`.
 
 ### 3.2b Previous row — v3 (`5ba76396…`, created 2026-07-28 09:46:24), superseded
 
@@ -1004,7 +1013,7 @@ shared/economy/prizePool.js`, `races/racePayoutPresets.js`,
 
 ---
 
-## 5. Daily spinner (daily reward box)
+## 5. Daily spinner (daily reward box) — verified 2026-08-19
 
 `CODE economy/dailyBoxOdds.js`, config `DB balance_config.dailyBox`.
 
@@ -1019,16 +1028,32 @@ shared/economy/prizePool.js`, `races/racePayoutPresets.js`,
 | RARE sub-roll | 50% accessory / 50% powerup when both pools stocked |
 
 **The spinner's powerup pool is the shop catalog** (`getEligiblePowerupPool`,
-gated by client capability tokens). Prod 30d: 659 non-box powerups granted,
-including 16 free `leech` (300-coin store price) and 62 `cleanse`.
+gated by client capability tokens). The live prod catalog has six active,
+non-test-only rows: `defense_scan`, `quick_rinse`, and `decoy` at 75 coins;
+`rainstorm`, `leech`, and `ghost_pepper` at 200. `TRAIL_MAGNET` has no
+`powerup_shop_items` row at all, so it cannot appear in the server-provided
+daily-spinner pool. Retained-account audit rows contain zero `TRAIL_MAGNET`
+free-daily or extra-spin grants.
+
+Within a powerup hit, inverse-price weighting makes the conditional store-price
+proxy **109.09 coins at streak 1** and **90.41 at streak 30**. With both an
+unowned-accessory pool and powerup pool stocked, a spin hits a powerup with
+probability `RARE × 50%`: 2.5% at streak 1 and 22.5% at streak 30, contributing
+2.73 and 20.34 coins of store-price proxy per spin respectively. If the user
+owns every accessory, the powerup gets the whole RARE slice: 5%→45%, or
+5.45→40.68 proxy coins/spin. These are value proxies, not coin minting.
+
+Trailing 30 complete days (2026-07-19 through 2026-08-17) produced 79 free-spin
+and 43 extra-spin powerup grants among retained accounts. The catalog has
+changed within that window, so historical grant types are not the current pool.
+Source: `DB powerup_shop_items`, `daily_reward_claims`, `ad_reward_grants`.
 
 `dailyBoxExcludedTypes` still exists in the `DB balance_config` row
 (`DEFENSE_SCAN, LEECH, HITCHHIKE, QUICK_RINSE, RALLY_FLAG`) but is **dead data** —
-it was removed as an authority on 2026-07-28 (`balanceConfig.js:228`,
+it was removed as an authority on 2026-07-28 (`balanceConfig.js:264`,
 `getEligiblePowerupPool.js:8`). The rule is now: **visible in the store ⟺
-winnable from the spin.** This is why 16 free `leech` (300-coin store price) and
-63 `quick_rinse` were granted in the last 30d. Consequence: **the spinner is a
-free source of the most expensive powerups in the game.**
+winnable from the spin.** Consequently the spinner remains a free source of the
+most expensive active powerups (currently the 200-coin tier).
 
 ---
 

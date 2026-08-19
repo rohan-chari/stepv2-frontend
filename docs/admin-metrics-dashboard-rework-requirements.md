@@ -109,13 +109,13 @@ Unless a row explicitly states otherwise:
 - Product/database days use `America/New_York` calendar boundaries.
 - Provider rows retain and label the provider's own reporting day/timezone.
   They are not silently rebucketed into ET when only daily aggregates exist.
-- “iOS user” means `users.apple_id IS NOT NULL` and
-  `users.is_review_account=false`. Every v2 user population, eligibility stamp,
-  cohort, race membership, ledger/reward fact, referral owner/signup, and
-  denominator applies this predicate. A rare linked account with both provider
-  ids qualifies because its Apple identity is authoritative; an account without
-  an Apple identity does not. Legacy stats queries remain unchanged. Provider
-  aggregates are the exception: AdMob/Apple do not provide user-level
+- “iOS user” means every retained `users` row with
+  `users.is_review_account=false`, regardless of whether the account used Apple
+  or Google Sign-In. The production population is iOS-only; authentication
+  provider is not a platform signal. Every v2 user population, eligibility
+  stamp, cohort, race membership, ledger/reward fact, referral owner/signup,
+  and denominator applies this predicate. Legacy stats queries remain
+  unchanged. Provider aggregates are the exception: AdMob/Apple do not provide user-level
   identity with which to remove review accounts. A future provider numerator
   must disclose that it may include review traffic before it is divided by a
   non-review product-DB denominator.
@@ -333,10 +333,9 @@ and compatibility debugging even though it is not a growth metric. Move the
 existing 30-day active version table out of `GROWTH` into collapsed
 `DEBUG → RELEASE ADOPTION`. Serve it through the lazy
 `dashboard-release-adoption` block, reusing the canonical existing 30-day
-version query with `apple_id IS NOT NULL AND is_review_account=false`, grouped
-only by version, rather than fetching the full legacy payload. Filter before
-removing the platform leaf so rows from other identity providers cannot become
-indistinguishable. Do not delete its
+version query with `is_review_account=false`, grouped only by version, rather
+than fetching the full legacy payload. Authentication provider must not be used
+as a platform filter. Do not delete its
 legacy API fields. It should
 remain explicitly labeled “accounts seen by backend in last 30d,” not install
 base. This placement is decided.
@@ -392,8 +391,8 @@ model MetricCoverageStart {
   denominator.
 - `metricsV2SignupEligible=true` and `metricsV2SignupEpochId=currentEpoch.id`
   are written only in the new-account transaction when collection is enabled
-  and the new account has an Apple identity and the creating request carries
-  the capability. The signup flag/epoch is
+  and the creating iOS request carries the capability, regardless of whether
+  the account uses Apple or Google Sign-In. The signup flag/epoch is
   immutable. D1/D7/D30 and health-within-24h denominators require the current
   epoch id. An older signup or a signup during a disabled gap never enters
   retroactively.
@@ -1084,11 +1083,11 @@ Backend integration tests, written first:
   exclusion, ET boundaries, mature denominators, null percentage semantics,
   and every DB-native metric through real HTTP + test Postgres.
 - Seed mixed Apple/Google identities, mixed-platform activation events and
-  device tokens, and version rows. Prove every v2 numerator/denominator uses
-  only Apple-identity users, the two new events accept only `platform='ios'`,
-  push attribution accepts only current-epoch iOS tokens, Release Adoption is
-  iOS-only before its platform leaf is removed, and every legacy aggregate is
-  unchanged.
+  device tokens, and version rows. Prove every v2 numerator/denominator includes
+  non-review iOS users across both sign-in providers, the two new events accept
+  only `platform='ios'`, push attribution accepts only current-epoch iOS tokens,
+  Release Adoption is iOS-only before its platform leaf is removed, and every
+  legacy aggregate is unchanged.
 - Seed frozen, upgraded, and signup-capable clients and prove immutable signup
   eligibility, capable-only DAU/retention denominators, per-metric collecting
   states, exact-day maturity, collection disable/re-enable epoch gaps, and no
@@ -1333,10 +1332,12 @@ There are no unresolved product questions in this draft.
   Summary placeholders; added collection-gap, retry, privacy-rotation, and
   old-server fallbacks; and confirmed zero unresolved product or architecture
   questions. `git diff --check` is clean.
-- **iOS-only scope revision (2026-08-18):** At owner direction, removed Google
-  Play, alternate-platform UI/data series, provider dimensions, and all
-  non-iOS feature instrumentation. Established `apple_id IS NOT NULL` plus
-  non-review as the authoritative v2 population; restricted activation facts,
+- **iOS-only scope revision (2026-08-18; corrected 2026-08-19):** At owner
+  direction, removed Google Play, alternate-platform UI/data series, provider dimensions, and all
+  non-iOS feature instrumentation. The original `apple_id IS NOT NULL` scope
+  incorrectly excluded iOS users of Google Sign-In; retained non-review users
+  across both authentication providers are the authoritative v2 population.
+  Restricted activation facts,
   APNs delivery attribution, referral ownership, capability epochs, and Release
   Adoption accordingly. Retained only the mandatory negative compile/no-emit
   guard for the shared project. Architect reconfirmed **APPROVE** with no

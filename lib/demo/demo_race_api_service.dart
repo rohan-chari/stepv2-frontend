@@ -1,4 +1,5 @@
 import '../services/backend_api_service.dart';
+import '../models/race_resolution_status.dart';
 import 'demo_race_engine.dart';
 
 /// A fake backend for the REAL `RaceDetailScreen` (spec §5.1).
@@ -31,6 +32,33 @@ class DemoRaceApiService extends BackendApiService {
     required String identityToken,
     required String raceId,
   }) async => const [];
+
+  @override
+  Future<ActiveImpactNoticesResult> fetchActiveRaceImpactNotices({
+    required String identityToken,
+    required String raceId,
+  }) async => ActiveImpactNoticesResult.empty;
+
+  @override
+  Future<RaceResolutionStatus> fetchRaceResolutionStatus({
+    required String identityToken,
+    required String jobId,
+    required int generation,
+  }) async => const RaceResolutionStatus(RaceResolutionState.notFound);
+
+  @override
+  Future<bool> acknowledgeActiveRaceImpactNotice({
+    required String identityToken,
+    required String raceId,
+    required String noticeId,
+  }) async => false;
+
+  @override
+  Future<bool> acknowledgeActiveImpactReceipt({
+    required String identityToken,
+    required String raceId,
+    required String receiptId,
+  }) async => false;
 
   @override
   Future<void> acknowledgeRaceImpactNotice({

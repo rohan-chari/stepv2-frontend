@@ -30,6 +30,7 @@ void showGameToast(
   required Key badgeKey,
   required GameToastPalette palette,
   Duration duration = const Duration(seconds: 3),
+  VoidCallback? onDismissed,
 }) {
   final overlay = Overlay.of(context, rootOverlay: true);
   late final OverlayEntry entry;
@@ -41,6 +42,7 @@ void showGameToast(
     if (entry.mounted) {
       entry.remove();
     }
+    onDismissed?.call();
   }
 
   entry = OverlayEntry(

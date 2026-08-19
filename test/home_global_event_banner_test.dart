@@ -42,10 +42,7 @@ Future<AuthService> _createAuthService() async {
   return authService;
 }
 
-Widget _buildHome(
-  AuthService authService, {
-  Map<String, dynamic>? raceCard,
-}) {
+Widget _buildHome(AuthService authService, {Map<String, dynamic>? raceCard}) {
   return MaterialApp(
     home: Scaffold(
       body: HomeTab(
@@ -79,7 +76,9 @@ void main() {
       final authService = await _createAuthService();
       // endsAt far in the future so the countdown is positive and the banner
       // is unambiguously "active".
-      final endsAt = DateTime.now().toUtc().add(const Duration(minutes: 20));
+      final endsAt = DateTime.now().toUtc().add(
+        const Duration(minutes: 20, seconds: 30),
+      );
 
       await tester.pumpWidget(
         _buildHome(
@@ -96,11 +95,13 @@ void main() {
       );
       await tester.pump();
 
-      expect(
-        find.byKey(const Key('home-global-event-banner')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const Key('home-global-event-banner')), findsOneWidget);
       expect(find.textContaining('2x RACE STEPS'), findsOneWidget);
+      expect(
+        find.textContaining('ends in 20:'),
+        findsOneWidget,
+        reason: 'the countdown must use this viewer response endsAt',
+      );
 
       // Tear down the periodic countdown timer.
       await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
@@ -131,7 +132,9 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(800, 1200));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final authService = await _createAuthService();
-      final endsAt = DateTime.now().toUtc().subtract(const Duration(minutes: 1));
+      final endsAt = DateTime.now().toUtc().subtract(
+        const Duration(minutes: 1),
+      );
 
       await tester.pumpWidget(
         _buildHome(
@@ -154,6 +157,51 @@ void main() {
   );
 
   testWidgets(
+    'home fails soft for null or malformed globalEvent contract fields',
+    (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final authService = await _createAuthService();
+      final validEnd = DateTime.now()
+          .toUtc()
+          .add(const Duration(minutes: 20))
+          .toIso8601String();
+      final malformedEvents = <Object?>[
+        null,
+        'not-an-object',
+        {'active': false, 'multiplier': 2, 'endsAt': validEnd},
+        {'multiplier': 2, 'endsAt': validEnd},
+        {'active': null, 'multiplier': 2, 'endsAt': validEnd},
+        {'active': 'true', 'multiplier': 2, 'endsAt': validEnd},
+        {'active': true, 'endsAt': validEnd},
+        {'active': true, 'multiplier': null, 'endsAt': validEnd},
+        {'active': true, 'multiplier': '2', 'endsAt': validEnd},
+        {'active': true, 'multiplier': double.nan, 'endsAt': validEnd},
+        {'active': true, 'multiplier': double.infinity, 'endsAt': validEnd},
+        {'active': true, 'multiplier': 2, 'endsAt': null},
+        {'active': true, 'multiplier': 2, 'endsAt': 'not-a-date'},
+      ];
+
+      for (final globalEvent in malformedEvents) {
+        await tester.pumpWidget(
+          _buildHome(
+            authService,
+            raceCard: {'state': 'EMPTY', 'globalEvent': globalEvent},
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.byKey(const Key('home-global-event-banner')),
+          findsNothing,
+          reason: 'malformed globalEvent must be ignored: $globalEvent',
+        );
+        expect(tester.takeException(), isNull);
+      }
+    },
+  );
+
+  testWidgets(
     'GlobalEventBanner renders the multiplier + countdown for an active window',
     (WidgetTester tester) async {
       final endsAt = DateTime.now().add(const Duration(minutes: 20));
@@ -171,10 +219,7 @@ void main() {
       );
       await tester.pump();
 
-      expect(
-        find.byKey(const Key('standalone-event-banner')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const Key('standalone-event-banner')), findsOneWidget);
       expect(find.textContaining('3x RACE STEPS'), findsOneWidget);
       expect(find.textContaining('ends in'), findsOneWidget);
 

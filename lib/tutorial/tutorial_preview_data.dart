@@ -1,5 +1,6 @@
 import '../models/step_data.dart';
 import '../models/home_race_suggestion.dart';
+import '../models/race_resolution_status.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 
@@ -52,6 +53,33 @@ class TutorialPreviewBackendApiService extends BackendApiService {
     required String identityToken,
     required String raceId,
   }) async => const [];
+
+  @override
+  Future<ActiveImpactNoticesResult> fetchActiveRaceImpactNotices({
+    required String identityToken,
+    required String raceId,
+  }) async => ActiveImpactNoticesResult.empty;
+
+  @override
+  Future<RaceResolutionStatus> fetchRaceResolutionStatus({
+    required String identityToken,
+    required String jobId,
+    required int generation,
+  }) async => const RaceResolutionStatus(RaceResolutionState.notFound);
+
+  @override
+  Future<bool> acknowledgeActiveRaceImpactNotice({
+    required String identityToken,
+    required String raceId,
+    required String noticeId,
+  }) async => false;
+
+  @override
+  Future<bool> acknowledgeActiveImpactReceipt({
+    required String identityToken,
+    required String raceId,
+    required String receiptId,
+  }) async => false;
 
   @override
   Future<List<Map<String, dynamic>>> fetchPrivateRaceImpactFeed({

@@ -768,7 +768,9 @@ void main() {
     await tester.tap(find.bySemanticsLabel('Definition for Total accounts'));
     await tester.pump();
     expect(
-      find.text('Retained non-review iOS accounts; this is not installs.'),
+      find.text(
+        'Retained non-review iOS accounts, whether signed in with Apple or Google; this is not installs.',
+      ),
       findsOneWidget,
     );
     expect(find.text('SOURCE · PRODUCT DB'), findsOneWidget);

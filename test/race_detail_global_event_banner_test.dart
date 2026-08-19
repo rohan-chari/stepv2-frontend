@@ -15,9 +15,13 @@ import 'package:step_tracker/services/backend_api_service.dart';
 // ---------------------------------------------------------------------------
 
 class _GlobalEventBackendApiService extends BackendApiService {
-  _GlobalEventBackendApiService({this.globalEvent});
+  _GlobalEventBackendApiService({
+    this.globalEvent,
+    this.includeGlobalEvent = true,
+  });
 
-  final Map<String, dynamic>? globalEvent;
+  final Object? globalEvent;
+  final bool includeGlobalEvent;
 
   @override
   Future<Map<String, dynamic>> fetchRaceDetails({
@@ -42,8 +46,16 @@ class _GlobalEventBackendApiService extends BackendApiService {
       'powerupsEnabled': false,
       'endsAt': '2026-06-10T12:00:00.000Z',
       'participants': const [
-        {'userId': 'user-1', 'displayName': 'Trail Walker', 'status': 'ACCEPTED'},
-        {'userId': 'user-2', 'displayName': 'Hill Climber', 'status': 'ACCEPTED'},
+        {
+          'userId': 'user-1',
+          'displayName': 'Trail Walker',
+          'status': 'ACCEPTED',
+        },
+        {
+          'userId': 'user-2',
+          'displayName': 'Hill Climber',
+          'status': 'ACCEPTED',
+        },
       ],
     };
   }
@@ -77,7 +89,7 @@ class _GlobalEventBackendApiService extends BackendApiService {
         'activeEffects': [],
       },
     };
-    if (globalEvent != null) {
+    if (includeGlobalEvent) {
       progress['globalEvent'] = globalEvent;
     }
     return progress;
@@ -117,7 +129,9 @@ void main() {
       final authService = await _createAuthService();
       // endsAt far in the future so the countdown is positive and the banner
       // is unambiguously "active".
-      final endsAt = DateTime.now().toUtc().add(const Duration(minutes: 20));
+      final endsAt = DateTime.now().toUtc().add(
+        const Duration(minutes: 10, seconds: 30),
+      );
       final backendApiService = _GlobalEventBackendApiService(
         globalEvent: {
           'active': true,
@@ -138,11 +152,13 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      expect(
-        find.byKey(const Key('race-global-event-banner')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const Key('race-global-event-banner')), findsOneWidget);
       expect(find.textContaining('2x RACE STEPS'), findsOneWidget);
+      expect(
+        find.textContaining('ends in 10:'),
+        findsOneWidget,
+        reason: 'race detail must use this viewer response endsAt',
+      );
 
       // Tear down the periodic countdown timer.
       await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
@@ -150,26 +166,123 @@ void main() {
     },
   );
 
+  testWidgets('does NOT show the banner when progress omits globalEvent', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _createAuthService();
+    final backendApiService = _GlobalEventBackendApiService(
+      globalEvent: null,
+      includeGlobalEvent: false,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RaceDetailScreen(
+          authService: authService,
+          raceId: 'race-event-off',
+          backendApiService: backendApiService,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byKey(const Key('race-global-event-banner')), findsNothing);
+    expect(find.textContaining('2x RACE STEPS'), findsNothing);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets(
-    'does NOT show the banner when progress omits globalEvent',
+    'race detail fails soft for null, malformed, or expired globalEvent data',
     (WidgetTester tester) async {
       final authService = await _createAuthService();
-      final backendApiService = _GlobalEventBackendApiService(globalEvent: null);
+      final validEnd = DateTime.now()
+          .toUtc()
+          .add(const Duration(minutes: 20))
+          .toIso8601String();
+      final malformedEvents = <Object?>[
+        null,
+        'not-an-object',
+        {'active': false, 'multiplier': 2, 'endsAt': validEnd},
+        {'multiplier': 2, 'endsAt': validEnd},
+        {'active': null, 'multiplier': 2, 'endsAt': validEnd},
+        {'active': 'true', 'multiplier': 2, 'endsAt': validEnd},
+        {'active': true, 'endsAt': validEnd},
+        {'active': true, 'multiplier': null, 'endsAt': validEnd},
+        {'active': true, 'multiplier': '2', 'endsAt': validEnd},
+        {'active': true, 'multiplier': double.nan, 'endsAt': validEnd},
+        {'active': true, 'multiplier': double.infinity, 'endsAt': validEnd},
+        {'active': true, 'multiplier': 2, 'endsAt': null},
+        {'active': true, 'multiplier': 2, 'endsAt': 'not-a-date'},
+        {
+          'active': true,
+          'multiplier': 2,
+          'endsAt': DateTime.now()
+              .toUtc()
+              .subtract(const Duration(seconds: 1))
+              .toIso8601String(),
+        },
+      ];
+
+      for (var index = 0; index < malformedEvents.length; index++) {
+        final globalEvent = malformedEvents[index];
+        await tester.pumpWidget(
+          MaterialApp(
+            home: RaceDetailScreen(
+              key: ValueKey('race-event-malformed-$index'),
+              authService: authService,
+              raceId: 'race-event-malformed-$index',
+              backendApiService: _GlobalEventBackendApiService(
+                globalEvent: globalEvent,
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+
+        expect(
+          find.byKey(const Key('race-global-event-banner')),
+          findsNothing,
+          reason: 'malformed globalEvent must be ignored: $globalEvent',
+        );
+        expect(tester.takeException(), isNull);
+      }
+
+      await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'race detail ignores unknown map keys without losing valid event fields',
+    (WidgetTester tester) async {
+      final authService = await _createAuthService();
+      final endsAt = DateTime.now().toUtc().add(const Duration(minutes: 20));
 
       await tester.pumpWidget(
         MaterialApp(
           home: RaceDetailScreen(
             authService: authService,
-            raceId: 'race-event-off',
-            backendApiService: backendApiService,
+            raceId: 'race-event-extra-key',
+            backendApiService: _GlobalEventBackendApiService(
+              globalEvent: {
+                1: 'malformed unknown key',
+                'active': true,
+                'multiplier': 2,
+                'endsAt': endsAt.toIso8601String(),
+              },
+            ),
           ),
         ),
       );
       await tester.pump();
       await tester.pump();
 
-      expect(find.byKey(const Key('race-global-event-banner')), findsNothing);
-      expect(find.textContaining('2x RACE STEPS'), findsNothing);
+      expect(find.byKey(const Key('race-global-event-banner')), findsOneWidget);
+      expect(tester.takeException(), isNull);
 
       await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
       await tester.pumpAndSettle();

@@ -156,7 +156,8 @@ class AdminMetricsSectionBody extends StatelessWidget {
         _MetricRow(
           label: 'Total accounts',
           value: _number(growth?.integer('totalSignups')),
-          definition: 'Retained non-review iOS accounts; this is not installs.',
+          definition:
+              'Retained non-review iOS accounts, whether signed in with Apple or Google; this is not installs.',
           window: 'CURRENT RETAINED-ACCOUNT SNAPSHOT',
         ),
         _MetricRow(

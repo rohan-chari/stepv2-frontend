@@ -268,6 +268,92 @@ void main() {
   });
 
   test(
+    'participants-v1 preserves the viewer globalEvent without new request params',
+    () async {
+      final http = _Http([
+        _Response(200, const {
+          'progress': {
+            'status': 'ACTIVE',
+            'globalEvent': {
+              'active': true,
+              'multiplier': 2,
+              'endsAt': '2026-08-20T15:47:00.000Z',
+            },
+            'participants': [
+              {
+                'userId': 'user-1',
+                'displayName': 'River',
+                'totalSteps': 1200,
+                'animal': 'corgi_puppy',
+                'accessories': <Map<String, dynamic>>[],
+              },
+            ],
+          },
+          'pagination': {
+            'offset': 0,
+            'limit': 15,
+            'total': 1,
+            'hasMore': false,
+            'nextOffset': 1,
+          },
+        }),
+      ]);
+      final api = BackendApiService(httpClient: http);
+
+      final result = await api.fetchRaceProgressParticipants(
+        identityToken: 'token',
+        raceId: 'race-1',
+        limit: 15,
+      );
+
+      expect(result.progress['globalEvent'], const {
+        'active': true,
+        'multiplier': 2,
+        'endsAt': '2026-08-20T15:47:00.000Z',
+      });
+      expect(http.uris.single.queryParameters, const {
+        'view': 'participants-v1',
+        'offset': '0',
+        'limit': '15',
+      });
+      final headers = http.requests.single.headers as _Headers;
+      expect(headers.values['x-timezone'], 'America/New_York');
+    },
+  );
+
+  test(
+    'home race-card preserves the viewer globalEvent on its existing request',
+    () async {
+      final http = _Http([
+        _Response(200, const {
+          'state': 'EMPTY',
+          'globalEvent': {
+            'active': true,
+            'multiplier': 2,
+            'endsAt': '2026-08-20T15:47:00.000Z',
+          },
+        }),
+      ]);
+      final api = BackendApiService(httpClient: http);
+
+      final result = await api.fetchHomeRaceCard(identityToken: 'token');
+
+      expect(result['globalEvent'], const {
+        'active': true,
+        'multiplier': 2,
+        'endsAt': '2026-08-20T15:47:00.000Z',
+      });
+      expect(http.uris.single.path, '/home/race-card');
+      expect(
+        http.uris.single.queryParameters.keys,
+        unorderedEquals(const ['view', 'homeActiveRaces', 'localDate']),
+      );
+      final headers = http.requests.single.headers as _Headers;
+      expect(headers.values['x-timezone'], 'America/New_York');
+    },
+  );
+
+  test(
     'paged race progress falls back when lean rows lack presentation',
     () async {
       final http = _Http([

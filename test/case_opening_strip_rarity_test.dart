@@ -46,7 +46,6 @@ void main() {
       'SHORTCUT': 'UNCOMMON',
       'TRAIL_MIX': 'UNCOMMON',
       'DETOUR_SIGN': 'UNCOMMON',
-      'TRAIL_MAGNET': 'UNCOMMON',
       'RUNNERS_HIGH': 'UNCOMMON',
       'LEG_CRAMP': 'UNCOMMON',
       'STEALTH_MODE': 'UNCOMMON',
@@ -75,23 +74,22 @@ void main() {
     expect(rarities.every((r) => r == 'UNCOMMON'), isTrue);
   });
 
-  testWidgets('server map absent -> bundled fallback used, reel still renders', (
-    WidgetTester tester,
-  ) async {
-    await _pumpStrip(tester);
+  testWidgets(
+    'server map absent -> bundled fallback used, reel still renders',
+    (WidgetTester tester) async {
+      await _pumpStrip(tester);
 
-    final rarities = _tileRarities(tester);
-    expect(rarities, isNotEmpty);
-    // The bundled table assigns COMMON to half the pool, so an all-UNCOMMON
-    // reel here would mean the fallback was dropped.
-    expect(rarities.any((r) => r == 'COMMON'), isTrue);
-    expect(
-      rarities.every(
-        (r) => const {'COMMON', 'UNCOMMON', 'RARE'}.contains(r),
-      ),
-      isTrue,
-    );
-  });
+      final rarities = _tileRarities(tester);
+      expect(rarities, isNotEmpty);
+      // The bundled table assigns COMMON to half the pool, so an all-UNCOMMON
+      // reel here would mean the fallback was dropped.
+      expect(rarities.any((r) => r == 'COMMON'), isTrue);
+      expect(
+        rarities.every((r) => const {'COMMON', 'UNCOMMON', 'RARE'}.contains(r)),
+        isTrue,
+      );
+    },
+  );
 
   testWidgets('a partial server map only overrides the types it names', (
     WidgetTester tester,
