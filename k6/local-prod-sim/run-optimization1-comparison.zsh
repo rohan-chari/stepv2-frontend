@@ -49,7 +49,7 @@ print -r -- "$capacity_db" | grep -Eq '^stepv2_capacity_[A-Za-z0-9_]+$' || {
 
 umask 077
 mkdir -p "$capacity_root/runs"
-lock_dir="$capacity_root/optimization1-comparison.lock"
+lock_dir="$capacity_root/capacity-workflow.lock"
 mkdir "$lock_dir" 2>/dev/null || {
   print -u2 "another local capacity comparison is already running: $lock_dir"
   exit 2
@@ -58,6 +58,9 @@ run_stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 pair_epoch_ms="$(($(date -u +%s) * 1000))"
 result_dir="$capacity_root/runs/optimization1-$run_stamp-${rate_rps}rps"
 mkdir -p "$result_dir"
+process_start="$(ps -p $$ -o lstart= | sed 's/^ *//')"
+node -e 'require("fs").writeFileSync(process.argv[1],`pid=${process.argv[2]}\nstart=${process.argv[3]}\nrun_id=${process.argv[4]}\n`,{mode:0o600})' \
+  "$lock_dir/owner" "$$" "$process_start" "optimization1-$run_stamp-${rate_rps}rps"
 
 source_tar="$(mktemp "$capacity_root/optimization1-source.XXXXXX.tar")"
 source_manifest="$(mktemp "$capacity_root/optimization1-source.XXXXXX.manifest")"
@@ -132,7 +135,7 @@ teardown() {
   if "$pg_bin/pg_ctl" -D "$capacity_root/postgres18" status >/dev/null 2>&1; then
     "$pg_bin/pg_ctl" -D "$capacity_root/postgres18" stop -m fast >/dev/null
   fi
-  rmdir "$lock_dir" >/dev/null 2>&1
+  mv "$lock_dir" "$result_dir/released-capacity-lock" >/dev/null 2>&1
 }
 trap 'teardown' EXIT
 trap 'exit 130' INT TERM

@@ -1472,14 +1472,25 @@ class _RacesTabState extends State<RacesTab> {
     // masking). Absent on older backends -> false.
     final myPlacementHidden = race['myPlacementHidden'] as bool? ?? false;
     final queuedBoxCount = (race['queuedBoxCount'] as num?)?.toInt() ?? 0;
-    // Held/openable mystery boxes for the current user in this race (0..4).
-    // Absent on older backends -> defaults to 0.
-    final mysteryBoxCount = (race['mysteryBoxCount'] as num?)?.toInt() ?? 0;
-    // Per-slot inventory ({type, status, ...}): HELD powerups render as their
-    // sprite, MYSTERY_BOX as a crate. Absent on older backends -> falls back to
-    // mysteryBoxCount crates.
-    final slotItems =
-        (race['slotItems'] as List?)?.whereType<Map>().toList() ?? const [];
+    // Canonical per-slot inventory. A well-formed list (including an empty
+    // one) owns the mystery-box count; older/malformed payloads retain the
+    // legacy duplicate as their fallback.
+    final rawSlotItems = race['slotItems'];
+    final slotItemsWellFormed =
+        rawSlotItems is List &&
+        rawSlotItems.every((raw) {
+          if (raw is! Map) return false;
+          final status = raw['status'];
+          final type = raw['type'];
+          return status == 'MYSTERY_BOX' ||
+              (status == 'HELD' && type is String && type.isNotEmpty);
+        });
+    final slotItems = slotItemsWellFormed
+        ? rawSlotItems.whereType<Map>().toList(growable: false)
+        : const <Map>[];
+    final mysteryBoxCount = slotItemsWellFormed
+        ? slotItems.where((item) => item['status'] == 'MYSTERY_BOX').length
+        : (race['mysteryBoxCount'] as num?)?.toInt() ?? 0;
 
     // Effects currently on ME in this race (additive `myActiveEffects` field on
     // ACTIVE summaries). Absent on older backends -> empty -> no cluster, so the
@@ -1496,7 +1507,15 @@ class _RacesTabState extends State<RacesTab> {
     // individual race (or an old payload) has none of these fields.
     final isTeamRace = TeamRace.isTeamRace(race);
     final teamSize = TeamRace.teamSize(race);
-    final teamTotals = isTeamRace ? TeamRace.listTeamTotals(race) : null;
+    final canonicalTeamTotals = isTeamRace
+        ? TeamRace.listTeamTotals(race)
+        : null;
+    final flatTeamATotal = race['teamATotalSteps'];
+    final flatTeamBTotal = race['teamBTotalSteps'];
+    final flatTeamTotals = flatTeamATotal is num && flatTeamBTotal is num
+        ? (flatTeamATotal.toInt(), flatTeamBTotal.toInt())
+        : null;
+    final teamTotals = canonicalTeamTotals ?? flatTeamTotals;
     // Item 16 (contract §5 C2): `GET /races` serves cheap PERSISTED team totals
     // — deliberately, to protect the perf win on the hottest screen — so they
     // can lag race detail's live figures. `teams.asOf` says by how much. The
@@ -1575,9 +1594,7 @@ class _RacesTabState extends State<RacesTab> {
     } else if (myPlacementHidden) {
       placementChip = _buildMetaChip(
         '??? PLACE',
-        backgroundColor: AppColors.of(
-          context,
-        ).textMid.withValues(alpha: 0.16),
+        backgroundColor: AppColors.of(context).textMid.withValues(alpha: 0.16),
         textColor: AppColors.of(context).textMid,
       );
     }
@@ -2025,8 +2042,7 @@ class _RacesLoadingSkeleton extends StatelessWidget {
   }) {
     return Column(
       children: [
-        for (var i = 0; i < rows; i++)
-          _row(context, withCrate: withCrate),
+        for (var i = 0; i < rows; i++) _row(context, withCrate: withCrate),
       ],
     );
   }

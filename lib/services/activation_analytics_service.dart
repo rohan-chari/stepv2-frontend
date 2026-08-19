@@ -11,8 +11,11 @@ import 'onboarding_state_service.dart';
 /// Privacy-bounded activation telemetry. No caller-provided strings are sent:
 /// event names and context values must both come from the allowlists below.
 class ActivationAnalyticsService {
-  ActivationAnalyticsService({BackendApiService? backendApiService})
-    : _api = backendApiService ?? BackendApiService();
+  ActivationAnalyticsService({
+    BackendApiService? backendApiService,
+    bool? isIosForTesting,
+  }) : _api = backendApiService ?? BackendApiService(),
+       _isIos = isIosForTesting ?? Platform.isIOS;
 
   static const _storageKey = 'activation_events_v1';
   static const maxQueuedEvents = 50;
@@ -95,6 +98,11 @@ class ActivationAnalyticsService {
     'extra_spin_ad_not_ready',
     'extra_spin_ad_completed',
     'extra_spin_claim_succeeded',
+    // Admin Metrics v2. Both names are iOS-only and additionally require the
+    // exact contexts checked in record(); malformed additions are dropped
+    // locally so one bad event can never poison the shared activation batch.
+    'health_connected',
+    'race_leaderboard_viewed',
   };
 
   static const allowedContext = <String, Set<String>>{
@@ -105,6 +113,7 @@ class ActivationAnalyticsService {
       'empty_state',
       'share_link',
       'next_race',
+      'healthkit',
     },
     'race_state': {'active', 'pending'},
     'result': {
@@ -139,7 +148,10 @@ class ActivationAnalyticsService {
   };
 
   final BackendApiService _api;
+  final bool _isIos;
   Future<void>? _flushInFlight;
+  String? _activeUserId;
+  int _accountGeneration = 0;
 
   /// Opens a new onboarding run. Recording this event ALWAYS mints a fresh
   /// correlation id, so the id a run uses is by construction the id its
@@ -182,9 +194,38 @@ class ActivationAnalyticsService {
   Future<void> record(
     String name, {
     String? sessionId,
+    String? ownerUserId,
     Map<String, String> context = const {},
   }) async {
     if (!allowedEventNames.contains(name)) return;
+    if (name == 'health_connected') {
+      if (!_isIos ||
+          ownerUserId == null ||
+          ownerUserId.isEmpty ||
+          context.length != 1 ||
+          context['source'] != 'healthkit') {
+        return;
+      }
+    }
+    if (name == 'race_leaderboard_viewed') {
+      final raceId = context['race_id'];
+      if (!_isIos ||
+          ownerUserId == null ||
+          ownerUserId.isEmpty ||
+          context.length != 1 ||
+          raceId == null ||
+          !RegExp(
+            r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
+          ).hasMatch(raceId)) {
+        return;
+      }
+    }
+    if (ownerUserId != null &&
+        ownerUserId.isNotEmpty &&
+        _activeUserId != ownerUserId) {
+      _activeUserId = ownerUserId;
+      _accountGeneration++;
+    }
     final safeContext = <String, String>{};
     for (final entry in context.entries) {
       final isUuidKey =
@@ -220,12 +261,14 @@ class ActivationAnalyticsService {
       'name': name,
       'context': safeContext,
       'appVersion': version.isEmpty ? 'unknown' : version,
-      'platform': Platform.isIOS
+      'platform': _isIos
           ? 'ios'
           : Platform.isAndroid
           ? 'android'
           : 'other',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
+      if (ownerUserId != null && ownerUserId.isNotEmpty)
+        'ownerUserId': ownerUserId,
     });
     if (queue.length > maxQueuedEvents) {
       queue.removeRange(0, queue.length - maxQueuedEvents);
@@ -239,22 +282,64 @@ class ActivationAnalyticsService {
     }
   }
 
-  Future<void> flush(String? authToken) {
-    if (authToken == null || authToken.isEmpty) return Future.value();
-    return _flushInFlight ??= _flush(authToken).whenComplete(() {
-      _flushInFlight = null;
-    });
+  Future<void> flush(String? authToken, {String? userId}) async {
+    if (authToken == null || authToken.isEmpty) return;
+    if (userId != null && userId.isNotEmpty) {
+      if (_activeUserId != null && _activeUserId != userId) return;
+      if (_activeUserId == null) {
+        _activeUserId = userId;
+        _accountGeneration++;
+      }
+    }
+    final running = _flushInFlight;
+    if (running != null) {
+      await running;
+      return flush(authToken, userId: userId);
+    }
+    final generation = _accountGeneration;
+    late final Future<void> tracked;
+    tracked = _flush(authToken, userId: userId, generation: generation)
+        .whenComplete(() {
+          if (identical(_flushInFlight, tracked)) _flushInFlight = null;
+        });
+    _flushInFlight = tracked;
+    await tracked;
   }
 
-  Future<void> _flush(String authToken) async {
+  Future<void> _flush(
+    String authToken, {
+    required String? userId,
+    required int generation,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
+    if (generation != _accountGeneration) return;
     final queue = _readQueue(prefs);
     if (queue.isEmpty) return;
+    if (userId != null && userId.isNotEmpty) {
+      queue.removeWhere((event) {
+        final owner = event['ownerUserId'];
+        return owner is String && owner.isNotEmpty && owner != userId;
+      });
+      if (generation != _accountGeneration) return;
+      await _writeQueue(prefs, queue);
+    }
+    final eligible = queue.where((event) {
+      final owner = event['ownerUserId'];
+      return owner == null || owner == userId;
+    }).toList();
+    if (eligible.isEmpty) return;
+    final wireEvents = eligible
+        .map((event) => Map<String, dynamic>.from(event)..remove('ownerUserId'))
+        .toList();
     try {
-      await _api.sendActivationEvents(identityToken: authToken, events: queue);
+      await _api.sendActivationEvents(
+        identityToken: authToken,
+        events: wireEvents,
+      );
+      if (generation != _accountGeneration) return;
       // Only remove the exact batch sent. Events recorded during the request
       // remain queued for the next best-effort flush.
-      final sentIds = queue.map((e) => e['id']).toSet();
+      final sentIds = eligible.map((e) => e['id']).toSet();
       final current = _readQueue(prefs)
         ..removeWhere((event) => sentIds.contains(event['id']));
       await _writeQueue(prefs, current);

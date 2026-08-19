@@ -390,15 +390,10 @@ class TutorialPreviewBackendApiService extends BackendApiService {
         (progress['participants'] as List?)?.cast<Map<String, dynamic>>() ??
         const [];
     final start = offset < 0 ? 0 : offset;
-    final safeLimit = limit <= 0
-        ? 10
-        : (limit > 50 ? 50 : limit);
+    final safeLimit = limit <= 0 ? 10 : (limit > 50 ? 50 : limit);
     final participants = full.skip(start).take(safeLimit).toList();
     return RaceProgressResult(
-      progress: {
-        ...progress,
-        'participants': participants,
-      },
+      progress: {...progress, 'participants': participants},
       globalPowerupInventory: const {'items': []},
       hasCompactInventory: true,
       participantsPagination: {
@@ -420,14 +415,13 @@ class TutorialPreviewBackendApiService extends BackendApiService {
     final participants =
         (progress['participants'] as List?)?.cast<Map<String, dynamic>>() ??
         const [];
-    final powerupData =
-        (progress['powerupData'] as Map?)?.cast<String, dynamic>();
-    final inventory =
-        powerupData?['inventory'] is List
-            ? (powerupData?['inventory'] as List)
-                .whereType<Map<String, dynamic>>()
-                .toList()
-            : const [];
+    final powerupData = (progress['powerupData'] as Map?)
+        ?.cast<String, dynamic>();
+    final inventory = powerupData?['inventory'] is List
+        ? (powerupData?['inventory'] as List)
+              .whereType<Map<String, dynamic>>()
+              .toList()
+        : const [];
     return {
       'participants': participants,
       'powerupData': {
@@ -436,6 +430,38 @@ class TutorialPreviewBackendApiService extends BackendApiService {
         'queuedBoxCount': powerupData?['queuedBoxCount'] ?? 0,
         'myPlacement': (progress['myPlacement'] as num?)?.toInt() ?? 0,
       },
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchRacePowerupTargetContext({
+    required String identityToken,
+    required String raceId,
+    required String powerupType,
+  }) async {
+    final legacy = await fetchRacePowerupUseContext(
+      identityToken: identityToken,
+      raceId: raceId,
+    );
+    final participants =
+        (legacy['participants'] as List?)?.whereType<Map<String, dynamic>>() ??
+        const <Map<String, dynamic>>[];
+    return {
+      'contract': 'race-powerup-target-context-v1',
+      'participants': [
+        for (final participant in participants)
+          {
+            'userId': participant['userId'],
+            'displayName': participant['displayName'],
+            'profilePhotoUrl': participant['profilePhotoUrl'],
+            'team': participant['team'],
+            'forfeitedAt': participant['forfeitedAt'],
+            'stealthed': participant['stealthed'] == true,
+            if (powerupType == 'BOUNTY')
+              'totalSteps': (participant['totalSteps'] as num?)?.toInt() ?? 0,
+          },
+      ],
+      'powerupData': legacy['powerupData'],
     };
   }
 
@@ -477,6 +503,9 @@ class TutorialPreviewBackendApiService extends BackendApiService {
       chatWatermark: {'recentIds': recentIds},
     );
   }
+
+  @override
+  void resetRaceMessageConditionalState({String? raceId}) {}
 
   // No-op so the race screen's read-receipt ping never hits the network.
   @override

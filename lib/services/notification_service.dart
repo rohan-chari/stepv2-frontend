@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
 
@@ -49,13 +50,18 @@ class NotificationAction {
 }
 
 class NotificationService {
-  NotificationService({BackendApiService? backendApiService})
-    : _backendApiService = backendApiService ?? BackendApiService();
+  NotificationService({
+    BackendApiService? backendApiService,
+    bool? isIosForTesting,
+  }) : _backendApiService = backendApiService ?? BackendApiService(),
+       _isIos = isIosForTesting ?? Platform.isIOS;
 
   static const _channel = MethodChannel('com.steptracker/notifications');
   static const _keyDeviceToken = 'notif_device_token';
   static const _keyPermissionGranted = 'notif_permission_granted';
   static const _keyLastRegisterError = 'notif_last_register_error';
+  static const _keyPendingOpenReceipts = 'admin_metrics_notification_opens_v1';
+  static const _maxPendingOpenReceipts = 20;
 
   // Android-only foreground display channel for FCM. Mirrors a typical
   // high-importance channel; ignored on iOS.
@@ -67,9 +73,13 @@ class NotificationService {
   );
 
   final BackendApiService _backendApiService;
+  final bool _isIos;
   final ValueNotifier<NotificationAction?> pendingAction = ValueNotifier(null);
 
   String? _pendingAuthToken;
+  String? _pendingUserId;
+  int _openReceiptAccountGeneration = 0;
+  Future<void>? _openReceiptFlushInFlight;
   FlutterLocalNotificationsPlugin? _localNotifications;
 
   Future<void> initialize() async {
@@ -179,8 +189,14 @@ class NotificationService {
         await prefs.setString(_keyLastRegisterError, message);
         break;
       case 'onNotificationTap':
-        final payload = Map<String, dynamic>.from(call.arguments as Map);
-        _onNotificationTap(payload);
+        final arguments = call.arguments;
+        final payload = arguments is Map
+            ? <String, dynamic>{
+                for (final entry in arguments.entries)
+                  if (entry.key is String) entry.key as String: entry.value,
+              }
+            : <String, dynamic>{};
+        _handleIosNotificationTap(payload);
         break;
     }
   }
@@ -255,9 +271,7 @@ class NotificationService {
             return null;
         }
       }
-      final status = await _channel.invokeMethod<String>(
-        'getPermissionStatus',
-      );
+      final status = await _channel.invokeMethod<String>('getPermissionStatus');
       switch (status) {
         case 'authorized':
         case 'provisional':
@@ -365,21 +379,52 @@ class NotificationService {
     await prefs.remove(_keyPermissionGranted);
   }
 
-  void _onNotificationTap(Map<String, dynamic> payload) {
-    final type = payload['type'] as String?;
+  void _handleIosNotificationTap(Map<String, dynamic> payload) {
+    // Route synchronously. Analytics persistence and network work are guarded
+    // best effort, so even a local-storage failure can never swallow a tap.
+    _routeIosNotificationTap(payload);
+    unawaited(_persistAndFlushOpenReceipt(payload['notificationId']));
+  }
 
-    final nested = payload['params'] is Map
-        ? Map<String, dynamic>.from(payload['params'] as Map)
+  @visibleForTesting
+  Future<void> handleNotificationTapForTesting(
+    Map<String, dynamic> payload,
+  ) async {
+    if (!_isIos) {
+      _onNotificationTapFromData(payload);
+      return;
+    }
+    _routeIosNotificationTap(payload);
+    await _persistAndFlushOpenReceipt(payload['notificationId']);
+  }
+
+  Future<void> _persistAndFlushOpenReceipt(Object? notificationId) async {
+    try {
+      await _queueOpenReceipt(notificationId, ownerUserId: _pendingUserId);
+      await flushPendingOpenReceipts(_pendingAuthToken, userId: _pendingUserId);
+    } catch (_) {
+      // Navigation has already happened; analytics can be lost safely.
+    }
+  }
+
+  void _routeIosNotificationTap(Map<String, dynamic> payload) {
+    final typeValue = payload['type'];
+    final type = typeValue is String ? typeValue : null;
+
+    final rawNested = payload['params'];
+    final nested = rawNested is Map
+        ? <String, dynamic>{
+            for (final entry in rawNested.entries)
+              if (entry.key is String) entry.key as String: entry.value,
+          }
         : <String, dynamic>{};
     final params = <String, String>{};
-    if (nested['raceId'] is String) {
-      params['raceId'] = nested['raceId'] as String;
-    }
+    final raceId = nested['raceId'];
+    if (raceId is String) params['raceId'] = raceId;
     // Tournament pushes carry `tournamentId`; read defensively (older apps that
     // don't know the type fall through to a null route and just ignore it).
-    if (nested['tournamentId'] is String) {
-      params['tournamentId'] = nested['tournamentId'] as String;
-    }
+    final tournamentId = nested['tournamentId'];
+    if (tournamentId is String) params['tournamentId'] = tournamentId;
 
     final route = resolveRoute(type, params);
     if (route == null) return;
@@ -391,25 +436,24 @@ class NotificationService {
   /// strings; `raceId` may be top-level or nested in a stringified `params`
   /// object (see backend G2). Reuses the same [_routeFromType] map.
   void _onNotificationTapFromData(Map<String, dynamic> data) {
-    final type = data['type'] as String?;
+    final rawType = data['type'];
+    final type = rawType is String ? rawType : null;
 
     final params = <String, String>{};
-    if (data['raceId'] is String) {
-      params['raceId'] = data['raceId'] as String;
-    }
-    if (data['tournamentId'] is String) {
-      params['tournamentId'] = data['tournamentId'] as String;
-    }
+    final raceId = data['raceId'];
+    if (raceId is String) params['raceId'] = raceId;
+    final tournamentId = data['tournamentId'];
+    if (tournamentId is String) params['tournamentId'] = tournamentId;
     final rawParams = data['params'];
     if (rawParams is String && rawParams.isNotEmpty) {
       try {
         final decoded = jsonDecode(rawParams);
         if (decoded is Map) {
-          if (decoded['raceId'] is String) {
-            params['raceId'] = decoded['raceId'] as String;
-          }
-          if (decoded['tournamentId'] is String) {
-            params['tournamentId'] = decoded['tournamentId'] as String;
+          final nestedRaceId = decoded['raceId'];
+          if (nestedRaceId is String) params['raceId'] = nestedRaceId;
+          final nestedTournamentId = decoded['tournamentId'];
+          if (nestedTournamentId is String) {
+            params['tournamentId'] = nestedTournamentId;
           }
         }
       } catch (_) {}
@@ -419,6 +463,162 @@ class NotificationService {
     if (route == null) return;
 
     pendingAction.value = NotificationAction(route: route, params: params);
+  }
+
+  Future<void> _queueOpenReceipt(
+    Object? rawId, {
+    required String? ownerUserId,
+  }) async {
+    if (!_isIos || rawId is! String || rawId.isEmpty || rawId.length > 128) {
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final queue = _readOpenReceiptQueue(prefs);
+    final existing = queue.indexWhere((row) => row['notificationId'] == rawId);
+    if (existing < 0) {
+      queue.add({
+        'notificationId': rawId,
+        if (ownerUserId != null && ownerUserId.isNotEmpty)
+          'ownerUserId': ownerUserId,
+      });
+    } else if (ownerUserId != null &&
+        ownerUserId.isNotEmpty &&
+        queue[existing]['ownerUserId'] == null) {
+      queue[existing]['ownerUserId'] = ownerUserId;
+    }
+    if (queue.length > _maxPendingOpenReceipts) {
+      queue.removeRange(0, queue.length - _maxPendingOpenReceipts);
+    }
+    await prefs.setString(_keyPendingOpenReceipts, jsonEncode(queue));
+  }
+
+  /// Flushes cold-start taps after authentication. Calls coalesce and old
+  /// 404/405 endpoints are treated as permanent best-effort loss.
+  Future<void> flushPendingOpenReceipts(
+    String? authToken, {
+    String? userId,
+  }) async {
+    _pendingAuthToken = authToken;
+    if (!_isIos) return;
+    if (authToken == null ||
+        authToken.isEmpty ||
+        userId == null ||
+        userId.isEmpty) {
+      if (_pendingUserId != null) {
+        _pendingUserId = null;
+        _openReceiptAccountGeneration++;
+      }
+      return;
+    }
+    if (_pendingUserId != userId) {
+      _pendingUserId = userId;
+      _openReceiptAccountGeneration++;
+    }
+    final running = _openReceiptFlushInFlight;
+    if (running != null) {
+      await running;
+      return flushPendingOpenReceipts(authToken, userId: userId);
+    }
+    final generation = _openReceiptAccountGeneration;
+    late final Future<void> tracked;
+    tracked =
+        _flushPendingOpenReceipts(
+          authToken,
+          userId: userId,
+          generation: generation,
+        ).whenComplete(() {
+          if (identical(_openReceiptFlushInFlight, tracked)) {
+            _openReceiptFlushInFlight = null;
+          }
+        });
+    _openReceiptFlushInFlight = tracked;
+    await tracked;
+  }
+
+  Future<void> _flushPendingOpenReceipts(
+    String authToken, {
+    required String userId,
+    required int generation,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    while (true) {
+      final queue = _readOpenReceiptQueue(prefs);
+      if (generation != _openReceiptAccountGeneration) return;
+      for (final row in queue) {
+        if (row['ownerUserId'] == null) row['ownerUserId'] = userId;
+      }
+      queue.removeWhere((row) => row['ownerUserId'] != userId);
+      await prefs.setString(_keyPendingOpenReceipts, jsonEncode(queue));
+      if (queue.isEmpty) return;
+      final id = queue.first['notificationId'];
+      if (id == null || id.isEmpty) {
+        queue.removeAt(0);
+        await prefs.setString(_keyPendingOpenReceipts, jsonEncode(queue));
+        continue;
+      }
+      try {
+        await _backendApiService.sendAdminMetricsNotificationOpen(
+          identityToken: authToken,
+          notificationId: id,
+        );
+        if (generation != _openReceiptAccountGeneration) return;
+        final current = _readOpenReceiptQueue(prefs)
+          ..removeWhere(
+            (row) =>
+                row['notificationId'] == id && row['ownerUserId'] == userId,
+          );
+        await prefs.setString(_keyPendingOpenReceipts, jsonEncode(current));
+      } on ApiException catch (error) {
+        if (generation != _openReceiptAccountGeneration) return;
+        if (error.statusCode == 404 || error.statusCode == 405) {
+          final current = _readOpenReceiptQueue(prefs)
+            ..removeWhere((row) => row['ownerUserId'] == userId);
+          await prefs.setString(_keyPendingOpenReceipts, jsonEncode(current));
+        } else if (error.statusCode == 400) {
+          // A malformed or permanently expired opaque id must not block later
+          // valid receipts in the bounded FIFO.
+          final current = _readOpenReceiptQueue(prefs)
+            ..removeWhere(
+              (row) =>
+                  row['notificationId'] == id && row['ownerUserId'] == userId,
+            );
+          await prefs.setString(_keyPendingOpenReceipts, jsonEncode(current));
+          continue;
+        }
+        return;
+      } catch (_) {
+        return;
+      }
+    }
+  }
+
+  List<Map<String, String>> _readOpenReceiptQueue(SharedPreferences prefs) {
+    final raw = prefs.getString(_keyPendingOpenReceipts);
+    if (raw == null) return [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return [];
+      final queue = <Map<String, String>>[];
+      for (final item in decoded) {
+        // Migrate the previous on-device string list as unowned. The next
+        // authenticated flush binds those receipts before any network send.
+        if (item is String && item.isNotEmpty) {
+          queue.add({'notificationId': item});
+          continue;
+        }
+        if (item is! Map) continue;
+        final id = item['notificationId'];
+        final owner = item['ownerUserId'];
+        if (id is! String || id.isEmpty) continue;
+        queue.add({
+          'notificationId': id,
+          if (owner is String && owner.isNotEmpty) 'ownerUserId': owner,
+        });
+      }
+      return queue;
+    } catch (_) {
+      return [];
+    }
   }
 
   /// Resolves the final route for a push, given its already-extracted [params].

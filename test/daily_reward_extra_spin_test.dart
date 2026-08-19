@@ -150,6 +150,7 @@ class _RecordingAnalytics extends ActivationAnalyticsService {
   Future<void> record(
     String name, {
     String? sessionId,
+    String? ownerUserId,
     Map<String, String> context = const {},
   }) async {
     events.add((name, context));
@@ -279,16 +280,12 @@ void main() {
       expect(find.byType(ExtraSpinRewardTicket), findsOneWidget);
       expect(find.text('DAILY REWARD'), findsOneWidget);
       expect(
-        find.bySemanticsLabel(
-          'Daily reward. One more spin is ready.',
-        ),
+        find.bySemanticsLabel('Daily reward. One more spin is ready.'),
         findsOneWidget,
       );
       expect(
         tester.getSemantics(
-          find.bySemanticsLabel(
-            'Daily reward. One more spin is ready.',
-          ),
+          find.bySemanticsLabel('Daily reward. One more spin is ready.'),
         ),
         matchesSemantics(
           isButton: true,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -29,12 +31,16 @@ class SettingsScreen extends StatelessWidget {
     required this.authService,
     this.notificationService,
     this.backendApiService,
+    this.healthService,
+    this.activationAnalyticsService,
     required this.onSettingsChanged,
   });
 
   final AuthService authService;
   final NotificationService? notificationService;
   final BackendApiService? backendApiService;
+  final HealthService? healthService;
+  final ActivationAnalyticsService? activationAnalyticsService;
   final VoidCallback onSettingsChanged;
 
   @override
@@ -74,6 +80,8 @@ class SettingsScreen extends StatelessWidget {
                   authService: authService,
                   notificationService: notificationService,
                   backendApiService: backendApiService,
+                  healthService: healthService,
+                  activationAnalyticsService: activationAnalyticsService,
                   onSettingsChanged: onSettingsChanged,
                 ),
               ),
@@ -89,12 +97,16 @@ class _SettingsContent extends StatefulWidget {
   final AuthService authService;
   final NotificationService? notificationService;
   final BackendApiService? backendApiService;
+  final HealthService? healthService;
+  final ActivationAnalyticsService? activationAnalyticsService;
   final VoidCallback onSettingsChanged;
 
   const _SettingsContent({
     required this.authService,
     this.notificationService,
     this.backendApiService,
+    this.healthService,
+    this.activationAnalyticsService,
     required this.onSettingsChanged,
   });
 
@@ -104,6 +116,7 @@ class _SettingsContent extends StatefulWidget {
 
 class _SettingsContentState extends State<_SettingsContent> {
   late final ActivationAnalyticsService _activationAnalytics =
+      widget.activationAnalyticsService ??
       ActivationAnalyticsService(backendApiService: widget.backendApiService);
 
   /// The ONE `GET /notifications/preferences` round trip for this screen
@@ -331,7 +344,11 @@ class _SettingsContentState extends State<_SettingsContent> {
               // later revoked step access had no way back in. This is it.
               // Mirrors _NotificationToggle: it renders nothing at all once
               // steps are connected.
-              _ConnectHealthRow(authService: widget.authService),
+              _ConnectHealthRow(
+                authService: widget.authService,
+                healthService: widget.healthService,
+                activationAnalytics: _activationAnalytics,
+              ),
             ],
           ),
           if (themeController != null) ...[
@@ -920,9 +937,14 @@ class _AppearanceChoice extends StatelessWidget {
 /// settings deep link if that returns nothing, because a prompt the user can
 /// actually answer is always the shorter path.
 class _ConnectHealthRow extends StatefulWidget {
-  const _ConnectHealthRow({required this.authService, this.healthService});
+  const _ConnectHealthRow({
+    required this.authService,
+    required this.activationAnalytics,
+    this.healthService,
+  });
 
   final AuthService authService;
+  final ActivationAnalyticsService activationAnalytics;
   final HealthService? healthService;
 
   @override
@@ -957,6 +979,7 @@ class _ConnectHealthRowState extends State<_ConnectHealthRow> {
       if (result == HealthSetupResult.authorized) {
         await _onboardingState.setEscapedHealthGate(false);
         await _onboardingState.clearProbeInconclusive();
+        unawaited(_recordHealthConnection());
         if (mounted) setState(() => _connected = true);
         return;
       }
@@ -967,6 +990,22 @@ class _ConnectHealthRowState extends State<_ConnectHealthRow> {
       // Nothing to report beyond the row staying visible.
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _recordHealthConnection() async {
+    try {
+      await widget.activationAnalytics.record(
+        'health_connected',
+        ownerUserId: widget.authService.userId,
+        context: const {'source': 'healthkit'},
+      );
+      await widget.activationAnalytics.flush(
+        widget.authService.authToken,
+        userId: widget.authService.userId,
+      );
+    } catch (_) {
+      // Connecting steps is the user action; analytics is always best effort.
     }
   }
 

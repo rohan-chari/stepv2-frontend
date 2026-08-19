@@ -1,6 +1,10 @@
+import 'dart:async';
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 
 import '../constants/powerup_copy.dart';
+import '../models/admin_metrics_dashboard.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
@@ -12,6 +16,7 @@ import '../widgets/powerup_icon.dart';
 import '../widgets/spinning_crate.dart';
 import '../widgets/trail_sign.dart';
 import 'admin_accessory_tuner_screen.dart';
+import 'admin_metrics_dashboard.dart';
 import 'admin_sections.dart';
 import 'admin_balance_config_screen.dart';
 import 'admin_powerup_shop_screen.dart';
@@ -146,7 +151,8 @@ class _AdminFlagsPanelState extends State<AdminFlagsPanel> {
         child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
       );
     }
-    if (_settings == null) {
+    final settings = _settings;
+    if (settings == null) {
       return Text(
         'Couldn\'t load settings.',
         style: PixelText.body(size: 12, color: AppColors.of(context).textMid),
@@ -156,7 +162,7 @@ class _AdminFlagsPanelState extends State<AdminFlagsPanel> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         AdminSettingsCardBody(
-          settings: _settings!,
+          settings: settings,
           saving: _saving,
           onChanged: _setSetting,
         ),
@@ -337,12 +343,14 @@ class AdminScreen extends StatefulWidget {
     this.backendApiService,
     this.showInfoToast = info_toast.showInfoToast,
     this.showErrorToast = error_toast.showErrorToast,
+    this.isIosForTesting,
   });
 
   final AuthService authService;
   final BackendApiService? backendApiService;
   final void Function(BuildContext context, String message) showInfoToast;
   final void Function(BuildContext context, String message) showErrorToast;
+  final bool? isIosForTesting;
 
   @override
   State<AdminScreen> createState() => _AdminScreenState();
@@ -364,10 +372,115 @@ class _AdminScreenState extends State<AdminScreen> {
   bool _revenueFailed = false;
   bool _revenueRequested = false;
 
+  final Map<String, _DashboardRequestState> _dashboardRequests = {};
+  final Set<String> _openedDashboardSections = {};
+  Future<void> _dashboardQueue = Future.value();
+  Future<void>? _refreshInFlight;
+  Future<void>? _lastRefreshFuture;
+  DateTime? _lastRefreshStartedAt;
+  Map<String, dynamic>? _legacyFallbackStats;
+
+  bool get _usesMetricsDashboard => widget.isIosForTesting ?? Platform.isIOS;
+
   @override
   void initState() {
     super.initState();
-    _loadStats();
+    if (_usesMetricsDashboard) {
+      _requestDashboardSection('dashboard-summary');
+    } else {
+      _loadStats();
+    }
+  }
+
+  _DashboardRequestState _dashboardState(String section) =>
+      _dashboardRequests.putIfAbsent(section, _DashboardRequestState.new);
+
+  Future<void> _requestDashboardSection(String section, {bool force = false}) {
+    final state = _dashboardState(section);
+    if (!force && (state.loading || state.envelope != null || state.failed)) {
+      return state.pending ?? Future.value();
+    }
+    state
+      ..loading = true
+      ..failed = false;
+    if (mounted) setState(() {});
+
+    final operation = _dashboardQueue
+        .then((_) async {
+          final token = widget.authService.authToken;
+          if (token == null || token.isEmpty) {
+            throw const ApiException('Missing authentication');
+          }
+          final stats = await _api.fetchAdminStats(
+            identityToken: token,
+            sections: [section],
+            window: '30d',
+          );
+          final envelope = AdminMetricsEnvelope.fromStats(stats);
+          if (!mounted) return;
+          setState(() {
+            state
+              ..envelope = envelope
+              ..loading = false
+              ..failed = false;
+            if (section == 'dashboard-summary' && !envelope.present) {
+              _legacyFallbackStats = stats;
+            }
+          });
+        })
+        .catchError((Object _) {
+          if (!mounted) return;
+          setState(() {
+            state
+              ..loading = false
+              ..failed = true;
+          });
+        });
+    state.pending = operation;
+    _dashboardQueue = operation.then<void>((_) {}, onError: (_) {});
+    return operation;
+  }
+
+  void _openDashboardSection(String section) {
+    _openedDashboardSections.add(section);
+    unawaited(_requestDashboardSection(section));
+  }
+
+  Future<void> _refreshDashboard() {
+    final now = DateTime.now();
+    final lastStarted = _lastRefreshStartedAt;
+    if (_refreshInFlight == null &&
+        lastStarted != null &&
+        now.difference(lastStarted) < const Duration(milliseconds: 500)) {
+      return _lastRefreshFuture ?? Future.value();
+    }
+    _lastRefreshStartedAt = now;
+    final future = _refreshInFlight ??= _runDashboardRefresh().whenComplete(() {
+      _refreshInFlight = null;
+      if (mounted) setState(() {});
+    });
+    _lastRefreshFuture = future;
+    return future;
+  }
+
+  Future<void> _runDashboardRefresh() async {
+    if (mounted) setState(() {});
+    await _requestDashboardSection('dashboard-summary', force: true);
+    const order = [
+      'dashboard-growth',
+      'dashboard-funnels',
+      'dashboard-activation',
+      'dashboard-retention',
+      'dashboard-engagement',
+      'dashboard-virality',
+      'dashboard-revenue',
+      'dashboard-release-adoption',
+    ];
+    for (final section in order) {
+      if (_openedDashboardSections.contains(section)) {
+        await _requestDashboardSection(section, force: true);
+      }
+    }
   }
 
   Future<void> _loadStats() async {
@@ -451,6 +564,7 @@ class _AdminScreenState extends State<AdminScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_usesMetricsDashboard) return _buildMetricsDashboard(context);
     final boardWidth = MediaQuery.of(context).size.width - 48;
     final colors = AppColors.of(context);
 
@@ -739,6 +853,365 @@ class _AdminScreenState extends State<AdminScreen> {
       ),
     );
   }
+
+  Widget _buildMetricsDashboard(BuildContext context) {
+    final boardWidth = MediaQuery.of(context).size.width - 48;
+    final colors = AppColors.of(context);
+    final summaryState = _dashboardState('dashboard-summary');
+    final summary = summaryState.envelope;
+    final dashboardUnavailable = summary != null && !summary.present;
+    final dashboardDisabled = summary?.status == AdminDashboardStatus.disabled;
+    final dashboardStatusUnavailable =
+        summary?.status == AdminDashboardStatus.unavailable;
+
+    return Scaffold(
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: colors.textDark),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.refresh, size: 20, color: colors.textDark),
+            onPressed: _refreshInFlight == null ? _refreshDashboard : null,
+          ),
+        ],
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
+      body: GameBackground(
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 60, 24, 32),
+            child: Column(
+              children: [
+                TrailSign(
+                  width: boardWidth,
+                  child: Text(
+                    'ADMIN TOOLS',
+                    style: PixelText.title(size: 22, color: colors.textDark),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                if (dashboardUnavailable)
+                  _dashboardMessageBoard(
+                    boardWidth,
+                    'Dashboard requires a server update',
+                  )
+                else if (dashboardDisabled)
+                  _dashboardMessageBoard(
+                    boardWidth,
+                    'Dashboard temporarily disabled',
+                  )
+                else if (dashboardStatusUnavailable)
+                  _dashboardMessageBoard(boardWidth, 'Dashboard unavailable')
+                else ...[
+                  AdminSection(
+                    title: 'SUMMARY',
+                    width: boardWidth,
+                    initiallyExpanded: true,
+                    child: _dashboardBody(
+                      requestSection: 'dashboard-summary',
+                      viewSection: 'dashboard-summary',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  for (final route in const [
+                    (
+                      title: 'USER GROWTH',
+                      request: 'dashboard-growth',
+                      view: 'dashboard-growth',
+                    ),
+                    (
+                      title: 'INVITE FUNNEL',
+                      request: 'dashboard-funnels',
+                      view: 'dashboard-funnels-invite',
+                    ),
+                    (
+                      title: 'ONBOARDING FUNNEL',
+                      request: 'dashboard-funnels',
+                      view: 'dashboard-funnels-onboarding',
+                    ),
+                    (
+                      title: 'ACTIVATION',
+                      request: 'dashboard-activation',
+                      view: 'dashboard-activation',
+                    ),
+                    (
+                      title: 'RETENTION',
+                      request: 'dashboard-retention',
+                      view: 'dashboard-retention',
+                    ),
+                    (
+                      title: 'RACE + ENGAGEMENT',
+                      request: 'dashboard-engagement',
+                      view: 'dashboard-engagement',
+                    ),
+                    (
+                      title: 'VIRALITY',
+                      request: 'dashboard-virality',
+                      view: 'dashboard-virality',
+                    ),
+                    (
+                      title: 'REVENUE',
+                      request: 'dashboard-revenue',
+                      view: 'dashboard-revenue',
+                    ),
+                  ]) ...[
+                    AdminSection(
+                      title: route.title,
+                      width: boardWidth,
+                      onFirstExpand: () => _openDashboardSection(route.request),
+                      child: _dashboardBody(
+                        requestSection: route.request,
+                        viewSection: route.view,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ],
+                if (dashboardUnavailable ||
+                    dashboardDisabled ||
+                    dashboardStatusUnavailable)
+                  const SizedBox(height: 16),
+                _buildMetricsConfig(boardWidth),
+                const SizedBox(height: 16),
+                AdminSection(
+                  title: 'INBOX',
+                  width: boardWidth,
+                  child: AdminInboxBody(
+                    authService: widget.authService,
+                    backendApiService: widget.backendApiService,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _buildMetricsDebug(boardWidth, colors),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _dashboardMessageBoard(double width, String message) => AdminSection(
+    title: 'SUMMARY',
+    width: width,
+    initiallyExpanded: true,
+    child: AdminMetricsStatePanel(message: message),
+  );
+
+  Widget _dashboardBody({
+    required String requestSection,
+    required String viewSection,
+  }) {
+    final state = _dashboardState(requestSection);
+    if (state.loading && state.envelope == null) return const _SectionSpinner();
+    if (state.failed && state.envelope == null) {
+      return AdminMetricsStatePanel(
+        message: 'Couldn’t load this section.',
+        retryKey: Key('admin-dashboard-retry-$requestSection'),
+        onRetry: () => _requestDashboardSection(requestSection, force: true),
+      );
+    }
+    final envelope = state.envelope;
+    if (envelope == null || !envelope.present) {
+      return const AdminMetricsStatePanel(message: 'Section unavailable.');
+    }
+    if (envelope.status == AdminDashboardStatus.disabled) {
+      return const AdminMetricsStatePanel(
+        message: 'Dashboard temporarily disabled',
+      );
+    }
+    if (envelope.status != AdminDashboardStatus.available) {
+      return const AdminMetricsStatePanel(message: 'Section unavailable.');
+    }
+    return AdminMetricsSectionBody(section: viewSection, envelope: envelope);
+  }
+
+  Widget _buildMetricsConfig(double boardWidth) => AdminSection(
+    title: 'CONFIG',
+    width: boardWidth,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AdminFlagsPanel(
+          authService: widget.authService,
+          backendApiService: widget.backendApiService,
+          showErrorToast: widget.showErrorToast,
+        ),
+        const SizedBox(height: 16),
+        for (final item in [
+          (
+            label: 'ACCESSORY RENDER TUNER',
+            builder: (BuildContext context) =>
+                AdminAccessoryTunerScreen(authService: widget.authService),
+          ),
+          (
+            label: 'BALANCE CONFIG',
+            builder: (BuildContext context) =>
+                AdminBalanceConfigScreen(authService: widget.authService),
+          ),
+          (
+            label: 'POWERUP SHOP',
+            builder: (BuildContext context) =>
+                AdminPowerupShopScreen(authService: widget.authService),
+          ),
+        ]) ...[
+          PillButton(
+            label: item.label,
+            variant: PillButtonVariant.primary,
+            fontSize: 13,
+            fullWidth: true,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            onPressed: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: item.builder)),
+          ),
+          const SizedBox(height: 10),
+        ],
+      ],
+    ),
+  );
+
+  Widget _buildMetricsDebug(double boardWidth, AppPalette colors) {
+    final releaseState = _dashboardState('dashboard-release-adoption');
+    final legacyVersions = _legacyFallbackStats?['versions'];
+    final hasLegacyVersions =
+        legacyVersions is List && legacyVersions.isNotEmpty;
+    return AdminSection(
+      title: 'DEBUG',
+      width: boardWidth,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_legacyFallbackStats == null || hasLegacyVersions) ...[
+            AdminSection(
+              title: 'RELEASE ADOPTION',
+              width: boardWidth - 24,
+              onFirstExpand: _legacyFallbackStats != null
+                  ? null
+                  : () => _openDashboardSection('dashboard-release-adoption'),
+              child: _legacyFallbackStats != null
+                  ? AdminLegacyReleaseAdoptionBody(stats: _legacyFallbackStats)
+                  : releaseState.loading && releaseState.envelope == null
+                  ? const _SectionSpinner()
+                  : _dashboardBody(
+                      requestSection: 'dashboard-release-adoption',
+                      viewSection: 'dashboard-release-adoption',
+                    ),
+            ),
+            const SizedBox(height: 20),
+          ],
+          Text(
+            'TOAST TESTS',
+            style: PixelText.title(size: 14, color: colors.textDark),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: PillButton(
+                  label: 'TEST INFO TOAST',
+                  variant: PillButtonVariant.primary,
+                  fontSize: 11,
+                  fullWidth: true,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 12,
+                  ),
+                  onPressed: () => widget.showInfoToast(
+                    context,
+                    'This is a test notification toast.',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: PillButton(
+                  label: 'TEST ERROR TOAST',
+                  variant: PillButtonVariant.accent,
+                  fontSize: 11,
+                  fullWidth: true,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 12,
+                  ),
+                  onPressed: () => widget.showErrorToast(
+                    context,
+                    'This is a test error toast.',
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'POWERUP ICONS',
+            style: PixelText.title(size: 14, color: colors.textDark),
+          ),
+          const SizedBox(height: 12),
+          for (final type in PowerupIcon.knownTypes)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 36,
+                    height: 36,
+                    child: PowerupIcon(
+                      type: type,
+                      size: 28,
+                      spinning: true,
+                      spinDuration: const Duration(milliseconds: 2800),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          PowerupCopy.nameFor(type),
+                          style: PixelText.title(
+                            size: 13,
+                            color: colors.textDark,
+                          ),
+                        ),
+                        Text(
+                          PowerupCopy.descriptionFor(type),
+                          style: PixelText.body(
+                            size: 11,
+                            color: colors.textMid,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 12),
+          Text(
+            'POWERUP CRATE',
+            style: PixelText.title(size: 14, color: colors.textDark),
+          ),
+          const SizedBox(height: 16),
+          const Center(child: SpinningCrate(size: 100)),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+}
+
+class _DashboardRequestState {
+  bool loading = false;
+  bool failed = false;
+  AdminMetricsEnvelope? envelope;
+  Future<void>? pending;
 }
 
 class _SectionSpinner extends StatelessWidget {

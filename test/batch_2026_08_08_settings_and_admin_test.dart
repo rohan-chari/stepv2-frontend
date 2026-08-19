@@ -12,8 +12,10 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/admin_sections.dart';
 import 'package:step_tracker/screens/settings_screen.dart';
+import 'package:step_tracker/services/activation_analytics_service.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/services/health_service.dart';
 import 'package:step_tracker/services/notification_service.dart';
 import 'package:step_tracker/widgets/pixel_switch.dart';
 
@@ -30,6 +32,7 @@ class _PrefsApi extends BackendApiService {
   /// opening Settings fired this twice.
   int prefsFetches = 0;
   int legacyDailyRewardFetches = 0;
+  final List<Map<String, dynamic>> activationEvents = [];
 
   @override
   Future<Map<String, dynamic>> fetchNotificationPreferences({
@@ -58,6 +61,23 @@ class _PrefsApi extends BackendApiService {
       throw const ApiException('offline');
     }
   }
+
+  @override
+  Future<void> sendActivationEvents({
+    required String identityToken,
+    required List<Map<String, dynamic>> events,
+  }) async {
+    activationEvents.addAll(events);
+  }
+}
+
+class _DisconnectedHealthService extends HealthService {
+  @override
+  Future<bool> restoreHealthAuthState() async => false;
+
+  @override
+  Future<HealthSetupResult> setUpHealthAccess() async =>
+      HealthSetupResult.authorized;
 }
 
 class _GrantedNotificationService extends NotificationService {
@@ -83,7 +103,12 @@ Future<AuthService> _authService() async {
   return authService;
 }
 
-Future<void> _pumpSettings(WidgetTester tester, _PrefsApi api) async {
+Future<void> _pumpSettings(
+  WidgetTester tester,
+  _PrefsApi api, {
+  HealthService? healthService,
+  ActivationAnalyticsService? activationAnalyticsService,
+}) async {
   tester.view.physicalSize = const Size(1170, 2532);
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.reset);
@@ -95,6 +120,8 @@ Future<void> _pumpSettings(WidgetTester tester, _PrefsApi api) async {
         authService: auth,
         notificationService: _GrantedNotificationService(),
         backendApiService: api,
+        healthService: healthService,
+        activationAnalyticsService: activationAnalyticsService,
         onSettingsChanged: () {},
       ),
     ),
@@ -108,12 +135,47 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
+    SharedPreferences.setMockInitialValues({});
     PackageInfo.setMockInitialValues(
       appName: 'Bara',
       packageName: 'com.bara.steps',
       version: '2.2.0',
       buildNumber: '1',
       buildSignature: '',
+    );
+  });
+
+  testWidgets('successful Settings HealthKit connection emits telemetry', (
+    tester,
+  ) async {
+    final api = _PrefsApi(prefsPayload: const {});
+    await _pumpSettings(
+      tester,
+      api,
+      healthService: _DisconnectedHealthService(),
+      activationAnalyticsService: ActivationAnalyticsService(
+        backendApiService: api,
+        isIosForTesting: true,
+      ),
+    );
+
+    final connect = find.byKey(const Key('settings-connect-health'));
+    expect(connect, findsOneWidget);
+    await tester.ensureVisible(connect);
+    await tester.tap(connect);
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(
+      api.activationEvents,
+      contains(
+        isA<Map<String, dynamic>>()
+            .having((event) => event['name'], 'name', 'health_connected')
+            .having((event) => event['context'], 'context', const {
+              'source': 'healthkit',
+            }),
+      ),
     );
   });
 

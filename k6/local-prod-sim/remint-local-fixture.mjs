@@ -14,7 +14,10 @@ function argument(name) {
 const input = argument("--input");
 const output = argument("--output");
 const databaseUrl = argument("--database-url");
-const backendRepo = argument("--backend-repo");
+const backendArtifactIndex = process.argv.indexOf("--backend-artifact");
+const backendRepo = backendArtifactIndex >= 0 && process.argv[backendArtifactIndex + 1]
+  ? process.argv[backendArtifactIndex + 1]
+  : argument("--backend-repo");
 const epochMs = Number(argument("--epoch-ms"));
 if (!/^postgresql:\/\/[^@/]*@127\.0\.0\.1:55432\/stepv2_capacity_/.test(databaseUrl)) {
   throw new Error("refusing token remint outside the dedicated local capacity database");

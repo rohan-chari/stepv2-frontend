@@ -21,6 +21,7 @@ import '../models/step_data.dart';
 import '../models/step_sample_data.dart';
 import '../services/async_ttl_cache.dart';
 import '../services/activation_analytics_service.dart';
+import '../services/admin_metrics_telemetry_service.dart';
 import '../services/ad_service.dart';
 import '../services/onboarding_state_service.dart';
 import '../utils/onboarding_gate.dart';
@@ -119,6 +120,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   late final BackgroundSyncBootstrapService _backgroundSyncBootstrapService;
   late final ReviewPromptService _reviewPromptService;
   late final ActivationAnalyticsService _activationAnalytics;
+  late final AdminMetricsTelemetryService _adminMetricsTelemetry;
   late final RaceResultsAcknowledgementQueue _raceResultsAckQueue;
   late final FriendsSummaryRepository _friendsRepository;
   bool _globalSummaryShowing = false;
@@ -479,7 +481,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     } catch (_) {
       // Telemetry must never break a launch.
     }
-    unawaited(_activationAnalytics.flush(widget.authService.authToken));
+    unawaited(
+      _activationAnalytics.flush(
+        widget.authService.authToken,
+        userId: widget.authService.userId,
+      ),
+    );
   }
 
   /// Whether the persistent "steps aren't connected" banner should be showing.
@@ -645,6 +652,19 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     final nextToken = widget.authService.authToken;
     final userChanged = _homeSuggestionsUserId != nextUserId;
     final tokenChanged = _raceCardAuthToken != nextToken;
+    unawaited(
+      _adminMetricsTelemetry.authenticatedForeground(
+        nextToken,
+        userId: nextUserId,
+      ),
+    );
+    unawaited(
+      widget.notificationService?.flushPendingOpenReceipts(
+            nextToken,
+            userId: nextUserId,
+          ) ??
+          Future.value(),
+    );
     setState(() {
       _homeSuggestionsUserId = nextUserId;
       _homeSuggestions.setUser(nextUserId);
@@ -702,6 +722,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _activationAnalytics = ActivationAnalyticsService(
       backendApiService: _backendApiService,
     );
+    _adminMetricsTelemetry = AdminMetricsTelemetryService(
+      backendApiService: _backendApiService,
+    );
     _raceResultsAckQueue =
         widget.raceResultsAcknowledgementQueue ??
         RaceResultsAcknowledgementQueue(backendApiService: _backendApiService);
@@ -728,6 +751,19 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       authService: widget.authService,
     );
     unawaited(_resolveInstallAttributionTelemetry());
+    unawaited(
+      _adminMetricsTelemetry.authenticatedForeground(
+        widget.authService.authToken,
+        userId: widget.authService.userId,
+      ),
+    );
+    unawaited(
+      widget.notificationService?.flushPendingOpenReceipts(
+            widget.authService.authToken,
+            userId: widget.authService.userId,
+          ) ??
+          Future.value(),
+    );
     unawaited(_startAppSession());
   }
 
@@ -1084,6 +1120,25 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.resumed:
+        unawaited(
+          _adminMetricsTelemetry.didResume(
+            widget.authService.authToken,
+            userId: widget.authService.userId,
+          ),
+        );
+        break;
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+        _adminMetricsTelemetry.didEnterBackground();
+        break;
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.detached:
+        // Permission/system overlays can keep iOS foreground-inactive for more
+        // than 30 seconds. They do not begin a new foreground session.
+        break;
+    }
     // The escaped user has no local health read, but every server-side surface
     // still needs refreshing on resume — otherwise the degraded app is also a
     // stale one.
@@ -1099,7 +1154,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           _recordHomeSuggestionsImpression();
         }
       }
-      unawaited(_activationAnalytics.flush(widget.authService.authToken));
+      unawaited(
+        _activationAnalytics.flush(
+          widget.authService.authToken,
+          userId: widget.authService.userId,
+        ),
+      );
       // Re-probe on every resume: the banner clears the moment steps appear,
       // so a genuinely idle device heals itself with no user action.
       unawaited(_reprobeSteps());
@@ -1396,6 +1456,13 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           _activationAnalytics.record(
             'health_result',
             context: const {'result': 'granted'},
+          ),
+        );
+        unawaited(
+          _activationAnalytics.record(
+            'health_connected',
+            ownerUserId: widget.authService.userId,
+            context: const {'source': 'healthkit'},
           ),
         );
         // A conclusive grant retires any earlier degraded state.

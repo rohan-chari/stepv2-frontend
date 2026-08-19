@@ -23,6 +23,7 @@ import {
   classifyResponse,
   matchedIterationSeed,
   resolutionStateDisposition,
+  rungDefinitionForName,
   validateFixture,
 } from "./harness-contract.mjs";
 
@@ -38,7 +39,7 @@ const REPEAT_INDEX = String(__ENV.REPEAT_INDEX || "").trim();
 const MATCHED_PAIR_EPOCH_MS = Number(__ENV.MATCHED_PAIR_EPOCH_MS || Date.now());
 const WARMUP_ITERATIONS = Number(__ENV.WARMUP_ITERATIONS || 0);
 const cohort = RELEASED_CLIENT_COHORTS[CLIENT_COHORT];
-const rung = RUNG_DEFINITIONS[TARGET_RUNG];
+const rung = rungDefinitionForName(TARGET_RUNG);
 const capacityRun = MODE === "capacity"
   ? classifyCapacityRun(
       __ENV.DURATION_OVERRIDE,
@@ -153,6 +154,7 @@ const resolutionLag = new Trend("resolution_lag_ms", true);
 const resolutionLagSampleCount = new Counter("resolution_lag_sample_count");
 const resolutionStateCount = new Counter("resolution_state_count");
 const finalResolutionOutstanding = new Gauge("final_resolution_outstanding");
+const resolutionDrainDuration = new Gauge("resolution_drain_duration_ms");
 const endpointAccountingCounters = Object.fromEntries(
   ENDPOINTS.map((endpoint) => [
     endpoint.key,
@@ -267,8 +269,8 @@ export function setup() {
   if (!safeHost) {
     throw new Error(`refusing capacity traffic to non-staging host: ${hostname}`);
   }
-  const resolutionContexts = fixtureDocument.resolutionSeeds.map((seed) => {
-    const idempotencyKey = randomUuid();
+  const resolutionContexts = fixtureDocument.resolutionSeeds.map((seed, index) => {
+    const idempotencyKey = runScopedUuid("resolution-seed-sync", index);
     const response = http.post(
       `${BASE_URL}/steps/sync-v2`,
       JSON.stringify(bodyFor("steps_sync_v2", 0)),
@@ -349,11 +351,29 @@ function makeSample(minuteOffset, iterationInTest) {
   };
 }
 
-function randomUuid() {
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
-    const value = Math.floor(Math.random() * 16);
-    return (char === "x" ? value : (value & 0x3) | 0x8).toString(16);
-  });
+function runScopedUuid(namespace, ordinal) {
+  const scope = `${RUN_ID}:${REPEAT_INDEX}:${namespace}:${ordinal}`;
+  const words = [];
+  for (let wordIndex = 0; wordIndex < 4; wordIndex += 1) {
+    let hash = 0x811c9dc5;
+    const input = `${scope}:${wordIndex}`;
+    for (let index = 0; index < input.length; index += 1) {
+      hash ^= input.charCodeAt(index);
+      hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    words.push(hash.toString(16).padStart(8, "0"));
+  }
+  const hexadecimal = words.join("").split("");
+  hexadecimal[12] = "4";
+  hexadecimal[16] = ((parseInt(hexadecimal[16], 16) & 0x3) | 0x8).toString(16);
+  const compact = hexadecimal.join("");
+  return [
+    compact.slice(0, 8),
+    compact.slice(8, 12),
+    compact.slice(12, 16),
+    compact.slice(16, 20),
+    compact.slice(20),
+  ].join("-");
 }
 
 function bodyFor(endpointKey, iterationInTest) {
@@ -378,7 +398,7 @@ function bodyFor(endpointKey, iterationInTest) {
       return {
         events: [
           buildActivationEvent({
-            id: randomUuid(),
+            id: runScopedUuid("activation-event", iterationInTest),
             now: logicalNow(iterationInTest),
             appVersion: cohort.appVersion,
             platform: cohort.platform,
@@ -393,6 +413,21 @@ function bodyFor(endpointKey, iterationInTest) {
 function pickEndpoint() {
   if (MODE === "smoke") {
     return ENDPOINTS[exec.scenario.iterationInTest % ENDPOINTS.length];
+  }
+  // The mandatory three-repeat aggregator requires every configured endpoint
+  // to be represented. Partition one deterministic coverage pass across the
+  // three repeats so rare released-client calls cannot be absent from all
+  // three identical weighted sequences. OFF/ON mates retain the same repeat
+  // index and therefore the same coverage prefix.
+  const coveragePerRepeat = Math.ceil(ENDPOINTS.length / 3);
+  const coverageIndex =
+    (Number(REPEAT_INDEX) - 1) * coveragePerRepeat +
+    exec.scenario.iterationInTest;
+  if (
+    exec.scenario.iterationInTest < coveragePerRepeat &&
+    coverageIndex < ENDPOINTS.length
+  ) {
+    return ENDPOINTS[coverageIndex];
   }
   const roll = Math.random() * totalWeight;
   let low = 0;
@@ -520,7 +555,7 @@ export function hitApi(setupData) {
   });
   endpointAccountingCounters[executed.key].executed.add(1, iterationTags);
 
-  const idempotencyKey = randomUuid();
+  const idempotencyKey = runScopedUuid("steps-sync-v2", iteration);
   const tags = {
     name: executed.key,
     endpoint: executed.key,
@@ -620,6 +655,7 @@ function fetchResolutionStatus(context, phase) {
 }
 
 export function teardown(setupData) {
+  const drainStartedAt = Date.now();
   const deadline = Date.now() + Number(__ENV.RESOLUTION_DRAIN_TIMEOUT_MS || 15000);
   const terminal = new Set(["succeeded", "failed"]);
   const pending = setupData.resolutionContexts.slice();
@@ -632,6 +668,10 @@ export function teardown(setupData) {
     if (pending.length > 0) sleep(0.25);
   }
   finalResolutionOutstanding.add(pending.length, {
+    rung: MODE === "smoke" ? "smoke" : TARGET_RUNG,
+    ...identityTags,
+  });
+  resolutionDrainDuration.add(Date.now() - drainStartedAt, {
     rung: MODE === "smoke" ? "smoke" : TARGET_RUNG,
     ...identityTags,
   });
@@ -675,6 +715,8 @@ export function handleSummary(data) {
         : "diagnostic_only",
       diagnosticReason: capacityRun.diagnosticReason,
       offeredRateRps: MODE === "smoke" ? null : rung.rate,
+      preAllocatedVUs: MODE === "smoke" ? null : rung.preAllocatedVUs,
+      maxVUs: MODE === "smoke" ? null : rung.maxVUs,
       rung: rungName,
       duration: __ENV.DURATION_OVERRIDE || (MODE === "smoke" ? null : rung.duration),
       clientCohort: CLIENT_COHORT,
@@ -707,6 +749,7 @@ export function handleSummary(data) {
         data,
         "final_resolution_outstanding",
       ),
+      resolutionDrainDuration: metricValues(data, "resolution_drain_duration_ms"),
       resolutionStates: Object.fromEntries(
         Object.keys(resolutionStateSummaryCounters).map((state) => [
           state,

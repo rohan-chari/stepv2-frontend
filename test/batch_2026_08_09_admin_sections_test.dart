@@ -36,6 +36,7 @@ class _AdminApi extends BackendApiService {
   Future<Map<String, dynamic>> fetchAdminStats({
     required String identityToken,
     List<String> sections = const [],
+    String? window,
   }) async {
     statsCalls.add(sections);
     if (sections.isEmpty) return base;

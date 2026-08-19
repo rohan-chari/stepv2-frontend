@@ -4,7 +4,6 @@ import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
 import '../widgets/content_board.dart';
-import 'admin_onboarding_funnel.dart';
 import 'inbox_screen.dart';
 
 /// Batch 2026-08-09 item 10 — the admin hub's section widgets.
@@ -241,7 +240,6 @@ class AdminGrowthStatsBody extends StatelessWidget {
     final versionsSince = stats['versionsSince'] is String
         ? stats['versionsSince'] as String
         : null;
-    final onboardingFunnel = adminMap(stats['onboardingFunnel']);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -318,7 +316,6 @@ class AdminGrowthStatsBody extends StatelessWidget {
           adminNumber(funnel?['finishedRace']),
         ),
         adminStatRow(context, 'Rewarded', adminNumber(funnel?['rewarded'])),
-        OnboardingFunnelSection(funnel: onboardingFunnel),
       ],
     );
   }
@@ -703,14 +700,16 @@ class _AdminInboxBodyState extends State<AdminInboxBody> {
               onTap: () {
                 final id = row['id'];
                 if (id is! String || id.isEmpty) return;
-                Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => SupportThreadScreen(
-                    authService: widget.authService,
-                    backendApiService: _api,
-                    threadId: id,
-                    admin: true,
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => SupportThreadScreen(
+                      authService: widget.authService,
+                      backendApiService: _api,
+                      threadId: id,
+                      admin: true,
+                    ),
                   ),
-                ));
+                );
               },
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

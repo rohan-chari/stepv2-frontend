@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/screens/edit_race_screen.dart';
 import 'package:step_tracker/screens/race_detail_screen.dart';
 import 'package:step_tracker/screens/race_invite_screen.dart';
+import 'package:step_tracker/services/activation_analytics_service.dart';
+import 'package:step_tracker/services/app_route_observer.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/utils/team_race.dart';
@@ -196,6 +199,27 @@ class _PagedActiveApi extends BackendApiService {
       const {'coins': 320, 'heldCoins': 0};
 }
 
+class _RecordingActivationAnalytics extends ActivationAnalyticsService {
+  _RecordingActivationAnalytics() : super(isIosForTesting: true);
+
+  final List<Map<String, String>> leaderboardViews = [];
+
+  @override
+  Future<void> record(
+    String name, {
+    String? sessionId,
+    String? ownerUserId,
+    Map<String, String> context = const {},
+  }) async {
+    if (name == 'race_leaderboard_viewed') {
+      leaderboardViews.add(Map<String, String>.from(context));
+    }
+  }
+
+  @override
+  Future<void> flush(String? authToken, {String? userId}) async {}
+}
+
 /// A PENDING team race whose page holds ONE row; the real 2v2 field lives in
 /// `teamAAcceptedCount`/`teamBAcceptedCount`, and the viewer's side in
 /// `myTeam`.
@@ -280,14 +304,18 @@ Future<void> _pump(
   WidgetTester tester,
   BackendApiService api, {
   List<Map<String, dynamic>> friends = const [],
+  String raceId = 'race-paged',
+  ActivationAnalyticsService? activationAnalyticsService,
 }) async {
   final authService = await _createAuthService();
   await tester.pumpWidget(
     MaterialApp(
+      navigatorObservers: [appRouteObserver],
       home: RaceDetailScreen(
         authService: authService,
-        raceId: 'race-paged',
+        raceId: raceId,
         backendApiService: api,
+        activationAnalyticsService: activationAnalyticsService,
         friends: friends,
       ),
     ),
@@ -409,6 +437,75 @@ void main() {
   });
 
   group('the viewer is not in the page', () {
+    testWidgets('leaderboard view records only when standings reach viewport', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(390, 300);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final analytics = _RecordingActivationAnalytics();
+      const raceId = '0198c82f-0011-7000-8000-000000000001';
+      await _pump(
+        tester,
+        _PagedActiveApi(),
+        raceId: raceId,
+        activationAnalyticsService: analytics,
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(analytics.leaderboardViews, isEmpty);
+      await tester.ensureVisible(find.text('STANDINGS').first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(analytics.leaderboardViews, [
+        const {'race_id': raceId},
+      ]);
+
+      // Leaving and deliberately returning is a second view, while rebuilds
+      // that keep the board visible must not duplicate one interaction.
+      await tester.drag(
+        find.byType(SingleChildScrollView).first,
+        const Offset(0, 1000),
+      );
+      await tester.pump();
+      await tester.ensureVisible(find.text('STANDINGS').first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(analytics.leaderboardViews, [
+        const {'race_id': raceId},
+        const {'race_id': raceId},
+      ]);
+
+      final raceContext = tester.element(find.byType(RaceDetailScreen));
+      unawaited(
+        Navigator.of(raceContext).push<void>(
+          MaterialPageRoute<void>(builder: (_) => const SizedBox.expand()),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(analytics.leaderboardViews, hasLength(2));
+      Navigator.of(raceContext).pop();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(analytics.leaderboardViews, hasLength(3));
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      expect(analytics.leaderboardViews, hasLength(3));
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(analytics.leaderboardViews, [
+        const {'race_id': raceId},
+        const {'race_id': raceId},
+        const {'race_id': raceId},
+        const {'race_id': raceId},
+      ]);
+    });
+
     testWidgets('an off-page participant is NOT shown as a spectator', (
       tester,
     ) async {
@@ -543,7 +640,9 @@ void main() {
               'maxDurationDays': 7,
               'buyInAmount': 0,
               'payoutPreset': 'WINNER_TAKES_ALL',
-              'participants': [for (var i = 0; i < 15; i++) _participant('u$i')],
+              'participants': [
+                for (var i = 0; i < 15; i++) _participant('u$i'),
+              ],
               'acceptedCount': 473,
             },
           ),
@@ -551,7 +650,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('473 runners already accepted'), findsOneWidget);
+      expect(
+        find.textContaining('473 runners already accepted'),
+        findsOneWidget,
+      );
     });
   });
 
@@ -568,14 +670,17 @@ void main() {
       expect(presentation.acceptedCount, 473);
     });
 
-    test('RacePayoutPresentation.fromRace still counts the array when absent', () {
-      final presentation = RacePayoutPresentation.fromRace({
-        'maxDurationDays': 7,
-        'buyInAmount': 10,
-        'participants': [for (var i = 0; i < 3; i++) _participant('u$i')],
-      });
-      expect(presentation.acceptedCount, 3);
-    });
+    test(
+      'RacePayoutPresentation.fromRace still counts the array when absent',
+      () {
+        final presentation = RacePayoutPresentation.fromRace({
+          'maxDurationDays': 7,
+          'buyInAmount': 10,
+          'participants': [for (var i = 0; i < 3; i++) _participant('u$i')],
+        });
+        expect(presentation.acceptedCount, 3);
+      },
+    );
 
     test('TeamRace.sideCounts prefers the summary counts over the page', () {
       final counts = TeamRace.sideCounts({

@@ -171,6 +171,71 @@ void main() {
       expect(stats['users'], {'total': 3});
       expect(stats['coinEconomy'], isNull);
     });
+
+    test(
+      'one dashboard section sends its validated window separately',
+      () async {
+        final client = _FakeHttpClient([const _Scripted(200, '{"stats":{}}')]);
+        final api = BackendApiService(httpClient: client);
+
+        await api.fetchAdminStats(
+          identityToken: 'tok',
+          sections: const ['dashboard-engagement'],
+          window: '90d',
+        );
+
+        final request = client.requests.single;
+        expect(request.uri.path, '/admin/stats');
+        expect(request.uri.queryParameters, {
+          'sections': 'dashboard-engagement',
+          'window': '90d',
+        });
+      },
+    );
+  });
+
+  group('admin metrics telemetry wire contract', () {
+    test('foreground sends only the locked session envelope', () async {
+      final client = _FakeHttpClient([
+        const _Scripted(202, '{"recorded":true}'),
+      ]);
+      final api = BackendApiService(httpClient: client);
+
+      await api.sendAdminMetricsForeground(
+        identityToken: 'tok',
+        sessionId: '01JABCDEFGHJKMNPQRSTVWXYZ12',
+        occurredAt: DateTime.utc(2026, 8, 18, 14, 58),
+        appVersion: '2.4.0',
+      );
+
+      final request = client.requests.single;
+      expect(request.method, 'POST');
+      expect(request.uri.path, '/analytics/foreground');
+      expect(_bodyOf(request), {
+        'sessionId': '01JABCDEFGHJKMNPQRSTVWXYZ12',
+        'occurredAt': '2026-08-18T14:58:00.000Z',
+        'appVersion': '2.4.0',
+      });
+    });
+
+    test('notification open sends only the opaque public id', () async {
+      final client = _FakeHttpClient([
+        const _Scripted(202, '{"attributed":true}'),
+      ]);
+      final api = BackendApiService(httpClient: client);
+
+      await api.sendAdminMetricsNotificationOpen(
+        identityToken: 'tok',
+        notificationId: '01JABCDEFGHJKMNPQRSTVWXYZ12',
+      );
+
+      final request = client.requests.single;
+      expect(request.method, 'POST');
+      expect(request.uri.path, '/analytics/notification-open');
+      expect(_bodyOf(request), {
+        'notificationId': '01JABCDEFGHJKMNPQRSTVWXYZ12',
+      });
+    });
   });
 
   group('PATCH /admin/settings/home-service-banner', () {

@@ -1157,7 +1157,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('renders both platforms with counts in funnel order', (
+    testWidgets('renders only the iOS series with counts in funnel order', (
       tester,
     ) async {
       await tester.binding.setSurfaceSize(const Size(500, 1400));
@@ -1176,17 +1176,17 @@ void main() {
 
       expect(find.text('ONBOARDING FUNNEL'), findsOneWidget);
       expect(find.text('IOS'), findsOneWidget);
-      expect(find.text('ANDROID'), findsOneWidget);
+      expect(find.text('ANDROID'), findsNothing);
 
-      // Every stage label appears once per platform.
+      // Every stage label appears exactly once in the product-scoped series.
       for (final label in OnboardingFunnelSection.stageLabels) {
-        expect(find.text(label), findsNWidgets(2));
+        expect(find.text(label), findsOneWidget);
       }
 
       expect(find.text('400'), findsOneWidget);
       expect(find.text('280'), findsOneWidget);
-      expect(find.text('100'), findsOneWidget);
-      expect(find.text('45'), findsOneWidget);
+      expect(find.text('100'), findsNothing);
+      expect(find.text('45'), findsNothing);
     });
 
     testWidgets('shows step-over-step retention along the funnel spine', (
@@ -1209,9 +1209,9 @@ void main() {
       // iOS: 380/400 = 95%, 300/380 = 79%, 290/300 = 97%, 280/290 = 97%.
       expect(find.text('95%'), findsOneWidget);
       expect(find.text('79%'), findsOneWidget);
-      // Android: 90/100 = 90%, 50/90 = 56%.
-      expect(find.text('90%'), findsOneWidget);
-      expect(find.text('56%'), findsOneWidget);
+      // Alternate-platform ratios never leak into the iOS dashboard.
+      expect(find.text('90%'), findsNothing);
+      expect(find.text('56%'), findsNothing);
     });
 
     testWidgets('the 30-day window is offered only when the backend sends it', (

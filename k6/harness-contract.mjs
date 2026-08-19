@@ -54,6 +54,21 @@ export const RUNG_DEFINITIONS = Object.freeze({
   }),
 });
 
+export function rungDefinitionForName(name) {
+  if (RUNG_DEFINITIONS[name]) return RUNG_DEFINITIONS[name];
+  const match = /^daily_(150|250|350|450|550|650|750|850|950)rps$/.exec(name);
+  if (!match) return null;
+  const rate = Number(match[1]);
+  return Object.freeze({
+    rate,
+    duration: "35s",
+    capacityFailure: "rate<0.01",
+    diagnosticOnly: true,
+    preAllocatedVUs: Math.ceil(rate * 2.4),
+    maxVUs: Math.ceil(rate * 3.2),
+  });
+}
+
 export const ENDPOINTS = Object.freeze([
   { key: "race_messages", w: 39207, method: "GET", context: "active_or_pending_race", path: (id) => `/races/${id}/messages?limit=50` },
   { key: "challenges_current", w: 13400, method: "GET", context: "none", path: () => "/challenges/current" },
@@ -86,7 +101,7 @@ export const ENDPOINTS = Object.freeze([
 export function buildThresholds(rungNames) {
   const thresholds = {};
   for (const rungName of rungNames) {
-    const rung = RUNG_DEFINITIONS[rungName];
+    const rung = rungDefinitionForName(rungName);
     if (!rung) throw new Error(`unknown offered-rate rung: ${rungName}`);
     const tag = `{rung:${rungName}}`;
     thresholds[`dropped_iterations${tag}`] = ["count==0"];

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/admin_metrics_dashboard.dart';
 import '../styles.dart';
 
 /// The activation funnel from `GET /admin/stats` → `onboardingFunnel` (§6.5).
@@ -23,9 +24,10 @@ import '../styles.dart';
 /// the backend and the app deploy independently, and an admin on a new build
 /// against an old backend should simply not see a funnel yet (§8.11).
 class OnboardingFunnelSection extends StatefulWidget {
-  const OnboardingFunnelSection({super.key, required this.funnel});
+  const OnboardingFunnelSection({super.key, this.funnel, this.dashboardFunnel});
 
   final Map<String, dynamic>? funnel;
+  final AdminMetricMap? dashboardFunnel;
 
   /// Display order, exactly as pinned in §6.5.
   static const stageKeys = <String>[
@@ -39,6 +41,7 @@ class OnboardingFunnelSection extends StatefulWidget {
     // pinned to the backend's ONBOARDING_FUNNEL_STAGES: this list only decides
     // what is DRAWN, so the two must not drift or the rows read out of order.
     'tutorial_opened',
+    'tutorial_skipped',
     'demo_box_opened',
     'demo_powerup_used',
     'demo_won',
@@ -55,6 +58,7 @@ class OnboardingFunnelSection extends StatefulWidget {
     'Probe zero',
     'Race intro',
     'Tutorial opened',
+    'Tutorial skipped',
     'Box opened',
     'Powerup used',
     'Race won',
@@ -68,8 +72,8 @@ class OnboardingFunnelSection extends StatefulWidget {
   /// The demo-race stages are all spine: a user genuinely flows opened → box →
   /// powerup → won → finished, so step-over-step retention is exactly the
   /// number worth reading. `tutorial_skipped` is deliberately absent from
-  /// [stageKeys] entirely — it is an exit, and the backend has no way to mark
-  /// one, so charting it would invent a stage nobody flows through.
+  /// [stageKeys] as a side exit, but remains absent from this spine so it shows
+  /// start-share only and never becomes a previous-stage denominator.
   static const _spine = <String>[
     'onboarding_started',
     'health_cta_tapped',
@@ -95,7 +99,11 @@ class _OnboardingFunnelSectionState extends State<OnboardingFunnelSection> {
 
   Map<String, dynamic>? _platforms(String key) {
     final raw = widget.funnel?[key];
-    return raw is Map<String, dynamic> ? raw : null;
+    if (raw is! Map) return null;
+    return <String, dynamic>{
+      for (final entry in raw.entries)
+        if (entry.key is String) entry.key as String: entry.value,
+    };
   }
 
   int _count(Map<String, dynamic>? stages, String key) {
@@ -105,6 +113,9 @@ class _OnboardingFunnelSectionState extends State<OnboardingFunnelSection> {
 
   @override
   Widget build(BuildContext context) {
+    final dashboard = widget.dashboardFunnel;
+    if (dashboard != null) return _buildDashboard(context, dashboard);
+
     final sevenDay = _platforms('byPlatform');
     if (sevenDay == null || sevenDay.isEmpty) return const SizedBox.shrink();
     final thirtyDay = _platforms('byPlatformLast30Days');
@@ -114,9 +125,11 @@ class _OnboardingFunnelSectionState extends State<OnboardingFunnelSection> {
     final sevenLabel = '${windowDays is num ? windowDays.toInt() : 7}D';
 
     final colors = AppColors.of(context);
+    // The dashboard is product-scoped to Bara/iOS. The legacy DTO can still
+    // arrive here in direct widget tests or an older response, but no Android
+    // series is presented by this build.
     final platforms = <String>[
-      for (final name in const ['ios', 'android'])
-        if (active[name] is Map<String, dynamic>) name,
+      if (active['ios'] is Map<String, dynamic>) 'ios',
     ];
     if (platforms.isEmpty) return const SizedBox.shrink();
 
@@ -160,6 +173,49 @@ class _OnboardingFunnelSectionState extends State<OnboardingFunnelSection> {
           const SizedBox(height: 4),
           ..._stageRows(active[platform] as Map<String, dynamic>),
         ],
+      ],
+    );
+  }
+
+  Widget _buildDashboard(BuildContext context, AdminMetricMap funnel) {
+    final colors = AppColors.of(context);
+    final cohortWindowDays = funnel.integer('cohortWindowDays');
+    final byKey = <String, AdminMetricMap>{};
+    for (final stage in funnel.rows('stages')) {
+      final key = stage.text('key');
+      if (key != null && OnboardingFunnelSection.stageKeys.contains(key)) {
+        byKey[key] = stage;
+      }
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              'IOS',
+              style: PixelText.title(size: 11, color: colors.textMid),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '${cohortWindowDays?.toString() ?? 'WINDOW UNAVAILABLE'}${cohortWindowDays == null ? '' : 'D'} START COHORT · 24H',
+                textAlign: TextAlign.end,
+                style: PixelText.title(size: 9, color: colors.textAccent),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 5),
+        for (var i = 0; i < OnboardingFunnelSection.stageKeys.length; i++)
+          _DashboardFunnelRow(
+            label: OnboardingFunnelSection.stageLabels[i],
+            stage: byKey[OnboardingFunnelSection.stageKeys[i]],
+            sideExit: OnboardingFunnelSection._isSideExit(
+              OnboardingFunnelSection.stageKeys[i],
+            ),
+            cohortWindowDays: cohortWindowDays,
+          ),
       ],
     );
   }
@@ -208,6 +264,139 @@ class _OnboardingFunnelSectionState extends State<OnboardingFunnelSection> {
       );
     }
     return rows;
+  }
+}
+
+class _DashboardFunnelRow extends StatelessWidget {
+  const _DashboardFunnelRow({
+    required this.label,
+    required this.stage,
+    required this.sideExit,
+    required this.cohortWindowDays,
+  });
+
+  final String label;
+  final AdminMetricMap? stage;
+  final bool sideExit;
+  final int? cohortWindowDays;
+
+  String _percent(AdminRatio ratio) {
+    final value = ratio.percent;
+    return value == null ? '—' : '${value.toStringAsFixed(1)}%';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final count = stage?.integer('count');
+    final previous = stage?.ratio('previousSpineConversion');
+    final start = stage?.ratio('startConversion') ?? const AdminRatio();
+    return Padding(
+      padding: EdgeInsets.fromLTRB(sideExit ? 12 : 0, 4, 0, 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (sideExit) ...[
+            Icon(
+              Icons.subdirectory_arrow_right_rounded,
+              size: 13,
+              color: colors.textMid,
+            ),
+            const SizedBox(width: 3),
+          ],
+          Expanded(
+            child: Text(
+              label,
+              style: PixelText.body(size: 12, color: colors.textMid),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              count == null
+                  ? 'UNAVAILABLE'
+                  : sideExit
+                  ? '$count · ${_percent(start)} of start'
+                  : '$count · prev ${_percent(previous ?? const AdminRatio())} · start ${_percent(start)}',
+              textAlign: TextAlign.end,
+              style: PixelText.title(size: 11, color: colors.textDark),
+            ),
+          ),
+          const SizedBox(width: 2),
+          Semantics(
+            label: 'Definition for $label',
+            button: true,
+            child: InkResponse(
+              radius: 18,
+              onTap: () => showModalBottomSheet<void>(
+                context: context,
+                backgroundColor: colors.parchment,
+                builder: (sheetContext) => SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          label.toUpperCase(),
+                          style: PixelText.title(
+                            size: 14,
+                            color: AppColors.of(sheetContext).textDark,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          sideExit
+                              ? 'Distinct onboarding sessions taking this side exit within 24 elapsed hours of start.'
+                              : 'Distinct onboarding sessions reaching this stage within 24 elapsed hours of start.',
+                          style: PixelText.body(
+                            size: 13,
+                            color: AppColors.of(sheetContext).textMid,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'SOURCE · ACTIVATION TELEMETRY',
+                          style: PixelText.title(
+                            size: 10,
+                            color: AppColors.of(sheetContext).textAccent,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'WINDOW · ${cohortWindowDays == null ? 'COHORT WINDOW UNAVAILABLE' : '${cohortWindowDays}D START COHORT'} · FIRST 24 ELAPSED HOURS',
+                          style: PixelText.title(
+                            size: 10,
+                            color: AppColors.of(sheetContext).textAccent,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'COVERAGE · CAPABILITY-SCOPED IOS COHORT',
+                          style: PixelText.title(
+                            size: 10,
+                            color: AppColors.of(sheetContext).textAccent,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(
+                  Icons.info_outline_rounded,
+                  size: 16,
+                  color: colors.textMid,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

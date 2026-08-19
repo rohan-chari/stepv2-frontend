@@ -74,6 +74,7 @@ class RaceDetailScreen extends StatefulWidget {
   final List<Map<String, dynamic>> friends;
   final BackendApiService backendApiService;
   final NotificationService? notificationService;
+  final ActivationAnalyticsService? activationAnalyticsService;
 
   /// Fired once a mystery-box reveal has finished and its overlay has closed.
   /// The host uses it for the relocated notification ask (spec §5.4) — this is
@@ -131,6 +132,7 @@ class RaceDetailScreen extends StatefulWidget {
     this.friends = const [],
     BackendApiService? backendApiService,
     this.notificationService,
+    this.activationAnalyticsService,
     this.onBoxOpened,
     this.tutorialPowerupsKey,
     this.tutorialClockKey,
@@ -410,6 +412,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
   // Activity tab (system/powerup events).
   RaceFeedService? _feed;
+
   /// In flight for the spectator banner's JOIN CTA (preview mode).
   bool _joiningFromPreview = false;
   bool _feedInitialized = false;
@@ -419,6 +422,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// Whether the user opened up the full standings board. Held on the State so
   /// the 5s progress poll can't collapse a board the user deliberately opened.
   bool _standingsExpanded = false;
+  final GlobalKey _standingsVisibilityKey = GlobalKey();
+  final GlobalKey _leaderboardViewportKey = GlobalKey();
+  bool _leaderboardWasVisible = false;
+  bool _leaderboardVisibilityCheckScheduled = false;
 
   String get _myUserId => widget.authService.userId ?? '';
   BackendApiService get _api => widget.backendApiService;
@@ -437,12 +444,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   @override
   void didPushNext() {
     _routeVisible = false;
+    _leaderboardWasVisible = false;
     _pauseCoveredTimers();
   }
 
   @override
   void didPopNext() {
     _routeVisible = true;
+    _scheduleLeaderboardVisibilityCheck();
     unawaited(_refreshAfterCoverage());
   }
 
@@ -607,6 +616,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   }
 
   late final ActivationAnalyticsService _activationAnalytics =
+      widget.activationAnalyticsService ??
       ActivationAnalyticsService(backendApiService: _api);
 
   Future<void> _loadAlertPermissionState() async {
@@ -767,8 +777,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       _appResumed = false;
+      _leaderboardWasVisible = false;
     } else if (state == AppLifecycleState.resumed) {
       _appResumed = true;
+      _scheduleLeaderboardVisibilityCheck();
     }
     switch (racePollLifecycleAction(state, wasPolling: _pollingActive)) {
       case RacePollLifecycleAction.pause:
@@ -900,10 +912,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     }
   }
 
-  Future<void> _loadDetails() =>
-      _detailsInFlight ??= _loadDetailsImpl().whenComplete(
-        () => _detailsInFlight = null,
-      );
+  Future<void> _loadDetails() => _detailsInFlight ??= _loadDetailsImpl()
+      .whenComplete(() => _detailsInFlight = null);
 
   Future<void> _loadDetailsImpl() async {
     try {
@@ -1078,7 +1088,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         final id = notice['id'];
         final type = notice['powerupType'];
         final delta = notice['deltaSteps'];
-        if (id is! String || id.isEmpty || type is! String || type.isEmpty ||
+        if (id is! String ||
+            id.isEmpty ||
+            type is! String ||
+            type.isEmpty ||
             delta is! num) {
           continue;
         }
@@ -1088,7 +1101,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           context,
           iconType: type,
           title: PowerupCopy.nameFor(type),
-          subtitle: '$sign${steps.abs()} steps in ${_race?['name'] is String ? _race!['name'] : 'this race'}',
+          subtitle:
+              '$sign${steps.abs()} steps in ${_race?['name'] is String ? _race!['name'] : 'this race'}',
           accent: steps >= 0
               ? AppColors.of(context).coinDark
               : AppColors.of(context).error,
@@ -1196,8 +1210,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
       if (!mounted) return;
       final participants =
-          (progress['participants'] as List?)?.cast<Map<String, dynamic>>() ??
-          const [];
+          (progress['participants'] as List?)
+              ?.whereType<Map>()
+              .map(
+                (row) => <String, dynamic>{
+                  for (final entry in row.entries)
+                    if (entry.key is String) entry.key as String: entry.value,
+                },
+              )
+              .toList(growable: false) ??
+          const <Map<String, dynamic>>[];
       // The paged fetch supplies this directly; when a prefetched race-open
       // packet satisfied the request instead, its own metadata rides along
       // inside the progress payload. Null on either path (an older backend,
@@ -1209,8 +1231,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
               ? Map<String, dynamic>.from(progress['pagination'] as Map)
               : null);
       final existingParticipants =
-          (previous?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
-          const [];
+          (previous?['participants'] as List?)
+              ?.whereType<Map>()
+              .map(
+                (row) => <String, dynamic>{
+                  for (final entry in row.entries)
+                    if (entry.key is String) entry.key as String: entry.value,
+                },
+              )
+              .toList(growable: false) ??
+          const <Map<String, dynamic>>[];
       // A paged response IS the board: it replaces what was on screen, so
       // NEXT/PREV land on a page of exactly one page's height. Only an
       // UNPAGED response (older backend, or a race served whole) keeps the
@@ -1238,8 +1268,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       final totalFromServer = rawTotal is int
           ? rawTotal
           : rawTotal is num
-              ? rawTotal.toInt()
-              : int.tryParse(rawTotal?.toString() ?? '');
+          ? rawTotal.toInt()
+          : int.tryParse(rawTotal?.toString() ?? '');
       // Trust the server's echoed offset over the local guess: a clamped or
       // rejected page must not leave the readout claiming a window the
       // response does not contain.
@@ -1247,8 +1277,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       final offsetFromServer = rawOffset is int
           ? rawOffset
           : rawOffset is num
-              ? rawOffset.toInt()
-              : null;
+          ? rawOffset.toInt()
+          : null;
 
       final resolvedProgress = Map<String, dynamic>.from(progress)
         ..['participants'] = mergedParticipants;
@@ -2058,15 +2088,20 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     var participants =
         (_progress?['participants'] as List?)?.cast<Map<String, dynamic>>() ??
         [];
-    final needsTargetingContext = _participantsHasMore ||
-        (_participantsTotal != null && participants.length < _participantsTotal!);
+    final needsTargetingContext =
+        _participantsHasMore ||
+        (_participantsTotal != null &&
+            participants.length < _participantsTotal!);
     final typeTargets =
         type == 'QUICKSAND' ||
         type == 'PINECONE_TOSS' ||
         type == 'SNEAKY_SWAP' ||
         kTargetedPowerupTypes.contains(type);
-    if (typeTargets && needsTargetingContext) {
-      final useContextParticipants = await _loadRacePowerupUseContext(token);
+    if (typeTargets && type != 'PINECONE_TOSS' && needsTargetingContext) {
+      final useContextParticipants = await _loadRacePowerupTargetContext(
+        token,
+        type,
+      );
       if (useContextParticipants.isNotEmpty) {
         participants = useContextParticipants;
       }
@@ -2280,19 +2315,23 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     }
   }
 
-  Future<List<Map<String, dynamic>>> _loadRacePowerupUseContext(
+  Future<List<Map<String, dynamic>>> _loadRacePowerupTargetContext(
     String token,
+    String powerupType,
   ) async {
     try {
-      final result = await _api.fetchRacePowerupUseContext(
+      final result = await _api.fetchRacePowerupTargetContext(
         identityToken: token,
         raceId: widget.raceId,
+        powerupType: powerupType,
       );
       final rawParticipants =
-          (result['participants'] as List?)?.cast<Map<String, dynamic>>() ??
-          const [];
+          (result['participants'] as List?)
+              ?.whereType<Map<String, dynamic>>()
+              .toList(growable: false) ??
+          const <Map<String, dynamic>>[];
       final rawPowerupData = result['powerupData'];
-      if (rawPowerupData is Map) {
+      if (rawPowerupData is Map && mounted) {
         setState(() {
           _powerupData = {
             for (final entry in rawPowerupData.entries)
@@ -2302,6 +2341,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       }
       return rawParticipants;
     } catch (_) {
+      // Missing/old/malformed/transient typed context keeps the already-loaded
+      // progress page exactly as it was. Never replay this URL through the
+      // legacy method: older backends already returned that body above.
       return const [];
     }
   }
@@ -3550,6 +3592,55 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
 
+  void _scheduleLeaderboardVisibilityCheck() {
+    if (_leaderboardVisibilityCheckScheduled || widget.demoMode) {
+      return;
+    }
+    _leaderboardVisibilityCheckScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _leaderboardVisibilityCheckScheduled = false;
+      if (!mounted || !_routeVisible || !_appResumed) {
+        _leaderboardWasVisible = false;
+        return;
+      }
+      final renderObject = _standingsVisibilityKey.currentContext
+          ?.findRenderObject();
+      final viewport = _leaderboardViewportKey.currentContext
+          ?.findRenderObject();
+      if (renderObject is! RenderBox ||
+          !renderObject.attached ||
+          viewport is! RenderBox ||
+          !viewport.attached) {
+        _leaderboardWasVisible = false;
+        return;
+      }
+      final top = renderObject.localToGlobal(Offset.zero).dy;
+      final bottom = top + renderObject.size.height;
+      final viewportTop = viewport.localToGlobal(Offset.zero).dy;
+      final viewportBottom = viewportTop + viewport.size.height;
+      final visible = bottom > viewportTop && top < viewportBottom;
+      if (!visible) {
+        _leaderboardWasVisible = false;
+        return;
+      }
+      if (_leaderboardWasVisible) return;
+      _leaderboardWasVisible = true;
+      unawaited(
+        _activationAnalytics.record(
+          'race_leaderboard_viewed',
+          ownerUserId: widget.authService.userId,
+          context: {'race_id': widget.raceId},
+        ),
+      );
+      unawaited(
+        _activationAnalytics.flush(
+          widget.authService.authToken,
+          userId: widget.authService.userId,
+        ),
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -3677,22 +3768,31 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                                   ? const LoadErrorPanel(
                                       icon: Icons.lock_outline,
                                       title: 'Signed out',
-                                      message: 'Sign back in to view this race.',
+                                      message:
+                                          'Sign back in to view this race.',
                                     )
                                   : LoadErrorPanel(
                                       title: 'Failed to load race',
-                                      message: _detailsError ?? 'Pull to retry.',
+                                      message:
+                                          _detailsError ?? 'Pull to retry.',
                                       onRetry: () => _loadDetails(),
                                     ),
                             ],
                           ),
                         )
-                      : AppRefreshIndicator(
-                          onRefresh: _loadDetails,
-                          child: SingleChildScrollView(
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            padding: EdgeInsets.zero,
-                            child: _buildContent(),
+                      : NotificationListener<ScrollNotification>(
+                          onNotification: (_) {
+                            _scheduleLeaderboardVisibilityCheck();
+                            return false;
+                          },
+                          child: AppRefreshIndicator(
+                            onRefresh: _loadDetails,
+                            child: SingleChildScrollView(
+                              key: _leaderboardViewportKey,
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: EdgeInsets.zero,
+                              child: _buildContent(),
+                            ),
                           ),
                         ),
                 ),
@@ -3766,6 +3866,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   }
 
   Widget _buildContent() {
+    _scheduleLeaderboardVisibilityCheck();
     final status = _race!['status'] as String;
 
     Widget content;
@@ -5246,6 +5347,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         // back to summing visible planks on older payloads. Solo races keep the
         // single STANDINGS list. This sits below the actionable POWERUPS card.
         StaggerIn(
+          key: _standingsVisibilityKey,
           index: 1,
           child: Column(
             children: [
@@ -7381,7 +7483,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           // board as if it were authoritative.
           (_serverHonouredParticipantsPaging
               ? null
-              : (_race!['participants'] as List?)?.cast<Map<String, dynamic>>()) ??
+              : (_race!['participants'] as List?)
+                    ?.cast<Map<String, dynamic>>()) ??
           [],
     );
     final completedLeaderSteps = _leaderSteps(participants);
@@ -7523,13 +7626,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
 
         // FINAL STANDINGS
         StaggerIn(
+          key: _standingsVisibilityKey,
           index: 1,
           child: Column(
             children: [
               _checkerSectionHeader('FINAL STANDINGS'),
               _sectionCard(
                 padding: const EdgeInsets.all(8),
-              child: isTeamRace
+                child: isTeamRace
                     ? Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: _buildTeamGroupedRows(participants),
@@ -8794,8 +8898,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     final clamped = offset < 0
         ? 0
         : (total != null && offset >= total)
-            ? _participantsOffset
-            : offset;
+        ? _participantsOffset
+        : offset;
     if (clamped == _participantsOffset) return;
     _participantsOffset = clamped;
     await _loadProgress(append: true);
@@ -8854,10 +8958,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     if (!collapsible || _standingsExpanded) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ...rows,
-          if (collapsible) _standingsToggle(hiddenCount: 0),
-        ],
+        children: [...rows, if (collapsible) _standingsToggle(hiddenCount: 0)],
       );
     }
 
