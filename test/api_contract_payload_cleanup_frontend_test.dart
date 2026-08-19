@@ -125,6 +125,87 @@ void main() {
     );
   });
 
+  test(
+    'compact race bootstrap rejects a naked lean participant page',
+    () async {
+      Map<String, dynamic> payload(Map<String, dynamic> participant) => {
+        'contract': 'race-bootstrap-compact-v1',
+        'race': {
+          'status': 'ACTIVE',
+          'isTeamRace': false,
+          'acceptedCount': 1,
+          'participantUserIds': ['user-1'],
+          'myStatus': 'ACCEPTED',
+          'myTotalSteps': 1200,
+          'participantsPagination': {
+            'offset': 0,
+            'limit': 15,
+            'total': 1,
+            'hasMore': false,
+            'nextOffset': 1,
+          },
+        },
+        'progress': {
+          'status': 'ACTIVE',
+          'participants': [participant],
+          'pagination': {
+            'offset': 0,
+            'limit': 15,
+            'total': 1,
+            'hasMore': false,
+            'nextOffset': 1,
+          },
+        },
+      };
+
+      final missingPresentationHttp = _Http([
+        _Response(
+          200,
+          payload(const {
+            'userId': 'user-1',
+            'displayName': 'River',
+            'totalSteps': 1200,
+          }),
+        ),
+      ]);
+      final missingPresentationApi = BackendApiService(
+        httpClient: missingPresentationHttp,
+      );
+      final rejected = await missingPresentationApi.fetchRaceBootstrap(
+        identityToken: 'token',
+        raceId: 'race-1',
+        participantsLimit: 15,
+      );
+      expect(rejected.supported, isFalse);
+
+      final hydratedHttp = _Http([
+        _Response(
+          200,
+          payload(const {
+            'userId': 'user-1',
+            'displayName': 'River',
+            'totalSteps': 1200,
+            'animal': 'corgi_puppy',
+            'accessories': [
+              {'assetKey': 'sunglasses'},
+              {'assetKey': 'beaver_tail'},
+            ],
+          }),
+        ),
+      ]);
+      final hydratedApi = BackendApiService(httpClient: hydratedHttp);
+      final accepted = await hydratedApi.fetchRaceBootstrap(
+        identityToken: 'token',
+        raceId: 'race-1',
+        participantsLimit: 15,
+      );
+      expect(accepted.supported, isTrue);
+      final row = (accepted.progress!['participants'] as List).single as Map;
+      expect(row['animal'], 'corgi_puppy');
+      expect(row['accessories'], hasLength(2));
+    },
+  );
+
   test('race bootstrap caches only a definite 404 as unsupported', () async {
     final http = _Http([
       _Response(404, const {'error': 'Not found'}),
@@ -185,6 +266,62 @@ void main() {
     expect(result.globalPowerupInventory, isNull);
     expect(result.hasCompactInventory, isFalse);
   });
+
+  test(
+    'paged race progress falls back when lean rows lack presentation',
+    () async {
+      final http = _Http([
+        _Response(200, const {
+          'progress': {
+            'status': 'ACTIVE',
+            'participants': [
+              {'userId': 'user-1', 'displayName': 'River', 'totalSteps': 1200},
+            ],
+          },
+          'pagination': {
+            'offset': 0,
+            'limit': 15,
+            'total': 1,
+            'hasMore': false,
+            'nextOffset': 1,
+          },
+        }),
+        _Response(200, const {
+          'contract': 'race-progress-compact-v1',
+          'progress': {
+            'status': 'ACTIVE',
+            'participants': [
+              {
+                'userId': 'user-1',
+                'displayName': 'River',
+                'totalSteps': 1200,
+                'animal': 'corgi_puppy',
+                'accessories': [
+                  {'assetKey': 'sunglasses'},
+                  {'assetKey': 'beaver_tail'},
+                ],
+              },
+            ],
+          },
+        }),
+      ]);
+      final api = BackendApiService(httpClient: http);
+
+      final result = await api.fetchRaceProgressParticipants(
+        identityToken: 'token',
+        raceId: 'race-1',
+        limit: 15,
+      );
+
+      expect(result.participantsPagination, isNull);
+      final row = (result.progress['participants'] as List).single as Map;
+      expect(row['animal'], 'corgi_puppy');
+      expect(row['accessories'], hasLength(2));
+      expect(http.uris, hasLength(2));
+      expect(http.uris.first.queryParameters['view'], 'participants-v1');
+      expect(http.uris.last.queryParameters['view'], 'compact-v1');
+    },
+  );
 
   test('message streams rejects malformed resolved stream envelopes', () async {
     final http = _Http([

@@ -1234,15 +1234,27 @@ class BackendApiService {
     }
     final racePagination = _safeStringMap(race['participantsPagination']);
     final progressPagination = _safeStringMap(progress['pagination']);
-    final participants = progress['participants'];
     return _isValidParticipantsPagination(racePagination) &&
         _isValidParticipantsPagination(progressPagination) &&
-        participants is List &&
+        _hasHydratedParticipantPresentation(progress);
+  }
+
+  bool _hasHydratedParticipantPresentation(Map<String, dynamic> progress) {
+    final participants = progress['participants'];
+    return participants is List &&
         participants.every((row) {
           final participant = _safeStringMap(row);
           return participant != null &&
               participant['userId'] is String &&
-              (participant['userId'] as String).isNotEmpty;
+              (participant['userId'] as String).isNotEmpty &&
+              participant['accessories'] is List &&
+              // `animal` is nullable, but the key is mandatory. Its presence,
+              // together with the accessories list, proves the paged row
+              // completed presentation hydration instead of carrying only the
+              // lean scoring projection.
+              participant.containsKey('animal') &&
+              (participant['animal'] == null ||
+                  participant['animal'] is String);
         });
   }
 
@@ -3872,6 +3884,13 @@ class BackendApiService {
     if (progress == null) {
       throw const ApiException(
         'Couldn’t load race progress. Please try again.',
+      );
+    }
+    if (!_hasHydratedParticipantPresentation(progress)) {
+      _raceProgressParticipantsSupport = EndpointSupport.unsupported;
+      return fetchRaceProgressCompact(
+        identityToken: identityToken,
+        raceId: raceId,
       );
     }
     _raceProgressParticipantsSupport = EndpointSupport.supported;
