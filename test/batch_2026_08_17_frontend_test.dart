@@ -249,7 +249,7 @@ void main() {
     expect(find.text('Write a message'), findsOneWidget);
   });
 
-  testWidgets('Home shows only valid service banner data and unread mail', (
+  testWidgets('Home shows valid service banner data without Inbox chrome', (
     tester,
   ) async {
     final auth = await _auth();
@@ -286,7 +286,7 @@ void main() {
     );
     await tester.pump();
     expect(find.byKey(const Key('home-service-banner')), findsOneWidget);
-    expect(find.byKey(const Key('home-inbox-button')), findsOneWidget);
+    expect(find.byKey(const Key('home-inbox-button')), findsNothing);
   });
 
   testWidgets('Admin validates and saves the atomic Home service banner pair', (

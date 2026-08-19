@@ -13,6 +13,7 @@ import 'package:step_tracker/screens/admin_onboarding_funnel.dart';
 import 'package:step_tracker/screens/admin_screen.dart';
 import 'package:step_tracker/screens/main_shell.dart';
 import 'package:step_tracker/screens/onboarding_flow.dart';
+import 'package:step_tracker/screens/race_detail_screen.dart';
 import 'package:step_tracker/services/activation_analytics_service.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
@@ -171,6 +172,36 @@ class _FakeBackendApiService extends BackendApiService {
   }) async {
     throw const ApiException('offline');
   }
+}
+
+class _DailyFallbackBackendApiService extends _FakeBackendApiService {
+  @override
+  Future<List<Map<String, dynamic>>> fetchFeaturedRaces({
+    required String identityToken,
+  }) async => const [
+    {
+      // Older/newer featured serializers have used either id key. The app
+      // must route correctly without requiring the canonical alias.
+      'id': 'daily-race-1',
+      'seedKind': 'DAILY_10K',
+      'status': 'ACTIVE',
+      // This is the fallback path users reach when the featured response does
+      // not prove ACCEPTED, even though the Daily itself is available.
+      'myStatus': 'PENDING',
+    },
+  ];
+
+  @override
+  Future<void> markFirstRaceOnboardingSeen({
+    required String identityToken,
+  }) async {}
+}
+
+class _MissingDailyBackendApiService extends _FakeBackendApiService {
+  @override
+  Future<void> markFirstRaceOnboardingSeen({
+    required String identityToken,
+  }) async {}
 }
 
 Map<String, Object> _prefs({
@@ -813,6 +844,63 @@ void main() {
 
       expect(find.byType(OnboardingDailyIntroStep), findsOneWidget);
     });
+
+    testWidgets('Find a Race opens the available Daily after the tutorial', (
+      tester,
+    ) async {
+      final auth = await _auth(
+        _prefs(
+          healthAuthorized: true,
+          firstRaceSeen: false,
+          tutorialSeen: true,
+        ),
+      );
+      await _pumpShell(
+        tester,
+        auth: auth,
+        health: _FakeHealthService(restored: true),
+        api: _DailyFallbackBackendApiService(),
+      );
+
+      expect(find.text('FIND A RACE'), findsOneWidget);
+      await tester.tap(find.text('FIND A RACE'));
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 40));
+      }
+
+      final detail = tester.widget<RaceDetailScreen>(
+        find.byType(RaceDetailScreen),
+      );
+      expect(detail.raceId, 'daily-race-1');
+    });
+
+    testWidgets(
+      'Find a Race falls back to the Races tab when Daily is absent',
+      (tester) async {
+        final auth = await _auth(
+          _prefs(
+            healthAuthorized: true,
+            firstRaceSeen: false,
+            tutorialSeen: true,
+          ),
+        );
+        await _pumpShell(
+          tester,
+          auth: auth,
+          health: _FakeHealthService(restored: true),
+          api: _MissingDailyBackendApiService(),
+        );
+
+        await tester.tap(find.text('FIND A RACE'));
+        for (var i = 0; i < 8; i++) {
+          await tester.pump(const Duration(milliseconds: 40));
+        }
+
+        final tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
+        expect(tabBar.currentIndex, 1);
+        expect(find.byType(RaceDetailScreen), findsNothing);
+      },
+    );
   });
 
   group('§5.9 analytics funnel', () {

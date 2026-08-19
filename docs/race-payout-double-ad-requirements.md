@@ -1,19 +1,28 @@
 # Race-payout double rewarded ad — requirements
 
-Status: **Implemented — code review APPROVE; dark until Android AdMob ID and rollout configuration**
+> **Product correction — 2026-08-18:** the hard bonus ceiling is **100 coins**
+> per results batch and per rolling 24-hour provider identity. The August 17
+> “full additional copy” override is revoked. The authoritative formula is
+> `bonusCoins = min(baseCoins, 100, rolling24hRemaining)`, where the rolling
+> allowance starts at 100. Any older `500` examples below are historical design
+> records, not the live limit. Offer preparation and claim settlement must each
+> independently enforce the 100-coin ceiling; a persisted legacy offer above
+> 100 is serialized, claimed, and durably repaired at no more than 100.
+
+Status: **Implementation complete; corrected backend deployment pending**
 Owners: frontend + backend  
 Platforms: iOS and Android  
-Last updated: 2026-08-12
+Last updated: 2026-08-18
 
 ## 1. Summary and user story
 
 When the existing Home race-results popup reports one or more newly completed
 races, a user who earned qualifying **system-funded** race prize coins may
-watch one rewarded ad to receive one additional copy of those combined prizes,
-capped at **500 bonus coins per results batch and per rolling 24 hours**. If the
+watch one rewarded ad to receive up to 100 additional coins from those combined
+prizes, capped at **100 bonus coins per results batch and per rolling 24 hours**. If the
 popup contains qualifying prizes of 40, 0, and 80 coins, it
-presents one offer for **+120 coins**; one completed, server-verified ad grants
-120 more coins. If the combined payout is 800, the offer clearly says **+500
+presents one offer for **+100 coins**; one completed, server-verified ad grants
+100 more coins. If the combined payout is 800, the offer clearly says **+100
 maximum bonus** rather than falsely promising a complete double. It does not
 grant the combined amount per race or double the user's entire wallet.
 

@@ -7,7 +7,7 @@
  */
 
 import exec from "k6/execution";
-import { sleep } from "k6";
+import { randomSeed, sleep } from "k6";
 import http from "k6/http";
 import { SharedArray } from "k6/data";
 import { Counter, Gauge, Rate, Trend } from "k6/metrics";
@@ -21,6 +21,7 @@ import {
   buildThresholds,
   classifyCapacityRun,
   classifyResponse,
+  matchedIterationSeed,
   resolutionStateDisposition,
   validateFixture,
 } from "./harness-contract.mjs";
@@ -34,6 +35,8 @@ const MODE = __ENV.MODE || "capacity";
 const TARGET_RUNG = __ENV.TARGET_RUNG || "rate_15rps";
 const RUN_ID = String(__ENV.RUN_ID || "").trim();
 const REPEAT_INDEX = String(__ENV.REPEAT_INDEX || "").trim();
+const MATCHED_PAIR_EPOCH_MS = Number(__ENV.MATCHED_PAIR_EPOCH_MS || Date.now());
+const WARMUP_ITERATIONS = Number(__ENV.WARMUP_ITERATIONS || 0);
 const cohort = RELEASED_CLIENT_COHORTS[CLIENT_COHORT];
 const rung = RUNG_DEFINITIONS[TARGET_RUNG];
 const capacityRun = MODE === "capacity"
@@ -41,6 +44,7 @@ const capacityRun = MODE === "capacity"
       __ENV.DURATION_OVERRIDE,
       __ENV.ALLOW_DIAGNOSTIC_OVERRIDE === "1",
       BASE_URL,
+      rung,
     )
   : { capacityCandidate: false, diagnosticReason: "smoke" };
 
@@ -49,6 +53,12 @@ if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(RUN_ID)) {
   throw new Error("RUN_ID must match [A-Za-z0-9][A-Za-z0-9._-]{0,63}");
 }
 if (!REPEAT_INDEX) throw new Error("REPEAT_INDEX is required");
+if (!Number.isFinite(MATCHED_PAIR_EPOCH_MS) || MATCHED_PAIR_EPOCH_MS <= 0) {
+  throw new Error("MATCHED_PAIR_EPOCH_MS must be a positive epoch millisecond value");
+}
+if (!Number.isInteger(WARMUP_ITERATIONS) || WARMUP_ITERATIONS < 0) {
+  throw new Error("WARMUP_ITERATIONS must be a non-negative integer");
+}
 if (MODE === "capacity" && !["1", "2", "3"].includes(REPEAT_INDEX)) {
   throw new Error("capacity REPEAT_INDEX must be 1, 2, or 3");
 }
@@ -222,8 +232,8 @@ function buildScenarios() {
       rate: rung.rate,
       timeUnit: "1s",
       duration: __ENV.DURATION_OVERRIDE || rung.duration,
-      preAllocatedVUs: Math.max(50, rung.rate * 4),
-      maxVUs: Math.max(200, rung.rate * 20),
+      preAllocatedVUs: rung.preAllocatedVUs || Math.max(50, rung.rate * 4),
+      maxVUs: rung.maxVUs || Math.max(200, rung.rate * 20),
       exec: "hitApi",
       tags: { rung: TARGET_RUNG, mode: "capacity", ...identityTags },
       gracefulStop: "30s",
@@ -241,6 +251,7 @@ export const options = {
 };
 
 export function setup() {
+  randomSeed(matchedIterationSeed(0));
   const validation = validateFixture(fixtureDocument);
   if (!validation.ok) {
     throw new Error(`invalid capacity fixture:\n- ${validation.errors.join("\n- ")}`);
@@ -260,7 +271,7 @@ export function setup() {
     const idempotencyKey = randomUuid();
     const response = http.post(
       `${BASE_URL}/steps/sync-v2`,
-      JSON.stringify(bodyFor("steps_sync_v2")),
+      JSON.stringify(bodyFor("steps_sync_v2", 0)),
       {
         headers: requestHeaders(seed.token, idempotencyKey),
         tags: {
@@ -317,12 +328,18 @@ function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function isoDate() {
-  return new Date().toISOString().split("T")[0];
+function logicalNow(iterationInTest = 0) {
+  return new Date(MATCHED_PAIR_EPOCH_MS + iterationInTest * 10);
 }
 
-function makeSample(minuteOffset) {
-  const end = new Date(Date.now() - minuteOffset * 60 * 1000);
+function isoDate(iterationInTest) {
+  return logicalNow(iterationInTest).toISOString().split("T")[0];
+}
+
+function makeSample(minuteOffset, iterationInTest) {
+  const end = new Date(
+    logicalNow(iterationInTest).getTime() - minuteOffset * 60 * 1000,
+  );
   const start = new Date(end.getTime() - 5 * 60 * 1000);
   return {
     periodStart: start.toISOString(),
@@ -339,24 +356,30 @@ function randomUuid() {
   });
 }
 
-function bodyFor(endpointKey) {
+function bodyFor(endpointKey, iterationInTest) {
   switch (endpointKey) {
     case "steps_post":
-      return { date: isoDate(), steps: randomInt(500, 14000) };
+      return { date: isoDate(iterationInTest), steps: randomInt(500, 14000) };
     case "steps_samples":
-      return { samples: [makeSample(12), makeSample(17)] };
+      return {
+        samples: [makeSample(12, iterationInTest), makeSample(17, iterationInTest)],
+      };
     case "steps_sync_v2":
       return {
-        date: isoDate(),
+        date: isoDate(iterationInTest),
         steps: randomInt(500, 14000),
-        samples: [makeSample(7), makeSample(12), makeSample(17)],
+        samples: [
+          makeSample(7, iterationInTest),
+          makeSample(12, iterationInTest),
+          makeSample(17, iterationInTest),
+        ],
       };
     case "activation_events":
       return {
         events: [
           buildActivationEvent({
             id: randomUuid(),
-            now: new Date(),
+            now: logicalNow(iterationInTest),
             appVersion: cohort.appVersion,
             platform: cohort.platform,
           }),
@@ -459,12 +482,18 @@ function requestHeaders(token, idempotencyKey = null) {
 }
 
 export function hitApi(setupData) {
+  const iteration = exec.scenario.iterationInTest;
+  randomSeed(matchedIterationSeed(iteration));
+  const iterationTags = {
+    ...identityTags,
+    traffic_phase: iteration < WARMUP_ITERATIONS ? "warmup" : "steady",
+  };
   const selected = pickEndpoint();
   selectedEndpointCount.add(1, {
     endpoint: selected.key,
-    ...identityTags,
+    ...iterationTags,
   });
-  endpointAccountingCounters[selected.key].selected.add(1, identityTags);
+  endpointAccountingCounters[selected.key].selected.add(1, iterationTags);
 
   const candidates = poolFor(selected.context, setupData);
   let executed = selected;
@@ -473,7 +502,7 @@ export function hitApi(setupData) {
     contextFallbackCount.add(1, {
       endpoint: selected.key,
       reason: `missing_${selected.context}`,
-      ...identityTags,
+      ...iterationTags,
     });
     executed = ENDPOINTS.find((endpoint) => endpoint.key === "races_list");
     context = allUsers[randomInt(0, allUsers.length - 1)];
@@ -481,15 +510,15 @@ export function hitApi(setupData) {
     contextFallbackCount.add(0, {
       endpoint: selected.key,
       reason: "none",
-      ...identityTags,
+      ...iterationTags,
     });
     context = candidates[randomInt(0, candidates.length - 1)];
   }
   executedEndpointCount.add(1, {
     endpoint: executed.key,
-    ...identityTags,
+    ...iterationTags,
   });
-  endpointAccountingCounters[executed.key].executed.add(1, identityTags);
+  endpointAccountingCounters[executed.key].executed.add(1, iterationTags);
 
   const idempotencyKey = randomUuid();
   const tags = {
@@ -497,7 +526,7 @@ export function hitApi(setupData) {
     endpoint: executed.key,
     selected_endpoint: selected.key,
     executed_endpoint: executed.key,
-    ...identityTags,
+    ...iterationTags,
     ...contextTags(context),
   };
   const headers = requestHeaders(
@@ -513,24 +542,28 @@ export function hitApi(setupData) {
     responseType: executed.key === "race_resolution" ? "text" : "none",
   };
   const response = executed.method === "POST"
-    ? http.post(url, JSON.stringify(bodyFor(executed.key)), params)
+    ? http.post(
+        url,
+        JSON.stringify(bodyFor(executed.key, exec.scenario.iterationInTest)),
+        params,
+      )
     : http.get(url, params);
 
   const classification = classifyResponse(executed.key, response.status);
   const metricTags = {
     endpoint: executed.key,
     status: String(response.status),
-    ...identityTags,
+    ...iterationTags,
     ...contextTags(context),
   };
   responseStatusCount.add(1, metricTags);
-  endpointAccountingCounters[executed.key].statusTotal.add(1, identityTags);
+  endpointAccountingCounters[executed.key].statusTotal.add(1, iterationTags);
   const statusKey = summarizedStatusCodes.includes(String(response.status))
     ? String(response.status)
     : "other";
   statusSummaryCounters[statusKey].add(1, {
     endpoint: executed.key,
-    ...identityTags,
+    ...iterationTags,
   });
   successfulResponseCount.add(
     response.status >= 200 && response.status < 300 ? 1 : 0,
@@ -546,12 +579,12 @@ export function hitApi(setupData) {
   capacityFailureRate.add(classification.capacityFailure ? 1 : 0, metricTags);
   hardFailureRate.add(classification.hardFailure ? 1 : 0, metricTags);
   endpointDuration.add(response.timings.duration, metricTags);
-  endpointAccountingCounters[executed.key].durationSamples.add(1, identityTags);
+  endpointAccountingCounters[executed.key].durationSamples.add(1, iterationTags);
   if (executed.critical) {
     persistenceCriticalDuration.add(response.timings.duration, metricTags);
   }
   if (executed.key === "race_resolution" && response.status >= 200 && response.status < 300) {
-    recordResolutionLag(response);
+    recordResolutionLag(response, iterationTags);
   }
 }
 
@@ -650,6 +683,8 @@ export function handleSummary(data) {
       ...requiredCapacityInputs,
       runId: RUN_ID,
       repeatIndex: REPEAT_INDEX,
+      matchedPairEpochMs: MATCHED_PAIR_EPOCH_MS,
+      warmupIterations: WARMUP_ITERATIONS,
     },
     totals: {
       requests: metricValues(data, "http_reqs"),

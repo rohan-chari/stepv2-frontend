@@ -18,7 +18,7 @@ import 'tutorial_real_screens.dart';
 /// backend is authoritative for the actual grant (and its idempotency).
 const int kTutorialRewardCoins = 100;
 
-enum TutorialMockPage { home, races, raceDetail, leaderboard, friends, profile }
+enum TutorialMockPage { home, races, raceDetail, friends, profile }
 
 class TutorialStep {
   const TutorialStep({

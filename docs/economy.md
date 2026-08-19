@@ -20,9 +20,35 @@ documents backend behaviour; backend paths below are relative to
 Where `DB` and `SEED`/`CODE` disagree, `DB` wins at runtime unless the seed's
 `update` block reasserts the field on deploy.
 
+**Historical-ledger retention caveat — verified 2026-08-18:** account deletion
+explicitly deletes that user's `coin_transactions`; `ad_reward_grants` and
+`daily_reward_claims` are also removed by their user-delete cascades. Historical
+DB rollups of coin sources/sinks, rewarded-ad grants, and daily claims therefore
+describe retained accounts and can revise downward after deletion. They are not
+immutable totals of all issuance, spending, or verified ad interactions.
+Sources: `CODE src/modules/users/commands/deleteUserAccount.js:243-279` and
+`CODE prisma/schema.prisma:424-482` (backend repo).
+
 ---
 
 ## 0. Population baseline — verified 2026-08-08 (prod, read-only)
+
+### 0d. IAP planning refresh — verified 2026-08-18 (prod, read-only)
+
+Trailing 30 complete calendar days (`2026-07-19` through `2026-08-17`). Date
+math uses the database's tz-naive `steps.date` and
+`coin_transactions.created_at::date`. Review accounts are excluded from player
+percentiles.
+
+| Metric | Value | Source |
+|---|---:|---|
+| 30d step-active users / user-days | 642 / 4,491 | `DB steps × users` |
+| Mean DAU with steps | 149.7 (daily min 79 · max 517) | `DB steps` (30 dates) |
+| Per-user steps / active day | p10 1,584 · **p50 5,884** · p90 11,611 | `DB steps` (n=642 users) |
+| Recurring positive coins / active day | p10 0 · **p50 9.0** · p90 75.4 · mean 29.4 | `DB steps × coin_transactions` (n=642 users; excludes tutorial, referral, admin/manual, refunds and redistributed buy-in payouts) |
+| Positive coins / individual active step-day | p10 0 · **p50 0** · p90 141 · mean 60.6 | `DB steps × coin_transactions` (n=4,491 user-days) |
+| Positive coins / earning day | p10 1 · **p50 74** · p90 280.7 · mean 122.7 | `DB coin_transactions` (n=2,274 user-days; 564 users) |
+| Current balance, 30d step-active users | p10 10 · **p50 138** · p90 706.9 · max 9,238; 0 negative | `DB users.coins` (n=642) |
 
 ### 0c. Refresh — verified 2026-08-12 (prod, read-only)
 
@@ -71,6 +97,31 @@ node-pg timestamp conversion.
 ---
 
 ## 1. Coin sources
+
+### 1d. IAP planning refresh — 30 days to 2026-08-18 (`DB coin_transactions`)
+
+| Reason | Coins/day | n | Users |
+|---|---:|---:|---:|
+| `race_prize_pool_payout` | 2,714.8 | 1,442 | 365 |
+| `tutorial_complete` | 1,623.3 | 487 | 487 |
+| `referral_reward` | 1,366.7 | 82 | 60 |
+| `daily_reward` | 1,214.0 | 1,179 | 289 |
+| `step_milestone` | 748.0 | 1,323 | 174 |
+| `ad_extra_spin` | 502.3 | 301 | 70 |
+| `race_buy_in_payout` | 278.9 | 58 | 21 |
+| `ad_coin_reward` | **240.8** | 289 | 29 |
+| `race_finish_reward` | 188.5 | 71 | 19 |
+| `race_payout_ad_double` | 143.5 | 44 | 31 |
+| `powerup_discard` | 90.3 | 440 | 54 |
+| `tournament_champion_reward` | 90.0 | 18 | 13 |
+| all other positive reasons | 103.2 | — | — |
+| **Total positive ledger** | **9,304.3/day** | | |
+
+The direct coin-ad rule remains **25 coins × 3/day = 75/day** (`ENV`, read by
+`CODE src/modules/economy/adRewards.js`). Actual direct coin-ad use was 289
+views / 7,225 coins over 30 days: 29 viewers, median 3 views/viewer, max 65,
+and 9.6 views per calendar day app-wide (`DB coin_transactions`,
+`reason='ad_coin_reward'`).
 
 ### 1b. Refresh — 30 days to 2026-08-11 (`DB coin_transactions`)
 
@@ -131,6 +182,22 @@ The faucet has ~500× headroom; it is bounded by discard *behaviour*, not by the
 
 ## 2. Coin sinks
 
+### 2d. IAP planning refresh — 30 days to 2026-08-18 (`DB coin_transactions`)
+
+| Reason | Coins/day | n | Users |
+|---|---:|---:|---:|
+| `powerup_purchase` | −1,597.3 | 484 | 37 |
+| `powerup_upgrade` | −1,224.0 | 1,763 | 85 |
+| `shop_purchase` | −683.3 | 39 | 22 |
+| `race_buy_in_hold` | −65.9 | 67 | 33 |
+| `powerup_unlock_ads` | −28.6 | 7 | 4 |
+| **Total negative ledger** | **−3,599.2/day** | | |
+
+Gross sources / sinks / net were **+9,304.3 / −3,599.2 / +5,705.1 coins/day**.
+Acquisition-period `tutorial_complete` and `referral_reward` contributed
+2,990.0/day of sources; `race_buy_in_payout` is redistribution rather than new
+issuance.
+
 ### 2c. Economy rollup — verified 2026-08-12 (prod, read-only)
 
 Trailing 30 calendar days, grouped in pure SQL by the tz-naive ledger's stored
@@ -174,6 +241,18 @@ players convert at well under 1.49.
 ---
 
 ## 3. Powerups
+
+### 3.1a Current store catalog — `DB powerup_shop_items`, verified 2026-08-18
+
+Enum labels are lowercase. Active, non-test-only rows are:
+
+| Price | Types |
+|---:|---|
+| 75 | `decoy`, `defense_scan`, `quick_rinse` |
+| 200 | `ghost_pepper`, `leech`, `rainstorm` |
+
+There are six currently purchasable types. This supersedes the 2026-08-13
+snapshot below; the DB remains runtime authority.
 
 ### 3.1 Store catalog — `DB powerup_shop_items`, verified 2026-08-13
 
@@ -553,7 +632,7 @@ app version and leaves in-flight effects alone.
 | `CAMPFIRE_REST` | 45m | 60m | 75m | 90m |
 
 Fixed (non-upgradeable) durations: `SIGNAL_JAMMER` 1h
-(`usePowerup.js:158`), `POWER_OUTAGE` 30m (`:129`), Mystery Potion's cramps
+(`usePowerup.js:170`), `POWER_OUTAGE` 30m (`:141`), Mystery Potion's cramps
 **hardcoded 2h** self and enemy (`:546`, `:730`) with potion self-wrong-turn at
 1h (`:559`) — the potion has never adopted the standard ladder.
 
@@ -579,6 +658,34 @@ at L1/L2/L3. `STEALTH_MODE` and `DETOUR_SIGN` buy 0 direct step value.
 hour averages **497 steps**, median 146, p90 1,459, and is **zero 23.4%** of the
 time. A marginal duration extension is therefore worth 0.3–1.0× the first hour
 depending on how well-timed the attack was; 1,737/h is the optimistic bound.
+
+### 3.4d Jam counterplay — verified 2026-08-18
+
+| Interaction | Rule | Source |
+|---|---|---|
+| `SIGNAL_JAMMER` | Blocks every powerup for 1h, including `CLEANSE` and `QUICK_RINSE` | `CODE usePowerup.js` jam guard |
+| `POWER_OUTAGE` | Blocks ordinary powerups for 30m; post-fix guard permits only `CLEANSE` and `QUICK_RINSE` through | `CODE usePowerup.js:1041-1083` (2026-08-18 worktree; prod deployment not yet verified) |
+| Both jams live | `SIGNAL_JAMMER` wins and both cleansers remain blocked | same guard; Signal Jammer lookup has precedence |
+| `CLEANSE` | Ends every opponent-inflicted cleansable debuff immediately, including `POWER_OUTAGE`; self-buffs and `BOUNTY`/`RALLY_FLAG`/`UPRISING` survive | `CODE usePowerup.js:355-361,2892-2934` |
+| `QUICK_RINSE` | Halves the remaining duration of every timed opponent-inflicted cleansable debuff, including `POWER_OUTAGE`; one use/race/hour | `CODE usePowerup.js:205-221,2088-2131,2720-2758` |
+
+The bypass is type-specific, not a general jam immunity. `CLEANSE` remains a
+free RARE box drop; its N=6 per-box odds are 2.22–3.89% by position (§3.3b).
+`QUICK_RINSE` is store-only at **75 coins** (`DB powerup_shop_items`, active and
+non-test-only). At the current 9 coins/active-day median recurring income
+(§0d), one Rinse costs **8.3 median active days**.
+
+Live usage baseline, 30 complete days through 2026-08-17 (`DB`, read-only): 127
+Power Outage uses created 9,427 victim effects (mean 74.27 victims/use; p50 12,
+p90 356, max 499); 259 Cleanses removed 285 effects; 126 Quick Rinses shortened
+144 effects. A historical tray-state reconstruction found a Cleanse or Rinse
+already held in-race for at most 334 / 9,427 outage victim rows (3.54%); this is
+an upper bound because final row status cannot recover every intervening
+discard/expiry. Current global inventory has 19 Quick Rinses across 9 users and
+no Cleanse stock (race trays separately hold 83 Cleanses). Quick Rinse recorded
+113 successful store purchases by 22 buyers for 8,475 coins in the same window
+= **282.5 coins/day of sink** (`DB powerup_purchase_requests`, status label
+`SUCCEEDED`).
 
 ### 3.5 Discard — `CODE powerups/commands/discardPowerup.js` (batch 2026-08-08)
 
@@ -712,21 +819,29 @@ are forced to 0.
 > pre-cutover). Any spec that reasons "free race ⇒ no payout" is wrong against
 > live config.
 
-Per-participant EV is `durationPoints × PRIZE_COIN_UNIT` **independent of field
-size** (pool = N × dp × 20, WINNER_TAKES_ALL pays one of N) — 40 coins for a
-2-day race, 80 for a 7-day one — but realised payout is winner-take-all, so the
-median participant receives 0. Measured `race_prize_pool_payout` amounts, 30d:
-n=290, 45 users, p10 **2** · p50 **40** · p90 **157** · max **336**.
+Before payout rounding, per-participant EV is `durationPoints ×
+PRIZE_COIN_UNIT` **independent of field size** (pool = N × dp × 20) — 40
+coins for a 2-day race, 80 for a 7-day one. Races stamped
+`payout_rounding_version=1` then round every positive recipient award up to a
+multiple of 5 and mint the difference, so their final EV is weakly higher; see
+§4.2. Realised payout remains highly placement-dependent. Measured
+`race_prize_pool_payout` amounts, 30d: n=290, 45 users, p10 **2** · p50 **40**
+· p90 **157** · max **336** (historical snapshot; current 30d source total is
+in §1d).
 
 Per participant-**day** the mint rate is `durationPoints × 20 / days`, which is
 **higher for shorter races**: 1-day 20 · 2-day 20 · 3-day 13.3 · 7-day 11.4 ·
 14-day 11.4. A quick-create preset menu therefore prices differently per preset.
 
-> **Invariant: 20 coins per player-day is the ceiling.** Verified 2026-08-16 by
+> **Raw-pool invariant: 20 coins per player-day is the formula ceiling before
+> recipient rounding or rewarded-ad duplication.** Verified 2026-08-16 by
 > scanning every legal integer duration 1..30: `max(durationPoints(d) × 20 / d)`
 > = **20**, attained at `d = 1` and `d = 8`. Nothing in the current system can
-> mint faster than 20 coins per walker per elapsed day. Two properties hold it
-> up, and any change to race timing must preserve **both**:
+> put more than 20 raw pool coins per walker per elapsed day into a normal
+> individual race. Version-1 per-recipient rounding can mint a subsidy above
+> that raw pool, and a claimed payout-double ad mints up to 100 additional coins
+> from the final base award. Two properties hold up the raw-pool invariant, and
+> any change to race timing must preserve **both**:
 > 1. `maxDurationDays` is an **integer number of days**, so a race is never
 >    priced at a band it only barely entered (there is no 24h+1min race).
 > 2. `maxDurationDays` equals the race's **actual elapsed length**, because
@@ -790,11 +905,18 @@ timezone shifts.
 | `WINNER_TAKES_ALL` | [100] | |
 | `TOP3_70_20_10` | [70,20,10] | |
 | `TOP3_80_15_5` | [80,15,5] | |
-| `TOP_HALF` | `ceil(N/2)` places | funded ⇒ **even** split; buy-in pot ⇒ geometric r=0.7 |
-| `ALL_BUT_LAST` | `N−1` places | same |
+| `TOP_HALF` | `ceil(N/2)` places | funded + `payout_curve IS NULL` ⇒ even; funded + `GEOMETRIC` (seeded challenges) or legacy buy-in ⇒ geometric r=0.7 |
+| `ALL_BUT_LAST` | `N−1` places | same curve rules |
 
 Graded presets need ≥4 accepted (`MIN_MULTI_PAYOUT_PARTICIPANTS`). Geometric
-floor per paid place = 1 coin.
+floor per paid place = 1 coin. Every race has an immutable
+`payout_rounding_version`: version 0 pays the raw whole-coin split; version 1
+maps each positive award independently to `max(5, ceil(raw/5)×5)` and mints the
+rounding subsidy. New-row stamping is controlled by
+`DB app_settings.payoutRoundingV1Enabled` (currently `true`, verified
+2026-08-18); missing/legacy rows remain version 0. Source: `CODE
+races/services/payoutRounding.js`, `races/commands/completeRace.js`,
+`races/jobs/seededRaceRenewal.js`.
 
 ### 4.3 Team race payouts — `CODE races/commands/completeRace.js:143-243`
 
@@ -847,7 +969,7 @@ Non-funded seeded races only (retired for funded).
 
 Split by descending linear weights (`computeGradedPayouts`).
 
-### 4.5 Live Daily/Weekly challenge configuration — verified 2026-08-12
+### 4.5 Live Daily/Weekly challenge configuration — verified 2026-08-18
 
 | Item | Daily (`seed-daily-10k`) | Weekly (`seed-weekly-50k`) | Source |
 |---|---:|---:|---|
@@ -855,6 +977,7 @@ Split by descending linear weights (`computeGradedPayouts`).
 | New-race payout preset | `TOP_HALF` | `TOP_HALF` | `CODE races/jobs/seededRaceRenewal.js:83-122` |
 | Funding | app-funded | app-funded | `DB app_settings` has no `fundedPrizePoolsEnabled` row, so `CODE` default is `true` |
 | New-race curve | `GEOMETRIC` | `GEOMETRIC` | `DB app_settings.seededGeometricPayoutsEnabled=true`; stamped by renewal |
+| New-race payout rounding | v1: each positive award rounds up to 5 | same | `DB app_settings.payoutRoundingV1Enabled=true`; stamped by renewal |
 | Pool EV per eligible walker | 20 coins / 1-day race | 80 coins / 7-day race | `CODE shared/economy/prizePool.js`; pool = walkers × durationPoints × 20 |
 
 The active rows observed at verification had 61 accepted / 50 walkers (Daily)
@@ -862,6 +985,22 @@ and 68 accepted / 57 walkers (Weekly). These are live operational counts, not
 configuration. `race_seeds.powerup_step_interval=2500` in DB is legacy stored
 data; renewal deliberately stamps the global fixed 2,000 raw-steps/box cadence
 (§3.3).
+
+**2026-08-17 Daily settlement (verified 2026-08-18, prod read-only).** The
+completed race displayed as a 496-person field but had 425 settled walkers;
+settlement deliberately excludes accepted no-shows. Its raw funded pool was
+`425 × 1 × 20 = 8,500`, `TOP_HALF` paid `ceil(425/2)=213` places, and the
+row's stamped `GEOMETRIC` curve used ratio 0.7 plus a 1-coin floor. For fourth:
+`1 + floor((8,500−213) × 0.7³ / Σ[i=0..212]0.7ⁱ) = 853`. The row was
+created before payout-rounding v1 and retained immutable version 0, hence 853
+rather than 855. The complete top six were
+`[2501, 1741, 1219, 853, 597, 418]`; 213 awards summed exactly to 8,500.
+At equal rank odds across 425 walkers, the raw outcome distribution was mean
+20, p10 0, median 1, p90 1, p99 418, max 2,501. Applying current v1 to the same
+raw split would pay 9,310 (mean 21.91/walker), a +810 / +9.53% rounding subsidy,
+with fourth rounded to 855. Source: `DB races × race_participants`; `CODE
+shared/economy/prizePool.js`, `races/racePayoutPresets.js`,
+`races/services/payoutRounding.js`.
 
 ---
 
@@ -894,6 +1033,20 @@ free source of the most expensive powerups in the game.**
 ---
 
 ## 6. Cosmetics — `DB shop_items`, verified 2026-08-08
+
+### 6.1 Current catalog refresh — verified 2026-08-18
+
+| Price | Active, non-test-only, non-earn-only items |
+|---:|---:|
+| 250 | 6 |
+| 500 | 9 |
+| 750 | 1 |
+| 1,000 | 1 |
+| 2,000 | 1 |
+
+There are 18 currently coin-purchasable cosmetics. At the current p50 recurring
+rate of 9 coins per active day, these tiers represent 27.8, 55.6, 83.3, 111.1
+and 222.2 active days respectively.
 
 | Segment | n | Prices |
 |---|---|---|
@@ -1464,29 +1617,51 @@ link or types the code in onboarding. Any copy promising coins for sharing a
 
 ---
 
-## 12. Race-payout rewarded-ad bonus — proposed, NOT LIVE (verified 2026-08-12)
+## 12. Race-payout rewarded-ad bonus — hard-capped at 100 (corrected implementation; deployment pending 2026-08-18)
 
-The draft in `docs/race-payout-double-ad-requirements.md` proposes one
-SSV-verified bonus per persisted results batch:
+One SSV-verified ad awards up to 100 additional coins from the authoritative
+eligible race-ledger payout:
 
 ```
-baseCoins  = sum(positive coin-ledger credits in the eligible batch
+baseCoins  = sum(exact positive ledger rows for the results batch
                  where reason IN (race_prize_pool_payout, race_finish_reward))
-remaining = 500 - sum(durable provider-velocity grants in (databaseNow-24h, databaseNow])
-bonusCoins = min(baseCoins, 500, remaining)
+remaining  = 100 - durable provider-identity grants in the trailing 24h
+bonusCoins = min(baseCoins, 100, remaining)
 ```
 
-This is a `SPEC` value only. There is currently no
-`race_payout_ad_double` ledger reason, offer table, runtime switch, dedicated
-allowlist, or claim path in code or prod DB. The existing payout column is the
-combined participant-facing display value and can contain app-funded
-prize-pool, legacy buy-in-pot, or legacy seeded finish-reward coins (`CODE
-completeRace.js:143-483`; `DB race_participants.payout_coins`). The proposal
-uses the two allowlisted system-funded ledger reasons as economic authority;
 `race_buy_in_payout`, refunds, tournament/referral coins and all other reasons
-are ineligible even when included in displayed `myPayoutCoins`.
+remain ineligible. Exact source `reason + refId`, persisted offer items,
+provider-identity locks, a unique participant fence, SSV verification and
+exactly-once claim receipts prevent client-submitted amounts or duplicate
+claims. Source: `CODE races/models/racePayoutDouble.js`,
+`races/commands/createRacePayoutDoubleOffer.js`,
+`races/commands/claimRacePayoutDouble.js`.
 
-### 12.1 Empirical input distribution (30 days to 2026-08-12)
+The hard ceiling is non-configurable upward: malformed, absent, or greater
+environment values resolve to 100. Offer reads and persistence apply the cap;
+claim settlement recomputes the rolling allowance under the durable identity
+lock and uses the capped amount for the coin ledger, consumed ad grant,
+velocity grant, claim receipt, and repaired offer row. Thus an older persisted
+offer above 100 cannot issue more than 100. `DB
+app_settings.racePayoutDoubleRolloutPercent=100` controls cohort reach, not the
+coin amount.
+
+For the §4.5 fourth-place Daily, base 853 therefore offers at most +100. At
+100% take-up the race can add no more than 100 per eligible claiming identity,
+and each identity can receive no more than 100 total across the trailing 24h.
+
+Prod before the correction: lifetime 53 claimed offers / 4,846 bonus coins,
+median 87, p90 100, max 500; none had yet claimed after the brief uncapped
+backend deploy.
+Trailing 30 complete days: 4,305 `race_payout_ad_double` coins = 143.5/day (44
+ledger rows, 31 users). Gross sources/sinks/net were 9,304.3 / 3,599.2 /
++5,705.1 coins/day. Source: `DB race_payout_double_offers`,
+`DB coin_transactions` (aggregate-only, tz-naive SQL date math).
+
+The original capped-model measurements below are retained only as historical
+pre-launch evidence; their 500-cap counterfactual is not current behavior.
+
+### 12.1 Historical capped-model input distribution (30 days to 2026-08-12; superseded)
 
 Prod eligible ledger aggregate: 435 user/race awards, 51 users, **27,780 coins
 = 926.0/day**.
@@ -1506,7 +1681,7 @@ event order `(created_at, race_id)`, one claim at each qualifying ledger event,
 100%-claim upper proxy, not a take-rate forecast; real popup batching can only
 reduce it.
 
-### 12.2 Economy frame
+### 12.2 Historical capped-model economy frame (superseded)
 
 Thirty-day live ledger at verification: **+3,707.5 sources / −2,536.5 sinks /
 +1,171.0 net coins/day** (`DB coin_transactions`). At 100% redemption under the
@@ -1526,7 +1701,7 @@ bonus alone was p10 0 / p50 0 / p90 43.54 / p99 91.60 per active day. Thus
 median affordability barely moves (250-coin cosmetic: 26.3 → 25.0 active
 days), while the upper tail receives most issuance.
 
-### 12.3 Bounds relevant to the cap
+### 12.3 Historical capped-model bounds (superseded)
 
 - `CODE raceBuyIns.js:26-32`: legacy buy-in is at most 200 coins per accepted
   participant, but the pot can be transferred to a controlled winner. Prod
@@ -1562,7 +1737,44 @@ rolling 24 hours, including across account recreation.
 
 ---
 
+## 13. Consumable coin IAP — planning defaults, NOT LIVE (2026-08-18)
+
+No IAP product, purchase ledger or IAP-sourced coin transaction exists in the
+verified production model. The accepted planning defaults are product inputs,
+not DB/code values:
+
+| Pack | Base + displayed bonus | Total coins | US reference price | Coins / US$ |
+|---|---:|---:|---:|---:|
+| Small | 500 + 0 | 500 | $0.99 | 505.1 |
+| Medium | 1,250 + 250 | 1,500 | $3.99 | 375.9 |
+| Large | 2,500 + 500 | 3,000 | $7.99 | 375.5 |
+| XL | 4,000 + 1,000 | 5,000 | $14.99 | 333.6 |
+
+The client is planned to show Apple/Google localized store price metadata; the
+US figures are reference prices only. At the current p50 recurring rate of 9
+coins per active day, the packs equal 55.6 / 166.7 / 333.3 / 555.6 active days
+of play; at p90 75.4/day, 6.6 / 19.9 / 39.8 / 66.3 days. The packs equal 20 /
+60 / 120 / 200 direct coin-ad grants, or 6.7 / 20 / 40 / 66.7 days at the live
+three-grant (75-coin) daily cap.
+
+The displayed bonuses are 20%, 20% and 25% of each larger pack's stated base,
+but the base is not tied to the small-pack exchange rate. At US reference
+prices, four small packs cost $3.96 and provide 2,000 coins (500 more than the
+$3.99 medium); eight cost $7.92 and provide 4,000 (1,000 more than the $7.99
+large); fifteen cost $14.85 and provide 7,500 (2,500 more than the $14.99 XL).
+
+Until this source ships, economy projections must represent paid issuance as:
+
+`paid coins/day = 500 × small grants + 1,500 × medium grants + 3,000 × large grants + 5,000 × XL grants − refunded coins`
+
+and must not count store checkout starts or client purchase callbacks as
+issuance.
+
+---
+
 *Last full verification pass: 2026-08-08 (prod SELECT-only, aggregates only).
+§0d, §1d, §2d, §3.1a, §3.4d, §6.1 and §13 verified/added 2026-08-18 (prod
+SELECT-only aggregates + accepted planning inputs; IAP is explicitly not live).
 §12 verified/added 2026-08-12 (prod SELECT-only aggregates + current code/spec).
 §0b, §1b, §2b, §4.1, §7 (box-volume order statistic) and §11 verified/added
 2026-08-11 (prod SELECT-only, aggregates only).

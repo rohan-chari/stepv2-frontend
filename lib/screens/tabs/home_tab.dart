@@ -109,7 +109,8 @@ class HomeTab extends StatelessWidget {
   final VoidCallback? onEnterInviteCode;
   final VoidCallback? onSkipInviteCode;
   final VoidCallback? onStartQuickRace;
-  final VoidCallback? onOpenInbox;
+  // Deprecated compatibility input. Inbox is now shell navigation and Home no
+  // longer renders an Inbox affordance.
 
   /// Shell-owned Home invite overlay is showing this same invitation. Keep the
   /// inline fallback out of the underlying Home tree until it is dismissed.
@@ -167,7 +168,6 @@ class HomeTab extends StatelessWidget {
     this.onEnterInviteCode,
     this.onSkipInviteCode,
     this.onStartQuickRace,
-    this.onOpenInbox,
     this.suppressPendingInvite = false,
   });
 
@@ -266,7 +266,12 @@ class HomeTab extends StatelessWidget {
                             ),
                             if (_buildServiceBanner(context) case final banner?)
                               Padding(
-                                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  12,
+                                  16,
+                                  0,
+                                ),
                                 child: banner,
                               ),
                             // Streak + shop live just under the hero scene so the
@@ -406,10 +411,14 @@ class HomeTab extends StatelessWidget {
                               index: 6,
                               child: _buildRaceSection(context),
                             ),
+                            StaggerIn(
+                              index: 7,
+                              child: _buildLeaderboardsTicket(context),
+                            ),
                             // Last block on the page: the ask, once the user
                             // has seen everything the app has to show them.
                             StaggerIn(
-                              index: 7,
+                              index: 8,
                               child: _buildFeedbackSection(context),
                             ),
                           ],
@@ -452,12 +461,6 @@ class HomeTab extends StatelessWidget {
       multiplier: multiplier,
       endsAt: endsAt,
     );
-  }
-
-  int? get _inboxUnreadCount {
-    final raw = raceCard?['inboxUnreadCount'];
-    final count = raw is num ? raw.toInt() : null;
-    return count == null || count < 0 ? null : count;
   }
 
   Widget? _buildServiceBanner(BuildContext context) {
@@ -629,6 +632,97 @@ class HomeTab extends StatelessWidget {
               : () => _openPublicRaces(homeContext),
         );
       },
+    );
+  }
+
+  /// The board is intentionally a route, not a sixth/hidden shell tab. Keeping
+  /// this ticket outside [_buildSuggestedRacesBody] makes its placement stable
+  /// across loading, populated, empty, and error suggestion states.
+  Widget _buildLeaderboardsTicket(BuildContext context) {
+    final colors = AppColors.of(context);
+    final callback = isTutorialPreview ? null : onOpenLeaderboardTab;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
+      child: Semantics(
+        excludeSemantics: true,
+        button: true,
+        label: "Leaderboards. See today's top walkers",
+        onTap: callback ?? () {},
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            key: const Key('home-leaderboards-ticket'),
+            onTap: callback ?? () {},
+            excludeFromSemantics: true,
+            borderRadius: BorderRadius.circular(12),
+            focusColor: colors.coinLight.withValues(alpha: 0.28),
+            highlightColor: colors.roofDark.withValues(alpha: 0.12),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 68),
+              child: Ink(
+                padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+                decoration: BoxDecoration(
+                  color: colors.parchment,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: colors.roofDark, width: 2),
+                  boxShadow: _homeCardShadow,
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: colors.roofDark,
+                        borderRadius: BorderRadius.circular(9),
+                        border: Border(
+                          top: BorderSide(color: colors.coinLight, width: 2),
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Icon(
+                        Icons.leaderboard_rounded,
+                        color: colors.textLight,
+                        size: 25,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'LEADERBOARDS',
+                            style: PixelText.title(
+                              size: 16,
+                              color: colors.textDark,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            "See today's top walkers",
+                            style: PixelText.body(
+                              size: 13,
+                              color: colors.textMid,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      color: colors.textDark,
+                      size: 28,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -1138,8 +1232,7 @@ class HomeTab extends StatelessWidget {
           children: [
             Positioned(
               left: 20,
-              // Keep the name/coins clear of the overlaid help button.
-              right: 58,
+              right: 20,
               top: topInset + 12,
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -1197,25 +1290,6 @@ class HomeTab extends StatelessWidget {
                 ),
               ),
             ),
-            if (!isTutorialPreview)
-              if (_inboxUnreadCount case final int unread)
-              Positioned(
-                right: 8,
-                top: topInset + 4,
-                child: IconButton(
-                  key: const Key('home-inbox-button'),
-                  tooltip: unread > 0 ? '$unread unread alerts' : 'Inbox',
-                  onPressed: onOpenInbox,
-                  icon: Badge(
-                    isLabelVisible: unread > 0,
-                    label: Text('$unread'),
-                    child: Icon(
-                      Icons.mail_outline_rounded,
-                      color: AppColors.of(context).textLight,
-                    ),
-                  ),
-                ),
-              ),
           ],
         ),
       ),

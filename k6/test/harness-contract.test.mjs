@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -10,10 +11,25 @@ import {
   buildThresholds,
   classifyCapacityRun,
   classifyResponse,
+  matchedIterationSeed,
   partitionResolutionSeeds,
   resolutionStateDisposition,
   validateFixture,
 } from "../harness-contract.mjs";
+
+test("documented inspect command passes its shell environment to k6", () => {
+  const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+  assert.match(
+    readme,
+    /k6 inspect --include-system-env-vars k6\/prod-mix-load-test\.js/,
+  );
+});
+
+test("matched iteration seeds are stable and distinct", () => {
+  assert.equal(matchedIterationSeed(0), matchedIterationSeed(0));
+  assert.notEqual(matchedIterationSeed(0), matchedIterationSeed(1));
+  assert.throws(() => matchedIterationSeed(-1), /iteration/i);
+});
 
 const validFixture = {
   schemaVersion: "capacity-fixture-v1",
@@ -80,10 +96,35 @@ const validFixture = {
 test("offered-rate rungs replace stale DAU identities and carry every gate", () => {
   assert.deepEqual(
     Object.keys(RUNG_DEFINITIONS),
-    ["rate_5rps", "rate_15rps", "rate_31rps"],
+    [
+      "rate_5rps",
+      "rate_15rps",
+      "rate_31rps",
+      "diagnostic_160rps",
+      "diagnostic_260rps",
+    ],
   );
   assert.equal(RUNG_DEFINITIONS.rate_15rps.duration, "90s");
   assert.equal(RUNG_DEFINITIONS.rate_31rps.duration, "30s");
+  for (const name of [
+    "diagnostic_160rps",
+    "diagnostic_260rps",
+  ]) {
+    assert.equal(RUNG_DEFINITIONS[name].diagnosticOnly, true);
+    assert.equal(RUNG_DEFINITIONS[name].duration, "30s");
+    assert.ok(
+      RUNG_DEFINITIONS[name].preAllocatedVUs >=
+        Math.ceil(RUNG_DEFINITIONS[name].rate * 2.4),
+    );
+    assert.ok(
+      RUNG_DEFINITIONS[name].maxVUs >=
+        RUNG_DEFINITIONS[name].preAllocatedVUs,
+    );
+    assert.equal(
+      RUNG_DEFINITIONS[name].maxVUs,
+      name === "diagnostic_260rps" ? 800 : 400,
+    );
+  }
 
   const thresholds = buildThresholds(["rate_15rps", "rate_31rps"]);
   for (const rung of ["rate_15rps", "rate_31rps"]) {
@@ -115,6 +156,28 @@ test("offered-rate rungs replace stale DAU identities and carry every gate", () 
     thresholds["capacity_failure_rate{rung:rate_31rps}"],
     ["rate<0.01"],
   );
+  assert.throws(
+    () =>
+      classifyCapacityRun(
+        "60s",
+        false,
+        "https://staging.steptracker-api.org",
+        RUNG_DEFINITIONS.diagnostic_160rps,
+      ),
+    /ALLOW_DIAGNOSTIC_OVERRIDE=1/,
+  );
+  assert.deepEqual(
+    classifyCapacityRun(
+      "60s",
+      true,
+      "https://staging.steptracker-api.org",
+      RUNG_DEFINITIONS.diagnostic_160rps,
+    ),
+    {
+      capacityCandidate: false,
+      diagnosticReason: "diagnostic_breakpoint_rung",
+    },
+  );
 });
 
 test("capacity overrides are explicitly diagnostic and non-claimable", () => {
@@ -136,6 +199,18 @@ test("capacity overrides are explicitly diagnostic and non-claimable", () => {
   assert.throws(
     () => classifyCapacityRun("12s", false),
     /ALLOW_DIAGNOSTIC_OVERRIDE=1/,
+  );
+  assert.deepEqual(
+    classifyCapacityRun(
+      undefined,
+      false,
+      "https://staging.steptracker-api.org",
+      RUNG_DEFINITIONS.diagnostic_160rps,
+    ),
+    {
+      capacityCandidate: false,
+      diagnosticReason: "diagnostic_breakpoint_rung",
+    },
   );
 });
 
@@ -354,5 +429,100 @@ test("resolution partition skips multi-ACTIVE users and fails when eligible seed
   assert.throws(
     () => partitionResolutionSeeds({ users, raceRows, seedCount: 3 }),
     /requested 3.*found 2/i,
+  );
+});
+
+test("resolution partition prefers a later small-race user over an earlier large-race user", () => {
+  const users = [
+    { id: "recent-large", token: "large-token" },
+    { id: "later-small", token: "small-token" },
+    { id: "workload", token: "workload-token" },
+  ];
+  const raceRows = [
+    {
+      user_id: "recent-large",
+      race_id: "race-large",
+      race_status: "active",
+      roster_size: 642,
+    },
+    {
+      user_id: "later-small",
+      race_id: "race-small",
+      race_status: "active",
+      roster_size: 3,
+    },
+    {
+      user_id: "workload",
+      race_id: "workload-active",
+      race_status: "active",
+      roster_size: 14,
+    },
+  ];
+
+  const partition = partitionResolutionSeeds({ users, raceRows, seedCount: 1 });
+
+  assert.deepEqual(partition.resolutionSeeds, [
+    {
+      userId: "later-small",
+      token: "small-token",
+      raceIds: ["race-small"],
+    },
+  ]);
+  assert.deepEqual(
+    partition.workloadUsers.map((user) => user.id),
+    ["recent-large", "workload"],
+  );
+});
+
+test("resolution partition selects distinct races when users share the smallest race", () => {
+  const users = [
+    { id: "small-a", token: "small-a-token" },
+    { id: "small-b", token: "small-b-token" },
+    { id: "next", token: "next-token" },
+    { id: "large", token: "large-token" },
+  ];
+  const raceRows = [
+    {
+      user_id: "small-a",
+      race_id: "shared-small",
+      race_status: "active",
+      roster_size: 2,
+    },
+    {
+      user_id: "small-b",
+      race_id: "shared-small",
+      race_status: "active",
+      roster_size: 2,
+    },
+    {
+      user_id: "next",
+      race_id: "next-distinct",
+      race_status: "active",
+      roster_size: 4,
+    },
+    {
+      user_id: "large",
+      race_id: "large-distinct",
+      race_status: "active",
+      roster_size: 100,
+    },
+  ];
+
+  const partition = partitionResolutionSeeds({ users, raceRows, seedCount: 2 });
+
+  assert.deepEqual(
+    partition.resolutionSeeds.map((seed) => [seed.userId, seed.raceIds[0]]),
+    [
+      ["small-a", "shared-small"],
+      ["next", "next-distinct"],
+    ],
+  );
+  assert.throws(
+    () => partitionResolutionSeeds({
+      users: users.slice(0, 2),
+      raceRows: raceRows.slice(0, 2),
+      seedCount: 2,
+    }),
+    /requested 2.*1 distinct eligible ACTIVE races/i,
   );
 });

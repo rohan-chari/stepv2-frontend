@@ -1995,7 +1995,7 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
-  Future<void> markInboxAlertRead({
+  Future<Map<String, dynamic>> markInboxAlertRead({
     required String identityToken,
     required String alertId,
   }) async {
@@ -2005,7 +2005,7 @@ class BackendApiService {
       body: const <String, dynamic>{},
       identityToken: identityToken,
     );
-    await _decodeJsonResponse(response);
+    return _decodeJsonResponse(response);
   }
 
   Future<Map<String, dynamic>> fetchFeedbackThreads({

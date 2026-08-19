@@ -22,10 +22,36 @@ export const RELEASED_CLIENT_COHORTS = Object.freeze({
   }),
 });
 
+// Re-seed every arrival from its scenario-global iteration. Matched OFF/ON
+// runs then select the same user, endpoint and payload randomness even when k6
+// assigns iterations to different VUs.
+export function matchedIterationSeed(iterationInTest) {
+  if (!Number.isInteger(iterationInTest) || iterationInTest < 0) {
+    throw new Error("iterationInTest must be a non-negative integer");
+  }
+  return (0x51f15e + iterationInTest * 2654435761) >>> 0;
+}
+
 export const RUNG_DEFINITIONS = Object.freeze({
   rate_5rps: Object.freeze({ rate: 5, duration: "60s", capacityFailure: "rate==0" }),
   rate_15rps: Object.freeze({ rate: 15, duration: "90s", capacityFailure: "rate==0" }),
   rate_31rps: Object.freeze({ rate: 31, duration: "30s", capacityFailure: "rate<0.01" }),
+  diagnostic_160rps: Object.freeze({
+    rate: 160,
+    duration: "30s",
+    capacityFailure: "rate<0.01",
+    diagnosticOnly: true,
+    preAllocatedVUs: 384,
+    maxVUs: 400,
+  }),
+  diagnostic_260rps: Object.freeze({
+    rate: 260,
+    duration: "30s",
+    capacityFailure: "rate<0.01",
+    diagnosticOnly: true,
+    preAllocatedVUs: 624,
+    maxVUs: 800,
+  }),
 });
 
 export const ENDPOINTS = Object.freeze([
@@ -86,7 +112,19 @@ export function classifyCapacityRun(
   durationOverride,
   allowDiagnosticOverride,
   baseUrl = "https://staging.steptracker-api.org",
+  rungDefinition = null,
 ) {
+  if (durationOverride && !allowDiagnosticOverride) {
+    throw new Error(
+      "DURATION_OVERRIDE in capacity mode requires ALLOW_DIAGNOSTIC_OVERRIDE=1",
+    );
+  }
+  if (rungDefinition?.diagnosticOnly === true) {
+    return {
+      capacityCandidate: false,
+      diagnosticReason: "diagnostic_breakpoint_rung",
+    };
+  }
   if (baseUrl !== "https://staging.steptracker-api.org") {
     return {
       capacityCandidate: false,
@@ -94,11 +132,6 @@ export function classifyCapacityRun(
     };
   }
   if (!durationOverride) return { capacityCandidate: true, diagnosticReason: null };
-  if (!allowDiagnosticOverride) {
-    throw new Error(
-      "DURATION_OVERRIDE in capacity mode requires ALLOW_DIAGNOSTIC_OVERRIDE=1",
-    );
-  }
   return { capacityCandidate: false, diagnosticReason: "duration_override" };
 }
 
@@ -150,27 +183,56 @@ export function partitionResolutionSeeds({ users, raceRows, seedCount }) {
   if (!Number.isInteger(seedCount) || seedCount < 1) {
     throw new Error("resolution seed count must be a positive integer");
   }
-  const activeRaceIdsByUser = new Map();
+  const activeRacesByUser = new Map();
   for (const row of raceRows) {
     if (
       String(row.race_status).toLowerCase() === "active" &&
       usersById.has(row.user_id)
     ) {
-      if (!activeRaceIdsByUser.has(row.user_id)) {
-        activeRaceIdsByUser.set(row.user_id, new Set());
+      if (!activeRacesByUser.has(row.user_id)) {
+        activeRacesByUser.set(row.user_id, new Map());
       }
-      activeRaceIdsByUser.get(row.user_id).add(row.race_id);
+      const races = activeRacesByUser.get(row.user_id);
+      const rosterSize = Number(row.roster_size);
+      const normalizedRosterSize = Number.isFinite(rosterSize) && rosterSize > 0
+        ? rosterSize
+        : Number.POSITIVE_INFINITY;
+      races.set(
+        row.race_id,
+        Math.min(races.get(row.race_id) ?? Number.POSITIVE_INFINITY, normalizedRosterSize),
+      );
     }
   }
-  const eligibleUserIds = users
-    .map((user) => user.id)
-    .filter((userId) => activeRaceIdsByUser.get(userId)?.size === 1);
-  if (eligibleUserIds.length < seedCount) {
+  const eligibleSeeds = users
+    .map((user) => {
+      const races = activeRacesByUser.get(user.id);
+      if (races?.size !== 1) return null;
+      const [[raceId, rosterSize]] = races.entries();
+      return { userId: user.id, raceId, rosterSize };
+    })
+    .filter(Boolean)
+    .sort(
+      (left, right) =>
+        left.rosterSize - right.rosterSize ||
+        String(left.userId).localeCompare(String(right.userId)) ||
+        String(left.raceId).localeCompare(String(right.raceId)),
+    );
+  const selectedSeeds = [];
+  const selectedRaceIds = new Set();
+  for (const candidate of eligibleSeeds) {
+    if (selectedRaceIds.has(candidate.raceId)) continue;
+    selectedSeeds.push(candidate);
+    selectedRaceIds.add(candidate.raceId);
+    if (selectedSeeds.length === seedCount) break;
+  }
+  if (selectedSeeds.length < seedCount) {
     throw new Error(
-      `requested ${seedCount} resolution seeds but found ${eligibleUserIds.length} users with exactly one distinct ACTIVE race`,
+      `requested ${seedCount} resolution seeds but found ${selectedRaceIds.size} distinct eligible ACTIVE races`,
     );
   }
-  const selectedSeedIds = new Set(eligibleUserIds.slice(0, seedCount));
+  const selectedSeedIds = new Set(
+    selectedSeeds.map((seed) => seed.userId),
+  );
   const dedicatedRaceIds = new Set(
     raceRows
       .filter(
@@ -187,7 +249,7 @@ export function partitionResolutionSeeds({ users, raceRows, seedCount }) {
   const resolutionSeeds = [...selectedSeedIds].map((userId) => ({
     userId,
     token: usersById.get(userId).token,
-    raceIds: [...activeRaceIdsByUser.get(userId)],
+    raceIds: [...activeRacesByUser.get(userId).keys()],
   }));
   return {
     resolutionSeeds,

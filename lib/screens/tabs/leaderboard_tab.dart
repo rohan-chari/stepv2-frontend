@@ -72,6 +72,7 @@ class LeaderboardTab extends StatefulWidget {
   // shipped app (the internal _myRowKey is used as before); the tutorial passes
   // a key so its overlay can measure the highlighted "you" row.
   final GlobalKey? tutorialMyRowKey;
+  final bool reserveShellFooter;
 
   /// SharedPreferences key holding the last Friends/Global choice, so it
   /// survives the PageView disposing this tab and survives app restarts.
@@ -92,6 +93,7 @@ class LeaderboardTab extends StatefulWidget {
     this.selectionNonce = 0,
     this.onOpenProfile,
     this.tutorialMyRowKey,
+    this.reserveShellFooter = true,
   });
 
   @override
@@ -221,9 +223,17 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
       }
 
       setState(() {
-        final top100Raw = data['top100'] as List? ?? [];
-        _top100 = top100Raw.cast<Map<String, dynamic>>();
-        _currentUser = data['currentUser'] as Map<String, dynamic>?;
+        final top100Raw = data['top100'];
+        _top100 = top100Raw is List
+            ? top100Raw
+                  .whereType<Map>()
+                  .map(_stringKeyedMap)
+                  .toList(growable: false)
+            : const [];
+        final currentUserRaw = data['currentUser'];
+        _currentUser = currentUserRaw is Map
+            ? _stringKeyedMap(currentUserRaw)
+            : null;
         _leaderboardState = Loadable.success(_top100);
         _isLoading = false;
       });
@@ -260,8 +270,21 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     return '$steps';
   }
 
+  static Map<String, dynamic> _stringKeyedMap(Map raw) => {
+    for (final entry in raw.entries)
+      if (entry.key is String) entry.key as String: entry.value,
+  };
+
+  static int? _safeInt(Object? raw) {
+    if (raw is int) return raw;
+    if (raw is num && raw.isFinite) return raw.toInt();
+    return null;
+  }
+
+  static String? _safeString(Object? raw) => raw is String ? raw : null;
+
   String _displayValue(Map<String, dynamic> entry) {
-    return _formatSteps((entry['totalSteps'] as num?)?.toInt() ?? 0);
+    return _formatSteps(_safeInt(entry['totalSteps']) ?? 0);
   }
 
   Widget _buildValueContent(_LeaderboardRow row) {
@@ -281,7 +304,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   Widget build(BuildContext context) {
     final topInset = MediaQuery.of(context).padding.top;
     final bottomInset = MediaQuery.of(context).padding.bottom;
-    final tabBarHeight = 77.5 + bottomInset;
+    final tabBarHeight = widget.reserveShellFooter ? 77.5 + bottomInset : 0.0;
 
     return Stack(
       children: [
@@ -294,6 +317,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
           ),
         ),
         Padding(
+          key: Key('leaderboard-host-bottom-inset-${tabBarHeight.toInt()}'),
           padding: EdgeInsets.only(top: topInset + 14, bottom: tabBarHeight),
           child: AppRefreshIndicator(
             onRefresh: _loadLeaderboard,
@@ -469,9 +493,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
 
   Widget _buildRankingControls() {
     return DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.of(context).roofLight,
-      ),
+      decoration: BoxDecoration(color: AppColors.of(context).roofLight),
       child: CustomPaint(
         painter: const ArcadeCheckerPainter(drawBottomStripe: false),
         child: Padding(
@@ -544,20 +566,21 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
     for (final entry in _top100) {
       rows.add(
         _LeaderboardRow(
-          rank: entry['rank'] as int?,
-          userId: entry['userId'] as String?,
-          displayName: entry['displayName'] as String? ?? 'Anonymous',
-          profilePhotoUrl: entry['profilePhotoUrl'] as String?,
+          rank: _safeInt(entry['rank']),
+          userId: _safeString(entry['userId']),
+          displayName: _safeString(entry['displayName']) ?? 'Anonymous',
+          profilePhotoUrl: _safeString(entry['profilePhotoUrl']),
           valueLabel: _displayValue(entry),
-          isMe: (entry['userId'] as String?) == widget.authService.userId,
-          firsts: entry['firsts'] as int?,
-          seconds: entry['seconds'] as int?,
-          thirds: entry['thirds'] as int?,
-          equippedAccessories:
-              (entry['equippedAccessories'] as List?)
-                  ?.whereType<Map<String, dynamic>>()
-                  .toList() ??
-              const [],
+          isMe: _safeString(entry['userId']) == widget.authService.userId,
+          firsts: _safeInt(entry['firsts']),
+          seconds: _safeInt(entry['seconds']),
+          thirds: _safeInt(entry['thirds']),
+          equippedAccessories: entry['equippedAccessories'] is List
+              ? (entry['equippedAccessories'] as List)
+                    .whereType<Map>()
+                    .map(_stringKeyedMap)
+                    .toList()
+              : const [],
           animal: animalFromJson(entry['animal']),
         ),
       );
@@ -568,20 +591,21 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   _LeaderboardRow? _buildCurrentUserRow() {
     if (_currentUser == null || _currentUser!['inTop100'] == true) return null;
     return _LeaderboardRow(
-      rank: _currentUser!['rank'] as int?,
+      rank: _safeInt(_currentUser!['rank']),
       userId: widget.authService.userId,
-      displayName: _currentUser!['displayName'] as String? ?? 'Anonymous',
-      profilePhotoUrl: _currentUser!['profilePhotoUrl'] as String?,
+      displayName: _safeString(_currentUser!['displayName']) ?? 'Anonymous',
+      profilePhotoUrl: _safeString(_currentUser!['profilePhotoUrl']),
       valueLabel: _displayValue(_currentUser!),
       isMe: true,
-      firsts: _currentUser!['firsts'] as int?,
-      seconds: _currentUser!['seconds'] as int?,
-      thirds: _currentUser!['thirds'] as int?,
-      equippedAccessories:
-          (_currentUser!['equippedAccessories'] as List?)
-              ?.whereType<Map<String, dynamic>>()
-              .toList() ??
-          const [],
+      firsts: _safeInt(_currentUser!['firsts']),
+      seconds: _safeInt(_currentUser!['seconds']),
+      thirds: _safeInt(_currentUser!['thirds']),
+      equippedAccessories: _currentUser!['equippedAccessories'] is List
+          ? (_currentUser!['equippedAccessories'] as List)
+                .whereType<Map>()
+                .map(_stringKeyedMap)
+                .toList()
+          : const [],
       animal: animalFromJson(_currentUser!['animal']),
     );
   }

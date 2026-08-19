@@ -1,15 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
-import '../widgets/pill_button.dart';
 import '../widgets/retro_card.dart';
 
 enum InboxDestinationRoute {
   home,
+  races,
   dailyReward,
   friends,
+  inbox,
+  profile,
   raceDetail,
   tournamentDetail,
   supportThread,
@@ -35,13 +39,21 @@ class InboxDestination {
     if (raw is! Map) return null;
     final route = raw['route'];
     if (route is! String) return null;
+    final keys = raw.keys;
+    if (keys.any((key) => key is! String)) return null;
     switch (route) {
       case 'home':
         return const InboxDestination._(InboxDestinationRoute.home);
+      case 'races':
+        return const InboxDestination._(InboxDestinationRoute.races);
       case 'dailyReward':
         return const InboxDestination._(InboxDestinationRoute.dailyReward);
       case 'friends':
         return const InboxDestination._(InboxDestinationRoute.friends);
+      case 'inbox':
+        return const InboxDestination._(InboxDestinationRoute.inbox);
+      case 'profile':
+        return const InboxDestination._(InboxDestinationRoute.profile);
       case 'raceDetail':
         final id = raw['raceId'];
         return id is String && id.isNotEmpty
@@ -68,6 +80,8 @@ class InboxDestination {
   }
 }
 
+enum InboxHostMode { standalone, embedded }
+
 /// Recipient-private Inbox v1. It intentionally offers only system alerts and
 /// staff-owned feedback threads—there is no user search, profile lookup, or
 /// player-to-player composer in this surface.
@@ -77,32 +91,142 @@ class InboxScreen extends StatefulWidget {
     required this.authService,
     required this.backendApiService,
     this.onOpenDestination,
+    this.onUnreadCountChanged,
+    this.onUnreadCountDecremented,
+    this.hostMode = InboxHostMode.standalone,
   });
 
   final AuthService authService;
   final BackendApiService backendApiService;
   final ValueChanged<Map<String, dynamic>>? onOpenDestination;
+  final ValueChanged<int>? onUnreadCountChanged;
+  final VoidCallback? onUnreadCountDecremented;
+  final InboxHostMode hostMode;
 
   @override
   State<InboxScreen> createState() => _InboxScreenState();
 }
 
-class _InboxScreenState extends State<InboxScreen> {
+class _InboxScreenState extends State<InboxScreen>
+    with AutomaticKeepAliveClientMixin {
   bool _support = false;
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _rows = const [];
   String? _nextCursor;
   bool _loadingMore = false;
+  String? _userId;
+  String? _authToken;
+  int _loadGeneration = 0;
+  int _unreadFetchGeneration = 0;
+  int _lastAppliedUnreadFetchGeneration = 0;
+  int _unreadMutationGeneration = 0;
+  int _nextAlertReadGeneration = 0;
+  int? _lastKnownUnreadCount;
+  final Map<String, int> _readingAlertGenerations = <String, int>{};
+  int _readBatchGeneration = 0;
+  int _pendingAlertReads = 0;
+  bool _readBatchConcurrent = false;
+  bool _readBatchSawAuthoritativeCount = false;
+
+  @override
+  bool get wantKeepAlive => widget.hostMode == InboxHostMode.embedded;
 
   @override
   void initState() {
     super.initState();
+    _userId = widget.authService.userId;
+    _authToken = widget.authService.authToken;
+    widget.authService.addListener(_handleAuthChanged);
     _load();
   }
 
+  @override
+  void didUpdateWidget(covariant InboxScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.authService == widget.authService) return;
+    oldWidget.authService.removeListener(_handleAuthChanged);
+    widget.authService.addListener(_handleAuthChanged);
+    _handleAuthChanged();
+  }
+
+  @override
+  void dispose() {
+    widget.authService.removeListener(_handleAuthChanged);
+    super.dispose();
+  }
+
+  void _handleAuthChanged() {
+    final nextUserId = widget.authService.userId;
+    final nextAuthToken = widget.authService.authToken;
+    if (nextUserId == _userId && nextAuthToken == _authToken) return;
+    _userId = nextUserId;
+    _authToken = nextAuthToken;
+    _loadGeneration++;
+    _lastAppliedUnreadFetchGeneration = ++_unreadFetchGeneration;
+    _unreadMutationGeneration++;
+    _readingAlertGenerations.clear();
+    _readBatchGeneration++;
+    _pendingAlertReads = 0;
+    _readBatchConcurrent = false;
+    _readBatchSawAuthoritativeCount = false;
+    _lastKnownUnreadCount = null;
+    if (!mounted) return;
+    setState(() {
+      _support = false;
+      _rows = const [];
+      _nextCursor = null;
+    });
+    _load();
+  }
+
+  static int? _nonnegativeInt(Object? value) {
+    if (value is int && value >= 0) return value;
+    if (value is num &&
+        value.isFinite &&
+        value >= 0 &&
+        value == value.round()) {
+      return value.toInt();
+    }
+    return null;
+  }
+
+  void _applyFetchedUnreadResult(
+    Object? rawUnreadCount,
+    int fetchGeneration,
+    int mutationGeneration,
+  ) {
+    if (fetchGeneration < _lastAppliedUnreadFetchGeneration ||
+        mutationGeneration != _unreadMutationGeneration) {
+      return;
+    }
+    final unread = _nonnegativeInt(rawUnreadCount);
+    if (unread != null) {
+      _lastAppliedUnreadFetchGeneration = fetchGeneration;
+      _lastKnownUnreadCount = unread;
+      widget.onUnreadCountChanged?.call(unread);
+    }
+  }
+
+  void _applySingleReadAuthoritativeCount(int unread) {
+    _lastKnownUnreadCount = unread;
+    widget.onUnreadCountChanged?.call(unread);
+  }
+
+  void _applyLegacyReadDecrement() {
+    final previous = _lastKnownUnreadCount;
+    if (previous != null && previous > 0) {
+      _lastKnownUnreadCount = previous - 1;
+    }
+    widget.onUnreadCountDecremented?.call();
+  }
+
   Future<void> _load() async {
+    final generation = ++_loadGeneration;
     final token = widget.authService.authToken;
+    final support = _support;
+    final unreadFetchGeneration = support ? null : ++_unreadFetchGeneration;
+    final unreadMutationGeneration = _unreadMutationGeneration;
     if (token == null || token.isEmpty) {
       setState(() {
         _loading = false;
@@ -112,22 +236,26 @@ class _InboxScreenState extends State<InboxScreen> {
     }
     setState(() {
       _loading = true;
+      _loadingMore = false;
       _error = null;
     });
     try {
-      final payload = _support
+      final payload = support
           ? await widget.backendApiService.fetchFeedbackThreads(
               identityToken: token,
             )
           : await widget.backendApiService.fetchInboxAlerts(
               identityToken: token,
             );
-      final raw = payload[_support ? 'threads' : 'alerts'];
+      if (!mounted ||
+          generation != _loadGeneration ||
+          support != _support ||
+          token != widget.authService.authToken) {
+        return;
+      }
+      final raw = payload[support ? 'threads' : 'alerts'];
       final rows = raw is List
-          ? raw
-                .whereType<Map>()
-                .map((row) => Map<String, dynamic>.from(row))
-                .toList()
+          ? raw.whereType<Map>().map(_stringKeyedMap).toList()
           : <Map<String, dynamic>>[];
       if (mounted) {
         setState(() {
@@ -137,12 +265,22 @@ class _InboxScreenState extends State<InboxScreen> {
               : null;
           _loading = false;
         });
+        if (unreadFetchGeneration != null) {
+          _applyFetchedUnreadResult(
+            _combinedUnreadCount(payload),
+            unreadFetchGeneration,
+            unreadMutationGeneration,
+          );
+        }
       }
     } catch (_) {
-      if (mounted) {
+      if (mounted &&
+          generation == _loadGeneration &&
+          support == _support &&
+          token == widget.authService.authToken) {
         setState(() {
           _loading = false;
-          _error = _support
+          _error = support
               ? 'Couldn’t load support messages.'
               : 'Couldn’t load alerts.';
         });
@@ -156,9 +294,12 @@ class _InboxScreenState extends State<InboxScreen> {
     if (_loadingMore || cursor == null || token == null || token.isEmpty) {
       return;
     }
+    final support = _support;
+    final unreadFetchGeneration = support ? null : ++_unreadFetchGeneration;
+    final unreadMutationGeneration = _unreadMutationGeneration;
     setState(() => _loadingMore = true);
     try {
-      final payload = _support
+      final payload = support
           ? await widget.backendApiService.fetchFeedbackThreads(
               identityToken: token,
               cursor: cursor,
@@ -167,12 +308,15 @@ class _InboxScreenState extends State<InboxScreen> {
               identityToken: token,
               cursor: cursor,
             );
-      final raw = payload[_support ? 'threads' : 'alerts'];
+      if (!mounted ||
+          support != _support ||
+          token != widget.authService.authToken ||
+          cursor != _nextCursor) {
+        return;
+      }
+      final raw = payload[support ? 'threads' : 'alerts'];
       final incoming = raw is List
-          ? raw
-                .whereType<Map>()
-                .map((row) => Map<String, dynamic>.from(row))
-                .toList()
+          ? raw.whereType<Map>().map(_stringKeyedMap).toList()
           : <Map<String, dynamic>>[];
       if (mounted) {
         setState(() {
@@ -182,9 +326,19 @@ class _InboxScreenState extends State<InboxScreen> {
               : null;
           _loadingMore = false;
         });
+        if (unreadFetchGeneration != null) {
+          _applyFetchedUnreadResult(
+            _combinedUnreadCount(payload),
+            unreadFetchGeneration,
+            unreadMutationGeneration,
+          );
+        }
       }
     } catch (_) {
-      if (mounted) {
+      if (mounted &&
+          support == _support &&
+          token == widget.authService.authToken &&
+          cursor == _nextCursor) {
         setState(() => _loadingMore = false);
       }
     }
@@ -193,83 +347,203 @@ class _InboxScreenState extends State<InboxScreen> {
   Future<void> _openAlert(Map<String, dynamic> alert) async {
     final token = widget.authService.authToken;
     final id = alert['id'];
-    if (token != null && token.isNotEmpty && id is String && id.isNotEmpty) {
-      try {
-        await widget.backendApiService.markInboxAlertRead(
-          identityToken: token,
-          alertId: id,
-        );
-      } catch (_) {}
+    final locallyUnread = alert['readAt'] == null;
+    if (!locallyUnread) {
+      _openDestination(alert['destination']);
+      return;
     }
-    final destination = alert['destination'];
-    if (!mounted || destination is! Map) return;
-    widget.onOpenDestination?.call(Map<String, dynamic>.from(destination));
+    if (token == null ||
+        token.isEmpty ||
+        id is! String ||
+        id.isEmpty ||
+        _readingAlertGenerations.containsKey(id)) {
+      return;
+    }
+    final userId = widget.authService.userId;
+    if (_pendingAlertReads == 0) {
+      _readBatchGeneration++;
+      _readBatchConcurrent = false;
+      _readBatchSawAuthoritativeCount = false;
+    } else {
+      _readBatchConcurrent = true;
+    }
+    final readBatchGeneration = _readBatchGeneration;
+    _pendingAlertReads++;
+    final readGeneration = ++_nextAlertReadGeneration;
+    // A GET begun before this mutation cannot describe the post-read total.
+    _unreadMutationGeneration++;
+    _readingAlertGenerations[id] = readGeneration;
+    var readSucceeded = false;
+    Map<String, dynamic>? readPayload;
+    try {
+      readPayload = await widget.backendApiService.markInboxAlertRead(
+        identityToken: token,
+        alertId: id,
+      );
+      readSucceeded = readPayload['read'] == true;
+    } catch (_) {}
+    final ownsRead =
+        _readingAlertGenerations[id] == readGeneration &&
+        readBatchGeneration == _readBatchGeneration;
+    if (!ownsRead ||
+        !mounted ||
+        token != widget.authService.authToken ||
+        userId != widget.authService.userId) {
+      return;
+    }
+    _readingAlertGenerations.remove(id);
+    _pendingAlertReads--;
+    if (readSucceeded) {
+      final hasAuthoritativeUnreadCount =
+          readPayload?.containsKey('totalUnreadCount') == true ||
+          readPayload?.containsKey('unreadCount') == true;
+      final authoritativeUnread = readPayload == null
+          ? null
+          : _combinedUnreadCount(readPayload);
+      if (!hasAuthoritativeUnreadCount) {
+        _applyLegacyReadDecrement();
+      } else {
+        _readBatchSawAuthoritativeCount = true;
+        if (authoritativeUnread != null &&
+            !_readBatchConcurrent &&
+            _pendingAlertReads == 0) {
+          _applySingleReadAuthoritativeCount(authoritativeUnread);
+        }
+      }
+      setState(() => alert['readAt'] = DateTime.now().toIso8601String());
+    }
+    final reconcileConcurrentAuthoritativeReads =
+        _pendingAlertReads == 0 &&
+        _readBatchConcurrent &&
+        _readBatchSawAuthoritativeCount;
+    if (_pendingAlertReads == 0) {
+      _readBatchConcurrent = false;
+      _readBatchSawAuthoritativeCount = false;
+    }
+    if (reconcileConcurrentAuthoritativeReads) {
+      unawaited(_refreshUnreadCount());
+    }
+    _openDestination(alert['destination']);
   }
+
+  void _openDestination(Object? rawDestination) {
+    if (!mounted ||
+        rawDestination is! Map ||
+        InboxDestination.tryParse(rawDestination) == null) {
+      return;
+    }
+    widget.onOpenDestination?.call(_stringKeyedMap(rawDestination));
+  }
+
+  Future<void> _refreshUnreadCount() async {
+    final token = widget.authService.authToken;
+    final userId = widget.authService.userId;
+    if (token == null || token.isEmpty) return;
+    final fetchGeneration = ++_unreadFetchGeneration;
+    final mutationGeneration = _unreadMutationGeneration;
+    try {
+      final payload = await widget.backendApiService.fetchInboxAlerts(
+        identityToken: token,
+        limit: 1,
+      );
+      if (!mounted ||
+          token != widget.authService.authToken ||
+          userId != widget.authService.userId) {
+        return;
+      }
+      _applyFetchedUnreadResult(
+        _combinedUnreadCount(payload),
+        fetchGeneration,
+        mutationGeneration,
+      );
+    } catch (_) {
+      // Keep the last shell badge when an older backend/network cannot refresh.
+    }
+  }
+
+  static Map<String, dynamic> _stringKeyedMap(Map raw) => {
+    for (final entry in raw.entries)
+      if (entry.key is String) entry.key as String: entry.value,
+  };
+
+  // New backends preserve alert-only `unreadCount` for frozen clients and add
+  // the combined alerts+support badge as `totalUnreadCount`. Older backends
+  // expose only `unreadCount`, so fall back defensively when the additive key
+  // is absent or malformed.
+  static int? _combinedUnreadCount(Map<String, dynamic> payload) =>
+      _nonnegativeInt(payload['totalUnreadCount']) ??
+      _nonnegativeInt(payload['unreadCount']);
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
+    final embedded = widget.hostMode == InboxHostMode.embedded;
+    final bottomPadding = embedded
+        ? 77.5 + MediaQuery.of(context).padding.bottom
+        : 0.0;
     return Scaffold(
-      backgroundColor: AppColors.of(context).roofLight,
-      appBar: AppBar(
-        title: Text(
-          'INBOX',
-          style: PixelText.title(
-            size: 18,
-            color: AppColors.of(context).textLight,
-          ),
-        ),
-        backgroundColor: AppColors.of(context).roofLight,
-        foregroundColor: AppColors.of(context).textLight,
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: PillButton(
-                    label: 'ALERTS',
-                    variant: !_support
-                        ? PillButtonVariant.primary
-                        : PillButtonVariant.secondary,
-                    onPressed: _support
-                        ? () {
-                            setState(() => _support = false);
-                            _load();
-                          }
-                        : null,
-                  ),
+      backgroundColor: AppColors.of(context).parchment,
+      appBar: embedded
+          ? null
+          : AppBar(
+              title: Text(
+                'INBOX',
+                style: PixelText.title(
+                  size: 18,
+                  color: AppColors.of(context).textLight,
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: PillButton(
-                    label: 'SUPPORT',
-                    variant: _support
-                        ? PillButtonVariant.primary
-                        : PillButtonVariant.secondary,
-                    onPressed: !_support
-                        ? () {
-                            setState(() => _support = true);
-                            _load();
-                          }
-                        : null,
-                  ),
-                ),
-              ],
+              ),
+              backgroundColor: AppColors.of(context).roofDark,
+              foregroundColor: AppColors.of(context).textLight,
             ),
-          ),
-          Expanded(child: _body(context)),
-        ],
+      body: Padding(
+        padding: EdgeInsets.only(bottom: bottomPadding),
+        child: Column(
+          children: [
+            if (embedded) _embeddedHeader(context),
+            _InboxSegmentedSelector(
+              supportSelected: _support,
+              onAlerts: () => _selectSupport(false),
+              onSupport: () => _selectSupport(true),
+            ),
+            Expanded(
+              child: ColoredBox(
+                color: AppColors.of(context).parchment,
+                child: _body(context),
+              ),
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  Widget _embeddedHeader(BuildContext context) => Container(
+    width: double.infinity,
+    color: AppColors.of(context).roofDark,
+    padding: EdgeInsets.fromLTRB(
+      16,
+      MediaQuery.of(context).padding.top + 14,
+      16,
+      12,
+    ),
+    child: Text(
+      'INBOX',
+      style: PixelText.title(size: 28, color: AppColors.of(context).textLight),
+    ),
+  );
+
+  void _selectSupport(bool support) {
+    if (_support == support) return;
+    setState(() => _support = support);
+    _load();
   }
 
   Widget _body(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null) {
       return Center(
-        child: PillButton(label: 'TRY AGAIN', onPressed: _load),
+        child: _InboxActionButton(label: 'TRY AGAIN', onPressed: _load),
       );
     }
     if (_rows.isEmpty) {
@@ -290,7 +564,7 @@ class _InboxScreenState extends State<InboxScreen> {
       itemBuilder: (context, index) {
         if (index == _rows.length) {
           return Center(
-            child: PillButton(
+            child: _InboxActionButton(
               label: _loadingMore ? 'LOADING…' : 'LOAD MORE',
               onPressed: _loadingMore ? null : _loadMore,
             ),
@@ -320,6 +594,7 @@ class _InboxScreenState extends State<InboxScreen> {
                         authService: widget.authService,
                         backendApiService: widget.backendApiService,
                         threadId: id,
+                        onThreadRead: _refreshUnreadCount,
                       ),
                     ),
                   );
@@ -358,6 +633,152 @@ class _InboxScreenState extends State<InboxScreen> {
   }
 }
 
+class _InboxSegmentedSelector extends StatelessWidget {
+  const _InboxSegmentedSelector({
+    required this.supportSelected,
+    required this.onAlerts,
+    required this.onSupport,
+  });
+
+  final bool supportSelected;
+  final VoidCallback onAlerts;
+  final VoidCallback onSupport;
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+    color: AppColors.of(context).roofDark,
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: _InboxSegment(
+              key: const Key('inbox-segment-alerts'),
+              label: 'ALERTS',
+              selected: !supportSelected,
+              onTap: onAlerts,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _InboxSegment(
+              key: const Key('inbox-segment-support'),
+              label: 'SUPPORT',
+              selected: supportSelected,
+              onTap: onSupport,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _InboxSegment extends StatelessWidget {
+  const _InboxSegment({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Semantics(
+      excludeSemantics: true,
+      selected: selected,
+      button: true,
+      label: label == 'ALERTS' ? 'Alerts' : 'Support',
+      onTap: onTap,
+      child: Material(
+        color: selected ? colors.roofDark : colors.parchmentLight,
+        borderRadius: BorderRadius.circular(9),
+        child: InkWell(
+          onTap: onTap,
+          excludeFromSemantics: true,
+          borderRadius: BorderRadius.circular(9),
+          focusColor: colors.coinLight.withValues(alpha: 0.26),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 48),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(
+                color: selected ? colors.coinLight : colors.parchmentBorder,
+                width: 2,
+              ),
+            ),
+            child: Text(
+              label,
+              maxLines: 1,
+              style: PixelText.title(
+                size: 13,
+                color: selected ? colors.textLight : colors.textDark,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _InboxActionButton extends StatelessWidget {
+  const _InboxActionButton({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final enabled = onPressed != null;
+    return Semantics(
+      excludeSemantics: true,
+      button: true,
+      enabled: enabled,
+      label: label,
+      onTap: onPressed,
+      child: Material(
+        color: enabled ? colors.roofDark : colors.parchmentDark,
+        borderRadius: BorderRadius.circular(9),
+        child: InkWell(
+          onTap: onPressed,
+          excludeFromSemantics: true,
+          borderRadius: BorderRadius.circular(9),
+          focusColor: colors.coinLight.withValues(alpha: 0.28),
+          highlightColor: colors.accent,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 48, minWidth: 112),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(
+                color: enabled ? colors.coinLight : colors.parchmentBorder,
+                width: 2,
+              ),
+            ),
+            child: Text(
+              label,
+              maxLines: 1,
+              style: PixelText.title(
+                size: 12,
+                color: enabled ? colors.textLight : colors.textMid,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// The user side of a staff-only support conversation. All sender identity is
 /// fixed by the endpoint; the UI never transmits a role or recipient id.
 class SupportThreadScreen extends StatefulWidget {
@@ -367,12 +788,14 @@ class SupportThreadScreen extends StatefulWidget {
     required this.backendApiService,
     required this.threadId,
     this.admin = false,
+    this.onThreadRead,
   });
 
   final AuthService authService;
   final BackendApiService backendApiService;
   final String threadId;
   final bool admin;
+  final VoidCallback? onThreadRead;
 
   @override
   State<SupportThreadScreen> createState() => _SupportThreadScreenState();
@@ -385,6 +808,7 @@ class _SupportThreadScreenState extends State<SupportThreadScreen> {
   bool _loading = true;
   bool _sending = false;
   String? _error;
+  bool _reportedThreadRead = false;
 
   @override
   void initState() {
@@ -400,6 +824,7 @@ class _SupportThreadScreenState extends State<SupportThreadScreen> {
 
   Future<void> _load({bool older = false}) async {
     final token = widget.authService.authToken;
+    final userId = widget.authService.userId;
     if (token == null || token.isEmpty) {
       return;
     }
@@ -428,7 +853,9 @@ class _SupportThreadScreenState extends State<SupportThreadScreen> {
                 .map((row) => Map<String, dynamic>.from(row))
                 .toList()
           : <Map<String, dynamic>>[];
-      if (mounted) {
+      if (mounted &&
+          token == widget.authService.authToken &&
+          userId == widget.authService.userId) {
         setState(() {
           _messages = older ? [...parsed, ..._messages] : parsed;
           _nextBefore = payload['nextBefore'] is String
@@ -436,6 +863,13 @@ class _SupportThreadScreenState extends State<SupportThreadScreen> {
               : null;
           _loading = false;
         });
+        if (!older &&
+            !widget.admin &&
+            !_reportedThreadRead &&
+            token == widget.authService.authToken) {
+          _reportedThreadRead = true;
+          widget.onThreadRead?.call();
+        }
       }
     } catch (_) {
       if (mounted) {
@@ -510,7 +944,7 @@ class _SupportThreadScreenState extends State<SupportThreadScreen> {
         if (_nextBefore != null)
           Padding(
             padding: const EdgeInsets.all(8),
-            child: PillButton(
+            child: _InboxActionButton(
               label: 'LOAD OLDER',
               onPressed: () => _load(older: true),
             ),
@@ -520,7 +954,10 @@ class _SupportThreadScreenState extends State<SupportThreadScreen> {
               ? const Center(child: CircularProgressIndicator())
               : _error != null && _messages.isEmpty
               ? Center(
-                  child: PillButton(label: 'TRY AGAIN', onPressed: _load),
+                  child: _InboxActionButton(
+                    label: 'TRY AGAIN',
+                    onPressed: _load,
+                  ),
                 )
               : ListView.builder(
                   padding: const EdgeInsets.all(12),
@@ -575,11 +1012,10 @@ class _SupportThreadScreenState extends State<SupportThreadScreen> {
                     ),
                   ),
                 ),
-                IconButton(
+                const SizedBox(width: 8),
+                _InboxActionButton(
+                  label: _sending ? 'SENDING…' : 'SEND',
                   onPressed: _sending ? null : _send,
-                  icon: _sending
-                      ? const CircularProgressIndicator()
-                      : const Icon(Icons.send_rounded),
                 ),
               ],
             ),

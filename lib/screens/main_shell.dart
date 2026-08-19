@@ -67,11 +67,11 @@ import '../tutorial/tutorial_gate.dart';
 import '../tutorial/tutorial_screen.dart';
 import 'tabs/friends_tab.dart';
 import 'tabs/home_tab.dart';
-import 'tabs/leaderboard_tab.dart';
 import 'tabs/profile_tab.dart';
 import 'create_race_screen.dart';
 import 'daily_reward_screen.dart';
 import 'inbox_screen.dart';
+import 'leaderboard_screen.dart';
 import 'race_detail_screen.dart';
 import 'public_races_screen.dart';
 import 'tournament_detail_screen.dart';
@@ -111,7 +111,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   static const _homeTabIndex = 0;
   static const _racesTabIndex = 1;
   static const _friendsTabIndex = 2;
-  static const _boardsTabIndex = 3;
+  static const _inboxTabIndex = 3;
   static const _profileTabIndex = 4;
 
   late final HealthService _healthService;
@@ -166,6 +166,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   String? _error;
   StepData? _stepData;
   int _incomingFriendRequests = 0;
+  int? _inboxUnreadCount;
+  bool _hasInboxUnreadSnapshot = false;
   String? _displayName;
   String? _email;
   List<Map<String, dynamic>> _friendsSteps = [];
@@ -188,6 +190,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   Loadable<Map<String, dynamic>> _shopCatalogState = const Loadable.initial();
   Map<String, dynamic>? _raceCard;
   bool _raceCardLoading = true;
+  int _raceCardGeneration = 0;
+  String? _raceCardAuthToken;
+  int _inboxRefreshGeneration = 0;
   bool _homePresentationResolved = false;
   bool _homeFriendsResolved = false;
   bool _skipNextMeRefresh = false;
@@ -195,9 +200,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   String? _homeSuggestionsUserId;
   final Set<String> _joiningHomeSuggestionKeys = {};
   bool _homeSuggestionsImpressionRecorded = false;
-  final String _requestedLeaderboardType = 'steps';
-  final String _requestedLeaderboardPeriod = 'today';
-  int _leaderboardSelectionNonce = 0;
   Timer? _foregroundPollTimer;
   final GlobalKey<StreakChipState> _streakChipKey =
       GlobalKey<StreakChipState>();
@@ -640,16 +642,37 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   void _handleAuthServiceChanged() {
     if (!mounted) return;
     final nextUserId = widget.authService.userId;
+    final nextToken = widget.authService.authToken;
     final userChanged = _homeSuggestionsUserId != nextUserId;
+    final tokenChanged = _raceCardAuthToken != nextToken;
     setState(() {
       _homeSuggestionsUserId = nextUserId;
       _homeSuggestions.setUser(nextUserId);
+      _raceCardAuthToken = nextToken;
+      if (userChanged || tokenChanged) {
+        _raceCardGeneration++;
+      }
+      if (userChanged) {
+        _inboxRefreshGeneration++;
+        _inboxUnreadCount = null;
+        _hasInboxUnreadSnapshot = false;
+        _raceCard = null;
+        _raceCardLoading = nextToken != null && nextToken.isNotEmpty;
+        _homePresentationResolved = false;
+        _homeFriendsResolved = false;
+      }
     });
     // A cold-start suggestions request can begin before /me establishes the
     // backend user id. setUser intentionally invalidates that response so it
     // cannot cross accounts; immediately replace it for the newly known user.
     if (userChanged && nextUserId != null) {
       unawaited(_refreshHomeSuggestions());
+    }
+    if ((userChanged || tokenChanged) &&
+        nextUserId != null &&
+        nextToken != null &&
+        nextToken.isNotEmpty) {
+      unawaited(_fetchRaceCard());
     }
     // A share token may have just been captured (link tapped while running) or
     // the final onboarding step may have just completed — either way, try to
@@ -683,6 +706,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         widget.raceResultsAcknowledgementQueue ??
         RaceResultsAcknowledgementQueue(backendApiService: _backendApiService);
     _homeSuggestionsUserId = widget.authService.userId;
+    _raceCardAuthToken = widget.authService.authToken;
     _homeSuggestions.setUser(_homeSuggestionsUserId);
     _pageController = PageController();
     WidgetsBinding.instance.addObserver(this);
@@ -713,6 +737,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     if (oldWidget.authService == widget.authService) return;
     oldWidget.authService.removeListener(_handleAuthServiceChanged);
     widget.authService.addListener(_handleAuthServiceChanged);
+    _handleAuthServiceChanged();
   }
 
   @override
@@ -2309,7 +2334,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
 
     if (unseen.isEmpty) return;
-
     // Sequence after the daily-reward popup: that modal opens on tap and lives
     // on a route above this shell, so if anything is already on top of us, hold
     // off — the next resume/load will re-detect and show then.
@@ -2854,6 +2878,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   Future<void> _fetchRaceCard({bool usePersistedTotals = false}) async {
     final identityToken = widget.authService.authToken;
+    final userId = widget.authService.userId;
+    final generation = ++_raceCardGeneration;
     if (identityToken == null || identityToken.isEmpty) {
       if (mounted) setState(() => _raceCardLoading = false);
       return;
@@ -2866,6 +2892,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         identityToken: identityToken,
         usePersistedTotals: usePersistedTotals,
       );
+      if (!mounted ||
+          generation != _raceCardGeneration ||
+          identityToken != widget.authService.authToken ||
+          userId != widget.authService.userId) {
+        return;
+      }
       _homePresentationResolved = false;
       _homeFriendsResolved = false;
       if (data['contract'] == 'home-shell-v1') {
@@ -2932,6 +2964,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         setState(() {
           _raceCard = data;
           _raceCardLoading = false;
+          final unread = _validUnreadCount(data['inboxUnreadCount']);
+          if (unread != null && !_hasInboxUnreadSnapshot) {
+            _inboxUnreadCount = unread;
+          }
         });
         unawaited(_showGlobalEventSummaryIfEligible(data));
         final next = NextRaceState.tryParse(data['nextRace']);
@@ -2959,7 +2995,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       }
     } catch (_) {
       // Card is non-critical; ignore fetch errors and keep last value.
-      if (mounted) {
+      if (mounted &&
+          generation == _raceCardGeneration &&
+          identityToken == widget.authService.authToken &&
+          userId == widget.authService.userId) {
         setState(() => _raceCardLoading = false);
       }
     }
@@ -3053,17 +3092,17 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
   }
 
-  void _openInbox() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => InboxScreen(
-          authService: widget.authService,
-          backendApiService: _backendApiService,
-          onOpenDestination: _openInboxDestination,
-        ),
-      ),
-    );
+  static int? _validUnreadCount(Object? raw) {
+    if (raw is int && raw >= 0) return raw;
+    if (raw is num && raw.isFinite && raw >= 0 && raw == raw.round()) {
+      return raw.toInt();
+    }
+    return null;
   }
+
+  static int? _combinedInboxUnreadCount(Map<String, dynamic> payload) =>
+      _validUnreadCount(payload['totalUnreadCount']) ??
+      _validUnreadCount(payload['unreadCount']);
 
   /// Inbox destinations are backend-allowlisted opaque route payloads. Do not
   /// accept arbitrary route names/arguments from alert text; malformed or old
@@ -3074,49 +3113,88 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     final navigator = Navigator.of(context);
     switch (destinationModel.route) {
       case InboxDestinationRoute.home:
-        navigator.pop();
         _pageController.animateToPage(
           _homeTabIndex,
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeOutCubic,
         );
+      case InboxDestinationRoute.races:
+        _openRacesTab();
       case InboxDestinationRoute.friends:
-        navigator.pop();
         _openFriendsTab();
-      case InboxDestinationRoute.dailyReward:
-        navigator.pop();
-        navigator.push(
-          MaterialPageRoute(
-            builder: (_) => DailyRewardScreen(
-              authService: widget.authService,
-              backendApiService: _backendApiService,
-            ),
-          ),
+      case InboxDestinationRoute.inbox:
+        _pageController.animateToPage(
+          _inboxTabIndex,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
         );
+      case InboxDestinationRoute.profile:
+        _openProfile();
+      case InboxDestinationRoute.dailyReward:
+        _openDailyReward();
       case InboxDestinationRoute.raceDetail:
         final raceId = destinationModel.raceId;
         if (raceId == null) return;
-        navigator.pop();
         _openRaceFromCard(raceId);
       case InboxDestinationRoute.tournamentDetail:
         final tournamentId = destinationModel.tournamentId;
         if (tournamentId == null) return;
-        navigator.pop();
         _openTournament(tournamentId);
       case InboxDestinationRoute.supportThread:
         final threadId = destinationModel.threadId;
         if (threadId == null) return;
-        navigator.pop();
         navigator.push(
           MaterialPageRoute(
             builder: (_) => SupportThreadScreen(
               authService: widget.authService,
               backendApiService: _backendApiService,
               threadId: threadId,
+              onThreadRead: _refreshInboxUnreadCount,
             ),
           ),
         );
     }
+  }
+
+  void _setInboxUnreadCount(int count) {
+    if (!mounted || count < 0) return;
+    if (_inboxUnreadCount == count && _hasInboxUnreadSnapshot) return;
+    setState(() {
+      _inboxUnreadCount = count;
+      _hasInboxUnreadSnapshot = true;
+    });
+  }
+
+  Future<void> _refreshInboxUnreadCount() async {
+    final token = widget.authService.authToken;
+    final userId = widget.authService.userId;
+    if (token == null || token.isEmpty) return;
+    final generation = ++_inboxRefreshGeneration;
+    try {
+      final payload = await _backendApiService.fetchInboxAlerts(
+        identityToken: token,
+        limit: 1,
+      );
+      if (!mounted ||
+          generation != _inboxRefreshGeneration ||
+          token != widget.authService.authToken ||
+          userId != widget.authService.userId) {
+        return;
+      }
+      final unread = _combinedInboxUnreadCount(payload);
+      if (unread != null) _setInboxUnreadCount(unread);
+    } catch (_) {
+      // Keep the prior combined badge when refresh is unavailable.
+    }
+  }
+
+  void _decrementInboxUnreadCount() {
+    final current = _inboxUnreadCount;
+    if (!mounted || current == null || current <= 0) return;
+    setState(() {
+      _inboxUnreadCount = current - 1;
+      _hasInboxUnreadSnapshot = true;
+    });
   }
 
   void _openRaceFromCard(String raceId) {
@@ -3283,9 +3361,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   /// Finds the id of the currently ACTIVE featured Daily (`DAILY_10K`) race, or
   /// null when the backend returns none (older backend / seeding gap). The
-  /// featured payload exposes the race id as `raceId` and the stable seed
-  /// identity as `seedKind`. Best-effort: any error yields null so the caller
-  /// falls back to Home.
+  /// featured payload normally exposes the race id as `raceId` (some compatible
+  /// serializers use `id`) and the stable seed identity as `seedKind`.
+  /// Best-effort: any error yields null so the caller can use its safe fallback.
   Future<String?> _fetchActiveDailyRaceId() async {
     final identityToken = widget.authService.authToken;
     if (identityToken == null || identityToken.isEmpty) return null;
@@ -3294,10 +3372,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         identityToken: identityToken,
       );
       for (final race in featured) {
-        if (race['seedKind'] == 'DAILY_10K') {
-          final raceId = race['raceId'] as String?;
-          if (raceId != null && raceId.isNotEmpty) return raceId;
-        }
+        if (race['seedKind'] != 'DAILY_10K') continue;
+        final status = race['status'];
+        if (status != null && status != 'ACTIVE') continue;
+        final rawRaceId = race['raceId'] ?? race['id'];
+        if (rawRaceId is String && rawRaceId.isNotEmpty) return rawRaceId;
       }
       return null;
     } catch (_) {
@@ -3395,10 +3474,26 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   Future<void> _finishOnboardingAndFindRace() async {
+    // The intro can fall back to "Find a Race" when its stricter enrollment
+    // check cannot prove ACCEPTED. Retry the looser Daily lookup here so the
+    // CTA still lands on the Daily whenever that race is available.
+    final dailyRaceId = await _fetchActiveDailyRaceId();
     await _skipFirstRaceOnboarding();
     if (!mounted) return;
-    _pageController.jumpToPage(_racesTabIndex);
-    showInfoToast(context, 'Choose a race to start walking.');
+    unawaited(_fetchRaces());
+    if (dailyRaceId != null && dailyRaceId.isNotEmpty) {
+      unawaited(_activationAnalytics.record('daily_opened'));
+      _openRaceFromCard(dailyRaceId);
+      return;
+    }
+
+    // Marking onboarding complete rebuilds the PageView. Wait until that frame
+    // attaches the controller before selecting the general fallback tab.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_pageController.hasClients) return;
+      _pageController.jumpToPage(_racesTabIndex);
+      showInfoToast(context, 'Choose a race to start walking.');
+    });
   }
 
   /// Skips the first-race onboarding step: marks it seen on the backend
@@ -3598,10 +3693,15 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   void _openLeaderboardTab() {
-    _pageController.animateToPage(
-      _boardsTabIndex,
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOutCubic,
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => StandaloneLeaderboardScreen(
+          authService: widget.authService,
+          backendApiService: _backendApiService,
+          stepData: _stepData,
+          displayName: _displayName,
+        ),
+      ),
     );
   }
 
@@ -3831,12 +3931,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   Future<void> _refreshProfileSurfaces() async {
     await Future.wait([_refreshMe(), _fetchFriendsSteps(), _fetchRaces()]);
-
-    if (mounted) {
-      setState(() {
-        _leaderboardSelectionNonce += 1;
-      });
-    }
   }
 
   void _syncSettingsState() {
@@ -4039,7 +4133,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                           onStartQuickRace: () {
                             unawaited(_showQuickCreateRaceSheet());
                           },
-                          onOpenInbox: _openInbox,
                           suppressPendingInvite: _homeInvitePopupOpen,
                         ),
                         RacesTab(
@@ -4092,15 +4185,13 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                           displayName: _displayName,
                           onOpenProfile: _openProfile,
                         ),
-                        LeaderboardTab(
+                        InboxScreen(
+                          hostMode: InboxHostMode.embedded,
                           authService: widget.authService,
                           backendApiService: _backendApiService,
-                          stepData: _stepData,
-                          displayName: _displayName,
-                          requestedType: _requestedLeaderboardType,
-                          requestedPeriod: _requestedLeaderboardPeriod,
-                          selectionNonce: _leaderboardSelectionNonce,
-                          onOpenProfile: _openProfile,
+                          onOpenDestination: _openInboxDestination,
+                          onUnreadCountChanged: _setInboxUnreadCount,
+                          onUnreadCountDecremented: _decrementInboxUnreadCount,
                         ),
                         ProfileTab(
                           authService: widget.authService,
@@ -4190,9 +4281,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     label: 'Friends',
                     badgeCount: _incomingFriendRequests,
                   ),
-                  const WoodenTabItem(
-                    icon: Icons.leaderboard_rounded,
-                    label: 'Boards',
+                  WoodenTabItem(
+                    icon: Icons.inbox_rounded,
+                    label: 'Inbox',
+                    badgeCount: _inboxUnreadCount ?? 0,
                   ),
                   const WoodenTabItem(
                     icon: Icons.person_rounded,

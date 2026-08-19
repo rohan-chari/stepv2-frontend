@@ -408,6 +408,12 @@ and external AdMob/network-console setup.
 
 ### 4.15 Round race payouts up to 0 or 5
 
+> **Superseded in part — 2026-08-18:** payout rounding remains unchanged, but
+> the uncapped rewarded-double rule below is revoked. Rewarded doubles are
+> capped by the backend at `min(baseCoins, 100, rolling24hRemaining)` with a
+> 100-coin rolling allowance. Both offer preparation and claim issuance enforce
+> the ceiling, including legacy persisted offers.
+
 - **Rule:** apply this only to a positive, final, per-recipient race payout:
   `roundUpToFive(amount) = max(5, ceil(amount / 5) × 5)`. Zero remains zero.
   It is applied exactly once, after the existing canonical payout split has

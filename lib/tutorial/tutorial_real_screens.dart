@@ -4,7 +4,6 @@ import '../models/loadable.dart';
 import '../widgets/wooden_tab_bar.dart';
 import '../screens/tabs/home_tab.dart';
 import '../screens/tabs/races_tab.dart';
-import '../screens/tabs/leaderboard_tab.dart';
 import '../screens/tabs/profile_tab.dart';
 import '../screens/tabs/friends_tab.dart';
 import '../screens/race_detail_screen.dart';
@@ -37,7 +36,6 @@ class TutorialRealHost extends StatelessWidget {
     TutorialMockPage.home => 0,
     TutorialMockPage.races => 1,
     TutorialMockPage.friends => 2,
-    TutorialMockPage.leaderboard => 3,
     TutorialMockPage.profile => 4,
     // Race detail is a pushed screen in the real app — no bottom bar.
     TutorialMockPage.raceDetail => null,
@@ -78,10 +76,7 @@ class TutorialRealHost extends StatelessWidget {
                     label: 'Races',
                   ),
                   WoodenTabItem(icon: Icons.people_rounded, label: 'Friends'),
-                  WoodenTabItem(
-                    icon: Icons.leaderboard_rounded,
-                    label: 'Boards',
-                  ),
+                  WoodenTabItem(icon: Icons.inbox_rounded, label: 'Inbox'),
                   WoodenTabItem(icon: Icons.person_rounded, label: 'Profile'),
                 ],
               ),
@@ -119,6 +114,9 @@ class TutorialRealHost extends StatelessWidget {
           tutorialMilestonesKey: keys['home.milestones'],
           tutorialShopKey: keys['home.shop'],
           tutorialFriendsKey: keys['home.friends'],
+          // The shared ticket stays visible, but a preview tap must not escape
+          // the tutorial route.
+          onOpenLeaderboardTab: () {},
         );
       case TutorialMockPage.races:
         return RacesTab(
@@ -151,13 +149,6 @@ class TutorialRealHost extends StatelessWidget {
           email: null,
           onSettingsChanged: () {},
           showBackButton: false,
-        );
-      case TutorialMockPage.leaderboard:
-        return LeaderboardTab(
-          authService: authService,
-          backendApiService: api,
-          displayName: 'Rohan',
-          tutorialMyRowKey: keys['leaderboard.rank'],
         );
       case TutorialMockPage.friends:
         return FriendsTab(

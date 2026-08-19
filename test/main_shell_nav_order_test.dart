@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:ui' show Tristate;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -54,11 +57,18 @@ class _FakeBackendApiService extends BackendApiService {
       'invites': <Map<String, dynamic>>[],
     },
     this.completeOnboarding = true,
+    this.homeRaceCard = const {'state': 'EMPTY'},
+    this.inboxAlerts = const {
+      'alerts': <Map<String, dynamic>>[],
+      'nextCursor': null,
+    },
   });
 
   final Map<String, dynamic> racesData;
   final Map<String, dynamic> homeInvitePreflight;
   final bool completeOnboarding;
+  final Map<String, dynamic> homeRaceCard;
+  final Map<String, dynamic> inboxAlerts;
   int homeSuggestionCalls = 0;
   int racesDiscoveryCalls = 0;
   int payoutClaimCalls = 0;
@@ -120,8 +130,28 @@ class _FakeBackendApiService extends BackendApiService {
     required String identityToken,
     bool usePersistedTotals = false,
   }) async {
-    return const {'state': 'EMPTY'};
+    return homeRaceCard;
   }
+
+  @override
+  Future<Map<String, dynamic>> fetchInboxAlerts({
+    required String identityToken,
+    String? cursor,
+    int limit = 25,
+  }) async => inboxAlerts;
+
+  @override
+  Future<Map<String, dynamic>> markInboxAlertRead({
+    required String identityToken,
+    required String alertId,
+  }) async => const {'read': true, 'unreadCount': 0, 'totalUnreadCount': 0};
+
+  @override
+  Future<Map<String, dynamic>> fetchFeedbackThreads({
+    required String identityToken,
+    String? cursor,
+    int limit = 25,
+  }) async => const {'threads': <Map<String, dynamic>>[], 'nextCursor': null};
 
   @override
   Future<Map<String, dynamic>> fetchHomeInvitePreflight({
@@ -205,6 +235,61 @@ class _FakeBackendApiService extends BackendApiService {
   }
 }
 
+class _AccountSwitchRaceCardApi extends _FakeBackendApiService {
+  final Completer<Map<String, dynamic>> oldAccount = Completer();
+  final Completer<Map<String, dynamic>> newAccount = Completer();
+  final List<String> tokens = [];
+
+  @override
+  Future<Map<String, dynamic>> fetchHomeRaceCard({
+    required String identityToken,
+    bool usePersistedTotals = false,
+  }) {
+    tokens.add(identityToken);
+    return identityToken == 'new-user-token'
+        ? newAccount.future
+        : oldAccount.future;
+  }
+}
+
+class _SupportUnreadApi extends _FakeBackendApiService {
+  int inboxFetches = 0;
+
+  @override
+  Future<Map<String, dynamic>> fetchInboxAlerts({
+    required String identityToken,
+    String? cursor,
+    int limit = 25,
+  }) async {
+    inboxFetches++;
+    return {
+      'alerts': <Map<String, dynamic>>[],
+      'nextCursor': null,
+      'unreadCount': inboxFetches == 1 ? 5 : 2,
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchFeedbackThreads({
+    required String identityToken,
+    String? cursor,
+    int limit = 25,
+  }) async => const {
+    'threads': <Map<String, dynamic>>[
+      {'id': 'thread-1', 'preview': 'A staff reply'},
+    ],
+    'nextCursor': null,
+  };
+
+  @override
+  Future<Map<String, dynamic>> fetchFeedbackThread({
+    required String identityToken,
+    required String threadId,
+    String? before,
+    int limit = 25,
+  }) async => const {'messages': <Map<String, dynamic>>[], 'nextBefore': null};
+}
+
 class _FakeRacePayoutDoubleAdController
     implements RacePayoutDoubleAdController {
   @override
@@ -277,9 +362,10 @@ void main() {
       'Home',
       'Races',
       'Friends',
-      'Boards',
+      'Inbox',
       'Profile',
     ]);
+    expect(find.byKey(const Key('home-inbox-button')), findsNothing);
   });
 
   testWidgets('Home loads suggestions without Races discovery fan-out', (
@@ -306,6 +392,152 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(api.racesDiscoveryCalls, 1);
+  });
+
+  testWidgets('shell seeds then refreshes the Inbox badge and never pops', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _authService();
+    final api = _FakeBackendApiService(
+      homeRaceCard: const {'state': 'EMPTY', 'inboxUnreadCount': 6},
+      inboxAlerts: const {
+        'alerts': [
+          {
+            'id': 'alert-1',
+            'title': 'Back home',
+            'body': 'Open Home',
+            'readAt': null,
+            'destination': {'route': 'home'},
+          },
+        ],
+        'nextCursor': null,
+        'unreadCount': 4,
+        'totalUnreadCount': 7,
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    var tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
+    expect(tabBar.items[3].badgeCount, 6);
+    tabBar.onTap(3);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
+    expect(tabBar.currentIndex, 3);
+    expect(tabBar.items[3].badgeCount, 7);
+
+    await tester.tap(find.text('Back home'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(MainShell), findsOneWidget);
+    tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
+    expect(tabBar.currentIndex, 0);
+    expect(tabBar.items[3].badgeCount, 0);
+
+    tabBar.onTap(3);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    await tester.tap(find.text('SUPPORT'));
+    await tester.pump();
+    tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
+    tabBar.onTap(0);
+    await tester.pump(const Duration(milliseconds: 400));
+    tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
+    tabBar.onTap(3);
+    await tester.pump(const Duration(milliseconds: 400));
+    final supportSemantics = tester.getSemantics(
+      find.byKey(const Key('inbox-segment-support')),
+    );
+    expect(
+      supportSemantics.getSemanticsData().flagsCollection.isSelected,
+      Tristate.isTrue,
+    );
+  });
+
+  testWidgets(
+    'delayed prior-account Home response cannot seed the new Inbox badge',
+    (WidgetTester tester) async {
+      final authService = await _authService();
+      final api = _AccountSwitchRaceCardApi();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MainShell(
+            authService: authService,
+            healthService: _FakeHealthService(),
+            backendApiService: api,
+            backgroundSyncBootstrapService:
+                _FakeBackgroundSyncBootstrapService(),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(api.tokens, contains('session-token'));
+
+      await authService.updateSessionToken('new-user-token');
+      await authService.syncFromBackendUser(const {'id': 'user-2'});
+      await tester.pump();
+      expect(api.tokens, contains('new-user-token'));
+
+      api.newAccount.complete(const {'state': 'EMPTY', 'inboxUnreadCount': 2});
+      await tester.pump();
+      var tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
+      expect(tabBar.items[3].badgeCount, 2);
+
+      api.oldAccount.complete(const {'state': 'EMPTY', 'inboxUnreadCount': 9});
+      await tester.pump();
+      tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
+      expect(tabBar.items[3].badgeCount, 2);
+    },
+  );
+
+  testWidgets('opening a support thread refreshes the shell combined badge', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _authService();
+    final api = _SupportUnreadApi();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    var tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
+    tabBar.onTap(3);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
+    expect(tabBar.items[3].badgeCount, 5);
+
+    await tester.tap(find.text('SUPPORT'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.tap(find.text('BARA SUPPORT'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
+    expect(tabBar.items[3].badgeCount, 2);
   });
 
   testWidgets(
@@ -357,6 +589,7 @@ void main() {
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.text('Frozen Race'), findsOneWidget);
       expect(find.text('Later Race'), findsNothing);
@@ -414,6 +647,7 @@ void main() {
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.text('Results Before Invite'), findsOneWidget);
       expect(find.text('Invite After Results'), findsNothing);
@@ -506,6 +740,7 @@ void main() {
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('Old User Finish'), findsOneWidget);
 
       await authService.syncFromBackendUser(const {'id': 'user-2'});
