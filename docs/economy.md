@@ -807,6 +807,30 @@ Gain formula: reroll is a fresh iid draw, so the optimal rule is "reroll iff the
 current holding is below its mean" and the gain is `E[(μ−S)⁺]`. Per-box gain
 falls like `1/√N` for an all-or-nothing batch; per-**ad** gain rises like `√N`.
 
+### 3.8 Daily 2x Race Steps event — verified 2026-08-19 (prod, read-only)
+
+| Rule / live state | Value | Source |
+|---|---:|---|
+| Frequency / duration / multiplier | once per product day / 30 min / 2x | `CODE src/modules/steps/globalStepEvent.js` |
+| Local schedule | one cryptographically random minute in 08:00–22:00, interpreted in each entitled user's snapshotted timezone | `CODE globalStepEvent.js`, `globalStepEventEntitlement.js` |
+| Canonical extra race score | `window steps × signed participant multiplier × (2−1)` | `CODE globalStepEvent.js:computeGlobalEventBoost` |
+| Box progress / milestones / raw steps / coin sources | unaffected | `CODE globalStepEvent.js`; `docs/local-2x-step-event-requirements.md` §1 |
+| Production rollout switches | local creation `true`; retention `true`, both changed 2026-08-19 21:09Z | `DB app_settings` |
+| Materialized local parents at snapshot | Aug 22: minute 609 (10:09 local), 696 entitlements; Aug 23: minute 785 (13:05 local), 696 entitlements | `DB global_step_events`, `global_step_event_entitlements`, queried 2026-08-20 01:18Z |
+
+Last measured race-step EV evidence from the production analysis in
+`docs/local-2x-step-event-requirements.md` §12:
+
+| Schedule evidence | Extra raw race steps at neutral participant multiplier |
+|---|---:|
+| Historical live legacy-global events | mean **146**, p50 0, p90 440, p99 2,214; 5,498 user-events / 29 events |
+| Randomized 08:00–22:00 local proxy | mean **202**, p10 55, p50 190, p90 360, p99 578; 683 users / 4,955 active user-days |
+
+The two rows use different cohorts and denominators and are not a causal
+before/after estimate. Total coin issuance and sinks are unchanged: the event
+can redistribute fixed race payouts through placement, but does not enlarge a
+funded pool or advance a direct coin source.
+
 ---
 
 ## 4. Race payouts
@@ -1798,6 +1822,7 @@ issuance.
 ---
 
 *Last full verification pass: 2026-08-08 (prod SELECT-only, aggregates only).
+§3.8 verified/added 2026-08-19 (prod SELECT-only aggregates + current code).
 §0d, §1d, §2d, §3.1a, §3.4d, §6.1 and §13 verified/added 2026-08-18 (prod
 SELECT-only aggregates + accepted planning inputs; IAP is explicitly not live).
 §12 verified/added 2026-08-12 (prod SELECT-only aggregates + current code/spec).
