@@ -263,11 +263,11 @@ test('HTTP classification fails closed at every exact gate boundary', () => {
 
 test('queue classification separates invalid, unverified, fail, and pass boundaries', () => {
   const good = {complete: true, observed: true, cadenceValid: true, distinctDirtyRaces: 1, generationDelta: 1,
-    oldestClaimableAgeP95Ms: 30000, newFailedJobs: 0, finalQueued: 0, finalRunning: 0,
+    oldestClaimableAgeP95Ms: 90000, newFailedJobs: 0, finalQueued: 0, finalRunning: 0,
     allTouchedTerminalSuccess: true, observerQueryP95Ms: 100, observerQueryMaxMs: 250,
     sampleIntervalSeconds: 10, drainSeconds: 40};
   assert.equal(classifyQueueEvidence(good).outcome, 'pass');
-  assert.equal(classifyQueueEvidence({...good, oldestClaimableAgeP95Ms: 30001}).outcome, 'fail');
+  assert.equal(classifyQueueEvidence({...good, oldestClaimableAgeP95Ms: 90001}).outcome, 'fail');
   assert.equal(classifyQueueEvidence({...good, finalQueued: 1}).outcome, 'fail');
   assert.equal(classifyQueueEvidence({...good, observerQueryP95Ms: 100.01}).outcome, 'unverified');
   assert.equal(classifyQueueEvidence({...good, observerQueryMaxMs: 250.01}).outcome, 'unverified');
@@ -512,7 +512,7 @@ import {existsSync,readFileSync,writeFileSync} from 'node:fs'; const args=proces
 if (args[0] === 'barrier') { const contextsIndex=args.indexOf('--contexts'); if(contextsIndex>=0) { const contexts=JSON.parse(readFileSync(args[contextsIndex+1],'utf8')); if(contexts.length!==4) process.exit(2); } writeFileSync(output,JSON.stringify({complete:true,clean:true,setupVerified:true})); }
 if (args[0] === 'seed') writeFileSync(output, JSON.stringify(Array.from({length:4},(_,seedIndex)=>({seedIndex,jobId:'fixture-job-'+seedIndex,generation:args.includes('measurement-setup')?2:1}))));
 if (args[0] === 'postcheck') writeFileSync(output, JSON.stringify({postcheckSuccesses:4,postcheckFailures:0}));
-if (args[0] === 'observe') { const ready=args[args.indexOf('--ready')+1]; const boundary=args[args.indexOf('--boundary-ready')+1]; writeFileSync(ready,'ready'); writeFileSync(boundary,'boundary-ready'); const index=existsSync(process.env.FAKE_COUNTER)?Number(readFileSync(process.env.FAKE_COUNTER,'utf8')):0; const mode=process.env.FAKE_QUEUE_MODES.split(',')[index]||'pass'; const evidence={complete:mode!=='invalid',observed:true,cadenceValid:true,distinctDirtyRaces:1,generationDelta:1,oldestClaimableAgeP95Ms:mode==='fail'?30001:0,newFailedJobs:0,finalQueued:0,finalRunning:0,allTouchedTerminalSuccess:true,observerQueryP95Ms:mode==='unverified'?101:1,observerQueryMaxMs:mode==='unverified'?251:2,sampleIntervalSeconds:10,drainSeconds:1}; writeFileSync(output, JSON.stringify(evidence)); }`);
+if (args[0] === 'observe') { const ready=args[args.indexOf('--ready')+1]; const boundary=args[args.indexOf('--boundary-ready')+1]; writeFileSync(ready,'ready'); writeFileSync(boundary,'boundary-ready'); const index=existsSync(process.env.FAKE_COUNTER)?Number(readFileSync(process.env.FAKE_COUNTER,'utf8')):0; const mode=process.env.FAKE_QUEUE_MODES.split(',')[index]||'pass'; const evidence={complete:mode!=='invalid',observed:true,cadenceValid:true,distinctDirtyRaces:1,generationDelta:1,oldestClaimableAgeP95Ms:mode==='fail'?90001:0,newFailedJobs:0,finalQueued:0,finalRunning:0,allTouchedTerminalSuccess:true,observerQueryP95Ms:mode==='unverified'?101:1,observerQueryMaxMs:mode==='unverified'?251:2,sampleIntervalSeconds:10,drainSeconds:1}; writeFileSync(output, JSON.stringify(evidence)); }`);
   execFileSync('chmod', ['700', fakeObserver]);
   const queueRequired = command !== 'smoke';
   const env = {

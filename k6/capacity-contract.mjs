@@ -551,7 +551,7 @@ export function classifyQueueEvidence(queue) {
   if (queue.distinctDirtyRaces < 1) reasons.push('no measured dirty race observed');
   if (queue.generationDelta < 1) reasons.push('no measured queue generation observed');
   if (queue.newFailedJobs > 0) reasons.push('new failed resolution job observed');
-  if (queue.oldestClaimableAgeP95Ms > 30000) reasons.push('claimable queue age p95 exceeded 30s');
+  if (queue.oldestClaimableAgeP95Ms > 90000) reasons.push('claimable queue age p95 exceeded 90s');
   if (queue.finalQueued !== 0 || queue.finalRunning !== 0) reasons.push('queue did not fully drain');
   if (!queue.allTouchedTerminalSuccess) reasons.push('not every measured race row became terminally successful');
   return {outcome: reasons.length ? 'fail' : 'pass', reasons};

@@ -1011,6 +1011,66 @@ with fourth rounded to 855. Source: `DB races × race_participants`; `CODE
 shared/economy/prizePool.js`, `races/racePayoutPresets.js`,
 `races/services/payoutRounding.js`.
 
+### 4.6 Feature-control cleanup economy snapshot — verified 2026-08-20 (prod, read-only)
+
+Trailing 30 complete calendar days (`2026-07-21` through `2026-08-19`) now
+show **10,953.7 coins/day of sources, 4,619.3/day of sinks, and +6,334.4/day
+net** across 647 retained ledger users. App-funded ordinary/seeded race payouts
+were **103,784 coins = 3,459.5/day**; rewarded race-payout ads added another
+**6,752 = 225.1/day**. Sources: `DB coin_transactions` using tz-naive
+`created_at::date`; historical-ledger deletion caveat in the document preface
+still applies.
+
+The current 30-day funded-race settlement population was 165 races. Its
+stamped raw pools totalled 103,900 coins: 18,500 ordinary individual, 2,320
+team, and 83,080 seeded. Replaying the same settled fields with a coin unit of
+10 and permanent payout-rounding v1 gives:
+
+| v2 pool ceiling | Raw pools | Rounded awards | Rounding subsidy | Reduction vs stamped v1/20-unit pools |
+|---:|---:|---:|---:|---:|
+| 16,000 (unchanged) | 60,110 | 65,115 | 5,005 | **37.3%** |
+| 8,000 (scaled with the halved unit) | 52,110 | 57,550 | 5,440 | **44.6%** |
+
+Thus `PRIZE_COIN_UNIT: 20 -> 10` does **not** by itself halve realised
+issuance. The unchanged 16,000 ceiling keeps a large weekly seed close to its
+old payout, and rounding every positive geometric tail award up to 5 mints a
+subsidy. Source: exact replay of `DB races × race_participants` through `CODE
+shared/economy/prizePool.js`, `racePayoutPresets.js`, and
+`services/payoutRounding.js`.
+
+Current live funded exposure (PENDING/ACTIVE accepted memberships, excluding
+tournament matchup rows and featured champion-prize tournaments), recalculated
+at unit 10 and including stamped team-pool multipliers, covers 686 users:
+p50 **60**, p90 **140**, p95 **220**, p99 **603.6**, max **962.5** expected
+coins. A 300-coin concurrent ceiling places 25 users (3.64%) above the limit;
+the amount above the ceiling is 9.04% of all current exposure. The corresponding
+expected-issuance-rate distribution, `membership EV / priced duration`, is
+p50 **11.4**, p90 **27.1**, p99 **71.4**, max **120.9 coins/day**. A raw
+concurrent ceiling alone is weakest against one-day races: unit 10 permits up
+to 30 simultaneous one-day entries (300 expected coins/day) while the same
+steps count in every race. Sources: `DB races × race_participants × tournaments
+× tournament_participants`; `CODE teamPoolMultiplier.js` and tournament
+`MAX_CHAMPION_PRIZE`.
+
+Imposter retirement inventory remains **5 units across 4 owners**. Those owners
+have two successful historical purchases totalling **575 coins** and three
+consumed ad-spin grants totalling three free units; the inactive catalog row is
+75 coins. Exact replacement is therefore **575 + 3×75 = 800 coins**. Sources:
+`DB user_powerup_items × powerup_purchase_requests × powerup_shop_items ×
+ad_reward_grants`.
+
+Legacy buy-in status labels are not escrow balances. The one PENDING May race
+has two `HELD` participant markers totalling 300 but **zero matching
+`race_buy_in_hold` ledger debits**; cancelling it through a field-driven refund
+path would incorrectly mint 300 coins. Eight COMPLETED races retain 40 `HELD`
+markers totalling 1,155; 36 of those markers have real, unrefunded debits
+totalling **830 coins**, while four have no matching debit. The 830 represents
+late-join money that never entered those races' stamped pots, not a still-held
+account balance. Sources: exact `(user_id, reason, ref_id)` joins over `DB
+race_participants × races × coin_transactions`; `CODE joinRaceCore.js` stamps
+active public paid joins `HELD` without increasing `potCoins`, whereas the
+invite-accept path commits and increases the pot.
+
 ---
 
 ## 5. Daily spinner (daily reward box) — verified 2026-08-19
@@ -1575,7 +1635,7 @@ identical to Rainstorm's. All-time coin-flip effect rows: **5**.
 
 ---
 
-## 11. Referral economy — verified 2026-08-11 (prod SELECT-only)
+## 11. Referral economy — verified 2026-08-20 (prod SELECT-only)
 
 ### 11.1 Rates and guards
 
@@ -1587,31 +1647,58 @@ identical to Rainstorm's. All-time coin-flip effect rows: **5**.
 | Attribution window | 30 days signup → first qualifying race; then `EXPIRED`, never pays | `ENV REFERRAL_QUALIFY_WINDOW_DAYS` |
 | Referrer velocity cap | **20 / rolling 24h**, **100 / rolling 30d** → status `FLAGGED`, held for manual review (both sides held) | `ENV REFERRAL_DAILY_CAP` / `REFERRAL_MONTHLY_CAP` |
 | Payout trigger | **not install** — the referee's first *qualifying completed race* (Apple 3.2.2) | `CODE grantReferralReward.js` |
-| Qualifying race | `seedId == null` **and** ≥2 ACCEPTED participants with `totalSteps > 0`; referee must have `placement != null` and `totalSteps > 0` | `CODE grantReferralReward.js:200-215` |
+| Qualifying race | `seedId == null` **and** ≥2 ACCEPTED participants with `rawSteps >= 2,000`; referee must have `placement != null` and `rawSteps >= 2,000` | `CODE grantReferralReward.js:188-226` |
 | Idempotency | `@@unique(refereeSubHash, role)` on `referral_reward_grants` — one payout per **human provider identity per role, forever**, surviving delete + reinstall | `CODE grantReferralReward.js:29-46` |
 | Attribution idempotency | `@@unique(Referral.refereeSubHash)` — one attribution per human, ever; written only on the account-create branch | `CODE recordReferral.js` |
 | Self-referral | blocked (`referrer.id === newUser.id`) | same |
 | Review accounts | excluded on both sides (`EXCLUDED`) | same |
 | IP fallback | `link_opens.kind = 'referral'` only; tier 1 exact IP hash (48h, ≤10 opens, exactly 1 distinct code); tier 2 /24-/64 net prefix **OFF by default** | `CODE findLinkOpenReferralCode.js` |
 
-### 11.2 Measured volume (all-time, 2026-08-11)
+### 11.2 Measured volume (all-time, 2026-08-20)
 
 | Metric | Value |
 |---|---|
-| `referrals` rows, all time | **8** — all `REWARDED`, 0 PENDING / EXPIRED / FLAGGED |
+| `referrals` rows, all time | **218** — 54 `REWARDED`, 158 `PENDING`, 6 `FLAGGED` |
 | First referral | 2026-08 (the program has one month of data) |
-| `referral_reward_grants` | 8 REFERRER (4,000) + 8 REFEREE (4,000) = **8,000 coins** |
-| `referral_reward` coin txns, 30d | 16 txns, 8,000 coins = **266.7 / day** (7.5% of all sources) |
-| Qualification rate to date | **8 / 8 = 100%** |
+| Attribution source | 142 `provision_body` (27 rewarded), 59 `ip_fallback_exact` (16 rewarded), 9 `redeem` (3 rewarded), 8 legacy null-source (all rewarded) |
+| `referral_reward` coin txns, 30d | 108 txns, **54,000 coins = 1,800 / day**; 80 recipient users |
+| Early qualification observation | Exact-IP cohorts at least 4 days old: **14 / 43 = 32.6%** rewarded; provision-body: **23 / 82 = 28.0%**. These are not final 30-day cohort rates. |
+| Reward latency | Exact-IP rewarded rows: p50 **59.1h**, p90 **94.9h**, max **111.1h** (n=16) |
+
+### 11.2a Network-prefix fallback surface (tier 2 remains off)
+
+Production retains no signup-IP hashes for organic users, so the incremental
+number of signups tier 2 would attribute cannot be measured directly. Recent
+anonymous link-open aggregates bound the matching surface:
+
+The prefix only bridges address churn *within* one IPv4 /24 or one IPv6 /64.
+Despite broader comments in the implementation, a normal IPv4 address and an
+IPv6 address produce different prefix keys, and Wi-Fi and cellular usually do
+too; tier 2 therefore does not generally bridge IPv4↔IPv6 or Wi-Fi↔cellular.
+
+| Metric | Value | Source |
+|---|---:|---|
+| Referral opens / net-hash coverage in retained 90d window | 1,496 / 1,297 (86.7%); 493 distinct net prefixes | `DB link_opens` |
+| Net prefixes with >1 code / >1 exact IP | 76 / 493 (15.4%) / 57 / 493 (11.6%) | same |
+| Open-anchored rolling 48h net windows | 1,297 | same |
+| Windows eligible under unique-code + ≤10-open rule | 1,041 (80.3%) | same |
+| Ambiguous-code / hot windows | 235 (18.1%) / 34 (2.6%); categories may overlap | same |
+| Eligible windows already spanning >1 exact IP | 71 (5.5%) | same |
+| Latest 48h net-prefix snapshot | 66 / 72 prefixes eligible; 6 ambiguous; 0 hot; 2 eligible prefixes spanned >1 exact IP | same |
+
+Hash coverage needs an operational check before any tier-2 launch: on
+2026-08-20, all 40 referral opens observed by 03:54 UTC had null exact and net
+hashes, versus full coverage on 2026-08-18. `CODE hmacClientIpHashes` deliberately
+stores nulls when the active HMAC version/secret is missing or invalid, and a
+null net hash can never match.
 
 ### 11.3 Affordability frame
 
-At the p50 earn rate of **3 coins/active-day** (§0), one 500-coin side is
-**166 days** of median play; the 1,000-coin pair is **333 days**. At p90
-(98/day) it is 5 and 10 days. The cheapest active cosmetic is 250 and the
-cheapest active store powerup is 40, so **a single referral hands a new account
-more purchasing power than eleven months of median play**, and two referrals
-out-earn a p90 player's entire month.
+At the current p50 recurring earn rate of **9 coins/active-day** (§0d), one
+500-coin side is **55.6 days** of median play; the 1,000-coin pair is **111.1
+days**. At p90 (75.4/day) it is 6.6 and 13.3 days. The cheapest active cosmetic
+is 250 and the cheapest active store powerup is 75, so one paid referral gives
+each side two cheapest cosmetics or 6.7 cheapest powerups.
 
 ### 11.4 Cap headroom vs the live economy
 

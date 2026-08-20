@@ -144,6 +144,10 @@ following it; delegate to a subagent by spawning it by name.
   rules): run the `game-analyst` subagent for an EV + exploit analysis before
   numbers are committed to code or seeds. It maintains `docs/economy.md` and
   may read prod SELECT-only; it never edits code or config.
+- **Any k6/capacity/load-run request**, including simply "do a k6 run": load
+  the `k6-operator` skill and delegate execution to the named `k6-operator`
+  agent. `k6/operator.zsh` is the only public workflow; never reconstruct the
+  old fixture workbook or bypass its fresh per-run confirmation gate.
 - **After any non-trivial implementation**: run the `code-reviewer` subagent
   before presenting the work as done.
 
