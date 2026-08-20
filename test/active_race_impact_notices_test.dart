@@ -124,6 +124,15 @@ class _ActiveImpactApi extends BackendApiService {
     this.heldPowerupType = 'SECOND_WIND',
     this.useResult = const <String, dynamic>{},
     this.starterRewardEligible = false,
+    this.privateEvents = const [
+      {
+        'id': 'impact:final-leech',
+        'eventType': 'POWERUP_IMPACT',
+        'powerupType': 'LEECH',
+        'body': 'Leech changed your final score by −430 steps.',
+        'createdAt': '2026-08-19T17:00:00.000Z',
+      },
+    ],
     List<ActiveImpactNoticesResult>? responses,
   }) : responses = responses ?? <ActiveImpactNoticesResult>[];
 
@@ -133,10 +142,12 @@ class _ActiveImpactApi extends BackendApiService {
   final String heldPowerupType;
   final Map<String, dynamic> useResult;
   final bool starterRewardEligible;
+  final List<Map<String, dynamic>> privateEvents;
   final List<ActiveImpactNoticesResult> responses;
   int activeNoticeFetches = 0;
   int legacyNoticeFetches = 0;
   int progressFetches = 0;
+  int privateFeedFetches = 0;
   final List<String> acknowledgedNoticeIds = [];
   final List<String> acknowledgedReceiptIds = [];
   final List<RaceResolutionState> resolutionStates = [];
@@ -250,18 +261,15 @@ class _ActiveImpactApi extends BackendApiService {
   }) async => const {'marked': true};
 
   @override
-  Future<List<Map<String, dynamic>>> fetchPrivateRaceImpactFeed({
+  Future<PrivateRaceImpactFeedPage> fetchPrivateRaceImpactFeed({
     required String identityToken,
     required String raceId,
-  }) async => const [
-    {
-      'id': 'impact:final-leech',
-      'eventType': 'POWERUP_IMPACT',
-      'powerupType': 'LEECH',
-      'body': 'Leech changed your final score by −430 steps.',
-      'createdAt': '2026-08-19T17:00:00.000Z',
-    },
-  ];
+    String? cursor,
+    int limit = 50,
+  }) async {
+    privateFeedFetches += 1;
+    return PrivateRaceImpactFeedPage(events: privateEvents);
+  }
 
   @override
   Future<List<Map<String, dynamic>>> fetchRaceImpactNotices({
@@ -430,7 +438,7 @@ void main() {
     );
   });
 
-  test('advertises active-impact capability on iOS and Android', () {
+  test('advertises resolved-impact v2 capability on iOS and Android', () {
     for (final isIos in [true, false]) {
       final features = BackendApiService.clientFeaturesHeaderForPlatform(
         isIos: isIos,
@@ -438,6 +446,7 @@ void main() {
         racePayoutDoubleSupported: false,
       ).split(',');
       expect(features, contains('active_impact_notices_v1'));
+      expect(features, contains('resolved_impact_events_v2'));
     }
   });
 
@@ -544,6 +553,45 @@ void main() {
     },
   );
 
+  test(
+    'private Activity service parses events and sends the v2 cursor',
+    () async {
+      final http = _WireHttpClient([
+        _WireResponse(
+          200,
+          jsonEncode({
+            'events': [
+              {
+                'id': 'impact:private-wire',
+                'description': 'Private wire event.',
+              },
+            ],
+            'nextCursor': 'private cursor/+',
+          }),
+        ),
+      ]);
+      final api = BackendApiService(httpClient: http);
+
+      final page = await api.fetchPrivateRaceImpactFeed(
+        identityToken: 'token',
+        raceId: 'race/with space',
+        cursor: 'older cursor/+',
+      );
+
+      expect(page.events.single['id'], 'impact:private-wire');
+      expect(page.nextCursor, 'private cursor/+');
+      expect(
+        http.requests.single.uri.path,
+        '/races/race%2Fwith%20space/private-impact-feed',
+      );
+      expect(http.requests.single.uri.queryParameters['limit'], '50');
+      expect(
+        http.requests.single.uri.queryParameters['cursor'],
+        'older cursor/+',
+      );
+    },
+  );
+
   testWidgets(
     'active race open shows a synced-step impact and acks dismissal',
     (tester) async {
@@ -574,6 +622,79 @@ void main() {
       await _tearDownScreen(tester);
     },
   );
+
+  testWidgets('popup uses the exact valid server-authored description', (
+    tester,
+  ) async {
+    final api = _ActiveImpactApi(
+      responses: [
+        _notices(const [
+          {
+            'id': 'notice-server-copy',
+            'powerupType': 'LEECH',
+            'deltaSteps': -426,
+            'description': 'A very specific server-authored impact.',
+            'valueStatus': 'SYNCED_SNAPSHOT',
+            'resolvedAt': '2026-08-19T16:30:00.000Z',
+          },
+        ]),
+      ],
+    );
+
+    await _pumpRace(tester, api);
+
+    expect(
+      find.text('A very specific server-authored impact.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Continue'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 700));
+    await _tearDownScreen(tester);
+  });
+
+  testWidgets('popup dismissal leaves the same private event in Activity', (
+    tester,
+  ) async {
+    const description = 'You lost 426 synced steps to Leech.';
+    final api = _ActiveImpactApi(
+      privateEvents: const [
+        {
+          'id': 'impact:same-event',
+          'eventType': 'EFFECT_IMPACT',
+          'powerupType': 'LEECH',
+          'description': description,
+          'impactScope': 'ACTIVE_SYNCED_SNAPSHOT',
+          'createdAt': '2026-08-19T16:30:00.000Z',
+        },
+      ],
+      responses: [
+        _notices(const [
+          {
+            'id': 'impact:same-event',
+            'powerupType': 'LEECH',
+            'deltaSteps': -426,
+            'description': description,
+            'valueStatus': 'SYNCED_SNAPSHOT',
+            'resolvedAt': '2026-08-19T16:30:00.000Z',
+          },
+        ]),
+      ],
+    );
+
+    await _pumpRace(tester, api);
+    // One copy is the Activity row already rendered behind the popup; the
+    // second is the popup subtitle sourced from the same canonical event.
+    expect(find.text(description, findRichText: true), findsNWidgets(2));
+
+    await tester.tap(find.text('Continue'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 700));
+
+    expect(find.text(description, findRichText: true), findsOneWidget);
+    expect(api.acknowledgedNoticeIds, ['impact:same-event']);
+    await _tearDownScreen(tester);
+  });
 
   testWidgets('starter reward and active impact never stack', (tester) async {
     final api = _ActiveImpactApi(
@@ -828,11 +949,20 @@ void main() {
     'ordinary polling does not fetch notices; true resume does once',
     (tester) async {
       final api = _ActiveImpactApi(
+        privateEvents: const [
+          {
+            'id': 'impact:resume',
+            'eventType': 'EFFECT_IMPACT',
+            'powerupType': 'LEECH',
+            'description': 'Leech drained 77 synced steps',
+            'createdAt': '2026-08-19T16:30:00.000Z',
+          },
+        ],
         responses: [
           ActiveImpactNoticesResult.empty,
           _notices(const [
             {
-              'id': 'notice-resume',
+              'id': 'impact:resume',
               'powerupType': 'LEECH',
               'deltaSteps': -77,
               'valueStatus': 'SYNCED_SNAPSHOT',
@@ -844,13 +974,16 @@ void main() {
 
       await _pumpRace(tester, api);
       expect(api.activeNoticeFetches, 1);
+      final privateFetchesAfterOpen = api.privateFeedFetches;
 
       await tester.pump(const Duration(seconds: 30));
       expect(api.progressFetches, 2);
       expect(api.activeNoticeFetches, 1);
+      expect(api.privateFeedFetches, privateFetchesAfterOpen);
 
       await _backgroundAndResume(tester);
       expect(api.activeNoticeFetches, 2);
+      expect(api.privateFeedFetches, privateFetchesAfterOpen + 1);
       expect(find.text('Leech drained 77 synced steps'), findsOneWidget);
       await tester.tap(find.text('Continue'));
       await tester.pump(const Duration(milliseconds: 350));
@@ -878,6 +1011,7 @@ void main() {
 
     await _pumpRace(tester, api);
     expect(api.activeNoticeFetches, 1);
+    final privateFetchesAfterOpen = api.privateFeedFetches;
 
     final refresh = tester.widget<RefreshIndicator>(
       find.byType(RefreshIndicator),
@@ -886,6 +1020,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
 
     expect(api.activeNoticeFetches, 1);
+    expect(api.privateFeedFetches, privateFetchesAfterOpen + 1);
     expect(find.byType(PowerupRevealModal), findsNothing);
     await _tearDownScreen(tester);
   });

@@ -25,6 +25,7 @@ class _StreamsApi extends BackendApiService {
   int legacyUserCalls = 0;
   int legacySystemCalls = 0;
   int readAcks = 0;
+  int privateFeedCalls = 0;
   int _chatSequence = 0;
 
   @override
@@ -99,6 +100,17 @@ class _StreamsApi extends BackendApiService {
     if (pending != null) return pending.future;
     return const {};
   }
+
+  @override
+  Future<PrivateRaceImpactFeedPage> fetchPrivateRaceImpactFeed({
+    required String identityToken,
+    required String raceId,
+    String? cursor,
+    int limit = 50,
+  }) async {
+    privateFeedCalls += 1;
+    return PrivateRaceImpactFeedPage.empty;
+  }
 }
 
 Future<AuthService> _auth() async {
@@ -142,6 +154,7 @@ void main() {
       expect(coordinator.chat, isNull);
       expect(coordinator.chatHasUnread, isFalse);
       expect(api.readAcks, 1);
+      expect(api.privateFeedCalls, 1);
       coordinator.dispose();
     },
   );
@@ -160,6 +173,7 @@ void main() {
       await coordinator.openChat();
 
       expect(api.includeUserCalls, [false, true]);
+      expect(api.privateFeedCalls, 1);
       expect(coordinator.chat?.messages.single.body, 'Hello');
       coordinator.dispose();
     },

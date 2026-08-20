@@ -82,10 +82,12 @@ class TutorialPreviewBackendApiService extends BackendApiService {
   }) async => false;
 
   @override
-  Future<List<Map<String, dynamic>>> fetchPrivateRaceImpactFeed({
+  Future<PrivateRaceImpactFeedPage> fetchPrivateRaceImpactFeed({
     required String identityToken,
     required String raceId,
-  }) async => const [];
+    String? cursor,
+    int limit = 50,
+  }) async => PrivateRaceImpactFeedPage.empty;
 
   // -- Home: feedback card (batch 2026-08-10b item 5) --
   //

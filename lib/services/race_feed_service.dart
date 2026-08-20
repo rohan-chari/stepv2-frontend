@@ -13,6 +13,8 @@ class RaceFeedEvent {
   final String description;
   final String? actorUserId;
   final String? targetUserId;
+  final String? sourceFeedEventId;
+  final String? impactScope;
   final DateTime createdAt;
 
   const RaceFeedEvent({
@@ -23,6 +25,8 @@ class RaceFeedEvent {
     this.powerupType,
     this.actorUserId,
     this.targetUserId,
+    this.sourceFeedEventId,
+    this.impactScope,
   });
 
   static RaceFeedEvent? tryFromJson(Object? raw) {
@@ -30,6 +34,8 @@ class RaceFeedEvent {
     final id = raw['id'];
     if (id is! String || id.isEmpty) return null;
     final createdRaw = raw['createdAt'];
+    final sourceFeedEventId = raw['sourceFeedEventId'];
+    final impactScope = raw['impactScope'];
     return RaceFeedEvent(
       id: id,
       eventType: raw['eventType'] is String ? raw['eventType'] as String : '',
@@ -46,6 +52,13 @@ class RaceFeedEvent {
           : null,
       targetUserId: raw['targetUserId'] is String
           ? raw['targetUserId'] as String
+          : null,
+      sourceFeedEventId:
+          sourceFeedEventId is String && sourceFeedEventId.isNotEmpty
+          ? sourceFeedEventId
+          : null,
+      impactScope: impactScope is String && impactScope.isNotEmpty
+          ? impactScope
           : null,
       createdAt: createdRaw != null
           ? DateTime.tryParse(
@@ -66,8 +79,8 @@ class RaceFeedEvent {
       );
 }
 
-/// Per-race Activity (system/powerup events) state. Read-only feed that mirrors
-/// [RaceChatService] but loads `/races/:raceId/messages?kind=SYSTEM`.
+/// Per-race Activity state. Shared and recipient-private rows have independent
+/// cursors, then merge into one stable newest-first projection.
 class RaceFeedService extends ChangeNotifier {
   RaceFeedService({
     required this.authService,
@@ -80,17 +93,25 @@ class RaceFeedService extends ChangeNotifier {
   final BackendApiService api;
 
   final List<RaceFeedEvent> _events = [];
-  String? _cursor;
-  bool _hasMore = true;
+  final Set<String> _privateEventIds = {};
+  final Set<String> _suppressedSourceFeedEventIds = {};
+  final Map<String, RaceFeedEvent> _suppressedSharedEvents = {};
+  String? _sharedCursor;
+  String? _privateCursor;
+  bool _sharedHasMore = true;
+  bool _privateHasMore = false;
   bool _loading = false;
   bool _disposed = false;
+  int _privateGeneration = 0;
   Object? _lastError;
   Timer? _pollTimer;
+  Future<void>? _privateRefreshInFlight;
 
   List<RaceFeedEvent> get events => List.unmodifiable(_events);
   bool get isLoading => _loading;
-  bool get hasMore => _hasMore;
+  bool get hasMore => _sharedHasMore || _privateHasMore;
   Object? get lastError => _lastError;
+  bool containsEvent(String id) => _events.any((event) => event.id == id);
 
   void beginCombinedLoad() {
     if (_disposed) return;
@@ -126,19 +147,7 @@ class RaceFeedService extends ChangeNotifier {
       );
       if (_disposed) return;
       applyInitialStream(result);
-      // This separately-authorized stream intentionally does not share the
-      // message cursor/cache. Its locked response has no nextCursor, so it is
-      // a safe bounded newest-50 window refreshed at the top; this must never
-      // change shared Activity pagination. Old/disabled endpoints simply
-      // contribute no rows; a private-impact outage must not hide the shared
-      // Activity feed.
-      try {
-        final privateEvents = await api.fetchPrivateRaceImpactFeed(
-          identityToken: token,
-          raceId: raceId,
-        );
-        if (!_disposed) _mergePrivateImpactEvents(privateEvents);
-      } catch (_) {}
+      await refreshPrivateTop();
     } catch (e) {
       _lastError = e;
     } finally {
@@ -148,30 +157,51 @@ class RaceFeedService extends ChangeNotifier {
   }
 
   Future<void> loadMore() async {
-    if (_disposed || _loading || !_hasMore || _cursor == null) return;
+    if (_disposed || _loading || !hasMore) return;
     _loading = true;
     _safeNotify();
+    Object? pageError;
     try {
       final token = _token;
       if (token == null) throw const ApiException('Not signed in');
-      final result = await api.fetchRaceMessages(
-        identityToken: token,
-        raceId: raceId,
-        cursor: _cursor,
-        limit: 50,
-        kind: 'SYSTEM',
-      );
-      if (_disposed) return;
-      final list = result['messages'];
-      if (list is List) {
-        _events.addAll(
-          list.map(RaceFeedEvent.tryFromJson).whereType<RaceFeedEvent>(),
-        );
+      final sharedCursor = _sharedHasMore ? _sharedCursor : null;
+      final privateCursor = _privateHasMore ? _privateCursor : null;
+      final privateGeneration = _privateGeneration;
+
+      if (sharedCursor != null) {
+        try {
+          final result = await api.fetchRaceMessages(
+            identityToken: token,
+            raceId: raceId,
+            cursor: sharedCursor,
+            limit: 50,
+            kind: 'SYSTEM',
+          );
+          if (!_disposed) _applySharedPage(result);
+        } catch (error) {
+          pageError ??= error;
+        }
+      } else {
+        _sharedHasMore = false;
       }
-      _cursor = result['nextCursor'] is String
-          ? result['nextCursor'] as String
-          : null;
-      _hasMore = _cursor != null;
+
+      if (privateCursor != null) {
+        try {
+          final page = await api.fetchPrivateRaceImpactFeed(
+            identityToken: token,
+            raceId: raceId,
+            cursor: privateCursor,
+          );
+          if (!_disposed && privateGeneration == _privateGeneration) {
+            _applyPrivatePage(page, advanceCursor: true);
+          }
+        } catch (error) {
+          pageError ??= error;
+        }
+      } else {
+        _privateHasMore = false;
+      }
+      _lastError = pageError;
     } catch (e) {
       _lastError = e;
     } finally {
@@ -180,7 +210,8 @@ class RaceFeedService extends ChangeNotifier {
     }
   }
 
-  /// Polls newest events, merging by id.
+  /// Polls only shared Activity. Private impacts refresh at explicit lifecycle
+  /// boundaries so every mounted viewer does not query PostgreSQL every 5s.
   Future<void> refreshTop() async {
     if (_disposed) return;
     try {
@@ -194,32 +225,79 @@ class RaceFeedService extends ChangeNotifier {
       );
       if (_disposed) return;
       applyTopStream(result);
-      try {
-        final privateEvents = await api.fetchPrivateRaceImpactFeed(
-          identityToken: token,
-          raceId: raceId,
-        );
-        if (!_disposed) _mergePrivateImpactEvents(privateEvents);
-      } catch (_) {}
     } catch (_) {
       // Silent — polling.
     }
   }
 
+  /// Fetches the newest private page. Popup and lifecycle refreshes coalesce;
+  /// an old/disabled endpoint never hides shared Activity.
+  Future<void> refreshPrivateTop() {
+    if (_disposed) return Future.value();
+    final existing = _privateRefreshInFlight;
+    if (existing != null) return existing;
+    final generation = _privateGeneration;
+    final operation = _refreshPrivateTopImpl(generation);
+    _privateRefreshInFlight = operation;
+    return operation.whenComplete(() {
+      if (identical(_privateRefreshInFlight, operation)) {
+        _privateRefreshInFlight = null;
+      }
+    });
+  }
+
+  Future<void> _refreshPrivateTopImpl(int generation) async {
+    try {
+      final token = _token;
+      if (token == null) return;
+      final page = await api.fetchPrivateRaceImpactFeed(
+        identityToken: token,
+        raceId: raceId,
+      );
+      if (_disposed || generation != _privateGeneration) return;
+      _applyPrivatePage(
+        page,
+        advanceCursor: !_privateHasMore || _privateCursor == null,
+      );
+      _safeNotify();
+    } catch (_) {
+      // Optional private Activity quietly degrades against older backends.
+    }
+  }
+
+  /// Clears active snapshot rows before installing terminal authoritative rows.
+  /// The generation guard prevents a stale active response landing afterward.
+  Future<void> replacePrivateImpactStream() async {
+    if (_disposed) return;
+    _privateGeneration += 1;
+    _privateRefreshInFlight = null;
+    _events.removeWhere((event) => _privateEventIds.contains(event.id));
+    final restoredSharedEvents = _suppressedSharedEvents.values.toList(
+      growable: false,
+    );
+    _privateEventIds.clear();
+    _suppressedSourceFeedEventIds.clear();
+    _suppressedSharedEvents.clear();
+    _mergeEvents(restoredSharedEvents);
+    _privateCursor = null;
+    _privateHasMore = false;
+    _safeNotify();
+    await refreshPrivateTop();
+  }
+
   void applyInitialStream(Map<String, dynamic> stream) {
     if (_disposed) return;
     final list = stream['messages'];
-    _events
-      ..clear()
-      ..addAll(
-        list is List
-            ? list.map(RaceFeedEvent.tryFromJson).whereType<RaceFeedEvent>()
-            : const <RaceFeedEvent>[],
-      );
-    _cursor = stream['nextCursor'] is String
-        ? stream['nextCursor'] as String
-        : null;
-    _hasMore = _cursor != null;
+    _events.removeWhere((event) => !_privateEventIds.contains(event.id));
+    _mergeEvents(
+      list is List
+          ? _withoutSuppressedSharedEvents(
+              list.map(RaceFeedEvent.tryFromJson).whereType<RaceFeedEvent>(),
+            )
+          : const <RaceFeedEvent>[],
+    );
+    _sharedCursor = _readCursor(stream['nextCursor']);
+    _sharedHasMore = _sharedCursor != null;
     _loading = false;
     _lastError = null;
     _safeNotify();
@@ -228,17 +306,24 @@ class RaceFeedService extends ChangeNotifier {
   void applyTopStream(Map<String, dynamic> stream) {
     if (_disposed) return;
     final list = stream['messages'];
-    final fresh = list is List
-        ? list.map(RaceFeedEvent.tryFromJson).whereType<RaceFeedEvent>()
-        : const Iterable<RaceFeedEvent>.empty();
-    final existingIds = _events.map((event) => event.id).toSet();
-    final additions = fresh
-        .where((event) => !existingIds.contains(event.id))
-        .toList();
-    if (additions.isEmpty) return;
-    _events.insertAll(0, additions);
-    _events.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    _safeNotify();
+    final beforeIds = _events.map((event) => event.id).toSet();
+    final hadMore = _sharedHasMore;
+    _mergeEvents(
+      list is List
+          ? _withoutSuppressedSharedEvents(
+              list.map(RaceFeedEvent.tryFromJson).whereType<RaceFeedEvent>(),
+            )
+          : const <RaceFeedEvent>[],
+    );
+    if (!_sharedHasMore || _sharedCursor == null) {
+      _sharedCursor = _readCursor(stream['nextCursor']);
+      _sharedHasMore = _sharedCursor != null;
+    }
+    if (_events.length != beforeIds.length ||
+        _events.any((event) => !beforeIds.contains(event.id)) ||
+        hadMore != _sharedHasMore) {
+      _safeNotify();
+    }
   }
 
   void applyCombinedError(Object error) {
@@ -248,18 +333,73 @@ class RaceFeedService extends ChangeNotifier {
     _safeNotify();
   }
 
-  void _mergePrivateImpactEvents(List<Map<String, dynamic>> raw) {
-    final additions = raw
+  void _applySharedPage(Map<String, dynamic> page) {
+    final raw = page['messages'];
+    if (raw is List) {
+      _mergeEvents(
+        _withoutSuppressedSharedEvents(
+          raw.map(RaceFeedEvent.tryFromJson).whereType<RaceFeedEvent>(),
+        ),
+      );
+    }
+    _sharedCursor = _readCursor(page['nextCursor']);
+    _sharedHasMore = _sharedCursor != null;
+  }
+
+  void _applyPrivatePage(
+    PrivateRaceImpactFeedPage page, {
+    required bool advanceCursor,
+  }) {
+    final parsed = page.events
         .map(RaceFeedEvent.tryFromJson)
         .whereType<RaceFeedEvent>()
         .where((event) => event.id.startsWith('impact:'))
-        .where((event) => !_events.any((existing) => existing.id == event.id))
         .toList(growable: false);
-    if (additions.isEmpty) return;
-    _events.addAll(additions);
-    _events.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    _safeNotify();
+    for (final event in parsed) {
+      _privateEventIds.add(event.id);
+      final sourceId = event.sourceFeedEventId;
+      if (sourceId != null) _suppressedSourceFeedEventIds.add(sourceId);
+    }
+    for (final event in _events) {
+      if (_suppressedSourceFeedEventIds.contains(event.id)) {
+        _suppressedSharedEvents[event.id] = event;
+      }
+    }
+    _events.removeWhere(
+      (event) => _suppressedSourceFeedEventIds.contains(event.id),
+    );
+    _mergeEvents(parsed);
+    if (advanceCursor) {
+      _privateCursor = page.nextCursor;
+      _privateHasMore = _privateCursor != null;
+    }
   }
+
+  Iterable<RaceFeedEvent> _withoutSuppressedSharedEvents(
+    Iterable<RaceFeedEvent> events,
+  ) sync* {
+    for (final event in events) {
+      if (_suppressedSourceFeedEventIds.contains(event.id)) {
+        _suppressedSharedEvents[event.id] = event;
+      } else {
+        yield event;
+      }
+    }
+  }
+
+  void _mergeEvents(Iterable<RaceFeedEvent> incoming) {
+    final ids = _events.map((event) => event.id).toSet();
+    for (final event in incoming) {
+      if (ids.add(event.id)) _events.add(event);
+    }
+    _events.sort((a, b) {
+      final byTime = b.createdAt.compareTo(a.createdAt);
+      return byTime != 0 ? byTime : b.id.compareTo(a.id);
+    });
+  }
+
+  String? _readCursor(Object? raw) =>
+      raw is String && raw.isNotEmpty ? raw : null;
 
   void startPolling({Duration interval = const Duration(seconds: 5)}) {
     _pollTimer?.cancel();

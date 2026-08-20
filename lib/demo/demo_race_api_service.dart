@@ -22,10 +22,12 @@ class DemoRaceApiService extends BackendApiService {
   // Demo/tutorial narratives must never request live recipient-private impact
   // data or present an unscripted settlement overlay over a spotlight beat.
   @override
-  Future<List<Map<String, dynamic>>> fetchPrivateRaceImpactFeed({
+  Future<PrivateRaceImpactFeedPage> fetchPrivateRaceImpactFeed({
     required String identityToken,
     required String raceId,
-  }) async => const [];
+    String? cursor,
+    int limit = 50,
+  }) async => PrivateRaceImpactFeedPage.empty;
 
   @override
   Future<List<Map<String, dynamic>>> fetchRaceImpactNotices({

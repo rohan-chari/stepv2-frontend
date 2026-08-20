@@ -91,6 +91,17 @@ class ActiveImpactNoticesResult {
       jobId != null && generation != null && retryAfterMs != null;
 }
 
+/// One defensively parsed page from the recipient-private Activity stream.
+/// Older backends omit [nextCursor], which is treated as an exhausted stream.
+class PrivateRaceImpactFeedPage {
+  const PrivateRaceImpactFeedPage({this.events = const [], this.nextCursor});
+
+  static const empty = PrivateRaceImpactFeedPage();
+
+  final List<Map<String, dynamic>> events;
+  final String? nextCursor;
+}
+
 class RaceMessageStreamsResult {
   const RaceMessageStreamsResult({
     required this.supported,
@@ -308,6 +319,7 @@ class BackendApiService {
       'race_preview',
       'impact_notices',
       'active_impact_notices_v1',
+      'resolved_impact_events_v2',
       'impact_summaries',
       'review_prompt',
       'inbox_v1',
@@ -321,8 +333,8 @@ class BackendApiService {
   }
 
   static final String clientFeaturesHeader = _adsSupported
-      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,active_impact_notices_v1,impact_summaries,review_prompt,inbox_v1,api_payload_compact_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_double' : ''}'
-      : 'characters,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,active_impact_notices_v1,impact_summaries,review_prompt,inbox_v1,api_payload_compact_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_double' : ''}';
+      ? 'characters,ads,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,review_prompt,inbox_v1,api_payload_compact_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_double' : ''}'
+      : 'characters,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,review_prompt,inbox_v1,api_payload_compact_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_double' : ''}';
 
   /// Replays a persisted results dismissal with the capability it originally
   /// advertised. A later app build may have gained or lost the dedicated ad
@@ -2189,26 +2201,37 @@ class BackendApiService {
     await _decodeJsonResponse(response);
   }
 
-  Future<List<Map<String, dynamic>>> fetchPrivateRaceImpactFeed({
+  Future<PrivateRaceImpactFeedPage> fetchPrivateRaceImpactFeed({
     required String identityToken,
     required String raceId,
+    String? cursor,
+    int limit = 50,
   }) async {
-    if (runtimeType != BackendApiService) return const [];
-    // The locked endpoint response intentionally has no `nextCursor`. Ask for
-    // its documented bounded newest-first window rather than inventing client
-    // pagination fields that an older backend might not understand.
+    if (runtimeType != BackendApiService) {
+      return PrivateRaceImpactFeedPage.empty;
+    }
+    final boundedLimit = limit.clamp(1, 50);
+    final query = <String, String>{'limit': boundedLimit.toString()};
+    if (cursor != null && cursor.isNotEmpty) query['cursor'] = cursor;
     final response = await _sendGetRequest(
       path:
-          '/races/${Uri.encodeComponent(raceId)}/private-impact-feed?limit=50',
+          '/races/${Uri.encodeComponent(raceId)}/private-impact-feed?${Uri(queryParameters: query).query}',
       identityToken: identityToken,
     );
     final payload = await _decodeJsonResponse(response);
     final raw = payload['events'];
-    if (raw is! List) return const [];
-    return raw
+    if (raw is! List) return PrivateRaceImpactFeedPage.empty;
+    final events = raw
         .whereType<Map>()
         .map((row) => Map<String, dynamic>.from(row))
         .toList(growable: false);
+    final rawCursor = payload['nextCursor'];
+    return PrivateRaceImpactFeedPage(
+      events: events,
+      nextCursor: rawCursor is String && rawCursor.isNotEmpty
+          ? rawCursor
+          : null,
+    );
   }
 
   Future<void> acknowledgeGlobalEventSummary({

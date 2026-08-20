@@ -208,12 +208,14 @@ class _ActiveImpactNotice {
     required this.powerupType,
     required this.deltaSteps,
     required this.resolvedAt,
+    this.description,
   });
 
   final String id;
   final String powerupType;
   final int deltaSteps;
   final DateTime resolvedAt;
+  final String? description;
 
   static _ActiveImpactNotice? tryParse(Object? raw) {
     if (raw is! Map) return null;
@@ -222,6 +224,7 @@ class _ActiveImpactNotice {
     final delta = raw['deltaSteps'];
     final valueStatus = raw['valueStatus'];
     final resolvedAt = raw['resolvedAt'];
+    final rawDescription = raw['description'];
     if (id is! String ||
         id.isEmpty ||
         powerupType is! String ||
@@ -241,6 +244,9 @@ class _ActiveImpactNotice {
       powerupType: powerupType,
       deltaSteps: delta.toInt(),
       resolvedAt: parsedResolvedAt,
+      description: rawDescription is String && rawDescription.trim().isNotEmpty
+          ? rawDescription
+          : null,
     );
   }
 }
@@ -1046,6 +1052,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   Future<void> _loadDetails() => _detailsInFlight ??= _loadDetailsImpl()
       .whenComplete(() => _detailsInFlight = null);
 
+  Future<void> _refreshDetailsFromPull() async {
+    await _loadDetails();
+    await _streams?.refreshNow();
+    await _streams?.refreshPrivateActivity();
+  }
+
   Future<void> _loadDetailsImpl() async {
     try {
       final token = widget.authService.authToken;
@@ -1098,6 +1110,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       if (!mounted) return;
       final isInitialRouteLoad = !_initialDetailsLoadCompleted;
       _initialDetailsLoadCompleted = true;
+      final previousRaceStatus = _race?['status'];
       setState(() {
         _race = details;
         _isLoading = false;
@@ -1108,6 +1121,9 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
             details['myPlacementAlertsMuted'] == true ||
             details['myChatMuted'] == true;
       });
+      if (previousRaceStatus == 'ACTIVE' && details['status'] != 'ACTIVE') {
+        unawaited(_streams?.replacePrivateActivity());
+      }
 
       // Preview mode (a non-participant on a public, non-tournament race) is a
       // SINGLE fetch plus pull-to-refresh: the backend's read-only preview path
@@ -1231,6 +1247,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     if (token == null || token.isEmpty) return;
 
     final attempt = ++_impactAttemptGeneration;
+    await _streams?.refreshPrivateActivity();
+    if (!_impactAttemptStillCurrent(attempt, token)) return;
     try {
       var result = await _api.fetchActiveRaceImpactNotices(
         identityToken: token,
@@ -1261,15 +1279,20 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           .whereType<_ActiveImpactNotice>()
           .take(3)
           .toList(growable: false);
+      if (notices.any((notice) => _feed?.containsEvent(notice.id) != true)) {
+        await _streams?.refreshPrivateActivity();
+      }
       for (final notice in notices) {
         if (!_impactAttemptStillCurrent(attempt, token)) return;
         await _runRaceOverlay(() async {
           if (!_canPresentActiveImpact(attempt: attempt)) return;
           final name = PowerupCopy.nameFor(notice.powerupType);
           final steps = notice.deltaSteps;
-          final subtitle = steps < 0
-              ? '$name ${notice.powerupType == 'LEECH' ? 'drained' : 'removed'} ${steps.abs()} synced steps'
-              : '$name added $steps synced steps';
+          final subtitle =
+              notice.description ??
+              (steps < 0
+                  ? '$name ${notice.powerupType == 'LEECH' ? 'drained' : 'removed'} ${steps.abs()} synced steps'
+                  : '$name added $steps synced steps');
           await showPowerupRevealModal(
             context,
             iconType: notice.powerupType,
@@ -2425,6 +2448,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       final activeImpactReceipt = parsedReceipt?.raceId == widget.raceId
           ? parsedReceipt
           : null;
+      unawaited(_streams?.refreshPrivateActivity());
       final coinsSpent = _readInt(res?['coinsSpent'], fallback: 0);
       if (coinsSpent > 0) {
         await widget.authService.updateCoins(
@@ -4024,7 +4048,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                         )
                       : _race == null
                       ? AppRefreshIndicator(
-                          onRefresh: _loadDetails,
+                          onRefresh: _refreshDetailsFromPull,
                           child: ListView(
                             physics: const AlwaysScrollableScrollPhysics(),
                             padding: const EdgeInsets.fromLTRB(12, 80, 12, 0),
@@ -4054,7 +4078,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                             return false;
                           },
                           child: AppRefreshIndicator(
-                            onRefresh: _loadDetails,
+                            onRefresh: _refreshDetailsFromPull,
                             child: SingleChildScrollView(
                               key: _leaderboardViewportKey,
                               physics: const AlwaysScrollableScrollPhysics(),

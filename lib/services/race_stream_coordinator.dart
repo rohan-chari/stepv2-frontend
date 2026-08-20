@@ -58,6 +58,9 @@ class RaceStreamCoordinator extends ChangeNotifier {
     _initialPending = true;
     feed.beginCombinedLoad();
     await _refresh(includeUser: false, initial: true, muted: muted);
+    if (!_legacy && !_disposed && _eligible) {
+      await feed.refreshPrivateTop();
+    }
     if (_refreshQueued && _eligible && !_legacy && !_disposed) {
       await refreshNow();
     }
@@ -109,6 +112,15 @@ class RaceStreamCoordinator extends ChangeNotifier {
       await _refresh(includeUser: _chatRequested);
     } while (_refreshQueued && _eligible && !_legacy && !_disposed);
   }
+
+  /// Explicit recipient-private refresh used only at the lifecycle boundaries
+  /// defined by the active-impact contract. The periodic shared timer never
+  /// calls this method.
+  Future<void> refreshPrivateActivity() => feed.refreshPrivateTop();
+
+  /// Removes active synced snapshots before loading terminal authoritative
+  /// impact rows from the same private endpoint.
+  Future<void> replacePrivateActivity() => feed.replacePrivateImpactStream();
 
   Future<void> _refresh({
     required bool includeUser,
