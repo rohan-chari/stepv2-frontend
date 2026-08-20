@@ -252,6 +252,16 @@ void main() {
       );
     });
 
+    testWidgets('legacy persisted ON value cannot resurrect the removed step', (
+      tester,
+    ) async {
+      final auth = await _auth(_prefs(inviteCodeEnabled: true));
+      await _pumpShell(tester, auth: auth);
+
+      expect(find.text('GOT AN INVITE CODE?'), findsNothing);
+      expect(_demoRace, findsOneWidget);
+    });
+
     testWidgets('hidden when the account is already attributed', (
       tester,
     ) async {
@@ -379,47 +389,19 @@ void main() {
       expect(auth.referredByCode, isNull);
     });
 
-    test('the kill switch fails OPEN: absent / non-boolean ⇒ ON', () async {
-      SharedPreferences.setMockInitialValues({});
+    test('legacy invite-code flag payloads are safely ignored', () async {
+      SharedPreferences.setMockInitialValues({
+        'auth_onboarding_invite_code_enabled': true,
+      });
       final auth = AuthService();
-      expect(auth.onboardingInviteCodeEnabled, isTrue);
-
-      auth.applyBackendUser({'id': 'u1', 'featureFlags': const {}});
-      expect(auth.onboardingInviteCodeEnabled, isTrue);
-
+      await auth.restoreSession();
       auth.applyBackendUser({
         'id': 'u1',
-        'featureFlags': const {'onboardingInviteCodeEnabled': 'nope'},
+        'featureFlags': const {'onboardingInviteCodeEnabled': true},
       });
-      expect(auth.onboardingInviteCodeEnabled, isTrue);
-    });
 
-    test('only a literal false disables it', () async {
-      SharedPreferences.setMockInitialValues({});
-      final auth = AuthService();
-      auth.applyBackendUser({
-        'id': 'u1',
-        'featureFlags': const {'onboardingInviteCodeEnabled': false},
-      });
-      expect(auth.onboardingInviteCodeEnabled, isFalse);
-
-      await auth.signOut();
-      expect(
-        auth.onboardingInviteCodeEnabled,
-        isTrue,
-        reason: 'sign-out returns the kill switch to its fail-open default',
-      );
-    });
-
-    test('a payload with no featureFlags envelope leaves the flag alone', () {
-      SharedPreferences.setMockInitialValues({});
-      final auth = AuthService();
-      auth.applyBackendUser({
-        'id': 'u1',
-        'featureFlags': const {'onboardingInviteCodeEnabled': false},
-      });
-      auth.applyBackendUser({'id': 'u1'});
-      expect(auth.onboardingInviteCodeEnabled, isFalse);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('auth_onboarding_invite_code_enabled'), isNull);
     });
   });
 

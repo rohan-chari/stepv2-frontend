@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../styles.dart';
+import '../utils/funded_exposure_error_copy.dart';
 import '../utils/team_race.dart';
 import '../utils/tournament.dart';
 import '../widgets/error_toast.dart';
@@ -88,7 +89,11 @@ class DiscoveryJoinCoordinator {
       if (context.mounted) {
         showErrorToast(
           context,
-          error.code != null ? teamRaceErrorCopy(error.code) : error.message,
+          error.code == kFundedExposureLimitCode
+              ? fundedExposureErrorCopy(error)
+              : error.code != null
+              ? teamRaceErrorCopy(error.code)
+              : error.message,
         );
       }
     } catch (error) {
@@ -141,7 +146,11 @@ class DiscoveryJoinCoordinator {
       if (context.mounted) {
         showErrorToast(
           context,
-          error.code != null ? tournamentErrorCopy(error.code) : error.message,
+          error.code == kFundedExposureLimitCode
+              ? fundedExposureErrorCopy(error)
+              : error.code != null
+              ? tournamentErrorCopy(error.code)
+              : error.message,
         );
       }
     } catch (error) {

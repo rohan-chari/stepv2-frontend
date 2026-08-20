@@ -21,11 +21,9 @@ import 'admin_sections.dart';
 import 'admin_balance_config_screen.dart';
 import 'admin_powerup_shop_screen.dart';
 
-/// Runtime feature flags (backend AppSetting rows). Toggling here changes what
-/// every client sees on its next /auth/me sync; no app release needed.
-///
 /// Batch 2026-08-09 item 10: no longer draws its own board or SETTINGS title —
-/// it is the body of the hub's CONFIG section now.
+/// it is the body of the hub's CONFIG section now. Product rollout switches
+/// have graduated; CONFIG retains only the operational Home service banner.
 class AdminFlagsPanel extends StatefulWidget {
   const AdminFlagsPanel({
     super.key,
@@ -119,30 +117,6 @@ class _AdminFlagsPanelState extends State<AdminFlagsPanel> {
     }
   }
 
-  Future<void> _setSetting(String key, bool enabled) async {
-    final token = widget.authService.authToken;
-    if (token == null || _saving) return;
-    final previous = _settings;
-    setState(() {
-      _saving = true;
-      _settings = {...?_settings, key: enabled};
-    });
-    try {
-      final updated = await _api.updateAdminSettings(
-        identityToken: token,
-        settings: {key: enabled},
-      );
-      if (mounted) setState(() => _settings = updated);
-    } catch (_) {
-      if (mounted) {
-        setState(() => _settings = previous);
-        widget.showErrorToast(context, 'Couldn\'t save the setting.');
-      }
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -161,12 +135,6 @@ class _AdminFlagsPanelState extends State<AdminFlagsPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        AdminSettingsCardBody(
-          settings: settings,
-          saving: _saving,
-          onChanged: _setSetting,
-        ),
-        const SizedBox(height: 18),
         Text(
           'HOME SERVICE BANNER',
           style: PixelText.title(
@@ -206,12 +174,9 @@ class _AdminFlagsPanelState extends State<AdminFlagsPanel> {
   }
 }
 
-/// One switch per client-served feature flag (the `featureFlags` envelope).
-///
-/// Server-only flags stay out on purpose — they change backend behavior, not
-/// what a client renders, and a mis-tap on one of those is not recoverable from
-/// this screen. Split out from the card so the full switch list is assertable
-/// without a live admin session.
+/// Compatibility shell retained for tests and downstream forks. Product
+/// rollout settings are no longer mutable in the app, so it intentionally
+/// renders no controls.
 class AdminSettingsCardBody extends StatelessWidget {
   const AdminSettingsCardBody({
     super.key,
@@ -224,103 +189,8 @@ class AdminSettingsCardBody extends StatelessWidget {
   final bool saving;
   final void Function(String key, bool enabled) onChanged;
 
-  /// Order matters: the two ad switches are the ones an operator reaches for
-  /// most often, so they stay on top where they have always been.
-  static const _flags = <({String key, String title, String blurb})>[
-    (
-      key: 'bannerAdsEnabled',
-      title: 'Banner ads',
-      blurb: 'Remote kill switch for every banner placement.',
-    ),
-    (
-      key: 'dualBoxBannersEnabled',
-      title: 'Dual box banners',
-      blurb: 'Adds the dedicated top placement to box screens.',
-    ),
-    (
-      key: 'teamRacesEnabled',
-      title: 'Team races',
-      blurb:
-          'Hides the team toggle in race creation when off. '
-          'Existing team races keep running either way.',
-    ),
-    (
-      key: 'onboardingV2Enabled',
-      title: 'Onboarding v2',
-      blurb: 'Skips the blocking tutorial gate for signed-in users.',
-    ),
-    (
-      key: 'onboardingV3Enabled',
-      title: 'Onboarding v3',
-      blurb:
-          'Health-gate rework, degraded state, relocated notification '
-          'ask, referral landing, five-step tutorial. Implies v2.',
-    ),
-    (
-      key: 'onboardingInviteCodeEnabled',
-      title: 'Onboarding invite code',
-      blurb:
-          'KILL SWITCH (defaults ON): the "got an invite code?" step at '
-          'the top of the v3 flow. Off removes it with no app release.',
-    ),
-    // Batch 2026-08-09 item 9. Flip ON only once the carrying build has
-    // rolled out — older binaries ignore it and stay skippable either way.
-    (
-      key: 'tutorialMandatoryEnabled',
-      title: 'Mandatory tutorial',
-      blurb:
-          'Removes every skip/back exit from the onboarding tutorial. '
-          'Settings replay stays optional; a client-side breaker restores '
-          'skip after 3 abandoned attempts.',
-    ),
-  ];
-
   @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (var i = 0; i < _flags.length; i++) ...[
-          if (i > 0) const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _flags[i].title,
-                      style: PixelText.title(size: 13, color: colors.textDark),
-                    ),
-                    Text(
-                      _flags[i].blurb,
-                      style: PixelText.body(size: 11, color: colors.textMid),
-                    ),
-                  ],
-                ),
-              ),
-              Switch(
-                value: settings[_flags[i].key] == true,
-                onChanged: saving
-                    ? null
-                    : (value) => onChanged(_flags[i].key, value),
-              ),
-            ],
-          ),
-        ],
-        const SizedBox(height: 12),
-        // The flag cache is per-worker with a 30s TTL, so a toggle that looks
-        // like it did nothing is usually just early. Saying so here stops the
-        // re-tap that follows.
-        Text(
-          'Flags are cached for 30s per server, so a change takes up to 30s '
-          'to reach every client.',
-          style: PixelText.body(size: 11, color: colors.textMid),
-        ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 /// The admin hub — batch 2026-08-09 item 10.

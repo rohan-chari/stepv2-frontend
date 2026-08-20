@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../services/backend_api_service.dart';
 import '../styles.dart';
+import '../utils/funded_exposure_error_copy.dart';
 import 'game_container.dart';
 import 'home_chrome.dart';
 import 'pill_button.dart';
@@ -43,7 +45,9 @@ class _QuickCreateRaceSheetState extends State<QuickCreateRaceSheet> {
       if (!mounted) return;
       setState(() {
         _creating = null;
-        _error = error.toString();
+        _error = error is ApiException
+            ? fundedExposureErrorCopy(error)
+            : error.toString();
       });
     }
   }
@@ -103,6 +107,7 @@ class _QuickCreateRaceSheetState extends State<QuickCreateRaceSheet> {
               if (_error != null) ...[
                 const SizedBox(height: 10),
                 Text(
+                  key: const Key('quick-create-error'),
                   _error!,
                   textAlign: TextAlign.center,
                   style: HomeText.body(

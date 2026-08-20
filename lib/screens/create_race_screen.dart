@@ -4,6 +4,7 @@ import '../models/race_payouts.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
+import '../utils/funded_exposure_error_copy.dart';
 import '../utils/team_race.dart';
 import '../utils/tournament.dart';
 import '../widgets/arcade_page.dart';
@@ -577,7 +578,9 @@ class CreateRaceScreenState extends State<CreateRaceScreen> {
         setState(() => _isCreating = false);
         showErrorToast(
           context,
-          _isTournament && e.code != null
+          e.code == kFundedExposureLimitCode
+              ? fundedExposureErrorCopy(e)
+              : _isTournament && e.code != null
               ? tournamentErrorCopy(e.code)
               : e.message,
         );

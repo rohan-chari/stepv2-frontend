@@ -449,6 +449,8 @@ bool raceCountsAsReviewHappyMoment(Map<String, dynamic> race) {
 /// a safe generic message so a newer backend never shows a raw code.
 String teamRaceErrorCopy(String? code, {String? friendName}) {
   switch (code) {
+    case 'FUNDED_EXPOSURE_LIMIT':
+      return 'Finish or leave another funded race before joining this one.';
     case 'TEAM_FULL':
       return "That side's full. Hop on the other team!";
     case 'TEAMS_UNEVEN':

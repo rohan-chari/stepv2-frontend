@@ -10,6 +10,8 @@ import '../services/backend_api_service.dart';
 String powerupUseErrorCopy(Object error) {
   if (error is ApiException) {
     switch (error.code) {
+      case 'POWERUP_RETIRED':
+        return 'This powerup has been retired.';
       case 'SIGNAL_JAMMED':
         return 'Powerups are jammed in this race right now. Sit tight!';
       case 'RAINSTORM_ACTIVE':

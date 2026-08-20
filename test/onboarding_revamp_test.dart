@@ -1051,12 +1051,8 @@ void main() {
     });
   });
 
-  group('§5.10 admin flag UI', () {
-    // 18. every client-served flag gets a switch. The invite-code kill switch
-    // and batch 2026-08-09 item 9's `tutorialMandatoryEnabled` bring the count
-    // to seven — the property (one switch per client-served flag, none
-    // missing) is unchanged.
-    testWidgets('the admin settings card renders every flag switch', (
+  group('§5.10 graduated admin flag UI', () {
+    testWidgets('the retired settings card renders no product switches', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -1084,13 +1080,14 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.byType(Switch), findsNWidgets(7));
-      expect(find.text('Onboarding v2'), findsOneWidget);
-      expect(find.text('Onboarding v3'), findsOneWidget);
-      expect(find.text('Onboarding invite code'), findsOneWidget);
-      expect(find.text('Team races'), findsOneWidget);
-      expect(find.text('Mandatory tutorial'), findsOneWidget);
-      expect(find.textContaining('30s'), findsWidgets);
+      expect(find.byType(Switch), findsNothing);
+      expect(find.text('Banner ads'), findsNothing);
+      expect(find.text('Onboarding v2'), findsNothing);
+      expect(find.text('Onboarding v3'), findsNothing);
+      expect(find.text('Onboarding invite code'), findsNothing);
+      expect(find.text('Team races'), findsNothing);
+      expect(find.text('Mandatory tutorial'), findsNothing);
+      expect(find.textContaining('30s'), findsNothing);
     });
   });
 

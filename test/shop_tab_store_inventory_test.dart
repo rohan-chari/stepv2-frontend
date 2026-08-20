@@ -10,7 +10,7 @@ import 'package:step_tracker/styles.dart';
 //
 // STORE shows:
 //   - cosmetics the user does NOT yet own (owned cosmetics leave the store)
-//   - purchasable powerups (e.g. Imposter, 75 coins) which are RE-BUYABLE
+//   - purchasable powerups which are RE-BUYABLE
 // INVENTORY shows:
 //   - owned cosmetics
 //   - owned powerups with their quantity counts
@@ -87,62 +87,63 @@ Future<AuthService> _createAuthService() async {
 }
 
 Map<String, dynamic> _catalog() => {
-      'coins': 1000,
-      'ownedItemIds': ['item-owned'],
-      'equipped': <String, dynamic>{},
-      'items': [
-        {
-          'id': 'item-unowned',
-          'sku': 'HAT_BLUE',
-          'name': 'Blue Hat',
-          'description': 'A hat',
-          'slot': 'HEAD',
-          'priceCoins': 100,
-          'assetKey': 'hat_blue',
-          'owned': false,
-          'equipped': false,
-        },
-        {
-          'id': 'item-owned',
-          'sku': 'SCARF_RED',
-          'name': 'Red Scarf',
-          'description': 'A scarf',
-          'slot': 'NECK',
-          'priceCoins': 200,
-          'assetKey': 'scarf_red',
-          'owned': true,
-          'equipped': false,
-        },
-      ],
-    };
+  'coins': 1000,
+  'ownedItemIds': ['item-owned'],
+  'equipped': <String, dynamic>{},
+  'items': [
+    {
+      'id': 'item-unowned',
+      'sku': 'HAT_BLUE',
+      'name': 'Blue Hat',
+      'description': 'A hat',
+      'slot': 'HEAD',
+      'priceCoins': 100,
+      'assetKey': 'hat_blue',
+      'owned': false,
+      'equipped': false,
+    },
+    {
+      'id': 'item-owned',
+      'sku': 'SCARF_RED',
+      'name': 'Red Scarf',
+      'description': 'A scarf',
+      'slot': 'NECK',
+      'priceCoins': 200,
+      'assetKey': 'scarf_red',
+      'owned': true,
+      'equipped': false,
+    },
+  ],
+};
 
 Map<String, dynamic> _powerupCatalog() => {
-      'coins': 1000,
-      'items': [
-        {
-          'sku': 'POWERUP_IMPOSTER',
-          'name': 'Imposter',
-          'description': 'Swap leaderboard positions for 1 hour',
-          'priceCoins': 75,
-          'powerupType': 'IMPOSTER',
-          'ownedQuantity': 2,
-        },
-        {
-          'sku': 'POWERUP_SIGNAL_JAMMER',
-          'name': 'Signal Jammer',
-          'description': 'Jam a rival — they can\'t use powerups for 1 hour',
-          'priceCoins': 75,
-          'powerupType': 'SIGNAL_JAMMER',
-          'ownedQuantity': 0,
-        },
-      ],
-    };
+  'coins': 1000,
+  'items': [
+    {
+      'sku': 'POWERUP_IMPOSTER',
+      'name': 'Imposter',
+      'description': 'Swap leaderboard positions for 1 hour',
+      'priceCoins': 75,
+      'powerupType': 'IMPOSTER',
+      'ownedQuantity': 2,
+    },
+    {
+      'sku': 'POWERUP_SIGNAL_JAMMER',
+      'name': 'Signal Jammer',
+      'description': 'Jam a rival — they can\'t use powerups for 1 hour',
+      'priceCoins': 75,
+      'powerupType': 'SIGNAL_JAMMER',
+      'ownedQuantity': 0,
+    },
+  ],
+};
 
 Map<String, dynamic> _inventory() => {
-      'items': [
-        {'powerupType': 'IMPOSTER', 'quantity': 2},
-      ],
-    };
+  'items': [
+    {'powerupType': 'IMPOSTER', 'quantity': 2},
+    {'powerupType': 'SIGNAL_JAMMER', 'quantity': 3},
+  ],
+};
 
 Future<void> _pumpShop(
   WidgetTester tester,
@@ -206,8 +207,9 @@ void main() {
     }
   });
 
-  testWidgets('STORE shows Imposter (75 coins) as a purchasable powerup',
-      (tester) async {
+  testWidgets('STORE filters retired Imposter from an older backend payload', (
+    tester,
+  ) async {
     final auth = await _createAuthService();
     final api = _FakeShopApi(
       catalog: _catalog(),
@@ -218,13 +220,15 @@ void main() {
     await _pumpShop(tester, auth, api);
     await _selectSegment(tester, 'STORE');
 
-    expect(find.text('Imposter'), findsWidgets);
-    // The 75-coin price is shown as a buy affordance in the store.
+    expect(find.text('Imposter'), findsNothing);
+    expect(find.text('Signal Jammer'), findsWidgets);
+    // The surviving 75-coin powerup still has its normal buy affordance.
     expect(find.text('75'), findsWidgets);
   });
 
-  testWidgets('STORE shows the Signal Jammer as a purchasable powerup',
-      (tester) async {
+  testWidgets('STORE shows the Signal Jammer as a purchasable powerup', (
+    tester,
+  ) async {
     final auth = await _createAuthService();
     final api = _FakeShopApi(
       catalog: _catalog(),
@@ -238,8 +242,9 @@ void main() {
     expect(find.text('Signal Jammer'), findsWidgets);
   });
 
-  testWidgets('STORE shows unowned cosmetics but NOT owned ones',
-      (tester) async {
+  testWidgets('STORE shows unowned cosmetics but NOT owned ones', (
+    tester,
+  ) async {
     final auth = await _createAuthService();
     final api = _FakeShopApi(
       catalog: _catalog(),
@@ -257,8 +262,34 @@ void main() {
     expect(find.text('Red Scarf'), findsNothing);
   });
 
-  testWidgets('INVENTORY shows owned cosmetics and owned-powerup counts',
-      (tester) async {
+  testWidgets(
+    'INVENTORY hides retired residue and keeps owned powerup counts',
+    (tester) async {
+      final auth = await _createAuthService();
+      final api = _FakeShopApi(
+        catalog: _catalog(),
+        powerupCatalog: _powerupCatalog(),
+        inventory: _inventory(),
+      );
+
+      await _pumpShop(tester, auth, api);
+      await _selectSegment(tester, 'INVENTORY');
+
+      // Retired residue is omitted while supported inventory remains usable.
+      await _selectCategory(tester, 'POWERUPS');
+      expect(find.text('Imposter'), findsNothing);
+      expect(find.text('Signal Jammer'), findsWidgets);
+      expect(find.textContaining('3'), findsWidgets);
+
+      // Owned cosmetic appears under ACCESSORIES.
+      await _selectCategory(tester, 'ACCESSORIES');
+      expect(find.text('Red Scarf'), findsWidgets);
+    },
+  );
+
+  testWidgets('Capybara details use identity copy without an ability claim', (
+    tester,
+  ) async {
     final auth = await _createAuthService();
     final api = _FakeShopApi(
       catalog: _catalog(),
@@ -268,19 +299,24 @@ void main() {
 
     await _pumpShop(tester, auth, api);
     await _selectSegment(tester, 'INVENTORY');
+    await _selectCategory(tester, 'CHARACTERS');
+    await tester.tap(find.byKey(const Key('shop-capybara-tile')));
+    // The character thumbnail animates forever; settle the sheet with fixed
+    // frames instead of pumpAndSettle.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
 
-    // Owned powerup appears under POWERUPS with its quantity (x2).
-    await _selectCategory(tester, 'POWERUPS');
-    expect(find.text('Imposter'), findsWidgets);
-    expect(find.textContaining('2'), findsWidgets);
-
-    // Owned cosmetic appears under ACCESSORIES.
-    await _selectCategory(tester, 'ACCESSORIES');
-    expect(find.text('Red Scarf'), findsWidgets);
+    expect(
+      find.text('The original. Steady, sociable, and always in your corner.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('ability'), findsNothing);
+    expect(find.textContaining('bonus'), findsNothing);
   });
 
-  testWidgets('degrades gracefully when powerup endpoints are unavailable',
-      (tester) async {
+  testWidgets('degrades gracefully when powerup endpoints are unavailable', (
+    tester,
+  ) async {
     final auth = await _createAuthService();
     final api = _FakeShopApi(
       catalog: _catalog(),

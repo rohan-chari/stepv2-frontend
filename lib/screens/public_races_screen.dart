@@ -12,6 +12,7 @@ import '../services/discovery_join_coordinator.dart';
 import '../styles.dart';
 import '../widgets/app_refresh_indicator.dart';
 import '../utils/at_name.dart';
+import '../utils/funded_exposure_error_copy.dart';
 import '../utils/team_race.dart';
 import '../utils/tournament.dart';
 import '../widgets/ad_banner_slot.dart';
@@ -280,10 +281,14 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
       showInfoToast(context, bucketPrivate ? "You're in!" : "You're in!");
       // Refresh so the card flips to VIEW.
       await _load();
-    } catch (e) {
+    } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _joiningFeaturedRaceKey = null);
-      showErrorToast(context, 'Could not join: $e');
+      showErrorToast(context, fundedExposureErrorCopy(e));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _joiningFeaturedRaceKey = null);
+      showErrorToast(context, 'Could not join. Give it another try!');
     }
   }
 

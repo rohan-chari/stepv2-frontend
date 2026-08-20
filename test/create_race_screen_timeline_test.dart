@@ -16,6 +16,9 @@ import 'package:step_tracker/widgets/pill_button.dart';
 // build against an older backend is behaviorally identical to today.
 
 class _RecordingApi extends BackendApiService {
+  _RecordingApi({this.createFailure});
+
+  final ApiException? createFailure;
   Map<String, dynamic>? lastCreateRaceCall;
   Map<String, dynamic>? lastCreateTeamRaceCall;
 
@@ -33,6 +36,7 @@ class _RecordingApi extends BackendApiService {
     DateTime? scheduledStartAt,
     DateTime? scheduledEndAt,
   }) async {
+    if (createFailure case final error?) throw error;
     lastCreateRaceCall = {
       'name': name,
       'maxDurationDays': maxDurationDays,
@@ -247,7 +251,9 @@ void main() {
     // A window that is entirely in the past — reachable on a stale scheduled
     // race whose start has already slipped by. End is after start, so this is
     // the "in the future" rule and not the ordering one.
-    state.debugSetScheduledStart(DateTime.now().subtract(const Duration(days: 10)));
+    state.debugSetScheduledStart(
+      DateTime.now().subtract(const Duration(days: 10)),
+    );
     state.debugSetCustomEnd(DateTime.now().subtract(const Duration(days: 2)));
     await tester.pump();
     expect(find.text('Pick an end time in the future'), findsOneWidget);
@@ -307,6 +313,35 @@ void main() {
 
     expect(api.lastCreateRaceCall!['scheduledEndAt'], isNull);
     expect(api.lastCreateRaceCall!['maxDurationDays'], 14);
+  });
+
+  testWidgets('funded exposure rejection stays on full create with one toast', (
+    tester,
+  ) async {
+    final api = _RecordingApi(
+      createFailure: const ApiException(
+        'Conflict',
+        statusCode: 409,
+        code: 'FUNDED_EXPOSURE_LIMIT',
+      ),
+    );
+    await _pump(tester, api);
+    await tester.enterText(
+      find.byKey(const Key('race-name-field')),
+      'Exposure Check',
+    );
+
+    await tester.ensureVisible(find.text('CREATE RACE'));
+    await tester.tap(find.text('CREATE RACE'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byType(CreateRaceScreen), findsOneWidget);
+    expect(
+      find.text('Finish or leave another funded race before joining this one.'),
+      findsOneWidget,
+    );
+    expect(find.text('Conflict'), findsNothing);
   });
 
   // -- 18 --------------------------------------------------------------------
@@ -404,7 +439,8 @@ void main() {
       expect(
         _derivation(tester),
         '10 PLAYERS × ${entry.value}',
-        reason: 'the seeded window must price the same as the preset it came '
+        reason:
+            'the seeded window must price the same as the preset it came '
             'from, not one day less',
       );
       expect(_createEnabled(tester), isTrue);

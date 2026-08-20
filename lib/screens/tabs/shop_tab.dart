@@ -22,8 +22,8 @@ import '../../widgets/powerup_icon.dart';
 import '../../constants/powerup_copy.dart';
 import '../get_coins_screen.dart';
 
-// Powerup types hidden from this build's store even if the backend still lists
-// them. Currently only IMPOSTER, disabled server-side (item #3).
+// Powerup types retired from Store and Inventory. Old-backend residue is
+// filtered defensively; historical race Activity remains readable elsewhere.
 const _hiddenShopPowerupTypes = {'IMPOSTER'};
 
 /// The watch-ads-to-unlock rules (spec §7 / contract §4.3).
@@ -363,7 +363,9 @@ class _ShopTabState extends State<ShopTab> {
         final type = raw['powerupType'];
         final quantity = raw['quantity'];
         if (type is String && quantity is num && quantity.toInt() > 0) {
-          inventory[type] = quantity.toInt();
+          if (!_hiddenShopPowerupTypes.contains(type)) {
+            inventory[type] = quantity.toInt();
+          }
         }
       }
     }
@@ -1242,8 +1244,7 @@ class _ShopTabState extends State<ShopTab> {
         slotLabel: _slotLabels['CHARACTER'],
         badge: equipped ? 'EQUIPPED' : null,
         description:
-            'The original. Steady, sociable, and always in your corner. '
-            'Capybaras top each other up with bonus steps every day.',
+            'The original. Steady, sociable, and always in your corner.',
         actions: [
           if (!equipped)
             PillButton(

@@ -3,7 +3,9 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../models/home_invite_preflight.dart';
+import '../services/backend_api_service.dart';
 import '../styles.dart';
+import '../utils/funded_exposure_error_copy.dart';
 import 'pill_button.dart';
 import 'spinning_coin.dart';
 
@@ -43,7 +45,9 @@ class _HomeInviteOverlayState extends State<HomeInviteOverlay> {
         setState(() {
           _acting = false;
           _accepting = null;
-          _error = error.toString();
+          _error = error is ApiException
+              ? fundedExposureErrorCopy(error)
+              : error.toString();
         });
       }
     }

@@ -109,8 +109,6 @@ class AuthService extends ChangeNotifier {
   static const _keyTeamRacesEnabled = 'auth_team_races_enabled';
   static const _keyOnboardingV2Enabled = 'auth_onboarding_v2_enabled';
   static const _keyOnboardingV3Enabled = 'auth_onboarding_v3_enabled';
-  static const _keyOnboardingInviteCodeEnabled =
-      'auth_onboarding_invite_code_enabled';
   static const _keyReferredByCode = 'auth_referred_by_code';
   static const _keyAuthPayloadApplied = 'auth_payload_applied';
   static const _keyTutorialMandatoryEnabled = 'auth_tutorial_mandatory_enabled';
@@ -167,9 +165,6 @@ class AuthService extends ChangeNotifier {
   bool _customRaceWindowEnabled = false;
   bool _onboardingV2Enabled = false;
   bool _onboardingV3Enabled = false;
-  // Kill switch, NOT an opt-in: it starts life ON and only a literal `false`
-  // from the backend turns it off.
-  bool _onboardingInviteCodeEnabled = true;
   bool _setupInviteCodePromptEnabled = false;
   bool _inviteCodePromptResolvedThisSession = false;
   String? _referredByCode;
@@ -269,15 +264,6 @@ class AuthService extends ChangeNotifier {
   /// behaves exactly as v2 does today, which is the rollback path.
   bool get onboardingV3Enabled => _onboardingV3Enabled;
 
-  /// Remote KILL SWITCH for the onboarding invite-code step (backend
-  /// `featureFlags.onboardingInviteCodeEnabled`, default true).
-  ///
-  /// Parsed fail-open on purpose, and this is the one place that differs from
-  /// [onboardingV3Enabled]: an opt-in flag must default off so an older
-  /// backend keeps the old flow, but a kill switch must default ON or a
-  /// backend that has never heard of it would silently disable a shipped
-  /// feature. Only the literal boolean `false` disables.
-  bool get onboardingInviteCodeEnabled => _onboardingInviteCodeEnabled;
   bool get setupInviteCodePromptEnabled => _setupInviteCodePromptEnabled;
   bool get inviteCodePromptResolvedThisSession =>
       _inviteCodePromptResolvedThisSession;
@@ -408,6 +394,10 @@ class AuthService extends ChangeNotifier {
   /// Loads persisted auth state. Returns true if a session exists.
   Future<bool> restoreSession() async {
     final prefs = await SharedPreferences.getInstance();
+    // The onboarding invite-code step was retired permanently. Delete its
+    // device cache before reading auth state so an older installed value can
+    // never resurrect the removed branch in this or a future refactor.
+    await prefs.remove('auth_onboarding_invite_code_enabled');
     _identityToken = prefs.getString(_keyIdentityToken);
     _userIdentifier = prefs.getString(_keyUserIdentifier);
     _backendUserId = prefs.getString(_keyBackendUserId);
@@ -454,9 +444,6 @@ class AuthService extends ChangeNotifier {
     _teamRacesEnabled = prefs.getBool(_keyTeamRacesEnabled) ?? true;
     _onboardingV2Enabled = prefs.getBool(_keyOnboardingV2Enabled) ?? false;
     _onboardingV3Enabled = prefs.getBool(_keyOnboardingV3Enabled) ?? false;
-    // Fail open: an install that has never seen the flag keeps the step.
-    _onboardingInviteCodeEnabled =
-        prefs.getBool(_keyOnboardingInviteCodeEnabled) ?? true;
     _referredByCode = prefs.getString(_keyReferredByCode);
     _authPayloadApplied = prefs.getBool(_keyAuthPayloadApplied) ?? false;
     _tutorialMandatoryEnabled =
@@ -973,12 +960,6 @@ class AuthService extends ChangeNotifier {
       _onboardingV3Enabled =
           activationFlags is Map &&
           activationFlags['onboardingV3Enabled'] == true;
-      // KILL SWITCH, so the polarity is inverted from the two flags above:
-      // absent, null, or any non-boolean leaves the step ON, and only the
-      // literal `false` removes it (no app release required either way).
-      _onboardingInviteCodeEnabled =
-          !(activationFlags is Map &&
-              activationFlags['onboardingInviteCodeEnabled'] == false);
       _setupInviteCodePromptEnabled =
           activationFlags is Map &&
           activationFlags['setupInviteCodePromptEnabled'] == true;
@@ -1075,7 +1056,6 @@ class AuthService extends ChangeNotifier {
     _customRaceWindowEnabled = false;
     _onboardingV2Enabled = false;
     _onboardingV3Enabled = false;
-    _onboardingInviteCodeEnabled = true;
     _setupInviteCodePromptEnabled = false;
     _inviteCodePromptResolvedThisSession = false;
     _referredByCode = null;
@@ -1117,9 +1097,6 @@ class AuthService extends ChangeNotifier {
     await prefs.remove(_keyDualBoxBannersEnabled);
     await prefs.remove(_keyOnboardingV2Enabled);
     await prefs.remove(_keyOnboardingV3Enabled);
-    // Cleared with its peers: both are per-account server state, and the next
-    // sign-in refills them from that account's payload.
-    await prefs.remove(_keyOnboardingInviteCodeEnabled);
     await prefs.remove(_keyReferredByCode);
     await prefs.remove(_keyAuthPayloadApplied);
     await prefs.remove(_keyTutorialMandatoryEnabled);
@@ -1426,10 +1403,6 @@ class AuthService extends ChangeNotifier {
     await prefs.setBool(_keyTeamRacesEnabled, _teamRacesEnabled);
     await prefs.setBool(_keyOnboardingV2Enabled, _onboardingV2Enabled);
     await prefs.setBool(_keyOnboardingV3Enabled, _onboardingV3Enabled);
-    await prefs.setBool(
-      _keyOnboardingInviteCodeEnabled,
-      _onboardingInviteCodeEnabled,
-    );
     await prefs.setBool(_keyAuthPayloadApplied, _authPayloadApplied);
     // Persisted so a cold start knows the answer before /auth/me replies —
     // otherwise the invite step is held back on every launch until the network

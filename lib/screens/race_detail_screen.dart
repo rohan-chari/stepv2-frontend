@@ -21,6 +21,7 @@ import '../styles.dart';
 import '../widgets/app_refresh_indicator.dart';
 import '../utils/at_name.dart';
 import '../utils/effect_polarity.dart';
+import '../utils/funded_exposure_error_copy.dart';
 import '../utils/powerup_error_copy.dart';
 import '../utils/race_display.dart';
 import '../utils/race_participant_display.dart';
@@ -156,9 +157,8 @@ const _rarityColors = {
   'RARE': Color(0xFFD4A017),
 };
 
-// Powerup types hidden from this build's inventory/store surfaces even if a
-// user still owns one. Currently only IMPOSTER, which is disabled server-side
-// (item #3); the DB rows are left intact so re-enabling is a single flag flip.
+// Retired powerups stay readable in historical Activity but never render as a
+// usable inventory or stash action in this build.
 const _hiddenPowerupTypes = {'IMPOSTER'};
 
 /// Converts the versioned `powerupData.inventory` payload into a safe local
@@ -169,7 +169,9 @@ List<Map<String, dynamic>> normalizePowerupInventory(Object? rawInventory) {
 
   return [
     for (final rawEntry in rawInventory)
-      if (rawEntry is Map)
+      if (rawEntry is Map &&
+          rawEntry['type'] != 'IMPOSTER' &&
+          rawEntry['powerupType'] != 'IMPOSTER')
         <String, dynamic>{
           for (final MapEntry(:key, :value) in rawEntry.entries)
             if (key is String) key: value,
@@ -1790,8 +1792,12 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       } else {
         Navigator.of(context).pop(true);
       }
-    } catch (e) {
-      if (mounted) showErrorToast(context, e.toString());
+    } on ApiException catch (e) {
+      if (mounted) showErrorToast(context, fundedExposureErrorCopy(e));
+    } catch (_) {
+      if (mounted) {
+        showErrorToast(context, 'Could not answer this invite. Try again.');
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -2723,7 +2729,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     if (mounted) setState(() => _globalPowerupInventory = inventory);
   }
 
-  /// Spends a globally-owned powerup (e.g. Imposter) into this race: redeems it
+  /// Spends a globally-owned powerup into this race: redeems it
   /// to a HELD in-race powerup, then immediately runs the normal use flow
   /// (target picker etc.) on it. Reuses [_usePowerup] so targeting/feedback are
   /// identical to box-earned powerups.
@@ -6867,10 +6873,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   List<Widget> _buildGlobalPowerupStash() {
     final entries =
         _globalPowerupInventory.entries
-            // Imposter is disabled on this build (item #3): the server rejects
-            // its use and drops it from the catalog. Hide any still-owned
-            // Imposter from the stash so there's no dead "USE" button. The row
-            // stays in the DB untouched and reappears if we re-enable.
+            // Retired types remain readable in history but never expose a dead
+            // USE action if an old backend still returns inventory residue.
             .where((e) => e.value > 0 && !_hiddenPowerupTypes.contains(e.key))
             .toList()
           ..sort((a, b) => a.key.compareTo(b.key));

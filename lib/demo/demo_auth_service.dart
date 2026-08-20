@@ -83,14 +83,6 @@ class DemoAuthService extends AuthService {
   @override
   bool get onboardingV3Enabled => false;
 
-  /// The invite-code step is v3-only, so this is a second lock on the same
-  /// door — and it matters more than it looks: the flag FAILS OPEN on the real
-  /// service (a kill switch must), so inheriting it would leave the demo host
-  /// one `onboardingV3Enabled` change away from rendering an onboarding step
-  /// and firing a `/referrals/me` fetch inside a network-guarded demo.
-  @override
-  bool get onboardingInviteCodeEnabled => false;
-
   /// Deliberately false, same rationale as `onboardingV2Enabled` above and for
   /// a sharper reason (timeline spec §10.1 risk 1): this class inherits every
   /// flag it does not override, so the moment `customRaceWindowEnabled` flips

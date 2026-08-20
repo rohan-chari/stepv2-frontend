@@ -8,6 +8,7 @@ import '../services/app_route_observer.dart';
 import '../styles.dart';
 import '../utils/share_helper.dart';
 import '../utils/tournament.dart';
+import '../utils/funded_exposure_error_copy.dart';
 import '../utils/tournament_bracket.dart';
 import '../widgets/ad_banner_slot.dart';
 import '../widgets/celebration_confetti.dart';
@@ -253,7 +254,11 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
       if (mounted) {
         showErrorToast(
           context,
-          e.code != null ? tournamentErrorCopy(e.code) : e.message,
+          e.code == kFundedExposureLimitCode
+              ? fundedExposureErrorCopy(e)
+              : e.code != null
+              ? tournamentErrorCopy(e.code)
+              : e.message,
         );
       }
       return null;
@@ -348,7 +353,8 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
   Future<void> _leave() async {
     final ok = await _confirm(
       title: 'LEAVE THE TOURNAMENT?',
-      body: 'Your buy-in is refunded. You can rejoin later if a spot opens '
+      body:
+          'Your buy-in is refunded. You can rejoin later if a spot opens '
           'up.',
       confirmLabel: 'LEAVE',
     );
@@ -700,10 +706,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
               variant: PillButtonVariant.accent,
               fontSize: 13,
               fullWidth: true,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24,
-                vertical: 12,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               onPressed: _isActing
                   ? null
                   : () {

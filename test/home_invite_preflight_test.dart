@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:step_tracker/models/home_invite_preflight.dart';
+import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/widgets/home_invite_overlay.dart';
 
 void main() {
@@ -56,5 +57,38 @@ void main() {
     await tester.tap(find.byKey(const Key('home-invite-dismiss')));
     await tester.pump();
     expect(responseCalls, 0);
+  });
+
+  testWidgets('funded exposure failure stays inline and keeps overlay open', (
+    tester,
+  ) async {
+    const invite = HomeInvite(
+      kind: HomeInviteKind.race,
+      id: 'race-1',
+      name: 'Lunch Loop',
+      status: 'PENDING',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomeInviteOverlay(
+          invite: invite,
+          onRespond: (_) async => throw const ApiException(
+            'Conflict',
+            statusCode: 409,
+            code: 'FUNDED_EXPOSURE_LIMIT',
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('home-invite-accept')));
+    await tester.pump();
+
+    expect(find.byKey(const Key('home-invite-overlay')), findsOneWidget);
+    expect(
+      find.text('Finish or leave another funded race before joining this one.'),
+      findsOneWidget,
+    );
+    expect(find.text('Conflict'), findsNothing);
   });
 }

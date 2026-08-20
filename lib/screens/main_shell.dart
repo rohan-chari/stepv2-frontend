@@ -25,6 +25,7 @@ import '../services/admin_metrics_telemetry_service.dart';
 import '../services/ad_service.dart';
 import '../services/onboarding_state_service.dart';
 import '../utils/onboarding_gate.dart';
+import '../utils/funded_exposure_error_copy.dart';
 import '../widgets/notification_ask_dialog.dart';
 import '../widgets/steps_disconnected_banner.dart';
 import '../services/auth_service.dart';
@@ -290,12 +291,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
             firstRaceOnboardingSeen: widget.authService.firstRaceOnboardingSeen,
           ));
 
-  /// Whether the onboarding invite-code step is still owed.
+  /// Whether the one-time Home SETUP invite-code row is still owed.
   ///
   /// Every term must hold, and each one exists for a reason:
-  ///  * v3 — the step lives only inside the v3 branch of the flow.
-  ///  * the `onboardingInviteCodeEnabled` kill switch is not explicitly false
-  ///    (fail-open: an older backend that never heard of it keeps the step).
+  ///  * `setupInviteCodePromptEnabled` — an older backend must not reveal a
+  ///    Home contract it does not carry.
   ///  * `authPayloadApplied` — the NO-FLASH rule. Until a user envelope has
   ///    been applied, `referredByCode == null` means "unknown", not
   ///    "unattributed", and rendering on a guess flashes the step at a
@@ -942,16 +942,20 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
             );
       raceId = result['raceId'] as String?;
     } on ApiException catch (e) {
-      // Already a member / full / closed: still try to land them on the race by
-      // resolving its id from the public preview.
-      try {
-        final preview = await _backendApiService.fetchSharedRace(
-          token: token,
-          identityToken: identityToken,
-        );
-        raceId = preview['id'] as String?;
-      } catch (_) {}
-      if (raceId == null) errorMessage = e.message;
+      if (e.code == kFundedExposureLimitCode) {
+        errorMessage = fundedExposureErrorCopy(e);
+      } else {
+        // Already a member / full / closed: still try to land them on the race by
+        // resolving its id from the public preview.
+        try {
+          final preview = await _backendApiService.fetchSharedRace(
+            token: token,
+            identityToken: identityToken,
+          );
+          raceId = preview['id'] as String?;
+        } catch (_) {}
+        if (raceId == null) errorMessage = e.message;
+      }
     } catch (_) {
       // Network/transient: drop the token (it's re-tappable) rather than loop.
     } finally {
@@ -995,17 +999,23 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       final t = result['tournament'];
       tournamentId = t is Map ? t['id'] as String? : null;
     } on ApiException catch (e) {
-      // Already a member / full / started: still try to land them on the
-      // bracket by resolving its id from the share preview.
-      try {
-        final preview = await _backendApiService.fetchSharedTournament(
-          token: token,
-          identityToken: identityToken,
-        );
-        tournamentId = preview['id'] as String?;
-      } catch (_) {}
-      if (tournamentId == null) {
-        errorMessage = e.code != null ? tournamentErrorCopy(e.code) : e.message;
+      if (e.code == kFundedExposureLimitCode) {
+        errorMessage = fundedExposureErrorCopy(e);
+      } else {
+        // Already a member / full / started: still try to land them on the
+        // bracket by resolving its id from the share preview.
+        try {
+          final preview = await _backendApiService.fetchSharedTournament(
+            token: token,
+            identityToken: identityToken,
+          );
+          tournamentId = preview['id'] as String?;
+        } catch (_) {}
+        if (tournamentId == null) {
+          errorMessage = e.code != null
+              ? tournamentErrorCopy(e.code)
+              : e.message;
+        }
       }
     } catch (_) {
       // Network/transient: drop the token (re-tappable) rather than loop.
@@ -1106,7 +1116,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         // Server-gated one-time welcome boxes; a no-op if already granted.
         onboarding: true,
       );
-    } on ApiException {
+    } on ApiException catch (error) {
+      if (error.code == kFundedExposureLimitCode) {
+        if (mounted) showErrorToast(context, fundedExposureErrorCopy(error));
+        return;
+      }
       // "Already in this race" (signup auto-enroll) or full/closed — either
       // way the race screen is the right destination; it renders any state.
     } catch (_) {
@@ -2319,7 +2333,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         return;
       }
       throw ApiException(
-        error.code == 'TEAM_FULL'
+        error.code == kFundedExposureLimitCode
+            ? fundedExposureErrorCopy(error)
+            : error.code == 'TEAM_FULL'
             ? 'That team is full. Try another invitation.'
             : error.code == 'INSUFFICIENT_COINS'
             ? 'You need more coins to accept this invitation.'
@@ -2688,8 +2704,13 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       // keep using the core-only path.
       await Future.wait([_fetchRacesCore(), _refreshRacesDiscovery()]);
       return true;
-    } catch (e) {
-      if (mounted) showErrorToast(context, 'Could not join: $e');
+    } on ApiException catch (e) {
+      if (mounted) showErrorToast(context, fundedExposureErrorCopy(e));
+      return false;
+    } catch (_) {
+      if (mounted) {
+        showErrorToast(context, 'Could not join. Give it another try!');
+      }
       return false;
     }
   }
@@ -3405,7 +3426,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         final membershipLimitMessage = e.message.trim();
         showErrorToast(
           context,
-          e.code == 'QUICK_RACE_MEMBERSHIP_LIMIT'
+          e.code == kFundedExposureLimitCode
+              ? fundedExposureErrorCopy(e)
+              : e.code == 'QUICK_RACE_MEMBERSHIP_LIMIT'
               ? (membershipLimitMessage.isNotEmpty
                     ? membershipLimitMessage
                     : 'You’re already in the maximum number of races that start automatically. Try again after one is over.')
@@ -3416,7 +3439,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     : 'Could not join. Give it another try!'),
         );
       }
-      return e.code == 'QUICK_RACE_MEMBERSHIP_LIMIT'
+      return e.code == kFundedExposureLimitCode
+          ? kFundedExposureLimitCode
+          : e.code == 'QUICK_RACE_MEMBERSHIP_LIMIT'
           ? 'QUICK_RACE_MEMBERSHIP_LIMIT'
           : 'UNKNOWN';
     } catch (_) {
@@ -3560,9 +3585,16 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           raceId: raceId,
           onboarding: true,
         );
-      } catch (_) {
+      } on ApiException catch (error) {
+        if (error.code == kFundedExposureLimitCode) {
+          if (mounted) showErrorToast(context, fundedExposureErrorCopy(error));
+          return;
+        }
         // "Already in this race", full, closed — the race screen renders every
         // one of those states correctly, so continue to it either way.
+      } catch (_) {
+        // Older backends can still answer with uncoded failures. Preserve the
+        // established onboarding handoff for those responses.
       }
     }
     await _skipFirstRaceOnboarding();

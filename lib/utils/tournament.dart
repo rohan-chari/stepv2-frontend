@@ -656,6 +656,8 @@ abstract final class TournamentColors {
 /// never surfaces a raw code. Sibling of [teamRaceErrorCopy].
 String tournamentErrorCopy(String? code, {String? friendName}) {
   switch (code) {
+    case 'FUNDED_EXPOSURE_LIMIT':
+      return 'Finish or leave another funded race before joining this one.';
     case 'UPDATE_REQUIRED':
       return 'Update the app to join tournaments.';
     case 'FEATURE_DISABLED':

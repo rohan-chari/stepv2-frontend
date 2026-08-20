@@ -1486,7 +1486,14 @@ class _RacesTabState extends State<RacesTab> {
               (status == 'HELD' && type is String && type.isNotEmpty);
         });
     final slotItems = slotItemsWellFormed
-        ? rawSlotItems.whereType<Map>().toList(growable: false)
+        ? rawSlotItems
+              .whereType<Map>()
+              .where(
+                (item) =>
+                    item['type'] != 'IMPOSTER' &&
+                    item['powerupType'] != 'IMPOSTER',
+              )
+              .toList(growable: false)
         : const <Map>[];
     final mysteryBoxCount = slotItemsWellFormed
         ? slotItems.where((item) => item['status'] == 'MYSTERY_BOX').length

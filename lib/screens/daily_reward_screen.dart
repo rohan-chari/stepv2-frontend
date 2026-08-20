@@ -898,6 +898,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
     // the reel keeps showing accessory-only RARE tiles exactly as before.
     final powerupPool = (box['powerupPool'] as List? ?? const [])
         .whereType<Map<String, dynamic>>()
+        .where((powerup) => powerup['powerupType'] != 'IMPOSTER')
         .toList();
 
     final rng = Random();
@@ -1075,6 +1076,7 @@ class _DailyStripItem {
   // Set when this tile is a shop powerup (spinPowerups feature): drives the
   // PowerupIcon face. Null for coin/accessory tiles.
   final String? powerupType;
+  final bool retiredPowerup;
 
   const _DailyStripItem._({
     required this.rarity,
@@ -1083,6 +1085,7 @@ class _DailyStripItem {
     this.name,
     this.animationFrames = 1,
     this.powerupType,
+    this.retiredPowerup = false,
   });
 
   const _DailyStripItem.coins(int amount, String rarity)
@@ -1114,6 +1117,13 @@ class _DailyStripItem {
     // reward types). Read defensively so a partial payload never crashes.
     final powerup = result['powerup'] as Map<String, dynamic>?;
     if (result['rewardType'] == 'POWERUP' && powerup != null) {
+      if (powerup['powerupType'] == 'IMPOSTER') {
+        return _DailyStripItem._(
+          rarity: rarity,
+          name: 'Retired reward',
+          retiredPowerup: true,
+        );
+      }
       return _DailyStripItem.powerup(powerup);
     }
     final shopItem = result['shopItem'] as Map<String, dynamic>?;
@@ -1183,6 +1193,13 @@ class _DailyReelTile extends StatelessWidget {
     }
     if (item.isPowerup) {
       return PowerupIcon(type: item.powerupType!, size: 46);
+    }
+    if (item.retiredPowerup) {
+      return Icon(
+        Icons.block_rounded,
+        size: 42,
+        color: AppColors.of(context).textMid,
+      );
     }
     if (item.assetKey != null) {
       return SizedBox(
@@ -1435,7 +1452,9 @@ class _RewardRevealState extends State<_RewardReveal> {
     // rewardType with a missing payload falls through to the coin card rather
     // than crashing.
     final powerup = widget.reward['powerup'] as Map<String, dynamic>?;
-    final isPowerup = type == 'POWERUP' && powerup != null;
+    final isRetiredPowerup =
+        type == 'POWERUP' && powerup?['powerupType'] == 'IMPOSTER';
+    final isPowerup = type == 'POWERUP' && powerup != null && !isRetiredPowerup;
     // Present only on daily-box claims; legacy ladder claims have no rarity.
     final rarity = widget.reward['rarity'] as String?;
     final rarityColor = rarity != null ? _rarityColor(rarity) : null;
@@ -1478,8 +1497,43 @@ class _RewardRevealState extends State<_RewardReveal> {
                 color: AppColors.of(context).ink,
               ),
             ),
+            if (rarity != null) ...[
+              const SizedBox(height: 5),
+              Text(
+                rarity,
+                textAlign: TextAlign.center,
+                style: PixelText.title(
+                  size: 12,
+                  color: rarityColor ?? AppColors.of(context).textMid,
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
-            if (isPowerup) ...[
+            if (isRetiredPowerup) ...[
+              Icon(
+                Icons.block_rounded,
+                size: 88,
+                color: AppColors.of(context).textMid,
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'POWERUP RETIRED',
+                textAlign: TextAlign.center,
+                style: PixelText.title(
+                  size: 20,
+                  color: AppColors.of(context).textDark,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'This reward is no longer available.',
+                textAlign: TextAlign.center,
+                style: PixelText.body(
+                  size: 12,
+                  color: AppColors.of(context).textMid,
+                ),
+              ),
+            ] else if (isPowerup) ...[
               Center(
                 child: Container(
                   width: 130,
@@ -1577,7 +1631,8 @@ class _RewardRevealState extends State<_RewardReveal> {
               ],
             ],
             const SizedBox(height: 22),
-            if (widget.onExtraSpin != null && widget.extraSpinLabel != null) ...[
+            if (widget.onExtraSpin != null &&
+                widget.extraSpinLabel != null) ...[
               PillButton(
                 label: widget.extraSpinLabel!,
                 variant: PillButtonVariant.primary,

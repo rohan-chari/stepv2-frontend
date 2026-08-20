@@ -18,6 +18,9 @@ const _canonicalFundedPool = <String, dynamic>{
 };
 
 class _JoinApi extends BackendApiService {
+  _JoinApi({this.failure});
+
+  final ApiException? failure;
   int raceJoins = 0;
   int tournamentJoins = 0;
 
@@ -28,6 +31,7 @@ class _JoinApi extends BackendApiService {
     bool onboarding = false,
   }) async {
     raceJoins += 1;
+    if (failure case final error?) throw error;
     return {
       'race': {'id': raceId, 'status': 'PENDING'},
     };
@@ -39,6 +43,7 @@ class _JoinApi extends BackendApiService {
     required String tournamentId,
   }) async {
     tournamentJoins += 1;
+    if (failure case final error?) throw error;
     return {
       'tournament': {'id': tournamentId, 'status': 'PENDING'},
     };
@@ -112,6 +117,37 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   for (final target in DiscoveryJoinTarget.values) {
+    testWidgets('${target.name} shows the funded exposure limit as one toast', (
+      tester,
+    ) async {
+      final auth = await _authWithCoins(0);
+      final api = _JoinApi(
+        failure: const ApiException(
+          'Conflict',
+          statusCode: 409,
+          code: 'FUNDED_EXPOSURE_LIMIT',
+        ),
+      );
+      await _pumpJoinButton(
+        tester,
+        auth: auth,
+        api: api,
+        payload: _payload(target, _canonicalFundedPool),
+        target: target,
+      );
+
+      await tester.tap(find.text('JOIN'));
+      await tester.pump();
+
+      expect(
+        find.text(
+          'Finish or leave another funded race before joining this one.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Conflict'), findsNothing);
+    });
+
     testWidgets(
       '${target.name} malformed or explicitly unfunded pools retain buy-in confirmation',
       (tester) async {

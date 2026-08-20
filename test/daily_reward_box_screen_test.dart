@@ -219,7 +219,11 @@ void main() {
     final auth = await _authService();
     final api = _BoxModeApi(
       powerupPool: [
-        {'sku': 'POWERUP_IMPOSTER', 'name': 'Imposter', 'powerupType': 'IMPOSTER'},
+        {
+          'sku': 'POWERUP_SIGNAL_JAMMER',
+          'name': 'Signal Jammer',
+          'powerupType': 'SIGNAL_JAMMER',
+        },
       ],
       rarePrizeMix: {'ACCESSORY': 0.0, 'POWERUP': 1.0},
       boxResult: const {
@@ -228,9 +232,9 @@ void main() {
         'coinAmount': null,
         'shopItem': null,
         'powerup': {
-          'sku': 'POWERUP_IMPOSTER',
-          'name': 'Imposter',
-          'powerupType': 'IMPOSTER',
+          'sku': 'POWERUP_SIGNAL_JAMMER',
+          'name': 'Signal Jammer',
+          'powerupType': 'SIGNAL_JAMMER',
         },
         'coins': 100,
         'streak': 7,
@@ -248,8 +252,51 @@ void main() {
 
     expect(find.text('CLAIMED!'), findsOneWidget);
     expect(find.text('RARE'), findsOneWidget);
-    expect(find.text('Imposter'), findsOneWidget);
+    expect(find.text('Signal Jammer'), findsOneWidget);
     expect(find.text('Added to your powerups'), findsOneWidget);
+  });
+
+  testWidgets('an older backend cannot reveal a retired Imposter reward', (
+    WidgetTester tester,
+  ) async {
+    final auth = await _authService();
+    final api = _BoxModeApi(
+      powerupPool: const [
+        {
+          'sku': 'POWERUP_IMPOSTER',
+          'name': 'Imposter',
+          'powerupType': 'IMPOSTER',
+        },
+      ],
+      rarePrizeMix: const {'ACCESSORY': 0.0, 'POWERUP': 1.0},
+      boxResult: const {
+        'rarity': 'RARE',
+        'rewardType': 'POWERUP',
+        'powerup': {
+          'sku': 'POWERUP_IMPOSTER',
+          'name': 'Imposter',
+          'powerupType': 'IMPOSTER',
+        },
+        'coins': 100,
+        'streak': 7,
+      },
+    );
+    await _pumpScreen(tester, api, auth);
+
+    // The retired item is absent from decoys even when an older backend still
+    // returns it in the optional pool.
+    expect(find.text('Imposter'), findsNothing);
+
+    await tester.tap(find.text('SWIPE OR TAP'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 4100));
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(find.text('Imposter'), findsNothing);
+    expect(find.text('POWERUP RETIRED'), findsOneWidget);
+    expect(find.text('This reward is no longer available.'), findsOneWidget);
   });
 
   testWidgets('odds sheet describes RARE as accessory or powerup', (
@@ -258,7 +305,11 @@ void main() {
     final auth = await _authService();
     final api = _BoxModeApi(
       powerupPool: [
-        {'sku': 'POWERUP_IMPOSTER', 'name': 'Imposter', 'powerupType': 'IMPOSTER'},
+        {
+          'sku': 'POWERUP_SIGNAL_JAMMER',
+          'name': 'Signal Jammer',
+          'powerupType': 'SIGNAL_JAMMER',
+        },
       ],
       rarePrizeMix: {'ACCESSORY': 0.5, 'POWERUP': 0.5},
     );
