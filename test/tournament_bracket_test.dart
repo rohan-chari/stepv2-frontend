@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:step_tracker/utils/tournament.dart';
 import 'package:step_tracker/utils/tournament_bracket.dart';
 
 // The draggable bracket board is driven by a pure, normalized model derived

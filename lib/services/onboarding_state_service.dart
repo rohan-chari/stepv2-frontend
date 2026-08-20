@@ -32,19 +32,17 @@ class OnboardingStateService {
   static const keyRenameChipDismissed = 'rename_chip_dismissed';
   static const keyCoachTipsSeen = 'coach_tips_seen';
 
-  /// Whether this device has already answered the onboarding invite-code step
-  /// (applied a code, hit a terminal rejection, or skipped).
+  /// Whether this account has answered the one-time Home SETUP invite-code
+  /// prompt (applied a code, hit a terminal rejection, or skipped).
   ///
   /// Device-scoped with NO userId suffix, and deliberately IN [allKeys]: a
   /// different account on the same device gets its own chance to name an
-  /// inviter. Re-prompting an account that is already attributed is prevented
-  /// by server truth (`referredByCode`), not by this flag — which is why
-  /// wiping it on sign-out is safe here and was not for the rename chip.
-  static const keyInviteCodeStepDone = 'invite_code_step_done';
-
-  Future<bool> inviteCodePromptResolved() => inviteCodeStepDone();
-
-  Future<void> markInviteCodePromptResolved() => markInviteCodeStepDone();
+  /// inviter. Server truth (`referredByCode`) prevents re-prompting an already
+  /// attributed account.
+  // Keep the shipped storage literal across the onboarding-step removal. An
+  // upgrade or binary rollback must not resurrect a prompt the user already
+  // answered; only the Dart-facing name changes to describe the Home prompt.
+  static const keyInviteCodePromptResolved = 'invite_code_step_done';
 
   /// The app version whose "What's New" sheet this device has already seen
   /// (batch 2026-08-08, item 8).
@@ -72,7 +70,7 @@ class OnboardingStateService {
     keyRenameChipShownCount,
     keyRenameChipDismissed,
     keyCoachTipsSeen,
-    keyInviteCodeStepDone,
+    keyInviteCodePromptResolved,
   ];
 
   /// Total notification asks allowed per install. "Not now" in-app leaves the
@@ -249,22 +247,18 @@ class OnboardingStateService {
     _renameChipCountedThisSession = false;
   }
 
-  // -- invite-code step ------------------------------------------------------
+  // -- one-time Home invite-code prompt -------------------------------------
 
-  /// Whether the invite-code onboarding step has already been answered on this
-  /// device. Absent ⇒ false ⇒ the step is still owed, which is the safe
-  /// default: the worst case is one redundant prompt answered by
-  /// `already_attributed`.
-  Future<bool> inviteCodeStepDone() async =>
-      (await _prefs).getBool(keyInviteCodeStepDone) ?? false;
+  Future<bool> inviteCodePromptResolved() async {
+    return (await _prefs).getBool(keyInviteCodePromptResolved) ?? false;
+  }
 
-  /// Marks the step answered. Called on apply-success, on a TERMINAL rejection
-  /// (already_attributed / already_raced — self_referral is NOT terminal: the
-  /// user typed their own code and can retype their friend's), and on skip —
-  /// never on a transient failure, so a network blip or a typo leaves the user
-  /// a second chance on the next launch.
-  Future<void> markInviteCodeStepDone() async =>
-      (await _prefs).setBool(keyInviteCodeStepDone, true);
+  /// Marks the Home prompt answered on apply-success, a terminal rejection, or
+  /// skip. Transient failures intentionally remain retryable.
+  Future<void> markInviteCodePromptResolved() async {
+    final prefs = await _prefs;
+    await prefs.setBool(keyInviteCodePromptResolved, true);
+  }
 
   // -- what's new (item 8) ---------------------------------------------------
 

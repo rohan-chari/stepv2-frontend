@@ -26,12 +26,11 @@ void main() {
     return {
       'id': 't1',
       'name': 'Bracket',
-      if (status != null) 'status': status,
-      if (myStatus != null) 'myStatus': myStatus,
+      'status': ?status,
+      'myStatus': ?myStatus,
       'myEliminatedInRound': myEliminatedInRound,
-      if (championUserId != null) 'championUserId': championUserId,
-      if (myCurrentMatchRaceId != null)
-        'myCurrentMatchRaceId': myCurrentMatchRaceId,
+      'championUserId': ?championUserId,
+      'myCurrentMatchRaceId': ?myCurrentMatchRaceId,
       if (includeMatchKey) 'myCurrentMatch': myCurrentMatch,
     };
   }

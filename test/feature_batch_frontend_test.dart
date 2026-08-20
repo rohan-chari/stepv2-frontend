@@ -106,7 +106,7 @@ void main() {
   });
 
   test(
-    'sign out clears both persisted and live banner rollout flags',
+    'upgrade and sign out clear retired banner rollout preferences',
     () async {
       SharedPreferences.setMockInitialValues({
         'auth_identity_token': 'token',
@@ -116,16 +116,18 @@ void main() {
       });
       final auth = AuthService();
       await auth.restoreSession();
-      expect(AdService.remoteBannersEnabled, isTrue);
-      expect(AdService.remoteDualBoxBannersEnabled, isTrue);
+      expect(auth.bannerAdsEnabled, isTrue);
+      expect(auth.dualBoxBannersEnabled, isTrue);
+
+      var prefs = await SharedPreferences.getInstance();
+      expect(prefs.containsKey('auth_banner_ads_enabled'), isFalse);
+      expect(prefs.containsKey('auth_dual_box_banners_enabled'), isFalse);
 
       await auth.signOut();
 
-      final prefs = await SharedPreferences.getInstance();
+      prefs = await SharedPreferences.getInstance();
       expect(prefs.containsKey('auth_banner_ads_enabled'), isFalse);
       expect(prefs.containsKey('auth_dual_box_banners_enabled'), isFalse);
-      expect(AdService.remoteBannersEnabled, isFalse);
-      expect(AdService.remoteDualBoxBannersEnabled, isFalse);
     },
   );
 
@@ -184,9 +186,6 @@ void main() {
   testWidgets('single and Open All routes mount top and bottom banner slots', (
     tester,
   ) async {
-    AdService.remoteDualBoxBannersEnabled = true;
-    addTearDown(() => AdService.remoteDualBoxBannersEnabled = false);
-
     await tester.pumpWidget(
       MaterialApp(
         home: CaseOpeningScreen(openMysteryBox: () async => const {}),
@@ -208,7 +207,7 @@ void main() {
     expect(find.byType(AdBannerSlot), findsNWidgets(2));
   });
 
-  testWidgets('daily reward retains footer and adds a separate top slot', (
+  testWidgets('daily reward has no top safe-area gap without a build unit', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({
@@ -218,8 +217,6 @@ void main() {
     });
     final auth = AuthService();
     await auth.restoreSession();
-    AdService.remoteDualBoxBannersEnabled = true;
-    addTearDown(() => AdService.remoteDualBoxBannersEnabled = false);
     await tester.pumpWidget(
       MaterialApp(
         home: DailyRewardScreen(
@@ -229,7 +226,9 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.byType(AdBannerSlot), findsNWidgets(2));
+    expect(AdService.boxTopBannerEnabled, isFalse);
+    expect(find.byType(AdBannerSlot), findsOneWidget);
+    expect(find.byType(SafeArea), findsOneWidget);
   });
 
   testWidgets('admin rewarded-ad rows render complete and malformed payloads', (

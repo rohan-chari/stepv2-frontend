@@ -2425,7 +2425,7 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
-  /// GET /admin/settings -> `{settings: {bannerAdsEnabled, ...}}`.
+  /// GET /admin/settings -> the retained Home service-banner settings.
   Future<Map<String, dynamic>> fetchAdminSettings({
     required String identityToken,
   }) async {
@@ -2438,25 +2438,7 @@ class BackendApiService {
     return settings is Map<String, dynamic> ? settings : <String, dynamic>{};
   }
 
-  /// PATCH /admin/settings with a subset of boolean flags; echoes the full
-  /// updated settings map.
-  Future<Map<String, dynamic>> updateAdminSettings({
-    required String identityToken,
-    required Map<String, bool> settings,
-  }) async {
-    final response = await _sendJsonRequest(
-      method: 'PATCH',
-      path: '/admin/settings',
-      body: settings,
-      identityToken: identityToken,
-    );
-    final body = await _decodeJsonResponse(response);
-    final updated = body['settings'];
-    return updated is Map<String, dynamic> ? updated : <String, dynamic>{};
-  }
-
-  /// Atomic settings command for the text-only Home service banner. It is
-  /// intentionally separate from the boolean-only generic settings endpoint.
+  /// Dedicated atomic command for the retained text-only Home service banner.
   Future<Map<String, dynamic>> updateAdminHomeServiceBanner({
     required String identityToken,
     required bool enabled,

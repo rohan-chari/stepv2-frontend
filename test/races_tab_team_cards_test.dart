@@ -45,7 +45,7 @@ Map<String, dynamic> _teamRace({
     'isCreator': false,
     'endsAt':
         DateTime.now().add(const Duration(days: 3)).toUtc().toIso8601String(),
-    if (teams != null) 'teams': teams,
+    'teams': ?teams,
   };
 }
 

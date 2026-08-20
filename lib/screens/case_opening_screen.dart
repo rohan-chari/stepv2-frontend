@@ -369,15 +369,13 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
             SafeArea(
               child: Column(
                 children: [
-                  if (AdService.remoteDualBoxBannersEnabled) ...[
-                    AdBannerSlot(
-                      placement: AdBannerPlacement.boxTop,
-                      reserveSpaceWhileLoading: true,
-                      hidden: widget.demoMode,
-                    ),
-                    if (AdService.boxTopBannerEnabled && !widget.demoMode)
-                      const SizedBox(height: 12),
-                  ],
+                  AdBannerSlot(
+                    placement: AdBannerPlacement.boxTop,
+                    reserveSpaceWhileLoading: true,
+                    hidden: widget.demoMode,
+                  ),
+                  if (AdService.boxTopBannerEnabled && !widget.demoMode)
+                    const SizedBox(height: 12),
                   Expanded(
                     child: Center(
                       child: SingleChildScrollView(

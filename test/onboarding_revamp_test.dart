@@ -83,27 +83,30 @@ class _FakeBackgroundSync extends BackgroundSyncBootstrapService {
 }
 
 class _FakeBackendApiService extends BackendApiService {
-  _FakeBackendApiService({this.inviterRace, this.inviterRaceThrows = false});
+  AuthService? authService;
 
-  Map<String, dynamic>? inviterRace;
-  bool inviterRaceThrows;
-  int inviterRaceCalls = 0;
+  Map<String, dynamic> get _featureFlags => {
+    'onboardingV2Enabled': authService?.onboardingV2Enabled ?? false,
+    'onboardingV3Enabled': authService?.onboardingV3Enabled ?? false,
+    'tutorialMandatoryEnabled': authService?.tutorialMandatoryEnabled ?? false,
+    'customRaceWindowEnabled': authService?.customRaceWindowEnabled ?? false,
+    'setupInviteCodePromptEnabled':
+        authService?.setupInviteCodePromptEnabled ?? false,
+    'stepSampleBucketMinutes': authService?.stepSampleBucketMinutes ?? 60,
+  };
 
   @override
   Future<Map<String, dynamic>?> fetchInviterRace({
     required String identityToken,
-  }) async {
-    inviterRaceCalls += 1;
-    if (inviterRaceThrows) {
-      throw const ApiException('not found', statusCode: 404);
-    }
-    return inviterRace;
-  }
+  }) async => null;
 
   @override
   Future<Map<String, dynamic>> refreshSessionToken({
     required String authToken,
-  }) async => {'sessionToken': authToken, 'user': const <String, dynamic>{}};
+  }) async => {
+    'sessionToken': authToken,
+    'user': {'featureFlags': _featureFlags},
+  };
 
   @override
   Future<void> recordSteps({
@@ -139,7 +142,11 @@ class _FakeBackendApiService extends BackendApiService {
 
   @override
   Future<Map<String, dynamic>> fetchMe({required String identityToken}) async =>
-      const {'displayName': 'Trail Walker', 'incomingFriendRequests': 0};
+      {
+        'displayName': 'Trail Walker',
+        'incomingFriendRequests': 0,
+        'featureFlags': _featureFlags,
+      };
 
   @override
   Future<Map<String, dynamic>> fetchRaces({
@@ -240,12 +247,16 @@ Future<void> _pumpShell(
   BackendApiService? api,
   NotificationService? notifications,
 }) async {
+  final backendApi = api ?? _FakeBackendApiService();
+  if (backendApi is _FakeBackendApiService) {
+    backendApi.authService = auth;
+  }
   await tester.pumpWidget(
     MaterialApp(
       home: MainShell(
         authService: auth,
         healthService: health,
-        backendApiService: api ?? _FakeBackendApiService(),
+        backendApiService: backendApi,
         backgroundSyncBootstrapService: _FakeBackgroundSync(),
         notificationService: notifications,
       ),

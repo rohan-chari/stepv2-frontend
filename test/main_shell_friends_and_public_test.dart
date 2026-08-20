@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/models/step_data.dart';
 import 'package:step_tracker/models/step_sample_data.dart';
@@ -32,6 +33,15 @@ class _FakeHealthService extends HealthService {
   Future<List<StepSampleData>> getHourlySteps({
     required DateTime startTime,
     required DateTime endTime,
+  }) async {
+    return const [];
+  }
+
+  @override
+  Future<List<StepSampleData>> getStepSamples({
+    required DateTime startTime,
+    required DateTime endTime,
+    int bucketMinutes = 60,
   }) async {
     return const [];
   }
@@ -67,21 +77,19 @@ Map<String, dynamic> _compactAuthUser({
   'hiddenFromLeaderboard': false,
   'autoJoinFeaturedRaces': false,
   'incomingFriendRequests': 0,
-  'characterPowersEnabled': false,
   'featureFlags': {
-    'bannerAdsEnabled': false,
-    'dualBoxBannersEnabled': false,
+    'characterPowersEnabled': false,
     'teamRacesEnabled': true,
-    'onboardingV2Enabled': false,
-    'onboardingV3Enabled': false,
-    'onboardingInviteCodeEnabled': true,
-    'openUserRaceDiscoveryEnabled': false,
-    'quickCreateRaceCtaEnabled': false,
-    'setupInviteCodePromptEnabled': false,
-    'racesInviteDecisionGateEnabled': false,
-    'quickRaceShareAutoFriendEnabled': false,
-    'tutorialMandatoryEnabled': false,
-    'stepSampleBucketMinutes': 60,
+    'customRaceWindowEnabled': true,
+    'onboardingV2Enabled': true,
+    'onboardingV3Enabled': true,
+    'onboardingInviteCodeEnabled': false,
+    'openUserRaceDiscoveryEnabled': true,
+    'quickCreateRaceCtaEnabled': true,
+    'setupInviteCodePromptEnabled': true,
+    'homeInviteModalEnabled': true,
+    'tutorialMandatoryEnabled': true,
+    'stepSampleBucketMinutes': 5,
   },
 };
 
@@ -340,6 +348,16 @@ Future<MainShell> _pumpShell(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    PackageInfo.setMockInitialValues(
+      appName: 'Bara',
+      packageName: 'com.rohanchari.steptracker',
+      version: '2.3.8',
+      buildNumber: '1',
+      buildSignature: '',
+    );
+  });
 
   testWidgets(
     'compact auth skips only the cold-start me read, not a later Home refresh',

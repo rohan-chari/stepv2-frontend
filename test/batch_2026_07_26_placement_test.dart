@@ -15,10 +15,9 @@ import 'package:step_tracker/widgets/leaderboard_plank.dart';
 /// stealthed member's hidden `null` total as zero.
 
 class _ProgressApi extends BackendApiService {
-  _ProgressApi({required this.progress, this.race});
+  _ProgressApi({required this.progress});
 
   final Map<String, dynamic> progress;
-  final Map<String, dynamic>? race;
 
   @override
   Future<Map<String, dynamic>> fetchRaceDetails({
@@ -47,7 +46,6 @@ class _ProgressApi extends BackendApiService {
         {'userId': 'u2', 'displayName': 'Bob', 'status': 'ACCEPTED'},
         {'userId': 'u3', 'displayName': 'Cat', 'status': 'ACCEPTED'},
       ],
-      ...?race,
     };
   }
 

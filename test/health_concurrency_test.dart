@@ -7,13 +7,9 @@ import 'package:step_tracker/services/health_service.dart';
 /// its result on the interval start (so value assignment does not depend on call
 /// completion order — only the production code's index bookkeeping does).
 class _ConcurrencyFakeHealth extends Health {
-  _ConcurrencyFakeHealth(
-    this.byStart, {
-    this.delay = const Duration(milliseconds: 5),
-  });
+  _ConcurrencyFakeHealth(this.byStart);
 
   final Map<DateTime, int?> byStart;
-  final Duration delay;
   int inFlight = 0;
   int maxInFlight = 0;
   int totalCalls = 0;
@@ -27,7 +23,7 @@ class _ConcurrencyFakeHealth extends Health {
     totalCalls += 1;
     inFlight += 1;
     if (inFlight > maxInFlight) maxInFlight = inFlight;
-    await Future<void>.delayed(delay);
+    await Future<void>.delayed(const Duration(milliseconds: 5));
     inFlight -= 1;
     return byStart[startTime];
   }

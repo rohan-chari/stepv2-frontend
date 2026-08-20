@@ -355,8 +355,6 @@ class HomeTab extends StatelessWidget {
                                   state: nextRace!,
                                   shareFirst:
                                       nextRace.createEnabled &&
-                                      authService
-                                          .quickRaceShareAutoFriendEnabled &&
                                       friendsStepsState?.isSuccess == true &&
                                       friendsSteps.length < 5,
                                   onStart: onStartQuickRace,

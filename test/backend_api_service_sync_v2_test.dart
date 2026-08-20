@@ -4,7 +4,6 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:step_tracker/models/race_discovery_summary.dart';
 import 'package:step_tracker/models/race_resolution_status.dart';
 import 'package:step_tracker/models/step_data.dart';
 import 'package:step_tracker/models/step_sample_data.dart';
@@ -116,9 +115,6 @@ class _FakeHttpClient implements HttpClient {
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
-
-Map<String, dynamic> _bodyOf(_CapturedRequest r) =>
-    jsonDecode(r.body.toString()) as Map<String, dynamic>;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

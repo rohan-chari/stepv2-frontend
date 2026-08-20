@@ -96,14 +96,6 @@ class DemoAuthService extends AuthService {
   @override
   String? get referredByCode => null;
 
-  /// No ads inside the demo (§5.6). The banner slots are hidden by `demoMode`
-  /// too; this keeps the flag itself from arming an ad request.
-  @override
-  bool get bannerAdsEnabled => false;
-
-  @override
-  bool get dualBoxBannersEnabled => false;
-
   // -- Writes: no-ops ---------------------------------------------------------
 
   @override

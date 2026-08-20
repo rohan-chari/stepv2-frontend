@@ -12,13 +12,13 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  group('featureFlags.stepSampleBucketMinutes plumbing', () {
+  group('permanent five-minute sampling compatibility', () {
     test('defaults to 60 (hourly) when never set', () {
       final auth = AuthService();
       expect(auth.stepSampleBucketMinutes, 60);
     });
 
-    test('a valid value in {5,10,15,30,60} is accepted', () {
+    test('the permanent compatibility value enables five-minute sampling', () {
       final auth = AuthService();
       auth.applyBackendUser({
         'featureFlags': {'stepSampleBucketMinutes': 5},
@@ -58,19 +58,42 @@ void main() {
       expect(auth.stepSampleBucketMinutes, 60);
     });
 
-    test('the last-accepted value survives a cold start via SharedPreferences',
-        () async {
+    test('a numeric but non-integer JSON value falls back to 60', () {
       final auth = AuthService();
-      await auth.syncFromBackendUser({
-        'featureFlags': {'stepSampleBucketMinutes': 15},
+      auth.applyBackendUser({
+        'featureFlags': {'stepSampleBucketMinutes': 5.0},
       });
-
-      // A fresh instance restoring from prefs sees the persisted granularity
-      // (cold-start syncs run before the me-fetch completes).
-      final restored = AuthService();
-      await restored.restoreSession();
-      expect(restored.stepSampleBucketMinutes, 15);
+      expect(auth.stepSampleBucketMinutes, 60);
     });
+
+    test('an authoritative old-backend payload clears a cached five', () {
+      final auth = AuthService();
+      auth.applyBackendUser({
+        'featureFlags': {'stepSampleBucketMinutes': 5},
+      }, authoritative: true);
+      expect(auth.stepSampleBucketMinutes, 5);
+
+      auth.applyBackendUser({'id': 'user-1'}, authoritative: true);
+      expect(auth.stepSampleBucketMinutes, 60);
+    });
+
+    test(
+      'a retired intermediate setting downgrades to hourly and stays safe on cold start',
+      () async {
+        final auth = AuthService();
+        await auth.syncFromBackendUser({
+          'featureFlags': {'stepSampleBucketMinutes': 15},
+        });
+
+        expect(auth.stepSampleBucketMinutes, 60);
+
+        // Cold-start syncs run before the me-fetch completes, so the cached
+        // compatibility result must never resurrect a retired bucket size.
+        final restored = AuthService();
+        await restored.restoreSession();
+        expect(restored.stepSampleBucketMinutes, 60);
+      },
+    );
   });
 
   test('fine 5-min samples pass through buildStepSyncV2Payload unchanged', () {

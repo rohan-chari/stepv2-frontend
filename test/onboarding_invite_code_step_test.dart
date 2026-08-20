@@ -51,9 +51,18 @@ class _FakeHealthService extends HealthService {
 class _FakeBackgroundSync extends BackgroundSyncBootstrapService {}
 
 class _FakeApi extends BackendApiService {
-  _FakeApi({this.redeemResult});
+  _FakeApi({this.redeemResult, this.featureFlags = _currentFeatureFlags});
+
+  static const _currentFeatureFlags = <String, dynamic>{
+    'onboardingV2Enabled': true,
+    'onboardingV3Enabled': true,
+    'setupInviteCodePromptEnabled': true,
+    'tutorialMandatoryEnabled': true,
+    'stepSampleBucketMinutes': 5,
+  };
 
   final Map<String, dynamic>? redeemResult;
+  final Map<String, dynamic>? featureFlags;
   int redeemCalls = 0;
   int inviterRaceCalls = 0;
 
@@ -84,7 +93,10 @@ class _FakeApi extends BackendApiService {
   @override
   Future<Map<String, dynamic>> refreshSessionToken({
     required String authToken,
-  }) async => {'sessionToken': authToken, 'user': const <String, dynamic>{}};
+  }) async => {
+    'sessionToken': authToken,
+    'user': {if (featureFlags != null) 'featureFlags': featureFlags},
+  };
 
   @override
   Future<void> recordSteps({
@@ -120,7 +132,11 @@ class _FakeApi extends BackendApiService {
 
   @override
   Future<Map<String, dynamic>> fetchMe({required String identityToken}) async =>
-      const {'displayName': 'Trail Walker', 'incomingFriendRequests': 0};
+      {
+        'displayName': 'Trail Walker',
+        'incomingFriendRequests': 0,
+        if (featureFlags != null) 'featureFlags': featureFlags,
+      };
 
   @override
   Future<Map<String, dynamic>> fetchRaces({
@@ -160,7 +176,7 @@ Map<String, Object> _prefs({
   bool authPayloadApplied = true,
   String? referredByCode,
   bool? inviteCodeEnabled,
-  bool inviteStepDone = false,
+  bool setupInvitePromptResolved = false,
 }) {
   return {
     'auth_identity_token': 'apple-token',
@@ -175,7 +191,8 @@ Map<String, Object> _prefs({
     if (authPayloadApplied) 'auth_payload_applied': true,
     'auth_referred_by_code': ?referredByCode,
     'auth_onboarding_invite_code_enabled': ?inviteCodeEnabled,
-    if (inviteStepDone) OnboardingStateService.keyInviteCodeStepDone: true,
+    if (setupInvitePromptResolved)
+      OnboardingStateService.keyInviteCodePromptResolved: true,
     'health_authorized': true,
   };
 }
@@ -284,13 +301,22 @@ void main() {
       tester,
     ) async {
       final auth = await _auth(_prefs(v3: false));
-      await _pumpShell(tester, auth: auth);
+      await _pumpShell(
+        tester,
+        auth: auth,
+        api: _FakeApi(
+          featureFlags: const {
+            'onboardingV2Enabled': true,
+            'onboardingV3Enabled': false,
+          },
+        ),
+      );
 
       expect(find.text('GOT AN INVITE CODE?'), findsNothing);
     });
 
     testWidgets('hidden once the local done-flag is set', (tester) async {
-      final auth = await _auth(_prefs(inviteStepDone: true));
+      final auth = await _auth(_prefs(setupInvitePromptResolved: true));
       await _pumpShell(tester, auth: auth);
 
       expect(find.text('GOT AN INVITE CODE?'), findsNothing);
@@ -318,7 +344,7 @@ void main() {
 
       final prefs = await SharedPreferences.getInstance();
       expect(
-        prefs.getBool(OnboardingStateService.keyInviteCodeStepDone),
+        prefs.getBool(OnboardingStateService.keyInviteCodePromptResolved),
         isNot(true),
       );
       expect(await _queuedEventNames(), isNot(contains('invite_code_skipped')));
@@ -336,7 +362,7 @@ void main() {
       expect(api.redeemCalls, 0);
       final prefs = await SharedPreferences.getInstance();
       expect(
-        prefs.getBool(OnboardingStateService.keyInviteCodeStepDone),
+        prefs.getBool(OnboardingStateService.keyInviteCodePromptResolved),
         isNot(true),
       );
       expect(await _queuedEventNames(), isNot(contains('invite_code_applied')));
@@ -406,10 +432,25 @@ void main() {
   });
 
   group('done-flag storage', () {
+    test(
+      'reuses the shipped key so upgrades and downgrades stay resolved',
+      () async {
+        SharedPreferences.setMockInitialValues({'invite_code_step_done': true});
+
+        final state = OnboardingStateService();
+        expect(await state.inviteCodePromptResolved(), isTrue);
+        await state.markInviteCodePromptResolved();
+
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getBool('invite_code_step_done'), isTrue);
+        expect(prefs.containsKey('setup_invite_code_prompt_resolved'), isFalse);
+      },
+    );
+
     test('the key is in the sign-out wipe set', () {
       expect(
         OnboardingStateService.allKeys,
-        contains(OnboardingStateService.keyInviteCodeStepDone),
+        contains(OnboardingStateService.keyInviteCodePromptResolved),
         reason:
             'a different account on the same device gets its own chance; '
             'server-truth referredByCode is what stops re-prompting an '
@@ -419,7 +460,7 @@ void main() {
 
     test('the key is device-scoped (no userId suffix)', () {
       expect(
-        OnboardingStateService.keyInviteCodeStepDone,
+        OnboardingStateService.keyInviteCodePromptResolved,
         'invite_code_step_done',
       );
     });

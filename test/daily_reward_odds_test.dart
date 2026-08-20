@@ -10,10 +10,9 @@ import 'package:step_tracker/services/backend_api_service.dart';
 /// which the legacy `rarePrizeMix` omits), and hides the affordance entirely
 /// when the field is absent or malformed.
 class _ItemOddsApi extends BackendApiService {
-  _ItemOddsApi({this.itemOdds, this.odds, this.claimedToday = true});
+  _ItemOddsApi({this.itemOdds, this.claimedToday = true});
 
   final Map<String, dynamic>? itemOdds;
-  final Map<String, dynamic>? odds;
   final bool claimedToday;
 
   @override
@@ -31,7 +30,6 @@ class _ItemOddsApi extends BackendApiService {
       'box': {
         'streak': 7,
         'streakCap': 30,
-        if (odds != null) 'odds': odds,
         'coinRanges': {
           'COMMON': [10, 30],
           'UNCOMMON': [40, 80],

@@ -267,14 +267,11 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
             SafeArea(
               child: Column(
                 children: [
-                  if (AdService.remoteDualBoxBannersEnabled) ...[
-                    const AdBannerSlot(
-                      placement: AdBannerPlacement.boxTop,
-                      reserveSpaceWhileLoading: true,
-                    ),
-                    if (AdService.boxTopBannerEnabled)
-                      const SizedBox(height: 12),
-                  ],
+                  const AdBannerSlot(
+                    placement: AdBannerPlacement.boxTop,
+                    reserveSpaceWhileLoading: true,
+                  ),
+                  if (AdService.boxTopBannerEnabled) const SizedBox(height: 12),
                   Expanded(
                     child: Center(
                       child: SingleChildScrollView(

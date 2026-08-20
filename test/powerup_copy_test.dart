@@ -24,7 +24,7 @@ void main() {
       'type': type,
       'name': name ?? 'Server $type',
       'description': description ?? 'Server description for $type',
-      if (shortDescription != null) 'shortDescription': shortDescription,
+      'shortDescription': ?shortDescription,
       'upgradeTierLabels': upgradeTierLabels ?? const <String>[],
     };
   }

@@ -6,7 +6,6 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
-import 'ad_service.dart';
 import 'backend_api_service.dart';
 import 'health_service.dart';
 import 'onboarding_state_service.dart';
@@ -84,8 +83,6 @@ class AuthService extends ChangeNotifier {
   static const _keyNameSetupOnboardingRequired =
       'auth_name_setup_onboarding_required';
   static const _keyNameSetupCompletedAt = 'auth_name_setup_completed_at';
-  static const _keyQuickRaceShareAutoFriendEnabled =
-      'auth_quick_race_share_auto_friend_enabled';
   static const _keyProfilePhotoUrl = 'auth_profile_photo_url';
   static const _keyProfilePhotoPromptDismissedAt =
       'auth_profile_photo_prompt_dismissed_at';
@@ -104,8 +101,6 @@ class AuthService extends ChangeNotifier {
   static const _keyTutorialOnboardingSeen = 'auth_tutorial_onboarding_seen';
   static const _keyHiddenFromLeaderboard = 'auth_hidden_from_leaderboard';
   static const _keyAutoJoinFeaturedRaces = 'auth_auto_join_featured_races';
-  static const _keyBannerAdsEnabled = 'auth_banner_ads_enabled';
-  static const _keyDualBoxBannersEnabled = 'auth_dual_box_banners_enabled';
   static const _keyTeamRacesEnabled = 'auth_team_races_enabled';
   static const _keyOnboardingV2Enabled = 'auth_onboarding_v2_enabled';
   static const _keyOnboardingV3Enabled = 'auth_onboarding_v3_enabled';
@@ -145,7 +140,6 @@ class AuthService extends ChangeNotifier {
   bool _supportsDiscoverableIdentity = false;
   bool _nameSetupOnboardingRequired = false;
   String? _nameSetupCompletedAt;
-  bool _quickRaceShareAutoFriendEnabled = false;
   String? _profilePhotoUrl;
   String? _profilePhotoPromptDismissedAt;
   int? _renameChipShownCount;
@@ -159,8 +153,6 @@ class AuthService extends ChangeNotifier {
   bool _tutorialOnboardingSeen = false;
   bool _hiddenFromLeaderboard = false;
   bool _autoJoinFeaturedRaces = false;
-  bool _bannerAdsEnabled = false;
-  bool _dualBoxBannersEnabled = false;
   bool _teamRacesEnabled = true;
   bool _customRaceWindowEnabled = false;
   bool _onboardingV2Enabled = false;
@@ -191,7 +183,10 @@ class AuthService extends ChangeNotifier {
   bool get supportsDiscoverableIdentity => _supportsDiscoverableIdentity;
   bool get nameSetupOnboardingRequired => _nameSetupOnboardingRequired;
   String? get nameSetupCompletedAt => _nameSetupCompletedAt;
-  bool get quickRaceShareAutoFriendEnabled => _quickRaceShareAutoFriendEnabled;
+
+  /// Quick-share automatic friendship is permanent. Retain this compatibility
+  /// getter for callers while ignoring retired runtime payloads and caches.
+  bool get quickRaceShareAutoFriendEnabled => true;
   bool get requiresDiscoverableIdentityOnboarding =>
       _supportsDiscoverableIdentity &&
       _nameSetupOnboardingRequired &&
@@ -225,11 +220,11 @@ class AuthService extends ChangeNotifier {
   bool get hiddenFromLeaderboard => _hiddenFromLeaderboard;
   bool get autoJoinFeaturedRaces => _autoJoinFeaturedRaces;
 
-  /// Remote kill switch for banner ads (backend `featureFlags.bannerAdsEnabled`
-  /// on /auth/me, toggleable from Admin → Settings). Mirrored into
-  /// [AdService.remoteBannersEnabled] wherever it changes.
-  bool get bannerAdsEnabled => _bannerAdsEnabled;
-  bool get dualBoxBannersEnabled => _dualBoxBannersEnabled;
+  /// Compatibility accessors retained for callers and demo overrides after the
+  /// banner rollout controls graduated. Production behavior is permanently on;
+  /// whether a banner can render is solely a build-time ad-service capability.
+  bool get bannerAdsEnabled => true;
+  bool get dualBoxBannersEnabled => true;
 
   /// Remote kill switch for team-race CREATION (TR-107, backend
   /// `featureFlags.teamRacesEnabled`). Defaults ON; only an explicit `false`
@@ -296,30 +291,16 @@ class AuthService extends ChangeNotifier {
   /// wedged user never has to wait for a flag flip to reach the app.
   bool get tutorialMandatoryEnabled => _tutorialMandatoryEnabled;
 
-  /// Remotely-configurable step-sample bucket size in minutes (backend
-  /// `featureFlags.stepSampleBucketMinutes`). One of {5, 10, 15, 30, 60};
-  /// anything else — absent, null, out-of-set, or non-integer — resolves to 60
-  /// (hourly), so a new build against an older backend behaves exactly like
-  /// today. Persisted so a cold-start sync (which can run before the me-fetch
-  /// completes) uses the last-known granularity instead of reverting to hourly.
+  /// Permanent five-minute sampling compatibility value from
+  /// `featureFlags.stepSampleBucketMinutes`. Only literal 5 opts this binary
+  /// into fine samples. Anything else — including retired intermediate values,
+  /// absent/null, or malformed data — resolves to the version-safe hourly
+  /// fallback used with older backends. Persisted so a cold-start sync can use
+  /// the last validated compatibility answer before `/auth/me` completes.
   int get stepSampleBucketMinutes => _stepSampleBucketMinutes;
 
-  static const Set<int> _allowedStepSampleBucketMinutes = {5, 10, 15, 30, 60};
-
-  /// Resolves a raw `featureFlags.stepSampleBucketMinutes` value to an allowed
-  /// bucket size, defaulting to 60 for any non-integer / out-of-set input.
-  static int _resolveStepSampleBucketMinutes(dynamic raw) {
-    int? value;
-    if (raw is int) {
-      value = raw;
-    } else if (raw is num && raw == raw.toInt()) {
-      value = raw.toInt();
-    }
-    if (value != null && _allowedStepSampleBucketMinutes.contains(value)) {
-      return value;
-    }
-    return 60;
-  }
+  static int _resolveStepSampleBucketMinutes(dynamic raw) =>
+      raw is int && raw == 5 ? 5 : 60;
 
   /// A race share token captured from a deep link that has not yet been
   /// consumed (joined). Persisted so it survives the sign-in/onboarding gap on
@@ -386,7 +367,6 @@ class AuthService extends ChangeNotifier {
       _supportsDiscoverableIdentity = false;
       _nameSetupOnboardingRequired = false;
       _nameSetupCompletedAt = null;
-      _quickRaceShareAutoFriendEnabled = false;
     }
     _backendUserId = nextUserId;
   }
@@ -398,6 +378,11 @@ class AuthService extends ChangeNotifier {
     // device cache before reading auth state so an older installed value can
     // never resurrect the removed branch in this or a future refactor.
     await prefs.remove('auth_onboarding_invite_code_enabled');
+    // Retired rollout controls must not survive an upgrade and later
+    // accidentally regain authority over permanent placements.
+    await prefs.remove('auth_banner_ads_enabled');
+    await prefs.remove('auth_dual_box_banners_enabled');
+    await prefs.remove('auth_quick_race_share_auto_friend_enabled');
     _identityToken = prefs.getString(_keyIdentityToken);
     _userIdentifier = prefs.getString(_keyUserIdentifier);
     _backendUserId = prefs.getString(_keyBackendUserId);
@@ -413,8 +398,6 @@ class AuthService extends ChangeNotifier {
       _nameSetupOnboardingRequired =
           prefs.getBool(_keyNameSetupOnboardingRequired) ?? false;
       _nameSetupCompletedAt = prefs.getString(_keyNameSetupCompletedAt);
-      _quickRaceShareAutoFriendEnabled =
-          prefs.getBool(_keyQuickRaceShareAutoFriendEnabled) ?? false;
     }
     _profilePhotoUrl = prefs.getString(_keyProfilePhotoUrl);
     _profilePhotoPromptDismissedAt = prefs.getString(
@@ -437,10 +420,6 @@ class AuthService extends ChangeNotifier {
         prefs.getBool(_keyTutorialOnboardingSeen) ?? false;
     _hiddenFromLeaderboard = prefs.getBool(_keyHiddenFromLeaderboard) ?? false;
     _autoJoinFeaturedRaces = prefs.getBool(_keyAutoJoinFeaturedRaces) ?? false;
-    _bannerAdsEnabled = prefs.getBool(_keyBannerAdsEnabled) ?? false;
-    AdService.remoteBannersEnabled = _bannerAdsEnabled;
-    _dualBoxBannersEnabled = prefs.getBool(_keyDualBoxBannersEnabled) ?? false;
-    AdService.remoteDualBoxBannersEnabled = _dualBoxBannersEnabled;
     _teamRacesEnabled = prefs.getBool(_keyTeamRacesEnabled) ?? true;
     _onboardingV2Enabled = prefs.getBool(_keyOnboardingV2Enabled) ?? false;
     _onboardingV3Enabled = prefs.getBool(_keyOnboardingV3Enabled) ?? false;
@@ -448,7 +427,9 @@ class AuthService extends ChangeNotifier {
     _authPayloadApplied = prefs.getBool(_keyAuthPayloadApplied) ?? false;
     _tutorialMandatoryEnabled =
         prefs.getBool(_keyTutorialMandatoryEnabled) ?? false;
-    _stepSampleBucketMinutes = prefs.getInt(_keyStepSampleBucketMinutes) ?? 60;
+    _stepSampleBucketMinutes = _resolveStepSampleBucketMinutes(
+      prefs.getInt(_keyStepSampleBucketMinutes),
+    );
     _pendingShareToken = prefs.getString(_keyPendingShareToken);
     _pendingTournamentShareToken = prefs.getString(
       _keyPendingTournamentShareToken,
@@ -809,7 +790,7 @@ class AuthService extends ChangeNotifier {
       // attributed", which is exactly how the absent field is read below.
       _authPayloadApplied = true;
     }
-    // Server truth for the invite-code step's show condition. Same containsKey
+    // Server truth for the one-time Home invite prompt. Same containsKey
     // guard as everything else here so a partial payload can't wipe a known
     // code; an explicit null (organic signup) DOES clear it.
     if (backendUser.containsKey('referredByCode')) {
@@ -918,31 +899,19 @@ class AuthService extends ChangeNotifier {
     // payload is allowed to resolve opt-in capabilities to false below.
     if (backendUser.containsKey('featureFlags')) {
       final flags = backendUser['featureFlags'];
-      _bannerAdsEnabled = flags is Map && flags['bannerAdsEnabled'] == true;
-      AdService.remoteBannersEnabled = _bannerAdsEnabled;
-      _dualBoxBannersEnabled =
-          flags is Map && flags['dualBoxBannersEnabled'] == true;
-      AdService.remoteDualBoxBannersEnabled = _dualBoxBannersEnabled;
       // TR-107 team-race creation kill switch. Opposite default from banners:
       // the feature ships ON, so only an explicit false disables it — an older
       // backend that omits the key must not hide the toggle.
       _teamRacesEnabled = !(flags is Map && flags['teamRacesEnabled'] == false);
-      // Step-sample granularity. Absent/null/out-of-set/non-integer -> 60
-      // (hourly), so an older backend that omits the key reads as hourly.
+      // Only the permanent value 5 enables fine sampling. An older backend or
+      // any retired/malformed setting keeps the version-safe hourly fallback.
       _stepSampleBucketMinutes = _resolveStepSampleBucketMinutes(
         flags is Map ? flags['stepSampleBucketMinutes'] : null,
       );
-      _quickRaceShareAutoFriendEnabled =
-          flags is Map && flags['quickRaceShareAutoFriendEnabled'] == true;
       // Custom race windows. Opt-in, same envelope guard as everything above:
       // only the literal boolean true reveals the CUSTOM chip.
       _customRaceWindowEnabled =
           flags is Map && flags['customRaceWindowEnabled'] == true;
-    } else if (authoritative) {
-      // A complete envelope from an older backend is capability evidence too:
-      // omission means the create-and-share auto-friend promise is unavailable.
-      // Partial mutation payloads intentionally retain the last full answer.
-      _quickRaceShareAutoFriendEnabled = false;
     }
     // Unlike team races, v2 is opt-in: within a payload that carries the
     // envelope, anything except the literal boolean true is the compatible v1
@@ -992,6 +961,27 @@ class AuthService extends ChangeNotifier {
       _setupInviteCodePromptEnabled =
           appSettings['setupInviteCodePromptEnabled'] == true;
     }
+    if (authoritative && !backendUser.containsKey('featureFlags')) {
+      // A full user response from an older backend must clear cached opt-in
+      // capabilities from a newer backend. Partial mutation responses retain
+      // the last authoritative answer. appSettings remains a supported legacy
+      // fallback for the controls it carried.
+      _stepSampleBucketMinutes = 60;
+      _onboardingV2Enabled = false;
+      _onboardingV3Enabled = false;
+      if (!(appSettings is Map &&
+          appSettings.containsKey('customRaceWindowEnabled'))) {
+        _customRaceWindowEnabled = false;
+      }
+      if (!(appSettings is Map &&
+          appSettings.containsKey('setupInviteCodePromptEnabled'))) {
+        _setupInviteCodePromptEnabled = false;
+      }
+      if (!(appSettings is Map &&
+          appSettings.containsKey('tutorialMandatoryEnabled'))) {
+        _tutorialMandatoryEnabled = false;
+      }
+    }
   }
 
   Future<void> syncFromBackendUser(
@@ -1035,7 +1025,6 @@ class AuthService extends ChangeNotifier {
     _supportsDiscoverableIdentity = false;
     _nameSetupOnboardingRequired = false;
     _nameSetupCompletedAt = null;
-    _quickRaceShareAutoFriendEnabled = false;
     _profilePhotoUrl = null;
     _profilePhotoPromptDismissedAt = null;
     _renameChipShownCount = null;
@@ -1049,10 +1038,6 @@ class AuthService extends ChangeNotifier {
     _tutorialOnboardingSeen = false;
     _hiddenFromLeaderboard = false;
     _autoJoinFeaturedRaces = false;
-    _bannerAdsEnabled = false;
-    AdService.remoteBannersEnabled = false;
-    _dualBoxBannersEnabled = false;
-    AdService.remoteDualBoxBannersEnabled = false;
     _customRaceWindowEnabled = false;
     _onboardingV2Enabled = false;
     _onboardingV3Enabled = false;
@@ -1078,7 +1063,7 @@ class AuthService extends ChangeNotifier {
     await prefs.remove(_keyIdentitySupported);
     await prefs.remove(_keyNameSetupOnboardingRequired);
     await prefs.remove(_keyNameSetupCompletedAt);
-    await prefs.remove(_keyQuickRaceShareAutoFriendEnabled);
+    await prefs.remove('auth_quick_race_share_auto_friend_enabled');
     await prefs.remove(_keyProfilePhotoUrl);
     await prefs.remove(_keyProfilePhotoPromptDismissedAt);
     // Correct to clear: these cache server state, and the next sign-in refills
@@ -1093,8 +1078,8 @@ class AuthService extends ChangeNotifier {
     await prefs.remove(_keyTutorialOnboardingSeen);
     await prefs.remove(_keyHiddenFromLeaderboard);
     await prefs.remove(_keyAutoJoinFeaturedRaces);
-    await prefs.remove(_keyBannerAdsEnabled);
-    await prefs.remove(_keyDualBoxBannersEnabled);
+    await prefs.remove('auth_banner_ads_enabled');
+    await prefs.remove('auth_dual_box_banners_enabled');
     await prefs.remove(_keyOnboardingV2Enabled);
     await prefs.remove(_keyOnboardingV3Enabled);
     await prefs.remove(_keyReferredByCode);
@@ -1369,10 +1354,7 @@ class AuthService extends ChangeNotifier {
       } else {
         await prefs.remove(_keyNameSetupCompletedAt);
       }
-      await prefs.setBool(
-        _keyQuickRaceShareAutoFriendEnabled,
-        _quickRaceShareAutoFriendEnabled,
-      );
+      await prefs.remove('auth_quick_race_share_auto_friend_enabled');
     }
     if (_profilePhotoUrl != null) {
       await prefs.setString(_keyProfilePhotoUrl, _profilePhotoUrl!);
@@ -1398,8 +1380,6 @@ class AuthService extends ChangeNotifier {
     await prefs.setBool(_keyFirstRaceOnboardingSeen, _firstRaceOnboardingSeen);
     await prefs.setBool(_keyTutorialOnboardingSeen, _tutorialOnboardingSeen);
     await prefs.setBool(_keyHiddenFromLeaderboard, _hiddenFromLeaderboard);
-    await prefs.setBool(_keyBannerAdsEnabled, _bannerAdsEnabled);
-    await prefs.setBool(_keyDualBoxBannersEnabled, _dualBoxBannersEnabled);
     await prefs.setBool(_keyTeamRacesEnabled, _teamRacesEnabled);
     await prefs.setBool(_keyOnboardingV2Enabled, _onboardingV2Enabled);
     await prefs.setBool(_keyOnboardingV3Enabled, _onboardingV3Enabled);

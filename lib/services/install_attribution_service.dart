@@ -82,8 +82,8 @@ class InstallAttributionService {
   static const keyPendingOutcomeEvent = 'install_attr_pending_event';
 
   /// Set when a probable invite URL was detected but could not be read. The
-  /// onboarding invite-code step reads this to offer a "Paste invite link"
-  /// button whose TAP is the user gesture the iOS paste alert wants.
+  /// Retained install-attribution state for older builds that offered a
+  /// consented paste button after detecting an unread invite URL.
   static const keyDetectedButUnread = 'install_attr_detect_unread';
 
   static String eventNameFor(InstallAttributionOutcome outcome) {

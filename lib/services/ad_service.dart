@@ -231,30 +231,16 @@ class AdService implements ExtraSpinAdController, RacePayoutDoubleAdController {
     return '';
   }
 
-  /// Remote kill switch, set from the backend's `featureFlags.bannerAdsEnabled`
-  /// (AuthService mirrors it here on restore and on every /auth/me sync, and it
-  /// is toggleable from Admin → Settings without an app release). Defaults OFF:
-  /// no flag from the backend means no banners.
-  static bool remoteBannersEnabled = false;
-
-  /// Additive box-only rollout switch. Missing/null server values stay off.
-  static bool remoteDualBoxBannersEnabled = false;
-
-  /// Banners render ONLY when the backend flag is on AND this build baked in a
-  /// real banner unit id for the current platform — the unit id is compile-time
-  /// (keep passing the dart-define in prod builds so the remote switch can turn
-  /// banners back on later). iOS uses ADMOB_BANNER_AD_UNIT_ID; Android uses
+  /// Banner rollout is permanent. A banner renders only when this build baked
+  /// in a real unit id for the current platform. iOS uses
+  /// ADMOB_BANNER_AD_UNIT_ID; Android uses
   /// ADMOB_BANNER_AD_UNIT_ID_ANDROID. Builds that omit their platform's define
   /// (and web) show nothing at all. When off, [AdBannerSlot] collapses to zero
   /// size.
-  static bool get bannersEnabled =>
-      remoteBannersEnabled && !kIsWeb && _platformBannerUnitId.isNotEmpty;
+  static bool get bannersEnabled => !kIsWeb && _platformBannerUnitId.isNotEmpty;
 
   static bool get boxTopBannerEnabled =>
-      remoteBannersEnabled &&
-      remoteDualBoxBannersEnabled &&
-      !kIsWeb &&
-      _platformBoxTopBannerUnitId.isNotEmpty;
+      !kIsWeb && _platformBoxTopBannerUnitId.isNotEmpty;
 
   /// Ad unit for [AdBannerSlot]. The real unit when injected at build time,
   /// otherwise Google's public test banner for this platform (only reached in

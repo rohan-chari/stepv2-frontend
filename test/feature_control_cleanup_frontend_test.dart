@@ -47,6 +47,34 @@ void main() {
       expect(auth.stepSampleBucketMinutes, 5);
     });
 
+    test(
+      'retired banner settings cannot disable permanent ad placements',
+      () async {
+        SharedPreferences.setMockInitialValues(const {
+          'auth_banner_ads_enabled': false,
+          'auth_dual_box_banners_enabled': false,
+        });
+        final auth = AuthService();
+        await auth.restoreSession();
+
+        expect(auth.bannerAdsEnabled, isTrue);
+        expect(auth.dualBoxBannersEnabled, isTrue);
+
+        auth.applyBackendUser(const {
+          'featureFlags': {
+            'bannerAdsEnabled': false,
+            'dualBoxBannersEnabled': false,
+          },
+        }, authoritative: true);
+
+        expect(auth.bannerAdsEnabled, isTrue);
+        expect(auth.dualBoxBannersEnabled, isTrue);
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.containsKey('auth_banner_ads_enabled'), isFalse);
+        expect(prefs.containsKey('auth_dual_box_banners_enabled'), isFalse);
+      },
+    );
+
     test('missing and malformed old-backend fields retain safe downgrade', () {
       final auth = AuthService();
       auth.applyBackendUser(const {
@@ -60,6 +88,29 @@ void main() {
 
       expect(auth.teamRacesEnabled, isTrue);
       expect(auth.customRaceWindowEnabled, isFalse);
+      expect(auth.onboardingV3Enabled, isFalse);
+      expect(auth.setupInviteCodePromptEnabled, isFalse);
+      expect(auth.tutorialMandatoryEnabled, isFalse);
+      expect(auth.stepSampleBucketMinutes, 60);
+    });
+
+    test('authoritative old backend clears cached opt-in capabilities', () {
+      final auth = AuthService();
+      auth.applyBackendUser(const {
+        'featureFlags': {
+          'customRaceWindowEnabled': true,
+          'onboardingV2Enabled': true,
+          'onboardingV3Enabled': true,
+          'setupInviteCodePromptEnabled': true,
+          'tutorialMandatoryEnabled': true,
+          'stepSampleBucketMinutes': 5,
+        },
+      }, authoritative: true);
+
+      auth.applyBackendUser(const {'id': 'old-user'}, authoritative: true);
+
+      expect(auth.customRaceWindowEnabled, isFalse);
+      expect(auth.onboardingV2Enabled, isFalse);
       expect(auth.onboardingV3Enabled, isFalse);
       expect(auth.setupInviteCodePromptEnabled, isFalse);
       expect(auth.tutorialMandatoryEnabled, isFalse);

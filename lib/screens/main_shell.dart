@@ -155,15 +155,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   bool _probeInconclusive = false;
   int? _probeArmedAtMs;
   bool _homeReachedRecorded = false;
-  // --- invite-code step ------------------------------------------------------
-  // Null until the device-local done-flag has been read: "unknown" must never
-  // render as "not done", or a returning user flashes a step they already
-  // answered.
-  bool? _inviteCodeStepDone;
-  // Part C: a probable invite URL was detected on the iOS pasteboard at launch
-  // but could not be read. Only in that state does the step offer the
-  // consented paste button.
-  bool _canPasteInviteLink = false;
+  // --- one-time Home invite-code prompt -------------------------------------
+  // Null until the device-local answer has been read: "unknown" must never
+  // render as "not resolved", or a returning user flashes a prompt they
+  // already answered.
+  bool? _setupInviteCodePromptResolved;
   late final InstallAttributionService _installAttribution;
   bool _notificationAskShowing = false;
   bool _isLoading = false;
@@ -305,14 +301,14 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   ///    Deliberately NOT `welcomeReferralCode`: that slot is stashed on
   ///    provision SUCCESS, not attribution success, so a body code the backend
   ///    silently rejected would set it while leaving the account unattributed
-  ///    — exactly the user this step exists to catch.
+  ///    — exactly the user this Home prompt exists to catch.
   ///  * the device-local done-flag is read (non-null) and false.
   bool get _showInviteCodePrompt =>
       widget.authService.setupInviteCodePromptEnabled &&
       widget.authService.authPayloadApplied &&
       widget.authService.referredByCode == null &&
       !widget.authService.inviteCodePromptResolvedThisSession &&
-      _inviteCodeStepDone == false;
+      _setupInviteCodePromptResolved == false;
 
   /// Opens the shared Home invite-code sheet. Terminal outcomes resolve the
   /// device prompt; a successful attribution also refreshes auth and friends
@@ -326,7 +322,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     if (!mounted || outcome == null) return;
     if (outcome.attributed || outcome.terminal) {
       await _onboardingState.markInviteCodePromptResolved();
-      if (mounted) setState(() => _inviteCodeStepDone = true);
+      if (mounted) setState(() => _setupInviteCodePromptResolved = true);
       unawaited(
         _activationAnalytics.record(
           'invite_code_setup_applied',
@@ -343,8 +339,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   Future<void> _skipInviteCodeFromHome() async {
-    if (_inviteCodeStepDone == true) return;
-    setState(() => _inviteCodeStepDone = true);
+    if (_setupInviteCodePromptResolved == true) return;
+    setState(() => _setupInviteCodePromptResolved = true);
     widget.authService.markInviteCodePromptResolvedThisSession();
     await _onboardingState.markInviteCodePromptResolved();
     unawaited(_activationAnalytics.record('invite_code_setup_dismissed'));
@@ -467,18 +463,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   /// Part C: emits the single stashed install-attribution outcome (one event
   /// per install, name-encoded) now that a signed-in token exists, and learns
-  /// whether a probable invite URL was detected but never read.
-  ///
-  /// Deliberately does NOT re-run `resolveOnFirstLaunch` — that stays
-  /// at-most-once per install, and a second launch-time pasteboard read is the
-  /// exact behavior part C is retiring.
+  /// Flushes the single stashed install-attribution outcome now that a
+  /// signed-in token exists. It deliberately does not re-run the at-most-once
+  /// first-launch resolver.
   Future<void> _resolveInstallAttributionTelemetry() async {
     try {
       await _installAttribution.flushStashedOutcome(_activationAnalytics);
-      final canPaste = await _installAttribution.hasUnreadDetectedInvite();
-      if (mounted && canPaste != _canPasteInviteLink) {
-        setState(() => _canPasteInviteLink = canPaste);
-      }
     } catch (_) {
       // Telemetry must never break a launch.
     }
@@ -517,7 +507,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _onboardingState.escapedHealthGate(),
       _onboardingState.probeInconclusive(),
       _onboardingState.probeArmedAtMs(),
-      _onboardingState.inviteCodeStepDone(),
+      _onboardingState.inviteCodePromptResolved(),
       // Item 9: one more key on the same round trip.
       tutorialAbandonCount(),
     ]);
@@ -525,7 +515,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     final escaped = values[1] as bool;
     final inconclusive = values[2] as bool;
     final armedAt = values[3] as int?;
-    final inviteDone = values[4] as bool;
+    final invitePromptResolved = values[4] as bool;
     final abandons = values[5] as int;
     if (!mounted) return;
     setState(() {
@@ -533,7 +523,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _escapedHealthGate = escaped;
       _probeInconclusive = inconclusive;
       _probeArmedAtMs = armedAt;
-      _inviteCodeStepDone = inviteDone;
+      _setupInviteCodePromptResolved = invitePromptResolved;
       _tutorialAbandons = abandons;
     });
   }
@@ -745,10 +735,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     if (!widget.authService.firstRaceOnboardingSeen) {
       unawaited(_activationAnalytics.record('onboarding_started'));
     }
-    // Part C: flush the one stashed install-attribution outcome (recorded in
-    // main() before any token existed) and learn whether the pasteboard was
-    // detected-but-unread. Ends by flushing the queue, which is why the plain
-    // flush that used to sit here is folded into it.
+    // Flush the one stashed install-attribution outcome (recorded in main()
+    // before any token existed). This also flushes the activation queue.
     _installAttribution = InstallAttributionService(
       authService: widget.authService,
     );
@@ -1370,7 +1358,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       'tutorialOnboardingSeen',
       'hiddenFromLeaderboard',
       'autoJoinFeaturedRaces',
-      'characterPowersEnabled',
     ]) {
       if (!requiredBool(key)) return false;
     }
@@ -1385,21 +1372,25 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     final flags = user['featureFlags'];
     if (flags is! Map) return false;
     for (final key in const [
-      'bannerAdsEnabled',
-      'dualBoxBannersEnabled',
       'teamRacesEnabled',
+      'customRaceWindowEnabled',
       'onboardingV2Enabled',
       'onboardingV3Enabled',
       'onboardingInviteCodeEnabled',
       'openUserRaceDiscoveryEnabled',
       'quickCreateRaceCtaEnabled',
       'setupInviteCodePromptEnabled',
-      'racesInviteDecisionGateEnabled',
-      'quickRaceShareAutoFriendEnabled',
+      'homeInviteModalEnabled',
       'tutorialMandatoryEnabled',
     ]) {
       if (flags[key] is! bool) return false;
     }
+    // The cleaned envelope carries this compatibility value inside
+    // featureFlags. Accept the previous top-level location as a downgrade path
+    // while independently deployed older backends are still in circulation.
+    final characterPowersEnabled =
+        flags['characterPowersEnabled'] ?? user['characterPowersEnabled'];
+    if (characterPowersEnabled is! bool) return false;
     final bucketMinutes = flags['stepSampleBucketMinutes'];
     return bucketMinutes == null || bucketMinutes is num;
   }

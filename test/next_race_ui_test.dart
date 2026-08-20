@@ -204,15 +204,12 @@ void main() {
   );
 
   testWidgets(
-    'Home derives share-first copy only from capability and successful 0-4 friends',
+    'Home derives permanent share-first copy from successful 0-4 friends',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(800, 1800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final api = _UiApi();
       final auth = await _auth(api);
-      auth.applyBackendUser({
-        'featureFlags': {'quickRaceShareAutoFriendEnabled': true},
-      });
       var starts = 0;
 
       for (final count in [0, 4]) {
@@ -269,9 +266,6 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final api = _UiApi();
       final auth = await _auth(api);
-      auth.applyBackendUser({
-        'featureFlags': {'quickRaceShareAutoFriendEnabled': true},
-      });
       final cached = _friends(2);
       final states = <Loadable<List<Map<String, dynamic>>>?>[
         null,
@@ -296,18 +290,21 @@ void main() {
         expect(find.text('RACE WITH YOUR FRIENDS'), findsNothing);
       }
 
-      final unsupported = await _auth(api);
+      final cleanedEnvelope = await _auth(api);
+      cleanedEnvelope.applyBackendUser({
+        'featureFlags': const {},
+      }, authoritative: true);
       await tester.pumpWidget(
         _quickRaceHome(
-          auth: unsupported,
+          auth: cleanedEnvelope,
           api: api,
           friends: const [],
           friendsState: const Loadable.success([]),
         ),
       );
       await tester.pump();
-      expect(find.text('START YOUR OWN RACE'), findsOneWidget);
-      expect(find.text('RACE WITH YOUR FRIENDS'), findsNothing);
+      expect(find.text('RACE WITH YOUR FRIENDS'), findsOneWidget);
+      expect(find.text('CREATE & SHARE'), findsOneWidget);
     },
   );
 
@@ -318,9 +315,6 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final api = _UiApi();
       final auth = await _auth(api);
-      auth.applyBackendUser({
-        'featureFlags': {'quickRaceShareAutoFriendEnabled': true},
-      });
 
       await tester.pumpWidget(
         _quickRaceHome(
@@ -386,9 +380,6 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(390, 1200));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final auth = TutorialPreviewAuthService();
-    auth.applyBackendUser({
-      'featureFlags': {'quickRaceShareAutoFriendEnabled': true},
-    });
 
     await tester.pumpWidget(
       MaterialApp(

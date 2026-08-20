@@ -23,7 +23,7 @@ void main() {
       'id': id,
       'type': type,
       'onSelf': onSelf,
-      if (expiresAt != null) 'expiresAt': expiresAt,
+      'expiresAt': ?expiresAt,
       'targetUserId': targetUserId,
       'sourceUserId': sourceUserId,
     };

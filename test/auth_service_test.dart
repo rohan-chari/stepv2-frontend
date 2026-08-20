@@ -90,7 +90,7 @@ void main() {
   );
 
   test(
-    'quick-race share capability is literal, persisted, and authoritative',
+    'quick-race share behavior ignores the retired runtime control',
     () async {
       SharedPreferences.setMockInitialValues({
         'auth_identity_token': 'identity',
@@ -101,27 +101,8 @@ void main() {
       final auth = AuthService();
       await auth.restoreSession();
 
-      await auth.syncFromBackendUser({
-        'id': 'user-1',
-        'featureFlags': {'quickRaceShareAutoFriendEnabled': true},
-      }, authoritative: true);
-      expect(auth.quickRaceShareAutoFriendEnabled, isTrue);
-
-      final restored = AuthService();
-      await restored.restoreSession();
-      expect(restored.quickRaceShareAutoFriendEnabled, isTrue);
-
-      // A partial mutation without featureFlags is not capability evidence.
-      restored.applyBackendUser({'displayName': 'Renamed'});
-      expect(restored.quickRaceShareAutoFriendEnabled, isTrue);
-
-      await restored.syncFromBackendUser({'id': 'user-1'}, authoritative: true);
-      expect(restored.quickRaceShareAutoFriendEnabled, isFalse);
-      final restoredAfterOldBackend = AuthService();
-      await restoredAfterOldBackend.restoreSession();
-      expect(restoredAfterOldBackend.quickRaceShareAutoFriendEnabled, isFalse);
-
       for (final payload in <Map<String, dynamic>>[
+        {'id': 'user-1'},
         {'id': 'user-1', 'featureFlags': null},
         {'id': 'user-1', 'featureFlags': 'bad'},
         {
@@ -137,18 +118,15 @@ void main() {
           'featureFlags': {'quickRaceShareAutoFriendEnabled': false},
         },
       ]) {
-        restored.applyBackendUser({
-          'featureFlags': {'quickRaceShareAutoFriendEnabled': true},
-        });
-        restored.applyBackendUser(payload, authoritative: true);
-        expect(restored.quickRaceShareAutoFriendEnabled, isFalse);
+        auth.applyBackendUser(payload, authoritative: true);
+        expect(auth.quickRaceShareAutoFriendEnabled, isTrue);
       }
 
-      restored.applyBackendUser({
-        'featureFlags': {'quickRaceShareAutoFriendEnabled': true},
-      });
-      await restored.signOut();
-      expect(restored.quickRaceShareAutoFriendEnabled, isFalse);
+      final prefs = await SharedPreferences.getInstance();
+      expect(
+        prefs.containsKey('auth_quick_race_share_auto_friend_enabled'),
+        isFalse,
+      );
     },
   );
 

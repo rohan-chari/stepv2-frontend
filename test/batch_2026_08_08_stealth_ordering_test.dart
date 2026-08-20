@@ -26,7 +26,7 @@ Map<String, dynamic> _p(
     'totalSteps': steps,
     'stealthed': stealthed,
     'finishedAt': null,
-    if (placement != null) 'placement': placement,
+    'placement': ?placement,
   };
 }
 

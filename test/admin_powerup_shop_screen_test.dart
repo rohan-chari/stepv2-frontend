@@ -58,10 +58,10 @@ class _ShopApi extends BackendApiService {
   }) async {
     patches.add({
       'itemId': itemId,
-      if (priceCoins != null) 'priceCoins': priceCoins,
-      if (active != null) 'active': active,
-      if (testOnly != null) 'testOnly': testOnly,
-      if (sortOrder != null) 'sortOrder': sortOrder,
+      'priceCoins': ?priceCoins,
+      'active': ?active,
+      'testOnly': ?testOnly,
+      'sortOrder': ?sortOrder,
     });
     if (failWith != null) throw ApiException(failWith!, statusCode: 400);
     return PowerupShopAdminItem(

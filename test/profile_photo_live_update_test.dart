@@ -65,16 +65,6 @@ class _FakeBackendApiService extends BackendApiService {
   }) async => const [];
 
   @override
-  Future<Map<String, dynamic>> fetchCurrentChallenge({
-    required String identityToken,
-  }) async => const {'challenge': null, 'instances': [], 'syncDays': []};
-
-  @override
-  Future<Map<String, dynamic>> fetchLeaderboardHighlights({
-    required String identityToken,
-  }) async => const {'cards': []};
-
-  @override
   Future<Map<String, dynamic>> fetchMe({required String identityToken}) async {
     return const {
       'stepGoal': 8000,

@@ -460,7 +460,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
           ),
           Column(
             children: [
-              if (AdService.remoteDualBoxBannersEnabled) ...[
+              if (AdService.boxTopBannerEnabled)
                 const SafeArea(
                   bottom: false,
                   child: AdBannerSlot(
@@ -468,8 +468,7 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
                     reserveSpaceWhileLoading: true,
                   ),
                 ),
-                if (AdService.boxTopBannerEnabled) const SizedBox(height: 12),
-              ],
+              if (AdService.boxTopBannerEnabled) const SizedBox(height: 12),
               Expanded(
                 child: SafeArea(
                   child: Center(

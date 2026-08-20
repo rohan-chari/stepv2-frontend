@@ -167,11 +167,12 @@ For most releases, you can deploy backend first because the old App Store binary
 # no reward, no backend). Both define are safe to forget — the app just ships
 # without that ad — but a prod release should carry both.
 # ADMOB_BOX_TOP_BANNER_AD_UNIT_ID is the dedicated box-screen top placement.
-# It remains dark unless both bannerAdsEnabled and dualBoxBannersEnabled are
-# true; omitting it safely preserves the footer-only layout.
+# Its presence enables the permanent top placement; omitting it safely
+# preserves the footer-only layout with no reserved top space.
 # ADMOB_NATIVE_AD_UNIT_ID bakes in the races-tab in-feed NATIVE ad (styled
-# template, same kill switch as banners). A prod build WITHOUT it falls back
-# to Google's TEST native ad in that slot — always carry the define.
+# template, enabled whenever the footer-banner build unit is present). A prod
+# build WITHOUT it falls back to Google's TEST native ad in that slot — always
+# carry the define.
 # GOOGLE_IOS_CLIENT_ID enables the "Sign in with Google" button on iOS
 # (PROD iOS OAuth client, registered for com.rohanchari.steptracker). The
 # backend's GOOGLE_AUTH_CLIENT_ID allowlist must already include this client
@@ -287,13 +288,13 @@ Android ad units — the ids are per-platform in AdMob, so Android uses its own
   the build advertise the `ads` client-feature to the backend, so the extra-spin
   offer appears. Like iOS, this bakes in the SSV target; omit it and the offer
   never shows.
-- `ADMOB_BANNER_AD_UNIT_ID_ANDROID` — footer display banner. Banners still
-  require the backend `bannerAdsEnabled` remote switch to be on.
+- `ADMOB_BANNER_AD_UNIT_ID_ANDROID` — enables the permanent footer display
+  banner placement for this build.
 - `ADMOB_BOX_TOP_BANNER_AD_UNIT_ID_ANDROID` — dedicated top placement on box
-  routes. It additionally requires `dualBoxBannersEnabled`; omit it to retain
-  the existing footer-only layout with zero reserved top space.
+  routes. Its presence enables the permanent placement; omit it to retain the
+  footer-only layout with zero reserved top space.
 - `ADMOB_NATIVE_AD_UNIT_ID_ANDROID` — races-tab in-feed native ad (gated by the
-  same banner switch).
+  footer-banner build unit, with no backend switch).
 - `ADMOB_RACE_PAYOUT_DOUBLE_AD_UNIT_ID_ANDROID` — dedicated Rewarded unit for
   the combined race-results bonus. There is no test/live-placement fallback;
   omission keeps the capability token and offer out of the build.

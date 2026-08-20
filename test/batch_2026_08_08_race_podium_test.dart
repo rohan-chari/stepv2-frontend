@@ -21,10 +21,10 @@ Map<String, dynamic> _p(
   return <String, dynamic>{
     'userId': userId ?? name,
     'displayName': name,
-    if (steps != null) 'totalSteps': steps,
+    'totalSteps': ?steps,
     'stealthed': stealthed,
     'finishedAt': null,
-    if (placement != null) 'placement': placement,
+    'placement': ?placement,
   };
 }
 
@@ -300,7 +300,7 @@ void main() {
       'myPlacement': 2,
       'myPayoutCoins': 40,
       'winner': {'displayName': 'Ada'},
-      if (podium != null) 'podium': podium,
+      'podium': ?podium,
     };
 
     Future<void> pumpPopup(WidgetTester tester, Map<String, dynamic> race) async {

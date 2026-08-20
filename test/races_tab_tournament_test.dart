@@ -72,7 +72,7 @@ Future<_RecordingApi> _pump(
             'active': active,
             'pending': pending,
             'completed': completed,
-            if (tournaments != null) 'tournaments': tournaments,
+            'tournaments': ?tournaments,
           }),
           friendsSteps: const [],
           onRacesChanged: _noop,

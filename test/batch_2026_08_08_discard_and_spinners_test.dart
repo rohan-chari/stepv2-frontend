@@ -3,8 +3,6 @@
 //
 // Pumps the REAL race detail screen against a stubbed HTTP layer so the
 // assertions are about what a user sees, not about a mocked collaborator.
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -45,7 +43,6 @@ Map<String, dynamic> _race() => {
 class _StubApi extends BackendApiService {
   _StubApi({
     this.discardResponse = const {'ok': true},
-    this.discardDelay,
     this.serverDiscardPrices,
   });
 
@@ -56,7 +53,6 @@ class _StubApi extends BackendApiService {
   /// What POST .../discard returns. Defaults to the OLD shape (no new fields)
   /// so the degradation path is the default, not the exception.
   final Map<String, dynamic> discardResponse;
-  final Completer<void>? discardDelay;
 
   int discardCalls = 0;
 
@@ -124,8 +120,6 @@ class _StubApi extends BackendApiService {
     required String powerupId,
   }) async {
     discardCalls++;
-    final gate = discardDelay;
-    if (gate != null) await gate.future;
     return discardResponse;
   }
 }
