@@ -3,6 +3,21 @@
 Machine-specific paths (backend repo, Aseprite, etc.) live in `CLAUDE.local.md`
 (gitignored). Do not hardcode `/Users/...` paths in committed files.
 
+## Release flags are prohibited by default
+
+Ship permanent, version-compatible behavior by default. Do **not** add a
+feature flag, rollout percentage, kill switch, runtime toggle, or temporary
+environment control merely to make a normal release feel safer.
+
+If a flag appears absolutely necessary for mixed-version compatibility,
+irreversible migration safety, or an exceptional operational risk, stop before
+implementing it and get the user's explicit approval. Explain why permanent
+behavior, additive compatibility, or version/data stamping is insufficient.
+Every approved exception must document its owner, safe default, rollout plan,
+and concrete removal deadline or condition. Remove the control promptly when
+that condition is met; a flag must never become permanent infrastructure by
+inertia.
+
 ## Core principle: never break users on older app versions
 
 The app talks to a shared backend (`steptracker-api.org`) that is updated
