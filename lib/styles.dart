@@ -637,7 +637,9 @@ abstract final class AppThemeData {
   }
 }
 
-/// Game-themed text styles — bold and clean, not arcade-pixel.
+/// Game-themed text styles. Jersey 25 carries concise display moments and
+/// normal-sized action labels; Space Grotesk and DM Sans keep compact labels
+/// and longer copy comfortably readable.
 abstract final class PixelText {
   static TextStyle title({double size = 30, Color color = AppColors.textDark}) {
     return GoogleFonts.spaceGrotesk(
@@ -668,8 +670,9 @@ abstract final class PixelText {
   ];
 
   /// True bitmap-pixel display face (Jersey 25), bundled rather than fetched.
-  /// Reserved for the arcade wordmark treatment — the letterforms are stepped
-  /// pixels, so it only reads well large. Body copy stays on [body].
+  /// Reserved for the wordmark and short, large display moments — the
+  /// letterforms are stepped pixels, so it only reads well at display scale.
+  /// Body copy stays on [body].
   static TextStyle display({
     double size = 64,
     Color color = AppColors.textLight,
@@ -722,7 +725,12 @@ abstract final class PixelText {
     );
   }
 
+  /// Pixel glyphs become ambiguous below this size, so compact pills retain
+  /// the established sans-serif label treatment.
   static TextStyle pill({double size = 19, Color color = Colors.white}) {
+    if (size >= 13) {
+      return display(size: size, color: color, letterSpacing: 0.2);
+    }
     return GoogleFonts.dmSans(
       fontSize: size,
       color: color,

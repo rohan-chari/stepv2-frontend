@@ -210,6 +210,24 @@ void main() {
     });
   });
 
+  testWidgets('quick-create uses the bundled arcade display face for its hero heading', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: QuickCreateRaceSheet(
+            onCreate: (_) async {},
+            onCustomize: () {},
+          ),
+        ),
+      ),
+    );
+
+    final heading = tester.widget<Text>(find.text('START A RACE'));
+    expect(heading.style?.fontFamily, 'Jersey25');
+  });
+
   test('retired Imposter is removed from usable race inventory residue', () {
     final inventory = normalizePowerupInventory(const [
       {'id': 'retired', 'type': 'IMPOSTER', 'status': 'HELD'},

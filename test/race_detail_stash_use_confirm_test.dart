@@ -9,11 +9,16 @@ import 'package:step_tracker/services/backend_api_service.dart';
 /// same name + description sheet a box-earned powerup shows. Tapping USE on the
 /// stash row opens the sheet; only the sheet's USE actually redeems.
 class _StashApi extends BackendApiService {
-  _StashApi({this.stashType = 'TRAIL_MIX'});
+  _StashApi({
+    this.stashType = 'TRAIL_MIX',
+    this.rejectUse = false,
+  }) : _stashQuantity = 2;
 
   final String stashType;
+  final bool rejectUse;
   int redeemCalls = 0;
   int? lastUpgradeLevel;
+  int _stashQuantity;
 
   @override
   Future<Map<String, dynamic>> fetchRaceDetails({
@@ -82,7 +87,7 @@ class _StashApi extends BackendApiService {
     required String identityToken,
   }) async => {
     'items': [
-      {'powerupType': stashType, 'quantity': 2},
+      {'powerupType': stashType, 'quantity': _stashQuantity},
     ],
   };
 
@@ -93,12 +98,14 @@ class _StashApi extends BackendApiService {
     required String powerupType,
   }) async {
     redeemCalls++;
+    _stashQuantity--;
     return {
       'result': {
         'powerup': {
           'id': 'pw-1',
           'type': powerupType,
-          'rarity': 'COMMON',
+          // Store redemption deliberately has no rarity or earnedAtSteps.
+          'rarity': null,
           'status': 'HELD',
         },
       },
@@ -115,6 +122,11 @@ class _StashApi extends BackendApiService {
     String? targetEffectId,
     int upgradeLevel = 0,
   }) async {
+    if (rejectUse) {
+      // Mirrors the current backend's rejected-redeemed-item refund.
+      _stashQuantity++;
+      throw const ApiException('Quick Rinse is on cooldown', statusCode: 409);
+    }
     lastUpgradeLevel = upgradeLevel;
     return const {'result': {}};
   }
@@ -210,6 +222,26 @@ void main() {
     expect(api.redeemCalls, 1);
     // The optimistic stash decrement still runs after the confirm.
     expect(find.text('Trail Mix x1'), findsOneWidget);
+  });
+
+  testWidgets('a rejected stash use reconciles the item back into YOUR STASH', (
+    tester,
+  ) async {
+    final api = _StashApi(rejectUse: true);
+    await _pump(tester, api);
+
+    await tester.tap(find.byKey(const Key('stash-use-TRAIL_MIX')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byKey(const Key('stash-confirm-use')));
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(api.redeemCalls, 1);
+    // The authoritative follow-up read restores a server-refunded redeemed
+    // item to the account-wide stash rather than leaving it in a race slot.
+    expect(find.text('Trail Mix x2'), findsOneWidget);
   });
 
   // Pocket Watch is shop-only, so the stash is its main entry point: it must

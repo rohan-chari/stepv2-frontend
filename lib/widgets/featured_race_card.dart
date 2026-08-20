@@ -151,8 +151,10 @@ class FeaturedRaceCard extends StatelessWidget {
                 Text(
                   raceDisplayName(seedKind, name),
                   textAlign: TextAlign.center,
-                  style: PixelText.title(
-                    size: 17,
+                  style: PixelText.display(
+                    // Keep the card title one step above the old 17px face
+                    // while preserving the fixed-height featured strip.
+                    size: 20,
                     color: AppColors.of(context).textDark,
                   ),
                   maxLines: 2,

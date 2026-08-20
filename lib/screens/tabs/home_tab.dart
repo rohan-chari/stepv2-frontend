@@ -1196,7 +1196,7 @@ class HomeTab extends StatelessWidget {
               child: CountUpText(
                 value: steps,
                 format: _formatNumber,
-                style: PixelText.title(
+                style: PixelText.display(
                   size: compact ? 56 : 64,
                   color: AppColors.of(context).textLight,
                 ).copyWith(shadows: _heroHudShadows),
@@ -1209,7 +1209,7 @@ class HomeTab extends StatelessWidget {
           Text(
             'STEPS TODAY',
             textAlign: TextAlign.center,
-            style: PixelText.title(
+            style: PixelText.display(
               size: 13,
               color: AppColors.of(context).textLight.withValues(alpha: 0.85),
             ).copyWith(shadows: _heroShadows, letterSpacing: 3),
@@ -2128,8 +2128,8 @@ class _HomeRaceHeader extends StatelessWidget {
                 'SUGGESTED RACES',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: PixelText.title(
-                  size: 20,
+                style: PixelText.display(
+                  size: 22,
                   color: AppColors.of(context).textLight,
                 ).copyWith(shadows: _textShadows),
               ),
@@ -2882,8 +2882,8 @@ class _HomeSectionHeader extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             title,
-            style: PixelText.title(
-              size: 20,
+            style: PixelText.display(
+              size: 22,
               color: AppColors.of(context).textLight,
             ).copyWith(shadows: _textShadows),
           ),

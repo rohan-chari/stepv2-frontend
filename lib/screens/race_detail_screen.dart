@@ -2319,6 +2319,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     String? targetEffectId,
   }) async {
     final type = powerup['type'] as String;
+    // Store-redeemed items are distinguishable from race-earned drops even
+    // after a prior app version left one in the tray: redemption creates them
+    // with neither a rarity nor a milestone. The server returns these to the
+    // global stash on a rejected use, so reconcile instead of restoring a
+    // stale in-race snapshot.
+    final wasRedeemedFromStash =
+        powerup['rarity'] == null && powerup['earnedAtSteps'] == null;
     final token = widget.authService.authToken;
     if (token == null || token.isEmpty) return;
 
@@ -2588,7 +2595,16 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       if (!mounted) return;
       _loadProgress();
     } catch (e) {
-      restoreInventory();
+      if (wasRedeemedFromStash) {
+        // A current backend returns a rejected redeemed item to the global
+        // stash; an older backend may retain it in the race tray instead. Do
+        // not restore our stale local snapshot — re-read both authoritative
+        // projections so either server version renders where it actually put
+        // the item.
+        _loadProgress();
+      } else {
+        restoreInventory();
+      }
       // B3 — map redeem/use rejection codes to friendly copy; unknown/absent
       // codes fall back to the server message (old-backend compat).
       if (mounted) showErrorToast(context, powerupUseErrorCopy(e));
@@ -3995,8 +4011,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                             _race?['seedKind'] as String?,
                             _race?['name'] as String? ?? 'Race',
                           ),
-                          style: PixelText.title(
-                            size: 22,
+                          style: PixelText.display(
+                            size: 28,
                             color: AppColors.of(context).textLight,
                           ).copyWith(shadows: _headerTextShadows),
                           overflow: TextOverflow.ellipsis,
@@ -4605,8 +4621,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
           Expanded(
             child: Text(
               title,
-              style: PixelText.title(
-                size: 16,
+              style: PixelText.display(
+                size: 20,
                 color: AppColors.of(context).textLight,
               ).copyWith(shadows: _headerTextShadows),
               maxLines: 1,
