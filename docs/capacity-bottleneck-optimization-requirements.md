@@ -3,7 +3,7 @@
 **Status:** Specification complete; awaiting owner approval before implementation.
 
 **Evidence date:** 2026-08-17  
-**Frontend baseline:** `17ca1a8` plus uncommitted k6 corrections  
+**Frontend baseline:** `17ca1a8` plus uncommitted capacity-test corrections
 **Backend staging baseline:** `f86dd81`  
 **Historical measured topology:** one staging PM2 worker, PgBouncer pool 20,
 production kept at two workers with cron ownership on production instance 0  
@@ -19,7 +19,7 @@ reversible.
 
 As a user, step uploads, race standings, and messages remain responsive during
 normal peak traffic and background race processing. As the operator, we can state a
-capacity ceiling from a reproducible arrival-rate test rather than stale k6 scenario
+capacity ceiling from a reproducible arrival-rate test rather than stale scenario
 names or a linear worker-count assumption.
 
 The historical 15-rps run had no hard failures or dropped arrivals; the 31-rps run
@@ -34,7 +34,7 @@ a host, database, Redis, and cron load.
 
 ### In scope
 
-1. Repair the k6 harness and capacity conversion so repeated tests model the shipped
+1. Repair the capacity harness and conversion so repeated tests model the shipped
    client and produce enforceable endpoint/status results.
 2. Add low-overhead phase/query-count telemetry before changing expensive paths.
 3. Reduce placement baseline write amplification while preserving compare-and-set
@@ -205,7 +205,7 @@ Backend-owned work:
   measurement gate eligible, identical settings, and no placeholder revision/
   config/topology labels.
 
-Gate: `k6 inspect`, a deterministic smoke, and a low-rate run prove that every
+Gate: an inspection, deterministic smoke, and low-rate run prove that every
 intended endpoint/status is represented and all selected-rung thresholds receive
 samples. A mandatory cohort aggregator validates the three-run gates. Telemetry adds zero database queries; across three paired warm 5-rps,
 60-second runs, its median p50 and process CPU-time/request regress by no more than

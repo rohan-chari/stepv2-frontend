@@ -100,6 +100,18 @@ platforms are coupled in non-obvious ways: a dependency added for one (e.g.
 `firebase_*`) still links into the other's build. Build and verify **both**
 before considering a build/release change done. See `DEPLOYMENT.md`.
 
+## Production and staging operations
+
+- Production runs with **exactly two PM2 workers** on the production host unless
+  the user explicitly authorizes a different capacity change.
+- Staging is **shut down by default**. Start or reload the staging service only
+  after the user gives explicit, in-the-moment authorization for that use. Do
+  not start staging merely to verify a change, and shut it down again when the
+  authorized work is complete.
+- When the replacement production server is provisioned, configure swap as an
+  emergency memory buffer and verify its size and persistence across reboot.
+  Swap does not replace capacity planning or application/database optimization.
+
 ## Workflow routing (skills & agents)
 
 - **Any new-feature request** (not a bug fix or one-line tweak): load the
@@ -122,9 +134,5 @@ before considering a build/release change done. See `DEPLOYMENT.md`.
   rules): run the `game-analyst` agent for an EV + exploit analysis before
   numbers are committed to code or seeds. It maintains `docs/economy.md` and
   may read prod SELECT-only; it never edits code or config.
-- **Any k6/capacity/load-run request**, including simply "do a k6 run": load
-  the `k6-operator` skill and delegate execution to the named `k6-operator`
-  agent. `k6/operator.zsh` is the only public workflow; never reconstruct the
-  old fixture workbook or bypass its fresh per-run confirmation gate.
 - **After any non-trivial implementation**: run the `code-reviewer` agent
   before presenting the work as done.

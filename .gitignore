@@ -78,8 +78,3 @@ tmp/
 
 # Machine-specific Claude config
 CLAUDE.local.md
-
-# k6 load-test identities — signed session tokens for real users, never commit
-k6/users.json
-k6/fixture.json
-k6/results/

@@ -1,9 +1,9 @@
 # Request-path and payload optimization requirements
 
-> **Historical k6 note (2026-08-19):** References below to the former local
+> **Historical capacity-test note (2026-08-19):** References below to the former local
 > production-simulation and production-log harness are retained as historical
-> implementation evidence. Those commands are obsolete. Use the current
-> [`k6/README.md`](../k6/README.md) smoke/find/confirm/soak workflow.
+> implementation evidence. Those commands are obsolete; no current capacity-test
+> workflow is maintained in this repository.
 
 **Status:** Specification complete; architect approved; awaiting owner approval. No
 measurement or implementation is authorized until the owner explicitly approves the
@@ -778,7 +778,7 @@ write/storage cost before creating it. No destructive migration is permitted.
 
 No test source is added or modified. Before implementation, record hashes/status of
 all currently tracked test files so unrelated owner changes are distinguishable
-from this work. After each milestone, `git diff -- test k6/test` in the frontend and
+from this work. After each milestone, `git diff -- test` in the frontend and
 `git diff -- test` in the backend must show no changes attributable to this work.
 
 Because the worktrees are already dirty, each implementation agent must capture the
@@ -795,9 +795,9 @@ Required verification uses the existing suites and existing operational tooling:
 - Run `npm run test:integration`; never run bare `npm test`.
 - Run existing Redis-backed suites under their documented test Redis configuration
   and once with Redis unavailable where the existing command supports it.
-- Historical implementation used the former k6/local capacity harness and
+- Historical implementation used the former local capacity harness and
   production-log analysis scripts. Those commands are obsolete; current capacity
-  work uses [`k6/README.md`](../k6/README.md).
+  work uses the current capacity-test workflow.
 - On a dedicated local/test environment or staging, capture paired authenticated
   legacy and compact responses for the same fixture and compare them with a
   non-committed canonical JSON-diff command that permits only the removals and
