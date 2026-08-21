@@ -208,9 +208,48 @@ void main() {
       expect(find.byType(WoodenTabBar), findsOneWidget);
       expect(find.byKey(const Key('main-shell-pages')), findsOneWidget);
       await tester.tap(find.text('Races'));
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 700));
       expect(find.text('Races'), findsWidgets);
       expect(find.byKey(const Key('main-shell-pages')), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'dismissing an invite does not immediately reopen the pending invite',
+    (tester) async {
+      final api = _Api(
+        invites: {
+          'resolved': true,
+          'invites': [
+            {
+              'kind': 'RACE',
+              'id': 'race-1',
+              'name': 'Lunch Loop',
+              'status': 'PENDING',
+            },
+          ],
+        },
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MainShell(
+            authService: await _auth(),
+            healthService: _Health(),
+            backendApiService: api,
+            backgroundSyncBootstrapService: _Background(),
+            forceHomeInviteEligibilityForTesting: true,
+          ),
+        ),
+      );
+      for (var i = 0; i < 12; i++) {
+        await tester.pump(const Duration(milliseconds: 40));
+      }
+
+      expect(find.text('Lunch Loop'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('home-invite-dismiss')));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(api.responds, 0);
     },
   );
 

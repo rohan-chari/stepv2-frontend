@@ -16,10 +16,12 @@ class HomeInviteOverlay extends StatefulWidget {
     super.key,
     required this.invite,
     required this.onRespond,
+    this.onDismissed,
   });
 
   final HomeInvite invite;
   final Future<void> Function(bool accept) onRespond;
+  final VoidCallback? onDismissed;
 
   @override
   State<HomeInviteOverlay> createState() => _HomeInviteOverlayState();
@@ -54,7 +56,12 @@ class _HomeInviteOverlayState extends State<HomeInviteOverlay> {
   }
 
   void _dismiss() {
-    if (!_acting) Navigator.of(context).pop(false);
+    if (!_acting) {
+      // Notify the shell before popping so a concurrent coordinator cannot
+      // push the same still-pending invite during route teardown.
+      widget.onDismissed?.call();
+      Navigator.of(context, rootNavigator: true).pop(false);
+    }
   }
 
   @override

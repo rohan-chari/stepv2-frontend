@@ -242,6 +242,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   bool _homeInvitePopupOpen = false;
   bool _homeInviteSequenceRunning = false;
   int _homeInviteRequestGeneration = 0;
+  // X/back is a non-mutating answer. Suppress that same pending invite for
+  // the current app session so concurrent overlay coordinators cannot push it
+  // straight back on screen. The invite remains pending and is offered again
+  // on a later app session.
+  final Set<String> _homeInviteDismissedThisVisit = {};
 
   /// Item 8 — a results modal (race or ranked) took the screen this session,
   /// so the What's New sheet waits for the next launch rather than stacking.
@@ -2260,7 +2265,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         final preflight = HomeInvitePreflight.tryParse(payload);
         if (!preflight.supported || preflight.invites.isEmpty) return;
 
-        final invite = preflight.invites.first;
+        final invite = preflight.invites.firstWhere(
+          (candidate) =>
+              !_homeInviteDismissedThisVisit.contains(candidate.id),
+          orElse: () => preflight.invites.first,
+        );
+        if (_homeInviteDismissedThisVisit.contains(invite.id)) return;
         setState(() => _homeInvitePopupOpen = true);
         final answered = await Navigator.of(context).push<bool>(
           PageRouteBuilder(
@@ -2270,6 +2280,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
             pageBuilder: (_, _, _) => HomeInviteOverlay(
               invite: invite,
               onRespond: (accept) => _respondToHomeInvite(invite, accept),
+              onDismissed: () =>
+                  _homeInviteDismissedThisVisit.add(invite.id),
             ),
             transitionsBuilder: (_, animation, _, child) =>
                 FadeTransition(opacity: animation, child: child),
@@ -2278,8 +2290,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         if (!mounted) return;
         setState(() => _homeInvitePopupOpen = false);
         if (answered != true) {
-          // X/back is non-mutating. Re-read the existing card to restore its
-          // normal inline fallback after this route has fully popped.
+          // X/back is non-mutating. Keep the invite pending, but suppress it
+          // for this Home visit so another coordinator cannot immediately
+          // reopen the same modal after the route has fully popped.
+          _homeInviteDismissedThisVisit.add(invite.id);
           unawaited(_fetchRaceCard());
           return;
         }
