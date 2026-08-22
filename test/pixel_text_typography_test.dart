@@ -11,19 +11,25 @@ void main() {
     expect(PixelText.pill().fontFamily, 'Jersey25');
   });
 
-  testWidgets('standard action buttons render the pixel label without overflow', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: PillButton(label: 'DAILY REWARD', onPressed: () {}),
-        ),
-      ),
-    );
-
-    final label = tester.widget<Text>(find.text('DAILY REWARD'));
-    expect(label.style?.fontFamily, 'Jersey25');
-    expect(tester.takeException(), isNull);
+  test('Jersey25 display styles use the enlarged arcade scale', () {
+    expect(PixelText.display(size: 20).fontSize, 30);
+    expect(PixelText.pill(size: 20).fontSize, 30);
   });
+
+  testWidgets(
+    'standard action buttons render the pixel label without overflow',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: PillButton(label: 'DAILY REWARD', onPressed: () {}),
+          ),
+        ),
+      );
+
+      final label = tester.widget<Text>(find.text('DAILY REWARD'));
+      expect(label.style?.fontFamily, 'Jersey25');
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

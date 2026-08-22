@@ -641,6 +641,8 @@ abstract final class AppThemeData {
 /// normal-sized action labels; Space Grotesk and DM Sans keep compact labels
 /// and longer copy comfortably readable.
 abstract final class PixelText {
+  static const double _displayScale = 1.5;
+
   static TextStyle title({double size = 30, Color color = AppColors.textDark}) {
     return GoogleFonts.spaceGrotesk(
       fontSize: size,
@@ -680,7 +682,7 @@ abstract final class PixelText {
   }) {
     return TextStyle(
       fontFamily: 'Jersey25',
-      fontSize: size,
+      fontSize: size * _displayScale,
       color: color,
       height: 1.0,
       letterSpacing: letterSpacing,
