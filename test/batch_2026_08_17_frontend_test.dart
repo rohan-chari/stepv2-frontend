@@ -223,9 +223,9 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('AD NOT READY — TRY AGAIN'), findsOneWidget);
+    expect(find.text('SPIN AGAIN'), findsOneWidget);
     expect(find.text('LOADING AD...'), findsNothing);
-    await tester.tap(find.text('AD NOT READY — TRY AGAIN'));
+    await tester.tap(find.text('SPIN AGAIN'));
     await tester.pump();
     expect(ad.loads, greaterThanOrEqualTo(2));
   });

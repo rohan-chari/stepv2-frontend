@@ -652,6 +652,8 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
           Text(
             !claimedToday
                 ? 'Open today\'s mystery box to keep your streak going.'
+                : _rewardClaimed
+                ? 'Today\'s reward has been claimed.'
                 : _extraSpinOffered
                 ? 'You\'ve opened today\'s box. Grab your bonus spin!'
                 : 'You\'ve opened today\'s box. Come back tomorrow!',
@@ -713,8 +715,8 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
                   : _retryOrStartExtraSpin,
             )
           else
-            const PillButton(
-              label: 'COME BACK TOMORROW',
+            PillButton(
+              label: _rewardClaimed ? 'REWARD CLAIMED' : 'COME BACK TOMORROW',
               variant: PillButtonVariant.primary,
               fullWidth: true,
               onPressed: null,
@@ -731,12 +733,16 @@ class _DailyRewardScreenState extends State<DailyRewardScreen> {
     return _hasAvailableExtraSpin && !_extraSpinDone && _adCtrl.isSupported;
   }
 
+  bool get _rewardClaimed {
+    return _extraSpinDone || _adExtraSpin?['used'] == true;
+  }
+
   String get _extraSpinCtaLabel {
     if (_adFlowBusy) return 'PLEASE WAIT...';
-    if (_adExtraSpin?['pendingGrant'] == true) return 'CLAIM YOUR EXTRA SPIN';
-    if (_adReady) return 'WATCH A SHORT AD · +1 SPIN';
+    if (_adExtraSpin?['pendingGrant'] == true) return 'SPIN AGAIN';
+    if (_adReady) return 'SPIN AGAIN';
     if (_adLoading) return 'LOADING AD...';
-    return 'AD NOT READY — TRY AGAIN';
+    return 'SPIN AGAIN';
   }
 
   // Reel screen — same chrome as the race mystery box (CaseOpeningScreen):

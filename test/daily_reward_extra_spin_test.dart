@@ -218,7 +218,7 @@ void main() {
       final ads = _FakeAdController();
       await _pumpScreen(tester, api: api, adController: ads);
 
-      expect(find.text('WATCH A SHORT AD · +1 SPIN'), findsOneWidget);
+      expect(find.text('SPIN AGAIN'), findsOneWidget);
       expect(find.text('COME BACK TOMORROW'), findsNothing);
       expect(ads.loadCalls, 1, reason: 'ad should preload when offer is live');
     },
@@ -231,7 +231,7 @@ void main() {
     final ads = _FakeAdController();
     await _pumpScreen(tester, api: api, adController: ads);
 
-    expect(find.text('WATCH A SHORT AD · +1 SPIN'), findsNothing);
+    expect(find.text('SPIN AGAIN'), findsNothing);
     expect(ads.loadCalls, 0);
   });
 
@@ -245,8 +245,8 @@ void main() {
     );
     await _pumpScreen(tester, api: api, adController: _FakeAdController());
 
-    expect(find.text('WATCH A SHORT AD · +1 SPIN'), findsNothing);
-    expect(find.text('COME BACK TOMORROW'), findsOneWidget);
+    expect(find.text('SPIN AGAIN'), findsNothing);
+    expect(find.text('REWARD CLAIMED'), findsOneWidget);
   });
 
   testWidgets(
@@ -437,7 +437,7 @@ void main() {
     final ads = _FakeAdController(readyAfterLoad: false);
     await _pumpScreen(tester, api: api, adController: ads);
 
-    expect(find.text('AD NOT READY — TRY AGAIN'), findsOneWidget);
+    expect(find.text('SPIN AGAIN'), findsOneWidget);
   });
 
   testWidgets('daily screen records ready, tap, completion, and claim stages', (
@@ -456,7 +456,7 @@ void main() {
       analytics: analytics,
     );
 
-    await tester.tap(find.text('WATCH A SHORT AD · +1 SPIN'));
+    await tester.tap(find.text('SPIN AGAIN'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -520,7 +520,7 @@ void main() {
       adController: ads,
     );
 
-    expect(find.text('WATCH A SHORT AD · +1 SPIN'), findsNothing);
+    expect(find.text('SPIN AGAIN'), findsNothing);
     expect(ads.loadCalls, 0);
   });
 
@@ -541,7 +541,7 @@ void main() {
       adController: _UnsupportedAdController(),
     );
 
-    expect(find.text('WATCH A SHORT AD · +1 SPIN'), findsNothing);
+    expect(find.text('SPIN AGAIN'), findsNothing);
   });
 
   testWidgets('tap: shows the ad, claims, and spins the reel again', (
@@ -555,7 +555,7 @@ void main() {
     final ads = _FakeAdController();
     await _pumpScreen(tester, api: api, adController: ads);
 
-    await tester.tap(find.text('WATCH A SHORT AD · +1 SPIN'));
+    await tester.tap(find.text('SPIN AGAIN'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -563,7 +563,7 @@ void main() {
     expect(api.claimCalls, 1);
     expect(find.byType(CaseOpeningReel), findsOneWidget);
     // Offer is single-use: no second button behind the reel.
-    expect(find.text('WATCH A SHORT AD · +1 SPIN'), findsNothing);
+    expect(find.text('SPIN AGAIN'), findsNothing);
   });
 
   testWidgets('pendingGrant claims directly without showing another ad', (
@@ -578,7 +578,7 @@ void main() {
     await _pumpScreen(tester, api: api, adController: ads);
 
     // A verified-but-unredeemed watch exists: claim it, don't run a new ad.
-    await tester.tap(find.text('CLAIM YOUR EXTRA SPIN'));
+    await tester.tap(find.text('SPIN AGAIN'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -603,7 +603,7 @@ void main() {
     final ads = _FakeAdController();
     await _pumpScreen(tester, api: api, adController: ads);
 
-    await tester.tap(find.text('WATCH A SHORT AD · +1 SPIN'));
+    await tester.tap(find.text('SPIN AGAIN'));
     await tester.pump();
     expect(api.claimCalls, 1);
 
@@ -625,7 +625,7 @@ void main() {
     final ads = _FakeAdController()..earnReward = false;
     await _pumpScreen(tester, api: api, adController: ads);
 
-    await tester.tap(find.text('WATCH A SHORT AD · +1 SPIN'));
+    await tester.tap(find.text('SPIN AGAIN'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
