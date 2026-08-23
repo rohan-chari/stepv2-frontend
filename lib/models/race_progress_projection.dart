@@ -30,9 +30,11 @@ class RaceProjectionMetadata {
         ? rawSource
         : null;
 
-    if ((generation == null || generation <= 0) && asOf == null && source == null) return null;
+    final validGeneration = generation != null && generation > 0;
+    final safeGeneration = validGeneration ? generation : null;
+    if (safeGeneration == null && asOf == null && source == null) return null;
     return RaceProjectionMetadata(
-      generation: generation,
+      generation: safeGeneration,
       asOf: asOf,
       source: source,
     );
