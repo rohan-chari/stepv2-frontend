@@ -274,6 +274,20 @@ void main() {
       expect(targets.map((t) => t['userId']), isNot(contains('ghost')));
     });
 
+    test('target filtering preserves the server-provided order', () {
+      final targets = TeamRace.offensiveTargets(
+        participants: const [
+          {'userId': 'me', 'placement': 4, 'totalSteps': 100},
+          {'userId': 'third', 'placement': 3, 'totalSteps': 200},
+          {'userId': 'first', 'placement': 1, 'totalSteps': 400},
+          {'userId': 'second', 'placement': 2, 'totalSteps': 300},
+        ],
+        myUserId: 'me',
+        race: const {},
+      );
+      expect(targets.map((t) => t['userId']), ['third', 'first', 'second']);
+    });
+
     test('individual race keeps every non-self, non-stealthed racer', () {
       final targets = TeamRace.offensiveTargets(
         participants: const [

@@ -224,6 +224,10 @@ void main() {
         findsOneWidget,
       );
       expect(
+        find.descendant(of: pickerColumn, matching: find.text('38,000 steps')),
+        findsOneWidget,
+      );
+      expect(
         find.descendant(of: pickerColumn, matching: find.text('@Trail Walker')),
         findsNothing,
       );
