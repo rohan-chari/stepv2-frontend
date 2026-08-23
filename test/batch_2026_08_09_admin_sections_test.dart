@@ -186,7 +186,7 @@ void main() {
       await _pumpHub(tester, _AdminApi());
       await _expand(tester, 'CONFIG');
 
-      expect(find.text('Banner ads'), findsNothing);
+      expect(find.text('Banner ads'), findsOneWidget);
       expect(find.text('HOME SERVICE BANNER'), findsOneWidget);
       expect(find.text('ACCESSORY RENDER TUNER'), findsOneWidget);
       expect(find.text('BALANCE CONFIG'), findsOneWidget);

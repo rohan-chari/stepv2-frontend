@@ -20,6 +20,28 @@ enum AdBannerStyle {
 
 enum AdBannerPlacement { standard, boxTop }
 
+/// Spacing paired with a banner slot; it follows the same runtime gate so a
+/// remote disable never leaves a dead strip in the host screen.
+class AdBannerSpacing extends StatelessWidget {
+  const AdBannerSpacing({super.key, this.height = 12, this.placement = AdBannerPlacement.standard});
+
+  final double height;
+  final AdBannerPlacement placement;
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+        valueListenable: AdService.bannerAdsEnabledListenable,
+        builder: (context, enabled, child) => SizedBox(
+          height: enabled &&
+                  (placement == AdBannerPlacement.boxTop
+                      ? AdService.boxTopBannerEnabled
+                      : AdService.bannersEnabled)
+              ? height
+              : 0,
+        ),
+      );
+}
+
 /// Compact banner ad for the bottom of low-stakes screens. Renders NOTHING —
 /// zero size — unless this build has banners enabled (iOS with the
 /// ADMOB_BANNER_AD_UNIT_ID dart-define) AND the ad actually loads, so screens
@@ -75,7 +97,32 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
   bool _loaded = false;
   bool _loadStarted = false;
   int _retries = 0;
+  int _loadGeneration = 0;
   Timer? _retryTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    AdService.bannerAdsEnabledListenable.addListener(_onBannerGateChanged);
+  }
+
+  void _onBannerGateChanged() {
+    if (!mounted) return;
+    if (!AdService.bannerAdsRuntimeEnabled) {
+      _loadGeneration++;
+      _retryTimer?.cancel();
+      _retryTimer = null;
+      _ad?.dispose();
+      _ad = null;
+      _loaded = false;
+      _loadStarted = false;
+    } else {
+      _loadGeneration++;
+      _loadStarted = false;
+      _maybeStartLoad();
+    }
+    setState(() {});
+  }
 
   @override
   void didChangeDependencies() {
@@ -98,6 +145,7 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
   }
 
   Future<void> _load() async {
+    final generation = _loadGeneration;
     _retryTimer?.cancel();
     _retryTimer = null;
     final enabled = widget.placement == AdBannerPlacement.boxTop
@@ -105,7 +153,7 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
         : AdService.bannersEnabled;
     if (!enabled) return;
     await AdService.ensureInitialized();
-    if (!mounted) return;
+    if (!mounted || generation != _loadGeneration || !enabled) return;
     // Use the standard 320x50 banner format shared by Google demand and our
     // mediation providers. In particular, Meta Audience Network rejects
     // anchored/inline adaptive sizes, while arbitrary screen-width AdSize
@@ -120,7 +168,7 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
       request: const AdRequest(),
       listener: BannerAdListener(
         onAdLoaded: (_) {
-          if (mounted) {
+          if (mounted && generation == _loadGeneration && enabled) {
             setState(() {
               _loaded = true;
               _retries = 0;
@@ -132,6 +180,7 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
           // new or unverified; the screen simply has no banner.
           debugPrint('Banner ad failed to load: $error');
           ad.dispose();
+          if (generation != _loadGeneration) return;
           if (mounted) {
             setState(() {
               _ad = null;
@@ -155,6 +204,7 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
 
   @override
   void dispose() {
+    AdService.bannerAdsEnabledListenable.removeListener(_onBannerGateChanged);
     _retryTimer?.cancel();
     _ad?.dispose();
     super.dispose();
@@ -178,6 +228,10 @@ class _AdBannerSlotState extends State<AdBannerSlot> {
   @override
   Widget build(BuildContext context) {
     if (widget.hidden) return const SizedBox.shrink();
+    final enabled = widget.placement == AdBannerPlacement.boxTop
+        ? AdService.boxTopBannerEnabled
+        : AdService.bannersEnabled;
+    if (!enabled) return const SizedBox.shrink();
     final ad = _ad;
     if (!_loaded || ad == null) {
       if (!widget.reserveSpaceWhileLoading) return const SizedBox.shrink();

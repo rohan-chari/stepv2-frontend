@@ -29,11 +29,15 @@ class _AdInlineCardState extends State<AdInlineCard> {
 
   NativeAd? _ad;
   bool _adLoaded = false;
+  int _loadGeneration = 0;
 
   Future<void> _load() async {
-    if (!AdService.bannersEnabled) return;
+    final generation = _loadGeneration;
+    if (!AdService.nativeAdsEnabled) return;
     await AdService.ensureInitialized();
-    if (!mounted) return;
+    if (!mounted || generation != _loadGeneration || !AdService.nativeAdsEnabled) {
+      return;
+    }
 
     final ad = NativeAd(
       adUnitId: AdService.nativeAdUnitId,
@@ -48,7 +52,7 @@ class _AdInlineCardState extends State<AdInlineCard> {
       ),
       listener: NativeAdListener(
         onAdLoaded: (ad) {
-          if (!mounted) {
+          if (!mounted || generation != _loadGeneration || !AdService.nativeAdsEnabled) {
             ad.dispose();
             return;
           }
@@ -58,6 +62,7 @@ class _AdInlineCardState extends State<AdInlineCard> {
           // No fill / error: stay collapsed and the list closes up normally.
           debugPrint('Inline native ad failed to load: $error');
           ad.dispose();
+          if (generation != _loadGeneration) return;
           if (mounted) {
             setState(() {
               _ad = null;
@@ -74,20 +79,36 @@ class _AdInlineCardState extends State<AdInlineCard> {
   @override
   void initState() {
     super.initState();
+    AdService.bannerAdsEnabledListenable.addListener(_onBannerGateChanged);
     // A factory-built native ad doesn't need a measured slot width to
     // request — kick off the load immediately.
     _load();
   }
 
+  void _onBannerGateChanged() {
+    if (!mounted) return;
+    if (AdService.bannerAdsRuntimeEnabled) {
+      _loadGeneration++;
+      _load();
+    } else {
+      _loadGeneration++;
+      _ad?.dispose();
+      _ad = null;
+      _adLoaded = false;
+    }
+    setState(() {});
+  }
+
   @override
   void dispose() {
+    AdService.bannerAdsEnabledListenable.removeListener(_onBannerGateChanged);
     _ad?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!AdService.bannersEnabled) return const SizedBox.shrink();
+    if (!AdService.nativeAdsEnabled) return const SizedBox.shrink();
 
     final ad = _ad;
     if (ad == null || !_adLoaded) return const SizedBox.shrink();

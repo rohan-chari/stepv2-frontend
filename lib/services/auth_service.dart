@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import 'backend_api_service.dart';
+import 'ad_service.dart';
 import 'health_service.dart';
 import 'onboarding_state_service.dart';
 import '../tutorial/tutorial_gate.dart';
@@ -153,6 +154,7 @@ class AuthService extends ChangeNotifier {
   bool _tutorialOnboardingSeen = false;
   bool _hiddenFromLeaderboard = false;
   bool _autoJoinFeaturedRaces = false;
+  bool _bannerAdsEnabled = true;
   bool _teamRacesEnabled = true;
   bool _customRaceWindowEnabled = false;
   bool _onboardingV2Enabled = false;
@@ -220,10 +222,9 @@ class AuthService extends ChangeNotifier {
   bool get hiddenFromLeaderboard => _hiddenFromLeaderboard;
   bool get autoJoinFeaturedRaces => _autoJoinFeaturedRaces;
 
-  /// Compatibility accessors retained for callers and demo overrides after the
-  /// banner rollout controls graduated. Production behavior is permanently on;
-  /// whether a banner can render is solely a build-time ad-service capability.
-  bool get bannerAdsEnabled => true;
+  /// Remote banner setting. Missing or malformed values default to enabled for
+  /// compatibility with older backend responses.
+  bool get bannerAdsEnabled => _bannerAdsEnabled;
   bool get dualBoxBannersEnabled => true;
 
   /// Remote kill switch for team-race CREATION (TR-107, backend
@@ -374,6 +375,8 @@ class AuthService extends ChangeNotifier {
   /// Loads persisted auth state. Returns true if a session exists.
   Future<bool> restoreSession() async {
     final prefs = await SharedPreferences.getInstance();
+    _bannerAdsEnabled = true;
+    AdService.setBannerAdsEnabled(true);
     // The onboarding invite-code step was retired permanently. Delete its
     // device cache before reading auth state so an older installed value can
     // never resurrect the removed branch in this or a future refactor.
@@ -899,6 +902,13 @@ class AuthService extends ChangeNotifier {
     // payload is allowed to resolve opt-in capabilities to false below.
     if (backendUser.containsKey('featureFlags')) {
       final flags = backendUser['featureFlags'];
+      final rawBannerAdsEnabled = flags is Map
+          ? flags['bannerAdsEnabled']
+          : null;
+      _bannerAdsEnabled = rawBannerAdsEnabled is bool
+          ? rawBannerAdsEnabled
+          : true;
+      AdService.setBannerAdsEnabled(_bannerAdsEnabled);
       // TR-107 team-race creation kill switch. Opposite default from banners:
       // the feature ships ON, so only an explicit false disables it — an older
       // backend that omits the key must not hide the toggle.
@@ -967,6 +977,8 @@ class AuthService extends ChangeNotifier {
       // the last authoritative answer. appSettings remains a supported legacy
       // fallback for the controls it carried.
       _stepSampleBucketMinutes = 60;
+      _bannerAdsEnabled = true;
+      AdService.setBannerAdsEnabled(true);
       _onboardingV2Enabled = false;
       _onboardingV3Enabled = false;
       if (!(appSettings is Map &&
@@ -1038,6 +1050,8 @@ class AuthService extends ChangeNotifier {
     _tutorialOnboardingSeen = false;
     _hiddenFromLeaderboard = false;
     _autoJoinFeaturedRaces = false;
+    _bannerAdsEnabled = true;
+    AdService.setBannerAdsEnabled(true);
     _customRaceWindowEnabled = false;
     _onboardingV2Enabled = false;
     _onboardingV3Enabled = false;

@@ -47,9 +47,7 @@ void main() {
       expect(auth.stepSampleBucketMinutes, 5);
     });
 
-    test(
-      'retired banner settings cannot disable permanent ad placements',
-      () async {
+    test('banner settings reactivate the runtime ad gate', () async {
         SharedPreferences.setMockInitialValues(const {
           'auth_banner_ads_enabled': false,
           'auth_dual_box_banners_enabled': false,
@@ -67,7 +65,7 @@ void main() {
           },
         }, authoritative: true);
 
-        expect(auth.bannerAdsEnabled, isTrue);
+        expect(auth.bannerAdsEnabled, isFalse);
         expect(auth.dualBoxBannersEnabled, isTrue);
         final prefs = await SharedPreferences.getInstance();
         expect(prefs.containsKey('auth_banner_ads_enabled'), isFalse);
@@ -118,7 +116,7 @@ void main() {
     });
   });
 
-  testWidgets('admin CONFIG exposes only the retained service-banner control', (
+  testWidgets('compatibility admin settings exposes the banner control', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -141,8 +139,8 @@ void main() {
       ),
     );
 
-    expect(find.byType(Switch), findsNothing);
-    expect(find.text('Banner ads'), findsNothing);
+    expect(find.byKey(const Key('admin-settings-banner-ads-toggle')), findsOneWidget);
+    expect(find.text('Banner ads'), findsOneWidget);
     expect(find.text('Dual box banners'), findsNothing);
     expect(find.text('Team races'), findsNothing);
     expect(find.text('Onboarding v2'), findsNothing);

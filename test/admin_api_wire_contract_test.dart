@@ -274,6 +274,26 @@ void main() {
     );
   });
 
+  group('PATCH /admin/settings', () {
+    test('sends only the bannerAdsEnabled setting and reads the envelope', () async {
+      final client = _FakeHttpClient([
+        const _Scripted(200, '{"settings":{"bannerAdsEnabled":false}}'),
+      ]);
+      final api = BackendApiService(httpClient: client);
+
+      final settings = await api.updateAdminSettings(
+        identityToken: 'tok',
+        bannerAdsEnabled: false,
+      );
+
+      final request = client.requests.single;
+      expect(request.method, 'PATCH');
+      expect(request.uri.path, '/admin/settings');
+      expect(_bodyOf(request), {'bannerAdsEnabled': false});
+      expect(settings, {'bannerAdsEnabled': false});
+    });
+  });
+
   group('PATCH /admin/powerup-shop/items/:itemId', () {
     test('sends ONLY the keys that were provided', () async {
       final client = _FakeHttpClient([

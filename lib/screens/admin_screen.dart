@@ -18,6 +18,7 @@ import '../widgets/trail_sign.dart';
 import 'admin_accessory_tuner_screen.dart';
 import 'admin_metrics_dashboard.dart';
 import 'admin_sections.dart';
+import '../services/ad_service.dart';
 import 'admin_balance_config_screen.dart';
 import 'admin_powerup_shop_screen.dart';
 
@@ -46,6 +47,7 @@ class _AdminFlagsPanelState extends State<AdminFlagsPanel> {
   Map<String, dynamic>? _settings;
   bool _loading = true;
   bool _saving = false;
+  bool _bannerAdsEnabled = true;
   final TextEditingController _serviceBannerMessage = TextEditingController();
   bool _serviceBannerEnabled = false;
 
@@ -63,6 +65,9 @@ class _AdminFlagsPanelState extends State<AdminFlagsPanel> {
       if (mounted) {
         setState(() {
           _settings = settings;
+          _bannerAdsEnabled = settings['bannerAdsEnabled'] is bool
+              ? settings['bannerAdsEnabled'] as bool
+              : true;
           _serviceBannerEnabled = settings['homeServiceBannerEnabled'] == true;
           final message = settings['homeServiceBannerMessage'];
           _serviceBannerMessage.text = message is String ? message : '';
@@ -71,6 +76,34 @@ class _AdminFlagsPanelState extends State<AdminFlagsPanel> {
       }
     } catch (_) {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _saveBannerAds(bool enabled) async {
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty || _saving) return;
+    final previous = _bannerAdsEnabled;
+    setState(() {
+      _bannerAdsEnabled = enabled;
+      _saving = true;
+    });
+    try {
+      final updated = await _api.updateAdminSettings(
+        identityToken: token,
+        bannerAdsEnabled: enabled,
+      );
+      final returned = updated['bannerAdsEnabled'];
+      if (returned is! bool) throw const ApiException('Invalid settings response');
+      AdService.setBannerAdsEnabled(returned);
+      if (mounted) setState(() => _bannerAdsEnabled = returned);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _bannerAdsEnabled = previous);
+        AdService.setBannerAdsEnabled(previous);
+        widget.showErrorToast(context, 'Couldn\'t save banner ads.');
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -136,6 +169,19 @@ class _AdminFlagsPanelState extends State<AdminFlagsPanel> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
+          'ADVERTISING',
+          style: PixelText.title(size: 13, color: AppColors.of(context).textDark),
+        ),
+        SwitchListTile.adaptive(
+          key: const Key('admin-banner-ads-toggle'),
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Banner ads'),
+          subtitle: const Text('Remote control for display banner placements.'),
+          value: _bannerAdsEnabled,
+          onChanged: _saving ? null : _saveBannerAds,
+        ),
+        const SizedBox(height: 14),
+        Text(
           'HOME SERVICE BANNER',
           style: PixelText.title(
             size: 13,
@@ -190,7 +236,18 @@ class AdminSettingsCardBody extends StatelessWidget {
   final void Function(String key, bool enabled) onChanged;
 
   @override
-  Widget build(BuildContext context) => const SizedBox.shrink();
+  Widget build(BuildContext context) => SwitchListTile.adaptive(
+        key: const Key('admin-settings-banner-ads-toggle'),
+        contentPadding: EdgeInsets.zero,
+        title: const Text('Banner ads'),
+        subtitle: const Text('Remote control for display banner placements.'),
+        value: settings['bannerAdsEnabled'] is bool
+            ? settings['bannerAdsEnabled'] as bool
+            : true,
+        onChanged: saving
+            ? null
+            : (value) => onChanged('bannerAdsEnabled', value),
+      );
 }
 
 /// The admin hub — batch 2026-08-09 item 10.

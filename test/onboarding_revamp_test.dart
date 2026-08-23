@@ -1062,8 +1062,8 @@ void main() {
     });
   });
 
-  group('§5.10 graduated admin flag UI', () {
-    testWidgets('the retired settings card renders no product switches', (
+  group('§5.10 admin banner control', () {
+    testWidgets('the settings card renders the reactivated banner switch', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -1091,8 +1091,8 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.byType(Switch), findsNothing);
-      expect(find.text('Banner ads'), findsNothing);
+      expect(find.byKey(const Key('admin-settings-banner-ads-toggle')), findsOneWidget);
+      expect(find.text('Banner ads'), findsOneWidget);
       expect(find.text('Onboarding v2'), findsNothing);
       expect(find.text('Onboarding v3'), findsNothing);
       expect(find.text('Onboarding invite code'), findsNothing);

@@ -152,6 +152,33 @@ class AdService implements ExtraSpinAdController, RacePayoutDoubleAdController {
   static const _testNativeIos = 'ca-app-pub-3940256099942544/3986624511';
   static const _testNativeAndroid = 'ca-app-pub-3940256099942544/2247696110';
 
+  static final ValueNotifier<bool> _bannerAdsEnabledNotifier =
+      ValueNotifier<bool>(true);
+  static bool? _testStandardBannerUnitAvailable;
+  static bool? _testBoxTopBannerUnitAvailable;
+  static bool? _testNativeUnitAvailable;
+
+  static ValueListenable<bool> get bannerAdsEnabledListenable =>
+      _bannerAdsEnabledNotifier;
+
+  static bool get bannerAdsRuntimeEnabled => _bannerAdsEnabledNotifier.value;
+
+  static void setBannerAdsEnabled(bool enabled) {
+    if (_bannerAdsEnabledNotifier.value == enabled) return;
+    _bannerAdsEnabledNotifier.value = enabled;
+  }
+
+  @visibleForTesting
+  static void setBannerUnitAvailabilityForTesting({
+    bool? standard,
+    bool? boxTop,
+    bool? native,
+  }) {
+    _testStandardBannerUnitAvailable = standard;
+    _testBoxTopBannerUnitAvailable = boxTop;
+    _testNativeUnitAvailable = native;
+  }
+
   /// The real (injected) rewarded/banner/native unit id for the CURRENT
   /// platform, or '' when this platform has no id baked in (which disables the
   /// surface). Web has no ads SDK, so always ''.
@@ -212,6 +239,8 @@ class AdService implements ExtraSpinAdController, RacePayoutDoubleAdController {
 
   static String get _platformBannerUnitId {
     if (kIsWeb) return '';
+    if (_testStandardBannerUnitAvailable == true) return 'test-banner-unit';
+    if (_testStandardBannerUnitAvailable == false) return '';
     if (Platform.isIOS) return _envBannerAdUnitId;
     if (Platform.isAndroid) return _envBannerAdUnitIdAndroid;
     return '';
@@ -219,6 +248,8 @@ class AdService implements ExtraSpinAdController, RacePayoutDoubleAdController {
 
   static String get _platformBoxTopBannerUnitId {
     if (kIsWeb) return '';
+    if (_testBoxTopBannerUnitAvailable == true) return 'test-box-top-unit';
+    if (_testBoxTopBannerUnitAvailable == false) return '';
     if (Platform.isIOS) return _envBoxTopBannerAdUnitId;
     if (Platform.isAndroid) return _envBoxTopBannerAdUnitIdAndroid;
     return '';
@@ -226,6 +257,8 @@ class AdService implements ExtraSpinAdController, RacePayoutDoubleAdController {
 
   static String get _platformNativeUnitId {
     if (kIsWeb) return '';
+    if (_testNativeUnitAvailable == true) return 'test-native-unit';
+    if (_testNativeUnitAvailable == false) return '';
     if (Platform.isIOS) return _envNativeAdUnitId;
     if (Platform.isAndroid) return _envNativeAdUnitIdAndroid;
     return '';
@@ -237,10 +270,16 @@ class AdService implements ExtraSpinAdController, RacePayoutDoubleAdController {
   /// ADMOB_BANNER_AD_UNIT_ID_ANDROID. Builds that omit their platform's define
   /// (and web) show nothing at all. When off, [AdBannerSlot] collapses to zero
   /// size.
-  static bool get bannersEnabled => !kIsWeb && _platformBannerUnitId.isNotEmpty;
+  static bool get bannersEnabled =>
+      bannerAdsRuntimeEnabled && !kIsWeb && _platformBannerUnitId.isNotEmpty;
 
   static bool get boxTopBannerEnabled =>
-      !kIsWeb && _platformBoxTopBannerUnitId.isNotEmpty;
+      bannerAdsRuntimeEnabled &&
+      !kIsWeb &&
+      _platformBoxTopBannerUnitId.isNotEmpty;
+
+  static bool get nativeAdsEnabled =>
+      bannerAdsRuntimeEnabled && !kIsWeb && _platformNativeUnitId.isNotEmpty;
 
   /// Ad unit for [AdBannerSlot]. The real unit when injected at build time,
   /// otherwise Google's public test banner for this platform (only reached in

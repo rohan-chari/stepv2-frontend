@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../styles.dart';
-import '../services/ad_service.dart';
 import '../widgets/ad_banner_slot.dart';
 import '../widgets/case_opening_strip.dart';
 import '../widgets/error_toast.dart';
@@ -271,7 +270,7 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
                     placement: AdBannerPlacement.boxTop,
                     reserveSpaceWhileLoading: true,
                   ),
-                  if (AdService.boxTopBannerEnabled) const SizedBox(height: 12),
+                  const AdBannerSpacing(placement: AdBannerPlacement.boxTop),
                   Expanded(
                     child: Center(
                       child: SingleChildScrollView(
@@ -287,7 +286,7 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
                       ),
                     ),
                   ),
-                  if (AdService.bannersEnabled) const SizedBox(height: 12),
+                  const AdBannerSpacing(),
                   const AdBannerSlot(reserveSpaceWhileLoading: true),
                 ],
               ),
