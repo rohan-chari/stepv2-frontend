@@ -222,7 +222,7 @@ void main() {
       () {
         expect(
           RaceProjectionMetadata.tryParse({
-            'projectionGeneration': 12.0,
+            'projectionGeneration': 12,
             'asOf': '2026-08-22T12:00:00.000Z',
             'projectionSource': 'authoritative',
           }),

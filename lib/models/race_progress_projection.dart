@@ -15,20 +15,22 @@ class RaceProjectionMetadata {
     if (raw is! Map) return null;
 
     final rawGeneration = raw['projectionGeneration'];
-    final generation = rawGeneration is num && rawGeneration.isFinite
-        ? rawGeneration.toInt()
+    final generation = rawGeneration is int && rawGeneration > 0
+        ? rawGeneration
         : rawGeneration is String
         ? int.tryParse(rawGeneration)
         : null;
     final rawAsOf = raw['asOf'];
-    final asOf = rawAsOf is String && rawAsOf.isNotEmpty ? rawAsOf : null;
+    final asOf = rawAsOf is String && rawAsOf.isNotEmpty && DateTime.tryParse(rawAsOf) != null
+        ? rawAsOf
+        : null;
     const sources = {'authoritative', 'stale-fallback', 'legacy'};
     final rawSource = raw['projectionSource'];
     final source = rawSource is String && sources.contains(rawSource)
         ? rawSource
         : null;
 
-    if (generation == null && asOf == null && source == null) return null;
+    if ((generation == null || generation <= 0) && asOf == null && source == null) return null;
     return RaceProjectionMetadata(
       generation: generation,
       asOf: asOf,

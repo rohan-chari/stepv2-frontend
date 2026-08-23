@@ -2443,6 +2443,22 @@ class BackendApiService {
     return settings is Map<String, dynamic> ? settings : <String, dynamic>{};
   }
 
+  /// PATCH /admin/settings for the mutable banner operational setting.
+  Future<Map<String, dynamic>> updateAdminSettings({
+    required String identityToken,
+    required bool bannerAdsEnabled,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'PATCH',
+      path: '/admin/settings',
+      body: {'bannerAdsEnabled': bannerAdsEnabled},
+      identityToken: identityToken,
+    );
+    final body = await _decodeJsonResponse(response);
+    final settings = body['settings'];
+    return settings is Map<String, dynamic> ? settings : <String, dynamic>{};
+  }
+
   /// Dedicated atomic command for the retained text-only Home service banner.
   Future<Map<String, dynamic>> updateAdminHomeServiceBanner({
     required String identityToken,
@@ -4033,7 +4049,7 @@ class BackendApiService {
     }
 
     final progress = _safeStringMap(payload['progress']);
-    final participantsPagination = _safeStringMap(payload['pagination']);
+    final participantsPagination = _safeStringMap(progress?['pagination']);
     if (progress == null) {
       throw const ApiException(
         'Couldn’t load race progress. Please try again.',
