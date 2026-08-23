@@ -17,6 +17,7 @@ import '../models/powerup_shop_admin_item.dart';
 import '../models/race_discovery_summary.dart';
 import '../models/race_payout_double_offer.dart';
 import '../models/race_resolution_status.dart';
+import '../models/race_progress_projection.dart';
 import '../models/step_data.dart';
 import '../models/step_sample_data.dart';
 import '../models/step_sync_v2_result.dart';
@@ -37,6 +38,7 @@ class RaceBootstrapResult {
     this.globalPowerupInventory,
     this.progressUnavailable = false,
     this.participantsPagination,
+    this.projectionMetadata,
   });
 
   static const unsupported = RaceBootstrapResult(supported: false);
@@ -47,6 +49,7 @@ class RaceBootstrapResult {
   final Map<String, dynamic>? globalPowerupInventory;
   final bool progressUnavailable;
   final Map<String, dynamic>? participantsPagination;
+  final RaceProjectionMetadata? projectionMetadata;
 }
 
 class RaceProgressResult {
@@ -55,12 +58,14 @@ class RaceProgressResult {
     this.globalPowerupInventory,
     required this.hasCompactInventory,
     this.participantsPagination,
+    this.projectionMetadata,
   });
 
   final Map<String, dynamic> progress;
   final Map<String, dynamic>? globalPowerupInventory;
   final bool hasCompactInventory;
   final Map<String, dynamic>? participantsPagination;
+  final RaceProjectionMetadata? projectionMetadata;
 }
 
 /// Defensive projection of the additive active-race impact endpoint.
@@ -3025,6 +3030,7 @@ class BackendApiService {
       // Absent on a backend that ignored the paging query, which is exactly
       // the signal the screen uses to fall back to "everything already here".
       participantsPagination: _safeStringMap(progress?['pagination']),
+      projectionMetadata: RaceProjectionMetadata.tryParse(progress),
     );
   }
 
@@ -3977,6 +3983,7 @@ class BackendApiService {
       globalPowerupInventory: validInventory,
       hasCompactInventory: compact && validInventory != null,
       participantsPagination: null,
+      projectionMetadata: RaceProjectionMetadata.tryParse(progress),
     );
   }
 
@@ -4045,6 +4052,7 @@ class BackendApiService {
       globalPowerupInventory: null,
       hasCompactInventory: false,
       participantsPagination: participantsPagination,
+      projectionMetadata: RaceProjectionMetadata.tryParse(progress),
     );
   }
 

@@ -8096,7 +8096,15 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
   /// when the viewer isn't running or there's nothing to rank yet — the "you"
   /// line is then omitted entirely.
   int? get _myViewerPlacement {
-    final raw = (_progressState.data ?? _progress)?['participants'];
+    final progress = _progressState.data ?? _progress;
+    // Page projections keep the requester's authoritative placement at the
+    // top level when their row is outside the visible page. Older/full
+    // responses omit it, so retain the existing visible-row fallback.
+    final projectedPlacement = _readNullableInt(progress?['myPlacement']);
+    if (projectedPlacement != null && projectedPlacement > 0) {
+      return projectedPlacement;
+    }
+    final raw = progress?['participants'];
     if (raw is! List) return null;
     final rows = raw
         .whereType<Map>()
