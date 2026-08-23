@@ -70,6 +70,7 @@ import '../tutorial/tutorial_gate.dart';
 import '../tutorial/tutorial_screen.dart';
 import 'tabs/friends_tab.dart';
 import 'tabs/home_tab.dart';
+import 'tabs/leaderboard_tab.dart';
 import 'tabs/profile_tab.dart';
 import 'create_race_screen.dart';
 import 'daily_reward_screen.dart';
@@ -113,9 +114,8 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   static const _homeTabIndex = 0;
   static const _racesTabIndex = 1;
-  static const _friendsTabIndex = 2;
-  static const _inboxTabIndex = 3;
-  static const _profileTabIndex = 4;
+  static const _friendsTabIndex = 3;
+  static const _inboxTabIndex = 4;
 
   late final HealthService _healthService;
   late final BackendApiService _backendApiService;
@@ -4014,10 +4014,22 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   void _openProfile() {
-    _pageController.animateToPage(
-      _profileTabIndex,
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOutCubic,
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProfileTab(
+          authService: widget.authService,
+          backendApiService: _backendApiService,
+          displayName: _displayName,
+          email: _email,
+          onSettingsChanged: _syncSettingsState,
+          onRefresh: _refreshProfileTab,
+          notificationService: widget.notificationService,
+          stepData: _stepData,
+          onAddProfilePhoto: _addOrChangeProfilePhoto,
+          onRemoveProfilePhoto: _removeProfilePhoto,
+          showBackButton: true,
+        ),
+      ),
     );
   }
 
@@ -4242,6 +4254,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                           shopCatalogState: _shopCatalogState,
                           onOpenRacesTab: _openRacesTab,
                           onOpenLeaderboardTab: _openLeaderboardTab,
+                          onOpenProfile: _openProfile,
                           onOpenFriendsTab: _openFriendsTab,
                           onOpenShop: _openShop,
                           onAddProfilePhoto: _addOrChangeProfilePhoto,
@@ -4294,6 +4307,13 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                           notificationService: widget.notificationService,
                           onOpenProfile: _openProfile,
                         ),
+                        LeaderboardTab(
+                          authService: widget.authService,
+                          backendApiService: _backendApiService,
+                          stepData: _stepData,
+                          displayName: _displayName,
+                          onOpenProfile: _openProfile,
+                        ),
                         FriendsTab(
                           authService: widget.authService,
                           onFriendsChanged: () {},
@@ -4334,19 +4354,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                           onOpenDestination: _openInboxDestination,
                           onUnreadCountChanged: _setInboxUnreadCount,
                           onUnreadCountDecremented: _decrementInboxUnreadCount,
-                        ),
-                        ProfileTab(
-                          authService: widget.authService,
-                          backendApiService: _backendApiService,
-                          displayName: _displayName,
-                          email: _email,
-                          onSettingsChanged: _syncSettingsState,
-                          onRefresh: _refreshProfileTab,
-                          notificationService: widget.notificationService,
-                          stepData: _stepData,
-                          onAddProfilePhoto: _addOrChangeProfilePhoto,
-                          onRemoveProfilePhoto: _removeProfilePhoto,
-                          showBackButton: false,
                         ),
                       ],
                     ),
@@ -4419,6 +4426,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     label: 'Races',
                   ),
                   WoodenTabItem(
+                    icon: Icons.emoji_events_rounded,
+                    label: 'Rank',
+                  ),
+                  WoodenTabItem(
                     icon: Icons.people_rounded,
                     label: 'Friends',
                     badgeCount: _incomingFriendRequests,
@@ -4427,10 +4438,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     icon: Icons.inbox_rounded,
                     label: 'Inbox',
                     badgeCount: _inboxUnreadCount ?? 0,
-                  ),
-                  const WoodenTabItem(
-                    icon: Icons.person_rounded,
-                    label: 'Profile',
                   ),
                 ],
               ),

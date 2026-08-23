@@ -381,7 +381,8 @@ void main() {
     final api = _FakeBackendApiService(compactSession: true);
     await _pumpShell(tester, api);
 
-    await _tapTab(tester, 4);
+    await tester.tap(find.byKey(const Key('home-profile-button')));
+    await _settle(tester);
 
     expect(find.text('compact@example.com'), findsOneWidget);
     expect(find.text('@Compact Walker'), findsOneWidget);
@@ -540,22 +541,22 @@ void main() {
   ) async {
     await _pumpShell(tester, _FakeBackendApiService());
 
-    await _tapTab(tester, 2);
+    await _tapTab(tester, 3);
 
     expect(find.byType(FriendsTab), findsOneWidget);
     expect(find.byType(RankedTab), findsNothing);
   });
 
-  testWidgets('tab item 2 is labeled Friends and the Profile badge moved', (
+  testWidgets('tab item 3 is labeled Friends and the Profile badge moved', (
     WidgetTester tester,
   ) async {
     await _pumpShell(tester, _FakeBackendApiService(incomingFriendRequests: 2));
 
     final tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
-    expect(tabBar.items[2].label, 'Friends');
-    expect(tabBar.items[2].icon, Icons.people_rounded);
+    expect(tabBar.items[3].label, 'Friends');
+    expect(tabBar.items[3].icon, Icons.people_rounded);
     // The incoming-request badge now lives on Friends, not Profile.
-    expect(tabBar.items[2].badgeCount, 2);
+    expect(tabBar.items[3].badgeCount, 2);
     expect(tabBar.items[4].badgeCount, 0);
   });
 
@@ -565,12 +566,12 @@ void main() {
     await _pumpShell(tester, _FakeBackendApiService(incomingFriendRequests: 2));
 
     var tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
-    expect(tabBar.items[2].badgeCount, 2);
+    expect(tabBar.items[3].badgeCount, 2);
 
-    await _tapTab(tester, 2);
+    await _tapTab(tester, 3);
 
     tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
-    expect(tabBar.items[2].badgeCount, 0);
+    expect(tabBar.items[3].badgeCount, 0);
   });
 
   testWidgets('the in-app ranked results popup is suppressed on load', (

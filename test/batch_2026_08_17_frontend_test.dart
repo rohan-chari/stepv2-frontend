@@ -54,9 +54,11 @@ class _InboxApi extends BackendApiService {
     'alerts': [
       {
         'id': 'alert-1',
+        'type': 'RACE_COMPLETED',
         'title': 'Race complete',
         'body': 'Open results',
         'readAt': null,
+        'destination': {'route': 'home'},
       },
     ],
     'nextCursor': null,
@@ -239,8 +241,6 @@ void main() {
     );
     await tester.pump();
     expect(find.text('Race complete'), findsOneWidget);
-    await tester.tap(find.text('SUPPORT'));
-    await tester.pump();
     expect(find.text('Can you help?'), findsOneWidget);
     await tester.tap(find.text('Can you help?'));
     await tester.pump();

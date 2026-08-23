@@ -109,11 +109,11 @@ class InboxScreen extends StatefulWidget {
 
 class _InboxScreenState extends State<InboxScreen>
     with AutomaticKeepAliveClientMixin {
-  bool _support = false;
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _rows = const [];
-  String? _nextCursor;
+  String? _alertsCursor;
+  String? _threadsCursor;
   bool _loadingMore = false;
   String? _userId;
   String? _authToken;
@@ -173,9 +173,9 @@ class _InboxScreenState extends State<InboxScreen>
     _lastKnownUnreadCount = null;
     if (!mounted) return;
     setState(() {
-      _support = false;
       _rows = const [];
-      _nextCursor = null;
+      _alertsCursor = null;
+      _threadsCursor = null;
     });
     _load();
   }
@@ -224,8 +224,7 @@ class _InboxScreenState extends State<InboxScreen>
   Future<void> _load() async {
     final generation = ++_loadGeneration;
     final token = widget.authService.authToken;
-    final support = _support;
-    final unreadFetchGeneration = support ? null : ++_unreadFetchGeneration;
+    final unreadFetchGeneration = ++_unreadFetchGeneration;
     final unreadMutationGeneration = _unreadMutationGeneration;
     if (token == null || token.isEmpty) {
       setState(() {
@@ -240,49 +239,45 @@ class _InboxScreenState extends State<InboxScreen>
       _error = null;
     });
     try {
-      final payload = support
-          ? await widget.backendApiService.fetchFeedbackThreads(
-              identityToken: token,
-            )
-          : await widget.backendApiService.fetchInboxAlerts(
-              identityToken: token,
-            );
+      final payloads = await Future.wait([
+        widget.backendApiService.fetchInboxAlerts(identityToken: token),
+        widget.backendApiService.fetchFeedbackThreads(identityToken: token),
+      ]);
+      final alertPayload = payloads[0];
+      final threadPayload = payloads[1];
       if (!mounted ||
           generation != _loadGeneration ||
-          support != _support ||
           token != widget.authService.authToken) {
         return;
       }
-      final raw = payload[support ? 'threads' : 'alerts'];
-      final rows = raw is List
-          ? raw.whereType<Map>().map(_stringKeyedMap).toList()
-          : <Map<String, dynamic>>[];
+      final rows = [
+        ..._normalizeRows(alertPayload['alerts'], 'alert'),
+        ..._normalizeRows(threadPayload['threads'], 'support'),
+      ]..sort(_compareRows);
       if (mounted) {
         setState(() {
           _rows = rows;
-          _nextCursor = payload['nextCursor'] is String
-              ? payload['nextCursor'] as String
+          _alertsCursor = alertPayload['nextCursor'] is String
+              ? alertPayload['nextCursor'] as String
+              : null;
+          _threadsCursor = threadPayload['nextCursor'] is String
+              ? threadPayload['nextCursor'] as String
               : null;
           _loading = false;
         });
-        if (unreadFetchGeneration != null) {
-          _applyFetchedUnreadResult(
-            _combinedUnreadCount(payload),
-            unreadFetchGeneration,
-            unreadMutationGeneration,
-          );
-        }
+        _applyFetchedUnreadResult(
+          _combinedUnreadCount(alertPayload),
+          unreadFetchGeneration,
+          unreadMutationGeneration,
+        );
       }
     } catch (_) {
       if (mounted &&
           generation == _loadGeneration &&
-          support == _support &&
           token == widget.authService.authToken) {
         setState(() {
           _loading = false;
-          _error = support
-              ? 'Couldn’t load support messages.'
-              : 'Couldn’t load alerts.';
+          _error = 'Couldn’t load your Inbox.';
         });
       }
     }
@@ -290,55 +285,68 @@ class _InboxScreenState extends State<InboxScreen>
 
   Future<void> _loadMore() async {
     final token = widget.authService.authToken;
-    final cursor = _nextCursor;
-    if (_loadingMore || cursor == null || token == null || token.isEmpty) {
+    if (_loadingMore ||
+        (_alertsCursor == null && _threadsCursor == null) ||
+        token == null ||
+        token.isEmpty) {
       return;
     }
-    final support = _support;
-    final unreadFetchGeneration = support ? null : ++_unreadFetchGeneration;
+    final alertsCursor = _alertsCursor;
+    final threadsCursor = _threadsCursor;
+    final unreadFetchGeneration = ++_unreadFetchGeneration;
     final unreadMutationGeneration = _unreadMutationGeneration;
     setState(() => _loadingMore = true);
     try {
-      final payload = support
-          ? await widget.backendApiService.fetchFeedbackThreads(
-              identityToken: token,
-              cursor: cursor,
-            )
-          : await widget.backendApiService.fetchInboxAlerts(
-              identityToken: token,
-              cursor: cursor,
-            );
+      final payloads = await Future.wait([
+        if (alertsCursor != null)
+          widget.backendApiService.fetchInboxAlerts(
+            identityToken: token,
+            cursor: alertsCursor,
+          )
+        else
+          Future.value(const <String, dynamic>{'alerts': <dynamic>[]}),
+        if (threadsCursor != null)
+          widget.backendApiService.fetchFeedbackThreads(
+            identityToken: token,
+            cursor: threadsCursor,
+          )
+        else
+          Future.value(const <String, dynamic>{'threads': <dynamic>[]}),
+      ]);
+      final alertPayload = payloads[0];
+      final threadPayload = payloads[1];
       if (!mounted ||
-          support != _support ||
           token != widget.authService.authToken ||
-          cursor != _nextCursor) {
+          alertsCursor != _alertsCursor ||
+          threadsCursor != _threadsCursor) {
         return;
       }
-      final raw = payload[support ? 'threads' : 'alerts'];
-      final incoming = raw is List
-          ? raw.whereType<Map>().map(_stringKeyedMap).toList()
-          : <Map<String, dynamic>>[];
+      final incoming = [
+        ..._normalizeRows(alertPayload['alerts'], 'alert'),
+        ..._normalizeRows(threadPayload['threads'], 'support'),
+      ]..sort(_compareRows);
       if (mounted) {
         setState(() {
-          _rows = [..._rows, ...incoming];
-          _nextCursor = payload['nextCursor'] is String
-              ? payload['nextCursor'] as String
+          _rows = [..._rows, ...incoming]..sort(_compareRows);
+          _alertsCursor = alertPayload['nextCursor'] is String
+              ? alertPayload['nextCursor'] as String
+              : null;
+          _threadsCursor = threadPayload['nextCursor'] is String
+              ? threadPayload['nextCursor'] as String
               : null;
           _loadingMore = false;
         });
-        if (unreadFetchGeneration != null) {
-          _applyFetchedUnreadResult(
-            _combinedUnreadCount(payload),
-            unreadFetchGeneration,
-            unreadMutationGeneration,
-          );
-        }
+        _applyFetchedUnreadResult(
+          _combinedUnreadCount(alertPayload),
+          unreadFetchGeneration,
+          unreadMutationGeneration,
+        );
       }
     } catch (_) {
       if (mounted &&
-          support == _support &&
           token == widget.authService.authToken &&
-          cursor == _nextCursor) {
+          alertsCursor == _alertsCursor &&
+          threadsCursor == _threadsCursor) {
         setState(() => _loadingMore = false);
       }
     }
@@ -348,6 +356,22 @@ class _InboxScreenState extends State<InboxScreen>
     final token = widget.authService.authToken;
     final id = alert['id'];
     final locallyUnread = alert['readAt'] == null;
+    if (alert['_inboxKind'] != 'alert') {
+      final threadId = alert['id'];
+      if (threadId is! String || threadId.isEmpty) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => SupportThreadScreen(
+            authService: widget.authService,
+            backendApiService: widget.backendApiService,
+            threadId: threadId,
+            onThreadRead: _refreshUnreadCount,
+          ),
+        ),
+      );
+      if (mounted) _load();
+      return;
+    }
     if (!locallyUnread) {
       _openDestination(alert['destination']);
       return;
@@ -466,6 +490,67 @@ class _InboxScreenState extends State<InboxScreen>
       if (entry.key is String) entry.key as String: entry.value,
   };
 
+  static List<Map<String, dynamic>> _normalizeRows(Object? raw, String kind) {
+    if (raw is! List) return const [];
+    return raw.whereType<Map>().map((row) {
+      final normalized = _stringKeyedMap(row);
+      normalized['_inboxKind'] = kind;
+      if (kind == 'support' && normalized['createdAt'] == null) {
+        normalized['createdAt'] = normalized['lastMessageAt'];
+      }
+      return normalized;
+    }).where((row) {
+      if (row['id'] is! String || (row['id'] as String).isEmpty) return false;
+      if (kind != 'alert') return true;
+      return _visibleAlertTypes.contains(row['type']) &&
+          InboxDestination.tryParse(row['destination']) != null;
+    }).toList();
+  }
+
+  static const _visibleAlertTypes = <String>{
+    'FRIEND_REQUEST_SENT',
+    'FRIEND_REQUEST_ACCEPTED',
+    'RACE_INVITE_SENT',
+    'RACE_INVITE_ACCEPTED',
+    'RACE_BUYIN_CHANGED',
+    'TEAM_RACE_SCHEDULED_UNEVEN',
+    'RACE_STARTED',
+    'RACE_COMPLETED',
+    'TEAM_LEAD_CHANGE',
+    'RACE_CANCELLED',
+    'REFERRAL_REWARDED',
+    'GLOBAL_EVENT_STARTED',
+    'TOURNAMENT_INVITE_SENT',
+    'TOURNAMENT_STARTED',
+    'TOURNAMENT_ROUND_STARTED',
+    'TOURNAMENT_MATCHUP_WON',
+    'TOURNAMENT_ELIMINATED',
+    'TOURNAMENT_CHAMPION',
+    'TOURNAMENT_COMPLETED',
+    'TOURNAMENT_CANCELLED',
+    'HIGH_MULTIPLIER_ALERT',
+  };
+
+  static String _categoryLabel(Object? type) {
+    final value = type is String ? type : '';
+    if (value.startsWith('TOURNAMENT_')) return 'TOURNAMENT';
+    if (value.startsWith('RACE_') || value.startsWith('TEAM_')) return 'RACE';
+    if (value.startsWith('FRIEND_')) return 'FRIENDS';
+    if (value == 'REFERRAL_REWARDED' || value == 'GLOBAL_EVENT_STARTED') {
+      return 'REWARD';
+    }
+    return 'IMPORTANT';
+  }
+
+  static int _compareRows(Map<String, dynamic> a, Map<String, dynamic> b) {
+    final aDate = DateTime.tryParse('${a['createdAt'] ?? ''}');
+    final bDate = DateTime.tryParse('${b['createdAt'] ?? ''}');
+    if (aDate == null && bDate == null) return 0;
+    if (aDate == null) return 1;
+    if (bDate == null) return -1;
+    return bDate.compareTo(aDate);
+  }
+
   // New backends preserve alert-only `unreadCount` for frozen clients and add
   // the combined alerts+support badge as `totalUnreadCount`. Older backends
   // expose only `unreadCount`, so fall back defensively when the additive key
@@ -501,11 +586,6 @@ class _InboxScreenState extends State<InboxScreen>
         child: Column(
           children: [
             if (embedded) _embeddedHeader(context),
-            _InboxSegmentedSelector(
-              supportSelected: _support,
-              onAlerts: () => _selectSupport(false),
-              onSupport: () => _selectSupport(true),
-            ),
             Expanded(
               child: ColoredBox(
                 color: AppColors.of(context).parchment,
@@ -533,12 +613,6 @@ class _InboxScreenState extends State<InboxScreen>
     ),
   );
 
-  void _selectSupport(bool support) {
-    if (_support == support) return;
-    setState(() => _support = support);
-    _load();
-  }
-
   Widget _body(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null) {
@@ -549,7 +623,7 @@ class _InboxScreenState extends State<InboxScreen>
     if (_rows.isEmpty) {
       return Center(
         child: Text(
-          _support ? 'NO SUPPORT MESSAGES YET' : 'NO ALERTS YET',
+          'YOU’RE CAUGHT UP',
           style: PixelText.title(
             size: 14,
             color: AppColors.of(context).textMid,
@@ -559,7 +633,8 @@ class _InboxScreenState extends State<InboxScreen>
     }
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
-      itemCount: _rows.length + (_nextCursor == null ? 0 : 1),
+      itemCount: _rows.length +
+          (_alertsCursor == null && _threadsCursor == null ? 0 : 1),
       separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         if (index == _rows.length) {
@@ -571,159 +646,54 @@ class _InboxScreenState extends State<InboxScreen>
           );
         }
         final row = _rows[index];
-        final title = _support
+        final isSupport = row['_inboxKind'] == 'support';
+        final title = isSupport
             ? 'BARA SUPPORT'
             : row['title'] is String
             ? row['title'] as String
             : 'BARA ALERT';
-        final body = _support
+        final body = isSupport
             ? row['preview'] is String
                   ? row['preview'] as String
                   : 'Support conversation'
             : row['body'] is String
             ? row['body'] as String
             : '';
+        final category = isSupport ? 'SUPPORT' : _categoryLabel(row['type']);
+        final unread = isSupport
+            ? row.containsKey('unreadByUser')
+                ? row['unreadByUser'] == true
+                : row.containsKey('unread')
+                ? row['unread'] == true
+                : row['readAt'] == null
+            : row['readAt'] == null;
         return InkWell(
-          onTap: _support
-              ? () async {
-                  final id = row['id'];
-                  if (id is! String || id.isEmpty) return;
-                  await Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => SupportThreadScreen(
-                        authService: widget.authService,
-                        backendApiService: widget.backendApiService,
-                        threadId: id,
-                        onThreadRead: _refreshUnreadCount,
-                      ),
-                    ),
-                  );
-                  if (mounted) _load();
-                }
-              : () => _openAlert(row),
+          onTap: () => _openAlert(row),
           child: RetroCard(
-            child: ListTile(
-              title: Text(
-                title,
-                style: PixelText.title(
-                  size: 14,
-                  color: AppColors.of(context).textDark,
-                ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 13),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(category, style: PixelText.title(size: 10, color: unread ? AppColors.of(context).coinDark : AppColors.of(context).textMid)),
+                      const Spacer(),
+                      if (unread) Text('NEW', style: PixelText.title(size: 10, color: AppColors.of(context).coinDark)),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(title, style: PixelText.title(size: 14, color: AppColors.of(context).textDark)),
+                  const SizedBox(height: 4),
+                  Text(body, maxLines: 2, overflow: TextOverflow.ellipsis, style: PixelText.body(size: 13, color: AppColors.of(context).textMid)),
+                  const SizedBox(height: 9),
+                  Text(isSupport ? 'REPLY' : 'OPEN', style: PixelText.title(size: 10, color: AppColors.of(context).textAccent)),
+                ],
               ),
-              subtitle: Text(
-                body,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: PixelText.body(
-                  size: 13,
-                  color: AppColors.of(context).textMid,
-                ),
-              ),
-              trailing: !_support && row['readAt'] == null
-                  ? Icon(
-                      Icons.mark_email_unread_rounded,
-                      color: AppColors.of(context).coinDark,
-                    )
-                  : null,
             ),
           ),
         );
       },
-    );
-  }
-}
-
-class _InboxSegmentedSelector extends StatelessWidget {
-  const _InboxSegmentedSelector({
-    required this.supportSelected,
-    required this.onAlerts,
-    required this.onSupport,
-  });
-
-  final bool supportSelected;
-  final VoidCallback onAlerts;
-  final VoidCallback onSupport;
-
-  @override
-  Widget build(BuildContext context) => ColoredBox(
-    color: AppColors.of(context).roofDark,
-    child: Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: _InboxSegment(
-              key: const Key('inbox-segment-alerts'),
-              label: 'ALERTS',
-              selected: !supportSelected,
-              onTap: onAlerts,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _InboxSegment(
-              key: const Key('inbox-segment-support'),
-              label: 'SUPPORT',
-              selected: supportSelected,
-              onTap: onSupport,
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-class _InboxSegment extends StatelessWidget {
-  const _InboxSegment({
-    super.key,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
-    return Semantics(
-      excludeSemantics: true,
-      selected: selected,
-      button: true,
-      label: label == 'ALERTS' ? 'Alerts' : 'Support',
-      onTap: onTap,
-      child: Material(
-        color: selected ? colors.roofDark : colors.parchmentLight,
-        borderRadius: BorderRadius.circular(9),
-        child: InkWell(
-          onTap: onTap,
-          excludeFromSemantics: true,
-          borderRadius: BorderRadius.circular(9),
-          focusColor: colors.coinLight.withValues(alpha: 0.26),
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 48),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(
-                color: selected ? colors.coinLight : colors.parchmentBorder,
-                width: 2,
-              ),
-            ),
-            child: Text(
-              label,
-              maxLines: 1,
-              style: PixelText.title(
-                size: 13,
-                color: selected ? colors.textLight : colors.textDark,
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

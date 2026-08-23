@@ -35,8 +35,8 @@ class TutorialRealHost extends StatelessWidget {
   int? get _tabIndex => switch (page) {
     TutorialMockPage.home => 0,
     TutorialMockPage.races => 1,
-    TutorialMockPage.friends => 2,
-    TutorialMockPage.profile => 4,
+    TutorialMockPage.friends => 3,
+    TutorialMockPage.profile => null,
     // Race detail is a pushed screen in the real app — no bottom bar.
     TutorialMockPage.raceDetail => null,
   };
@@ -66,18 +66,21 @@ class TutorialRealHost extends StatelessWidget {
               child: WoodenTabBar(
                 currentIndex: tabIndex,
                 onTap: (_) {},
-                // Index 2 = Friends; keyed so the tutorial can spotlight the
+                // Index 3 = Friends; keyed so the tutorial can spotlight the
                 // real tab. Mirrors MainShell's live tab set.
-                itemKeys: [null, null, keys['nav.friends'], null, null],
+                itemKeys: [null, null, null, keys['nav.friends'], null],
                 items: const [
                   WoodenTabItem(icon: Icons.home_rounded, label: 'Home'),
                   WoodenTabItem(
                     icon: Icons.directions_run_rounded,
                     label: 'Races',
                   ),
+                  WoodenTabItem(
+                    icon: Icons.emoji_events_rounded,
+                    label: 'Rank',
+                  ),
                   WoodenTabItem(icon: Icons.people_rounded, label: 'Friends'),
                   WoodenTabItem(icon: Icons.inbox_rounded, label: 'Inbox'),
-                  WoodenTabItem(icon: Icons.person_rounded, label: 'Profile'),
                 ],
               ),
             ),
@@ -117,6 +120,7 @@ class TutorialRealHost extends StatelessWidget {
           // The shared ticket stays visible, but a preview tap must not escape
           // the tutorial route.
           onOpenLeaderboardTab: () {},
+          onOpenProfile: () {},
         );
       case TutorialMockPage.races:
         return RacesTab(

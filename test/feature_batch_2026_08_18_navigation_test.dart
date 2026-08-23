@@ -38,6 +38,7 @@ class _InboxApi extends BackendApiService {
     'alerts': [
       {
         'id': 'alert-1',
+        'type': 'RACE_STARTED',
         'title': 'Race ready',
         'body': 'Go!',
         'readAt': null,
@@ -54,6 +55,13 @@ class _InboxApi extends BackendApiService {
     required String identityToken,
     required String alertId,
   }) async => markReadPayload;
+
+  @override
+  Future<Map<String, dynamic>> fetchFeedbackThreads({
+    required String identityToken,
+    String? cursor,
+    int limit = 25,
+  }) async => const {'threads': <Map<String, dynamic>>[], 'nextCursor': null};
 }
 
 class _ControlledInboxApi extends BackendApiService {
@@ -305,17 +313,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 20));
 
     expect(find.byTooltip('Back'), findsNothing);
-    expect(find.byKey(const Key('inbox-segment-alerts')), findsOneWidget);
-    expect(
-      tester.getSemantics(find.byKey(const Key('inbox-segment-alerts'))),
-      matchesSemantics(
-        label: 'Alerts',
-        isButton: true,
-        isSelected: true,
-        hasSelectedState: true,
-        hasTapAction: true,
-      ),
-    );
+    expect(find.byKey(const Key('inbox-segment-alerts')), findsNothing);
     expect(updates, [4]);
 
     await tester.tap(find.text('Race ready'));
@@ -479,6 +477,7 @@ void main() {
         alerts: [
           {
             'id': 'alert-1',
+            'type': 'RACE_STARTED',
             'title': 'One alert',
             'body': 'Open it',
             'readAt': null,
@@ -520,6 +519,7 @@ void main() {
           for (final id in ['alert-1', 'alert-2'])
             {
               'id': id,
+              'type': 'RACE_STARTED',
               'title': id == 'alert-1' ? 'First alert' : 'Second alert',
               'body': 'Open it',
               'readAt': null,
@@ -566,6 +566,7 @@ void main() {
           for (final id in ['alert-1', 'alert-2'])
             {
               'id': id,
+              'type': 'RACE_STARTED',
               'title': id == 'alert-1' ? 'First alert' : 'Second alert',
               'body': 'Open it',
               'readAt': null,
@@ -616,6 +617,7 @@ void main() {
           for (final id in ['alert-1', 'alert-2'])
             {
               'id': id,
+              'type': 'RACE_STARTED',
               'title': id == 'alert-1' ? 'First alert' : 'Second alert',
               'body': 'Open it',
               'readAt': null,
@@ -677,10 +679,7 @@ void main() {
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 20));
-      await tester.tap(find.text('SUPPORT'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 20));
-      await tester.tap(find.text('BARA SUPPORT'));
+      await tester.tap(find.text('We replied to your note'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 20));
 
@@ -754,9 +753,9 @@ void main() {
       expect(bar.items.map((item) => item.label), [
         'Home',
         'Races',
+        'Rank',
         'Friends',
         'Inbox',
-        'Profile',
       ]);
       expect(find.byKey(const Key('home-leaderboards-ticket')), findsOneWidget);
       tester
@@ -766,4 +765,63 @@ void main() {
       expect(find.byType(StandaloneLeaderboardScreen), findsNothing);
     },
   );
+
+  testWidgets('tutorial Friends preview selects the Friends tab', (tester) async {
+    final auth = TutorialPreviewAuthService();
+    addTearDown(auth.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppThemeData.light(),
+        home: TutorialRealHost(
+          page: TutorialMockPage.friends,
+          keys: const {},
+          authService: auth,
+          api: TutorialPreviewBackendApiService(),
+        ),
+      ),
+    );
+    await _boundedPump(tester);
+    final bar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
+    expect(bar.currentIndex, 3);
+  });
+
+  testWidgets('Inbox suppresses routine and malformed alert rows', (tester) async {
+    final auth = await _auth();
+    final api = _ControlledInboxApi(
+      alerts: [
+        const {
+          'id': 'routine',
+          'type': 'STEP_MILESTONE_REMINDER',
+          'title': 'Routine',
+          'body': 'Skip me',
+          'destination': {'route': 'home'},
+        },
+        const {
+          'id': 'bad-destination',
+          'type': 'RACE_STARTED',
+          'title': 'Bad route',
+          'body': 'Skip me',
+          'destination': {'route': 'not-allowed'},
+        },
+        const {
+          'id': 'important',
+          'type': 'RACE_STARTED',
+          'title': 'Race ready',
+          'body': 'Open me',
+          'destination': {'route': 'home'},
+        },
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppThemeData.light(),
+        home: InboxScreen(authService: auth, backendApiService: api),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 20));
+    expect(find.text('Race ready'), findsOneWidget);
+    expect(find.text('Routine'), findsNothing);
+    expect(find.text('Bad route'), findsNothing);
+  });
 }

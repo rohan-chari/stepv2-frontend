@@ -68,6 +68,7 @@ class HomeTab extends StatelessWidget {
   final int incomingFriendRequests;
   final VoidCallback? onOpenRacesTab;
   final VoidCallback? onOpenLeaderboardTab;
+  final VoidCallback? onOpenProfile;
 
   /// Jumps to the Friends tab — the SETUP board's "add your first friend" row.
   final VoidCallback? onOpenFriendsTab;
@@ -138,6 +139,7 @@ class HomeTab extends StatelessWidget {
     this.incomingFriendRequests = 0,
     this.onOpenRacesTab,
     this.onOpenLeaderboardTab,
+    this.onOpenProfile,
     this.onOpenFriendsTab,
     this.onOpenShop,
     this.onAddProfilePhoto,
@@ -1246,6 +1248,25 @@ class HomeTab extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  if (onOpenProfile != null) ...[
+                    const SizedBox(width: 8),
+                    Semantics(
+                      button: true,
+                      label: 'Open profile',
+                      child: IconButton(
+                        key: const Key('home-profile-button'),
+                        onPressed: onOpenProfile,
+                        tooltip: 'Profile',
+                        icon: const Icon(Icons.person_rounded),
+                        color: AppColors.of(context).textLight,
+                        iconSize: 24,
+                        constraints: const BoxConstraints(
+                          minWidth: 44,
+                          minHeight: 44,
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(width: 10),
                   CoinBalanceBadge(
                     coins: authService.coins,

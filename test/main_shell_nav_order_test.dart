@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' show Tristate;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -380,9 +379,9 @@ void main() {
     expect(tabBar.items.map((item) => item.label), [
       'Home',
       'Races',
+      'Rank',
       'Friends',
       'Inbox',
-      'Profile',
     ]);
     expect(find.byKey(const Key('home-inbox-button')), findsNothing);
   });
@@ -509,6 +508,7 @@ void main() {
         'alerts': [
           {
             'id': 'alert-1',
+            'type': 'RACE_STARTED',
             'title': 'Back home',
             'body': 'Open Home',
             'readAt': null,
@@ -534,42 +534,34 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
 
     var tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
-    expect(tabBar.items[3].badgeCount, 6);
-    tabBar.onTap(3);
+    expect(tabBar.items[4].badgeCount, 6);
+    tabBar.onTap(4);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
     tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
-    expect(tabBar.currentIndex, 3);
-    expect(tabBar.items[3].badgeCount, 7);
+    expect(tabBar.currentIndex, 4);
+    expect(tabBar.items[4].badgeCount, 7);
 
-    await tester.tap(find.text('Back home'));
+    tabBar.onTap(0);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    expect(find.byType(MainShell), findsOneWidget);
     tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
     expect(tabBar.currentIndex, 0);
-    expect(tabBar.items[3].badgeCount, 0);
+    expect(tabBar.items[4].badgeCount, 7);
 
-    tabBar.onTap(3);
+    tabBar.onTap(4);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
-    await tester.tap(find.text('SUPPORT'));
     await tester.pump();
     tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
     tabBar.onTap(0);
     await tester.pump(const Duration(milliseconds: 400));
     tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
-    tabBar.onTap(3);
+    tabBar.onTap(4);
     await tester.pump(const Duration(milliseconds: 400));
-    final supportSemantics = tester.getSemantics(
-      find.byKey(const Key('inbox-segment-support')),
-    );
-    expect(
-      supportSemantics.getSemanticsData().flagsCollection.isSelected,
-      Tristate.isTrue,
-    );
+    expect(find.text('Back home'), findsOneWidget);
   });
 
   testWidgets(
@@ -599,12 +591,12 @@ void main() {
       api.newAccount.complete(const {'state': 'EMPTY', 'inboxUnreadCount': 2});
       await tester.pump();
       var tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
-      expect(tabBar.items[3].badgeCount, 2);
+      expect(tabBar.items[4].badgeCount, 2);
 
       api.oldAccount.complete(const {'state': 'EMPTY', 'inboxUnreadCount': 9});
       await tester.pump();
       tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
-      expect(tabBar.items[3].badgeCount, 2);
+      expect(tabBar.items[4].badgeCount, 2);
     },
   );
 
@@ -627,22 +619,19 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     var tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
-    tabBar.onTap(3);
+    tabBar.onTap(4);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
     tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
-    expect(tabBar.items[3].badgeCount, 5);
+    expect(tabBar.items[4].badgeCount, 5);
 
-    await tester.tap(find.text('SUPPORT'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 20));
-    await tester.tap(find.text('BARA SUPPORT'));
+    await tester.tap(find.text('A staff reply'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
     tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
-    expect(tabBar.items[3].badgeCount, 2);
+    expect(tabBar.items[4].badgeCount, 2);
   });
 
   testWidgets(
