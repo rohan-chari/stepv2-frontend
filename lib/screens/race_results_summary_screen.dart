@@ -568,7 +568,11 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
                     title,
                     key: ValueKey<String>(title),
                     textAlign: TextAlign.center,
-                    style: PixelText.number(size: 15, color: palette.coinEdge),
+                    // Keep the offer headline in the same readable display
+                    // family as the rest of the results surface. Pixel
+                    // number lettering was too thin/low-contrast here,
+                    // especially against the gold gradient.
+                    style: HomeText.title(size: 16, color: palette.textDark),
                   ),
                 ),
               ),
@@ -579,8 +583,8 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
             body,
             textAlign: TextAlign.center,
             style: HomeText.body(
-              size: 12,
-              color: palette.textMid,
+              size: 13,
+              color: palette.textDark,
               weight: FontWeight.w700,
             ),
           ),
@@ -606,7 +610,10 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
                     ? 'WATCH AD · +50 COINS PER RACE'
                     : 'WATCH AD · +$bonus COINS',
                 icon: Icons.play_circle_fill_rounded,
-                variant: PillButtonVariant.decision,
+                // This is the primary action on the results screen. The
+                // gold decision treatment made the label difficult to read
+                // and did not match the app-wide action hierarchy.
+                variant: PillButtonVariant.primary,
                 fullWidth: true,
                 onPressed: _flowBusy ? null : _startPayoutDouble,
               ),
@@ -622,7 +629,7 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
                 key: const Key('race-payout-double-message'),
                 textAlign: TextAlign.center,
                 style: HomeText.body(
-                  size: 12,
+                  size: 13,
                   color: palette.textDark,
                   weight: FontWeight.w800,
                 ),

@@ -259,6 +259,10 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('WATCH AD · +50 COINS'), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.text('WATCH AD · +50 COINS')).style?.color,
+      Colors.white,
+    );
     expect(find.textContaining('DOUBLE'), findsNothing);
     expect(find.textContaining('qualifying race prizes'), findsNothing);
   });
@@ -378,6 +382,10 @@ void main() {
     expect(find.text('DOUBLE +120 COINS'), findsOneWidget);
     expect(find.text('Watch one ad to get another 120.'), findsOneWidget);
     expect(find.text('WATCH AD · +120 COINS'), findsOneWidget);
+    final actionText = tester.widget<Text>(
+      find.text('WATCH AD · +120 COINS'),
+    );
+    expect(actionText.style?.color, Colors.white);
     expect(
       tester.getTopLeft(find.byKey(const Key('race-payout-double-panel'))).dy,
       lessThan(tester.getTopLeft(find.text('NICE')).dy),
