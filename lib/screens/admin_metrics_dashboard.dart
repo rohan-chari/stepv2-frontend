@@ -134,6 +134,12 @@ class AdminMetricsSectionBody extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (section == 'dashboard-summary') ...[
+            const _DashboardIntro(),
+            const SizedBox(height: 12),
+            const _DataStatusGuide(),
+            const SizedBox(height: 12),
+          ],
           _MetadataStrip(envelope: envelope),
           const SizedBox(height: 8),
           body,
@@ -844,24 +850,148 @@ class _MetadataStrip extends StatelessWidget {
       AdminSourceStatus.disabled => 'FOREGROUND · DISABLED',
       _ => 'FOREGROUND · UNAVAILABLE',
     };
-    return Wrap(
-      spacing: 6,
-      runSpacing: 5,
-      children: [
-        _Badge('${window.days?.toString() ?? '?'}D'),
-        _Badge(
-          window.timeZone == 'America/New_York' ? 'ET' : 'TIMEZONE UNAVAILABLE',
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 9, 10, 8),
+      decoration: BoxDecoration(
+        color: colors.parchmentDark.withValues(alpha: 0.42),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: colors.parchmentBorder.withValues(alpha: 0.7),
         ),
-        const _Badge('PRODUCT DB'),
-        if (productStateLabel != null) _Badge(productStateLabel),
-        _Badge(foregroundLabel),
-        if (productSource.asOf != null) _Badge('AS OF ${productSource.asOf}'),
-        if (window.start != null && window.end != null)
-          Text(
-            '${window.start} → ${window.end}',
-            style: PixelText.body(size: 10, color: colors.textMid),
+      ),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 5,
+        children: [
+          _Badge('${window.days?.toString() ?? '?'}D'),
+          _Badge(
+            window.timeZone == 'America/New_York'
+                ? 'ET'
+                : 'TIMEZONE UNAVAILABLE',
           ),
-      ],
+          const _Badge('PRODUCT DB'),
+          if (productStateLabel != null) _Badge(productStateLabel),
+          _Badge(foregroundLabel),
+          if (productSource.asOf != null) _Badge('AS OF ${productSource.asOf}'),
+          if (window.start != null && window.end != null)
+            Text(
+              '${window.start} → ${window.end}',
+              style: PixelText.body(size: 10, color: colors.textMid),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DashboardIntro extends StatelessWidget {
+  const _DashboardIntro();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
+      decoration: BoxDecoration(
+        color: colors.parchment.withValues(alpha: 0.96),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: colors.woodShadow.withValues(alpha: 0.12),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.insights_rounded, color: colors.textAccent, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'TODAY AT A GLANCE',
+                  style: PixelText.title(size: 13, color: colors.textDark),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'A quick look at signups, activity, retention, and races. Tap the info icon to see what each number means.',
+                  style: PixelText.body(size: 11, color: colors.textMid),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DataStatusGuide extends StatelessWidget {
+  const _DataStatusGuide();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: colors.roofDark.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: colors.roofRidge.withValues(alpha: 0.55)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'WHAT THE STATUSES MEAN',
+            style: PixelText.title(size: 11, color: colors.textLight),
+          ),
+          const SizedBox(height: 6),
+          _StatusLine(
+            label: 'UNAVAILABLE',
+            explanation: 'We do not have enough trustworthy data yet.',
+          ),
+          _StatusLine(
+            label: 'COLLECTING',
+            explanation: 'Tracking is turned on, but it needs more time.',
+          ),
+          _StatusLine(
+            label: '0',
+            explanation: 'We checked, and there were none.',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatusLine extends StatelessWidget {
+  const _StatusLine({required this.label, required this.explanation});
+
+  final String label;
+  final String explanation;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 3),
+      child: RichText(
+        text: TextSpan(
+          style: PixelText.body(size: 10, color: colors.textLight),
+          children: [
+            TextSpan(
+              text: '$label  ',
+              style: PixelText.title(size: 10, color: colors.roofRidge),
+            ),
+            TextSpan(text: explanation),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -949,107 +1079,117 @@ class _MetricRow extends StatelessWidget {
         : 'SELECTED ${days}D · ${timezone == 'America/New_York' ? 'ET' : timezone ?? 'TIMEZONE UNAVAILABLE'}';
     final windowText = window ?? selectedWindow;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            flex: 5,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: PixelText.body(size: 12, color: colors.textMid),
-                ),
-                if (coverageText != null)
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(11, 9, 7, 8),
+        decoration: BoxDecoration(
+          color: colors.parchment.withValues(alpha: 0.58),
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(
+            color: colors.parchmentBorder.withValues(alpha: 0.55),
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 5,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    coverageText,
-                    style: PixelText.title(size: 9, color: colors.textAccent),
+                    label,
+                    style: PixelText.body(size: 12, color: colors.textMid),
                   ),
-              ],
+                  if (coverageText != null)
+                    Text(
+                      coverageText,
+                      style: PixelText.title(size: 9, color: colors.textAccent),
+                    ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            flex: 4,
-            child: Text(
-              value,
-              textAlign: TextAlign.end,
-              style: PixelText.title(size: 12, color: colors.textDark),
+            const SizedBox(width: 6),
+            Flexible(
+              flex: 4,
+              child: Text(
+                value,
+                textAlign: TextAlign.end,
+                style: PixelText.title(size: 13, color: colors.textDark),
+              ),
             ),
-          ),
-          const SizedBox(width: 2),
-          Semantics(
-            label: 'Definition for $label',
-            button: true,
-            child: InkResponse(
-              radius: 18,
-              onTap: () => showModalBottomSheet<void>(
-                context: context,
-                backgroundColor: colors.parchment,
-                builder: (sheetContext) => SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          label.toUpperCase(),
-                          style: PixelText.title(
-                            size: 14,
-                            color: AppColors.of(sheetContext).textDark,
+            const SizedBox(width: 2),
+            Semantics(
+              label: 'Definition for $label',
+              button: true,
+              child: InkResponse(
+                radius: 18,
+                onTap: () => showModalBottomSheet<void>(
+                  context: context,
+                  backgroundColor: colors.parchment,
+                  builder: (sheetContext) => SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            label.toUpperCase(),
+                            style: PixelText.title(
+                              size: 14,
+                              color: AppColors.of(sheetContext).textDark,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          definition,
-                          style: PixelText.body(
-                            size: 13,
-                            color: AppColors.of(sheetContext).textMid,
+                          const SizedBox(height: 8),
+                          Text(
+                            definition,
+                            style: PixelText.body(
+                              size: 13,
+                              color: AppColors.of(sheetContext).textMid,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'SOURCE · $source',
-                          style: PixelText.title(
-                            size: 10,
-                            color: AppColors.of(sheetContext).textAccent,
+                          const SizedBox(height: 8),
+                          Text(
+                            'SOURCE · $source',
+                            style: PixelText.title(
+                              size: 10,
+                              color: AppColors.of(sheetContext).textAccent,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'WINDOW · $windowText',
-                          style: PixelText.title(
-                            size: 10,
-                            color: AppColors.of(sheetContext).textAccent,
+                          const SizedBox(height: 4),
+                          Text(
+                            'WINDOW · $windowText',
+                            style: PixelText.title(
+                              size: 10,
+                              color: AppColors.of(sheetContext).textAccent,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'COVERAGE · ${coverageText ?? 'NOT APPLICABLE'}',
-                          style: PixelText.title(
-                            size: 10,
-                            color: AppColors.of(sheetContext).textAccent,
+                          const SizedBox(height: 4),
+                          Text(
+                            'COVERAGE · ${coverageText ?? 'NOT APPLICABLE'}',
+                            style: PixelText.title(
+                              size: 10,
+                              color: AppColors.of(sheetContext).textAccent,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(4),
-                child: Icon(
-                  Icons.info_outline_rounded,
-                  size: 16,
-                  color: colors.textMid,
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    Icons.info_outline_rounded,
+                    size: 16,
+                    color: colors.textMid,
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
