@@ -36,11 +36,13 @@ class _CountingTutorialApi extends TutorialPreviewBackendApiService {
   Future<ActiveImpactNoticesResult> fetchActiveRaceImpactNotices({
     required String identityToken,
     required String raceId,
+    DateTime? resolvedAfter,
   }) async {
     activeNoticeFetches += 1;
     return super.fetchActiveRaceImpactNotices(
       identityToken: identityToken,
       raceId: raceId,
+      resolvedAfter: resolvedAfter,
     );
   }
 

@@ -286,6 +286,7 @@ class _ActiveImpactApi extends BackendApiService {
   Future<ActiveImpactNoticesResult> fetchActiveRaceImpactNotices({
     required String identityToken,
     required String raceId,
+    DateTime? resolvedAfter,
   }) async {
     activeNoticeFetches += 1;
     final error = activeNoticeError;
@@ -361,8 +362,11 @@ class _ActiveImpactApi extends BackendApiService {
   }
 }
 
-Future<AuthService> _auth({bool onboardingV2 = false}) async {
-  SharedPreferences.setMockInitialValues({
+Future<AuthService> _auth({
+  bool onboardingV2 = false,
+  bool seedImpactBaseline = true,
+}) async {
+  final values = <String, Object>{
     'auth_identity_token': 'apple-token',
     'auth_user_identifier': 'apple-user-123',
     'auth_session_token': 'session-token',
@@ -371,7 +375,14 @@ Future<AuthService> _auth({bool onboardingV2 = false}) async {
     'auth_coins': 420,
     'auth_held_coins': 0,
     'auth_onboarding_v2_enabled': onboardingV2,
-  });
+  };
+  if (seedImpactBaseline) {
+    // These fixtures exercise delivery after the first post-update baseline;
+    // the dedicated baseline test covers the silent legacy backlog path.
+    values['active_impact_notification_baseline_v1_user-1'] =
+        '2026-08-01T00:00:00.000Z';
+  }
+  SharedPreferences.setMockInitialValues(values);
   final auth = AuthService();
   await auth.restoreSession();
   return auth;
@@ -384,12 +395,16 @@ Future<void> _pumpRace(
   WidgetTester tester,
   _ActiveImpactApi api, {
   bool onboardingV2 = false,
+  bool seedImpactBaseline = true,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
       navigatorObservers: [appRouteObserver],
       home: RaceDetailScreen(
-        authService: await _auth(onboardingV2: onboardingV2),
+        authService: await _auth(
+          onboardingV2: onboardingV2,
+          seedImpactBaseline: seedImpactBaseline,
+        ),
         raceId: 'race-impact',
         backendApiService: api,
       ),
@@ -611,7 +626,7 @@ void main() {
 
       await _pumpRace(tester, api);
 
-      expect(find.text('Leech drained 426 synced steps'), findsOneWidget);
+      expect(find.text('POWERUP SUMMARY'), findsOneWidget);
       expect(api.activeNoticeFetches, 1);
       expect(api.acknowledgedNoticeIds, isEmpty);
 
@@ -622,6 +637,30 @@ void main() {
       await _tearDownScreen(tester);
     },
   );
+
+  testWidgets('first post-update open hides the legacy notice backlog', (
+    tester,
+  ) async {
+    final api = _ActiveImpactApi(
+      responses: [
+        _notices(const [
+          {
+            'id': 'legacy-notice',
+            'powerupType': 'LEECH',
+            'deltaSteps': -426,
+            'valueStatus': 'SYNCED_SNAPSHOT',
+            'resolvedAt': '2026-08-19T16:30:00.000Z',
+          },
+        ]),
+      ],
+    );
+
+    await _pumpRace(tester, api, seedImpactBaseline: false);
+
+    expect(find.text('POWERUP SUMMARY'), findsNothing);
+    expect(api.acknowledgedNoticeIds, isEmpty);
+    await _tearDownScreen(tester);
+  });
 
   testWidgets('popup uses the exact valid server-authored description', (
     tester,
@@ -643,8 +682,9 @@ void main() {
 
     await _pumpRace(tester, api);
 
+    expect(find.text('POWERUP SUMMARY'), findsOneWidget);
     expect(
-      find.text('A very specific server-authored impact.'),
+      find.textContaining('A very specific server-authored impact.'),
       findsOneWidget,
     );
     await tester.tap(find.text('Continue'));
@@ -685,7 +725,7 @@ void main() {
     await _pumpRace(tester, api);
     // One copy is the Activity row already rendered behind the popup; the
     // second is the popup subtitle sourced from the same canonical event.
-    expect(find.text(description, findRichText: true), findsNWidgets(2));
+    expect(find.text(description, findRichText: true), findsOneWidget);
 
     await tester.tap(find.text('Continue'));
     await tester.pump();
@@ -715,7 +755,7 @@ void main() {
     await _pumpRace(tester, api, onboardingV2: true);
 
     expect(find.text('FIRST RACE BONUS'), findsOneWidget);
-    expect(find.text('Leech drained 31 synced steps'), findsNothing);
+    expect(find.text('POWERUP SUMMARY'), findsNothing);
     expect(find.byType(Dialog), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('claim-starter-reward')));
@@ -725,7 +765,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
 
     expect(find.text('FIRST RACE BONUS'), findsNothing);
-    expect(find.text('Leech drained 31 synced steps'), findsOneWidget);
+    expect(find.text('POWERUP SUMMARY'), findsOneWidget);
     expect(find.byType(Dialog), findsNothing);
     expect(find.byType(PowerupRevealModal), findsOneWidget);
     await tester.tap(find.text('Continue'));
@@ -760,63 +800,53 @@ void main() {
 
     await _pumpRace(tester, api);
 
-    expect(find.text("Runner's High added 90 synced steps"), findsOneWidget);
+    expect(find.text('POWERUP SUMMARY'), findsOneWidget);
     await tester.tap(find.text('Continue'));
     await tester.pump(const Duration(milliseconds: 350));
     await _tearDownScreen(tester);
   });
 
-  testWidgets(
-    'three-notice cap leaves the oldest remainder for the next resume',
-    (tester) async {
-      Map<String, dynamic> notice(String id, int delta, int minute) => {
-        'id': id,
-        'powerupType': 'LEECH',
-        'deltaSteps': delta,
-        'valueStatus': 'SYNCED_SNAPSHOT',
-        'resolvedAt':
-            '2026-08-19T16:${minute.toString().padLeft(2, '0')}:00.000Z',
-      };
+  testWidgets('all returned notices are summarized and acknowledged together', (
+    tester,
+  ) async {
+    Map<String, dynamic> notice(String id, int delta, int minute) => {
+      'id': id,
+      'powerupType': 'LEECH',
+      'deltaSteps': delta,
+      'valueStatus': 'SYNCED_SNAPSHOT',
+      'resolvedAt':
+          '2026-08-19T16:${minute.toString().padLeft(2, '0')}:00.000Z',
+    };
 
-      final api = _ActiveImpactApi(
-        responses: [
-          _notices([
-            notice('notice-1', -11, 30),
-            notice('notice-2', -22, 31),
-            notice('notice-3', -33, 32),
-            notice('notice-4', -44, 33),
-          ]),
-          _notices([notice('notice-4', -44, 33)]),
-        ],
-      );
+    final api = _ActiveImpactApi(
+      responses: [
+        _notices([
+          notice('notice-1', -11, 30),
+          notice('notice-2', -22, 31),
+          notice('notice-3', -33, 32),
+          notice('notice-4', -44, 33),
+        ]),
+        _notices([notice('notice-4', -44, 33)]),
+      ],
+    );
 
-      await _pumpRace(tester, api);
-      for (final steps in [11, 22, 33]) {
-        expect(find.text('Leech drained $steps synced steps'), findsOneWidget);
-        await tester.tap(find.text('Continue'));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 350));
-        await tester.pump(const Duration(milliseconds: 350));
-      }
-
-      expect(api.acknowledgedNoticeIds, ['notice-1', 'notice-2', 'notice-3']);
-      expect(find.byType(PowerupRevealModal), findsNothing);
-
-      await _backgroundAndResume(tester);
-      expect(find.text('Leech drained 44 synced steps'), findsOneWidget);
-      await tester.tap(find.text('Continue'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 350));
-      await tester.pump(const Duration(milliseconds: 350));
-      expect(api.acknowledgedNoticeIds, [
-        'notice-1',
-        'notice-2',
-        'notice-3',
-        'notice-4',
-      ]);
-      await _tearDownScreen(tester);
-    },
-  );
+    await _pumpRace(tester, api);
+    expect(find.text('POWERUP SUMMARY'), findsOneWidget);
+    expect(find.textContaining('NET: −110 steps'), findsOneWidget);
+    expect(find.textContaining('Leech  −11 steps'), findsOneWidget);
+    expect(find.textContaining('Leech  −44 steps'), findsOneWidget);
+    await tester.tap(find.text('Continue'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(api.acknowledgedNoticeIds, [
+      'notice-1',
+      'notice-2',
+      'notice-3',
+      'notice-4',
+    ]);
+    await _tearDownScreen(tester);
+  });
 
   testWidgets('old-backend 404 keeps the active race usable with no overlay', (
     tester,
@@ -904,7 +934,7 @@ void main() {
     expect(find.byType(PowerupRevealModal), findsOneWidget);
     await _backgroundAndResume(tester);
     expect(api.activeNoticeFetches, 1);
-    expect(find.text('Leech drained 73 synced steps'), findsNothing);
+    expect(find.text('POWERUP SUMMARY'), findsNothing);
     expect(find.byType(PowerupRevealModal), findsOneWidget);
 
     await tester.tap(find.text('Continue'));
@@ -914,7 +944,7 @@ void main() {
 
     expect(find.text('HEADS!'), findsNothing);
     expect(api.activeNoticeFetches, 2);
-    expect(find.text('Leech drained 73 synced steps'), findsOneWidget);
+    expect(find.text('POWERUP SUMMARY'), findsOneWidget);
     expect(find.byType(PowerupRevealModal), findsOneWidget);
     await tester.tap(find.text('Continue'));
     await tester.pump(const Duration(milliseconds: 350));
@@ -984,7 +1014,7 @@ void main() {
       await _backgroundAndResume(tester);
       expect(api.activeNoticeFetches, 2);
       expect(api.privateFeedFetches, privateFetchesAfterOpen + 1);
-      expect(find.text('Leech drained 77 synced steps'), findsOneWidget);
+      expect(find.text('POWERUP SUMMARY'), findsOneWidget);
       await tester.tap(find.text('Continue'));
       await tester.pump(const Duration(milliseconds: 350));
       await _tearDownScreen(tester);
@@ -1095,7 +1125,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 350));
 
       expect(api.activeNoticeFetches, 2);
-      expect(find.text('Leech drained 62 synced steps'), findsOneWidget);
+      expect(find.text('POWERUP SUMMARY'), findsOneWidget);
       await tester.tap(find.text('Continue'));
       await tester.pump(const Duration(milliseconds: 350));
       await _tearDownScreen(tester);
@@ -1156,7 +1186,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 350));
 
       expect(api.activeNoticeFetches, 2);
-      expect(find.text('Leech drained 12 synced steps'), findsOneWidget);
+      expect(find.text('POWERUP SUMMARY'), findsOneWidget);
       await tester.tap(find.text('Continue'));
       await tester.pump(const Duration(milliseconds: 350));
       await _tearDownScreen(tester);

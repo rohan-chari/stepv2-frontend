@@ -74,20 +74,30 @@ class RaceProgressResult {
 /// one opaque race-resolution handoff. Unknown/malformed responses collapse to
 /// [empty], which keeps a newer app usable against older backend versions.
 class ActiveImpactNoticesResult {
-  const ActiveImpactNoticesResult({this.notices = const []})
-    : jobId = null,
-      generation = null,
-      retryAfterMs = null;
+  const ActiveImpactNoticesResult({
+    this.notices = const [],
+    this.authoritative = true,
+    this.resolvedAfterApplied = true,
+  }) : jobId = null,
+       generation = null,
+       retryAfterMs = null;
 
   const ActiveImpactNoticesResult.pending({
     required this.jobId,
     required this.generation,
     required this.retryAfterMs,
-  }) : notices = const [];
+  }) : notices = const [],
+       authoritative = true,
+       resolvedAfterApplied = true;
 
-  static const empty = ActiveImpactNoticesResult();
+  static const empty = ActiveImpactNoticesResult(
+    authoritative: false,
+    resolvedAfterApplied: false,
+  );
 
   final List<Map<String, dynamic>> notices;
+  final bool authoritative;
+  final bool resolvedAfterApplied;
   final String? jobId;
   final int? generation;
   final int? retryAfterMs;
@@ -349,8 +359,12 @@ class BackendApiService {
   ) {
     final tokens = clientFeaturesHeader
         .split(',')
-        .where((token) => token.isNotEmpty &&
-            token != 'race_payout_double' && token != 'race_payout_flat_50')
+        .where(
+          (token) =>
+              token.isNotEmpty &&
+              token != 'race_payout_double' &&
+              token != 'race_payout_flat_50',
+        )
         .toList(growable: true);
     if (enabled) tokens.add('race_payout_flat_50');
     return tokens.join(',');
@@ -2090,14 +2104,18 @@ class BackendApiService {
   Future<ActiveImpactNoticesResult> fetchActiveRaceImpactNotices({
     required String identityToken,
     required String raceId,
+    DateTime? resolvedAfter,
   }) async {
     if (runtimeType != BackendApiService) {
       return ActiveImpactNoticesResult.empty;
     }
 
     try {
+      final path =
+          '/races/${Uri.encodeComponent(raceId)}/active-impact-notices'
+          '${resolvedAfter == null ? '' : '?resolvedAfter=${Uri.encodeQueryComponent(resolvedAfter.toUtc().toIso8601String())}'}';
       final response = await _sendGetRequest(
-        path: '/races/${Uri.encodeComponent(raceId)}/active-impact-notices',
+        path: path,
         identityToken: identityToken,
       );
       final raw = await _readRawResponse(response);
@@ -2110,7 +2128,10 @@ class BackendApiService {
             .whereType<Map>()
             .map((row) => Map<String, dynamic>.from(row))
             .toList(growable: false);
-        return ActiveImpactNoticesResult(notices: notices);
+        return ActiveImpactNoticesResult(
+          notices: notices,
+          resolvedAfterApplied: payload['resolvedAfterApplied'] == true,
+        );
       }
 
       if (raw.statusCode == 202 && !raw.decodeFailed && payload != null) {

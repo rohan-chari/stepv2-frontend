@@ -58,6 +58,7 @@ class TutorialPreviewBackendApiService extends BackendApiService {
   Future<ActiveImpactNoticesResult> fetchActiveRaceImpactNotices({
     required String identityToken,
     required String raceId,
+    DateTime? resolvedAfter,
   }) async => ActiveImpactNoticesResult.empty;
 
   @override

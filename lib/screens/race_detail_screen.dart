@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/animals.dart';
 import '../models/loadable.dart';
@@ -1248,6 +1249,8 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
     }
     final token = widget.authService.authToken;
     if (token == null || token.isEmpty) return;
+    final storedImpactBaseline = await _readImpactBaseline();
+    final impactBaseline = storedImpactBaseline ?? DateTime.now().toUtc();
 
     final attempt = ++_impactAttemptGeneration;
     await _streams?.refreshPrivateActivity();
@@ -1256,6 +1259,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       var result = await _api.fetchActiveRaceImpactNotices(
         identityToken: token,
         raceId: widget.raceId,
+        resolvedAfter: impactBaseline,
       );
       if (!_impactAttemptStillCurrent(attempt, token)) return;
 
@@ -1271,6 +1275,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         result = await _api.fetchActiveRaceImpactNotices(
           identityToken: token,
           raceId: widget.raceId,
+          resolvedAfter: impactBaseline,
         );
         if (!_impactAttemptStillCurrent(attempt, token) || result.isPending) {
           return;
@@ -1280,43 +1285,88 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       final notices = result.notices
           .map(_ActiveImpactNotice.tryParse)
           .whereType<_ActiveImpactNotice>()
-          .take(3)
           .toList(growable: false);
-      if (notices.any((notice) => _feed?.containsEvent(notice.id) != true)) {
+      if (result.authoritative && storedImpactBaseline == null) {
+        await _writeImpactBaseline(impactBaseline);
+      }
+      final noticesToPresent = result.resolvedAfterApplied
+          ? _filterPreReleaseImpactNotices(notices, baseline: impactBaseline)
+          : notices;
+      if (noticesToPresent.isEmpty) return;
+      if (noticesToPresent.any(
+        (notice) => _feed?.containsEvent(notice.id) != true,
+      )) {
         await _streams?.refreshPrivateActivity();
       }
-      for (final notice in notices) {
+      if (!_impactAttemptStillCurrent(attempt, token)) return;
+      await _runRaceOverlay(() async {
+        if (!_canPresentActiveImpact(attempt: attempt)) return;
+        final net = noticesToPresent.fold<int>(
+          0,
+          (sum, notice) => sum + notice.deltaSteps,
+        );
+        final lines = noticesToPresent
+            .map((notice) {
+              final name = PowerupCopy.nameFor(notice.powerupType);
+              final sign = notice.deltaSteps >= 0 ? '+' : '−';
+              final amount = '$sign${notice.deltaSteps.abs()} steps';
+              final description = notice.description;
+              return description == null
+                  ? '$name  $amount'
+                  : '$name  $amount\n$description';
+            })
+            .join('\n');
+        final netSign = net >= 0 ? '+' : '−';
+        await showPowerupRevealModal(
+          context,
+          iconType: noticesToPresent.first.powerupType,
+          title: 'POWERUP SUMMARY',
+          subtitle: '$lines\n\nNET: $netSign${net.abs()} steps',
+          accent: net >= 0
+              ? AppColors.of(context).coinDark
+              : AppColors.of(context).error,
+        );
         if (!_impactAttemptStillCurrent(attempt, token)) return;
-        await _runRaceOverlay(() async {
-          if (!_canPresentActiveImpact(attempt: attempt)) return;
-          final name = PowerupCopy.nameFor(notice.powerupType);
-          final steps = notice.deltaSteps;
-          final subtitle =
-              notice.description ??
-              (steps < 0
-                  ? '$name ${notice.powerupType == 'LEECH' ? 'drained' : 'removed'} ${steps.abs()} synced steps'
-                  : '$name added $steps synced steps');
-          await showPowerupRevealModal(
-            context,
-            iconType: notice.powerupType,
-            title: name,
-            subtitle: subtitle,
-            accent: steps >= 0
-                ? AppColors.of(context).coinDark
-                : AppColors.of(context).error,
-          );
-          if (!_impactAttemptStillCurrent(attempt, token)) return;
+        for (final notice in noticesToPresent) {
           await _api.acknowledgeActiveRaceImpactNotice(
             identityToken: token,
             raceId: widget.raceId,
             noticeId: notice.id,
           );
-        });
-      }
+        }
+      });
     } catch (_) {
       // Capability disabled/old backend/unauthorized viewer all degrade to no
       // overlay. The private endpoint remains the actual security boundary.
     }
+  }
+
+  String get _impactBaselineKey {
+    final account =
+        widget.authService.userId ??
+        widget.authService.identityToken ??
+        'anonymous';
+    return 'active_impact_notification_baseline_v1_$account';
+  }
+
+  Future<DateTime?> _readImpactBaseline() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getString(_impactBaselineKey);
+    return stored == null ? null : DateTime.tryParse(stored);
+  }
+
+  Future<void> _writeImpactBaseline(DateTime baseline) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_impactBaselineKey, baseline.toIso8601String());
+  }
+
+  List<_ActiveImpactNotice> _filterPreReleaseImpactNotices(
+    List<_ActiveImpactNotice> notices, {
+    required DateTime baseline,
+  }) {
+    return notices
+        .where((notice) => notice.resolvedAt.isAfter(baseline))
+        .toList();
   }
 
   bool _impactAttemptStillCurrent(int attempt, String identityToken) =>
