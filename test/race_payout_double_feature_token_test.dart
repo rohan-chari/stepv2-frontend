@@ -11,7 +11,7 @@ void main() {
         'lib/services/backend_api_service.dart',
       ).readAsStringSync();
       final branchOccurrences = RegExp(
-        r"_racePayoutDoubleSupported\s*\?\s*',race_payout_double'\s*:\s*''",
+        r"_racePayoutDoubleSupported\s*\?\s*',race_payout_flat_50'\s*:\s*''",
       ).allMatches(source);
 
       expect(
@@ -35,10 +35,10 @@ void main() {
         ).split(',');
 
     expect(
-      capable.where((token) => token == 'race_payout_double'),
+      capable.where((token) => token == 'race_payout_flat_50'),
       hasLength(1),
     );
-    expect(tokenless, isNot(contains('race_payout_double')));
+    expect(tokenless, isNot(contains('race_payout_flat_50')));
     expect(tokenless, contains('characters'));
   });
 

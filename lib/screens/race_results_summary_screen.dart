@@ -182,8 +182,9 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
       if (!earned) {
         setState(() {
           _flowState = _PayoutDoubleFlowState.ready;
-          _message =
-              'Finish the ad to earn +${current!.bonusCoins} bonus coins.';
+          _message = current!.isFlat50
+              ? 'Finish the ad to earn +${current.bonusCoins} flat bonus coins.'
+              : 'Finish the ad to earn +${current.bonusCoins} bonus coins.';
         });
         return;
       }
@@ -290,17 +291,26 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
       return;
     }
     final bonus = _offer?.bonusCoins ?? 0;
+    final flat = _offer?.isFlat50 ?? false;
     setState(() {
       _flowState = _PayoutDoubleFlowState.ready;
       if (error.code == 'CLAIMS_DISABLED') {
         _earnedCallbackReceived = true;
-        _message = 'Bonus verification is temporarily unavailable. Try again.';
+        _message = flat
+            ? 'Flat bonus verification is temporarily unavailable. Try again.'
+            : 'Bonus verification is temporarily unavailable. Try again.';
       } else if (error.code == 'AD_NOT_VERIFIED') {
-        _message = _earnedCallbackReceived
+        _message = flat
+            ? _earnedCallbackReceived
+                  ? 'Still verifying +$bonus flat bonus coins. Try again.'
+                  : 'Finish an ad to earn +$bonus flat bonus coins.'
+            : _earnedCallbackReceived
             ? 'Still verifying +$bonus bonus coins. Try again.'
             : 'Finish an ad to earn +$bonus bonus coins.';
       } else {
-        _message = 'Bonus unavailable right now. Your coins are unchanged.';
+        _message = flat
+            ? 'Flat bonus unavailable right now. Your coins are unchanged.'
+            : 'Bonus unavailable right now. Your coins are unchanged.';
       }
     });
   }
@@ -454,6 +464,7 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
   Widget _buildRewardPanel(BuildContext context) {
     final offer = _offer!;
     final earned = _flowState == _PayoutDoubleFlowState.earned;
+    final flat = offer.isFlat50;
     final bonus = earned
         ? _earnedBonusCoins ?? offer.bonusCoins
         : offer.bonusCoins;
@@ -461,7 +472,18 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
     final qualifyingDiffers = _displayedPayoutCoins != offer.baseCoins;
     final String title;
     final String body;
-    if (earned) {
+    if (flat) {
+      if (earned) {
+        title = '+$bonus COINS EARNED';
+        body = 'Your verified flat bonus is in your coin balance.';
+      } else {
+        final perRace = offer.raceIds.length > 1;
+        title = perRace ? 'FLAT +50 COINS PER RACE' : 'FLAT +50 COINS';
+        body = perRace
+            ? 'Watch one ad to earn a flat 50-coin bonus for each race.'
+            : 'Watch one ad to earn a flat 50-coin bonus.';
+      }
+    } else if (earned) {
       title = qualifyingDiffers
           ? '$base QUALIFYING PRIZES + $bonus AD BONUS'
           : '$base PAYOUT + $bonus AD BONUS';
@@ -484,12 +506,22 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
     final reduceMotion =
         MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     final actionSemanticsLabel = switch (_flowState) {
-      _PayoutDoubleFlowState.loading => 'Loading ad for $bonus bonus coins.',
-      _PayoutDoubleFlowState.verifying => 'Verifying $bonus bonus coins.',
+      _PayoutDoubleFlowState.loading =>
+        flat
+            ? 'Loading ad for $bonus flat bonus coins.'
+            : 'Loading ad for $bonus bonus coins.',
+      _PayoutDoubleFlowState.verifying =>
+        flat
+            ? 'Verifying $bonus flat bonus coins.'
+            : 'Verifying $bonus bonus coins.',
       _PayoutDoubleFlowState.ready when _earnedCallbackReceived =>
-        'Retry verification for $bonus bonus coins.',
+        flat
+            ? 'Retry verification for $bonus flat bonus coins.'
+            : 'Retry verification for $bonus bonus coins.',
       _ =>
-        'Watch an ad to earn $bonus bonus coins on your qualifying race prizes.',
+        flat
+            ? 'Watch an ad to earn $bonus flat bonus coins.'
+            : 'Watch an ad to earn $bonus bonus coins on your qualifying race prizes.',
     };
     final announceActionState =
         _flowState == _PayoutDoubleFlowState.loading ||
@@ -570,6 +602,8 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
                     ? 'VERIFYING…'
                     : _earnedCallbackReceived
                     ? 'RETRY +$bonus BONUS'
+                    : flat && offer.raceIds.length > 1
+                    ? 'WATCH AD · +50 COINS PER RACE'
                     : 'WATCH AD · +$bonus COINS',
                 icon: Icons.play_circle_fill_rounded,
                 variant: PillButtonVariant.decision,
@@ -604,7 +638,9 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
       liveRegion: earned,
       excludeSemantics: earned,
       label: earned
-          ? '$base qualifying race prize coins plus $bonus ad bonus coins awarded.'
+          ? flat
+                ? '+$bonus flat bonus coins awarded.'
+                : '$base qualifying race prize coins plus $bonus ad bonus coins awarded.'
           : null,
       child: panel,
     );

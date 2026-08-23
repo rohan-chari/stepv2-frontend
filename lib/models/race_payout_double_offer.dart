@@ -14,6 +14,7 @@ class RacePayoutDoubleOffer {
     required this.bonusCoins,
     required this.maxBonusCoins,
     required this.rolling24hRemainingBeforeClaim,
+    required this.rewardMode,
   }) : raceIds = UnmodifiableListView<String>(raceIds);
 
   final String? offerId;
@@ -22,6 +23,9 @@ class RacePayoutDoubleOffer {
   final int bonusCoins;
   final int? maxBonusCoins;
   final int? rolling24hRemainingBeforeClaim;
+  final String rewardMode;
+
+  bool get isFlat50 => rewardMode == 'flat_50';
 
   /// v1 is an exact second copy of its server-owned rounded base.
   ///
@@ -65,6 +69,7 @@ class RacePayoutDoubleOffer {
       bonusCoins: values.bonusCoins,
       maxBonusCoins: values.maxBonusCoins,
       rolling24hRemainingBeforeClaim: values.remaining,
+      rewardMode: values.rewardMode,
     );
   }
 }
@@ -79,6 +84,7 @@ class RacePayoutDoubleClaimResult {
     required this.maxBonusCoins,
     required this.rolling24hRemainingBeforeClaim,
     required this.coins,
+    required this.rewardMode,
   }) : raceIds = UnmodifiableListView<String>(raceIds);
 
   final bool awarded;
@@ -88,6 +94,9 @@ class RacePayoutDoubleClaimResult {
   final int bonusCoins;
   final int? maxBonusCoins;
   final int? rolling24hRemainingBeforeClaim;
+  final String rewardMode;
+
+  bool get isFlat50 => rewardMode == 'flat_50';
 
   /// Null means the claim response was otherwise valid but omitted/malformed
   /// the authoritative balance. The caller must refresh `/auth/me` before
@@ -118,6 +127,7 @@ class RacePayoutDoubleClaimResult {
       maxBonusCoins: values.maxBonusCoins,
       rolling24hRemainingBeforeClaim: values.remaining,
       coins: coins,
+      rewardMode: values.rewardMode,
     );
   }
 }
@@ -128,6 +138,7 @@ class RacePayoutDoubleClaimResult {
   int bonusCoins,
   int? maxBonusCoins,
   int? remaining,
+  String rewardMode,
 })?
 _tryParseSnapshot(
   Map<String, dynamic> map, {
@@ -151,11 +162,35 @@ _tryParseSnapshot(
   }
   if (raceIds.any((id) => popupCounts[id] != 1)) return null;
 
+  final rewardModeRaw = map['rewardMode'];
+  final rewardMode = switch (rewardModeRaw) {
+    null when !map.containsKey('rewardMode') => 'legacy_double',
+    'flat_50' => 'flat_50',
+    'legacy_double' => 'legacy_double',
+    _ => null,
+  };
+  if (rewardMode == null) return null;
+
   final baseCoins = map['baseCoins'];
   final bonusCoins = map['bonusCoins'];
   if (baseCoins is! int || bonusCoins is! int) {
     return null;
   }
+  if (rewardMode == 'flat_50') {
+    // Flat offers are additive to the race payout. A zero-prize race and a
+    // batch whose fixed reward is larger than its combined payout are both
+    // valid; only the server-owned 50 coins per race total is accepted.
+    if (baseCoins < 0 || bonusCoins != 50 * raceIds.length) return null;
+    return (
+      raceIds: raceIds,
+      baseCoins: baseCoins,
+      bonusCoins: bonusCoins,
+      maxBonusCoins: null,
+      remaining: null,
+      rewardMode: rewardMode,
+    );
+  }
+
   if (baseCoins <= 0 || bonusCoins <= 0 || bonusCoins > baseCoins) {
     return null;
   }
@@ -170,6 +205,7 @@ _tryParseSnapshot(
       bonusCoins: bonusCoins,
       maxBonusCoins: null,
       remaining: null,
+      rewardMode: rewardMode,
     );
   }
 
@@ -192,6 +228,7 @@ _tryParseSnapshot(
     bonusCoins: bonusCoins,
     maxBonusCoins: maxBonusCoins,
     remaining: remaining,
+    rewardMode: rewardMode,
   );
 }
 

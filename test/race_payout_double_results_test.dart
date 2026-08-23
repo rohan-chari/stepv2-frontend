@@ -19,6 +19,7 @@ Map<String, dynamic> _offerJson({
   int bonusCoins = 120,
   int maxBonusCoins = 500,
   int remaining = 500,
+  String? rewardMode,
 }) => <String, dynamic>{
   'offerId': offerId,
   'raceIds': raceIds,
@@ -26,6 +27,26 @@ Map<String, dynamic> _offerJson({
   'bonusCoins': bonusCoins,
   'maxBonusCoins': maxBonusCoins,
   'rolling24hRemainingBeforeClaim': remaining,
+  // ignore: use_null_aware_elements
+  if (rewardMode case final mode?) 'rewardMode': mode,
+};
+
+Map<String, dynamic> _flatOfferJson({
+  String? offerId,
+  List<String> raceIds = const ['race-a'],
+  int baseCoins = 600,
+  int? bonusCoins,
+  String? status,
+}) => <String, dynamic>{
+  ..._offerJson(
+    offerId: offerId,
+    raceIds: raceIds,
+    baseCoins: baseCoins,
+    bonusCoins: bonusCoins ?? 50 * raceIds.length,
+    rewardMode: 'flat_50',
+  ),
+  // ignore: use_null_aware_elements
+  if (status case final value?) 'status': value,
 };
 
 List<Map<String, dynamic>> _races({int payout = 120}) => [
@@ -183,6 +204,113 @@ Future<void> _pump(
 }
 
 void main() {
+  test('flat_50 accepts a zero base and a bonus greater than that base', () {
+    final offer = RacePayoutDoubleOffer.tryParse(
+      _flatOfferJson(baseCoins: 0),
+      popupRaceIds: const ['race-a'],
+    );
+    final multiRaceOffer = RacePayoutDoubleOffer.tryParse(
+      _flatOfferJson(raceIds: const ['race-a', 'race-b'], baseCoins: 50),
+      popupRaceIds: const ['race-a', 'race-b'],
+    );
+
+    expect(offer, isNotNull);
+    expect(offer!.isFlat50, isTrue);
+    expect(offer.bonusCoins, 50);
+    expect(multiRaceOffer, isNotNull);
+    expect(multiRaceOffer!.bonusCoins, 100);
+  });
+
+  test('flat_50 rejects a malformed or non-exact additive reward', () {
+    expect(
+      RacePayoutDoubleOffer.tryParse(
+        {..._flatOfferJson(), 'rewardMode': 'unknown'},
+        popupRaceIds: const ['race-a'],
+      ),
+      isNull,
+    );
+    expect(
+      RacePayoutDoubleOffer.tryParse(
+        _flatOfferJson(bonusCoins: 40),
+        popupRaceIds: const ['race-a'],
+      ),
+      isNull,
+    );
+  });
+
+  testWidgets('flat offer uses a fixed per-race copy for a 600-coin race', (
+    tester,
+  ) async {
+    final offer = RacePayoutDoubleOffer.tryParse(
+      _flatOfferJson(),
+      popupRaceIds: const ['race-a'],
+    );
+    await _pump(
+      tester,
+      offer: offer,
+      api: _FakeRacePayoutApi(),
+      ads: _FakeRacePayoutAdController(),
+      races: _races(payout: 600),
+    );
+
+    expect(find.text('FLAT +50 COINS'), findsOneWidget);
+    expect(
+      find.text('Watch one ad to earn a flat 50-coin bonus.'),
+      findsOneWidget,
+    );
+    expect(find.text('WATCH AD · +50 COINS'), findsOneWidget);
+    expect(find.textContaining('DOUBLE'), findsNothing);
+    expect(find.textContaining('qualifying race prizes'), findsNothing);
+  });
+
+  testWidgets('flat multi-race offer shows 50 per race and exact total', (
+    tester,
+  ) async {
+    final races = [
+      ..._races(payout: 600),
+      {..._races(payout: 0).single, 'id': 'race-b', 'name': 'Dawn Dash'},
+    ];
+    final api = _FakeRacePayoutApi()
+      ..prepared = _flatOfferJson(
+        offerId: _offerId,
+        raceIds: const ['race-a', 'race-b'],
+        baseCoins: 600,
+        status: 'PENDING',
+      )
+      ..claimResults = [
+        <String, dynamic>{
+          'awarded': true,
+          'alreadyClaimed': false,
+          ..._flatOfferJson(
+            raceIds: const ['race-a', 'race-b'],
+            baseCoins: 600,
+          ),
+          'coins': 825,
+        },
+      ];
+    final offer = RacePayoutDoubleOffer.tryParse(
+      {...api.prepared, 'offerId': null},
+      popupRaceIds: const ['race-a', 'race-b'],
+    );
+    await _pump(
+      tester,
+      offer: offer,
+      api: api,
+      ads: _FakeRacePayoutAdController(),
+      races: races,
+    );
+
+    expect(find.text('FLAT +50 COINS PER RACE'), findsOneWidget);
+    expect(find.text('WATCH AD · +50 COINS PER RACE'), findsOneWidget);
+    await tester.tap(find.text('WATCH AD · +50 COINS PER RACE'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('+100 COINS EARNED'), findsOneWidget);
+    expect(find.text('DOUBLE'), findsNothing);
+    expect(find.textContaining('partial'), findsNothing);
+  });
+
   testWidgets(
     'full rounded server values render without a cap field or Dart rounding',
     (tester) async {

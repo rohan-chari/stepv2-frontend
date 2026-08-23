@@ -50,6 +50,21 @@ percentiles.
 | Positive coins / earning day | p10 1 · **p50 74** · p90 280.7 · mean 122.7 | `DB coin_transactions` (n=2,274 user-days; 564 users) |
 | Current balance, 30d step-active users | p10 10 · **p50 138** · p90 706.9 · max 9,238; 0 negative | `DB users.coins` (n=642) |
 
+### 0e. Current review refresh — verified 2026-08-23 (prod, read-only)
+
+Trailing 30 complete calendar days (`2026-07-24` through `2026-08-22`). Date
+math uses the database's tz-naive `steps.date` and
+`coin_transactions.created_at::date`; review accounts are excluded.
+
+| Metric | Value | Source |
+|---|---:|---|
+| Step-active users / user-days | 829 / 7,029 | `DB steps × users` |
+| Per-user steps / active day | p10 1,235 · **p50 5,774** · p90 13,572 · mean 6,832 | `DB steps` (n=7,029 user-days) |
+| Recurring positive coins / active day | p10 0 · **p50 10.53** · p90 75.67 · mean 30.75 | `DB steps × coin_transactions` (n=829 users; excludes tutorial, referral, admin/manual, refunds and redistributed buy-in payouts) |
+| Positive coins / earning day | p10 1 · **p50 56** · p90 257 · mean 114.14 | `DB coin_transactions` (n=3,892 user-days) |
+| Total positive / negative ledger | **+14,807.7 / −6,079.7 per day**; net **+8,728.0** | `DB coin_transactions` (n=9,784 positive and 3,723 negative rows) |
+| Active purchasable powerup / cosmetic minimum | **75 / 250 coins** | `DB powerup_shop_items`, `DB shop_items` (active, non-test-only) |
+
 ### 0c. Refresh — verified 2026-08-12 (prod, read-only)
 
 | Metric | Value | Source |
@@ -89,10 +104,10 @@ node-pg timestamp conversion.
 | Powerups minted per user-day | p50 6 · p90 36 · max 94 · mean 13.1 | `DB race_powerups` (n=956 user-days) |
 | Powerups **wasted** (expired/discarded) per user-day | p50 2 · p90 5 · max 15 · mean 2.5 | `DB race_powerups` |
 
-> **Median income is 3 coins/active-day**, not the ~6 quoted in
-> `economy-balance-audit.md` (2026-07-20). The economy is *under-supplied*
-> relative to its price list: the cheapest active cosmetic (250) is **83 days**
-> of median play; the cheapest active store powerup (40) is **13 days**.
+> The latest verified median recurring income is **10.53 coins/active-day**.
+> The cheapest active cosmetic (250) is **23.7 days** of median play; the
+> cheapest active store powerup (75) is **7.1 days**. Older snapshots above are
+> retained as historical baselines.
 
 ---
 

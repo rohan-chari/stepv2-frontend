@@ -11,6 +11,7 @@ import '../config/animals.dart';
 import '../config/backend_config.dart';
 import '../config/start_cape_metadata.dart';
 import '../styles.dart';
+import '../widgets/modal_action_button.dart';
 import '../models/loadable.dart';
 import '../models/home_race_suggestion.dart';
 import '../models/home_invite_preflight.dart';
@@ -1086,13 +1087,14 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         title: Text('$inviterName challenged you!'),
         content: Text('Jump into "$raceName" and race them right now.'),
         actions: [
-          TextButton(
+          ModalActionButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Later'),
+            label: 'Later',
+            variant: ModalActionVariant.secondary,
           ),
-          TextButton(
+          ModalActionButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Race now'),
+            label: 'Race now',
           ),
         ],
       ),
@@ -2280,8 +2282,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
             pageBuilder: (_, _, _) => HomeInviteOverlay(
               invite: invite,
               onRespond: (accept) => _respondToHomeInvite(invite, accept),
-              onDismissed: () =>
-                  _homeInviteDismissedThisVisit.add(invite.id),
+            onDismissed: () =>
+                _homeInviteDismissedThisVisit.add(invite.id),
             ),
             transitionsBuilder: (_, animation, _, child) =>
                 FadeTransition(opacity: animation, child: child),

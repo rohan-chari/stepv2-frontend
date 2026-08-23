@@ -18,6 +18,7 @@ import '../services/race_feed_service.dart';
 import '../services/race_stream_coordinator.dart';
 import '../services/app_route_observer.dart';
 import '../styles.dart';
+import '../widgets/modal_action_button.dart';
 import '../widgets/app_refresh_indicator.dart';
 import '../utils/at_name.dart';
 import '../utils/effect_polarity.dart';
@@ -7393,13 +7394,14 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       builder: (ctx) => AlertDialog(
         title: const Text('Delete message?'),
         actions: [
-          TextButton(
+          ModalActionButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            label: 'Cancel',
+            variant: ModalActionVariant.secondary,
           ),
-          TextButton(
+          ModalActionButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
+            label: 'Delete',
           ),
         ],
       ),

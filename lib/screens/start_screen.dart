@@ -12,6 +12,7 @@ import '../config/backend_config.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
 import '../styles.dart';
+import '../widgets/modal_action_button.dart';
 import '../widgets/error_toast.dart';
 import '../widgets/home_course_track.dart';
 import '../widgets/home_hero_scene.dart';
@@ -587,11 +588,12 @@ class _ReviewerSignInDialogState extends State<_ReviewerSignInDialog> {
         ],
       ),
       actions: [
-        TextButton(
+        ModalActionButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          label: 'Cancel',
+          variant: ModalActionVariant.secondary,
         ),
-        TextButton(onPressed: _submit, child: const Text('Sign in')),
+        ModalActionButton(label: 'Sign in', onPressed: _submit),
       ],
     );
   }
