@@ -8,6 +8,7 @@ import 'game_container.dart';
 import 'home_chrome.dart';
 import 'pill_button.dart';
 import 'powerup_icon.dart';
+import 'signed_step_amount.dart';
 
 /// §7 powerups5 — the gamble/surprise reveal shown on the caster's own client
 /// after a Coin Flip or Mystery Potion resolves.
@@ -85,6 +86,7 @@ class PowerupRevealModal extends StatelessWidget {
     required this.subtitle,
     required this.accent,
     required this.onDismiss,
+    this.signedSteps,
   });
 
   final String iconType;
@@ -92,6 +94,7 @@ class PowerupRevealModal extends StatelessWidget {
   final String subtitle;
   final Color accent;
   final VoidCallback onDismiss;
+  final int? signedSteps;
 
   @override
   Widget build(BuildContext context) {
@@ -137,6 +140,10 @@ class PowerupRevealModal extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
+            if (signedSteps != null) ...[
+              SignedStepAmount(steps: signedSteps!),
+              const SizedBox(height: 8),
+            ],
             Text(
               subtitle,
               style: PixelText.body(
@@ -167,6 +174,7 @@ Future<void> showPowerupRevealModal(
   required String title,
   required String subtitle,
   Color? accent,
+  int? signedSteps,
 }) {
   final resolvedAccent = accent ?? AppColors.of(context).accent;
   return showGeneralDialog(
@@ -199,6 +207,7 @@ Future<void> showPowerupRevealModal(
                       title: title,
                       subtitle: subtitle,
                       accent: resolvedAccent,
+                      signedSteps: signedSteps,
                       onDismiss: () => Navigator.of(dialogContext).pop(),
                     ),
                   ),

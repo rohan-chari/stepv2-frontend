@@ -48,6 +48,7 @@ import '../widgets/error_toast.dart';
 import '../widgets/info_toast.dart';
 import '../widgets/invite_code_sheet.dart';
 import '../widgets/game_container.dart';
+import '../widgets/signed_step_amount.dart';
 import '../widgets/home_chrome.dart';
 import '../widgets/pill_button.dart';
 import '../widgets/quick_create_race_sheet.dart';
@@ -3141,12 +3142,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     final presentationUserId = widget.authService.userId;
     if (presentationToken == null || presentationToken.isEmpty) return;
     _globalSummaryShowing = true;
-    final raceWord = races == 1 ? 'race' : 'races';
-    final summary = steps > 0
-        ? 'You earned +$steps extra race steps across $races $raceWord.'
-        : steps < 0
-        ? 'The event changed your race score by −${steps.abs()} across $races $raceWord.'
-        : 'Gains and losses balanced across $races $raceWord; net 0.';
     try {
       if (!mounted) return;
       await showDialog<void>(
@@ -3170,15 +3165,32 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   ),
                 ),
                 const SizedBox(height: 10),
-                Text(
-                  summary,
-                  textAlign: TextAlign.center,
-                  style: HomeText.body(
-                    size: 13,
-                    color: AppColors.of(context).muted,
-                    weight: FontWeight.w700,
+                if (steps != 0)
+                  Column(
+                    children: [
+                      SignedStepAmount(steps: steps),
+                      const SizedBox(height: 6),
+                      Text(
+                        'across all races',
+                        textAlign: TextAlign.center,
+                        style: HomeText.body(
+                          size: 13,
+                          color: AppColors.of(context).muted,
+                          weight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  Text(
+                    'Gains and losses balanced across all races; net 0.',
+                    textAlign: TextAlign.center,
+                    style: HomeText.body(
+                      size: 13,
+                      color: AppColors.of(context).muted,
+                      weight: FontWeight.w700,
+                    ),
                   ),
-                ),
                 const SizedBox(height: 16),
                 PillButton(
                   label: 'CONTINUE',

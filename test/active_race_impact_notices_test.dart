@@ -725,9 +725,9 @@ void main() {
     await _pumpRace(tester, api);
     // One copy is the Activity row already rendered behind the popup; the
     // second is the popup subtitle sourced from the same canonical event.
-    expect(find.text(description, findRichText: true), findsOneWidget);
+    expect(find.text(description, findRichText: true), findsNWidgets(2));
 
-    await tester.tap(find.text('Continue'));
+    await tester.tap(find.text('Continue').last);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 700));
 
@@ -768,7 +768,7 @@ void main() {
     expect(find.text('POWERUP SUMMARY'), findsOneWidget);
     expect(find.byType(Dialog), findsNothing);
     expect(find.byType(PowerupRevealModal), findsOneWidget);
-    await tester.tap(find.text('Continue'));
+    await tester.tap(find.text('Continue').last);
     await tester.pump(const Duration(milliseconds: 350));
     await _tearDownScreen(tester);
   });
@@ -801,8 +801,39 @@ void main() {
     await _pumpRace(tester, api);
 
     expect(find.text('POWERUP SUMMARY'), findsOneWidget);
-    await tester.tap(find.text('Continue'));
+    await tester.tap(find.text('Continue').last);
     await tester.pump(const Duration(milliseconds: 350));
+    await _tearDownScreen(tester);
+  });
+
+  testWidgets('popup policy excludes self-only bonuses and Shortcut gains', (
+    tester,
+  ) async {
+    final api = _ActiveImpactApi(
+      responses: [
+        _notices(const [
+          {
+            'id': 'protein-gain',
+            'powerupType': 'PROTEIN_SHAKE',
+            'deltaSteps': 1500,
+            'valueStatus': 'SYNCED_SNAPSHOT',
+            'resolvedAt': '2026-08-19T16:30:00.000Z',
+          },
+          {
+            'id': 'shortcut-caster-gain',
+            'powerupType': 'SHORTCUT',
+            'deltaSteps': 1500,
+            'valueStatus': 'SYNCED_SNAPSHOT',
+            'resolvedAt': '2026-08-19T16:31:00.000Z',
+          },
+        ]),
+      ],
+    );
+
+    await _pumpRace(tester, api);
+
+    expect(find.byType(PowerupRevealModal), findsNothing);
+    expect(api.acknowledgedNoticeIds, isEmpty);
     await _tearDownScreen(tester);
   });
 
@@ -832,12 +863,20 @@ void main() {
 
     await _pumpRace(tester, api);
     expect(find.text('POWERUP SUMMARY'), findsOneWidget);
-    expect(find.textContaining('NET: −110 steps'), findsOneWidget);
-    expect(find.textContaining('Leech  −11 steps'), findsOneWidget);
-    expect(find.textContaining('Leech  −44 steps'), findsOneWidget);
-    await tester.tap(find.text('Continue'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.text('-11 steps'), findsOneWidget);
+    Future<void> dismissPopup() async {
+      final modal = tester.element(find.byType(PowerupRevealModal).last);
+      Navigator.of(modal).pop();
+      await tester.pump(const Duration(milliseconds: 700));
+    }
+
+    await dismissPopup();
+    expect(find.text('-22 steps'), findsOneWidget);
+    await dismissPopup();
+    expect(find.text('-33 steps'), findsOneWidget);
+    await dismissPopup();
+    expect(find.text('-44 steps'), findsOneWidget);
+    await dismissPopup();
     await tester.pump(const Duration(milliseconds: 350));
     expect(api.acknowledgedNoticeIds, [
       'notice-1',

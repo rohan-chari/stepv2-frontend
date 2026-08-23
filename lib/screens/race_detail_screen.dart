@@ -255,6 +255,33 @@ class _ActiveImpactNotice {
   }
 }
 
+bool _isPopupEligibleImpact(_ActiveImpactNotice notice) {
+  if (notice.deltaSteps == 0) return false;
+  switch (notice.powerupType.toUpperCase()) {
+    case 'PROTEIN_SHAKE':
+      return false;
+    case 'SHORTCUT':
+      // The caster's positive side is intentionally silent; only the victim
+      // sees the popup for an incoming Shortcut.
+      return notice.deltaSteps < 0;
+    case 'LEG_CRAMP':
+    case 'WRONG_TURN':
+    case 'DETOUR_SIGN':
+    case 'RED_CARD':
+    case 'PINECONE_TOSS':
+    case 'SNEAKY_SWAP':
+    case 'SIGNAL_JAMMER':
+    case 'HITCHHIKE':
+    case 'DRILL_SERGEANT':
+    case 'LEECH':
+    case 'RUNNERS_HIGH':
+    case 'GHOST_PEPPER':
+      return true;
+    default:
+      return false;
+  }
+}
+
 class _ActiveImpactReceipt {
   const _ActiveImpactReceipt({required this.id, required this.raceId});
 
@@ -1285,6 +1312,7 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       final notices = result.notices
           .map(_ActiveImpactNotice.tryParse)
           .whereType<_ActiveImpactNotice>()
+          .where(_isPopupEligibleImpact)
           .toList(growable: false);
       if (result.authoritative && storedImpactBaseline == null) {
         await _writeImpactBaseline(impactBaseline);
@@ -1299,35 +1327,24 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         await _streams?.refreshPrivateActivity();
       }
       if (!_impactAttemptStillCurrent(attempt, token)) return;
+      if (!mounted) return;
+      final successAccent = AppColors.grassDark;
+      final errorAccent = AppColors.error;
       await _runRaceOverlay(() async {
-        if (!_canPresentActiveImpact(attempt: attempt)) return;
-        final net = noticesToPresent.fold<int>(
-          0,
-          (sum, notice) => sum + notice.deltaSteps,
-        );
-        final lines = noticesToPresent
-            .map((notice) {
-              final name = PowerupCopy.nameFor(notice.powerupType);
-              final sign = notice.deltaSteps >= 0 ? '+' : '−';
-              final amount = '$sign${notice.deltaSteps.abs()} steps';
-              final description = notice.description;
-              return description == null
-                  ? '$name  $amount'
-                  : '$name  $amount\n$description';
-            })
-            .join('\n');
-        final netSign = net >= 0 ? '+' : '−';
-        await showPowerupRevealModal(
-          context,
-          iconType: noticesToPresent.first.powerupType,
-          title: 'POWERUP SUMMARY',
-          subtitle: '$lines\n\nNET: $netSign${net.abs()} steps',
-          accent: net >= 0
-              ? AppColors.of(context).coinDark
-              : AppColors.of(context).error,
-        );
-        if (!_impactAttemptStillCurrent(attempt, token)) return;
         for (final notice in noticesToPresent) {
+          if (!mounted || !_canPresentActiveImpact(attempt: attempt)) {
+            return;
+          }
+          final accent = notice.deltaSteps > 0 ? successAccent : errorAccent;
+          await showPowerupRevealModal(
+            context,
+            iconType: notice.powerupType,
+            title: 'POWERUP SUMMARY',
+            subtitle: notice.description ?? 'Your race steps changed.',
+            signedSteps: notice.deltaSteps,
+            accent: accent,
+          );
+          if (!_impactAttemptStillCurrent(attempt, token)) return;
           await _api.acknowledgeActiveRaceImpactNotice(
             identityToken: token,
             raceId: widget.raceId,
