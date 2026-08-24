@@ -157,16 +157,23 @@ class _PersonalGroupHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            label,
-            style: PixelText.display(size: 20, color: colors.textLight).copyWith(
-              shadows: const [
-                Shadow(
-                  color: Color(0x40000000),
-                  blurRadius: 4,
-                  offset: Offset(0, 1),
-                ),
-              ],
+          Flexible(
+            child: Text(
+              label,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              style: PixelText.display(
+                size: 20,
+                color: colors.textLight,
+              ).copyWith(
+                shadows: const [
+                  Shadow(
+                    color: Color(0x40000000),
+                    blurRadius: 4,
+                    offset: Offset(0, 1),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -1308,34 +1315,32 @@ class _RacesTabState extends State<RacesTab> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Row(
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Flexible(
-                              child: Text(
-                                name,
-                                style: PixelText.title(
-                                  size: 18,
-                                  color: AppColors.of(context).textDark,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
+                            Text(
+                              name,
+                              style: PixelText.title(
+                                size: 18,
+                                color: AppColors.of(context).textDark,
                               ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
-                            const SizedBox(width: 5),
-                            Flexible(
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                alignment: Alignment.centerRight,
-                                child: _buildMetaChip(
-                                  roundLabel,
-                                  backgroundColor: AppColors.of(
-                                    context,
-                                  ).pillGold.withValues(alpha: 0.30),
-                                  textColor: AppColors.of(context).textDark,
-                                  borderColor: AppColors.of(
-                                    context,
-                                  ).pillGoldDark,
-                                ),
+                            const SizedBox(height: 4),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: _buildMetaChip(
+                                roundLabel,
+                                backgroundColor: AppColors.of(
+                                  context,
+                                ).pillGold.withValues(alpha: 0.30),
+                                textColor: AppColors.of(context).textDark,
+                                borderColor: AppColors.of(
+                                  context,
+                                ).pillGoldDark,
                               ),
                             ),
                           ],
