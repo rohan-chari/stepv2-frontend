@@ -115,6 +115,20 @@ Map<String, dynamic> _featured({
   'myStatus': ?myStatus,
 };
 
+Map<String, dynamic> _weeklyShowdown({int accepted = 3}) => {
+  'id': 'seed-tournament-weekly-showdown-lobby',
+  'name': '8 Racer Tourney',
+  'status': 'PENDING',
+  'seedId': 'seed-tournament-weekly-showdown',
+  'seedKind': 'WEEKLY_SHOWDOWN',
+  'bracketSize': 8,
+  'matchupDurationDays': 2,
+  'buyInAmount': 0,
+  'potCoins': 0,
+  'championPrizeCoins': 150,
+  'acceptedCount': accepted,
+};
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -189,6 +203,61 @@ void main() {
     );
     expect(btn.label, 'JOIN');
     expect(btn.onPressed, isNotNull);
+  });
+
+  testWidgets('8-person featured seed uses the generic tournament card', (
+    tester,
+  ) async {
+    await _pump(tester, _FakeApi(featured: [_weeklyShowdown()]));
+
+    expect(find.text('8 RACER TOURNEY'), findsOneWidget);
+    expect(find.textContaining('8 RACERS'), findsOneWidget);
+    expect(find.text('3/8 IN'), findsOneWidget);
+    expect(
+      find.byKey(
+        const Key(
+          'featured-tournament-join-seed-tournament-weekly-showdown-lobby',
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('/tournaments/public fallback renders the canonical seed', (
+    tester,
+  ) async {
+    final api = _FakeApi(featured: [_weeklyShowdown(accepted: 0)]);
+    await _pump(tester, api);
+
+    expect(api.publicTournamentCalls, 1);
+    expect(find.text('8 RACER TOURNEY'), findsOneWidget);
+    expect(find.text('0/8 IN'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('featured tournament card tolerates missing optional fields', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      _FakeApi(
+        featured: [
+          {
+            'id': 'seed-tournament-weekly-showdown-lobby',
+            'name': '8 Racer Tourney',
+            'status': 'PENDING',
+            'seedKind': 'WEEKLY_SHOWDOWN',
+            'bracketSize': 8,
+            'acceptedCount': 0,
+          },
+        ],
+      ),
+    );
+
+    expect(find.text('8 RACER TOURNEY'), findsOneWidget);
+    expect(find.text('0/8 IN'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('joined featured card flips to VIEW', (tester) async {

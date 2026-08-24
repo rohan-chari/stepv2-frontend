@@ -70,6 +70,24 @@ const _tournament = <String, dynamic>{
   'joinAction': 'JOIN',
 };
 
+const _weeklyShowdownTournament = <String, dynamic>{
+  'kind': 'TOURNAMENT',
+  'id': 'weekly-showdown-tournament',
+  'seedKind': 'WEEKLY_SHOWDOWN',
+  'name': '8 Racer Tourney',
+  'status': 'PENDING',
+  'bracketSize': 8,
+  'matchupDurationDays': 2,
+  'acceptedCount': 3,
+  'buyInAmount': 0,
+  'potCoins': 0,
+  'prizePool': null,
+  'powerupsEnabled': false,
+  'powerupStepInterval': null,
+  'createdAt': '2026-08-11T20:00:00.000Z',
+  'joinAction': 'JOIN',
+};
+
 class _Script {
   const _Script(this.status, this.body);
   final int status;
@@ -482,6 +500,53 @@ void main() {
         find.bySemanticsLabel(RegExp('Daily.*Daily 10K.*Join Daily 10K')),
         findsOneWidget,
       );
+    });
+
+    testWidgets('renders the canonical Weekly Showdown tournament card', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(390, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final auth = await _auth();
+      final suggestion = HomeRaceSuggestion.tryParse(
+        _weeklyShowdownTournament,
+      )!;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HomeTab(
+              stepData: StepData(steps: 4000, date: DateTime(2026, 8, 11)),
+              isLoading: false,
+              error: null,
+              healthAuthorized: true,
+              notificationsState: true,
+              displayName: 'Walker',
+              authService: auth,
+              backendApiService: _Api(),
+              onRefresh: () async {},
+              onEnableHealth: () {},
+              onEnableNotifications: () {},
+              onDisplayNameChanged: () {},
+              friendsSteps: const [],
+              raceCard: const {'state': 'EMPTY'},
+              suggestedRacesState: Loadable.success([suggestion]),
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -900));
+      await tester.pump();
+
+      expect(
+        find.byKey(
+          const Key('home-suggestion-TOURNAMENT-weekly-showdown-tournament'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('8 RACER TOURNEY'), findsOneWidget);
+      expect(find.text('2-DAY MATCHUPS · 3/8 IN'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('only the tapped card shows in-flight progress at 1.3x text', (

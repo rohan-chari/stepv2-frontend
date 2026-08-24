@@ -70,6 +70,7 @@ Map<String, dynamic> _pendingTournament() => {
   'id': 'tournament-pending',
   'name': 'Open Bracket',
   'status': 'PENDING',
+  'seedKind': 'WEEKLY_SHOWDOWN',
   'bracketSize': 8,
   'acceptedCount': 5,
   'myStatus': 'ACCEPTED',

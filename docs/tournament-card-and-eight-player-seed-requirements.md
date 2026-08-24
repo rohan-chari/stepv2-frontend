@@ -1,7 +1,12 @@
 # Tournament card parity and 8-player featured seed — requirements
 
 **Repos:** `stepv2-frontend` and `stepv2-backend`
-**Status:** Draft — approved for implementation
+**Status:** Superseded by `docs/featured-8-person-tournament-requirements.md`
+
+> Historical design document. Its earlier proposed 8-person values (inactive,
+> powerups enabled, 300-coin prize) are no longer authoritative. The approved
+> configuration is the active canonical `WEEKLY_SHOWDOWN` seed named “8 Racer
+> Tourney,” with powerups disabled and a 150-coin prize.
 **Date:** 2026-08-12
 
 ## Summary and user story
