@@ -3270,6 +3270,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
               onOpenDestination: _openInboxDestination,
               onUnreadCountChanged: _setInboxUnreadCount,
               onUnreadCountDecremented: _decrementInboxUnreadCount,
+              clearOnOpen: true,
             ),
           ),
         );
@@ -4285,6 +4286,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                                   onUnreadCountChanged: _setInboxUnreadCount,
                                   onUnreadCountDecremented:
                                       _decrementInboxUnreadCount,
+                                  clearOnOpen: true,
                                 ),
                               ),
                             );
@@ -4466,7 +4468,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   ),
                   WoodenTabItem(
                     icon: Icons.emoji_events_rounded,
-                    label: 'Leaderboard',
+                    label: 'Boards',
                   ),
                   WoodenTabItem(
                     icon: Icons.people_rounded,

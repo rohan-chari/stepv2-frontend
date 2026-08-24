@@ -56,6 +56,9 @@ PODS:
     - Flutter
   - flutter_timezone (0.0.1):
     - Flutter
+  - gma_mediation_unity (1.9.0):
+    - Flutter
+    - GoogleMobileAdsMediationUnity (~> 4.19.0.0)
   - Google-Mobile-Ads-SDK (13.3.0):
     - GoogleUserMessagingPlatform (>= 1.1)
   - google_mobile_ads (9.0.0):
@@ -80,6 +83,9 @@ PODS:
   - GoogleMobileAdsMediationIronSource (9.4.1.0.1):
     - Google-Mobile-Ads-SDK (~> 13.3.0)
     - IronSourceSDK (= 9.4.1.0)
+  - GoogleMobileAdsMediationUnity (4.19.0.1):
+    - Google-Mobile-Ads-SDK (~> 13.3)
+    - UnityAds (= 4.19.0)
   - GoogleSignIn (8.0.0):
     - AppAuth (< 2.0, >= 1.7.3)
     - AppCheckCore (~> 11.0)
@@ -156,6 +162,10 @@ PODS:
   - sign_in_with_apple (0.0.1):
     - Flutter
   - TOCropViewController (2.7.4)
+  - UnityAds (4.19.0):
+    - IronSourceAdQualitySDK (< 10.0.0)
+    - UnityCoherenceLib (= 0.1.0)
+  - UnityCoherenceLib (0.1.0)
   - url_launcher_ios (0.0.1):
     - Flutter
   - webview_flutter_wkwebview (0.0.1):
@@ -171,6 +181,7 @@ DEPENDENCIES:
   - Flutter (from `Flutter`)
   - flutter_local_notifications (from `.symlinks/plugins/flutter_local_notifications/ios`)
   - flutter_timezone (from `.symlinks/plugins/flutter_timezone/ios`)
+  - gma_mediation_unity (from `.symlinks/plugins/gma_mediation_unity/ios`)
   - google_mobile_ads (from `.symlinks/plugins/google_mobile_ads/ios`)
   - google_sign_in_ios (from `.symlinks/plugins/google_sign_in_ios/darwin`)
   - GoogleMobileAdsMediationAppLovin (= 13.6.3.0)
@@ -204,6 +215,7 @@ SPEC REPOS:
     - GoogleMobileAdsMediationAppLovin
     - GoogleMobileAdsMediationFacebook
     - GoogleMobileAdsMediationIronSource
+    - GoogleMobileAdsMediationUnity
     - GoogleSignIn
     - GoogleUserMessagingPlatform
     - GoogleUtilities
@@ -216,6 +228,8 @@ SPEC REPOS:
     - PromisesSwift
     - RecaptchaInterop
     - TOCropViewController
+    - UnityAds
+    - UnityCoherenceLib
 
 EXTERNAL SOURCES:
   app_links:
@@ -234,6 +248,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/flutter_local_notifications/ios"
   flutter_timezone:
     :path: ".symlinks/plugins/flutter_timezone/ios"
+  gma_mediation_unity:
+    :path: ".symlinks/plugins/gma_mediation_unity/ios"
   google_mobile_ads:
     :path: ".symlinks/plugins/google_mobile_ads/ios"
   google_sign_in_ios:
@@ -279,6 +295,7 @@ SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_local_notifications: a5a732f069baa862e728d839dd2ebb904737effb
   flutter_timezone: ee50ce7786b5fde27e2fe5375bbc8c9661ffc13f
+  gma_mediation_unity: fb9b4ecb5e6f75becd959a4ad1cdcc5fa45d4b09
   Google-Mobile-Ads-SDK: 7692126a35ed859f20635af281c50a2162be8bea
   google_mobile_ads: bab325fd4e31c9705cab0cb298e4f5a9bdb7370f
   google_sign_in_ios: b48bb9af78576358a168361173155596c845f0b9
@@ -286,6 +303,7 @@ SPEC CHECKSUMS:
   GoogleMobileAdsMediationAppLovin: 8929ef5280829acc3e1e4c41f9c6cfd3f99ee7cd
   GoogleMobileAdsMediationFacebook: 9687177355bb60dcf28000a4984750540f090b19
   GoogleMobileAdsMediationIronSource: b33fa1be79352d8b70f16980c9274aa81a11cd92
+  GoogleMobileAdsMediationUnity: 57fe41817b7d8b65385412d140ad51a5baf24468
   GoogleSignIn: ce8c89bb9b37fb624b92e7514cc67335d1e277e4
   GoogleUserMessagingPlatform: befe603da6501006420c206222acd449bba45a9c
   GoogleUtilities: 766ace00c6b10d8148408f329d10c4f051931850
@@ -307,6 +325,8 @@ SPEC CHECKSUMS:
   shared_preferences_foundation: 7036424c3d8ec98dfe75ff1667cb0cd531ec82bb
   sign_in_with_apple: c5dcc141574c8c54d5ac99dd2163c0c72ad22418
   TOCropViewController: 80b8985ad794298fb69d3341de183f33d1853654
+  UnityAds: 40804188247edc15e4e173450a749dbb2fbc61c5
+  UnityCoherenceLib: d9be08c5b9c2880cb220c7ecd643f97ebda422b7
   url_launcher_ios: 7a95fa5b60cc718a708b8f2966718e93db0cef1b
   webview_flutter_wkwebview: 8ebf4fded22593026f7dbff1fbff31ea98573c8d
 

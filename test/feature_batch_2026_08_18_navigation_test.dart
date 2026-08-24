@@ -719,7 +719,7 @@ void main() {
   );
 
   testWidgets(
-    'tutorial copied navigation uses Leaderboard and no Inbox or home ticket',
+    'tutorial copied navigation uses Boards and no Inbox or home ticket',
     (tester) async {
       final auth = TutorialPreviewAuthService();
       addTearDown(auth.dispose);
@@ -740,7 +740,7 @@ void main() {
       expect(bar.items.map((item) => item.label), [
         'Home',
         'Races',
-        'Leaderboard',
+        'Boards',
         'Friends',
         'Profile',
       ]);

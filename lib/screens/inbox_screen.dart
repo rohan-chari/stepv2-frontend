@@ -6,6 +6,7 @@ import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../styles.dart';
 import '../widgets/retro_card.dart';
+import '../widgets/arcade_page.dart';
 
 enum InboxDestinationRoute {
   home,
@@ -94,6 +95,7 @@ class InboxScreen extends StatefulWidget {
     this.onUnreadCountChanged,
     this.onUnreadCountDecremented,
     this.hostMode = InboxHostMode.standalone,
+    this.clearOnOpen = false,
   });
 
   final AuthService authService;
@@ -102,6 +104,7 @@ class InboxScreen extends StatefulWidget {
   final ValueChanged<int>? onUnreadCountChanged;
   final VoidCallback? onUnreadCountDecremented;
   final InboxHostMode hostMode;
+  final bool clearOnOpen;
 
   @override
   State<InboxScreen> createState() => _InboxScreenState();
@@ -270,6 +273,12 @@ class _InboxScreenState extends State<InboxScreen>
           unreadFetchGeneration,
           unreadMutationGeneration,
         );
+        // The Home entry opens the standalone page and clears the inbox on
+        // entry. Embedded Inbox is also used by existing shell/tutorial flows
+        // where opening the tab must preserve per-item read semantics.
+        if (widget.clearOnOpen) {
+          unawaited(_markVisibleAlertsRead(rows, generation));
+        }
       }
     } catch (_) {
       if (mounted &&
@@ -280,6 +289,79 @@ class _InboxScreenState extends State<InboxScreen>
           _error = 'Couldn’t load your Inbox.';
         });
       }
+    }
+  }
+
+  Future<void> _markVisibleAlertsRead(
+    List<Map<String, dynamic>> rows,
+    int loadGeneration,
+  ) async {
+    final token = widget.authService.authToken;
+    final userId = widget.authService.userId;
+    if (token == null || token.isEmpty) return;
+    final unread = rows
+        .where(
+          (row) =>
+              row['_inboxKind'] == 'alert' &&
+              row['readAt'] == null &&
+              row['id'] is String,
+        )
+        .toList(growable: false);
+    final allAlertIds = <String>{for (final row in unread) row['id'] as String};
+    var cursor = _alertsCursor;
+    while (cursor != null && cursor.isNotEmpty) {
+      try {
+        final payload = await widget.backendApiService.fetchInboxAlerts(
+          identityToken: token,
+          cursor: cursor,
+          limit: 50,
+        );
+        final raw = payload['alerts'];
+        if (raw is List) {
+          for (final rawRow in raw.whereType<Map>()) {
+            final id = rawRow['id'];
+            final readAt = rawRow['readAt'];
+            if (id is String && id.isNotEmpty && readAt == null) {
+              allAlertIds.add(id);
+            }
+          }
+        }
+        cursor = payload['nextCursor'] is String
+            ? payload['nextCursor'] as String
+            : null;
+      } catch (_) {
+        cursor = null;
+      }
+    }
+    final succeeded = <String>{};
+    for (final row in unread) {
+      row['readAt'] = DateTime.now().toIso8601String();
+    }
+    await Future.wait(
+      allAlertIds.map((id) async {
+        try {
+          await widget.backendApiService.markInboxAlertRead(
+            identityToken: token,
+            alertId: id,
+          );
+          succeeded.add(id);
+        } catch (_) {}
+      }),
+    );
+    if (mounted &&
+        token == widget.authService.authToken &&
+        userId == widget.authService.userId &&
+        loadGeneration == _loadGeneration) {
+      for (final row in unread) {
+        if (!succeeded.contains(row['id'])) row['readAt'] = null;
+      }
+      if (succeeded.length == allAlertIds.length) {
+        _lastKnownUnreadCount = 0;
+        widget.onUnreadCountChanged?.call(0);
+      } else {
+        unawaited(_refreshUnreadCount());
+      }
+      setState(() {});
     }
   }
 
@@ -492,19 +574,25 @@ class _InboxScreenState extends State<InboxScreen>
 
   static List<Map<String, dynamic>> _normalizeRows(Object? raw, String kind) {
     if (raw is! List) return const [];
-    return raw.whereType<Map>().map((row) {
-      final normalized = _stringKeyedMap(row);
-      normalized['_inboxKind'] = kind;
-      if (kind == 'support' && normalized['createdAt'] == null) {
-        normalized['createdAt'] = normalized['lastMessageAt'];
-      }
-      return normalized;
-    }).where((row) {
-      if (row['id'] is! String || (row['id'] as String).isEmpty) return false;
-      if (kind != 'alert') return true;
-      return _visibleAlertTypes.contains(row['type']) &&
-          InboxDestination.tryParse(row['destination']) != null;
-    }).toList();
+    return raw
+        .whereType<Map>()
+        .map((row) {
+          final normalized = _stringKeyedMap(row);
+          normalized['_inboxKind'] = kind;
+          if (kind == 'support' && normalized['createdAt'] == null) {
+            normalized['createdAt'] = normalized['lastMessageAt'];
+          }
+          return normalized;
+        })
+        .where((row) {
+          if (row['id'] is! String || (row['id'] as String).isEmpty) {
+            return false;
+          }
+          if (kind != 'alert') return true;
+          return _visibleAlertTypes.contains(row['type']) &&
+              InboxDestination.tryParse(row['destination']) != null;
+        })
+        .toList();
   }
 
   static const _visibleAlertTypes = <String>{
@@ -568,35 +656,57 @@ class _InboxScreenState extends State<InboxScreen>
         : 0.0;
     return Scaffold(
       backgroundColor: AppColors.of(context).parchment,
-      appBar: embedded
-          ? null
-          : AppBar(
-              title: Text(
-                'INBOX',
-                style: PixelText.title(
-                  size: 18,
-                  color: AppColors.of(context).textLight,
+      body: ArcadePageBackground(
+        headerHeight: 56,
+        headerColor: AppColors.of(context).roofLight,
+        child: Padding(
+          padding: EdgeInsets.only(bottom: bottomPadding),
+          child: Column(
+            children: [
+              if (embedded)
+                _embeddedHeader(context)
+              else
+                _standaloneHeader(context),
+              Expanded(
+                child: ColoredBox(
+                  color: AppColors.of(context).parchment,
+                  child: _body(context),
                 ),
               ),
-              backgroundColor: AppColors.of(context).roofDark,
-              foregroundColor: AppColors.of(context).textLight,
-            ),
-      body: Padding(
-        padding: EdgeInsets.only(bottom: bottomPadding),
-        child: Column(
-          children: [
-            if (embedded) _embeddedHeader(context),
-            Expanded(
-              child: ColoredBox(
-                color: AppColors.of(context).parchment,
-                child: _body(context),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
+
+  Widget _standaloneHeader(BuildContext context) => Padding(
+    padding: EdgeInsets.fromLTRB(
+      16,
+      MediaQuery.of(context).padding.top + 10,
+      16,
+      10,
+    ),
+    child: Row(
+      children: [
+        GestureDetector(
+          onTap: () => Navigator.of(context).pop(),
+          child: const Padding(
+            padding: EdgeInsets.all(8),
+            child: Icon(Icons.arrow_back, color: Colors.white),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          'NOTIFICATIONS',
+          style: PixelText.title(
+            size: 22,
+            color: AppColors.of(context).textLight,
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _embeddedHeader(BuildContext context) => Container(
     width: double.infinity,
@@ -633,7 +743,8 @@ class _InboxScreenState extends State<InboxScreen>
     }
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
-      itemCount: _rows.length +
+      itemCount:
+          _rows.length +
           (_alertsCursor == null && _threadsCursor == null ? 0 : 1),
       separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
@@ -662,10 +773,10 @@ class _InboxScreenState extends State<InboxScreen>
         final category = isSupport ? 'SUPPORT' : _categoryLabel(row['type']);
         final unread = isSupport
             ? row.containsKey('unreadByUser')
-                ? row['unreadByUser'] == true
-                : row.containsKey('unread')
-                ? row['unread'] == true
-                : row['readAt'] == null
+                  ? row['unreadByUser'] == true
+                  : row.containsKey('unread')
+                  ? row['unread'] == true
+                  : row['readAt'] == null
             : row['readAt'] == null;
         return InkWell(
           onTap: () => _openAlert(row),
@@ -677,17 +788,52 @@ class _InboxScreenState extends State<InboxScreen>
                 children: [
                   Row(
                     children: [
-                      Text(category, style: PixelText.title(size: 10, color: unread ? AppColors.of(context).coinDark : AppColors.of(context).textMid)),
+                      Text(
+                        category,
+                        style: PixelText.title(
+                          size: 10,
+                          color: unread
+                              ? AppColors.of(context).coinDark
+                              : AppColors.of(context).textMid,
+                        ),
+                      ),
                       const Spacer(),
-                      if (unread) Text('NEW', style: PixelText.title(size: 10, color: AppColors.of(context).coinDark)),
+                      if (unread)
+                        Text(
+                          'NEW',
+                          style: PixelText.title(
+                            size: 10,
+                            color: AppColors.of(context).coinDark,
+                          ),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 6),
-                  Text(title, style: PixelText.title(size: 14, color: AppColors.of(context).textDark)),
+                  Text(
+                    title,
+                    style: PixelText.title(
+                      size: 14,
+                      color: AppColors.of(context).textDark,
+                    ),
+                  ),
                   const SizedBox(height: 4),
-                  Text(body, maxLines: 2, overflow: TextOverflow.ellipsis, style: PixelText.body(size: 13, color: AppColors.of(context).textMid)),
+                  Text(
+                    body,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: PixelText.body(
+                      size: 13,
+                      color: AppColors.of(context).textMid,
+                    ),
+                  ),
                   const SizedBox(height: 9),
-                  Text(isSupport ? 'REPLY' : 'OPEN', style: PixelText.title(size: 10, color: AppColors.of(context).textAccent)),
+                  Text(
+                    isSupport ? 'REPLY' : 'OPEN',
+                    style: PixelText.title(
+                      size: 10,
+                      color: AppColors.of(context).textAccent,
+                    ),
+                  ),
                 ],
               ),
             ),

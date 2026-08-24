@@ -344,6 +344,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  gma_mediation_unity:
+    dependency: "direct main"
+    description:
+      name: gma_mediation_unity
+      sha256: "93500de55f884660fd831ddce4b49a4de21ebdee5e3b789de3e2512bfd1ca91a"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.9.0"
   google_fonts:
     dependency: "direct main"
     description:

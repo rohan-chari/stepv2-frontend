@@ -4,6 +4,7 @@ import 'dart:io' show Platform;
 import 'package:app_tracking_transparency/app_tracking_transparency.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:gma_mediation_unity/unity_privacy_api.g.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 /// Contract the daily-reward screen talks to for the rewarded-ad extra spin,
@@ -336,6 +337,16 @@ class AdService implements ExtraSpinAdController, RacePayoutDoubleAdController {
         // personalized tracking rather than blocking every ad source.
       }
     }
+    // This app currently has no UMP/consent-provider integration. Explicitly
+    // pass the conservative no-consent values before any mediated request;
+    // ATT authorization is not GDPR/US-state consent and must not be reused
+    // for it. A future consent flow can replace these values at this single
+    // mediation boundary before SDK initialization.
+    // Use the generated API directly because the package's convenience
+    // wrapper does not await its platform-channel calls in 1.9.0.
+    final unityPrivacy = UnityPrivacyApi();
+    await unityPrivacy.setGDPRConsent(false);
+    await unityPrivacy.setCCPAConsent(false);
     // Debug builds only: mark our own devices as AdMob test devices so we can
     // watch the REAL ad units without generating invalid traffic (impressions/
     // clicks Google would otherwise penalize). The value is the hashed

@@ -77,7 +77,7 @@ class TutorialRealHost extends StatelessWidget {
                   ),
                   WoodenTabItem(
                     icon: Icons.emoji_events_rounded,
-                    label: 'Leaderboard',
+                    label: 'Boards',
                   ),
                   WoodenTabItem(icon: Icons.people_rounded, label: 'Friends'),
                   WoodenTabItem(icon: Icons.person_rounded, label: 'Profile'),

@@ -293,9 +293,8 @@ class HomeTab extends StatelessWidget {
                                 ),
                                 child: Column(
                                   children: [
-                                    if (unreadNotificationCount > 1)
-                                      _buildNotificationsCard(context),
                                     _buildQuickActionsRow(context),
+                                    _buildNotificationsCard(context),
                                   ],
                                 ),
                               ),
@@ -1344,38 +1343,48 @@ class HomeTab extends StatelessWidget {
   Widget _buildNotificationsCard(BuildContext context) {
     final colors = AppColors.of(context);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.only(top: 16, bottom: 8),
       child: Semantics(
         button: true,
         label: 'Open notifications',
-        child: InkWell(
+        child: GestureDetector(
           key: const Key('home-notifications-card'),
           onTap: onOpenNotifications,
-          borderRadius: BorderRadius.circular(12),
-          child: Ink(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: colors.parchment,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: colors.roofDark, width: 2),
-              boxShadow: _homeCardShadow,
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.notifications_rounded, color: colors.roofDark),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'NOTIFICATIONS',
-                    style: PixelText.title(size: 15, color: colors.textDark),
-                  ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _HomeSectionHeader(title: 'NOTIFICATIONS', topPadding: 0),
+              GameContainer(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 9,
                 ),
-                Text(
-                  '$unreadNotificationCount',
-                  style: PixelText.title(size: 15, color: colors.roofDark),
+                child: Row(
+                  children: [
+                    Icon(Icons.notifications_rounded, color: colors.roofDark),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        unreadNotificationCount > 0
+                            ? '$unreadNotificationCount NEW'
+                            : 'NO NEW NOTIFICATIONS',
+                        style: PixelText.title(
+                          size: 15,
+                          color: colors.textDark,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      'VIEW ALL',
+                      style: PixelText.title(
+                        size: 12,
+                        color: colors.textAccent,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -2914,9 +2923,10 @@ class _SmallRaceButton extends StatelessWidget {
 }
 
 class _HomeSectionHeader extends StatelessWidget {
-  const _HomeSectionHeader({required this.title});
+  const _HomeSectionHeader({required this.title, this.topPadding = 16});
 
   final String title;
+  final double topPadding;
 
   static const _textShadows = [
     Shadow(color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 1)),
@@ -2927,7 +2937,7 @@ class _HomeSectionHeader extends StatelessWidget {
     // See _HomeRaceHeader: the `feltLine` top rule is gone from both headers.
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 9),
+      padding: EdgeInsets.fromLTRB(16, topPadding, 16, 9),
       child: Row(
         children: [
           const _SectionTick(),
