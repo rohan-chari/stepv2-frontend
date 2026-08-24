@@ -33,7 +33,10 @@ void main() {
 
     test('winnerTeam and participantTeam parse defensively', () {
       expect(TeamRace.winnerTeam(const {}), isNull);
-      expect(TeamRace.winnerTeam(const {'winnerTeam': 'TEAM_B'}), RaceTeam.teamB);
+      expect(
+        TeamRace.winnerTeam(const {'winnerTeam': 'TEAM_B'}),
+        RaceTeam.teamB,
+      );
       expect(TeamRace.participantTeam(const {}), isNull);
       expect(
         TeamRace.participantTeam(const {'team': 'TEAM_A'}),
@@ -44,7 +47,10 @@ void main() {
 
   group('team names', () {
     test('teamName reads wire fields with playful fallbacks', () {
-      final race = const {'teamAName': 'Swift Capys', 'teamBName': 'Turbo Beavers'};
+      final race = const {
+        'teamAName': 'Swift Capys',
+        'teamBName': 'Turbo Beavers',
+      };
       expect(TeamRace.teamName(race, RaceTeam.teamA), 'Swift Capys');
       expect(TeamRace.teamName(race, RaceTeam.teamB), 'Turbo Beavers');
     });
@@ -154,28 +160,30 @@ void main() {
       );
     });
 
-    test('sideCounts prefers the teams block and falls back to participants',
-        () {
-      final withBlock = {
-        'teams': {
-          'teamA': {'memberCount': 2},
-          'teamB': {'memberCount': 1},
-        },
-      };
-      expect(TeamRace.sideCounts(withBlock), (2, 1));
+    test(
+      'sideCounts prefers the teams block and falls back to participants',
+      () {
+        final withBlock = {
+          'teams': {
+            'teamA': {'memberCount': 2},
+            'teamB': {'memberCount': 1},
+          },
+        };
+        expect(TeamRace.sideCounts(withBlock), (2, 1));
 
-      final withParticipants = {
-        'participants': [
-          {'status': 'ACCEPTED', 'team': 'TEAM_A'},
-          {'status': 'ACCEPTED', 'team': 'TEAM_B'},
-          {'status': 'ACCEPTED', 'team': 'TEAM_B'},
-          {'status': 'INVITED', 'team': null},
-        ],
-      };
-      expect(TeamRace.sideCounts(withParticipants), (1, 2));
+        final withParticipants = {
+          'participants': [
+            {'status': 'ACCEPTED', 'team': 'TEAM_A'},
+            {'status': 'ACCEPTED', 'team': 'TEAM_B'},
+            {'status': 'ACCEPTED', 'team': 'TEAM_B'},
+            {'status': 'INVITED', 'team': null},
+          ],
+        };
+        expect(TeamRace.sideCounts(withParticipants), (1, 2));
 
-      expect(TeamRace.sideCounts(const {}), isNull);
-    });
+        expect(TeamRace.sideCounts(const {}), isNull);
+      },
+    );
 
     test('publicSlotsLabel renders the TR-206 card line', () {
       final race = {
@@ -191,29 +199,31 @@ void main() {
       expect(TeamRace.publicSlotsLabel(race), '2v2 · 1 slot left on Blue');
     });
 
-    test('publicSlotsLabel prefers the emptier side and degrades gracefully',
-        () {
-      final bothOpen = {
-        'isTeamRace': true,
-        'teamSize': 3,
-        'teamAName': 'Red',
-        'teamBName': 'Blue',
-        'teams': {
-          'teamA': {'memberCount': 1},
-          'teamB': {'memberCount': 2},
-        },
-      };
-      expect(
-        TeamRace.publicSlotsLabel(bothOpen),
-        '3v3 · 2 slots left on Red',
-      );
+    test(
+      'publicSlotsLabel prefers the emptier side and degrades gracefully',
+      () {
+        final bothOpen = {
+          'isTeamRace': true,
+          'teamSize': 3,
+          'teamAName': 'Red',
+          'teamBName': 'Blue',
+          'teams': {
+            'teamA': {'memberCount': 1},
+            'teamB': {'memberCount': 2},
+          },
+        };
+        expect(
+          TeamRace.publicSlotsLabel(bothOpen),
+          '3v3 · 2 slots left on Red',
+        );
 
-      // No side data at all -> just the format chip text.
-      expect(
-        TeamRace.publicSlotsLabel(const {'isTeamRace': true, 'teamSize': 2}),
-        '2v2',
-      );
-    });
+        // No side data at all -> just the format chip text.
+        expect(
+          TeamRace.publicSlotsLabel(const {'isTeamRace': true, 'teamSize': 2}),
+          '2v2',
+        );
+      },
+    );
   });
 
   group('TR-651/657 offensive target eligibility', () {

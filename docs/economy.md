@@ -1897,6 +1897,105 @@ Until this source ships, economy projections must represent paid issuance as:
 and must not count store checkout starts or client purchase callbacks as
 issuance.
 
+## 14. Funded-exposure cap removal — verified inputs and safeguards (2026-08-23)
+
+This is a factual model for the proposal in
+`stepv2-backend/docs/remove-funded-exposure-cap-requirements.md`; the release
+decision remains in the analyst report.
+
+### 14.1 Live rules and source-of-truth reconciliation
+
+| Item | Live value | Source |
+|---|---:|---|
+| Existing aggregate funded-exposure guard | 600 coins | `CODE src/modules/races/services/fundedExposure.js:8,904-912` |
+| Existing daily exposure guard | 80 coins/day | `CODE src/modules/races/services/fundedExposure.js:9,904-912` |
+| New funded race coin unit / pool ceiling | 10 / 8,000 coins | `CODE src/modules/races/services/fundedExposure.js:12-14`; stamped v2 rows |
+| New funded tournament champion ceiling | 500 coins | `CODE src/modules/races/services/fundedExposure.js:16`; stamped v2 rows |
+| Missing-env fallback unit / race ceiling | 20 / 16,000 coins | `CODE src/shared/economy/prizePool.js:9-24`; `.env.example:21-22` |
+| Box interval | 2,000 raw walked steps per powerup-enabled race | `CODE src/modules/races/constants/powerupInterval.js:1-5`, `powerups/boxSteps.js:3-27` |
+
+The exposure service is shared by user-created races, user tournaments, and
+seeded allocation paths. Removing its `enforceLimits` branch globally would
+change more than the proposal's stated scope; caller-level scoping is required.
+The 30-day production sample contained 215 v1 user-funded race rows and 48 v2
+rows; completed user-funded races in the review window had a p50 pool of 240,
+p90 744, and maximum 5,920 coins (`DB races`, 98 completed rows).
+
+### 14.2 Production baseline for the proposed change
+
+Trailing 30 complete calendar days, 2026-07-24 through 2026-08-22; all date
+arithmetic used tz-naive SQL dates and all queries were session read-only.
+
+| Metric | Value | Source |
+|---|---:|---|
+| Step-active player steps/day | p10 1,235 · **p50 5,774** · p90 13,572 | `DB steps` (7,029 user-days) |
+| Recurring positive coins/active day | p10 0 · **p50 10.53** · p90 75.67 | `DB steps × coin_transactions` (829 users) |
+| Daily positive / negative / net ledger | +14,807.7 / −6,079.7 / **+8,728.0** | `DB coin_transactions` |
+| User-funded race payout mint | **34,005 total / 1,133.5/day** | `DB coin_transactions` joined to `DB races` (97 payout races) |
+| Seeded funded race payout mint | 113,029 total / 3,767.6/day | same join (215 payout races) |
+| User-funded rolled boxes | **12,870 / 429.0/day** | `DB race_powerups` joined to non-seeded funded races |
+| User-funded box concentration | top 10% of users held **70.7%** of 15,740 box rows | `DB races × race_participants × race_powerups` (453 users) |
+| User-funded participant-race box volume | 12.86 boxes/participant-race | same join; 15,928 participant-races |
+| Current live user-funded exposure | p50 120 · p90 320 · max 1,380 coins | `DB race_participants`, 372 users; 18 exceed 600 and 7 exceed 80/day |
+
+The race-step duplication check found 48.15M raw steps across user-funded race
+participant records versus 31.18M unique step rows for the same 30-day user
+cohort (1.54x aggregate; race and unique-step windows are not perfectly
+identical because a race can span dates). This is evidence of replicated
+walking input, not additional physical activity.
+
+### 14.3 EV conversion for one additional funded membership
+
+For a new v2 race without a team multiplier:
+
+`pool = participants × durationPoints(days) × 10`
+
+Thus a symmetric participant's expected coin credit is 10 coins for a 1-day
+race, 20 for 2–3 days, 40 for 4–7 days, and 80 for 8–30 days. At the live
+median step rate, one additional active race also creates
+`5,774 / 2,000 = 2.89` boxes/day; p10 and p90 players create 0.62 and 6.79.
+For a four-player, two-day funded tournament the champion pool is 80 coins
+(20-coin symmetric EV); a full 16-player, two-day bracket reaches the 500-coin
+cap, with 31.25-coin symmetric EV and 500 coins to a controlled champion.
+Tournament settlement uses the same formula at
+`CODE src/modules/tournaments/commands/advanceTournament.js:234-255`.
+
+### 14.4 Required monitoring/safeguard inputs before cap removal
+
+The following are the minimum facts/controls to preserve in any implementation:
+
+- Scope the bypass to non-seeded user-created funded races and non-seeded funded
+  tournaments. Keep seeded allocation and legacy buy-in paths on their current
+  admission/settlement rules; do not delete exposure stamps or locking.
+- Replace unlimited live membership with an atomic per-user funded-membership
+  ceiling or an equivalent per-user funded-payout velocity budget. A ceiling of
+  no more than the existing **5 live quick memberships** is the upper bound
+  supported by current anti-duplication policy (`CODE
+  src/modules/races/services/nextRacePolicy.js:7-13`); the current live p90 is
+  3 user-funded memberships. “Unlimited” is not a safe default.
+- Require a minimum honest raw-step contribution before a funded payout is
+  eligible (recommended: **2,000 raw steps per entrant per race**), or retain
+  the existing exposure cap. Otherwise a pair of zero-step accounts can create
+  a 1-day, 2-player, winner-takes-all race that mints 20 coins to one account.
+- Monitor daily user-funded payout coins, user-funded box rows, per-user live
+  funded memberships, per-user funded payout p95/p99, zero-step payout share,
+  repeated participant-pair share, top-decile box share, and raw-race-steps /
+  unique-steps. Alert at 2x the verified baselines: 2,267 user-funded payout
+  coins/day, 858 user-funded rolled boxes/day, or top-decile box share above
+  80%; page immediately on any zero-step winner or a user above 5 live funded
+  memberships.
+- Preserve idempotent payout references and add a daily aggregate reconciliation
+  of stamped pool, awarded pool, and ledger mint. Any mismatch must block the
+  next deployment or trigger rollback; no production data update is part of
+  this change.
+- Owner and rollback: the backend on-call owns the daily alerts and may reload
+  the previous commit; the game analyst owns the seven-day post-deploy economy
+  review. Any threshold breach above, any zero-step winner, any user above the
+  membership ceiling, or any stamped-pool/ledger mismatch is a code-only
+  rollback criterion. No runtime flag or production data edit is required.
+
+These are safeguards for the proposed removal, not new live configuration.
+
 ---
 
 *Last full verification pass: 2026-08-08 (prod SELECT-only, aggregates only).
@@ -1909,4 +2008,5 @@ SELECT-only aggregates + accepted planning inputs; IAP is explicitly not live).
 SELECT-only, aggregates only).
 §3.2 / §3.4 / §3.4b / §3.4c / §3.5 / §3.6 / §9 verified and added 2026-08-09
 (prod SELECT-only, aggregates only). §8 Option H and §9 are analysis only —
-nothing in either has been applied.*
+nothing in either has been applied. §14 verified/added 2026-08-23 (prod
+SELECT-only aggregates + current backend code; no production data changed).*

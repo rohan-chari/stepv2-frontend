@@ -17,8 +17,8 @@ class _AdminApi extends BackendApiService {
   _AdminApi({
     this.base = const {},
     this.sectioned,
-    this.suggestions,
-    this.suggestionsThrow = false,
+    this.threads,
+    this.threadsThrow = false,
   });
 
   final Map<String, dynamic> base;
@@ -26,11 +26,11 @@ class _AdminApi extends BackendApiService {
   /// Returned when a non-empty `sections` list is requested. Null means the
   /// backend ignores the param and answers with the legacy payload.
   final Map<String, dynamic>? sectioned;
-  final Map<String, dynamic>? suggestions;
-  final bool suggestionsThrow;
+  final Map<String, dynamic>? threads;
+  final bool threadsThrow;
 
   final List<List<String>> statsCalls = [];
-  int suggestionCalls = 0;
+  int threadCalls = 0;
 
   @override
   Future<Map<String, dynamic>> fetchAdminStats({
@@ -44,13 +44,14 @@ class _AdminApi extends BackendApiService {
   }
 
   @override
-  Future<Map<String, dynamic>> fetchAdminSuggestions({
+  Future<Map<String, dynamic>> fetchAdminFeedbackThreads({
     required String identityToken,
-    int limit = 50,
+    String? cursor,
+    int limit = 25,
   }) async {
-    suggestionCalls += 1;
-    if (suggestionsThrow) throw Exception('boom');
-    return suggestions ?? const {'suggestions': <Map<String, dynamic>>[]};
+    threadCalls += 1;
+    if (threadsThrow) throw Exception('boom');
+    return threads ?? const {'threads': <Map<String, dynamic>>[]};
   }
 
   @override
@@ -296,15 +297,15 @@ void main() {
       expect(api.statsCalls, [const <String>[], const <String>[]]);
     });
 
-    testWidgets('INBOX fetches suggestions only when first expanded', (
+    testWidgets('INBOX fetches threads only when first expanded', (
       tester,
     ) async {
       final api = _AdminApi();
       await _pumpHub(tester, api);
-      expect(api.suggestionCalls, 0);
+      expect(api.threadCalls, 0);
 
       await _expand(tester, 'INBOX');
-      expect(api.suggestionCalls, 1);
+      expect(api.threadCalls, 1);
     });
   });
 
@@ -666,7 +667,7 @@ void main() {
   // ------------------------------------------------------------------
   // INBOX
   // ------------------------------------------------------------------
-  group('suggestions inbox', () {
+  group('support threads inbox', () {
     Future<void> pumpInbox(WidgetTester tester, _AdminApi api) async {
       final auth = await _auth();
       await _pumpBody(
@@ -682,12 +683,12 @@ void main() {
       await pumpInbox(
         tester,
         _AdminApi(
-          suggestions: const {
-            'suggestions': [
+          threads: const {
+            'threads': [
               {
-                'id': 's1',
+                'id': 'thread-1',
                 'displayName': 'Walker',
-                'text': 'please add a dark mode',
+                'preview': 'please add a dark mode',
                 'category': 'feature',
                 'platform': 'ios',
                 'appVersion': '2.2.0',
@@ -702,25 +703,78 @@ void main() {
       expect(find.textContaining('Walker'), findsOneWidget);
     });
 
+    testWidgets(
+      'renders named and safely falls back for null, blank, and omitted names',
+      (tester) async {
+        await pumpInbox(
+          tester,
+          _AdminApi(
+            threads: const {
+              'threads': [
+                {
+                  'id': 'thread-named',
+                  'displayName': 'Walker',
+                  'category': 'named',
+                  'preview': 'named preview',
+                },
+                {
+                  'id': 'thread-null',
+                  'displayName': null,
+                  'category': 'null-name',
+                  'preview': 'null preview',
+                },
+                {
+                  'id': 'thread-blank',
+                  'displayName': '   ',
+                  'category': 'blank-name',
+                  'preview': 'blank preview',
+                },
+                {
+                  'id': 'thread-omitted',
+                  'category': 'omitted-name',
+                  'preview': 'omitted preview',
+                },
+              ],
+            },
+          ),
+        );
+
+        expect(find.text('SUPPORT THREAD · Walker · named'), findsOneWidget);
+        expect(
+          find.text('SUPPORT THREAD · Anonymous · null-name'),
+          findsOneWidget,
+        );
+        expect(
+          find.text('SUPPORT THREAD · Anonymous · blank-name'),
+          findsOneWidget,
+        );
+        expect(
+          find.text('SUPPORT THREAD · Anonymous · omitted-name'),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
     testWidgets('an empty inbox says so instead of rendering nothing', (
       tester,
     ) async {
       await pumpInbox(tester, _AdminApi());
-      expect(find.textContaining('No suggestions'), findsOneWidget);
+      expect(find.text('No support threads yet.'), findsOneWidget);
     });
 
     testWidgets('a failing fetch shows an error with a retry', (tester) async {
-      final api = _AdminApi(suggestionsThrow: true);
+      final api = _AdminApi(threadsThrow: true);
       await pumpInbox(tester, api);
 
       expect(find.textContaining('Couldn’t load'), findsOneWidget);
-      expect(api.suggestionCalls, 1);
+      expect(api.threadCalls, 1);
 
       await tester.tap(find.byKey(const Key('admin-inbox-retry')));
       for (var i = 0; i < 6; i++) {
         await tester.pump(const Duration(milliseconds: 100));
       }
-      expect(api.suggestionCalls, 2);
+      expect(api.threadCalls, 2);
     });
 
     testWidgets('a row missing every optional field still renders', (
@@ -729,9 +783,9 @@ void main() {
       await pumpInbox(
         tester,
         _AdminApi(
-          suggestions: const {
-            'suggestions': [
-              {'id': 's1', 'text': 'bare row'},
+          threads: const {
+            'threads': [
+              {'id': 'thread-1', 'preview': 'bare row'},
               'not-a-map',
             ],
           },
@@ -739,17 +793,15 @@ void main() {
       );
 
       expect(find.text('bare row'), findsOneWidget);
+      expect(find.text('SUPPORT THREAD · Anonymous'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
     testWidgets('an older backend serving no list is an empty inbox', (
       tester,
     ) async {
-      await pumpInbox(
-        tester,
-        _AdminApi(suggestions: const {'nextBefore': null}),
-      );
-      expect(find.textContaining('No suggestions'), findsOneWidget);
+      await pumpInbox(tester, _AdminApi(threads: const {'nextBefore': null}));
+      expect(find.text('No support threads yet.'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });
