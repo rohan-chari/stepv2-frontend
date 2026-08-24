@@ -18,7 +18,11 @@ import google_mobile_ads
   private lazy var backgroundSyncCoordinator = BackgroundStepSyncCoordinator(
     stateStore: UserDefaultsBackgroundSyncStateStore(),
     stepReader: HealthKitStepReader(),
-    poster: URLSessionStepPoster()
+    poster: URLSessionStepPoster(),
+    hasExecutionBudget: {
+      let remaining = UIApplication.shared.backgroundTimeRemaining
+      return remaining == .greatestFiniteMagnitude || remaining > 20
+    }
   )
 
   private var backgroundRefreshTaskIdentifier: String {
@@ -345,13 +349,12 @@ import google_mobile_ads
 
   private func handleBackgroundRefresh(task: BGAppRefreshTask) {
     scheduleBackgroundRefresh()
-
-    var finished = false
+    let completionGate = BackgroundTaskCompletionGate()
 
     func finish(_ result: BackgroundStepSyncResult) {
-      guard !finished else { return }
-      finished = true
-      task.setTaskCompleted(success: result != .failed)
+      completionGate.finish(result != .failed) { success in
+        task.setTaskCompleted(success: success)
+      }
     }
 
     task.expirationHandler = {
@@ -410,6 +413,22 @@ import google_mobile_ads
   }
 }
 
+final class BackgroundTaskCompletionGate {
+  private let lock = NSLock()
+  private var finished = false
+
+  func finish(_ value: Bool, completion: (Bool) -> Void) {
+    lock.lock()
+    guard !finished else {
+      lock.unlock()
+      return
+    }
+    finished = true
+    lock.unlock()
+    completion(value)
+  }
+}
+
 enum BackgroundStepSyncResult: Equatable {
   case success
   case noData
@@ -427,11 +446,15 @@ enum BackgroundStepSyncResult: Equatable {
   }
 }
 
-protocol BackgroundStepSyncStateStoring {
+protocol BackgroundStepSyncStateStoring: AnyObject {
   var sessionToken: String? { get }
+  var backendUserID: String? { get }
   var backendBaseURL: URL? { get }
   var healthAuthorized: Bool { get }
   var stepSampleBucketMinutes: Int { get }
+  var pendingV2Envelope: String? { get set }
+  var pendingLegacyEnvelope: String? { get set }
+  var negativeCapability: String? { get set }
 }
 
 // Default keeps every existing conformer (and shipped behavior) on hourly;
@@ -464,6 +487,14 @@ protocol StepReading {
 }
 
 protocol StepPosting {
+  func postSyncV2(
+    _ request: BackgroundStepSyncV2Request,
+    completion: @escaping (BackgroundStepHTTPResponse) -> Void
+  )
+  func postLegacy(
+    _ request: BackgroundStepLegacyRequest,
+    completion: @escaping (BackgroundStepHTTPResponse) -> Void
+  )
   func postSteps(
     baseURL: URL,
     sessionToken: String,
@@ -479,175 +510,724 @@ protocol StepPosting {
   )
 }
 
+struct BackgroundStepHTTPResponse {
+  let statusCode: Int?
+  let body: Data?
+  let error: Error?
+}
+
+private enum BackgroundStepPostResult {
+  case response(BackgroundStepHTTPResponse)
+  case sessionChanged
+}
+
+struct BackgroundStepSyncV2Request: Equatable {
+  let baseURL: URL
+  let sessionToken: String
+  let idempotencyKey: String
+  let timeZone: String
+  let appVersion: String?
+  let body: Data
+}
+
+struct BackgroundStepLegacyRequest: Equatable {
+  let baseURL: URL
+  let path: String
+  let sessionToken: String
+  let timeZone: String
+  let body: Data
+}
+
+private struct BackgroundStepSyncV2Envelope: Codable {
+  let ownerID: String
+  let backendBaseURL: String
+  let idempotencyKey: String
+  let timeZone: String
+  let body: Data
+  let createdAt: Date
+}
+
+private struct BackgroundStepSyncLegacyEnvelope: Codable {
+  let ownerID: String
+  let backendBaseURL: String
+  let timeZone: String
+  let dailyBody: Data
+  let samplesBody: Data
+  var dailyComplete: Bool
+  var samplesComplete: Bool
+}
+
+private struct BackgroundStepSyncNegativeCapability: Codable {
+  let ownerID: String
+  let backendBaseURL: String
+  let unsupportedUntil: Date
+}
+
+private struct BackgroundStepSyncSession {
+  let token: String
+  let ownerID: String
+  let baseURL: URL
+}
+
 final class BackgroundStepSyncCoordinator {
   private let stateStore: BackgroundStepSyncStateStoring
   private let stepReader: StepReading
   private let poster: StepPosting
   private let now: () -> Date
+  private let timeZoneIdentifier: () -> String
+  private let appVersion: () -> String?
+  private let newIdempotencyKey: () -> String
+  private let hasExecutionBudget: () -> Bool
+  private let gate = DispatchQueue(label: "com.steptracker.background-step-sync")
+  private var isRunning = false
+  private var activeCompletions: [(BackgroundStepSyncResult) -> Void] = []
+  private var trailingCompletions: [(BackgroundStepSyncResult) -> Void] = []
 
   init(
     stateStore: BackgroundStepSyncStateStoring,
     stepReader: StepReading,
     poster: StepPosting,
-    now: @escaping () -> Date = Date.init
+    now: @escaping () -> Date = Date.init,
+    timeZoneIdentifier: @escaping () -> String = { TimeZone.current.identifier },
+    appVersion: @escaping () -> String? = {
+      Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+    },
+    newIdempotencyKey: @escaping () -> String = { UUID().uuidString.lowercased() },
+    hasExecutionBudget: @escaping () -> Bool = { true }
   ) {
     self.stateStore = stateStore
     self.stepReader = stepReader
     self.poster = poster
     self.now = now
+    self.timeZoneIdentifier = timeZoneIdentifier
+    self.appVersion = appVersion
+    self.newIdempotencyKey = newIdempotencyKey
+    self.hasExecutionBudget = hasExecutionBudget
   }
 
-  // Upper bound for this path's hourly-sample upload. On a sub-hourly account
-  // the in-progress hour is EXCLUDED (floor to the top of the current hour):
-  // this native path always uploads full-clock-hour rows, and letting one
-  // claim the open hour front-runs the Dart fine-grained sync and smears live
-  // powerup-window scoring until finer rows replace it (2026-07-24). Hourly
-  // accounts keep the legacy behavior (upload through `currentTime`).
-  // Completed-hour rows are safe on every account: the backend reconcile
-  // always prefers finer data.
+  // Native uploads contain only closed clock-hour buckets. This avoids a
+  // partial row blocking the finer foreground sample reconciler.
   static func hourlySamplesEnd(
     currentTime: Date,
     bucketMinutes: Int,
     calendar: Calendar = .current
   ) -> Date {
-    guard
-      bucketMinutes < 60,
-      let currentHour = calendar.dateInterval(of: .hour, for: currentTime)
-    else {
-      return currentTime
-    }
-    return currentHour.start
+    _ = bucketMinutes // retained for source compatibility with existing callers
+    return calendar.dateInterval(of: .hour, for: currentTime)?.start ?? currentTime
   }
 
   func performSync(completion: @escaping (BackgroundStepSyncResult) -> Void) {
-    guard
-      let sessionToken = stateStore.sessionToken,
-      !sessionToken.isEmpty,
-      stateStore.healthAuthorized,
-      let backendBaseURL = stateStore.backendBaseURL
-    else {
-      completion(.noData)
-      return
-    }
-    // Read once up front: the nested completion closures below would otherwise
-    // capture self for a late stateStore read.
-    let bucketMinutes = stateStore.stepSampleBucketMinutes
-
-    let currentTime = now()
-
-    // The sync window used to come from `GET /challenges/current`, but that
-    // route has never existed on this backend — it answered 404 to every one
-    // of the ~17k requests/day this made, and the result was always discarded
-    // in favour of the local fallback below. Removed 2026-08-16; the challenge
-    // feature itself is dead (no router mounted, tables last written May 2026).
-    let resolvedSyncDays = BackgroundStepSyncDateFormatter.localFallbackSyncDays(
-      now: currentTime
-    )
-
-    stepReader.fetchStepCounts(for: resolvedSyncDays) { [stepReader, poster] result in
-      switch result {
-      case .failure:
-        completion(.failed)
-      case .success(let dailySteps):
-        guard !dailySteps.isEmpty else {
-          completion(.noData)
-          return
-        }
-
-        Self.postDailySteps(
-          dailySteps,
-          baseURL: backendBaseURL,
-          sessionToken: sessionToken,
-          poster: poster
-        ) { dailyResult in
-          guard dailyResult == .success else {
-            completion(dailyResult)
-            return
-          }
-
-          // After daily sync succeeds, sync hourly samples for today. On a
-          // sub-hourly account, COMPLETED hours only (see hourlySamplesEnd)
-          // — an early-out when no hour has completed yet today.
-          let todayStart = Calendar.current.startOfDay(for: currentTime)
-          let hourlyEnd = Self.hourlySamplesEnd(
-            currentTime: currentTime,
-            bucketMinutes: bucketMinutes
-          )
-          guard hourlyEnd > todayStart else {
-            completion(.success)
-            return
-          }
-          stepReader.fetchHourlyStepCounts(from: todayStart, to: hourlyEnd) { hourlyResult in
-            switch hourlyResult {
-            case .failure:
-              // Don't fail the overall sync if hourly samples fail
-              completion(.success)
-            case .success(let samples):
-              guard !samples.isEmpty else {
-                completion(.success)
-                return
-              }
-              poster.postStepSamples(
-                baseURL: backendBaseURL,
-                sessionToken: sessionToken,
-                samples: samples
-              ) { _, _ in
-                // Ignore hourly post failures - daily sync already succeeded
-                completion(.success)
-              }
-            }
-          }
-        }
+    gate.async {
+      if self.isRunning {
+        self.trailingCompletions.append(completion)
+        return
+      }
+      self.isRunning = true
+      self.activeCompletions = [completion]
+      self.runLogicalSync(wasRecovery: false) { result in
+        self.finishRun(result)
       }
     }
   }
 
-  private static func postDailySteps(
-    _ dailySteps: [BackgroundDailyStep],
-    baseURL: URL,
-    sessionToken: String,
-    poster: StepPosting,
-    completion: @escaping (BackgroundStepSyncResult) -> Void
-  ) {
-    func postNext(index: Int) {
-      guard index < dailySteps.count else {
-        completion(.success)
+  private func finishRun(_ result: BackgroundStepSyncResult) {
+    gate.async {
+      let callbacks = self.activeCompletions
+      self.activeCompletions = []
+      callbacks.forEach { $0(result) }
+
+      guard !self.trailingCompletions.isEmpty else {
+        self.isRunning = false
         return
       }
+      let trailing = self.trailingCompletions
+      self.trailingCompletions = []
+      self.activeCompletions = trailing
+      guard self.hasExecutionBudget() else {
+        self.finishRun(.noData)
+        return
+      }
+      self.runLogicalSync(wasRecovery: false) { trailingResult in
+        self.finishRun(trailingResult)
+      }
+    }
+  }
 
-      let entry = dailySteps[index]
+  private func currentSession() -> BackgroundStepSyncSession? {
+    guard
+      stateStore.healthAuthorized,
+      let token = stateStore.sessionToken, !token.isEmpty,
+      let ownerID = stateStore.backendUserID, !ownerID.isEmpty,
+      let baseURL = stateStore.backendBaseURL
+    else { return nil }
+    return BackgroundStepSyncSession(token: token, ownerID: ownerID, baseURL: baseURL)
+  }
 
-      poster.postSteps(
-        baseURL: baseURL,
-        sessionToken: sessionToken,
-        steps: entry.steps,
-        date: entry.date
-      ) { statusCode, error in
-        if error != nil {
-          completion(.failed)
+  private func sessionStillMatches(_ captured: BackgroundStepSyncSession) -> Bool {
+    guard let current = currentSession() else { return false }
+    return current.token == captured.token &&
+      current.ownerID == captured.ownerID &&
+      current.baseURL.absoluteString == captured.baseURL.absoluteString
+  }
+
+  private func runLogicalSync(
+    wasRecovery: Bool,
+    completion: @escaping (BackgroundStepSyncResult) -> Void
+  ) {
+    guard let session = currentSession() else {
+      completion(.noData)
+      return
+    }
+
+    if let rawLegacy = stateStore.pendingLegacyEnvelope {
+      guard let envelope = decode(BackgroundStepSyncLegacyEnvelope.self, rawLegacy),
+            Self.isValidLegacyEnvelope(envelope) else {
+        guard sessionStillMatches(session) else { completion(.noData); return }
+        if stateStore.pendingLegacyEnvelope == rawLegacy { stateStore.pendingLegacyEnvelope = nil }
+        readFresh(session: session, forceLegacy: isNegativeCapabilityCurrent(session), completion: completion)
+        return
+      }
+      guard matches(envelope.ownerID, envelope.backendBaseURL, session) else {
+        clearOwnedLegacy(envelope)
+        guard sessionStillMatches(session) else { completion(.noData); return }
+        readFresh(session: session, forceLegacy: isNegativeCapabilityCurrent(session), completion: completion)
+        return
+      }
+      sendLegacy(envelope, session: session) { result in
+        guard result == .success, !wasRecovery else {
+          completion(result)
           return
         }
+        self.readFresh(session: session, forceLegacy: self.isNegativeCapabilityCurrent(session), completion: completion)
+      }
+      return
+    }
 
-        guard let statusCode else {
-          completion(.failed)
-          return
-        }
+    if let rawV2 = stateStore.pendingV2Envelope {
+      guard let envelope = decode(BackgroundStepSyncV2Envelope.self, rawV2),
+            Self.isValidV2Envelope(envelope) else {
+        guard sessionStillMatches(session) else { completion(.noData); return }
+        if stateStore.pendingV2Envelope == rawV2 { stateStore.pendingV2Envelope = nil }
+        readFresh(session: session, forceLegacy: isNegativeCapabilityCurrent(session), completion: completion)
+        return
+      }
+      guard matches(envelope.ownerID, envelope.backendBaseURL, session) else {
+        clearOwnedV2(envelope)
+        guard sessionStillMatches(session) else { completion(.noData); return }
+        readFresh(session: session, forceLegacy: isNegativeCapabilityCurrent(session), completion: completion)
+        return
+      }
+      sendV2(envelope, session: session, isRecovery: true, allowConflictRefresh: true, completion: completion)
+      return
+    }
 
-        if statusCode == 401 {
+    readFresh(session: session, forceLegacy: isNegativeCapabilityCurrent(session), completion: completion)
+  }
+
+  private func readFresh(
+    session: BackgroundStepSyncSession,
+    forceLegacy: Bool,
+    completion: @escaping (BackgroundStepSyncResult) -> Void
+  ) {
+    let currentTime = now()
+    let days = BackgroundStepSyncDateFormatter.localFallbackSyncDays(now: currentTime)
+    stepReader.fetchStepCounts(for: days) { result in
+      guard self.sessionStillMatches(session) else {
+        completion(.noData)
+        return
+      }
+      guard case .success(let dailySteps) = result,
+            let daily = dailySteps.last else {
+        completion(result.isFailure ? .failed : .noData)
+        return
+      }
+      let start = Calendar.current.startOfDay(for: currentTime)
+      let end = Self.hourlySamplesEnd(
+        currentTime: currentTime,
+        bucketMinutes: self.stateStore.stepSampleBucketMinutes
+      )
+      guard end > start else {
+        self.createAndSend(daily: daily, samples: [], session: session, forceLegacy: forceLegacy, completion: completion)
+        return
+      }
+      self.stepReader.fetchHourlyStepCounts(from: start, to: end) { hourlyResult in
+        guard self.sessionStillMatches(session) else {
           completion(.noData)
           return
         }
-
-        if !(200..<300).contains(statusCode) {
-          completion(.failed)
-          return
+        let samples: [[String: Any]]
+        switch hourlyResult {
+        case .success(let value): samples = value
+        case .failure: samples = []
         }
-
-        postNext(index: index + 1)
+        self.createAndSend(daily: daily, samples: samples, session: session, forceLegacy: forceLegacy, completion: completion)
       }
     }
+  }
 
-    postNext(index: 0)
+  private func createAndSend(
+    daily: BackgroundDailyStep,
+    samples: [[String: Any]],
+    session: BackgroundStepSyncSession,
+    forceLegacy: Bool,
+    completion: @escaping (BackgroundStepSyncResult) -> Void
+  ) {
+    guard sessionStillMatches(session) else {
+      completion(.noData)
+      return
+    }
+    guard let body = try? JSONSerialization.data(
+      withJSONObject: ["date": daily.date, "steps": daily.steps, "samples": samples],
+      options: [.sortedKeys]
+    ) else {
+      completion(.failed)
+      return
+    }
+    let timeZone = timeZoneIdentifier()
+    if forceLegacy {
+      guard let legacy = makeLegacyEnvelope(
+        body: body, ownerID: session.ownerID,
+        backendBaseURL: session.baseURL.absoluteString, timeZone: timeZone
+      ) else {
+        completion(.failed)
+        return
+      }
+      guard sessionStillMatches(session) else { completion(.noData); return }
+      stateStore.pendingLegacyEnvelope = encode(legacy)
+      sendLegacy(legacy, session: session, completion: completion)
+      return
+    }
+    let envelope = BackgroundStepSyncV2Envelope(
+      ownerID: session.ownerID,
+      backendBaseURL: session.baseURL.absoluteString,
+      idempotencyKey: newIdempotencyKey(),
+      timeZone: timeZone,
+      body: body,
+      createdAt: now()
+    )
+    guard sessionStillMatches(session) else { completion(.noData); return }
+    stateStore.pendingV2Envelope = encode(envelope)
+    sendV2(envelope, session: session, isRecovery: false, allowConflictRefresh: true, completion: completion)
+  }
+
+  private func sendV2(
+    _ envelope: BackgroundStepSyncV2Envelope,
+    session: BackgroundStepSyncSession,
+    isRecovery: Bool,
+    allowConflictRefresh: Bool,
+    completion: @escaping (BackgroundStepSyncResult) -> Void
+  ) {
+    guard sessionStillMatches(session) else {
+      clearOwnedV2(envelope)
+      completion(.noData)
+      return
+    }
+    guard hasExecutionBudget() else {
+      completion(.noData)
+      return
+    }
+    let request = BackgroundStepSyncV2Request(
+      baseURL: session.baseURL, sessionToken: session.token,
+      idempotencyKey: envelope.idempotencyKey, timeZone: envelope.timeZone,
+      appVersion: appVersion(), body: envelope.body
+    )
+    postV2(request, envelope: envelope, session: session, attemptsRemaining: 2) { postResult in
+      guard case .response(let response) = postResult else {
+        completion(.noData)
+        return
+      }
+      guard self.sessionStillMatches(session) else {
+        self.clearOwnedV2(envelope)
+        completion(.noData)
+        return
+      }
+      guard let status = response.statusCode, response.error == nil else {
+        completion(.failed) // immutable envelope remains for the next trigger
+        return
+      }
+      if status == 202, Self.hasCapabilityMarker(response.body) {
+        self.clearOwnedV2(envelope)
+        self.clearNegativeCapabilityIfOwned(session)
+        if isRecovery {
+          guard self.sessionStillMatches(session) else { completion(.noData); return }
+          self.readFresh(session: session, forceLegacy: false, completion: completion)
+        } else {
+          completion(.success)
+        }
+        return
+      }
+      if (200..<300).contains(status) {
+        self.startLegacyFallback(envelope, session: session, completion: completion)
+        return
+      }
+      if status == 404 || (status == 503 && Self.isAsyncDisabled(response.body)) {
+        self.startLegacyFallback(envelope, session: session, completion: completion)
+        return
+      }
+      if status == 409 {
+        self.clearOwnedV2(envelope)
+        guard allowConflictRefresh else { completion(.failed); return }
+        guard self.sessionStillMatches(session) else { completion(.noData); return }
+        self.readFreshAfterConflict(session: session, completion: completion)
+        return
+      }
+      if [400, 401, 403, 413, 429].contains(status) {
+        self.clearOwnedV2(envelope)
+        completion([401, 403, 429].contains(status) ? .noData : .failed)
+        return
+      }
+      completion(.failed) // retryable/unknown response retains the envelope
+    }
+  }
+
+  private func readFreshAfterConflict(
+    session: BackgroundStepSyncSession,
+    completion: @escaping (BackgroundStepSyncResult) -> Void
+  ) {
+    // A fresh Health read produces a new immutable key/body. A second conflict
+    // is terminal for this invocation and never selects legacy.
+    let currentTime = now()
+    stepReader.fetchStepCounts(for: BackgroundStepSyncDateFormatter.localFallbackSyncDays(now: currentTime)) { result in
+      guard self.sessionStillMatches(session) else { completion(.noData); return }
+      guard case .success(let values) = result, let daily = values.last else {
+        completion(.failed)
+        return
+      }
+      let start = Calendar.current.startOfDay(for: currentTime)
+      let end = Self.hourlySamplesEnd(currentTime: currentTime, bucketMinutes: self.stateStore.stepSampleBucketMinutes)
+      let finish: ([[String: Any]]) -> Void = { samples in
+        guard self.sessionStillMatches(session) else { completion(.noData); return }
+        guard let body = try? JSONSerialization.data(
+          withJSONObject: ["date": daily.date, "steps": daily.steps, "samples": samples],
+          options: [.sortedKeys]
+        ) else { completion(.failed); return }
+        let fresh = BackgroundStepSyncV2Envelope(
+          ownerID: session.ownerID, backendBaseURL: session.baseURL.absoluteString,
+          idempotencyKey: self.newIdempotencyKey(), timeZone: self.timeZoneIdentifier(),
+          body: body, createdAt: self.now()
+        )
+        guard self.sessionStillMatches(session) else { completion(.noData); return }
+        self.stateStore.pendingV2Envelope = self.encode(fresh)
+        self.sendV2(fresh, session: session, isRecovery: false, allowConflictRefresh: false, completion: completion)
+      }
+      guard end > start else { finish([]); return }
+      self.stepReader.fetchHourlyStepCounts(from: start, to: end) { hourly in
+        if case .success(let samples) = hourly { finish(samples) } else { finish([]) }
+      }
+    }
+  }
+
+  private func postV2(
+    _ request: BackgroundStepSyncV2Request,
+    envelope: BackgroundStepSyncV2Envelope,
+    session: BackgroundStepSyncSession,
+    attemptsRemaining: Int,
+    completion: @escaping (BackgroundStepPostResult) -> Void
+  ) {
+    guard sessionStillMatches(session) else {
+      clearOwnedV2(envelope)
+      completion(.sessionChanged)
+      return
+    }
+    poster.postSyncV2(request) { response in
+      guard self.sessionStillMatches(session) else {
+        self.clearOwnedV2(envelope)
+        completion(.sessionChanged)
+        return
+      }
+      let retryable = response.error != nil || response.statusCode == nil ||
+        ((500...599).contains(response.statusCode ?? 0) &&
+          !(response.statusCode == 503 && Self.isAsyncDisabled(response.body)))
+      guard retryable, attemptsRemaining > 1, self.hasExecutionBudget() else {
+        completion(.response(response))
+        return
+      }
+      guard self.sessionStillMatches(session) else {
+        self.clearOwnedV2(envelope)
+        completion(.sessionChanged)
+        return
+      }
+      self.postV2(
+        request, envelope: envelope, session: session,
+        attemptsRemaining: attemptsRemaining - 1, completion: completion
+      )
+    }
+  }
+
+  private func startLegacyFallback(
+    _ v2: BackgroundStepSyncV2Envelope,
+    session: BackgroundStepSyncSession,
+    completion: @escaping (BackgroundStepSyncResult) -> Void
+  ) {
+    guard sessionStillMatches(session) else {
+      clearOwnedV2(v2)
+      completion(.noData)
+      return
+    }
+    guard let legacy = makeLegacyEnvelope(
+      body: v2.body, ownerID: v2.ownerID,
+      backendBaseURL: v2.backendBaseURL, timeZone: v2.timeZone
+    ) else { completion(.failed); return }
+    guard sessionStillMatches(session) else {
+      clearOwnedV2(v2)
+      completion(.noData)
+      return
+    }
+    // Persist the staged pair before releasing the v2 envelope so a crash
+    // cannot lose the logical upload between protocols.
+    stateStore.pendingLegacyEnvelope = encode(legacy)
+    guard sessionStillMatches(session) else {
+      clearOwnedV2(v2)
+      clearOwnedLegacy(legacy)
+      completion(.noData)
+      return
+    }
+    cacheNegativeCapability(session)
+    clearOwnedV2(v2)
+    sendLegacy(legacy, session: session, completion: completion)
+  }
+
+  private func sendLegacy(
+    _ initial: BackgroundStepSyncLegacyEnvelope,
+    session: BackgroundStepSyncSession,
+    completion: @escaping (BackgroundStepSyncResult) -> Void
+  ) {
+    guard sessionStillMatches(session) else {
+      clearOwnedLegacy(initial)
+      completion(.noData)
+      return
+    }
+    guard hasExecutionBudget() else {
+      completion(.noData)
+      return
+    }
+    var envelope = initial
+    func persist(replacing previous: BackgroundStepSyncLegacyEnvelope) -> Bool {
+      guard self.sessionStillMatches(session), self.legacyEnvelopeStillMatches(previous) else {
+        self.clearOwnedLegacy(previous)
+        return false
+      }
+      self.stateStore.pendingLegacyEnvelope = self.encode(envelope)
+      return true
+    }
+    func sendSamples() {
+      guard self.sessionStillMatches(session) else {
+        self.clearOwnedLegacy(envelope)
+        completion(.noData)
+        return
+      }
+      guard !envelope.samplesComplete else {
+        self.clearOwnedLegacy(envelope)
+        completion(.success)
+        return
+      }
+      guard self.hasExecutionBudget() else {
+        completion(.noData)
+        return
+      }
+      let request = BackgroundStepLegacyRequest(
+        baseURL: session.baseURL, path: "/steps/samples", sessionToken: session.token,
+        timeZone: envelope.timeZone, body: envelope.samplesBody
+      )
+      self.poster.postLegacy(request) { response in
+        guard self.sessionStillMatches(session) else {
+          self.clearOwnedLegacy(envelope)
+          completion(.noData)
+          return
+        }
+        guard let status = response.statusCode, response.error == nil else {
+          completion(.failed); return
+        }
+        if (200..<300).contains(status) {
+          let previous = envelope
+          envelope.samplesComplete = true
+          guard persist(replacing: previous) else { completion(.noData); return }
+          self.clearOwnedLegacy(envelope)
+          completion(.success)
+        } else if [400, 401, 403, 413, 429].contains(status) {
+          self.clearOwnedLegacy(envelope)
+          completion([401, 403, 429].contains(status) ? .noData : .failed)
+        } else {
+          completion(.failed)
+        }
+      }
+    }
+    guard !envelope.dailyComplete else { sendSamples(); return }
+    let request = BackgroundStepLegacyRequest(
+      baseURL: session.baseURL, path: "/steps", sessionToken: session.token,
+      timeZone: envelope.timeZone, body: envelope.dailyBody
+    )
+    guard sessionStillMatches(session) else {
+      clearOwnedLegacy(envelope)
+      completion(.noData)
+      return
+    }
+    poster.postLegacy(request) { response in
+      guard self.sessionStillMatches(session) else {
+        self.clearOwnedLegacy(envelope)
+        completion(.noData)
+        return
+      }
+      guard let status = response.statusCode, response.error == nil else {
+        completion(.failed); return
+      }
+      if (200..<300).contains(status) {
+        let previous = envelope
+        envelope.dailyComplete = true
+        guard persist(replacing: previous) else { completion(.noData); return }
+        sendSamples()
+      } else if [400, 401, 403, 413, 429].contains(status) {
+        self.clearOwnedLegacy(envelope)
+        completion([401, 403, 429].contains(status) ? .noData : .failed)
+      } else {
+        completion(.failed)
+      }
+    }
+  }
+
+  private func makeLegacyEnvelope(
+    body: Data, ownerID: String, backendBaseURL: String, timeZone: String
+  ) -> BackgroundStepSyncLegacyEnvelope? {
+    guard let payload = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+          let date = payload["date"] as? String,
+          let steps = payload["steps"] as? Int,
+          let samples = payload["samples"] as? [[String: Any]],
+          let daily = try? JSONSerialization.data(
+            withJSONObject: ["date": date, "steps": steps, "skipRaceResolution": true],
+            options: [.sortedKeys]
+          ),
+          let sampleBody = try? JSONSerialization.data(
+            withJSONObject: ["samples": samples], options: [.sortedKeys]
+          ) else { return nil }
+    return BackgroundStepSyncLegacyEnvelope(
+      ownerID: ownerID, backendBaseURL: backendBaseURL, timeZone: timeZone,
+      dailyBody: daily, samplesBody: sampleBody,
+      dailyComplete: false, samplesComplete: samples.isEmpty
+    )
+  }
+
+  private func matches(_ ownerID: String, _ backendURL: String, _ session: BackgroundStepSyncSession) -> Bool {
+    ownerID == session.ownerID && backendURL == session.baseURL.absoluteString
+  }
+
+  private func sameV2(_ lhs: BackgroundStepSyncV2Envelope, _ rhs: BackgroundStepSyncV2Envelope) -> Bool {
+    lhs.ownerID == rhs.ownerID && lhs.backendBaseURL == rhs.backendBaseURL &&
+      lhs.idempotencyKey == rhs.idempotencyKey && lhs.timeZone == rhs.timeZone &&
+      lhs.body == rhs.body && lhs.createdAt == rhs.createdAt
+  }
+
+  private func sameLegacy(
+    _ lhs: BackgroundStepSyncLegacyEnvelope,
+    _ rhs: BackgroundStepSyncLegacyEnvelope
+  ) -> Bool {
+    lhs.ownerID == rhs.ownerID && lhs.backendBaseURL == rhs.backendBaseURL &&
+      lhs.timeZone == rhs.timeZone && lhs.dailyBody == rhs.dailyBody &&
+      lhs.samplesBody == rhs.samplesBody && lhs.dailyComplete == rhs.dailyComplete &&
+      lhs.samplesComplete == rhs.samplesComplete
+  }
+
+  private func clearOwnedV2(_ expected: BackgroundStepSyncV2Envelope) {
+    guard let raw = stateStore.pendingV2Envelope,
+          let current = decode(BackgroundStepSyncV2Envelope.self, raw),
+          sameV2(current, expected) else { return }
+    stateStore.pendingV2Envelope = nil
+  }
+
+  private func legacyEnvelopeStillMatches(_ expected: BackgroundStepSyncLegacyEnvelope) -> Bool {
+    guard let raw = stateStore.pendingLegacyEnvelope,
+          let current = decode(BackgroundStepSyncLegacyEnvelope.self, raw) else { return false }
+    return sameLegacy(current, expected)
+  }
+
+  private func clearOwnedLegacy(_ expected: BackgroundStepSyncLegacyEnvelope) {
+    guard legacyEnvelopeStillMatches(expected) else { return }
+    stateStore.pendingLegacyEnvelope = nil
+  }
+
+  private func isNegativeCapabilityCurrent(_ session: BackgroundStepSyncSession) -> Bool {
+    guard sessionStillMatches(session) else { return false }
+    guard let raw = stateStore.negativeCapability else { return false }
+    guard let value = decode(BackgroundStepSyncNegativeCapability.self, raw) else {
+      if sessionStillMatches(session), stateStore.negativeCapability == raw {
+        stateStore.negativeCapability = nil
+      }
+      return false
+    }
+    guard matches(value.ownerID, value.backendBaseURL, session), value.unsupportedUntil > now() else {
+      if sessionStillMatches(session), stateStore.negativeCapability == raw {
+        stateStore.negativeCapability = nil
+      }
+      return false
+    }
+    return true
+  }
+
+  private func cacheNegativeCapability(_ session: BackgroundStepSyncSession) {
+    guard sessionStillMatches(session) else { return }
+    let value = BackgroundStepSyncNegativeCapability(
+      ownerID: session.ownerID, backendBaseURL: session.baseURL.absoluteString,
+      unsupportedUntil: now().addingTimeInterval(24 * 60 * 60)
+    )
+    stateStore.negativeCapability = encode(value)
+  }
+
+  private func clearNegativeCapabilityIfOwned(_ session: BackgroundStepSyncSession) {
+    guard sessionStillMatches(session), let raw = stateStore.negativeCapability else { return }
+    guard let value = decode(BackgroundStepSyncNegativeCapability.self, raw) else {
+      if stateStore.negativeCapability == raw { stateStore.negativeCapability = nil }
+      return
+    }
+    guard matches(value.ownerID, value.backendBaseURL, session),
+          stateStore.negativeCapability == raw else { return }
+    stateStore.negativeCapability = nil
+  }
+
+  private func encode<T: Encodable>(_ value: T) -> String? {
+    guard let data = try? JSONEncoder().encode(value) else { return nil }
+    return String(data: data, encoding: .utf8)
+  }
+
+  private func decode<T: Decodable>(_ type: T.Type, _ raw: String) -> T? {
+    guard let data = raw.data(using: .utf8) else { return nil }
+    return try? JSONDecoder().decode(type, from: data)
+  }
+
+  private static func hasCapabilityMarker(_ body: Data?) -> Bool {
+    guard let body,
+          let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any] else { return false }
+    return json["stepIntakeSemantics"] as? String == "CANONICAL_SOURCE_QUEUE_V1"
+  }
+
+  private static func isAsyncDisabled(_ body: Data?) -> Bool {
+    guard let body,
+          let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any] else { return false }
+    return json["code"] as? String == "ASYNC_DISABLED"
+  }
+
+  private static func isValidV2Envelope(_ envelope: BackgroundStepSyncV2Envelope) -> Bool {
+    guard !envelope.ownerID.isEmpty, URL(string: envelope.backendBaseURL) != nil,
+          UUID(uuidString: envelope.idempotencyKey) != nil, !envelope.timeZone.isEmpty,
+          let payload = try? JSONSerialization.jsonObject(with: envelope.body) as? [String: Any],
+          payload["date"] is String, payload["steps"] is Int,
+          payload["samples"] is [[String: Any]] else { return false }
+    return true
+  }
+
+  private static func isValidLegacyEnvelope(_ envelope: BackgroundStepSyncLegacyEnvelope) -> Bool {
+    guard !envelope.ownerID.isEmpty, URL(string: envelope.backendBaseURL) != nil,
+          !envelope.timeZone.isEmpty,
+          let daily = try? JSONSerialization.jsonObject(with: envelope.dailyBody) as? [String: Any],
+          daily["date"] is String, daily["steps"] is Int,
+          let samples = try? JSONSerialization.jsonObject(with: envelope.samplesBody) as? [String: Any],
+          samples["samples"] is [[String: Any]] else { return false }
+    return true
+  }
+}
+
+private extension Result {
+  var isFailure: Bool {
+    if case .failure = self { return true }
+    return false
   }
 }
 
@@ -699,6 +1279,10 @@ final class UserDefaultsBackgroundSyncStateStore: BackgroundStepSyncStateStoring
     userDefaults.string(forKey: "flutter.auth_session_token")
   }
 
+  var backendUserID: String? {
+    userDefaults.string(forKey: "flutter.auth_backend_user_id")
+  }
+
   var backendBaseURL: URL? {
     guard
       let rawValue = userDefaults.string(forKey: BackgroundSyncBootstrapKeys.backendBaseURL)
@@ -721,11 +1305,34 @@ final class UserDefaultsBackgroundSyncStateStore: BackgroundStepSyncStateStoring
     let raw = userDefaults.integer(forKey: "flutter.auth_step_sample_bucket_minutes")
     return [5, 10, 15, 30, 60].contains(raw) ? raw : 60
   }
+
+  var pendingV2Envelope: String? {
+    get { userDefaults.string(forKey: BackgroundSyncBootstrapKeys.iosPendingV2) }
+    set { setString(newValue, forKey: BackgroundSyncBootstrapKeys.iosPendingV2) }
+  }
+
+  var pendingLegacyEnvelope: String? {
+    get { userDefaults.string(forKey: BackgroundSyncBootstrapKeys.iosPendingLegacy) }
+    set { setString(newValue, forKey: BackgroundSyncBootstrapKeys.iosPendingLegacy) }
+  }
+
+  var negativeCapability: String? {
+    get { userDefaults.string(forKey: BackgroundSyncBootstrapKeys.iosNegativeCapability) }
+    set { setString(newValue, forKey: BackgroundSyncBootstrapKeys.iosNegativeCapability) }
+  }
+
+  private func setString(_ value: String?, forKey key: String) {
+    if let value { userDefaults.set(value, forKey: key) }
+    else { userDefaults.removeObject(forKey: key) }
+  }
 }
 
 struct BackgroundSyncBootstrapKeys {
   // Fix C1: "flutter." prefix to match what Dart's legacy shared_preferences writes.
   static let backendBaseURL = "flutter.background_sync_backend_base_url"
+  static let iosPendingV2 = "flutter.ios_background_sync_v2_pending"
+  static let iosPendingLegacy = "flutter.ios_background_sync_legacy_pending"
+  static let iosNegativeCapability = "flutter.ios_background_sync_negative_capability"
 }
 
 final class HealthKitStepReader: StepReading {
@@ -908,6 +1515,56 @@ final class URLSessionStepPoster: StepPosting {
 
   init(session: URLSession = .shared) {
     self.session = session
+  }
+
+  func postSyncV2(
+    _ value: BackgroundStepSyncV2Request,
+    completion: @escaping (BackgroundStepHTTPResponse) -> Void
+  ) {
+    guard let url = URL(string: "/steps/sync-v2", relativeTo: value.baseURL)?.absoluteURL else {
+      completion(BackgroundStepHTTPResponse(statusCode: nil, body: nil, error: URLError(.badURL)))
+      return
+    }
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.httpBody = value.body
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.setValue("Bearer \(value.sessionToken)", forHTTPHeaderField: "Authorization")
+    request.setValue(value.idempotencyKey, forHTTPHeaderField: "Idempotency-Key")
+    request.setValue(value.timeZone, forHTTPHeaderField: "X-Timezone")
+    if let appVersion = value.appVersion, !appVersion.isEmpty {
+      request.setValue(appVersion, forHTTPHeaderField: "X-App-Version")
+    }
+    session.dataTask(with: request) { data, response, error in
+      completion(BackgroundStepHTTPResponse(
+        statusCode: (response as? HTTPURLResponse)?.statusCode,
+        body: data,
+        error: error
+      ))
+    }.resume()
+  }
+
+  func postLegacy(
+    _ value: BackgroundStepLegacyRequest,
+    completion: @escaping (BackgroundStepHTTPResponse) -> Void
+  ) {
+    guard let url = URL(string: value.path, relativeTo: value.baseURL)?.absoluteURL else {
+      completion(BackgroundStepHTTPResponse(statusCode: nil, body: nil, error: URLError(.badURL)))
+      return
+    }
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.httpBody = value.body
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.setValue("Bearer \(value.sessionToken)", forHTTPHeaderField: "Authorization")
+    request.setValue(value.timeZone, forHTTPHeaderField: "X-Timezone")
+    session.dataTask(with: request) { data, response, error in
+      completion(BackgroundStepHTTPResponse(
+        statusCode: (response as? HTTPURLResponse)?.statusCode,
+        body: data,
+        error: error
+      ))
+    }.resume()
   }
 
   func postSteps(

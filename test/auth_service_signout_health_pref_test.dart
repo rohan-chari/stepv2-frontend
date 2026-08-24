@@ -1,11 +1,31 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/services/auth_service.dart';
+import 'package:step_tracker/services/background_sync_bootstrap_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('signOut clears device-scoped health authorization', () {
+    test('sign-out removes every native step-sync recovery key', () async {
+      SharedPreferences.setMockInitialValues({
+        'auth_session_token': 'session-token',
+        'auth_backend_user_id': 'user-1',
+        for (final key in BackgroundSyncBootstrapService.nativeRecoveryKeys)
+          key: '{"ownerId":"user-1"}',
+      });
+
+      final authService = AuthService();
+      await authService.restoreSession();
+      await authService.signOut();
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('auth_backend_user_id'), isNull);
+      for (final key in BackgroundSyncBootstrapService.nativeRecoveryKeys) {
+        expect(prefs.getString(key), isNull, reason: key);
+      }
+    });
+
     test('health_authorized does not survive sign-out', () async {
       SharedPreferences.setMockInitialValues({
         'auth_identity_token': 'apple-token',

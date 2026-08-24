@@ -8,6 +8,7 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import 'backend_api_service.dart';
 import 'ad_service.dart';
+import 'background_sync_bootstrap_service.dart';
 import 'health_service.dart';
 import 'onboarding_state_service.dart';
 import '../tutorial/tutorial_gate.dart';
@@ -1102,6 +1103,9 @@ class AuthService extends ChangeNotifier {
     await prefs.remove(_keyStepSampleBucketMinutes);
     await prefs.remove(_keyPendingShareToken);
     await prefs.remove(_keyPendingTournamentShareToken);
+    for (final key in BackgroundSyncBootstrapService.nativeRecoveryKeys) {
+      await prefs.remove(key);
+    }
     _pendingInviterRace = null;
     await prefs.remove(_keyPendingInviterRace);
     // Health authorization is device-scoped, not auth-scoped, and lives under
