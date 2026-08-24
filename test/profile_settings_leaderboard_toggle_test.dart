@@ -112,7 +112,7 @@ Future<void> _openSettings(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('settings sheet renders a PixelSwitch reflecting auth state', (
+  testWidgets('settings sheet no longer owns leaderboard privacy', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1200, 2400);
@@ -124,10 +124,8 @@ void main() {
     final auth = await _createAuthService(api, hidden: true);
     await _openSettings(tester, auth, api);
 
-    expect(find.text('Hide me from the global leaderboard'), findsOneWidget);
-    final switchFinder = find.byType(PixelSwitch);
-    expect(switchFinder, findsOneWidget);
-    expect(tester.widget<PixelSwitch>(switchFinder).value, isTrue);
+    expect(find.text('Hide me from the global leaderboard'), findsNothing);
+    expect(find.byType(PixelSwitch), findsNothing);
   });
 
   testWidgets('appearance control applies and persists a dark override', (
@@ -158,7 +156,7 @@ void main() {
     expect(controller.resolvedMode, ThemeMode.dark);
   });
 
-  testWidgets('toggling the switch calls updateLeaderboardVisibility', (
+  testWidgets('settings sheet does not expose the moved leaderboard toggle', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1200, 2400);
@@ -170,17 +168,8 @@ void main() {
     final auth = await _createAuthService(api, hidden: false);
     await _openSettings(tester, auth, api);
 
-    final switchFinder = find.byType(PixelSwitch);
-    expect(tester.widget<PixelSwitch>(switchFinder).value, isFalse);
-
-    await tester.tap(switchFinder);
-    for (var i = 0; i < 4; i++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-
-    expect(api.calls, 1);
-    expect(api.lastHidden, isTrue);
-    expect(auth.hiddenFromLeaderboard, isTrue);
-    expect(tester.widget<PixelSwitch>(switchFinder).value, isTrue);
+    expect(find.text('Hide me from the global leaderboard'), findsNothing);
+    expect(find.byType(PixelSwitch), findsNothing);
+    expect(api.calls, 0);
   });
 }

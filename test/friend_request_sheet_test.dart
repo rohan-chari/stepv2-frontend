@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
+import 'package:step_tracker/screens/public_profile_screen.dart';
 import 'package:step_tracker/widgets/friend_request_sheet.dart';
 
 /// Fake backend that returns the `/friends` payload in the shape the real
@@ -14,6 +15,25 @@ class _FakeFriendsApi extends BackendApiService {
   List<Map<String, dynamic>> friends = const [];
   List<Map<String, dynamic>> incoming = const [];
   List<Map<String, dynamic>> outgoing = const [];
+
+  @override
+  Future<Map<String, dynamic>> fetchPublicProfile({
+    required String identityToken,
+    required String userId,
+  }) async => const {
+    'contract': 'public-profile-v1',
+    'user': {
+      'id': 'stranger-1',
+      'displayName': 'Stranger',
+      'profilePhotoUrl': null,
+      'equippedAnimal': null,
+      'equippedAccessories': <Map<String, dynamic>>[],
+    },
+    'stats': {
+      'racePodiums': {'first': 2, 'second': 1, 'third': 3},
+      'avgStepsPerDay': 4567,
+    },
+  };
 
   @override
   Future<Map<String, dynamic>> fetchFriends({
@@ -80,11 +100,7 @@ void main() {
       final authService = await _createAuthService();
       final api = _FakeFriendsApi()
         ..friends = [
-          {
-            'id': 'friend-1',
-            'displayName': 'Buddy',
-            'friendshipId': 'fr-1',
-          },
+          {'id': 'friend-1', 'displayName': 'Buddy', 'friendshipId': 'fr-1'},
         ];
 
       await _openSheet(
@@ -168,6 +184,32 @@ void main() {
     expect(find.text('ADD FRIEND'), findsOneWidget);
     expect(find.text('FRIENDS'), findsNothing);
   });
+
+  testWidgets(
+    'View Profile preserves add-friend action and opens public profile',
+    (tester) async {
+      final authService = await _createAuthService();
+      final api = _FakeFriendsApi();
+
+      await _openSheet(
+        tester,
+        authService: authService,
+        api: api,
+        userId: 'stranger-1',
+        displayName: 'Stranger',
+      );
+
+      expect(find.text('ADD FRIEND'), findsOneWidget);
+      expect(find.text('VIEW PROFILE'), findsOneWidget);
+      await tester.tap(find.text('VIEW PROFILE'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byType(PublicProfileScreen), findsOneWidget);
+      expect(find.text('Stranger'), findsOneWidget);
+      expect(find.text('4567 per day'), findsOneWidget);
+    },
+  );
 
   testWidgets('shows "That\'s you!" for your own row without a fetch', (
     tester,

@@ -72,10 +72,6 @@ Future<void> _pump(WidgetTester tester, BackendApiService api) async {
   await tester.pump();
 }
 
-String _poolCoins(WidgetTester tester) => tester
-    .widget<Text>(find.byKey(const Key('create-prize-pool-coins')))
-    .data!;
-
 Future<void> _selectField(WidgetTester tester, String label) async {
   await tester.ensureVisible(find.text(label));
   await tester.tap(find.text(label));
@@ -101,7 +97,7 @@ void main() {
     // ceiling. (The default moved from 3 to 7 when the 3-day chip was retired
     // from the TIMELINE picker.)
     await _selectField(tester, '50');
-    expect(_poolCoins(tester), '4,000');
+    expect(find.byKey(const Key('create-prize-pool-coins')), findsNothing);
     expect(find.byKey(const Key('create-prize-pool-max')), findsNothing);
   });
 
@@ -113,14 +109,14 @@ void main() {
     // 50 x 7 days -> 50 x 4 x 20 = 4,000 -> clamped to 3,200.
     await _selectField(tester, '50');
     await _selectDuration(tester, 7);
-    expect(_poolCoins(tester), '3,200');
-    expect(find.byKey(const Key('create-prize-pool-max')), findsOneWidget);
+    expect(find.byKey(const Key('create-prize-pool-coins')), findsNothing);
+    expect(find.byKey(const Key('create-prize-pool-max')), findsNothing);
 
     // Pushing further does not inflate the promise.
     await _selectField(tester, '100');
     await _selectDuration(tester, 14);
-    expect(_poolCoins(tester), '3,200');
-    expect(find.byKey(const Key('create-prize-pool-max')), findsOneWidget);
+    expect(find.byKey(const Key('create-prize-pool-coins')), findsNothing);
+    expect(find.byKey(const Key('create-prize-pool-max')), findsNothing);
   });
 
   testWidgets('a capped race still creates, and free', (

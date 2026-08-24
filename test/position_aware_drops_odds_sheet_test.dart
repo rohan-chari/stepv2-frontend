@@ -107,7 +107,13 @@ void main() {
     expect(find.text('19%'), findsOneWidget);
     expect(find.text('5%'), findsOneWidget);
     // Nothing invents a row for the missing type.
-    expect(find.text('Trail Mine'), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('odds-sheet')),
+        matching: find.text('Trail Mine'),
+      ),
+      findsNothing,
+    );
     expect(tester.takeException(), isNull);
   });
 

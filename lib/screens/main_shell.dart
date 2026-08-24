@@ -116,7 +116,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   static const _homeTabIndex = 0;
   static const _racesTabIndex = 1;
   static const _friendsTabIndex = 3;
-  static const _inboxTabIndex = 4;
 
   late final HealthService _healthService;
   late final BackendApiService _backendApiService;
@@ -692,6 +691,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         nextToken != null &&
         nextToken.isNotEmpty) {
       unawaited(_fetchRaceCard());
+      unawaited(_refreshInboxUnreadCount());
     }
     // A share token may have just been captured (link tapped while running) or
     // the final onboarding step may have just completed — either way, try to
@@ -1223,6 +1223,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
     final sessionIsValid = await _refreshSessionToken();
     if (!sessionIsValid || !mounted) return;
+
+    // The Home notification card is sourced from the existing Inbox endpoint.
+    // This is best-effort: an older backend or malformed optional count keeps
+    // the card hidden without affecting the rest of the shell.
+    unawaited(_refreshInboxUnreadCount());
 
     // Hydrate before the first race fetch/result detection. Matching queued
     // IDs are suppressed locally even when the atomic server ack is offline.
@@ -3065,10 +3070,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         setState(() {
           _raceCard = data;
           _raceCardLoading = false;
-          final unread = _validUnreadCount(data['inboxUnreadCount']);
-          if (unread != null && !_hasInboxUnreadSnapshot) {
-            _inboxUnreadCount = unread;
-          }
         });
         final rawGlobalSummary = data['globalEventSummary'];
         _pendingGlobalEventSummary = rawGlobalSummary is Map
@@ -3261,10 +3262,16 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       case InboxDestinationRoute.friends:
         _openFriendsTab();
       case InboxDestinationRoute.inbox:
-        _pageController.animateToPage(
-          _inboxTabIndex,
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOutCubic,
+        navigator.push(
+          MaterialPageRoute(
+            builder: (_) => InboxScreen(
+              authService: widget.authService,
+              backendApiService: _backendApiService,
+              onOpenDestination: _openInboxDestination,
+              onUnreadCountChanged: _setInboxUnreadCount,
+              onUnreadCountDecremented: _decrementInboxUnreadCount,
+            ),
+          ),
         );
       case InboxDestinationRoute.profile:
         _openProfile();
@@ -4267,6 +4274,21 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                           onOpenRacesTab: _openRacesTab,
                           onOpenLeaderboardTab: _openLeaderboardTab,
                           onOpenProfile: _openProfile,
+                          unreadNotificationCount: _inboxUnreadCount ?? 0,
+                          onOpenNotifications: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => InboxScreen(
+                                  authService: widget.authService,
+                                  backendApiService: _backendApiService,
+                                  onOpenDestination: _openInboxDestination,
+                                  onUnreadCountChanged: _setInboxUnreadCount,
+                                  onUnreadCountDecremented:
+                                      _decrementInboxUnreadCount,
+                                ),
+                              ),
+                            );
+                          },
                           onOpenFriendsTab: _openFriendsTab,
                           onOpenShop: _openShop,
                           onAddProfilePhoto: _addOrChangeProfilePhoto,
@@ -4359,13 +4381,18 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                           displayName: _displayName,
                           onOpenProfile: _openProfile,
                         ),
-                        InboxScreen(
-                          hostMode: InboxHostMode.embedded,
+                        ProfileTab(
                           authService: widget.authService,
                           backendApiService: _backendApiService,
-                          onOpenDestination: _openInboxDestination,
-                          onUnreadCountChanged: _setInboxUnreadCount,
-                          onUnreadCountDecremented: _decrementInboxUnreadCount,
+                          displayName: _displayName,
+                          email: _email,
+                          onSettingsChanged: _syncSettingsState,
+                          onRefresh: _refreshProfileTab,
+                          notificationService: widget.notificationService,
+                          stepData: _stepData,
+                          onAddProfilePhoto: _addOrChangeProfilePhoto,
+                          onRemoveProfilePhoto: _removeProfilePhoto,
+                          showBackButton: false,
                         ),
                       ],
                     ),
@@ -4439,17 +4466,16 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   ),
                   WoodenTabItem(
                     icon: Icons.emoji_events_rounded,
-                    label: 'Rank',
+                    label: 'Leaderboard',
                   ),
                   WoodenTabItem(
                     icon: Icons.people_rounded,
                     label: 'Friends',
                     badgeCount: _incomingFriendRequests,
                   ),
-                  WoodenTabItem(
-                    icon: Icons.inbox_rounded,
-                    label: 'Inbox',
-                    badgeCount: _inboxUnreadCount ?? 0,
+                  const WoodenTabItem(
+                    icon: Icons.person_rounded,
+                    label: 'Profile',
                   ),
                 ],
               ),

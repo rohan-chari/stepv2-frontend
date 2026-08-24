@@ -244,15 +244,14 @@ void main() {
           .toList();
       expect(
         strips.any((s) => s.startsWith('Watch ') || s == 'Get coins'),
-        isTrue,
-        reason: 'the unaffordable tile still shows its CTA',
+        isFalse,
+        reason: 'the tile now keeps the price as its only strip action',
       );
       // …and the price is still readable, from the art area's badge.
-      final badges = tester
-          .widgetList<Text>(find.byKey(const Key('shop-price-badge-text')))
-          .map((t) => t.data)
-          .toList();
-      expect(badges, containsAll(<String>['10', '50', '90']));
+      expect(find.byKey(const Key('shop-price-badge-text')), findsNothing);
+      for (final price in ['10', '50', '90']) {
+        expect(find.text(price), findsOneWidget);
+      }
     });
 
     testWidgets('an affordable tile prints the price exactly once', (
@@ -299,6 +298,7 @@ void main() {
         cosmetics: [
           {
             'id': 'item-corgi',
+            'sku': 'COS_CORGI',
             'name': 'Corgi Puppy',
             'slot': 'CHARACTER',
             'assetKey': 'corgi_puppy',
@@ -311,7 +311,6 @@ void main() {
       );
       await _pump(tester, api);
       await openCharacterInventory(tester);
-
       expect(find.text('Capybara'), findsOneWidget);
       await tester.tap(
         find.descendant(

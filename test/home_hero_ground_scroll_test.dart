@@ -101,7 +101,11 @@ void main() {
     final groundStart = _dx(tester);
     await tester.pump(const Duration(milliseconds: 500));
     expect(_dx(tester) - groundStart, lessThan(0), reason: 'ground goes left');
-    expect(cloudX() - cloudStart, greaterThan(0), reason: 'clouds go right');
+    expect(
+      cloudX() - cloudStart,
+      lessThan(0),
+      reason: 'clouds follow the ground more slowly',
+    );
   });
 
   testWidgets('the title screen scrolls its ground too', (tester) async {

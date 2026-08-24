@@ -145,7 +145,7 @@ void main() {
         (type: 'steps', period: 'today'),
       ]);
       expect(find.text('TODAY'), findsOneWidget);
-      expect(find.text('STEPS'), findsAtLeastNWidgets(1));
+      expect(find.text('LEADERBOARD'), findsOneWidget);
       expect(find.text('12.0k'), findsOneWidget);
     },
   );
@@ -164,39 +164,9 @@ void main() {
       );
       await tester.pump();
 
-      await tester.tap(find.text('RACES'));
-      await tester.pump();
-
-      expect(backendApiService.leaderboardCalls.last, (
-        type: 'races',
-        period: 'allTime',
-      ));
-      expect(
-        find.byKey(const Key('leaderboard-race-podiums-AtlasRun')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const Key('leaderboard-race-podiums-Trail Walker')),
-        findsOneWidget,
-      );
-      for (final displayName in ['AtlasRun', 'Trail Walker']) {
-        final podiums = find.byKey(
-          Key('leaderboard-race-podiums-$displayName'),
-        );
-        expect(
-          find.descendant(of: podiums, matching: find.text('1ST')),
-          findsOneWidget,
-        );
-        expect(
-          find.descendant(of: podiums, matching: find.text('2ND')),
-          findsOneWidget,
-        );
-        expect(
-          find.descendant(of: podiums, matching: find.text('3RD')),
-          findsOneWidget,
-        );
-      }
-      expect(find.text('TODAY'), findsNothing);
+      expect(find.text('RACES'), findsNothing);
+      expect(find.text('TODAY'), findsOneWidget);
+      expect(find.byKey(const Key('leaderboard-race-podiums-AtlasRun')), findsNothing);
     },
   );
 

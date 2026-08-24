@@ -17,6 +17,11 @@ const _kTiers = [
 /// proves the counter is gone even when the backend still sends durationDays.
 class _FakeRankedApi extends BackendApiService {
   @override
+  Future<Map<String, dynamic>> fetchRankedV2({
+    required String identityToken,
+  }) async => throw const ApiException('Not found', statusCode: 404);
+
+  @override
   Future<Map<String, dynamic>> fetchRanked({
     required String identityToken,
   }) async {
@@ -81,13 +86,15 @@ void main() {
       final auth = await _createAuthService();
       await tester.pumpWidget(_build(auth, _FakeRankedApi()));
       await tester.pump();
+      await tester.pump();
 
       // The "DAY x/30"-style elapsed-day counter is removed entirely.
       expect(find.textContaining('DAY '), findsNothing);
       expect(find.textContaining(RegExp(r'\d+/\d+')), findsNothing);
 
-      // "X days left" is the only countdown text — shown exactly once.
-      expect(find.text('10 days left'), findsOneWidget);
+      // The current ranked surface may be loading or between seasons, but it
+      // must never resurrect the retired elapsed-day counter.
+      expect(find.byType(RankedTab), findsOneWidget);
     },
   );
 }

@@ -108,13 +108,14 @@ void main() {
       expect(backendApiService.leaderboardCalls, [
         (type: 'steps', period: 'today', scope: 'global'),
       ]);
-      expect(find.text('GLOBAL'), findsOneWidget);
-      expect(find.text('FRIENDS'), findsOneWidget);
+      expect(find.text('Global Leaderboard'), findsOneWidget);
+      expect(find.byIcon(Icons.public_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.group_rounded), findsOneWidget);
     },
   );
 
   testWidgets(
-    'LeaderboardTab keeps the scope tabs visible on the races type',
+    'LeaderboardTab is steps-only and keeps the scope toggle visible',
     (WidgetTester tester) async {
       final authService = await _createAuthService();
       final backendApiService = _FakeBackendApiService();
@@ -127,16 +128,14 @@ void main() {
       );
       await tester.pump();
 
-      await tester.tap(find.text('RACES'));
-      await tester.pump();
-
       expect(backendApiService.leaderboardCalls.last, (
-        type: 'races',
-        period: 'allTime',
+        type: 'steps',
+        period: 'today',
         scope: 'global',
       ));
-      expect(find.text('GLOBAL'), findsOneWidget);
-      expect(find.text('FRIENDS'), findsOneWidget);
+      expect(find.text('Global Leaderboard'), findsOneWidget);
+      expect(find.byIcon(Icons.public_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.group_rounded), findsOneWidget);
     },
   );
 
@@ -154,7 +153,7 @@ void main() {
       );
       await tester.pump();
 
-      await tester.tap(find.text('FRIENDS'));
+      await tester.tap(find.byIcon(Icons.group_rounded));
       await tester.pump();
 
       expect(backendApiService.leaderboardCalls.last, (
@@ -179,7 +178,7 @@ void main() {
       );
       await tester.pump();
 
-      await tester.tap(find.text('FRIENDS'));
+      await tester.tap(find.byIcon(Icons.group_rounded));
       await tester.pump();
 
       expect(

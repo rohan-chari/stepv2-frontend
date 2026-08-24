@@ -1655,7 +1655,13 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
         _countdownActive = false;
         _pollTimer?.cancel();
         _countdownTimer?.cancel();
-        _loadDetails();
+        // A completed details payload already owns the terminal state. Do not
+        // reload it from its own completed progress response: that creates an
+        // endless details -> progress -> details loop (and can keep widget
+        // tests from completing their first frame).
+        if (_race?['status'] != 'COMPLETED') {
+          _loadDetails();
+        }
       }
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -4341,14 +4347,17 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       if (chips.isEmpty) return const SizedBox.shrink();
       return Padding(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (var i = 0; i < chips.length; i++) ...[
-              if (i > 0) const SizedBox(width: 8),
-              chips[i],
-            ],
-          ],
+        child: MediaQuery.withClampedTextScaling(
+          maxScaleFactor: 1.3,
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.start,
+            // The normal hero uses a Spacer between left and right chips. In
+            // the reflowing team hero a Spacer is invalid Wrap parent data and
+            // would also consume no meaningful width, so omit it.
+            children: [for (final chip in chips) if (chip is! Spacer) chip],
+          ),
         ),
       );
     }

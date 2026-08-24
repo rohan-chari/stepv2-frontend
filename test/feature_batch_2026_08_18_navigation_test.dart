@@ -208,45 +208,32 @@ void main() {
     );
   });
 
-  testWidgets(
-    'Home owns one Leaderboards ticket between suggestions and Feedback in every state',
-    (tester) async {
-      await tester.binding.setSurfaceSize(const Size(800, 2400));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      final auth = await _auth();
-      var taps = 0;
-      final states = <Loadable<List<HomeRaceSuggestion>>>[
-        const Loadable.loading(),
-        const Loadable.success([]),
-        const Loadable.error('offline'),
-        Loadable.success(tutorialPreviewHomeSuggestions()),
-      ];
+  testWidgets('Home removes the Leaderboards ticket in every state', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final auth = await _auth();
+    var taps = 0;
+    final states = <Loadable<List<HomeRaceSuggestion>>>[
+      const Loadable.loading(),
+      const Loadable.success([]),
+      const Loadable.error('offline'),
+      Loadable.success(tutorialPreviewHomeSuggestions()),
+    ];
 
-      for (final state in states) {
-        await tester.pumpWidget(
-          _home(auth, state, onLeaderboard: () => taps++),
-        );
-        await _boundedPump(tester);
+    for (final state in states) {
+      await tester.pumpWidget(_home(auth, state, onLeaderboard: () => taps++));
+      await _boundedPump(tester);
 
-        final ticket = find.byKey(const Key('home-leaderboards-ticket'));
-        expect(ticket, findsOneWidget);
-        expect(find.text('LEADERBOARDS'), findsOneWidget);
-        expect(find.text("See today's top walkers"), findsOneWidget);
-        expect(find.byKey(const Key('home-inbox-button')), findsNothing);
-        expect(
-          tester.getTopLeft(ticket).dy,
-          greaterThan(tester.getTopLeft(find.text('SUGGESTED RACES')).dy),
-        );
-        expect(
-          tester.getTopLeft(ticket).dy,
-          lessThan(tester.getTopLeft(find.text('FEEDBACK')).dy),
-        );
-      }
-
-      await tester.tap(find.byKey(const Key('home-leaderboards-ticket')));
-      expect(taps, 1);
-    },
-  );
+      final ticket = find.byKey(const Key('home-leaderboards-ticket'));
+      expect(ticket, findsNothing);
+      expect(find.text('LEADERBOARDS'), findsNothing);
+      expect(find.text("See today's top walkers"), findsNothing);
+      expect(find.byKey(const Key('home-inbox-button')), findsNothing);
+    }
+    expect(taps, 0);
+  });
 
   test('Inbox destination parser accepts only the shell allowlist', () {
     final cases = <Map<String, dynamic>, InboxDestinationRoute>{
@@ -732,7 +719,7 @@ void main() {
   );
 
   testWidgets(
-    'tutorial copied navigation uses Inbox and ticket cannot escape',
+    'tutorial copied navigation uses Leaderboard and no Inbox or home ticket',
     (tester) async {
       final auth = TutorialPreviewAuthService();
       addTearDown(auth.dispose);
@@ -753,20 +740,17 @@ void main() {
       expect(bar.items.map((item) => item.label), [
         'Home',
         'Races',
-        'Rank',
+        'Leaderboard',
         'Friends',
-        'Inbox',
+        'Profile',
       ]);
-      expect(find.byKey(const Key('home-leaderboards-ticket')), findsOneWidget);
-      tester
-          .widget<InkWell>(find.byKey(const Key('home-leaderboards-ticket')))
-          .onTap!();
-      await tester.pump();
-      expect(find.byType(StandaloneLeaderboardScreen), findsNothing);
+      expect(find.byKey(const Key('home-leaderboards-ticket')), findsNothing);
     },
   );
 
-  testWidgets('tutorial Friends preview selects the Friends tab', (tester) async {
+  testWidgets('tutorial Friends preview selects the Friends tab', (
+    tester,
+  ) async {
     final auth = TutorialPreviewAuthService();
     addTearDown(auth.dispose);
     await tester.pumpWidget(
@@ -785,7 +769,9 @@ void main() {
     expect(bar.currentIndex, 3);
   });
 
-  testWidgets('Inbox suppresses routine and malformed alert rows', (tester) async {
+  testWidgets('Inbox suppresses routine and malformed alert rows', (
+    tester,
+  ) async {
     final auth = await _auth();
     final api = _ControlledInboxApi(
       alerts: [

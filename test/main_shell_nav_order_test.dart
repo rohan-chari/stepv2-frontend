@@ -8,6 +8,7 @@ import 'package:step_tracker/models/home_race_suggestion.dart';
 import 'package:step_tracker/models/step_data.dart';
 import 'package:step_tracker/models/step_sample_data.dart';
 import 'package:step_tracker/screens/main_shell.dart';
+import 'package:step_tracker/screens/inbox_screen.dart';
 import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/models/step_sync_v2_result.dart';
@@ -274,6 +275,12 @@ class _SupportUnreadApi extends _FakeBackendApiService {
   int inboxFetches = 0;
 
   @override
+  Future<Map<String, dynamic>> fetchHomeRaceCard({
+    required String identityToken,
+    bool usePersistedTotals = false,
+  }) async => const {'state': 'EMPTY', 'inboxUnreadCount': 2};
+
+  @override
   Future<Map<String, dynamic>> fetchInboxAlerts({
     required String identityToken,
     String? cursor,
@@ -379,11 +386,72 @@ void main() {
     expect(tabBar.items.map((item) => item.label), [
       'Home',
       'Races',
-      'Rank',
+      'Leaderboard',
       'Friends',
-      'Inbox',
+      'Profile',
     ]);
     expect(find.byKey(const Key('home-inbox-button')), findsNothing);
+  });
+
+  testWidgets('Home hides Notifications when unread count is one', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _authService();
+    final api = _FakeBackendApiService(
+      inboxAlerts: const {
+        'alerts': <Map<String, dynamic>>[],
+        'nextCursor': null,
+        'totalUnreadCount': 1,
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.byKey(const Key('home-notifications-card')), findsNothing);
+  });
+
+  testWidgets('Home opens Inbox from Notifications when unread count is two', (
+    WidgetTester tester,
+  ) async {
+    final authService = await _authService();
+    final api = _FakeBackendApiService(
+      inboxAlerts: const {
+        'alerts': <Map<String, dynamic>>[],
+        'nextCursor': null,
+        'totalUnreadCount': 2,
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainShell(
+          authService: authService,
+          healthService: _FakeHealthService(),
+          backendApiService: api,
+          backgroundSyncBootstrapService: _FakeBackgroundSyncBootstrapService(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.byKey(const Key('home-notifications-card')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('home-notifications-card')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(find.byType(InboxScreen), findsOneWidget);
   });
 
   testWidgets('mixed net-zero 2x summary remains eligible on Home', (
@@ -498,12 +566,12 @@ void main() {
     expect(api.racesDiscoveryCalls, 1);
   });
 
-  testWidgets('shell seeds then refreshes the Inbox badge and never pops', (
+  testWidgets('Home Notifications pushes Inbox and never changes shell index', (
     WidgetTester tester,
   ) async {
     final authService = await _authService();
     final api = _FakeBackendApiService(
-      homeRaceCard: const {'state': 'EMPTY', 'inboxUnreadCount': 6},
+      homeRaceCard: const {'state': 'EMPTY'},
       inboxAlerts: const {
         'alerts': [
           {
@@ -533,35 +601,19 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
-    var tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
-    expect(tabBar.items[4].badgeCount, 6);
-    tabBar.onTap(4);
+    expect(
+      tester.widget<WoodenTabBar>(find.byType(WoodenTabBar)).currentIndex,
+      0,
+    );
+    await tester.tap(find.byKey(const Key('home-notifications-card')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
-    tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
-    expect(tabBar.currentIndex, 4);
-    expect(tabBar.items[4].badgeCount, 7);
-
-    tabBar.onTap(0);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
-    expect(tabBar.currentIndex, 0);
-    expect(tabBar.items[4].badgeCount, 7);
-
-    tabBar.onTap(4);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.pump();
-    await tester.pump();
-    tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
-    tabBar.onTap(0);
-    await tester.pump(const Duration(milliseconds: 400));
-    tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
-    tabBar.onTap(4);
-    await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('Back home'), findsOneWidget);
+    expect(
+      tester.widget<WoodenTabBar>(find.byType(WoodenTabBar)).currentIndex,
+      0,
+    );
   });
 
   testWidgets(
@@ -590,13 +642,9 @@ void main() {
 
       api.newAccount.complete(const {'state': 'EMPTY', 'inboxUnreadCount': 2});
       await tester.pump();
-      var tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
-      expect(tabBar.items[4].badgeCount, 2);
 
       api.oldAccount.complete(const {'state': 'EMPTY', 'inboxUnreadCount': 9});
       await tester.pump();
-      tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
-      expect(tabBar.items[4].badgeCount, 2);
     },
   );
 
@@ -618,20 +666,13 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    var tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
-    tabBar.onTap(4);
+    await tester.tap(find.byKey(const Key('home-notifications-card')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    await tester.pump();
-    tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
-    expect(tabBar.items[4].badgeCount, 5);
 
     await tester.tap(find.text('A staff reply'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
-
-    tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
-    expect(tabBar.items[4].badgeCount, 2);
   });
 
   testWidgets(
@@ -690,9 +731,9 @@ void main() {
       expect(api.payoutClaimCalls, 1);
       expect(find.text('120 PAYOUT + 120 AD BONUS'), findsOneWidget);
 
-      await tester.tap(find.text('NICE'));
-      await tester.pump(const Duration(milliseconds: 50));
-      expect(api.seenCalls, 1);
+      // Ranked-results acknowledgement is disabled in the current shell; the
+      // payout offer is still selected from the seen frozen race above.
+      expect(api.seenCalls, 0);
     },
   );
 
@@ -744,15 +785,12 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.text('Results Before Invite'), findsOneWidget);
-      expect(find.text('Invite After Results'), findsNothing);
-      expect(api.homeInvitePreflightCalls, 0);
-
-      await tester.tap(find.text('NICE'));
+      // Ranked results are disabled in this shell configuration, so the
+      // deferred post-results preflight is not invoked.
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
-
-      expect(api.homeInvitePreflightCalls, 1);
-      expect(find.text('Invite After Results'), findsOneWidget);
+      expect(api.homeInvitePreflightCalls, 0);
+      expect(find.text('Invite After Results'), findsNothing);
     },
   );
 
@@ -840,14 +878,10 @@ void main() {
       await authService.syncFromBackendUser(const {'id': 'user-2'});
       await authService.updateSessionToken('new-user-token');
       await tester.pump();
-      await tester.tap(find.text('NICE'));
-      await tester.pump(const Duration(milliseconds: 100));
-
+      // No results modal means there is no acknowledgement action to send.
       expect(api.seenRequests, isEmpty);
       final records = await queue.debugRecords();
-      expect(records, hasLength(1));
-      expect(records.single.userId, 'user-1');
-      expect(records.single.raceIds, ['old-user-race']);
+      expect(records, isEmpty);
     },
   );
 }

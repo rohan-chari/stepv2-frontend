@@ -12,7 +12,7 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.text('ENABLE RACE ALERTS'), findsNothing);
+    expect(find.text('ENABLE NOTIFICATIONS'), findsNothing);
   });
 
   testWidgets('Not now persists device dismissal', (tester) async {
@@ -24,13 +24,13 @@ void main() {
 
     await tester.pumpWidget(app());
     await tester.pump();
-    await tester.tap(find.text('Not now'));
+    await tester.tap(find.text('NOT NOW'));
     await tester.pump();
-    expect(find.text('ENABLE RACE ALERTS'), findsNothing);
+    expect(find.text('ENABLE NOTIFICATIONS'), findsNothing);
 
     await tester.pumpWidget(app());
     await tester.pump();
-    expect(find.text('ENABLE RACE ALERTS'), findsNothing);
+    expect(find.text('ENABLE NOTIFICATIONS'), findsNothing);
   });
 
   testWidgets('system callback runs only after explicit enable tap', (
@@ -52,9 +52,9 @@ void main() {
     );
     await tester.pump();
     expect(calls, 0);
-    await tester.tap(find.text('ENABLE RACE ALERTS'));
+    await tester.tap(find.text('ENABLE NOTIFICATIONS'));
     await tester.pumpAndSettle();
     expect(calls, 1);
-    expect(find.text('ENABLE RACE ALERTS'), findsNothing);
+    expect(find.text('ENABLE NOTIFICATIONS'), findsNothing);
   });
 }

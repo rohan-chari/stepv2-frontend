@@ -9,7 +9,6 @@ import 'package:step_tracker/services/auth_service.dart';
 import 'package:step_tracker/services/backend_api_service.dart';
 import 'package:step_tracker/styles.dart';
 import 'package:step_tracker/widgets/home_course_track.dart';
-import 'package:step_tracker/widgets/retro_card.dart';
 
 class _FakeBackendApiService extends BackendApiService {
   int respondCalls = 0;
@@ -122,7 +121,10 @@ class _ActivePaidRaceBackendApiService extends BackendApiService {
         'third': _number(60),
       },
       'myStatus': 'ACCEPTED',
-      'isCreator': false,
+      'isCreator': true,
+      'isPublic': true,
+      'creationSource': 'QUICK_CREATE',
+      'startPolicy': 'ON_MINIMUM_PARTICIPANTS',
       'powerupsEnabled': false,
       'endsAt': '2026-04-10T12:00:00.000Z',
       'participants': const [
@@ -195,7 +197,10 @@ class _PendingAcceptedRaceBackendApiService extends BackendApiService {
       'projectedPotCoins': 300,
       'payouts': {'first': 210, 'second': 60, 'third': 30},
       'myStatus': 'ACCEPTED',
-      'isCreator': false,
+      'isCreator': true,
+      'isPublic': true,
+      'creationSource': 'QUICK_CREATE',
+      'startPolicy': 'ON_MINIMUM_PARTICIPANTS',
       'participants': const [
         {'userId': 'user-2', 'displayName': 'Sugaroro', 'status': 'ACCEPTED'},
         {'userId': 'user-3', 'displayName': 'emersonz', 'status': 'INVITED'},
@@ -1524,10 +1529,11 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      // The waiting-for-creator card is the only RetroCard on the accepted
-      // pending view; it must stretch to the full padded content width
-      // instead of shrink-wrapping its text.
-      final waitingCard = find.byType(RetroCard);
+      // The current pending view exposes a stable key on the auto-start
+      // waiting card; it must stretch to the full padded content width.
+      final waitingCard = find.byKey(
+        const Key('quick-race-auto-start-pending'),
+      );
       expect(waitingCard, findsOneWidget);
       final screenWidth = tester.getSize(find.byType(RaceDetailScreen)).width;
       expect(

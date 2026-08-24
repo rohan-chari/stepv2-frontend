@@ -313,12 +313,8 @@ class _CloudInstance extends StatelessWidget {
   Widget build(BuildContext context) {
     final cloudSize = 112.0 * config.scale;
     const span = 1.35;
-    // Clouds drift LEFT, the SAME way the ground slides — that is what
-    // parallax is. The mascot walks right, so the whole world moves left past
-    // the camera; depth comes from the far layer moving *slower*, not from it
-    // moving the other way. The previous version sent the clouds right, which
-    // gave them a higher apparent speed than the ground and read as clouds
-    // racing forwards in front of the capybara.
+    // Clouds drift with the ground, but slower, giving the scene depth without
+    // making the sky feel detached from the world.
     final wrapped =
         ((config.phase - t * config.cycles * _cloudDriftFactor) % span + span) %
         span;

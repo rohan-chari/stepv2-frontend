@@ -84,10 +84,6 @@ Future<void> _pump(
   await tester.pump();
 }
 
-String _poolCoins(WidgetTester tester) => tester
-    .widget<Text>(find.byKey(const Key('create-prize-pool-coins')))
-    .data!;
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -113,14 +109,14 @@ void main() {
       'Gold Rush',
     );
 
-    // 10 runners x the default 7 days -> 10 x 4 x 20 = 800.
-    expect(_poolCoins(tester), '800');
+    // The app funds the prize pool; no client-entered pool is rendered.
+    expect(find.byKey(const Key('create-prize-pool-coins')), findsNothing);
 
-    // Growing the field grows the pool, with no coin input anywhere.
+    // Growing the field remains available, with no coin input anywhere.
     await tester.ensureVisible(find.text('25'));
     await tester.tap(find.text('25'));
     await tester.pump();
-    expect(_poolCoins(tester), '2,000');
+    expect(find.byKey(const Key('create-prize-pool-coins')), findsNothing);
 
     tester.testTextInput.hide();
     await tester.pumpAndSettle();

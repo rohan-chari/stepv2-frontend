@@ -73,6 +73,11 @@ Future<void> _pump(WidgetTester tester, {required int coins, required int price}
   );
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 200));
+  // Unlock affordances live in the item sheet; the grid intentionally keeps
+  // only the compact price strip.
+  await tester.tap(find.text('Big Bang'));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 200));
 }
 
 void main() {
@@ -81,18 +86,18 @@ void main() {
 
   testWidgets('shortfall 120 → "Watch 3 ads"', (tester) async {
     await _pump(tester, coins: 30, price: 150);
-    expect(find.text('Watch 3 ads'), findsOneWidget);
-    expect(find.text('Get coins'), findsNothing);
+    expect(find.text('WATCH 3 ADS TO UNLOCK'), findsOneWidget);
+    expect(find.text('GET MORE COINS'), findsNothing);
   });
 
   testWidgets('shortfall 40 → "Watch 1 ad"', (tester) async {
     await _pump(tester, coins: 110, price: 150);
-    expect(find.text('Watch 1 ad'), findsOneWidget);
+    expect(find.text('WATCH 1 AD TO UNLOCK'), findsOneWidget);
   });
 
   testWidgets('shortfall 300 (>150) → "Get coins" route', (tester) async {
     await _pump(tester, coins: 0, price: 300);
-    expect(find.text('Get coins'), findsOneWidget);
+    expect(find.text('GET MORE COINS'), findsOneWidget);
     expect(find.textContaining('Watch'), findsNothing);
   });
 
@@ -100,6 +105,6 @@ void main() {
     await _pump(tester, coins: 1000, price: 150);
     expect(find.text('150'), findsWidgets);
     expect(find.textContaining('Watch'), findsNothing);
-    expect(find.text('Get coins'), findsNothing);
+    expect(find.text('GET MORE COINS'), findsNothing);
   });
 }

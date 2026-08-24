@@ -8,6 +8,7 @@ import 'app_avatar.dart';
 import 'error_toast.dart';
 import 'info_toast.dart';
 import 'pill_button.dart';
+import '../screens/public_profile_screen.dart';
 
 enum _FriendStatus { loading, self, friends, outgoing, incoming, none, error }
 
@@ -88,30 +89,31 @@ class _FriendRequestSheetState extends State<_FriendRequestSheet> {
       );
       if (!mounted) return;
 
-      final friends =
-          (data['friends'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final friends = _safeMaps(data['friends']);
       if (friends.any((f) => _matchesUser(f, widget.userId))) {
         setState(() => _status = _FriendStatus.friends);
         return;
       }
 
-      final pending = data['pending'] as Map<String, dynamic>? ?? {};
-      final outgoing =
-          (pending['outgoing'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final pending = _asStringMap(data['pending']);
+      final outgoing = _safeMaps(pending['outgoing']);
       if (outgoing.any((r) => _matchesUser(r, widget.userId))) {
         setState(() => _status = _FriendStatus.outgoing);
         return;
       }
 
-      final incoming =
-          (pending['incoming'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final incoming = _safeMaps(pending['incoming']);
       final incomingMatch = incoming.firstWhere(
         (r) => _matchesUser(r, widget.userId),
         orElse: () => const {},
       );
       if (incomingMatch.isNotEmpty) {
         setState(() {
-          _incomingFriendshipId = incomingMatch['friendshipId'] as String?;
+          final rawFriendshipId = incomingMatch['friendshipId'];
+          _incomingFriendshipId =
+              rawFriendshipId is String && rawFriendshipId.isNotEmpty
+              ? rawFriendshipId
+              : null;
           _status = _FriendStatus.incoming;
         });
         return;
@@ -133,6 +135,22 @@ class _FriendRequestSheetState extends State<_FriendRequestSheet> {
     return _extractUserId(entry) == userId;
   }
 
+  static Map<String, dynamic> _asStringMap(Object? value) {
+    if (value is! Map) return <String, dynamic>{};
+    return <String, dynamic>{
+      for (final entry in value.entries)
+        if (entry.key is String) entry.key as String: entry.value,
+    };
+  }
+
+  static List<Map<String, dynamic>> _safeMaps(Object? value) {
+    if (value is! List) return const <Map<String, dynamic>>[];
+    return <Map<String, dynamic>>[
+      for (final item in value)
+        if (item is Map) _asStringMap(item),
+    ];
+  }
+
   static String? _extractUserId(Map<String, dynamic> data) {
     for (final key in const ['id', 'userId', 'friendId', 'addresseeId']) {
       final value = data[key];
@@ -140,8 +158,8 @@ class _FriendRequestSheetState extends State<_FriendRequestSheet> {
     }
     for (final key in const ['user', 'friend', 'addressee', 'requester']) {
       final value = data[key];
-      if (value is Map<String, dynamic>) {
-        final nested = _extractUserId(value);
+      if (value is Map) {
+        final nested = _extractUserId(_asStringMap(value));
         if (nested != null) return nested;
       }
     }
@@ -260,6 +278,21 @@ class _FriendRequestSheetState extends State<_FriendRequestSheet> {
     }
   }
 
+  void _openProfile() {
+    Navigator.of(context).pop();
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PublicProfileScreen(
+          authService: widget.authService,
+          backendApiService: widget.backendApiService,
+          userId: widget.userId,
+          fallbackName: widget.displayName,
+          fallbackPhotoUrl: widget.profilePhotoUrl,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
@@ -285,6 +318,14 @@ class _FriendRequestSheetState extends State<_FriendRequestSheet> {
             ),
             const SizedBox(height: 16),
             _buildActionRow(),
+            const SizedBox(height: 10),
+            PillButton(
+              label: 'VIEW PROFILE',
+              variant: PillButtonVariant.secondary,
+              fullWidth: true,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              onPressed: _openProfile,
+            ),
           ],
         ),
       ),

@@ -273,6 +273,7 @@ class _OddsSheet extends StatelessWidget {
       maxChildSize: 0.92,
       expand: false,
       builder: (_, scrollController) => GameContainer(
+        key: const Key('odds-sheet'),
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
         frameColor: AppColors.of(context).coinDark,
         surfaceColor: AppColors.of(context).parchmentLight,

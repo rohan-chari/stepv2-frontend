@@ -554,7 +554,7 @@ void main() {
         .first;
     await tester.tap(firstIcon);
     await tester.pump();
-    expect(find.text('ADD FRIEND'), findsNothing);
+    expect(find.text('ADD FRIEND'), findsOneWidget);
     await tester.pump(const Duration(seconds: 3));
 
     await tester.drag(tray, const Offset(-80, 0));

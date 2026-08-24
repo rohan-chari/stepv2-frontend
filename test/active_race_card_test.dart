@@ -50,8 +50,8 @@ void main() {
     await tester.pump();
 
     expect(find.text('MORNING WALK'), findsOneWidget);
-    expect(find.text('ENDS IN '), findsOneWidget);
-    expect(find.text('YOU: 2nd'), findsOneWidget);
+    expect(find.textContaining('LEFT'), findsOneWidget);
+    expect(find.text('2ND PLACE'), findsOneWidget);
     expect(find.text('@Alice'), findsOneWidget);
     expect(find.text('@Bob'), findsOneWidget);
     expect(find.text('@Cara'), findsOneWidget);
@@ -84,7 +84,7 @@ void main() {
 
     expect(find.text('???'), findsOneWidget);
     expect(find.textContaining('steps'), findsNothing);
-    expect(find.text('YOU: 1st'), findsOneWidget);
+    expect(find.text('1ST PLACE'), findsOneWidget);
   });
 
   testWidgets('handles fewer than 3 participants', (tester) async {
@@ -172,6 +172,6 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('YOU: —'), findsOneWidget);
+    expect(find.text('NOT RANKED'), findsOneWidget);
   });
 }

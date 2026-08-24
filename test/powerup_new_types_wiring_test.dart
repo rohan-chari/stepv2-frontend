@@ -29,8 +29,9 @@ void main() {
     });
 
     test('knownTypeCount covers the new types', () {
-      // 26 shipped types + Hitchhike + Quick Rinse.
-      expect(PowerupIcon.knownTypeCount, 28);
+      // The catalog now includes the full shipped set plus Hitchhike and
+      // Quick Rinse.
+      expect(PowerupIcon.knownTypeCount, 40);
     });
 
     test('an unknown type still resolves null rather than throwing', () {

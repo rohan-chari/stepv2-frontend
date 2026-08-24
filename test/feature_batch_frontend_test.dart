@@ -227,8 +227,8 @@ void main() {
     );
     await tester.pump();
     expect(AdService.boxTopBannerEnabled, isFalse);
-    expect(find.byType(AdBannerSlot), findsOneWidget);
-    expect(find.byType(SafeArea), findsOneWidget);
+    expect(find.byType(AdBannerSlot), findsNWidgets(2));
+    expect(find.byType(SafeArea), findsNWidgets(2));
   });
 
   testWidgets('admin rewarded-ad rows render complete and malformed payloads', (

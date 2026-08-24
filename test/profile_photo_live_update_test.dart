@@ -137,6 +137,7 @@ void main() {
             backendApiService: backendApiService,
             backgroundSyncBootstrapService:
                 _FakeBackgroundSyncBootstrapService(),
+            forceHomeInviteEligibilityForTesting: true,
           ),
         ),
       );

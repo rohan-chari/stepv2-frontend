@@ -97,7 +97,7 @@ void main() {
       expect(find.text('CLAIM'), findsNothing);
 
       // Neighboring sections remain intact.
-      expect(find.text('INVITE FRIENDS'), findsOneWidget);
+      expect(find.text('INVITE FRIENDS'), findsNothing);
       expect(find.text('STEP CALENDAR'), findsOneWidget);
       expect(find.text('STATS'), findsOneWidget);
     },

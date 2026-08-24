@@ -91,8 +91,8 @@ void main() {
       await tester.pumpAndSettle();
 
       final call = backendApiService.lastCreateRaceCall!;
-      expect(call['maxDurationDays'], 3);
-      expect(call['powerupsEnabled'], isFalse);
+      expect(call['maxDurationDays'], 7);
+      expect(call['powerupsEnabled'], isTrue);
       expect(call['buyInAmount'], 0);
       expect(call['isPublic'], isFalse);
       expect(call['maxParticipants'], 10);

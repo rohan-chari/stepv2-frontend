@@ -21,6 +21,16 @@ class _FakeRankedApi extends BackendApiService {
   final _Mode mode;
 
   @override
+  Future<Map<String, dynamic>> fetchRankedV2({
+    required String identityToken,
+  }) async {
+    // Exercise the legacy-compatible fallback explicitly. The current widget
+    // probes /ranked/v2 first, while this fixture describes the older /ranked
+    // contract below.
+    throw const ApiException('Not found', statusCode: 404);
+  }
+
+  @override
   Future<Map<String, dynamic>> fetchRanked({
     required String identityToken,
   }) async {

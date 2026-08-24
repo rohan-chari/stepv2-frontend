@@ -43,7 +43,7 @@ class _FakeShopApi extends BackendApiService {
   @override
   Future<Map<String, dynamic>> fetchPowerupShopCatalog({
     required String identityToken,
-  }) async => powerupCatalog;
+  }) async => {...powerupCatalog, 'coins': coins};
 
   @override
   Future<Map<String, dynamic>> fetchPowerupInventory({
@@ -281,11 +281,11 @@ void main() {
         );
         await tester.pump();
 
-        expect(find.text('BONUS SPIN'), findsOneWidget);
+        expect(find.text('DAILY REWARD'), findsOneWidget);
         expect(
-          _truncated(tester, 'BONUS SPIN'),
+          _truncated(tester, 'DAILY REWARD'),
           isFalse,
-          reason: 'bonus-spin pill must fit at ${width.toInt()}pt',
+          reason: 'daily-reward ticket must fit at ${width.toInt()}pt',
         );
         expect(_truncated(tester, 'SHOP'), isFalse);
       });

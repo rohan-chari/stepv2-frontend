@@ -1903,6 +1903,17 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  Future<Map<String, dynamic>> fetchPublicProfile({
+    required String identityToken,
+    required String userId,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/friends/${Uri.encodeComponent(userId)}/profile',
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
   Future<Map<String, dynamic>> sendFriendRequest({
     required String identityToken,
     required String addresseeId,

@@ -44,7 +44,7 @@ void main() {
     expect(find.text('GET STARTED'), findsNothing);
   });
 
-  testWidgets('HomeTab shows action buttons for challenge and leaderboard', (
+  testWidgets('HomeTab omits the retired challenge and leaderboard buttons', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -69,11 +69,11 @@ void main() {
       ),
     );
 
-    expect(find.text('CHALLENGES'), findsOneWidget);
-    expect(find.text('LEADERBOARD'), findsOneWidget);
+    expect(find.text('CHALLENGES'), findsNothing);
+    expect(find.text('LEADERBOARD'), findsNothing);
   });
 
-  testWidgets('HomeTab shows daily reward slots', (WidgetTester tester) async {
+  testWidgets('HomeTab omits the retired daily reward slots', (WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -96,11 +96,11 @@ void main() {
       ),
     );
 
-    expect(find.text('1x GOAL'), findsOneWidget);
-    expect(find.text('2x GOAL'), findsOneWidget);
+    expect(find.text('1x GOAL'), findsNothing);
+    expect(find.text('2x GOAL'), findsNothing);
   });
 
-  testWidgets('HomeTab displays username and step count in status bar', (
+  testWidgets('HomeTab displays the current name and step HUD', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -126,9 +126,9 @@ void main() {
         ),
       ),
     );
+    await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text('@Trail Walker'), findsOneWidget);
-    expect(find.text('2,388'), findsOneWidget);
-    expect(find.text('out of 5k'), findsOneWidget);
+    expect(find.text('STEPS TODAY'), findsOneWidget);
   });
 }

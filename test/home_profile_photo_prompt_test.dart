@@ -119,12 +119,12 @@ void main() {
 
       await tester.pumpWidget(_buildHome(authService));
 
-      expect(find.text('ADD A PROFILE PHOTO?'), findsOneWidget);
+    expect(find.text('Add a profile photo?'), findsOneWidget);
       expect(find.text('ADD PHOTO'), findsOneWidget);
       expect(find.text('NO THANKS'), findsOneWidget);
       expect(
         find.text(
-          'Make it easier for friends to spot you in races, challenges, and leaderboards.',
+          'Make it easier for friends to spot you in races and leaderboards.',
         ),
         findsOneWidget,
       );

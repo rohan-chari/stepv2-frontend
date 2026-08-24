@@ -108,13 +108,6 @@ Future<void> _tap(WidgetTester tester, Key key) async {
   await tester.pump();
 }
 
-String _derivation(WidgetTester tester) => tester
-    .widget<Text>(find.byKey(const Key('create-prize-pool-derivation')))
-    .data!;
-
-String _coins(WidgetTester tester) =>
-    tester.widget<Text>(find.byKey(const Key('create-prize-pool-coins'))).data!;
-
 bool _createEnabled(WidgetTester tester) {
   final button = tester.widget<PillButton>(
     find.widgetWithText(PillButton, 'CREATE RACE'),
@@ -195,9 +188,9 @@ void main() {
   ) async {
     final state = await _pump(tester, _RecordingApi());
 
-    // Default preset: 10 runners x 7 days (4 points) x 20 = 800.
-    expect(_coins(tester), '800');
-    expect(_derivation(tester), '10 PLAYERS × 7 DAYS');
+    // Prize pools are app-funded and no client-entered plaque is rendered.
+    expect(find.byKey(const Key('create-prize-pool-coins')), findsNothing);
+    expect(find.byKey(const Key('create-prize-pool-derivation')), findsNothing);
 
     await _tap(tester, const Key('duration-option-custom'));
 
@@ -207,15 +200,15 @@ void main() {
     state.debugSetCustomEnd(start.add(const Duration(hours: 25)));
     await tester.pump();
 
-    expect(_derivation(tester), '10 PLAYERS × 1 DAY');
-    expect(_coins(tester), '200');
+    expect(find.byKey(const Key('create-prize-pool-derivation')), findsNothing);
+    expect(find.byKey(const Key('create-prize-pool-coins')), findsNothing);
 
     // A 5-day window prices at the 7-day band (4 points): 10 x 4 x 20 = 800.
     state.debugSetCustomEnd(start.add(const Duration(days: 5)));
     await tester.pump();
 
-    expect(_derivation(tester), '10 PLAYERS × 5 DAYS');
-    expect(_coins(tester), '800');
+    expect(find.byKey(const Key('create-prize-pool-derivation')), findsNothing);
+    expect(find.byKey(const Key('create-prize-pool-coins')), findsNothing);
   });
 
   // -- 16 --------------------------------------------------------------------
@@ -424,7 +417,7 @@ void main() {
     // made. The seeded window must always clear the 24h floor.
     expect(find.text('A race has to run at least 1 day'), findsNothing);
     expect(_createEnabled(tester), isTrue);
-    expect(_derivation(tester), '10 PLAYERS × 1 DAY');
+    expect(find.byKey(const Key('create-prize-pool-derivation')), findsNothing);
     expect(state.debugCustomEnd, isNotNull);
   });
 
@@ -436,13 +429,7 @@ void main() {
     for (final entry in {1: '1 DAY', 7: '7 DAYS', 14: '14 DAYS'}.entries) {
       await _tap(tester, Key('duration-option-${entry.key}'));
       await _tap(tester, const Key('duration-option-custom'));
-      expect(
-        _derivation(tester),
-        '10 PLAYERS × ${entry.value}',
-        reason:
-            'the seeded window must price the same as the preset it came '
-            'from, not one day less',
-      );
+      expect(find.byKey(const Key('create-prize-pool-derivation')), findsNothing);
       expect(_createEnabled(tester), isTrue);
     }
   });

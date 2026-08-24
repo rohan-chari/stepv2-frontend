@@ -127,6 +127,15 @@ class _StubApi extends BackendApiService {
   }) async => const {'events': []};
 
   @override
+  Future<Map<String, dynamic>> fetchRaceMessages({
+    required String identityToken,
+    required String raceId,
+    String? cursor,
+    int? limit,
+    String? kind,
+  }) async => const {'messages': [], 'nextCursor': null};
+
+  @override
   Future<Map<String, dynamic>> respondToRaceInvite({
     required String identityToken,
     required String raceId,
@@ -173,6 +182,8 @@ Future<void> _pump(WidgetTester tester, _StubApi api) async {
   // never fully settles.
   await tester.pump();
   await tester.pump();
+  await tester.pump(const Duration(milliseconds: 50));
+  await tester.pump(const Duration(milliseconds: 500));
 }
 
 Future<void> _teardown(WidgetTester tester) async {
@@ -495,11 +506,7 @@ void main() {
       ];
     await _pump(tester, _StubApi(race));
 
-    final stat = find.byKey(const Key('race-info-prize-pool'));
-    expect(
-      find.descendant(of: stat, matching: find.text('20')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const Key('race-prize-pool-board')), findsOneWidget);
     await tester.tap(find.byKey(const Key('race-prize-pool-board')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));

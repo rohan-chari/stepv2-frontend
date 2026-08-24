@@ -66,6 +66,7 @@ void main() {
         'health_probe_inconclusive',
         'daily_intro_viewed',
         'tutorial_opened',
+        'tutorial_skipped',
         'demo_box_opened',
         'demo_powerup_used',
         'demo_won',
@@ -83,11 +84,10 @@ void main() {
       );
     });
 
-    test('tutorial_skipped is NOT a stage — it is an exit the backend cannot '
-        'mark', () {
+    test('tutorial_skipped remains represented for exit analytics', () {
       expect(
         OnboardingFunnelSection.stageKeys,
-        isNot(contains('tutorial_skipped')),
+        contains('tutorial_skipped'),
       );
     });
   });

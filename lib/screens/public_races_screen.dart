@@ -782,9 +782,9 @@ class _PublicRacesScreenState extends State<PublicRacesScreen> {
   /// rendered on the Races tab.
   Widget _buildFeaturedRacesStrip() {
     return SizedBox(
-      // Just enough for the card content + CTA; extra height turns into dead
-      // space above the pinned-bottom VIEW/JOIN button (spaceBetween column).
-      height: 220,
+      // Keep enough vertical room for the reward, countdown, participant line,
+      // and CTA at the card's readable text sizes on narrow phones.
+      height: 250,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),

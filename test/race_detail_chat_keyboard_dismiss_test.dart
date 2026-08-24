@@ -242,7 +242,7 @@ void main() {
     expect(_composerHasFocus(tester), isTrue);
 
     // Tap a message in the list (outside the composer field) -> unfocus.
-    await tester.tap(find.text('Message number 0'));
+    await tester.tap(find.byType(ListView).first);
     await _pumpFrames(tester);
     expect(_composerHasFocus(tester), isFalse);
 

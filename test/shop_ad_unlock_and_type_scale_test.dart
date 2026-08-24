@@ -224,8 +224,10 @@ void main() {
     testWidgets('adUnlock absent → today\'s 150-coin behaviour is preserved',
         (tester) async {
       await _pump(tester, coins: 30, price: 150);
-      expect(find.text('Watch 3 ads'), findsOneWidget);
-      expect(find.text('Get coins'), findsNothing);
+      await tester.tap(find.text('Big Bang').first);
+      await tester.pump();
+      expect(find.text('WATCH 3 ADS TO UNLOCK'), findsOneWidget);
+      expect(find.text('GET MORE COINS'), findsNothing);
     });
 
     testWidgets('maxShortfall 20 → a 90-short tile routes to Get coins',
@@ -242,7 +244,9 @@ void main() {
           'remainingToday': 1,
         },
       );
-      expect(find.text('Get coins'), findsOneWidget);
+      await tester.tap(find.text('Big Bang').first);
+      await tester.pump();
+      expect(find.text('GET MORE COINS'), findsOneWidget);
       expect(find.textContaining('Watch'), findsNothing);
     });
 
@@ -260,7 +264,9 @@ void main() {
           'remainingToday': 1,
         },
       );
-      expect(find.text('Watch 1 ad'), findsOneWidget);
+      await tester.tap(find.text('Big Bang').first);
+      await tester.pump();
+      expect(find.text('WATCH 1 AD TO UNLOCK'), findsOneWidget);
     });
 
     testWidgets('remainingToday 0 → the ad button is absent, fail before the ad',
@@ -277,13 +283,13 @@ void main() {
           'remainingToday': 0,
         },
       );
-      expect(find.textContaining('Watch'), findsNothing);
-      expect(find.text('Get coins'), findsOneWidget);
+      await tester.tap(find.text('Big Bang').first);
+      await tester.pump();
+      expect(find.textContaining('WATCH'), findsNothing);
+      expect(find.text('GET MORE COINS'), findsOneWidget);
 
       // The sheet explains WHY, so a cap-reached tile doesn't read as
       // "this item is simply too expensive".
-      await tester.tap(find.text('Big Bang').first);
-      await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(
         find.text('You’ve used today’s ad unlock. Come back tomorrow.'),
@@ -299,7 +305,9 @@ void main() {
         price: 150,
         adUnlock: {'maxShortfall': 'nonsense'},
       );
-      expect(find.text('Watch 3 ads'), findsOneWidget);
+      await tester.tap(find.text('Big Bang').first);
+      await tester.pump();
+      expect(find.text('WATCH 3 ADS TO UNLOCK'), findsOneWidget);
     });
 
     testWidgets('cosmetics get the same ad-unlock affordance', (tester) async {
@@ -330,7 +338,9 @@ void main() {
       await tester.tap(find.text('CHARACTERS').first);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text('Watch 1 ad'), findsOneWidget);
+      await tester.tap(find.text('Corgi Puppy').first);
+      await tester.pump();
+      expect(find.text('WATCH 1 AD TO UNLOCK'), findsOneWidget);
     });
 
     testWidgets('a cosmetic priced past maxShortfall routes to Get coins',
@@ -361,8 +371,10 @@ void main() {
       await tester.tap(find.text('CHARACTERS').first);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('Corgi Puppy').first);
+      await tester.pump();
       expect(find.textContaining('Watch'), findsNothing);
-      expect(find.text('Get coins'), findsOneWidget);
+      expect(find.text('GET MORE COINS'), findsOneWidget);
     });
   });
 }

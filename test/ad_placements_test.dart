@@ -494,7 +494,7 @@ void main() {
     });
 
     testWidgets(
-      'race results modal hosts an AdBannerSlot and NICE still pops',
+      'race results screen hosts an AdBannerSlot without the retired NICE action',
       (tester) async {
         await tester.pumpWidget(
           MaterialApp(
@@ -526,9 +526,7 @@ void main() {
           findsNothing,
         );
 
-        await tester.tap(find.widgetWithText(PillButton, 'NICE'));
-        await tester.pumpAndSettle();
-        expect(find.text('RACE FINISHED'), findsNothing);
+        expect(find.widgetWithText(PillButton, 'NICE'), findsNothing);
       },
     );
 
@@ -547,7 +545,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 
-      expect(find.byType(AdBannerSlot), findsOneWidget);
+      expect(find.byType(AdBannerSlot), findsNWidgets(2));
       // Footer style: at the screen bottom, not inside the reward card.
       expect(
         find.descendant(

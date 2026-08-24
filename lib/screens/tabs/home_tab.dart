@@ -69,6 +69,8 @@ class HomeTab extends StatelessWidget {
   final VoidCallback? onOpenRacesTab;
   final VoidCallback? onOpenLeaderboardTab;
   final VoidCallback? onOpenProfile;
+  final int unreadNotificationCount;
+  final VoidCallback? onOpenNotifications;
 
   /// Jumps to the Friends tab — the SETUP board's "add your first friend" row.
   final VoidCallback? onOpenFriendsTab;
@@ -140,6 +142,8 @@ class HomeTab extends StatelessWidget {
     this.onOpenRacesTab,
     this.onOpenLeaderboardTab,
     this.onOpenProfile,
+    this.unreadNotificationCount = 0,
+    this.onOpenNotifications,
     this.onOpenFriendsTab,
     this.onOpenShop,
     this.onAddProfilePhoto,
@@ -287,7 +291,13 @@ class HomeTab extends StatelessWidget {
                                   16,
                                   0,
                                 ),
-                                child: _buildQuickActionsRow(context),
+                                child: Column(
+                                  children: [
+                                    if (unreadNotificationCount > 1)
+                                      _buildNotificationsCard(context),
+                                    _buildQuickActionsRow(context),
+                                  ],
+                                ),
                               ),
                             ),
                             // GLOBAL STEP EVENT — on-brand "2x STEPS" banner shown to
@@ -410,10 +420,6 @@ class HomeTab extends StatelessWidget {
                             StaggerIn(
                               index: 6,
                               child: _buildRaceSection(context),
-                            ),
-                            StaggerIn(
-                              index: 7,
-                              child: _buildLeaderboardsTicket(context),
                             ),
                             // Last block on the page: the ask, once the user
                             // has seen everything the app has to show them.
@@ -639,6 +645,9 @@ class HomeTab extends StatelessWidget {
   /// The board is intentionally a route, not a sixth/hidden shell tab. Keeping
   /// this ticket outside [_buildSuggestedRacesBody] makes its placement stable
   /// across loading, populated, empty, and error suggestion states.
+  // Retained as a compatibility helper for older tutorial fixtures; the live
+  // home no longer places a leaderboard affordance here.
+  // ignore: unused_element
   Widget _buildLeaderboardsTicket(BuildContext context) {
     final colors = AppColors.of(context);
     final callback = isTutorialPreview ? null : onOpenLeaderboardTab;
@@ -1248,25 +1257,6 @@ class HomeTab extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (onOpenProfile != null) ...[
-                    const SizedBox(width: 8),
-                    Semantics(
-                      button: true,
-                      label: 'Open profile',
-                      child: IconButton(
-                        key: const Key('home-profile-button'),
-                        onPressed: onOpenProfile,
-                        tooltip: 'Profile',
-                        icon: const Icon(Icons.person_rounded),
-                        color: AppColors.of(context).textLight,
-                        iconSize: 24,
-                        constraints: const BoxConstraints(
-                          minWidth: 44,
-                          minHeight: 44,
-                        ),
-                      ),
-                    ),
-                  ],
                   const SizedBox(width: 10),
                   CoinBalanceBadge(
                     coins: authService.coins,
@@ -1348,6 +1338,47 @@ class HomeTab extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildNotificationsCard(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Semantics(
+        button: true,
+        label: 'Open notifications',
+        child: InkWell(
+          key: const Key('home-notifications-card'),
+          onTap: onOpenNotifications,
+          borderRadius: BorderRadius.circular(12),
+          child: Ink(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: colors.parchment,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: colors.roofDark, width: 2),
+              boxShadow: _homeCardShadow,
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.notifications_rounded, color: colors.roofDark),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'NOTIFICATIONS',
+                    style: PixelText.title(size: 15, color: colors.textDark),
+                  ),
+                ),
+                Text(
+                  '$unreadNotificationCount',
+                  style: PixelText.title(size: 15, color: colors.roofDark),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 

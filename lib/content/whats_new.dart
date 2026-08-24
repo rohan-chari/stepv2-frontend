@@ -35,6 +35,15 @@ class WhatsNewEntry {
 /// Newest first.
 const List<WhatsNewEntry> kWhatsNewEntries = <WhatsNewEntry>[
   WhatsNewEntry(
+    version: '2.3.8',
+    title: 'RACE WITH FRIENDS',
+    bullets: <String>[
+      'Find friends, send requests, and view public profiles from one place.',
+      'Home now keeps notifications and race discovery close at hand.',
+      'Leaderboard visibility and profile details are easier to manage.',
+    ],
+  ),
+  WhatsNewEntry(
     version: '2.3.3',
     title: 'RACE TOGETHER',
     bullets: <String>[

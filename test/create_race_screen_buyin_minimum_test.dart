@@ -72,10 +72,6 @@ Future<void> _pump(WidgetTester tester, BackendApiService api) async {
   await tester.pump();
 }
 
-String _poolCoins(WidgetTester tester) => tester
-    .widget<Text>(find.byKey(const Key('create-prize-pool-coins')))
-    .data!;
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -92,8 +88,8 @@ void main() {
     await tester.tap(find.byKey(const Key('duration-option-1')));
     await tester.pump();
 
-    expect(_poolCoins(tester), '100');
-    // A floor pool is not a maxed pool.
+    // Prize pools are app-funded and no client pool plaque is rendered.
+    expect(find.byKey(const Key('create-prize-pool-coins')), findsNothing);
     expect(find.byKey(const Key('create-prize-pool-max')), findsNothing);
   });
 

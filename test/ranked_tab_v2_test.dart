@@ -247,7 +247,7 @@ void main() {
     await tester.pump();
 
     expect(find.textContaining("You're in"), findsOneWidget);
-    expect(find.text('How Ranked works'), findsOneWidget);
+    expect(find.text('How Ranked works'), findsNWidgets(2));
   });
 
   testWidgets('falls back to the legacy season ladder when /ranked/v2 404s', (

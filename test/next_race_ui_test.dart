@@ -560,7 +560,7 @@ void main() {
         ),
       );
       expect(find.text('START YOUR NEXT RACE'), findsNothing);
-      expect(find.text('NICE'), findsOneWidget);
+      expect(find.text('CONTINUE'), findsOneWidget);
       expect(find.byKey(const Key('results-nice-secondary')), findsNothing);
     },
   );

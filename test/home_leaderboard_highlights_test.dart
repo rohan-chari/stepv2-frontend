@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:step_tracker/models/loadable.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:step_tracker/models/step_data.dart';
 import 'package:step_tracker/screens/tabs/home_tab.dart';
@@ -34,11 +33,6 @@ Future<AuthService> _createAuthService() async {
 
 Widget _buildHome({
   required AuthService authService,
-  List<Map<String, dynamic>> leaderboardHighlights = const [],
-  bool leaderboardHighlightsLoading = false,
-  Loadable<List<Map<String, dynamic>>>? leaderboardHighlightsState,
-  void Function(String leaderboardType, String period)?
-  onOpenLeaderboardHighlight,
 }) {
   return MaterialApp(
     home: Scaffold(
@@ -62,158 +56,12 @@ Widget _buildHome({
 }
 
 void main() {
-  testWidgets(
-    'HomeTab shows climbing the boards and opens the matching leaderboard highlight',
-    (WidgetTester tester) async {
-      final authService = await _createAuthService();
-      String? tappedType;
-      String? tappedPeriod;
-      await tester.binding.setSurfaceSize(const Size(800, 1200));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-
-      await tester.pumpWidget(
-        _buildHome(
-          authService: authService,
-          leaderboardHighlights: const [
-            {
-              'title': "You're 5th all time in steps. Keep climbing.",
-              'subtitle': 'Only 501 steps from 4th.',
-              'leaderboardType': 'steps',
-              'period': 'allTime',
-            },
-          ],
-          onOpenLeaderboardHighlight: (leaderboardType, period) {
-            tappedType = leaderboardType;
-            tappedPeriod = period;
-          },
-        ),
-      );
-
-      expect(find.text('CLIMBING THE BOARDS'), findsOneWidget);
-      expect(
-        find.text("You're 5th all time in steps. Keep climbing."),
-        findsOneWidget,
-      );
-      expect(find.text('Only 501 steps from 4th.'), findsOneWidget);
-
-      await tester.ensureVisible(
-        find.text("You're 5th all time in steps. Keep climbing."),
-      );
-      await tester.tap(
-        find.text("You're 5th all time in steps. Keep climbing."),
-      );
-      await tester.pump();
-
-      expect(tappedType, 'steps');
-      expect(tappedPeriod, 'allTime');
-    },
-  );
-
-  testWidgets(
-    'HomeTab hides climbing the boards when no highlight cards are available',
-    (WidgetTester tester) async {
-      final authService = await _createAuthService();
-
-      await tester.pumpWidget(_buildHome(authService: authService));
-
-      expect(find.text('CLIMBING THE BOARDS'), findsNothing);
-    },
-  );
-
-  testWidgets(
-    'HomeTab shows a lightweight skeleton while leaderboard highlights load',
-    (WidgetTester tester) async {
-      final authService = await _createAuthService();
-
-      await tester.pumpWidget(
-        _buildHome(
-          authService: authService,
-          leaderboardHighlightsLoading: true,
-        ),
-      );
-
-      expect(find.byKey(const Key('climbing-boards-skeleton')), findsOneWidget);
-    },
-  );
-
-  testWidgets(
-    'HomeTab shows a retry panel when leaderboard highlights fail before cards load',
-    (WidgetTester tester) async {
-      final authService = await _createAuthService();
-
-      await tester.pumpWidget(
-        _buildHome(
-          authService: authService,
-          leaderboardHighlightsState: const Loadable.error(
-            'Connection timed out.',
-          ),
-        ),
-      );
-
-      expect(find.text('CLIMBING THE BOARDS'), findsOneWidget);
-      expect(find.text('Couldn’t load leaderboard'), findsOneWidget);
-      expect(find.text('TRY AGAIN'), findsOneWidget);
-    },
-  );
-
-  testWidgets(
-    'HomeTab auto-advances and supports swipe on the climbing the boards carousel',
-    (WidgetTester tester) async {
-      final authService = await _createAuthService();
-      await tester.binding.setSurfaceSize(const Size(800, 1200));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-
-      await tester.pumpWidget(
-        _buildHome(
-          authService: authService,
-          leaderboardHighlights: const [
-            {
-              'title': "You're 5th all time in steps. Keep climbing.",
-              'subtitle': 'Only 501 steps from 4th.',
-              'leaderboardType': 'steps',
-              'period': 'allTime',
-            },
-            {
-              'title': "You're 8th all time in challenges. Keep climbing.",
-              'subtitle': '5 more wins could move you up.',
-              'leaderboardType': 'challenges',
-              'period': 'allTime',
-            },
-          ],
-        ),
-      );
-
-      expect(
-        find.text("You're 5th all time in steps. Keep climbing."),
-        findsOneWidget,
-      );
-      expect(
-        find.text("You're 8th all time in challenges. Keep climbing."),
-        findsNothing,
-      );
-
-      await tester.pump(const Duration(seconds: 4));
-      await tester.pump(const Duration(milliseconds: 400));
-
-      expect(
-        find.text("You're 8th all time in challenges. Keep climbing."),
-        findsOneWidget,
-      );
-
-      await tester.ensureVisible(
-        find.byKey(const Key('climbing-boards-page-view')),
-      );
-      await tester.drag(
-        find.byKey(const Key('climbing-boards-page-view')),
-        const Offset(300, 0),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-
-      expect(
-        find.text("You're 5th all time in steps. Keep climbing."),
-        findsOneWidget,
-      );
-    },
-  );
+  testWidgets('HomeTab keeps leaderboard highlights off the Home route', (
+    tester,
+  ) async {
+    final authService = await _createAuthService();
+    await tester.pumpWidget(_buildHome(authService: authService));
+    expect(find.text('CLIMBING THE BOARDS'), findsNothing);
+    expect(find.byKey(const Key('climbing-boards-page-view')), findsNothing);
+  });
 }

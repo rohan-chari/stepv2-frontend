@@ -381,7 +381,8 @@ void main() {
     final api = _FakeBackendApiService(compactSession: true);
     await _pumpShell(tester, api);
 
-    await tester.tap(find.byKey(const Key('home-profile-button')));
+    final tabBar = tester.widget<WoodenTabBar>(find.byType(WoodenTabBar));
+    tabBar.onTap(4);
     await _settle(tester);
 
     expect(find.text('compact@example.com'), findsOneWidget);
@@ -557,7 +558,7 @@ void main() {
     expect(tabBar.items[3].icon, Icons.people_rounded);
     // The incoming-request badge now lives on Friends, not Profile.
     expect(tabBar.items[3].badgeCount, 2);
-    expect(tabBar.items[4].badgeCount, 0);
+    expect(tabBar.items[4].label, 'Profile');
   });
 
   testWidgets('selecting the Friends tab clears the incoming-request badge', (

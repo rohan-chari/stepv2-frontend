@@ -135,7 +135,7 @@ void main() {
 
       // Unchanged rows remain.
       expect(find.text('All Time'), findsOneWidget);
-      expect(find.text('Goal Streak'), findsOneWidget);
+      expect(find.text('Streak'), findsOneWidget);
       expect(find.text('4 days'), findsOneWidget);
     },
   );
