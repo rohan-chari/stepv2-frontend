@@ -42,6 +42,22 @@ class _HeaderTestBackendApiService extends BackendApiService {
   }
 }
 
+class _LongNameHeaderTestBackendApiService extends _HeaderTestBackendApiService {
+  @override
+  Future<Map<String, dynamic>> fetchRaceDetails({
+    required String identityToken,
+    required String raceId,
+    int? participantsLimit,
+  }) async {
+    final details = await super.fetchRaceDetails(
+      identityToken: identityToken,
+      raceId: raceId,
+      participantsLimit: participantsLimit,
+    );
+    return {...details, 'name': 'Real Walker Championship of the World'};
+  }
+}
+
 Future<AuthService> _createAuthService() async {
   SharedPreferences.setMockInitialValues({
     'auth_identity_token': 'apple-token',
@@ -60,6 +76,32 @@ Future<AuthService> _createAuthService() async {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets(
+    'RaceDetailScreen scales long race names to fit the header',
+    (WidgetTester tester) async {
+      final authService = await _createAuthService();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RaceDetailScreen(
+            authService: authService,
+            raceId: 'race-long-name',
+            backendApiService: _LongNameHeaderTestBackendApiService(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      final title = find.text('Real Walker Championship of the World');
+      expect(title, findsOneWidget);
+      expect(
+        find.ancestor(of: title, matching: find.byType(FittedBox)),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets(
     'RaceDetailScreen main scroll view clips its overscrolling content '

@@ -4074,16 +4074,22 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(
-                          raceDisplayName(
-                            _race?['seedKind'] as String?,
-                            _race?['name'] as String? ?? 'Race',
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            raceDisplayName(
+                              _race?['seedKind'] as String?,
+                              _race?['name'] as String? ?? 'Race',
+                            ),
+                            maxLines: 1,
+                            softWrap: false,
+                            style: PixelText.display(
+                              size: 28,
+                              color: AppColors.of(context).textLight,
+                            ).copyWith(shadows: _headerTextShadows),
+                            overflow: TextOverflow.visible,
                           ),
-                          style: PixelText.display(
-                            size: 28,
-                            color: AppColors.of(context).textLight,
-                          ).copyWith(shadows: _headerTextShadows),
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       if (_canShareRace())
