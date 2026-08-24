@@ -68,7 +68,10 @@ class _NoAdController implements ExtraSpinAdController {
   @override
   bool get isReady => false;
   @override
-  Future<void> load({required String userId, required String localDate}) async {}
+  Future<void> load({
+    required String userId,
+    required String localDate,
+  }) async {}
   @override
   Future<bool> showAndAwaitReward() async => false;
   @override
@@ -178,7 +181,7 @@ void main() {
   });
 
   group('share text', () {
-    test('states the shared figure when both are served and equal', () {
+    test('uses the Bara race invite copy regardless of step count', () {
       final text = referralShareText(
         code: 'BARA-7F3K',
         url: 'https://b.io/r',
@@ -186,14 +189,15 @@ void main() {
         referrerCoins: 500,
         refereeCoins: 500,
       );
-      expect(text, contains('8,432 steps'));
+      expect(text, startsWith('Join my race on Bara 🏃‍♂️'));
+      expect(text, isNot(contains('8,432 steps')));
       expect(text, contains('500 coins'));
       expect(text, contains('BARA-7F3K'));
       expect(text, contains('https://b.io/r'));
       expect(text, isNot(contains('BOTH')));
     });
 
-    test('states each side when the figures differ', () {
+    test('does not include step-count taunts when figures differ', () {
       final text = referralShareText(
         code: 'C',
         url: 'u',
@@ -201,11 +205,13 @@ void main() {
         referrerCoins: 1000,
         refereeCoins: 500,
       );
+      expect(text, startsWith('Join my race on Bara 🏃‍♂️'));
+      expect(text, isNot(contains('steps')));
       expect(text, contains('1,000'));
       expect(text, contains('500'));
     });
 
-    test('drops the number entirely when the backend served none', () {
+    test('drops reward numbers when the backend served none', () {
       final text = referralShareText(
         code: 'C',
         url: 'u',
@@ -213,6 +219,7 @@ void main() {
         referrerCoins: null,
         refereeCoins: null,
       );
+      expect(text, startsWith('Join my race on Bara 🏃‍♂️'));
       expect(text, contains('coin'));
       expect(text, isNot(contains('500')));
       expect(text, isNot(contains('null')));
@@ -238,7 +245,7 @@ void main() {
       // this test guards — the number-free row still names the action — is
       // unchanged.
       expect(
-        find.textContaining('finishes a race against another real player'),
+        find.textContaining('Finish any race with at least one other player'),
         findsOneWidget,
       );
     });
@@ -274,10 +281,7 @@ void main() {
         ),
       );
 
-      expect(
-        find.text('Tap everyone you want in this race.'),
-        findsOneWidget,
-      );
+      expect(find.text('Tap everyone you want in this race.'), findsOneWidget);
     });
 
     testWidgets('race invite empty state is an invitation to act', (

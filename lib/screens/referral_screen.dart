@@ -537,11 +537,11 @@ const String kReferralQualificationCopy =
     'Finish any race with at least one other player to earn your referral reward. '
     'Daily and Weekly challenges don’t count.';
 
-const String kQualifyingRacePhrase =
-    'a race with at least one other player';
+const String kQualifyingRacePhrase = 'a race with at least one other player';
 
 /// Compact definition, for toasts and share sheets.
-const String kQualifyingRaceShortPhrase = 'any race with at least one other player';
+const String kQualifyingRaceShortPhrase =
+    'any race with at least one other player';
 
 /// The exclusion, stated explicitly wherever the full phrase is used.
 const String kQualifyingRaceCaveat = 'Daily and Weekly challenges don’t count.';
@@ -607,10 +607,7 @@ String referralShareText({
   int? referrerCoins,
   int? refereeCoins,
 }) {
-  final opener = steps != null && steps > 0
-      ? "I'm at ${formatCoinsWithCommas(steps)} steps today. Think you can "
-            'beat that?'
-      : "Bet you can't out-step me.";
+  const opener = 'Join my race on Bara 🏃‍♂️';
 
   final String reward;
   if (!_statable(referrerCoins, refereeCoins)) {
