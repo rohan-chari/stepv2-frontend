@@ -600,8 +600,7 @@ class AdminSectionUnavailable extends StatelessWidget {
 // INBOX
 // ---------------------------------------------------------------------------
 
-/// The suggestions viewer over `GET /admin/feedback/suggestions` — an endpoint
-/// that has existed since the in-app suggestion box shipped and never had a UI.
+/// The support-thread viewer over `GET /admin/feedback/threads`.
 ///
 /// Every field except `text` is optional as far as this widget is concerned:
 /// the row renders from whatever the backend actually sent.
@@ -623,7 +622,7 @@ class _AdminInboxBodyState extends State<AdminInboxBody> {
   late final BackendApiService _api =
       widget.backendApiService ?? BackendApiService();
 
-  List<Map<String, dynamic>>? _suggestions;
+  List<Map<String, dynamic>>? _threads;
   bool _loading = true;
   bool _failed = false;
 
@@ -653,7 +652,7 @@ class _AdminInboxBodyState extends State<AdminInboxBody> {
         // An older backend, or one that changed the envelope, yields an empty
         // inbox rather than an error — there is nothing an operator can do
         // about a shape change from here.
-        _suggestions = adminRows(page['threads']);
+        _threads = adminRows(page['threads']);
         _loading = false;
       });
     } catch (_) {
@@ -682,8 +681,8 @@ class _AdminInboxBodyState extends State<AdminInboxBody> {
       );
     }
 
-    final suggestions = _suggestions ?? const <Map<String, dynamic>>[];
-    if (suggestions.isEmpty) {
+    final threads = _threads ?? const <Map<String, dynamic>>[];
+    if (threads.isEmpty) {
       return Text(
         'No support threads yet.',
         style: PixelText.body(size: 12, color: colors.textMid),
@@ -693,7 +692,7 @@ class _AdminInboxBodyState extends State<AdminInboxBody> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final row in suggestions) ...[
+        for (final row in threads) ...[
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: InkWell(

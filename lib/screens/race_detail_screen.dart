@@ -2080,8 +2080,10 @@ class _RaceDetailScreenState extends State<RaceDetailScreen>
       if (token == null || token.isEmpty) return;
       await _api.forfeitRace(identityToken: token, raceId: widget.raceId);
       await _refreshWallet();
-      await _loadDetails();
-      await _loadProgress();
+      // A forfeited race is no longer an actionable detail route. Return to
+      // the caller immediately; the shell refreshes its races list on resume,
+      // and the backend omits this membership from `active` for new clients.
+      if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
       if (mounted) {
         showErrorToast(

@@ -284,6 +284,19 @@ void main() {
       expect(targets.map((t) => t['userId']), isNot(contains('ghost')));
     });
 
+    test('racers with an active Leg Cramp are excluded from targeting', () {
+      final targets = TeamRace.offensiveTargets(
+        participants: const [
+          {'userId': 'me', 'team': 'TEAM_A'},
+          {'userId': 'fresh', 'team': 'TEAM_B'},
+          {'userId': 'cramped', 'team': 'TEAM_B', 'legCramped': true},
+        ],
+        myUserId: 'me',
+        race: teamRace,
+      );
+      expect(targets.map((t) => t['userId']), ['fresh']);
+    });
+
     test('target filtering preserves the server-provided order', () {
       final targets = TeamRace.offensiveTargets(
         participants: const [

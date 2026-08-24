@@ -313,6 +313,15 @@ abstract final class TeamRace {
     return raw is String && raw.isNotEmpty;
   }
 
+  /// Additive targeting metadata from the typed context. The fallback also
+  /// understands the active-effects shape used by older progress payloads.
+  static bool hasActiveLegCramp(Map<String, dynamic> participant) {
+    if (participant['legCramped'] == true) return true;
+    final effects = participant['activeEffects'];
+    return effects is List &&
+        effects.any((effect) => effect is Map && effect['type'] == 'LEG_CRAMP');
+  }
+
   /// TR-651/657 — the pool an OFFENSIVE single-target powerup may aim at.
   ///
   /// Always drops the caster and stealthed racers (existing rules). In a team
@@ -343,6 +352,7 @@ abstract final class TeamRace {
           if ((p['userId'] as String?) == myUserId) return false;
           if (p['stealthed'] == true) return false;
           if (hasForfeited(p)) return false;
+          if (hasActiveLegCramp(p)) return false;
           if (myTeam != null && participantTeam(p) == myTeam) return false;
           return true;
         })
