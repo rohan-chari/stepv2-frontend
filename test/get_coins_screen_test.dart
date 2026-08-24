@@ -30,7 +30,7 @@ Map<String, dynamic> _status({Map<String, dynamic>? adCoinReward}) {
 }
 
 const _claimResult = <String, dynamic>{
-  'coinAmount': 25,
+  'coinAmount': 47,
   'coins': 150,
   'remainingToday': 4,
 };
@@ -141,6 +141,8 @@ const _liveOffer = <String, dynamic>{
   'pendingGrant': false,
   'remainingToday': 5,
   'coinAmount': 25,
+  'coinRewardMin': 25,
+  'coinRewardMax': 50,
 };
 
 void main() {
@@ -151,7 +153,8 @@ void main() {
     final ads = _FakeAdController();
     await _pumpScreen(tester, api: api, adController: ads);
 
-    expect(find.text('WATCH AD · +25 COINS'), findsOneWidget);
+    expect(find.text('WATCH AD · RANDOM COINS'), findsOneWidget);
+    expect(find.textContaining('random 25–50 coins'), findsOneWidget);
     expect(find.text('INVITE FRIENDS'), findsOneWidget);
     expect(find.text('OPEN DAILY BOX'), findsOneWidget);
     expect(ads.loadCalls, 1, reason: 'ad should preload when offer is live');
@@ -180,7 +183,7 @@ void main() {
     final ads = _FakeAdController();
     final auth = await _pumpScreen(tester, api: api, adController: ads);
 
-    await tester.tap(find.text('WATCH AD · +25 COINS'));
+    await tester.tap(find.text('WATCH AD · RANDOM COINS'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -188,6 +191,7 @@ void main() {
     expect(api.claimCalls, 1);
     expect(auth.coins, 150);
     expect(find.textContaining('4 of 5'), findsOneWidget);
+    expect(find.text('+47 coins earned!'), findsOneWidget);
   });
 
   testWidgets('retries the claim while SSV has not landed yet', (tester) async {
@@ -204,7 +208,7 @@ void main() {
     final ads = _FakeAdController();
     await _pumpScreen(tester, api: api, adController: ads);
 
-    await tester.tap(find.text('WATCH AD · +25 COINS'));
+    await tester.tap(find.text('WATCH AD · RANDOM COINS'));
     await tester.pump();
     expect(api.claimCalls, 1);
 
@@ -224,13 +228,13 @@ void main() {
       final ads = _FakeAdController()..earnReward = false;
       await _pumpScreen(tester, api: api, adController: ads);
 
-      await tester.tap(find.text('WATCH AD · +25 COINS'));
+      await tester.tap(find.text('WATCH AD · RANDOM COINS'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 
       expect(api.claimCalls, 0);
       expect(ads.loadCalls, 2, reason: 'a fresh ad should preload');
-      expect(find.text('WATCH AD · +25 COINS'), findsOneWidget);
+      expect(find.text('WATCH AD · RANDOM COINS'), findsOneWidget);
       expect(find.text('LOADING AD...'), findsNothing);
     },
   );
@@ -248,14 +252,14 @@ void main() {
       final ads = _FakeAdController();
       await _pumpScreen(tester, api: api, adController: ads);
 
-      await tester.tap(find.text('WATCH AD · +25 COINS'));
+      await tester.tap(find.text('WATCH AD · RANDOM COINS'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 
       expect(api.claimCalls, 1);
       expect(api.statusCalls, 2, reason: 'status refetch picks up pendingGrant');
       expect(ads.loadCalls, greaterThanOrEqualTo(2));
-      expect(find.text('WATCH AD · +25 COINS'), findsOneWidget);
+      expect(find.text('WATCH AD · RANDOM COINS'), findsOneWidget);
       expect(find.text('LOADING AD...'), findsNothing);
     },
   );

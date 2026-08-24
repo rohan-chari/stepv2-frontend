@@ -9,6 +9,7 @@ import '../styles.dart';
 import '../widgets/ad_banner_slot.dart';
 import '../widgets/coin_balance_badge.dart';
 import '../widgets/error_toast.dart';
+import '../widgets/info_toast.dart';
 import '../widgets/pill_button.dart';
 import 'daily_reward_screen.dart';
 import 'referral_screen.dart';
@@ -149,6 +150,17 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
     return value != null && value >= 25 && value <= 50 ? value : 25;
   }
 
+  int get _coinRewardMin {
+    final value = _adCoinReward?['coinRewardMin'];
+    return value is num && value >= 1 && value <= 100 ? value.toInt() : 25;
+  }
+
+  int get _coinRewardMax {
+    final value = _adCoinReward?['coinRewardMax'];
+    final parsed = value is num ? value.toInt() : 50;
+    return parsed >= _coinRewardMin && parsed <= 100 ? parsed : 50;
+  }
+
   /// Watches allowed per day. Server-driven so a retuned cap reaches this build
   /// without an App Store cycle; the fallback matches the backend default for a
   /// backend too old to send it.
@@ -231,6 +243,11 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
           },
         };
       });
+      final rawEarnedAmount = res['coinAmount'];
+      final earnedAmount = rawEarnedAmount is num
+          ? rawEarnedAmount.toInt()
+          : _coinAmount;
+      showInfoToast(context, '+$earnedAmount coins earned!');
       await _maybePrepareAd();
     } catch (_) {
       if (!mounted) return;
@@ -461,7 +478,7 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
       label = 'CLAIM +$_coinAmount COINS';
       onPressed = _adFlowBusy ? null : _startWatchAd;
     } else if (_adReady) {
-      label = 'WATCH AD · +$_coinAmount COINS';
+      label = 'WATCH AD · RANDOM COINS';
       onPressed = _adFlowBusy ? null : _startWatchAd;
     } else if (_adLoading || _adFlowBusy) {
       label = 'LOADING AD...';
@@ -478,7 +495,7 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
       title: 'WATCH AN AD',
       subtitle: exhausted
           ? 'You earned all your ad coins for today.'
-          : 'Earn $_coinAmount coins per ad · $_remainingToday of $_dailyCap left today',
+          : 'Earn a random $_coinRewardMin–$_coinRewardMax coins per ad · $_remainingToday of $_dailyCap left today',
       action: PillButton(
         label: label,
         variant: PillButtonVariant.primary,
