@@ -159,6 +159,25 @@ class ShopBootstrapResult {
   final Map<String, dynamic>? inventory;
 }
 
+/// The authoritative result of the additive Inbox read-all mutation.
+///
+/// [totalUnreadCount] is required because it is the only count this endpoint
+/// may use to update the combined Home badge. The other response counts are
+/// optional projections so a version-skewed response cannot crash the client.
+class InboxReadAllResult {
+  const InboxReadAllResult({
+    this.readAlertCount,
+    this.readThreadCount,
+    this.unreadCount,
+    required this.totalUnreadCount,
+  });
+
+  final int? readAlertCount;
+  final int? readThreadCount;
+  final int? unreadCount;
+  final int totalUnreadCount;
+}
+
 /// A definite POST-search 404 selected the frozen backend contract. The
 /// current real-name query must not be replayed into a GET URL.
 class LegacyFriendSearchRequired implements Exception {
@@ -2328,6 +2347,37 @@ class BackendApiService {
       identityToken: identityToken,
     );
     return _decodeJsonResponse(response);
+  }
+
+  Future<InboxReadAllResult> markInboxReadAll({
+    required String identityToken,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/inbox/read-all',
+      body: const <String, dynamic>{},
+      identityToken: identityToken,
+    );
+    final raw = await _readRawResponse(response);
+    if (raw.statusCode < 200 || raw.statusCode >= 300) {
+      throw _apiExceptionFromRaw(raw);
+    }
+    final payload = raw.json;
+    final totalUnreadCount = payload?['totalUnreadCount'];
+    if (totalUnreadCount is! int || totalUnreadCount < 0) {
+      throw const ApiException('The Inbox read-all response was invalid.');
+    }
+    return InboxReadAllResult(
+      readAlertCount: _nonnegativeIntResponse(payload?['readAlertCount']),
+      readThreadCount: _nonnegativeIntResponse(payload?['readThreadCount']),
+      unreadCount: _nonnegativeIntResponse(payload?['unreadCount']),
+      totalUnreadCount: totalUnreadCount,
+    );
+  }
+
+  static int? _nonnegativeIntResponse(Object? value) {
+    if (value is int && value >= 0) return value;
+    return null;
   }
 
   Future<Map<String, dynamic>> fetchFeedbackThreads({

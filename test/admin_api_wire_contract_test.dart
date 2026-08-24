@@ -275,23 +275,26 @@ void main() {
   });
 
   group('PATCH /admin/settings', () {
-    test('sends only the bannerAdsEnabled setting and reads the envelope', () async {
-      final client = _FakeHttpClient([
-        const _Scripted(200, '{"settings":{"bannerAdsEnabled":false}}'),
-      ]);
-      final api = BackendApiService(httpClient: client);
+    test(
+      'sends only the bannerAdsEnabled setting and reads the envelope',
+      () async {
+        final client = _FakeHttpClient([
+          const _Scripted(200, '{"settings":{"bannerAdsEnabled":false}}'),
+        ]);
+        final api = BackendApiService(httpClient: client);
 
-      final settings = await api.updateAdminSettings(
-        identityToken: 'tok',
-        bannerAdsEnabled: false,
-      );
+        final settings = await api.updateAdminSettings(
+          identityToken: 'tok',
+          bannerAdsEnabled: false,
+        );
 
-      final request = client.requests.single;
-      expect(request.method, 'PATCH');
-      expect(request.uri.path, '/admin/settings');
-      expect(_bodyOf(request), {'bannerAdsEnabled': false});
-      expect(settings, {'bannerAdsEnabled': false});
-    });
+        final request = client.requests.single;
+        expect(request.method, 'PATCH');
+        expect(request.uri.path, '/admin/settings');
+        expect(_bodyOf(request), {'bannerAdsEnabled': false});
+        expect(settings, {'bannerAdsEnabled': false});
+      },
+    );
   });
 
   group('PATCH /admin/powerup-shop/items/:itemId', () {
@@ -573,5 +576,54 @@ void main() {
       expect(versions.single.version, 7);
       expect(versions.single.active, isTrue);
     });
+  });
+
+  group('POST /inbox/read-all', () {
+    test(
+      'sends an empty body and parses the authoritative combined count',
+      () async {
+        final client = _FakeHttpClient([
+          const _Scripted(
+            200,
+            '{"readAlertCount":7,"readThreadCount":2,"unreadCount":1,"totalUnreadCount":3}',
+          ),
+        ]);
+        final api = BackendApiService(httpClient: client);
+
+        final result = await api.markInboxReadAll(identityToken: 'tok');
+
+        final request = client.requests.single;
+        expect(request.method, 'POST');
+        expect(request.uri.path, '/inbox/read-all');
+        expect(_bodyOf(request), isEmpty);
+        expect(result.readAlertCount, 7);
+        expect(result.readThreadCount, 2);
+        expect(result.unreadCount, 1);
+        expect(result.totalUnreadCount, 3);
+      },
+    );
+
+    test(
+      'rejects a missing or malformed totalUnreadCount without a fallback',
+      () async {
+        for (final body in <String>[
+          '{"unreadCount":0}',
+          '{"totalUnreadCount":-1}',
+          '{"totalUnreadCount":1.5}',
+          '{"totalUnreadCount":"0"}',
+          '[]',
+        ]) {
+          final api = BackendApiService(
+            httpClient: _FakeHttpClient([_Scripted(200, body)]),
+          );
+
+          await expectLater(
+            api.markInboxReadAll(identityToken: 'tok'),
+            throwsA(isA<ApiException>()),
+            reason: body,
+          );
+        }
+      },
+    );
   });
 }

@@ -131,6 +131,8 @@ class _InboxScreenState extends State<InboxScreen>
   int _pendingAlertReads = 0;
   bool _readBatchConcurrent = false;
   bool _readBatchSawAuthoritativeCount = false;
+  bool _readAllAttempted = false;
+  int? _lastSuccessfulReadAllMutationGeneration;
 
   @override
   bool get wantKeepAlive => widget.hostMode == InboxHostMode.embedded;
@@ -173,6 +175,8 @@ class _InboxScreenState extends State<InboxScreen>
     _pendingAlertReads = 0;
     _readBatchConcurrent = false;
     _readBatchSawAuthoritativeCount = false;
+    _readAllAttempted = false;
+    _lastSuccessfulReadAllMutationGeneration = null;
     _lastKnownUnreadCount = null;
     if (!mounted) return;
     setState(() {
@@ -273,11 +277,13 @@ class _InboxScreenState extends State<InboxScreen>
           unreadFetchGeneration,
           unreadMutationGeneration,
         );
-        // The Home entry opens the standalone page and clears the inbox on
-        // entry. Embedded Inbox is also used by existing shell/tutorial flows
-        // where opening the tab must preserve per-item read semantics.
-        if (widget.clearOnOpen) {
-          unawaited(_markVisibleAlertsRead(rows, generation));
+        // Only the Home-launched standalone route opts into clear-on-open.
+        // Embedded/tutorial Inbox retains its existing item-level semantics.
+        if (widget.hostMode == InboxHostMode.standalone &&
+            widget.clearOnOpen &&
+            !_readAllAttempted) {
+          _readAllAttempted = true;
+          unawaited(_markInboxReadAll(generation));
         }
       }
     } catch (_) {
@@ -292,76 +298,44 @@ class _InboxScreenState extends State<InboxScreen>
     }
   }
 
-  Future<void> _markVisibleAlertsRead(
-    List<Map<String, dynamic>> rows,
-    int loadGeneration,
-  ) async {
+  Future<void> _markInboxReadAll(int loadGeneration) async {
     final token = widget.authService.authToken;
     final userId = widget.authService.userId;
     if (token == null || token.isEmpty) return;
-    final unread = rows
-        .where(
-          (row) =>
-              row['_inboxKind'] == 'alert' &&
-              row['readAt'] == null &&
-              row['id'] is String,
-        )
-        .toList(growable: false);
-    final allAlertIds = <String>{for (final row in unread) row['id'] as String};
-    var cursor = _alertsCursor;
-    while (cursor != null && cursor.isNotEmpty) {
-      try {
-        final payload = await widget.backendApiService.fetchInboxAlerts(
-          identityToken: token,
-          cursor: cursor,
-          limit: 50,
-        );
-        final raw = payload['alerts'];
-        if (raw is List) {
-          for (final rawRow in raw.whereType<Map>()) {
-            final id = rawRow['id'];
-            final readAt = rawRow['readAt'];
-            if (id is String && id.isNotEmpty && readAt == null) {
-              allAlertIds.add(id);
-            }
+    final mutationGeneration = ++_unreadMutationGeneration;
+    try {
+      final result = await widget.backendApiService.markInboxReadAll(
+        identityToken: token,
+      );
+      if (!mounted ||
+          token != widget.authService.authToken ||
+          userId != widget.authService.userId ||
+          loadGeneration != _loadGeneration ||
+          mutationGeneration != _unreadMutationGeneration) {
+        return;
+      }
+      // Any fetch started before read-all must not overwrite its authoritative
+      // combined count when it completes after this mutation.
+      _unreadMutationGeneration++;
+      _lastSuccessfulReadAllMutationGeneration = _unreadMutationGeneration;
+      final readAt = DateTime.now().toIso8601String();
+      for (final row in _rows) {
+        if (row['_inboxKind'] == 'alert' && row['readAt'] == null) {
+          row['readAt'] = readAt;
+        }
+        if (row['_inboxKind'] == 'support') {
+          if (row.containsKey('unread')) row['unread'] = false;
+          if (row.containsKey('unreadByUser')) {
+            row['unreadByUser'] = false;
           }
         }
-        cursor = payload['nextCursor'] is String
-            ? payload['nextCursor'] as String
-            : null;
-      } catch (_) {
-        cursor = null;
       }
-    }
-    final succeeded = <String>{};
-    for (final row in unread) {
-      row['readAt'] = DateTime.now().toIso8601String();
-    }
-    await Future.wait(
-      allAlertIds.map((id) async {
-        try {
-          await widget.backendApiService.markInboxAlertRead(
-            identityToken: token,
-            alertId: id,
-          );
-          succeeded.add(id);
-        } catch (_) {}
-      }),
-    );
-    if (mounted &&
-        token == widget.authService.authToken &&
-        userId == widget.authService.userId &&
-        loadGeneration == _loadGeneration) {
-      for (final row in unread) {
-        if (!succeeded.contains(row['id'])) row['readAt'] = null;
-      }
-      if (succeeded.length == allAlertIds.length) {
-        _lastKnownUnreadCount = 0;
-        widget.onUnreadCountChanged?.call(0);
-      } else {
-        unawaited(_refreshUnreadCount());
-      }
+      _lastKnownUnreadCount = result.totalUnreadCount;
+      widget.onUnreadCountChanged?.call(result.totalUnreadCount);
       setState(() {});
+    } catch (_) {
+      // A missing endpoint, transport error, or malformed total is a
+      // recoverable clear failure. Keep the existing badge and row state.
     }
   }
 
@@ -407,6 +381,21 @@ class _InboxScreenState extends State<InboxScreen>
         ..._normalizeRows(alertPayload['alerts'], 'alert'),
         ..._normalizeRows(threadPayload['threads'], 'support'),
       ]..sort(_compareRows);
+      // A read-all or per-item mutation may have completed while this page
+      // was loading. Do not reintroduce stale NEW markers from that response.
+      if (_lastSuccessfulReadAllMutationGeneration != null &&
+          _lastSuccessfulReadAllMutationGeneration ==
+              _unreadMutationGeneration &&
+          _unreadMutationGeneration != unreadMutationGeneration) {
+        final readAt = DateTime.now().toIso8601String();
+        for (final row in incoming) {
+          if (row['_inboxKind'] == 'alert') row['readAt'] = readAt;
+          if (row['_inboxKind'] == 'support') {
+            row['unread'] = false;
+            row['unreadByUser'] = false;
+          }
+        }
+      }
       if (mounted) {
         setState(() {
           _rows = [..._rows, ...incoming]..sort(_compareRows);
@@ -746,7 +735,7 @@ class _InboxScreenState extends State<InboxScreen>
       itemCount:
           _rows.length +
           (_alertsCursor == null && _threadsCursor == null ? 0 : 1),
-      separatorBuilder: (_, _) => const SizedBox(height: 8),
+      separatorBuilder: (_, _) => const SizedBox(height: 6),
       itemBuilder: (context, index) {
         if (index == _rows.length) {
           return Center(
@@ -782,7 +771,7 @@ class _InboxScreenState extends State<InboxScreen>
           onTap: () => _openAlert(row),
           child: RetroCard(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 13),
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 11),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -808,7 +797,7 @@ class _InboxScreenState extends State<InboxScreen>
                         ),
                     ],
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Text(
                     title,
                     style: PixelText.title(
@@ -816,7 +805,7 @@ class _InboxScreenState extends State<InboxScreen>
                       color: AppColors.of(context).textDark,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 3),
                   Text(
                     body,
                     maxLines: 2,
@@ -826,7 +815,7 @@ class _InboxScreenState extends State<InboxScreen>
                       color: AppColors.of(context).textMid,
                     ),
                   ),
-                  const SizedBox(height: 9),
+                  const SizedBox(height: 7),
                   Text(
                     isSupport ? 'REPLY' : 'OPEN',
                     style: PixelText.title(
