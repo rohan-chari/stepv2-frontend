@@ -2269,22 +2269,22 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         if (!preflight.supported || preflight.invites.isEmpty) return;
 
         final invite = preflight.invites.firstWhere(
-          (candidate) =>
-              !_homeInviteDismissedThisVisit.contains(candidate.id),
+          (candidate) => !_homeInviteDismissedThisVisit.contains(candidate.id),
           orElse: () => preflight.invites.first,
         );
         if (_homeInviteDismissedThisVisit.contains(invite.id)) return;
         setState(() => _homeInvitePopupOpen = true);
         final answered = await Navigator.of(context).push<bool>(
           PageRouteBuilder(
-            opaque: false,
+            // The invite card is the complete modal surface. A transparent
+            // route leaves Home's promoted invite card visible behind it.
+            opaque: true,
             transitionDuration: const Duration(milliseconds: 250),
             reverseTransitionDuration: const Duration(milliseconds: 200),
             pageBuilder: (_, _, _) => HomeInviteOverlay(
               invite: invite,
               onRespond: (accept) => _respondToHomeInvite(invite, accept),
-            onDismissed: () =>
-                _homeInviteDismissedThisVisit.add(invite.id),
+              onDismissed: () => _homeInviteDismissedThisVisit.add(invite.id),
             ),
             transitionsBuilder: (_, animation, _, child) =>
                 FadeTransition(opacity: animation, child: child),

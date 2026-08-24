@@ -511,7 +511,7 @@ class _MultiCaseOpeningScreenState extends State<MultiCaseOpeningScreen> {
                 key: const Key('open-all-reroll-button'),
                 label: 'REROLL ALL',
                 icon: Icons.ondemand_video_rounded,
-                variant: PillButtonVariant.secondary,
+                variant: PillButtonVariant.primary,
                 fontSize: 13,
                 fullWidth: true,
                 loading: _rerollingAll,

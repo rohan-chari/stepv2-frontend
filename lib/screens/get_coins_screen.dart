@@ -144,12 +144,19 @@ class _GetCoinsScreenState extends State<GetCoinsScreen> {
 
   int get _remainingToday =>
       (_adCoinReward?['remainingToday'] as num?)?.toInt() ?? 0;
-  int get _coinAmount => (_adCoinReward?['coinAmount'] as num?)?.toInt() ?? 25;
+  int get _coinAmount {
+    final value = (_adCoinReward?['coinAmount'] as num?)?.toInt();
+    return value != null && value >= 25 && value <= 50 ? value : 25;
+  }
 
   /// Watches allowed per day. Server-driven so a retuned cap reaches this build
   /// without an App Store cycle; the fallback matches the backend default for a
   /// backend too old to send it.
-  int get _dailyCap => (_adCoinReward?['dailyCap'] as num?)?.toInt() ?? 3;
+  int get _dailyCap {
+    final value = (_adCoinReward?['dailyCap'] as num?)?.toInt();
+    return value != null && value > 0 ? value : 5;
+  }
+
   bool get _pendingGrant => _adCoinReward?['pendingGrant'] == true;
   bool get _offerLive =>
       _adCoinReward != null &&

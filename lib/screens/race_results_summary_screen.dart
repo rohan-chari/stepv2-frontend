@@ -414,7 +414,7 @@ class _RaceResultsSummaryScreenState extends State<RaceResultsSummaryScreen> {
                                       : null,
                                   label: widget.canStartNextRace
                                       ? 'START YOUR NEXT RACE'
-                                      : 'NICE',
+                                      : 'CONTINUE',
                                   variant: PillButtonVariant.primary,
                                   fullWidth: true,
                                   // TODO(ads-interstitial): frequency-capped

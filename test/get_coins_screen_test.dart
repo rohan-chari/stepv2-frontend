@@ -32,7 +32,7 @@ Map<String, dynamic> _status({Map<String, dynamic>? adCoinReward}) {
 const _claimResult = <String, dynamic>{
   'coinAmount': 25,
   'coins': 150,
-  'remainingToday': 2,
+  'remainingToday': 4,
 };
 
 class _FakeBackendApiService extends BackendApiService {
@@ -139,7 +139,7 @@ Future<AuthService> _pumpScreen(
 const _liveOffer = <String, dynamic>{
   'available': true,
   'pendingGrant': false,
-  'remainingToday': 3,
+  'remainingToday': 5,
   'coinAmount': 25,
 };
 
@@ -187,7 +187,7 @@ void main() {
     expect(ads.showCalls, 1);
     expect(api.claimCalls, 1);
     expect(auth.coins, 150);
-    expect(find.textContaining('2 of 3'), findsOneWidget);
+    expect(find.textContaining('4 of 5'), findsOneWidget);
   });
 
   testWidgets('retries the claim while SSV has not landed yet', (tester) async {
@@ -285,7 +285,7 @@ void main() {
         adCoinReward: {
           'available': true,
           'pendingGrant': true,
-          'remainingToday': 3,
+          'remainingToday': 5,
           'coinAmount': 25,
         },
       ),

@@ -374,9 +374,7 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
                     hidden: widget.demoMode,
                   ),
                   if (!widget.demoMode)
-                    const AdBannerSpacing(
-                      placement: AdBannerPlacement.boxTop,
-                    ),
+                    const AdBannerSpacing(placement: AdBannerPlacement.boxTop),
                   Expanded(
                     child: Center(
                       child: SingleChildScrollView(
@@ -576,7 +574,7 @@ class _CaseOpeningScreenState extends State<CaseOpeningScreen> {
                 key: const Key('case-reroll-button'),
                 label: 'REROLL · WATCH AD',
                 icon: Icons.ondemand_video_rounded,
-                variant: PillButtonVariant.secondary,
+                variant: PillButtonVariant.primary,
                 fontSize: 13,
                 fullWidth: true,
                 loading: _rerolling,

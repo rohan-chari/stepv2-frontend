@@ -362,7 +362,7 @@ void main() {
     }
   });
 
-  testWidgets('real result screen places one exact double plaque before NICE', (
+  testWidgets('real result screen places one exact double plaque before CONTINUE', (
     tester,
   ) async {
     final races = _races();
@@ -388,7 +388,7 @@ void main() {
     expect(actionText.style?.color, Colors.white);
     expect(
       tester.getTopLeft(find.byKey(const Key('race-payout-double-panel'))).dy,
-      lessThan(tester.getTopLeft(find.text('NICE')).dy),
+      lessThan(tester.getTopLeft(find.text('CONTINUE')).dy),
     );
   });
 
@@ -458,12 +458,12 @@ void main() {
       await _pump(tester, offer: offer);
       expect(offer, isNull);
       expect(find.byKey(const Key('race-payout-double-panel')), findsNothing);
-      expect(find.text('NICE'), findsOneWidget);
+      expect(find.text('CONTINUE'), findsOneWidget);
       expect(tester.takeException(), isNull);
     }
   });
 
-  testWidgets('tap prepares before loading and loading leaves NICE enabled', (
+  testWidgets('tap prepares before loading and loading leaves CONTINUE enabled', (
     tester,
   ) async {
     final api = _FakeRacePayoutApi();
@@ -488,7 +488,7 @@ void main() {
           .widget<GestureDetector>(
             find
                 .ancestor(
-                  of: find.text('NICE'),
+                  of: find.text('CONTINUE'),
                   matching: find.byType(GestureDetector),
                 )
                 .first,
