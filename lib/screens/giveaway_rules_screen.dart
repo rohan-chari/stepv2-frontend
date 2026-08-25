@@ -7,26 +7,9 @@ import '../styles.dart';
 /// entrant. It intentionally never opens a browser: App Store and Play users
 /// can always read the controlling terms inside the carrying binary.
 class GiveawayRulesScreen extends StatelessWidget {
-  const GiveawayRulesScreen({
-    super.key,
-    required this.title,
-    required this.rules,
-    required this.minimumAge,
-    required this.governingTimeZone,
-    required this.startsAt,
-    required this.endsAt,
-    required this.sponsorLegalName,
-    required this.sponsorMailingAddress,
-  });
+  const GiveawayRulesScreen({super.key, required this.contest});
 
-  final String title;
-  final GiveawayRules rules;
-  final int minimumAge;
-  final String governingTimeZone;
-  final DateTime startsAt;
-  final DateTime endsAt;
-  final String sponsorLegalName;
-  final String sponsorMailingAddress;
+  final GiveawayContest contest;
 
   @override
   Widget build(BuildContext context) {
@@ -73,7 +56,7 @@ class GiveawayRulesScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          title,
+                          contest.title,
                           style: PixelText.title(
                             size: 20,
                             color: colors.textDark,
@@ -81,7 +64,7 @@ class GiveawayRulesScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Rules version ${rules.version}',
+                          'Rules version ${contest.rules.version}',
                           style: PixelText.body(
                             size: 12,
                             color: colors.textMid,
@@ -89,7 +72,10 @@ class GiveawayRulesScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          'Open to legal residents of the 50 United States and D.C., age $minimumAge+. No purchase necessary.',
+                          contest.eligibilityMode ==
+                                  GiveawayEligibilityMode.baraAccount
+                              ? contest.eligibilitySummary
+                              : 'Open to legal residents of the 50 United States and D.C., age ${contest.minimumAge ?? 18}+. No purchase necessary.',
                           style: PixelText.body(
                             size: 14,
                             color: colors.textDark,
@@ -97,7 +83,7 @@ class GiveawayRulesScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Contest window (UTC): ${_instant(startsAt)} through ${_instant(endsAt)}. Governing timezone: $governingTimeZone.',
+                          'Contest window (UTC): ${_instant(contest.startsAt)} through ${_instant(contest.endsAt)}. Governing timezone: ${contest.governingTimeZone}.',
                           style: PixelText.body(
                             size: 13,
                             color: colors.textMid,
@@ -113,23 +99,24 @@ class GiveawayRulesScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         SelectableText(
-                          sponsorLegalName,
+                          contest.sponsorName,
                           style: PixelText.body(
                             size: 13,
                             color: colors.textDark,
                           ),
                         ),
-                        SelectableText(
-                          sponsorMailingAddress,
-                          style: PixelText.body(
-                            size: 13,
-                            color: colors.textMid,
+                        if (contest.sponsorMailingAddress case final address?)
+                          SelectableText(
+                            address,
+                            style: PixelText.body(
+                              size: 13,
+                              color: colors.textMid,
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ),
-                  for (final section in rules.sections) ...[
+                  for (final section in contest.rules.sections) ...[
                     const SizedBox(height: 14),
                     _RulesCard(
                       child: Column(

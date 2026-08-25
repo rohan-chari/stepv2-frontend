@@ -516,6 +516,31 @@ void main() {
       }),
       isNotNull,
     );
+    expect(
+      AdminGiveawayFulfillment.tryParse({
+        ...empty,
+        'status': 'COINS_AWARDED',
+        'coinsAwardedAt': '2026-10-03T12:00:00.000Z',
+        'coinTransactionId': 'coin-tx-only',
+        'fulfilledAt': '2026-10-03T12:00:00.000Z',
+      }),
+      isNotNull,
+    );
+    expect(
+      AdminGiveawayFulfillment.tryParse({
+        ...empty,
+        'status': 'CASH_DELIVERED',
+        'provider': 'ACH',
+        'providerReference': '••••',
+        'cashSentMinor': 7500,
+        'cashSentCurrency': 'USD',
+        'claimedAt': '2026-10-03T10:00:00.000Z',
+        'cashSentAt': '2026-10-03T11:00:00.000Z',
+        'cashDeliveredAt': '2026-10-03T12:00:00.000Z',
+        'fulfilledAt': '2026-10-03T12:00:00.000Z',
+      }),
+      isNotNull,
+    );
   });
 
   test(
@@ -583,6 +608,45 @@ void main() {
         }),
         isNotNull,
       );
+      expect(
+        AdminGiveawayContest.tryParse({
+          ...valid,
+          'cashMinor': 0,
+          'coinPrize': 7500,
+        }),
+        isNotNull,
+      );
+      expect(
+        AdminGiveawayContest.tryParse({
+          ...valid,
+          'cashMinor': 12500,
+          'coinPrize': 0,
+        }),
+        isNotNull,
+      );
+      expect(
+        AdminGiveawayContest.tryParse({
+          ...valid,
+          'cashMinor': 0,
+          'coinPrize': 1000000,
+        }),
+        isNotNull,
+      );
+      for (final prizes in [
+        (cash: 0, coins: 0),
+        (cash: -1, coins: 5000),
+        (cash: 5000, coins: -1),
+        (cash: 5000, coins: 1000001),
+      ]) {
+        expect(
+          AdminGiveawayContest.tryParse({
+            ...valid,
+            'cashMinor': prizes.cash,
+            'coinPrize': prizes.coins,
+          }),
+          isNull,
+        );
+      }
     },
   );
 
@@ -883,6 +947,84 @@ void main() {
     },
   );
 
+  testWidgets('coin-only verified winner can award coins immediately', (
+    tester,
+  ) async {
+    final api = _AdminGiveawayApi()
+      ..contest = {
+        ...adminContest(status: 'FINAL', lifecycle: 'FINAL'),
+        'cashMinor': 0,
+        'coinPrize': 777,
+      }
+      ..currentResult = result(verified: true)
+      ..fulfillment = {
+        'status': 'UNCLAIMED',
+        'provider': null,
+        'providerReference': null,
+        'cashSentMinor': null,
+        'cashSentCurrency': null,
+        'claimedAt': null,
+        'cashSentAt': null,
+        'cashDeliveredAt': null,
+        'coinsAwardedAt': null,
+        'coinTransactionId': null,
+        'fulfilledAt': null,
+      };
+    await _pump(tester, api);
+    await tester.tap(find.text('Bara Referral Contest'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.text('MARK CLAIMED'), findsNothing);
+    expect(find.text('AWARD 777 COINS'), findsOneWidget);
+    await tester.ensureVisible(find.text('AWARD 777 COINS'));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.text('AWARD 777 COINS'));
+    await tester.pump();
+    await tester.tap(find.text('AWARD COINS'));
+    await tester.pump();
+
+    expect(
+      api.actions.where((action) => action == 'award-coins'),
+      hasLength(1),
+    );
+    expect(find.text('COINS_AWARDED'), findsOneWidget);
+    expect(find.textContaining('coin-tx-1'), findsOneWidget);
+  });
+
+  testWidgets('cash-only delivered fulfillment reopens as complete', (
+    tester,
+  ) async {
+    final api = _AdminGiveawayApi()
+      ..contest = {
+        ...adminContest(status: 'FINAL', lifecycle: 'FINAL'),
+        'cashMinor': 7500,
+        'coinPrize': 0,
+      }
+      ..currentResult = result(verified: true)
+      ..fulfillment = {
+        'status': 'CASH_DELIVERED',
+        'provider': 'ACH',
+        'providerReference': '••••',
+        'cashSentMinor': 7500,
+        'cashSentCurrency': 'USD',
+        'claimedAt': '2026-10-03T10:00:00.000Z',
+        'cashSentAt': '2026-10-03T11:00:00.000Z',
+        'cashDeliveredAt': '2026-10-03T12:00:00.000Z',
+        'coinsAwardedAt': null,
+        'coinTransactionId': null,
+        'fulfilledAt': '2026-10-03T12:00:00.000Z',
+      };
+    await _pump(tester, api);
+    await tester.tap(find.text('Bara Referral Contest'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.text('CASH_DELIVERED'), findsOneWidget);
+    expect(find.textContaining('latest server'), findsNothing);
+    expect(find.textContaining('AWARD'), findsNothing);
+  });
+
   testWidgets(
     'published banner correction requires a reason and explicit confirmation',
     (tester) async {
@@ -1018,48 +1160,130 @@ void main() {
     },
   );
 
+  testWidgets('draft editor exposes the simplified coin-only setup', (
+    tester,
+  ) async {
+    final api = _AdminGiveawayApi()
+      ..contest = adminContest(
+        status: 'DRAFT',
+        lifecycle: 'DRAFT',
+        revision: 2,
+      );
+    await _pump(tester, api);
+    await tester.tap(find.text('Bara Referral Contest'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    expect(find.byKey(const Key('giveaway-cash-prize-toggle')), findsNothing);
+    expect(find.byKey(const Key('giveaway-coin-prize-toggle')), findsOneWidget);
+    expect(find.textContaining('no cash prizes'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == 'Coin prize',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('SAVE DRAFT'), findsOneWidget);
+    expect(find.text('PUBLISH'), findsOneWidget);
+    expect(find.text('BANNER CORRECTION'), findsNothing);
+    expect(find.text('LEGAL DETAILS (ONE-TIME SETUP)'), findsOneWidget);
+    final titleField = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField && widget.decoration?.labelText == 'Title',
+    );
+    await tester.enterText(titleField, 'Edited legal title');
+    await tester.pump();
+    expect(find.text('Save draft changes before publishing.'), findsOneWidget);
+    expect(
+      tester
+          .widget<PillButton>(find.widgetWithText(PillButton, 'PUBLISH'))
+          .onPressed,
+      isNull,
+    );
+  });
+
   testWidgets(
-    'draft editor pins prizes and surfaces revision conflicts with reload',
+    'editing a legacy draft title preserves every frozen legacy field',
     (tester) async {
+      const originalRules = <String, dynamic>{
+        'version': 'legacy-september-v7',
+        'sha256':
+            '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+        'sections': [
+          {
+            'heading': 'Original entry rule',
+            'body': 'This historical rule must survive unrelated edits.',
+          },
+          {
+            'heading': 'Original tie break',
+            'body': 'The first entrant to reach the final score wins.',
+          },
+        ],
+      };
+      const originalSocial = <Map<String, dynamic>>[
+        {
+          'platform': 'instagram',
+          'label': 'Follow the original account',
+          'url': 'https://www.instagram.com/barastep/',
+        },
+      ];
+      final originalRegions = giveawayUsRegionsV1.toList()..sort();
       final api = _AdminGiveawayApi()
-        ..contest = adminContest(
-          status: 'DRAFT',
-          lifecycle: 'DRAFT',
-          revision: 2,
-        );
+        ..contest = {
+          ...adminContest(status: 'DRAFT', lifecycle: 'DRAFT', revision: 2),
+          'cashCurrency': 'USD',
+          'cashMinor': 7300,
+          'coinPrize': 4100,
+          'minimumAge': 18,
+          'eligibleCountries': const ['US'],
+          'eligibleRegions': originalRegions,
+          'sponsor': const {
+            'legalName': 'Original Sponsor LLC',
+            'mailingAddress': '77 Original Trail',
+          },
+          'rules': originalRules,
+          'socialLinks': originalSocial,
+          'bannerMessage': r'Original US$73 + 4,100 coin prize.',
+        };
+
       await _pump(tester, api);
       await tester.tap(find.text('Bara Referral Contest'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
-      await tester.pump();
-      expect(find.text(r'US$50 (fixed)'), findsOneWidget);
-      expect(find.text('5,000 coins (fixed)'), findsOneWidget);
-      expect(find.text('SAVE DRAFT'), findsOneWidget);
-      expect(find.text('PUBLISH'), findsOneWidget);
-      expect(find.text('BANNER CORRECTION'), findsNothing);
-      expect(find.text('How to enter'), findsOneWidget);
-      expect(find.text('Notice'), findsOneWidget);
-      final titleField = find.byWidgetPredicate(
+      final title = find.byWidgetPredicate(
         (widget) =>
             widget is TextField && widget.decoration?.labelText == 'Title',
       );
-      await tester.enterText(titleField, 'Edited legal title');
+      await tester.enterText(title, 'Edited title only');
       await tester.pump();
-      expect(
-        find.text('Save draft changes before publishing.'),
-        findsOneWidget,
-      );
-      expect(
-        tester
-            .widget<PillButton>(find.widgetWithText(PillButton, 'PUBLISH'))
-            .onPressed,
-        isNull,
-      );
+      final save = find.widgetWithText(PillButton, 'SAVE DRAFT');
+      await tester.ensureVisible(save);
+      tester.widget<PillButton>(save).onPressed!();
+      await tester.pump();
+
+      final body = api.draftBodies.single;
+      expect(body['title'], 'Edited title only');
+      expect(body['cashCurrency'], 'USD');
+      expect(body['cashMinor'], 7300);
+      expect(body['coinPrize'], 4100);
+      expect(body['minimumAge'], 18);
+      expect(body['eligibleRegions'], originalRegions);
+      expect(body['sponsor'], const {
+        'legalName': 'Original Sponsor LLC',
+        'mailingAddress': '77 Original Trail',
+      });
+      expect(body['rules'], {
+        'version': originalRules['version'],
+        'sections': originalRules['sections'],
+      });
+      expect(body['socialLinks'], originalSocial);
+      expect(body['bannerMessage'], r'Original US$73 + 4,100 coin prize.');
     },
   );
 
   testWidgets(
-    'create draft submits customizable rule sections and optional social links',
+    'create draft uses compact global coin-only fields and banner copy',
     (tester) async {
       final api = _AdminGiveawayApi()..contest = adminContest();
       await _pump(tester, api);
@@ -1073,33 +1297,34 @@ void main() {
       );
 
       await tester.enterText(field('Slug'), 'fall-referrals');
-      await tester.enterText(
-        field('Starts at (ISO-8601)'),
-        '2026-09-01T04:00:00.000Z',
+      expect(field('Starts at (ISO-8601)'), findsNothing);
+      expect(field('Ends at (ISO-8601)'), findsNothing);
+      expect(find.byKey(const Key('giveaway-start-date')), findsOneWidget);
+      expect(find.byKey(const Key('giveaway-start-time')), findsOneWidget);
+      expect(find.byKey(const Key('giveaway-end-date')), findsOneWidget);
+      expect(find.byKey(const Key('giveaway-end-time')), findsOneWidget);
+      expect(
+        find.text('Picker values use this device’s local timezone.'),
+        findsNWidgets(2),
       );
-      await tester.enterText(
-        field('Ends at (ISO-8601)'),
-        '2026-10-01T04:00:00.000Z',
-      );
-      await tester.enterText(field('Sponsor legal name'), 'Bara LLC');
-      await tester.enterText(field('Sponsor mailing address'), '1 Trail Way');
-      await tester.enterText(field('Rules version'), '2026-fall-v1');
-      await tester.enterText(field('Rules body'), 'Complete referrals.');
-      await tester.ensureVisible(find.text('ADD RULE SECTION'));
-      await tester.tap(find.text('ADD RULE SECTION'));
+      await tester.tap(find.byKey(const Key('giveaway-start-time')));
       await tester.pump();
-      final headings = field('Rules heading');
-      final bodies = field('Rules body');
-      await tester.enterText(headings.at(1), 'Eligibility');
-      await tester.enterText(bodies.at(1), 'U.S. residents age 18+.');
-      await tester.ensureVisible(find.text('ADD OPTIONAL SOCIAL LINK'));
-      await tester.tap(find.text('ADD OPTIONAL SOCIAL LINK'));
+      expect(find.byType(TimePickerDialog), findsOneWidget);
+      Navigator.of(tester.element(find.byType(TimePickerDialog))).pop();
       await tester.pump();
-      await tester.enterText(field('Platform'), 'instagram');
-      await tester.enterText(field('Public label'), 'Instagram');
+      await tester.tap(find.byKey(const Key('giveaway-start-date')));
+      await tester.pump();
+      expect(find.byType(DatePickerDialog), findsOneWidget);
+      Navigator.of(tester.element(find.byType(DatePickerDialog))).pop();
+      await tester.pump();
+      expect(find.byKey(const Key('giveaway-advanced-details')), findsNothing);
+      expect(field('Sponsor legal name'), findsNothing);
+      expect(field('Sponsor mailing address'), findsNothing);
+      expect(field('Governing timezone'), findsNothing);
+      expect(field('Home-card message'), findsOneWidget);
       await tester.enterText(
-        field('HTTPS URL'),
-        'https://www.instagram.com/bara',
+        field('Home-card message'),
+        'Bring your crew. The referral trail is open.',
       );
       await tester.ensureVisible(find.text('SAVE DRAFT'));
       await tester.tap(find.text('SAVE DRAFT'));
@@ -1107,17 +1332,146 @@ void main() {
 
       expect(api.actions.where((value) => value == 'create'), hasLength(1));
       final body = api.draftBodies.single;
-      expect(body['cashMinor'], 5000);
+      expect(body.keys.toSet(), {
+        'slug',
+        'title',
+        'startsAt',
+        'endsAt',
+        'coinPrize',
+        'bannerMessage',
+        'eligibilityMode',
+      });
       expect(body['coinPrize'], 5000);
-      expect(body['minimumAge'], 18);
-      expect((body['rules'] as Map)['sections'], hasLength(2));
-      expect(body['socialLinks'], [
-        {
-          'platform': 'instagram',
-          'label': 'Instagram',
-          'url': 'https://www.instagram.com/bara',
-        },
-      ]);
+      expect(
+        body['bannerMessage'],
+        'Bring your crew. The referral trail is open.',
+      );
+      expect(body['eligibilityMode'], 'BARA_ACCOUNT');
+      expect(DateTime.parse(body['startsAt'] as String).isUtc, isTrue);
+      expect(DateTime.parse(body['endsAt'] as String).isUtc, isTrue);
+    },
+  );
+
+  testWidgets('slug validation matches the backend and prevents save', (
+    tester,
+  ) async {
+    final api = _AdminGiveawayApi()
+      ..contest = adminContest(
+        status: 'DRAFT',
+        lifecycle: 'DRAFT',
+        revision: 2,
+      );
+    await _pump(tester, api);
+    await tester.tap(find.text('Bara Referral Contest'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    final slug = find.byWidgetPredicate(
+      (widget) => widget is TextField && widget.decoration?.labelText == 'Slug',
+    );
+    for (final invalid in [
+      '',
+      'Uppercase',
+      '-leading',
+      'trailing-',
+      'two--hyphens',
+      List.filled(81, 'a').join(),
+    ]) {
+      await tester.enterText(slug, invalid);
+      await tester.pump();
+      expect(
+        find.text(
+          'Use 1–80 lowercase letters, numbers, and single hyphens only.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<PillButton>(find.widgetWithText(PillButton, 'SAVE DRAFT'))
+            .onPressed,
+        isNull,
+      );
+    }
+    await tester.enterText(slug, 'valid-referrals-2026');
+    await tester.pump();
+    expect(
+      find.text(
+        'Use 1–80 lowercase letters, numbers, and single hyphens only.',
+      ),
+      findsNothing,
+    );
+    expect(
+      tester
+          .widget<PillButton>(find.widgetWithText(PillButton, 'SAVE DRAFT'))
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets(
+    'legacy coin prize edits preserve cash and require a positive prize',
+    (tester) async {
+      final api = _AdminGiveawayApi()
+        ..contest = adminContest(
+          status: 'DRAFT',
+          lifecycle: 'DRAFT',
+          revision: 2,
+        );
+      await _pump(tester, api);
+      await tester.tap(find.text('Bara Referral Contest'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      final coins = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == 'Coin prize',
+      );
+      await tester.enterText(coins, '7500');
+      await tester.pump();
+      await tester.ensureVisible(find.text('SAVE DRAFT'));
+      await tester.tap(find.text('SAVE DRAFT'));
+      await tester.pump();
+      expect(api.draftBodies.single['cashCurrency'], 'USD');
+      expect(api.draftBodies.single['cashMinor'], 5000);
+      expect(api.draftBodies.single['coinPrize'], 7500);
+
+      api.draftBodies.clear();
+      await tester.ensureVisible(
+        find.byKey(const Key('giveaway-coin-prize-toggle')),
+      );
+      await tester.tap(find.byKey(const Key('giveaway-coin-prize-toggle')));
+      await tester.pump();
+      expect(
+        find.text('Enable a prize with a value greater than zero.'),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<PillButton>(find.widgetWithText(PillButton, 'SAVE DRAFT'))
+            .onPressed,
+        isNull,
+      );
+      await tester.ensureVisible(
+        find.byKey(const Key('giveaway-coin-prize-toggle')),
+      );
+      await tester.tap(find.byKey(const Key('giveaway-coin-prize-toggle')));
+      await tester.pump();
+      await tester.enterText(coins, '-1');
+      await tester.pump();
+      expect(
+        find.text('Coin prize must be a whole number from 0 to 1,000,000.'),
+        findsOneWidget,
+      );
+      await tester.enterText(coins, '1000001');
+      await tester.pump();
+      expect(
+        find.text('Coin prize must be a whole number from 0 to 1,000,000.'),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<PillButton>(find.widgetWithText(PillButton, 'SAVE DRAFT'))
+            .onPressed,
+        isNull,
+      );
     },
   );
 
@@ -1157,7 +1511,7 @@ void main() {
       expect(api.actions.where((value) => value == 'publish'), hasLength(1));
       expect(
         find.text(
-          'Publishing validation failed. Review every required legal field.',
+          'Publishing validation failed. Review the contest fields and rules.',
         ),
         findsOneWidget,
       );
@@ -1205,13 +1559,18 @@ void main() {
       ),
     );
     expect(title.enabled, isFalse);
+    expect(find.text('ADD RULE SECTION'), findsNothing);
     expect(
       tester
-          .widget<TextButton>(
-            find.widgetWithText(TextButton, 'ADD RULE SECTION'),
+          .widget<TextField>(
+            find.byWidgetPredicate(
+              (widget) =>
+                  widget is TextField &&
+                  widget.decoration?.labelText == 'Coin prize',
+            ),
           )
-          .onPressed,
-      isNull,
+          .enabled,
+      isFalse,
     );
     completer.complete({'contest': api.contest});
     await tester.pump();
@@ -1239,27 +1598,14 @@ void main() {
       ),
     );
     expect(title.enabled, isFalse);
-    expect(
-      tester
-          .widget<TextButton>(
-            find.widgetWithText(TextButton, 'ADD RULE SECTION'),
-          )
-          .onPressed,
-      isNull,
-    );
+    expect(find.text('ADD RULE SECTION'), findsNothing);
     expect(
       tester
           .widget<PillButton>(find.widgetWithText(PillButton, 'SAVE DRAFT'))
           .onPressed,
       isNull,
     );
-    final removeButtons = find.byWidgetPredicate(
-      (widget) => widget is IconButton && widget.tooltip == 'Remove',
-    );
-    expect(removeButtons, findsWidgets);
-    for (final remove in tester.widgetList<IconButton>(removeButtons)) {
-      expect(remove.onPressed, isNull);
-    }
+    expect(find.byTooltip('Remove'), findsNothing);
 
     completer.complete({'contest': adminContest(revision: 3)});
     await tester.pump();

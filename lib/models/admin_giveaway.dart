@@ -45,9 +45,11 @@ final class AdminGiveawayContest {
     required this.cashCurrency,
     required this.cashMinor,
     required this.coinPrize,
+    required this.eligibilityMode,
     required this.minimumAge,
     required this.eligibleCountries,
     required this.eligibleRegions,
+    required this.sponsorName,
     required this.sponsorLegalName,
     required this.sponsorMailingAddress,
     required this.rules,
@@ -77,11 +79,13 @@ final class AdminGiveawayContest {
   final String cashCurrency;
   final int cashMinor;
   final int coinPrize;
-  final int minimumAge;
+  final GiveawayEligibilityMode eligibilityMode;
+  final int? minimumAge;
   final List<String> eligibleCountries;
   final List<String> eligibleRegions;
-  final String sponsorLegalName;
-  final String sponsorMailingAddress;
+  final String sponsorName;
+  final String? sponsorLegalName;
+  final String? sponsorMailingAddress;
   final GiveawayRules rules;
   final List<GiveawaySocialLink> socialLinks;
   final String bannerMessage;
@@ -132,10 +136,20 @@ final class AdminGiveawayContest {
     final currency = _string(raw['cashCurrency']);
     final cash = _int(raw['cashMinor']);
     final coins = _int(raw['coinPrize']);
+    final eligibilityModeRaw = raw['eligibilityMode'];
+    final isGlobal = eligibilityModeRaw == 'BARA_ACCOUNT';
+    if (eligibilityModeRaw != null &&
+        eligibilityModeRaw != 'BARA_ACCOUNT' &&
+        eligibilityModeRaw != 'US_18') {
+      return null;
+    }
     final age = _int(raw['minimumAge']);
     final countries = _strings(raw['eligibleCountries']);
     final regions = _strings(raw['eligibleRegions']);
     final sponsor = raw['sponsor'];
+    final sponsorName = sponsor is Map
+        ? _boundedString(sponsor['name'], 200)
+        : null;
     final legalName = sponsor is Map
         ? _boundedString(sponsor['legalName'], 200)
         : null;
@@ -164,11 +178,6 @@ final class AdminGiveawayContest {
         currency == null ||
         cash == null ||
         coins == null ||
-        age == null ||
-        countries == null ||
-        regions == null ||
-        legalName == null ||
-        address == null ||
         rules == null ||
         linksRaw is! List ||
         banner == null ||
@@ -178,12 +187,33 @@ final class AdminGiveawayContest {
       return null;
     }
     if (currency != 'USD' ||
-        cash != 5000 ||
-        coins != 5000 ||
-        age != 18 ||
+        cash < 0 ||
+        cash > giveawayCashMinorMax ||
+        coins < 0 ||
+        coins > giveawayCoinPrizeMax ||
+        (cash == 0 && coins == 0)) {
+      return null;
+    }
+    if (isGlobal) {
+      if (cash != 0 ||
+          coins < 1 ||
+          coins > 25000 ||
+          raw['minimumAge'] != null ||
+          raw['eligibleCountries'] != null ||
+          raw['eligibleRegions'] != null ||
+          sponsorName != 'Bara' ||
+          !isValidGlobalGiveawayBannerMessage(banner) ||
+          !RegExp(r'^bara-account-v1-[0-9a-f]{24}$').hasMatch(rules.version)) {
+        return null;
+      }
+    } else if (age != 18 ||
+        countries == null ||
         countries.length != 1 ||
         countries.single != 'US' ||
-        !_isExactUsRegionSet(regions)) {
+        regions == null ||
+        !_isExactUsRegionSet(regions) ||
+        legalName == null ||
+        address == null) {
       return null;
     }
     final links = <GiveawaySocialLink>[];
@@ -270,9 +300,13 @@ final class AdminGiveawayContest {
       cashCurrency: currency,
       cashMinor: cash,
       coinPrize: coins,
-      minimumAge: age,
-      eligibleCountries: List.unmodifiable(countries),
-      eligibleRegions: List.unmodifiable(regions),
+      eligibilityMode: isGlobal
+          ? GiveawayEligibilityMode.baraAccount
+          : GiveawayEligibilityMode.us18,
+      minimumAge: isGlobal ? null : age,
+      eligibleCountries: List.unmodifiable(countries ?? const <String>[]),
+      eligibleRegions: List.unmodifiable(regions ?? const <String>[]),
+      sponsorName: isGlobal ? sponsorName ?? '' : legalName ?? '',
       sponsorLegalName: legalName,
       sponsorMailingAddress: address,
       rules: rules,
@@ -519,7 +553,11 @@ final class AdminGiveawayFulfillment {
     final fulfilledAt = fulfilled.value;
     final hasProvider = providerValue != null;
     final hasReference = rawReference == '••••';
-    final hasCash = minorValue == 5000 && currencyValue == 'USD';
+    final hasCash =
+        minorValue != null &&
+        minorValue >= 0 &&
+        minorValue <= 2147483647 &&
+        currencyValue == 'USD';
     final noCash = minorValue == null && currencyValue == null;
     final noProvider = !hasProvider && !hasReference;
     final validLifecycle = switch (status) {
@@ -561,22 +599,27 @@ final class AdminGiveawayFulfillment {
             deliveredAt != null &&
             coinsAwardedAt == null &&
             transactionId == null &&
-            fulfilledAt == null &&
+            (fulfilledAt == null || _atOrAfter(fulfilledAt, deliveredAt)) &&
             _atOrAfter(sentAt, claimedAt) &&
             _atOrAfter(deliveredAt, sentAt),
       'COINS_AWARDED' =>
-        hasProvider &&
-            hasReference &&
-            hasCash &&
-            claimedAt != null &&
-            sentAt != null &&
-            deliveredAt != null &&
+        ((hasProvider &&
+                    hasReference &&
+                    hasCash &&
+                    claimedAt != null &&
+                    sentAt != null &&
+                    deliveredAt != null &&
+                    _atOrAfter(sentAt, claimedAt) &&
+                    _atOrAfter(deliveredAt, sentAt) &&
+                    _atOrAfter(coinsAwardedAt, deliveredAt)) ||
+                (noProvider &&
+                    noCash &&
+                    claimedAt == null &&
+                    sentAt == null &&
+                    deliveredAt == null)) &&
             coinsAwardedAt != null &&
             transactionId != null &&
             fulfilledAt != null &&
-            _atOrAfter(sentAt, claimedAt) &&
-            _atOrAfter(deliveredAt, sentAt) &&
-            _atOrAfter(coinsAwardedAt, deliveredAt) &&
             _atOrAfter(fulfilledAt, coinsAwardedAt),
       _ => false,
     };

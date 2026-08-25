@@ -1,7 +1,14 @@
 # Bara Referral Contest — Requirements
 
-Status: **IMPLEMENTED — post-review remediation complete; promotions-counsel
-approval remains required before public publication**
+Status: **HISTORICAL US_18/CASH DESIGN — superseded for all new contests**
+
+The governing product and implementation contract is
+[`referral-contest-experience-requirements.md`](referral-contest-experience-requirements.md).
+This file is retained only to document the historical `US_18` contest and its
+frozen compatibility behavior. Its cash-prize, U.S./18+, legacy admin-create,
+older Home payload, and animated-banner language must not be used to create or
+change a contest. New contests are global `BARA_ACCOUNT`, coin-only, use the
+configured Home message, and render a solid banner with no ambient motion.
 
 ## 1. Summary and user story
 
@@ -967,3 +974,142 @@ contest cannot publish with placeholders.
   or blocks on applicable qualification intents; rank snapshot stays verifying
   until winner verification/no-winner; public/member winner shape represents
   alternates safely; entrant identity HMAC prevents delete/recreate re-entry.
+
+## 16. Admin draft form amendment (test-contest controls)
+
+Historical note: these controls remain only so an existing `US_18` draft can be
+read and edited without silently replacing its stored cash, sponsor, rules,
+social, eligibility, or banner terms. They are not the normal create flow. The
+editor uses separate date/time pickers and UTC serialization; published-contest
+immutability remains unchanged.
+
+## 17. Standardized coin-only admin creation
+
+The governing normal create path is the compact global contract in
+`referral-contest-experience-requirements.md` §8.4. It accepts only slug,
+title, start/end, a 1–25,000 coin prize (default 5,000), required configurable
+Home-card message, and immutable `eligibilityMode: "BARA_ACCOUNT"`. The backend
+assigns zero cash, sponsor Bara, global eligibility, standard rules, and empty
+social links. The refreshed dashboard has no cash, age, U.S. region, legal
+address, or rules-authoring controls.
+
+## 18. Automatic active-contest homepage banner
+
+### Summary & user story
+
+When a referral contest is published and its current lifecycle status is
+`ACTIVE`, a compatible signed-in user sees one solid Bara-styled card on Home.
+The required admin-configured message is its headline; prize, remaining time,
+and **VIEW** support the action. The card has no gradient, shimmer, pulse, or
+ambient animation.
+
+### Scope / non-goals
+
+- In scope: one automatic banner for the active published referral contest,
+  its configured message, additive Home response data, and iOS/Android
+  rendering.
+- Out of scope: scheduled-contest promotion, multiple simultaneous banners,
+  admin service-banner settings, or public-page changes. Eligibility and admin
+  creation are governed by the superseding global spec, not this amendment.
+
+### API contract
+
+For a global contest, clients must advertise both `referral_contest_v1` and
+`referral_contest_global_v1`. The authenticated Home response may then include:
+
+```json
+{
+  "homeGiveawayBanner": {
+    "type": "referral_contest",
+    "contestSlug": "bara-referral-20260825135840",
+    "title": "Bara Referral Contest",
+    "message": "Bring your crew. The referral trail is open.",
+    "status": "ACTIVE",
+    "endsAt": "2026-10-01T17:58:40.158Z",
+    "coinPrize": 5000
+  }
+}
+```
+
+The backend emits the field only when exactly one published contest derives to
+`ACTIVE` at request time. Validation includes exact `type`/`status`, bounded
+title and slug, required 12–96-character value-safe `message`, a 1–25,000 coin
+prize, future UTC `endsAt`, and eligibility mode. Missing, duplicate, malformed,
+or failed lookups omit only the banner. Existing clients ignore the additive
+field; frozen clients without the global capability do not discover global
+contests.
+
+### Backend implementation
+
+- Add `resolveActiveContestBanner({ prisma, now })` beside
+  `resolveContestBanner`, with the validation and duplicate-row behavior above,
+  and export it through the giveaways module for dependency injection.
+- Call it from both Home response assembly paths behind both required
+  capability tokens for global contests.
+- The backend keeps returning the legacy `homeServiceBanner` whenever it is
+  configured, even alongside `homeGiveawayBanner`, so older binaries that
+  already advertise `referral_contest_v1` do not lose their existing banner.
+  The new Home UI gives the automatic contest banner visual precedence; older
+  clients ignore the additive field and keep rendering the manual banner.
+- Cache the derived banner with the existing Redis derived-cache helper using a
+  versioned key and a 15-second TTL; Redis failures/unset configuration fall
+  back to the indexed Postgres query. Publish/cancel/finalize/archive paths
+  invalidate the key. If invalidation fails, the documented maximum stale
+  window is 15 seconds. This is permanent behavior, not a rollout flag.
+- Add integration coverage for both home assembly paths, active/scheduled/
+  ended/absent/duplicate/malformed/query-failure cases, capability absence, and
+  automatic/manual-banner precedence using the test database only.
+
+### Frontend implementation
+
+- Parse `homeGiveawayBanner` defensively in `HomeTab`; invalid or missing data
+  renders nothing and cannot affect the rest of Home.
+- When `homeGiveawayBanner` is valid, do not render the legacy service banner in
+  the new Home UI; this preserves exactly one contest promotion while retaining
+  the field for older clients.
+- `HomeGiveawayBanner` is a stateless, solid, high-contrast card. It renders the
+  configured message, coin prize, countdown, and **VIEW**, with no gradient,
+  shimmer layer, animation controller, animated builder, or motion semantics.
+- Respect large text, narrow iOS/Android layouts, safe areas, screen readers,
+  and reduced-motion settings. Home rejects an expired payload on refresh or
+  rebuild without disturbing the rest of the screen.
+- Add Home widget/integration tests for valid, malformed, missing, expired,
+  no-cash rendering, precedence, tap-navigation, reduced motion, and tutorial
+  suppression. Consider refreshing Home on foreground return so a contest that
+  becomes active while the app is open appears without a full restart.
+
+### Rollout and definition of done
+
+Deploy backend first; old apps remain safe because they ignore the additive
+field. Then ship iOS and Android together. No feature flag or admin toggle is
+introduced. Done means backend integration tests, frontend tests, `flutter
+analyze`, full Flutter tests, formatting/diff checks, code review, and the
+manual UI-placement checklist all pass.
+
+### Manual UI-placement test plan
+
+1. Home with an active contest shows exactly one automatic contest banner below
+   the hero and above quick actions; no service-banner toggle is required.
+2. Banner visibly includes its configured message, coin prize, countdown, and
+   **VIEW**; no cash or stale service-banner copy appears.
+3. Tapping the banner opens the matching giveaway details.
+4. Scheduled, ended, missing, malformed, or capability-absent responses show no
+   banner and leave Home layout intact.
+5. At or after expiry, a Home refresh/rebuild removes the banner without a
+   crash or gap.
+6. Verify narrow iPhone/Android portrait layouts with large text, safe areas,
+   reduced motion, and screen readers; no clipping or overflow.
+7. Verify tutorial/demo Home surfaces do not gain a live contest banner from a
+   production response.
+
+## 19. Revision log
+
+- Initial draft: separated automatic active-contest promotion from the
+  manually configured service banner; pinned additive response shape,
+  capability gating, lifecycle filtering, and iOS/Android UI behavior.
+- Superseding global review: added required configured `message`,
+  `referral_contest_global_v1`, 1–25,000 coin bounds, global discovery gating,
+  and a stateless solid card with no ambient motion. No rollout flag is used.
+- UI-test-planner review: added iOS/Android placement, accessibility, reduced
+  motion, lifecycle, service-banner coexistence, countdown, and tutorial-home
+  checks; confirmed `HomeTab` is mirrored by the tutorial preview.

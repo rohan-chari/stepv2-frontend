@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../models/loadable.dart';
+import '../../models/giveaway.dart';
 import '../../models/home_race_suggestion.dart';
 import '../../models/next_race.dart';
 import '../../styles.dart';
@@ -21,6 +22,7 @@ import '../../widgets/coin_glyph.dart';
 import '../../widgets/feedback_sheet.dart';
 import '../../widgets/game_container.dart';
 import '../../widgets/global_event_banner.dart';
+import '../../widgets/home_giveaway_banner.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/step_milestones_section.dart';
 import '../../widgets/streak_chip.dart' show StreakChip, StreakChipState;
@@ -198,6 +200,10 @@ class HomeTab extends StatelessWidget {
     final nextRace = isTutorialPreview
         ? null
         : NextRaceState.tryParse(raceCard?['nextRace']);
+    final giveawayBanner = _buildGiveawayBanner(context);
+    final serviceBanner = giveawayBanner == null
+        ? _buildServiceBanner(context)
+        : null;
 
     return Stack(
       children: [
@@ -272,7 +278,11 @@ class HomeTab extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            if (_buildServiceBanner(context) case final banner?)
+                            // An active referral contest is the canonical Home
+                            // promotion. It deliberately outranks the legacy
+                            // admin service banner when both are present.
+                            ?giveawayBanner,
+                            if (serviceBanner case final banner?)
                               Padding(
                                 padding: const EdgeInsets.fromLTRB(
                                   16,
@@ -538,6 +548,55 @@ class HomeTab extends StatelessWidget {
                   child: content,
                 ),
               ),
+      ),
+    );
+  }
+
+  /// Parses the additive active-contest promotion defensively. The backend
+  /// only emits this for one published ACTIVE contest; older servers omit it,
+  /// and malformed/expired payloads are ignored so the rest of Home remains
+  /// available. A valid result suppresses the legacy service banner above.
+  Widget? _buildGiveawayBanner(BuildContext context) {
+    if (isTutorialPreview) return null;
+    final raw = raceCard?['homeGiveawayBanner'];
+    if (raw is! Map) return null;
+    if (raw['type'] != 'referral_contest' || raw['status'] != 'ACTIVE') {
+      return null;
+    }
+    final slug = raw['contestSlug'];
+    final title = raw['title'];
+    final message = raw['message'];
+    final endsAtRaw = raw['endsAt'];
+    final coinPrize = raw['coinPrize'];
+    if (slug is! String ||
+        slug.isEmpty ||
+        slug.length > 120 ||
+        !RegExp(r'^[a-z0-9]+(?:-[a-z0-9]+)*$').hasMatch(slug)) {
+      return null;
+    }
+    if (title is! String || title.trim().isEmpty || title.length > 160) {
+      return null;
+    }
+    if (!isValidGlobalGiveawayBannerMessage(message)) return null;
+    if (coinPrize is! int || coinPrize <= 0 || coinPrize > 25000) {
+      return null;
+    }
+    if (endsAtRaw is! String) return null;
+    final endsAt = DateTime.tryParse(endsAtRaw)?.toLocal();
+    if (endsAt == null || !endsAt.isAfter(DateTime.now())) return null;
+
+    return HomeGiveawayBanner(
+      message: (message as String).trim(),
+      coinPrize: coinPrize,
+      endsAt: endsAt,
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => GiveawayScreen(
+            slug: slug,
+            authService: authService,
+            backendApiService: backendApiService,
+          ),
+        ),
       ),
     );
   }

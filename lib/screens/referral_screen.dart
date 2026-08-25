@@ -428,7 +428,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Win US\$${contest.prize.cashMinor ~/ 100} + ${contest.prize.coins} coins',
+            _contestPrizeLabel(contest.prize),
             style: PixelText.title(
               size: 18,
               color: AppColors.of(context).textDark,
@@ -445,7 +445,9 @@ class _ReferralScreenState extends State<ReferralScreen> {
           const SizedBox(height: 4),
           Text(
             standing == null
-                ? 'Contest details and eligibility'
+                ? contest.eligibilityMode == GiveawayEligibilityMode.baraAccount
+                      ? 'Read the rules and follow the trail'
+                      : 'Contest details and eligibility'
                 : '${standing.verifiedCount} verified contest referral${standing.verifiedCount == 1 ? '' : 's'}',
             style: PixelText.body(
               size: 13,
@@ -487,6 +489,28 @@ class _ReferralScreenState extends State<ReferralScreen> {
         ? '${days}d ${hours}h remaining'
         : '${duration.inHours}h ${duration.inMinutes.remainder(60)}m remaining';
     return 'Ends $ends · $remaining';
+  }
+
+  String _contestPrizeLabel(GiveawayPrize prize) {
+    final parts = <String>[];
+    if (prize.cashMinor > 0) {
+      final dollars = prize.cashMinor ~/ 100;
+      final cents = prize.cashMinor % 100;
+      parts.add(
+        cents == 0
+            ? 'US\$${_formatWholeNumber(dollars)}'
+            : 'US\$${_formatWholeNumber(dollars)}.${cents.toString().padLeft(2, '0')}',
+      );
+    }
+    if (prize.coins > 0) {
+      parts.add('${_formatWholeNumber(prize.coins)} coins');
+    }
+    return 'Win ${parts.join(' + ')}';
+  }
+
+  String _formatWholeNumber(int value) {
+    final digits = value.toString();
+    return digits.replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',');
   }
 
   /// Parchment game-piece card — same language as the redesigned tabs.

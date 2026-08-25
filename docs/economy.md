@@ -16,6 +16,7 @@ documents backend behaviour; backend paths below are relative to
 | `SEED` | `prisma/seed.js` — re-run on **every deploy**, can clobber DB |
 | `CODE` | JS constant / default |
 | `ENV` | droplet env var, read per call |
+| `SPEC` | approved requirement, not live until implemented/deployed |
 
 Where `DB` and `SEED`/`CODE` disagree, `DB` wins at runtime unless the seed's
 `update` block reasserts the field on deploy.
@@ -1762,6 +1763,67 @@ share text built in `FE lib/screens/race_detail_screen.dart:5807-5840` uses
 nobody and pays nobody**, unless the installer separately opens a `/r/BARA-…`
 link or types the code in onboarding. Any copy promising coins for sharing a
 *race* is false against current code.
+
+### 11.6 Referral contest prize and scoring surface — verified 2026-08-25
+
+The referral contest is a winner-take-all supplement to the ordinary referral
+program. It does **not** replace the ordinary 500/500 payout in §11.1. A
+qualifying referral therefore mints 1,000 ordinary coins across the pair, while
+one eventual contest winner receives one additional configured coin mint.
+
+| Fact | Value | Source |
+|---|---:|---|
+| Live published contest / prize | 1 contest; **5,000 coins**, cash minor = 0 | `DB giveaway_contests` |
+| Live contest duration / entrants / awards so far | 42.0 days / 0 / 0 | `DB giveaway_contests × giveaway_entrants`; `DB coin_transactions reason='giveaway_winner'` |
+| Draft contests | 2; both 5,000 coins and cash minor = 0 | `DB giveaway_contests` |
+| Implemented global admin range / default | integer **1–25,000 coins** / **5,000 coins** | `SPEC docs/referral-contest-experience-requirements.md:§8.4`; frontend/backend validation |
+| Winner rule | most verified referrals; then earliest time reaching the final count | `CODE src/modules/giveaways/queries/getContestStandings.js` |
+| Contest point | ordinary durable referral fact in `QUALIFIED`/`REWARDED`, or reviewed-approved `FLAGGED`, inside the entrant's post-join window | same |
+| Ordinary acquisition mint per contest point | **1,000 coins** (500 referrer + 500 referee) | `CODE src/modules/social/referralRewards.js`; §11.1 |
+| Observed completed-referral distribution | 58 referrers / 110 rewards; p50 1, p90 4.3, max 7; histogram: 1→34, 2→13, 3→4, 4→1, 5→3, 6→2, 7→1 | `DB referrals status='REWARDED'` |
+| Human-race qualification capacity | user-created race allows 2–100 participants; each qualifying referee needs ≥2,000 raw steps and at least two accepted ≥2,000-step finishers | `CODE validateRaceConfig.js`; `CODE grantReferralReward.js` |
+| Qualifying participant-race rows, trailing 30 complete days | 730 across 247 users | `DB races × race_participants` (non-seeded, non-tournament, completed, qualifying thresholds) |
+
+At the latest verified recurring-income distribution (§0e), 5,000 coins are
+**474.8 median active-days** or **66.1 p90 active-days**. They buy 66.7 cheapest
+active powerups (75 coins) or 20 cheapest active cosmetics (250 coins). Among
+the 912 step-active users in the latest read-only balance refresh, current
+balances were p50 181, p90 910.9, and max 9,866; the prize is therefore 27.6×
+the median balance, 5.5× p90, and 50.7% of the maximum.
+
+Trailing 30 complete days currently contain +18,103.3 source coins/day and
+−7,190.6 sink coins/day (net +10,912.7). A 5,000-coin prize amortizes to
+166.7/day over a 30-day contest (**0.92%** of gross sources) or 119.0/day over
+the live 42-day window (**0.66%**). The implemented 25,000-coin global maximum
+amortizes to 833.3/day over 30 days: **4.60%** of gross sources and **7.64%**
+of current net issuance. An earlier, rejected 1,000,000-coin proposal would
+have amortized to 33,333/day (**184%** of gross sources and **305%** of net
+issuance); it is historical analysis only and was never the shipped global
+limit. These figures exclude behavioral lift in ordinary referrals.
+Each incremental completed referral caused by the contest adds another 1,000
+coins; one extra per day is +5.5% to current gross issuance, while five extra
+per day is +27.6%.
+
+With symmetric entrants, expected contest-prize value is `5,000 / N`: 500
+coins at N=10, 100 at N=50, 50 at N=100, and 10 at N=500. Using the 58
+historically observed rewarded referrers as a participation frame gives 86.2
+coins/entrant, although actual skill and acquisition reach make the payout
+highly concentrated. At the ordinary automatic monthly threshold, 25 completed
+referrals mint 25,000 coins across the pairs; adding the contest prize makes the
+winner-associated issuance 30,000 coins.
+
+The mechanical abuse seam is batching: five controlled referee identities can
+qualify inside one five-player race with 10,000 aggregate reported raw steps,
+remaining at the ordinary automatic daily threshold. That mints 5,000 ordinary
+coins across the accounts and produces a contest score of five, already above
+the historical p90 and near the observed maximum of seven. A single race can
+technically carry as many as 100 qualifying referee accounts, but referrals
+beyond the 5/day or 25/30-day threshold are `FLAGGED` and require manual review.
+The candidate API reports same-race, rapid, shared-device/network, and
+synchronized-step signals; current finalization only blocks on unresolved
+outcome-changing `FLAGGED` facts, not on unresolved risk signals attached to
+already `QUALIFIED`/`REWARDED` points. Sources: `CODE giveawayService.js`
+candidate/finalize paths and `CODE getContestStandings.js`.
 
 ---
 

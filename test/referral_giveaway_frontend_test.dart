@@ -573,6 +573,67 @@ void main() {
       expect(find.text('Contest unavailable'), findsNothing);
     });
 
+    testWidgets('dynamic nonnegative prizes render without fixed assumptions', (
+      tester,
+    ) async {
+      await _pumpGiveaway(
+        tester,
+        _GiveawayApi(
+          payload: currentPayload(
+            contest: {
+              ..._contest,
+              'prize': {'cashCurrency': 'USD', 'cashMinor': 2500},
+            },
+          ),
+        ),
+      );
+      expect(find.text(r'US$25'), findsOneWidget);
+      expect(find.text(r'US$50 + 5,000 COINS'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox());
+      await _pumpGiveaway(
+        tester,
+        _GiveawayApi(
+          payload: currentPayload(
+            contest: {
+              ..._contest,
+              'prize': {'coins': 1234},
+            },
+          ),
+        ),
+      );
+      expect(find.text('1,234 COINS'), findsOneWidget);
+      expect(find.text('Contest unavailable'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox());
+      await _pumpGiveaway(
+        tester,
+        _GiveawayApi(
+          payload: currentPayload(
+            contest: {
+              ..._contest,
+              'prize': {'coins': 1000000},
+            },
+          ),
+        ),
+      );
+      expect(find.text('1,000,000 COINS'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox());
+      await _pumpGiveaway(
+        tester,
+        _GiveawayApi(
+          payload: currentPayload(
+            contest: {
+              ..._contest,
+              'prize': {'coins': 1000001},
+            },
+          ),
+        ),
+      );
+      expect(find.text('Contest unavailable'), findsOneWidget);
+    });
+
     testWidgets(
       'sponsor territory and immutable-rules contract failures fail closed',
       (tester) async {
@@ -843,6 +904,35 @@ void main() {
         expect(find.byType(GiveawayScreen), findsOneWidget);
       },
     );
+
+    testWidgets('contest card formats each enabled dynamic prize', (
+      tester,
+    ) async {
+      for (final prizeCase in [
+        (
+          prize: <String, dynamic>{'cashCurrency': 'USD', 'cashMinor': 2500},
+          label: r'Win US$25',
+        ),
+        (prize: <String, dynamic>{'coins': 1234}, label: 'Win 1,234 coins'),
+      ]) {
+        final auth = await _auth();
+        final api = _GiveawayApi(
+          payload: currentPayload(
+            contest: {..._contest, 'prize': prizeCase.prize},
+          ),
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ReferralScreen(authService: auth, backendApiService: api),
+          ),
+        );
+        await tester.pump();
+        expect(find.text(prizeCase.label), findsOneWidget);
+        expect(find.textContaining(r'US$0 +'), findsNothing);
+        expect(find.textContaining('+ 0 coins'), findsNothing);
+        await tester.pumpWidget(const SizedBox());
+      }
+    });
 
     testWidgets('404/malformed contest does not block ordinary referral UI', (
       tester,

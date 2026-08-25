@@ -8,6 +8,7 @@ import '../services/backend_api_service.dart';
 import '../styles.dart';
 import '../widgets/loading_skeleton.dart';
 import '../widgets/pill_button.dart';
+import 'display_name_screen.dart';
 import 'giveaway_rules_screen.dart';
 import 'referral_screen.dart' show shareReferral;
 
@@ -28,19 +29,44 @@ class GiveawayScreen extends StatefulWidget {
 }
 
 class _GiveawayScreenState extends State<GiveawayScreen> {
-  static final Map<String, GiveawayContest> _immutableRulesCache = {};
-
   late final BackendApiService _api =
       widget.backendApiService ?? BackendApiService();
+  final ScrollController _globalRulesController = ScrollController();
   GiveawayCurrent? _data;
   GiveawayContest? _cachedRules;
   bool _loading = true;
+  bool _readRulesToEnd = false;
+  bool _rulesAccepted = false;
+  bool _joining = false;
+  bool _whatCountsOpen = false;
+  bool _displayNameRequired = false;
   String? _error;
+  String? _joinError;
 
   @override
   void initState() {
     super.initState();
+    _globalRulesController.addListener(_onRulesScroll);
     _load();
+  }
+
+  @override
+  void dispose() {
+    _globalRulesController
+      ..removeListener(_onRulesScroll)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _onRulesScroll() {
+    if (!_globalRulesController.hasClients) return;
+    final position = _globalRulesController.position;
+    final reached =
+        position.maxScrollExtent <= 0 ||
+        position.pixels >= position.maxScrollExtent - 2;
+    if (reached != _readRulesToEnd && mounted) {
+      setState(() => _readRulesToEnd = reached);
+    }
   }
 
   Future<void> _load() async {
@@ -64,8 +90,6 @@ class _GiveawayScreenState extends State<GiveawayScreen> {
       if (parsed == null || parsed.contest.slug != widget.slug) {
         throw const FormatException('Malformed contest');
       }
-      _immutableRulesCache['${parsed.contest.slug}:${parsed.contest.rules.sha256}'] =
-          parsed.contest;
       if (!mounted) return;
       setState(() {
         _data = parsed;
@@ -74,13 +98,8 @@ class _GiveawayScreenState extends State<GiveawayScreen> {
       });
     } catch (_) {
       if (!mounted) return;
-      GiveawayContest? cached;
-      for (final entry in _immutableRulesCache.entries) {
-        if (entry.key.startsWith('${widget.slug}:')) cached = entry.value;
-      }
       setState(() {
         _data = null; // Never retain potentially stale ranking.
-        _cachedRules = cached;
         _loading = false;
         _error = 'Contest unavailable';
       });
@@ -125,7 +144,10 @@ class _GiveawayScreenState extends State<GiveawayScreen> {
             ),
             Expanded(
               child: Text(
-                'REFERRAL CONTEST',
+                _data?.contest.eligibilityMode ==
+                        GiveawayEligibilityMode.baraAccount
+                    ? _data?.contest.title.toUpperCase() ?? 'REFERRAL CONTEST'
+                    : 'REFERRAL CONTEST',
                 style: PixelText.title(size: 22, color: colors.textLight),
               ),
             ),
@@ -185,6 +207,11 @@ class _GiveawayScreenState extends State<GiveawayScreen> {
   );
 
   Widget _content(GiveawayCurrent data, AppPalette colors) {
+    if (data.contest.eligibilityMode == GiveawayEligibilityMode.baraAccount) {
+      return data.entry?.status == GiveawayEntryStatus.actionRequired
+          ? _globalPreEntry(data, colors)
+          : _globalJoinedHub(data, colors);
+    }
     final contest = data.contest;
     return SingleChildScrollView(
       key: const Key('giveaway-content-scroll'),
@@ -312,7 +339,7 @@ class _GiveawayScreenState extends State<GiveawayScreen> {
           Icon(Icons.emoji_events_rounded, size: 42, color: colors.coinDark),
           const SizedBox(height: 6),
           Text(
-            r'US$50 + 5,000 COINS',
+            _prizeLabel(contest.prize),
             textAlign: TextAlign.center,
             style: PixelText.title(size: 23, color: colors.textDark),
           ),
@@ -362,6 +389,31 @@ class _GiveawayScreenState extends State<GiveawayScreen> {
         ],
       ),
     );
+  }
+
+  static String _prizeLabel(GiveawayPrize prize) {
+    final parts = <String>[];
+    if (prize.cashMinor > 0) {
+      final dollars = prize.cashMinor ~/ 100;
+      final cents = prize.cashMinor % 100;
+      parts.add(
+        cents == 0
+            ? 'US\$${_commas(dollars)}'
+            : 'US\$${_commas(dollars)}.${cents.toString().padLeft(2, '0')}',
+      );
+    }
+    if (prize.coins > 0) parts.add('${_commas(prize.coins)} COINS');
+    return parts.join(' + ');
+  }
+
+  static String _commas(int value) {
+    final digits = value.toString();
+    final output = StringBuffer();
+    for (var index = 0; index < digits.length; index++) {
+      if (index > 0 && (digits.length - index) % 3 == 0) output.write(',');
+      output.write(digits[index]);
+    }
+    return output.toString();
   }
 
   Widget _eligibility(GiveawayCurrent data, AppPalette colors) {
@@ -440,7 +492,11 @@ class _GiveawayScreenState extends State<GiveawayScreen> {
     );
   }
 
-  Widget _leaderboard(GiveawayCurrent data, AppPalette colors) {
+  Widget _leaderboard(
+    GiveawayCurrent data,
+    AppPalette colors, {
+    bool global = false,
+  }) {
     final standingRank = data.standing?.provisionalRank;
     final entry = data.entry;
     final userAlreadyListed =
@@ -467,7 +523,9 @@ class _GiveawayScreenState extends State<GiveawayScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
               child: Text(
-                'No referrals have qualified yet. Share your invite to get started.',
+                global
+                    ? 'No verified referrals yet. Share your invite to lead the trail.'
+                    : 'No referrals have qualified yet. Share your invite to get started.',
                 textAlign: TextAlign.center,
                 style: PixelText.body(size: 13, color: colors.textMid),
               ),
@@ -583,19 +641,535 @@ class _GiveawayScreenState extends State<GiveawayScreen> {
 
   void _openRules(GiveawayContest contest) {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => GiveawayRulesScreen(
-          title: contest.title,
-          rules: contest.rules,
-          minimumAge: contest.minimumAge,
-          governingTimeZone: contest.governingTimeZone,
-          startsAt: contest.startsAt,
-          endsAt: contest.endsAt,
-          sponsorLegalName: contest.sponsorLegalName,
-          sponsorMailingAddress: contest.sponsorMailingAddress,
+      MaterialPageRoute(builder: (_) => GiveawayRulesScreen(contest: contest)),
+    );
+  }
+
+  Widget _globalPreEntry(GiveawayCurrent data, AppPalette colors) {
+    final contest = data.contest;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_globalRulesController.hasClients) return;
+      _onRulesScroll();
+    });
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: NotificationListener<ScrollMetricsNotification>(
+            onNotification: (_) {
+              _onRulesScroll();
+              return false;
+            },
+            child: SingleChildScrollView(
+              key: const Key('giveaway-global-rules-scroll'),
+              controller: _globalRulesController,
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _globalPrizeHero(contest, colors),
+                  const SizedBox(height: 18),
+                  _sectionLabel('ROUTE TO THE PRIZE', colors),
+                  const SizedBox(height: 10),
+                  _trailRoute(colors),
+                  const SizedBox(height: 20),
+                  _sectionLabel('OFFICIAL RULES', colors),
+                  const SizedBox(height: 10),
+                  _card(
+                    colors,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          contest.eligibilitySummary,
+                          style: PixelText.body(
+                            size: 14,
+                            color: colors.textDark,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Rules ${contest.rules.version}',
+                          style: PixelText.body(
+                            size: 11,
+                            color: colors.textMid,
+                          ),
+                        ),
+                        for (final section in contest.rules.sections) ...[
+                          const SizedBox(height: 16),
+                          Container(
+                            width: 28,
+                            height: 3,
+                            color: colors.pillGoldDark,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            section.heading.toUpperCase(),
+                            style: PixelText.title(
+                              size: 14,
+                              color: colors.textDark,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          SelectableText(
+                            section.body,
+                            style: PixelText.body(
+                              size: 14,
+                              color: colors.textDark,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                        Text(
+                          'Sponsored by ${contest.sponsorName}. Apple and Google are not sponsors, administrators, endorsers, or involved in this contest.',
+                          style: PixelText.body(
+                            size: 12,
+                            color: colors.textMid,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
+        Semantics(
+          label: _readRulesToEnd
+              ? 'Official Rules read progress complete'
+              : 'Official Rules read progress incomplete',
+          child: LinearProgressIndicator(
+            key: const Key('giveaway-rules-progress'),
+            minHeight: 4,
+            value: _rulesProgress,
+            color: colors.pillGold,
+            backgroundColor: colors.parchmentBorder,
+          ),
+        ),
+        _globalEntryFooter(data, colors),
+      ],
+    );
+  }
+
+  double get _rulesProgress {
+    if (_readRulesToEnd) return 1;
+    if (!_globalRulesController.hasClients) return 0;
+    final position = _globalRulesController.position;
+    if (position.maxScrollExtent <= 0) return 1;
+    return (position.pixels / position.maxScrollExtent).clamp(0, 1);
+  }
+
+  Widget _globalEntryFooter(GiveawayCurrent data, AppPalette colors) {
+    final contest = data.contest;
+    final missingName =
+        _displayNameRequired ||
+        (widget.authService.displayName?.trim().isEmpty ?? true) ||
+        (data.entry?.displayName?.trim().isEmpty ?? true);
+    final active = contest.status == GiveawayStatus.active;
+    final ready =
+        active &&
+        !missingName &&
+        _readRulesToEnd &&
+        _rulesAccepted &&
+        !_joining;
+    final buttonLabel = missingName
+        ? 'SET DISPLAY NAME TO JOIN'
+        : _joining
+        ? 'JOINING…'
+        : 'JOIN CONTEST';
+
+    return Container(
+      key: const Key('giveaway-entry-footer'),
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
+      decoration: BoxDecoration(
+        color: colors.parchment,
+        border: Border(top: BorderSide(color: colors.woodDarker, width: 2)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x33000000),
+            offset: Offset(0, -3),
+            blurRadius: 0,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (active && !missingName)
+            Material(
+              color: colors.parchment,
+              child: CheckboxListTile(
+                key: const Key('giveaway-global-rules-accepted'),
+                value: _rulesAccepted,
+                enabled: !_joining,
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                onChanged: (value) =>
+                    setState(() => _rulesAccepted = value == true),
+                title: Text(
+                  'I agree to the contest rules',
+                  style: PixelText.body(size: 13, color: colors.textDark),
+                ),
+              ),
+            ),
+          if (_joinError case final error?)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                error,
+                textAlign: TextAlign.center,
+                style: PixelText.body(size: 12, color: colors.error),
+              ),
+            ),
+          if (!active)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                contest.status == GiveawayStatus.scheduled
+                    ? 'JOINING OPENS ${_utcInstant(contest.startsAt)}'
+                    : 'THIS CONTEST IS NO LONGER OPEN',
+                textAlign: TextAlign.center,
+                style: PixelText.title(size: 12, color: colors.textDark),
+              ),
+            )
+          else
+            PillButton(
+              label: buttonLabel,
+              fullWidth: true,
+              onPressed: missingName
+                  ? _openDisplayNameRecovery
+                  : ready
+                  ? () => _joinGlobal(data)
+                  : null,
+            ),
+        ],
       ),
     );
+  }
+
+  Future<void> _joinGlobal(GiveawayCurrent data) async {
+    if (_joining) return;
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) return;
+    setState(() {
+      _joining = true;
+      _joinError = null;
+    });
+    try {
+      final raw = await _api.enterGlobalGiveaway(
+        identityToken: token,
+        slug: data.contest.slug,
+        rulesVersion: data.contest.rules.version,
+        rulesAccepted: true,
+      );
+      final entry = GiveawayEntry.tryParse(raw['entry']);
+      if (entry == null ||
+          entry.status != GiveawayEntryStatus.eligible ||
+          entry.acceptedAt == null ||
+          entry.country != null ||
+          entry.region != null ||
+          entry.rulesVersion != data.contest.rules.version) {
+        throw const FormatException('Malformed global entry');
+      }
+      if (!mounted) return;
+      setState(() {
+        _data = GiveawayCurrent(
+          contest: data.contest,
+          leaderboard: data.leaderboard,
+          entry: entry,
+          standing: data.standing,
+          share: data.share,
+          winner: data.winner,
+        );
+        _joining = false;
+        _joinError = null;
+      });
+      await _load();
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _joining = false;
+        if (error.code == 'DISPLAY_NAME_REQUIRED') {
+          _displayNameRequired = true;
+          _joinError = 'Set a Bara display name, then return to join.';
+        } else if (error.code == 'RULES_CHANGED') {
+          _joinError =
+              'The rules changed. Refresh and read the latest version.';
+        } else if (error.code == 'CONTEST_NOT_OPEN') {
+          _joinError = 'This contest is not open for joining.';
+        } else {
+          _joinError = error.message;
+        }
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _joining = false;
+          _joinError = 'Couldn’t join. Check your connection and try again.';
+        });
+      }
+    }
+  }
+
+  Future<void> _openDisplayNameRecovery() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => DisplayNameScreen(authService: widget.authService),
+      ),
+    );
+    if (!mounted) return;
+    setState(() {
+      _displayNameRequired = false;
+      _joinError = null;
+    });
+    await _load();
+  }
+
+  Widget _globalPrizeHero(GiveawayContest contest, AppPalette colors) => _card(
+    colors,
+    borderColor: colors.coinDark,
+    child: Column(
+      children: [
+        Wrap(
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 5,
+          children: [
+            Icon(Icons.emoji_events_rounded, color: colors.coinDark, size: 25),
+            Text(
+              _prizeLabel(contest.prize),
+              textAlign: TextAlign.center,
+              style: PixelText.title(size: 24, color: colors.textDark),
+            ),
+          ],
+        ),
+        const SizedBox(height: 9),
+        Text(
+          '${_shortDate(contest.startsAt)} — ${_shortDate(contest.endsAt)}',
+          textAlign: TextAlign.center,
+          style: PixelText.body(size: 13, color: colors.textMid),
+        ),
+        if (_remaining(contest.endsAt) case final remaining?) ...[
+          const SizedBox(height: 3),
+          Text(
+            remaining.toUpperCase(),
+            style: PixelText.pill(size: 10, color: colors.roofMid),
+          ),
+        ],
+      ],
+    ),
+  );
+
+  Widget _trailRoute(AppPalette colors) {
+    const steps = [
+      ('Join the contest', 'Read these rules and agree.'),
+      ('Share your invite', 'Send your unique Bara link.'),
+      ('Your friend signs up', 'They must use your invite.'),
+      (
+        'They finish a qualifying race',
+        'The race must include another real player during the contest window.',
+      ),
+      (
+        'Most verified referrals wins',
+        'Ties go to whoever reached the final count first.',
+      ),
+    ];
+    return _card(
+      colors,
+      child: Column(
+        children: [
+          for (var index = 0; index < steps.length; index++)
+            _TrailStep(
+              number: index + 1,
+              title: steps[index].$1,
+              detail: steps[index].$2,
+              last: index == steps.length - 1,
+              colors: colors,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _globalJoinedHub(GiveawayCurrent data, AppPalette colors) {
+    final contest = data.contest;
+    final standing = data.standing;
+    final rank = standing?.provisionalRank;
+    final active = contest.status == GiveawayStatus.active;
+    return SingleChildScrollView(
+      key: const Key('giveaway-content-scroll'),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _globalPrizeHero(contest, colors),
+          const SizedBox(height: 18),
+          _sectionLabel('YOUR RUN', colors),
+          const SizedBox(height: 10),
+          _card(
+            colors,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: _RunStat(
+                        value: '${standing?.verifiedCount ?? 0}',
+                        label: 'VERIFIED REFERRALS',
+                        colors: colors,
+                      ),
+                    ),
+                    Container(
+                      width: 1,
+                      height: 52,
+                      color: colors.parchmentBorder,
+                    ),
+                    Expanded(
+                      child: _RunStat(
+                        value: rank == null ? '—' : '#$rank',
+                        label: 'PROVISIONAL RANK',
+                        colors: colors,
+                      ),
+                    ),
+                  ],
+                ),
+                if ((standing?.reviewableCount ?? 0) > 0) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    '${standing?.reviewableCount ?? 0} referral${standing?.reviewableCount == 1 ? '' : 's'} under review',
+                    textAlign: TextAlign.center,
+                    style: PixelText.body(size: 11, color: colors.textMid),
+                  ),
+                ],
+                const SizedBox(height: 14),
+                PillButton(
+                  label: active ? 'SHARE YOUR INVITE' : 'CONTEST CLOSED',
+                  icon: active ? Icons.ios_share_rounded : null,
+                  fullWidth: true,
+                  onPressed: active && data.share != null
+                      ? () => _share(data.share!)
+                      : null,
+                ),
+                const SizedBox(height: 7),
+                Text(
+                  active
+                      ? 'Invite a friend, then help them finish a qualifying race.'
+                      : contest.status == GiveawayStatus.verifying
+                      ? 'Final checks are underway. Rankings remain provisional.'
+                      : 'This contest has finished.',
+                  textAlign: TextAlign.center,
+                  style: PixelText.body(size: 12, color: colors.textMid),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          _sectionLabel('LEADERS', colors),
+          const SizedBox(height: 10),
+          _leaderboard(data, colors, global: true),
+          const SizedBox(height: 14),
+          _card(
+            colors,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                InkWell(
+                  key: const Key('giveaway-what-counts'),
+                  onTap: () =>
+                      setState(() => _whatCountsOpen = !_whatCountsOpen),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'WHAT COUNTS?',
+                            style: PixelText.title(
+                              size: 15,
+                              color: colors.textDark,
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          _whatCountsOpen
+                              ? Icons.expand_less
+                              : Icons.expand_more,
+                          color: colors.textDark,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_whatCountsOpen) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Your friend uses your invite, signs up, and finishes a qualifying race with another real player after you join and before the contest ends. Bots, self-referrals, duplicates, and coordinated dummy accounts do not count.',
+                    style: PixelText.body(size: 13, color: colors.textDark),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: () => _openRules(contest),
+            child: const Text('OFFICIAL RULES'),
+          ),
+          if (contest.socialLinks.isNotEmpty) ...[
+            Text(
+              'Optional — does not affect the contest.',
+              textAlign: TextAlign.center,
+              style: PixelText.body(size: 11, color: colors.textLight),
+            ),
+            for (final link in contest.socialLinks)
+              TextButton.icon(
+                onPressed: () =>
+                    launchUrl(link.url, mode: LaunchMode.externalApplication),
+                icon: const Icon(Icons.open_in_new, size: 16),
+                label: Text(link.label),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionLabel(String label, AppPalette colors) => Row(
+    children: [
+      Container(width: 18, height: 3, color: colors.pillGold),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(
+          label,
+          style: PixelText.title(size: 15, color: colors.textLight),
+        ),
+      ),
+    ],
+  );
+
+  static String _shortDate(DateTime value) {
+    const months = [
+      'JAN',
+      'FEB',
+      'MAR',
+      'APR',
+      'MAY',
+      'JUN',
+      'JUL',
+      'AUG',
+      'SEP',
+      'OCT',
+      'NOV',
+      'DEC',
+    ];
+    final local = value.toLocal();
+    return '${months[local.month - 1]} ${local.day}';
   }
 
   Future<void> _showEntry(GiveawayCurrent data) async {
@@ -643,6 +1217,104 @@ class _GiveawayScreenState extends State<GiveawayScreen> {
     }
     return '${duration.inMinutes.clamp(1, 59)}m remaining';
   }
+}
+
+class _TrailStep extends StatelessWidget {
+  const _TrailStep({
+    required this.number,
+    required this.title,
+    required this.detail,
+    required this.last,
+    required this.colors,
+  });
+
+  final int number;
+  final String title;
+  final String detail;
+  final bool last;
+  final AppPalette colors;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      SizedBox(
+        width: 34,
+        child: Column(
+          children: [
+            Container(
+              width: 30,
+              height: 30,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: colors.pillGold,
+                shape: BoxShape.circle,
+                border: Border.all(color: colors.woodDarker, width: 2),
+              ),
+              child: Text(
+                '$number',
+                style: PixelText.title(size: 12, color: colors.textDark),
+              ),
+            ),
+            if (!last)
+              Container(width: 3, height: 42, color: colors.pillGoldDark),
+          ],
+        ),
+      ),
+      const SizedBox(width: 10),
+      Expanded(
+        child: Padding(
+          padding: EdgeInsets.only(bottom: last ? 0 : 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: PixelText.title(size: 14, color: colors.textDark),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                detail,
+                style: PixelText.body(size: 12, color: colors.textMid),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
+class _RunStat extends StatelessWidget {
+  const _RunStat({
+    required this.value,
+    required this.label,
+    required this.colors,
+  });
+
+  final String value;
+  final String label;
+  final AppPalette colors;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 8),
+    child: Column(
+      children: [
+        Text(
+          value,
+          textAlign: TextAlign.center,
+          style: PixelText.title(size: 25, color: colors.textDark),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: PixelText.pill(size: 9, color: colors.textMid),
+        ),
+      ],
+    ),
+  );
 }
 
 class _GiveawayEntryPage extends StatelessWidget {

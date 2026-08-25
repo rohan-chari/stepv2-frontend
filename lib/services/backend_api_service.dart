@@ -359,6 +359,7 @@ class BackendApiService {
       'inbox_v1',
       'api_payload_compact_v1',
       'referral_contest_v1',
+      'referral_contest_global_v1',
       // This capability stamps the iOS-only, immutable metrics collection
       // cohort. Android shares this Dart file but must never advertise it.
       if (isIos) 'admin_metrics_v2',
@@ -368,8 +369,8 @@ class BackendApiService {
   }
 
   static final String clientFeaturesHeader = _adsSupported
-      ? 'characters,ads,ad_coin_random,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,review_prompt,inbox_v1,api_payload_compact_v1,referral_contest_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}'
-      : 'characters,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,review_prompt,inbox_v1,api_payload_compact_v1,referral_contest_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}';
+      ? 'characters,ads,ad_coin_random,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,review_prompt,inbox_v1,api_payload_compact_v1,referral_contest_v1,referral_contest_global_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}'
+      : 'characters,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,review_prompt,inbox_v1,api_payload_compact_v1,referral_contest_v1,referral_contest_global_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}';
 
   /// Replays a persisted results dismissal with the capability it originally
   /// advertised. A later app build may have gained or lost the dedicated ad
@@ -3723,6 +3724,24 @@ class BackendApiService {
     return _decodeJsonResponse(response);
   }
 
+  /// Rules-only entry for a global, coin-only referral contest. This remains a
+  /// separate method so historical US_18 callers cannot accidentally send an
+  /// ambiguous mixed request body.
+  Future<Map<String, dynamic>> enterGlobalGiveaway({
+    required String identityToken,
+    required String slug,
+    required String rulesVersion,
+    required bool rulesAccepted,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/giveaways/${Uri.encodeComponent(slug)}/entries',
+      identityToken: identityToken,
+      body: {'rulesVersion': rulesVersion, 'rulesAccepted': rulesAccepted},
+    );
+    return _decodeJsonResponse(response);
+  }
+
   Future<Map<String, dynamic>> fetchAdminGiveaways({
     required String identityToken,
     String? cursor,
@@ -3774,6 +3793,22 @@ class BackendApiService {
       path: '/admin/giveaways/${Uri.encodeComponent(contestId)}',
       identityToken: identityToken,
       body: {'revision': revision, 'patch': patch},
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> deleteAdminGiveawayDraft({
+    required String identityToken,
+    required String contestId,
+    required String idempotencyKey,
+    required int revision,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'DELETE',
+      path: '/admin/giveaways/${Uri.encodeComponent(contestId)}',
+      identityToken: identityToken,
+      headers: {'Idempotency-Key': idempotencyKey},
+      body: {'revision': revision},
     );
     return _decodeJsonResponse(response);
   }
