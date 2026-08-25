@@ -93,7 +93,9 @@ class _AdminFlagsPanelState extends State<AdminFlagsPanel> {
         bannerAdsEnabled: enabled,
       );
       final returned = updated['bannerAdsEnabled'];
-      if (returned is! bool) throw const ApiException('Invalid settings response');
+      if (returned is! bool) {
+        throw const ApiException('Invalid settings response');
+      }
       AdService.setBannerAdsEnabled(returned);
       if (mounted) setState(() => _bannerAdsEnabled = returned);
     } catch (_) {
@@ -170,7 +172,10 @@ class _AdminFlagsPanelState extends State<AdminFlagsPanel> {
       children: [
         Text(
           'ADVERTISING',
-          style: PixelText.title(size: 13, color: AppColors.of(context).textDark),
+          style: PixelText.title(
+            size: 13,
+            color: AppColors.of(context).textDark,
+          ),
         ),
         SwitchListTile.adaptive(
           key: const Key('admin-banner-ads-toggle'),
@@ -237,17 +242,15 @@ class AdminSettingsCardBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SwitchListTile.adaptive(
-        key: const Key('admin-settings-banner-ads-toggle'),
-        contentPadding: EdgeInsets.zero,
-        title: const Text('Banner ads'),
-        subtitle: const Text('Remote control for display banner placements.'),
-        value: settings['bannerAdsEnabled'] is bool
-            ? settings['bannerAdsEnabled'] as bool
-            : true,
-        onChanged: saving
-            ? null
-            : (value) => onChanged('bannerAdsEnabled', value),
-      );
+    key: const Key('admin-settings-banner-ads-toggle'),
+    contentPadding: EdgeInsets.zero,
+    title: const Text('Banner ads'),
+    subtitle: const Text('Remote control for display banner placements.'),
+    value: settings['bannerAdsEnabled'] is bool
+        ? settings['bannerAdsEnabled'] as bool
+        : true,
+    onChanged: saving ? null : (value) => onChanged('bannerAdsEnabled', value),
+  );
 }
 
 /// The admin hub — batch 2026-08-09 item 10.
@@ -394,6 +397,7 @@ class _AdminScreenState extends State<AdminScreen> {
     if (mounted) setState(() {});
     await _requestDashboardSection('dashboard-summary', force: true);
     const order = [
+      'dashboard-dau-engagement',
       'dashboard-growth',
       'dashboard-funnels',
       'dashboard-activation',
@@ -846,6 +850,11 @@ class _AdminScreenState extends State<AdminScreen> {
                   ),
                   const SizedBox(height: 16),
                   for (final route in const [
+                    (
+                      title: 'DAU + ENGAGEMENT',
+                      request: 'dashboard-dau-engagement',
+                      view: 'dashboard-dau-engagement',
+                    ),
                     (
                       title: 'USER GROWTH',
                       request: 'dashboard-growth',

@@ -121,6 +121,10 @@ class AdminMetricsSectionBody extends StatelessWidget {
       'dashboard-activation' => _activation(context, envelope.activation),
       'dashboard-retention' => _retention(context, envelope.retention),
       'dashboard-engagement' => _engagement(context, envelope.raceEngagement),
+      'dashboard-dau-engagement' => _dauEngagement(
+        context,
+        envelope.dauEngagement,
+      ),
       'dashboard-virality' => _virality(context, envelope.virality),
       'dashboard-revenue' => _revenue(context, envelope.revenue),
       'dashboard-release-adoption' => _release(
@@ -781,6 +785,248 @@ class AdminMetricsSectionBody extends StatelessWidget {
               window: releaseWindow,
             ),
       ],
+    );
+  }
+
+  Widget _dauEngagement(BuildContext context, AdminDauEngagement? block) {
+    if (block == null) {
+      return const AdminMetricsStatePanel(message: _unavailable);
+    }
+
+    const actionRows = [
+      (
+        key: 'raceParticipation',
+        label: 'Race participation',
+        definition:
+            'Distinct users accepted into eligible non-cancelled non-featured races today; events are accepted participant rows.',
+      ),
+      (
+        key: 'boxOpen',
+        label: 'Mystery box opens',
+        definition:
+            'Distinct users with a durable MYSTERY_BOX_OPENED event today; events are matching durable event rows.',
+      ),
+      (
+        key: 'powerupUse',
+        label: 'Powerup use',
+        definition:
+            'Distinct users with a durable POWERUP_USED event today; events are matching durable event rows.',
+      ),
+      (
+        key: 'dailyRewardClaim',
+        label: 'Daily reward claims',
+        definition:
+            'Distinct users with a non-review daily reward claim today; events are claim rows.',
+      ),
+      (
+        key: 'notificationOpen',
+        label: 'Notification opens',
+        definition:
+            'Distinct users who opened an accepted durable notification delivery today; events are opened delivery facts.',
+      ),
+      (
+        key: 'rewardedAd',
+        label: 'Verified rewarded ads',
+        definition:
+            'Distinct users with a verified rewarded-ad grant today; events are verified grant rows.',
+      ),
+      (
+        key: 'leaderboardView',
+        label: 'Leaderboard views',
+        definition:
+            'Distinct users with a durable race leaderboard viewed activation today; events are matching activation events.',
+      ),
+      (
+        key: 'raceCreated',
+        label: 'Race creation',
+        definition:
+            'Distinct users who created eligible non-seeded, non-tournament races today; events are matching race rows.',
+      ),
+      (
+        key: 'raceCompleted',
+        label: 'Race completion',
+        definition:
+            'Distinct users completing eligible races today; events are one completion fact per race.',
+      ),
+    ];
+
+    final comparisons = const [
+      (key: 'dayOverDay', label: 'DAY OVER DAY'),
+      (key: 'weekOverWeek', label: 'WEEK OVER WEEK'),
+      (key: 'monthOverMonth', label: 'MONTH OVER MONTH'),
+      (key: 'sixMonthsOverSixMonths', label: 'SIX MONTHS OVER SIX MONTHS'),
+      (key: 'yearOverYear', label: 'YEAR OVER YEAR'),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _MetricHeading('ACTION-BASED DAU'),
+        _MetricRow(
+          label: 'Meaningful users today',
+          value: block.actionBasedDauStatus == 'available'
+              ? _number(block.actionBasedDauUsers)
+              : 'GATHERING DATA',
+          definition:
+              'Distinct retained users who completed at least one of the nine tracked product actions today. App open alone does not count.',
+          source: 'PRODUCT DB · NINE DURABLE ACTION SOURCES',
+          window:
+              '${block.todayDate ?? 'TODAY'} · ${block.timeZone ?? 'TIMEZONE UNAVAILABLE'}',
+        ),
+        const _MetricHeading('MEANINGFUL ACTIONS TODAY'),
+        for (final row in actionRows)
+          _MetricRow(
+            label: row.label,
+            value: _dauActionValue(block.actions[row.key]),
+            definition: row.definition,
+            window:
+                '${block.todayDate ?? 'TODAY'} · ${block.timeZone ?? 'TIMEZONE UNAVAILABLE'}',
+          ),
+        const _MetricHeading('AVERAGE ACTION REACH'),
+        _MetricRow(
+          label: 'Arithmetic estimate',
+          value: _decimal(block.averageActionReach),
+          definition:
+              'Arithmetic average of the nine daily distinct-user counts. This is an estimate, not a unique-user count, because users may appear in multiple action types.',
+          window:
+              '${block.todayDate ?? 'TODAY'} · ${block.timeZone ?? 'TIMEZONE UNAVAILABLE'}',
+        ),
+        const _MetricHeading('USERS WITH ANY ACTION'),
+        _MetricRow(
+          label: 'Union users',
+          value: _number(block.usersWithAnyAction),
+          definition:
+              'Union of users across all nine action types. The backend leaves this unavailable when any source is unavailable.',
+          window:
+              '${block.todayDate ?? 'TODAY'} · ${block.timeZone ?? 'TIMEZONE UNAVAILABLE'}',
+        ),
+        if (block.daily.isNotEmpty) ...[
+          const _MetricHeading('DAILY ACTION REACH'),
+          for (final day in block.daily) ...[
+            if (day.date != null)
+              Text(
+                day.date!,
+                style: PixelText.title(
+                  size: 10,
+                  color: AppColors.of(context).textAccent,
+                ),
+              ),
+            _MetricRow(
+              label: 'Action-based DAU · daily',
+              value:
+                  '${_number(day.actionBasedDau)} · ${_decimal(day.averageActionReach)} avg · ${_number(day.usersWithAnyAction)} any',
+              definition:
+                  'Daily series for action-based DAU, average action reach, and the union of users with any action.',
+              window:
+                  '${day.date ?? 'DATE UNAVAILABLE'} · ${block.timeZone ?? 'TIMEZONE UNAVAILABLE'}',
+            ),
+          ],
+        ],
+        const _MetricHeading('COMPARISONS'),
+        for (final period in comparisons) ...[
+          _MetricHeading(period.label),
+          _DauComparisonRange(comparison: block.comparisons[period.key]),
+          _MetricRow(
+            label: 'Action-based DAU',
+            value: _dauComparisonValue(
+              _headlineComparison(block.comparisons[period.key]),
+            ),
+            definition:
+                'Current action-based DAU compared with the preceding period of the same length. GATHERING DATA means history is missing, immature, or cannot produce a safe percentage.',
+            window: _dauComparisonWindow(block.comparisons[period.key]),
+          ),
+          _MetricRow(
+            label: 'Average action reach',
+            value: _dauComparisonValue(
+              block.comparisons[period.key]?.averageActionReach,
+            ),
+            definition:
+                'Period comparison of the nine-action arithmetic daily average.',
+            window: _dauComparisonWindow(block.comparisons[period.key]),
+          ),
+          _MetricRow(
+            label: 'Users with any action',
+            value: _dauComparisonValue(
+              block.comparisons[period.key]?.usersWithAnyAction,
+            ),
+            definition:
+                'Period comparison of the daily union of users across all nine actions.',
+            window: _dauComparisonWindow(block.comparisons[period.key]),
+          ),
+          for (final row in actionRows)
+            _MetricRow(
+              label: row.label,
+              value: _dauComparisonValue(
+                block.comparisons[period.key]?.actions[row.key],
+              ),
+              definition: row.definition,
+              window: _dauComparisonWindow(block.comparisons[period.key]),
+            ),
+        ],
+      ],
+    );
+  }
+
+  String _dauActionValue(AdminDauAction? action) {
+    if (action == null) return _unavailable;
+    return '${_number(action.users)} users · ${_number(action.events)} events';
+  }
+
+  String _dauComparisonValue(AdminDauComparison? comparison) {
+    if (comparison == null || !comparison.hasUsableChange) {
+      return 'GATHERING DATA';
+    }
+    final absolute = comparison.absoluteChange!;
+    final sign = absolute > 0 ? '+' : '';
+    return '${_comparisonNumber(comparison.current)} current · ${_comparisonNumber(comparison.prior)} prior · '
+        '$sign${_comparisonNumber(absolute)} · ${comparison.percentChange!.toStringAsFixed(1)}%';
+  }
+
+  AdminDauComparison? _headlineComparison(AdminDauComparison? comparison) =>
+      comparison?.actionBasedDau ?? comparison;
+
+  String _comparisonNumber(double? value) {
+    if (value == null) return _unavailable;
+    return value == value.truncateToDouble()
+        ? value.toInt().toString()
+        : value.toStringAsFixed(1);
+  }
+
+  String _dauComparisonWindow(AdminDauComparison? comparison) {
+    if (comparison == null ||
+        comparison.currentStart == null ||
+        comparison.currentEnd == null ||
+        comparison.priorStart == null ||
+        comparison.priorEnd == null) {
+      return 'PERIOD RANGES UNAVAILABLE';
+    }
+    return 'CURRENT ${comparison.currentStart} → ${comparison.currentEnd} · '
+        'PRIOR ${comparison.priorStart} → ${comparison.priorEnd}';
+  }
+}
+
+class _DauComparisonRange extends StatelessWidget {
+  const _DauComparisonRange({required this.comparison});
+
+  final AdminDauComparison? comparison;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    if (comparison == null ||
+        comparison!.currentStart == null ||
+        comparison!.currentEnd == null ||
+        comparison!.priorStart == null ||
+        comparison!.priorEnd == null) {
+      return Text(
+        'PERIOD RANGES UNAVAILABLE',
+        style: PixelText.body(size: 10, color: colors.textMid),
+      );
+    }
+    return Text(
+      'CURRENT ${comparison!.currentStart} → ${comparison!.currentEnd} · '
+      'PRIOR ${comparison!.priorStart} → ${comparison!.priorEnd}',
+      style: PixelText.body(size: 10, color: colors.textMid),
     );
   }
 }

@@ -1375,7 +1375,7 @@ class HomeTab extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'VIEW ALL',
+                      'OPEN',
                       style: PixelText.title(
                         size: 12,
                         color: colors.textAccent,
@@ -2942,12 +2942,20 @@ class _HomeSectionHeader extends StatelessWidget {
         children: [
           const _SectionTick(),
           const SizedBox(width: 8),
-          Text(
-            title,
-            style: PixelText.display(
-              size: 22,
-              color: AppColors.of(context).textLight,
-            ).copyWith(shadows: _textShadows),
+          Expanded(
+            child: FittedBox(
+              alignment: Alignment.centerLeft,
+              fit: BoxFit.scaleDown,
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: PixelText.display(
+                  size: 22,
+                  color: AppColors.of(context).textLight,
+                ).copyWith(shadows: _textShadows),
+              ),
+            ),
           ),
         ],
       ),

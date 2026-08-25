@@ -922,6 +922,22 @@ minted 1,680 (800 each). The ledger's `race_prize_pool_payout` source is
 coin_transactions`; `created_at::date` is used in SQL to avoid node-pg
 timezone shifts.
 
+### 4.1a Seeded Daily/Weekly V2 payout stamp — verified 2026-08-24 (prod, read-only)
+
+Seeded `DAILY_10K`/`WEEKLY_50K` races use the creation-time V2 stamp from
+`CODE backend src/modules/races/services/fundedExposure.js` (`unit=10`,
+`max=8,000`), not the generic legacy/user-race defaults above (`20`/`16,000`).
+For a weekly field of `N` walkers, the raw pool is
+`min(N × durationPoints(7) × 10, 8,000) = min(40N, 8,000)`. Seeded races use
+`TOP_HALF`; production's permanent settings stamp `GEOMETRIC` and payout
+rounding v1 on new rows. Rounding rounds each positive award up to a multiple
+of five and mints the subsidy.
+
+The current prod weekly private stream has 48 active bucket races / 604
+accepted participants; their rows are stamped `funded_prize=true`,
+`payout_curve=GEOMETRIC`, `payout_rounding_version=1`, `prize_coin_unit=10`,
+and `prize_pool_max_coins=8000` (`DB races × seeded_race_buckets`).
+
 ### 4.2 Individual payout presets — `CODE races/racePayoutPresets.js`
 
 | Preset | Split | Notes |

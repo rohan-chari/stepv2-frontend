@@ -267,6 +267,7 @@ void main() {
     // reach the state this test is about: a held, upgradeable Shortcut.
     for (final id in DemoRaceEngine.mysteryBoxIds) {
       ctx.engine.openBox(id);
+      ctx.engine.commitBoxOpen(id);
     }
     await settleDemo(tester, frames: 20);
 
