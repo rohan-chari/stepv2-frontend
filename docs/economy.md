@@ -1666,17 +1666,17 @@ identical to Rainstorm's. All-time coin-flip effect rows: **5**.
 
 ---
 
-## 11. Referral economy — verified 2026-08-20 (prod SELECT-only)
+## 11. Referral economy — verified 2026-08-25 (prod SELECT-only)
 
 ### 11.1 Rates and guards
 
 | Knob | Value | Source |
 |---|---|---|
-| Referrer reward | **500** coins | `ENV REFERRAL_REFERRER_COINS`, default `CODE social/referralRewards.js:11` |
-| Referee reward | **500** coins (double-sided since batch 2026-07-27 D6) | `ENV REFERRAL_REFEREE_COINS` |
+| Referrer reward | **500** coins | live production env unset; `CODE social/referralRewards.js:11-13` fallback |
+| Referee reward | **500** coins (double-sided since batch 2026-07-27 D6) | live production env unset; `CODE social/referralRewards.js:14` fallback |
 | **Total per successful referral** | **1,000 coins minted** | |
-| Attribution window | 30 days signup → first qualifying race; then `EXPIRED`, never pays | `ENV REFERRAL_QUALIFY_WINDOW_DAYS` |
-| Referrer velocity cap | **20 / rolling 24h**, **100 / rolling 30d** → status `FLAGGED`, held for manual review (both sides held) | `ENV REFERRAL_DAILY_CAP` / `REFERRAL_MONTHLY_CAP` |
+| Attribution window | 30 days signup → first qualifying race; then `EXPIRED`, never pays | live production env unset; `CODE social/referralRewards.js:20-22` fallback |
+| Referrer velocity cap | **5 / rolling 24h**, **25 / rolling 30d** → the next referral becomes `FLAGGED`, with both sides held | live production env has no overrides; `CODE social/referralRewards.js:29-30` fallbacks are authoritative |
 | Payout trigger | **not install** — the referee's first *qualifying completed race* (Apple 3.2.2) | `CODE grantReferralReward.js` |
 | Qualifying race | `seedId == null` **and** ≥2 ACCEPTED participants with `rawSteps >= 2,000`; referee must have `placement != null` and `rawSteps >= 2,000` | `CODE grantReferralReward.js:188-226` |
 | Idempotency | `@@unique(refereeSubHash, role)` on `referral_reward_grants` — one payout per **human provider identity per role, forever**, surviving delete + reinstall | `CODE grantReferralReward.js:29-46` |
@@ -1685,16 +1685,17 @@ identical to Rainstorm's. All-time coin-flip effect rows: **5**.
 | Review accounts | excluded on both sides (`EXCLUDED`) | same |
 | IP fallback | `link_opens.kind = 'referral'` only; tier 1 exact IP hash (48h, ≤10 opens, exactly 1 distinct code); tier 2 /24-/64 net prefix **OFF by default** | `CODE findLinkOpenReferralCode.js` |
 
-### 11.2 Measured volume (all-time, 2026-08-20)
+### 11.2 Measured volume (all-time, 2026-08-25)
 
 | Metric | Value |
 |---|---|
-| `referrals` rows, all time | **218** — 54 `REWARDED`, 158 `PENDING`, 6 `FLAGGED` |
+| `referrals` rows, all time | **312** — 110 `REWARDED`, 195 `PENDING`, 7 `FLAGGED` |
 | First referral | 2026-08 (the program has one month of data) |
-| Attribution source | 142 `provision_body` (27 rewarded), 59 `ip_fallback_exact` (16 rewarded), 9 `redeem` (3 rewarded), 8 legacy null-source (all rewarded) |
-| `referral_reward` coin txns, 30d | 108 txns, **54,000 coins = 1,800 / day**; 80 recipient users |
-| Early qualification observation | Exact-IP cohorts at least 4 days old: **14 / 43 = 32.6%** rewarded; provision-body: **23 / 82 = 28.0%**. These are not final 30-day cohort rates. |
-| Reward latency | Exact-IP rewarded rows: p50 **59.1h**, p90 **94.9h**, max **111.1h** (n=16) |
+| Attribution source | 217 `provision_body` (69 rewarded), 59 `ip_fallback_exact` (28 rewarded), 28 `redeem` (5 rewarded), 8 legacy null-source (all rewarded) |
+| `referral_reward` coin txns, 30 complete days | 204 txns, **102,000 coins = 3,400 / day**; 145 recipient users |
+| Completed-referral concentration, all time | 58 referrers; p50 **1**, p90 **4.3**, max **7**, total 110 |
+| Completed referrals per referrer-day, trailing 30d | 75 referrer-days; p50 **1**, p90 **2.6**, max **5** |
+| Reward latency, all rewarded referrals | p50 **74.0h**, p90 **189.1h**, max **268.1h** (n=110) |
 
 ### 11.2a Network-prefix fallback surface (tier 2 remains off)
 
@@ -1725,24 +1726,28 @@ null net hash can never match.
 
 ### 11.3 Affordability frame
 
-At the current p50 recurring earn rate of **9 coins/active-day** (§0d), one
-500-coin side is **55.6 days** of median play; the 1,000-coin pair is **111.1
-days**. At p90 (75.4/day) it is 6.6 and 13.3 days. The cheapest active cosmetic
+At the current p50 recurring earn rate of **10.53 coins/active-day** (§0e), one
+500-coin side is **47.5 days** of median play; the 1,000-coin pair is **95.0
+days**. At p90 (75.67/day) it is 6.6 and 13.2 days. The cheapest active cosmetic
 is 250 and the cheapest active store powerup is 75, so one paid referral gives
 each side two cheapest cosmetics or 6.7 cheapest powerups.
 
 ### 11.4 Cap headroom vs the live economy
 
-The velocity caps were sized for a much larger app. Against today's
-**3,544 coins/day of total supply**:
+Against the trailing-30-complete-day **18,103.3 coins/day total positive
+ledger** (of which referrals are 3,400/day):
 
 | | Coins the guard still permits | × total daily supply |
 |---|---|---|
-| One referrer at the daily cap (20) | 10,000/day self + 10,000/day to referees | **5.6×** |
-| One referrer at the monthly cap (100) | 50,000/30d self + 50,000 to referees | **0.94×** of a whole month |
+| One referrer at the daily cap (5) | 2,500/day self + 2,500/day to referees | **0.28×** |
+| One referrer at the monthly cap (25) | 12,500/30d self + 12,500 to referees | **4.6%** of a whole month's supply |
 
-i.e. a single account can mint more than five days of the entire app's coin
-supply in one day without tripping any guard.
+The cap now materially bounds one account's automatic minting, but it also
+creates a hard scoring seam for any competition that equates a completed
+referral with the durable paid grant: the 26th completion inside a rolling 30
+days becomes `FLAGGED` and cannot count unless a documented review path clears
+and grants it. The observed maximum is currently 7 completed referrals for one
+referrer, below that seam.
 
 ### 11.5 Race share links do NOT carry referral attribution
 

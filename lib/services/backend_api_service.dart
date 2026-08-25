@@ -358,6 +358,7 @@ class BackendApiService {
       'review_prompt',
       'inbox_v1',
       'api_payload_compact_v1',
+      'referral_contest_v1',
       // This capability stamps the iOS-only, immutable metrics collection
       // cohort. Android shares this Dart file but must never advertise it.
       if (isIos) 'admin_metrics_v2',
@@ -367,8 +368,8 @@ class BackendApiService {
   }
 
   static final String clientFeaturesHeader = _adsSupported
-      ? 'characters,ads,ad_coin_random,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,review_prompt,inbox_v1,api_payload_compact_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}'
-      : 'characters,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,review_prompt,inbox_v1,api_payload_compact_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}';
+      ? 'characters,ads,ad_coin_random,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,review_prompt,inbox_v1,api_payload_compact_v1,referral_contest_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}'
+      : 'characters,jammer,spinpowerups,team_races,tournaments,race_leave,powerups2,powerups3,powerups4,powerups5,stealth_runner_duration,hitchhike_effective_steps,remote_assets,remote_asset_preferred,next_race_cta,discoverable_identity,home_suggested_races,seeded_race_buckets,home_invite_modal,race_participants_paging,race_preview,impact_notices,active_impact_notices_v1,resolved_impact_events_v2,impact_summaries,review_prompt,inbox_v1,api_payload_compact_v1,referral_contest_v1${!kIsWeb && Platform.isIOS ? ',admin_metrics_v2' : ''}${_racePayoutDoubleSupported ? ',race_payout_flat_50' : ''}';
 
   /// Replays a persisted results dismissal with the capability it originally
   /// advertised. A later app build may have gained or lost the dedicated ad
@@ -2547,11 +2548,16 @@ class BackendApiService {
     required String identityToken,
     required bool enabled,
     required String message,
+    String? contestSlug,
   }) async {
     final response = await _sendJsonRequest(
       method: 'PATCH',
       path: '/admin/settings/home-service-banner',
-      body: {'enabled': enabled, 'message': message},
+      body: {
+        'enabled': enabled,
+        'message': message,
+        'contestSlug': ?contestSlug,
+      },
       identityToken: identityToken,
     );
     final body = await _decodeJsonResponse(response);
@@ -3661,6 +3667,184 @@ class BackendApiService {
   }) async {
     final response = await _sendGetRequest(
       path: '/referrals/me',
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  // ---- Referral contest --------------------------------------------------
+
+  /// Additive member discovery. A 404 is deliberately surfaced so every UI
+  /// caller can hide the module while leaving ordinary referral behavior
+  /// untouched.
+  Future<Map<String, dynamic>> fetchCurrentGiveaway({
+    required String identityToken,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/giveaways/current/me',
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> fetchGiveawayData({
+    required String slug,
+    int limit = 25,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/giveaways/${Uri.encodeComponent(slug)}/data?limit=$limit',
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> enterGiveaway({
+    required String identityToken,
+    required String slug,
+    required String rulesVersion,
+    required String country,
+    required String region,
+    required bool ageConfirmed,
+    required bool residencyConfirmed,
+    required bool rulesAccepted,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/giveaways/${Uri.encodeComponent(slug)}/entries',
+      identityToken: identityToken,
+      body: {
+        'rulesVersion': rulesVersion,
+        'country': country,
+        'region': region,
+        'ageConfirmed': ageConfirmed,
+        'residencyConfirmed': residencyConfirmed,
+        'rulesAccepted': rulesAccepted,
+      },
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> fetchAdminGiveaways({
+    required String identityToken,
+    String? cursor,
+    int limit = 25,
+  }) async {
+    final query = <String, String>{'limit': '$limit'};
+    if (cursor != null && cursor.isNotEmpty) query['cursor'] = cursor;
+    final response = await _sendGetRequest(
+      path: Uri(path: '/admin/giveaways', queryParameters: query).toString(),
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> fetchAdminGiveawayDetail({
+    required String identityToken,
+    required String contestId,
+  }) async {
+    final response = await _sendGetRequest(
+      path: '/admin/giveaways/${Uri.encodeComponent(contestId)}',
+      identityToken: identityToken,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> createAdminGiveaway({
+    required String identityToken,
+    required String idempotencyKey,
+    required Map<String, dynamic> body,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/admin/giveaways',
+      identityToken: identityToken,
+      headers: {'Idempotency-Key': idempotencyKey},
+      body: body,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> updateAdminGiveaway({
+    required String identityToken,
+    required String contestId,
+    required int revision,
+    required Map<String, dynamic> patch,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'PATCH',
+      path: '/admin/giveaways/${Uri.encodeComponent(contestId)}',
+      identityToken: identityToken,
+      body: {'revision': revision, 'patch': patch},
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> correctAdminGiveawayBanner({
+    required String identityToken,
+    required String contestId,
+    required String idempotencyKey,
+    required int revision,
+    required String bannerMessage,
+    required String reason,
+  }) async {
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path:
+          '/admin/giveaways/${Uri.encodeComponent(contestId)}/banner-correction',
+      identityToken: identityToken,
+      headers: {'Idempotency-Key': idempotencyKey},
+      body: {
+        'revision': revision,
+        'bannerMessage': bannerMessage,
+        'reason': reason,
+      },
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> mutateAdminGiveaway({
+    required String identityToken,
+    required String contestId,
+    required String action,
+    required String idempotencyKey,
+    required Map<String, dynamic> body,
+  }) async {
+    const allowed = {
+      'publish',
+      'cancel',
+      'reviews',
+      'finalize',
+      'winner',
+      'select-next',
+      'fulfillment',
+      'award-coins',
+      'archive',
+    };
+    if (!allowed.contains(action)) {
+      throw ArgumentError.value(action, 'action', 'Unsupported mutation');
+    }
+    final response = await _sendJsonRequest(
+      method: 'POST',
+      path: '/admin/giveaways/${Uri.encodeComponent(contestId)}/$action',
+      identityToken: identityToken,
+      headers: {'Idempotency-Key': idempotencyKey},
+      body: body,
+    );
+    return _decodeJsonResponse(response);
+  }
+
+  Future<Map<String, dynamic>> fetchAdminGiveawayCandidates({
+    required String identityToken,
+    required String contestId,
+    String? cursor,
+    int limit = 25,
+  }) async {
+    final query = <String, String>{'limit': '$limit'};
+    if (cursor != null && cursor.isNotEmpty) query['cursor'] = cursor;
+    final response = await _sendGetRequest(
+      path: Uri(
+        path: '/admin/giveaways/${Uri.encodeComponent(contestId)}/candidates',
+        queryParameters: query,
+      ).toString(),
       identityToken: identityToken,
     );
     return _decodeJsonResponse(response);

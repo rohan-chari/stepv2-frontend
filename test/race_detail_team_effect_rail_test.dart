@@ -433,7 +433,9 @@ void main() {
     final bubble = find.textContaining('Red Card:');
     expect(bubble, findsOneWidget);
     expect(find.textContaining('From @Me Myself'), findsOneWidget);
-    expect(find.textContaining('2h'), findsOneWidget);
+    // Assert the duration belongs to this tooltip. A broad page-level `2h`
+    // finder also matches long live race countdowns as the fixture date ages.
+    expect(tester.widget<Text>(bubble).data, contains('2h'));
     // …and clamped fully within the 430pt-wide screen (the old fixed offset
     // would have pushed a right-column bubble off the right edge).
     final rect = tester.getRect(bubble);

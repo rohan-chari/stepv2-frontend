@@ -126,6 +126,183 @@ void main() {
         );
   });
 
+  group('referral contest wire contract', () {
+    test(
+      'member discovery and entry use the dedicated additive endpoints',
+      () async {
+        final client = _FakeHttpClient([
+          const _Scripted(
+            200,
+            '{"contest":null,"leaderboard":[],"entry":null,"standing":null,"share":null}',
+          ),
+          const _Scripted(201, '{"entry":{"status":"ELIGIBLE"}}'),
+        ]);
+        final api = BackendApiService(httpClient: client);
+
+        await api.fetchCurrentGiveaway(identityToken: 'tok');
+        await api.enterGiveaway(
+          identityToken: 'tok',
+          slug: 'bara-referral-2026-09',
+          rulesVersion: '2026-09-v1',
+          country: 'US',
+          region: 'US-NY',
+          ageConfirmed: true,
+          residencyConfirmed: true,
+          rulesAccepted: true,
+        );
+
+        expect(client.requests.first.uri.path, '/giveaways/current/me');
+        expect(
+          client.requests.last.uri.path,
+          '/giveaways/bara-referral-2026-09/entries',
+        );
+        expect(_bodyOf(client.requests.last), {
+          'rulesVersion': '2026-09-v1',
+          'country': 'US',
+          'region': 'US-NY',
+          'ageConfirmed': true,
+          'residencyConfirmed': true,
+          'rulesAccepted': true,
+        });
+        expect(
+          client.requests.last.body.toString(),
+          isNot(contains('displayName')),
+        );
+        expect(
+          client.requests.last.body.toString(),
+          isNot(contains('dateOfBirth')),
+        );
+        expect(
+          client.requests.last.body.toString(),
+          isNot(contains('payment')),
+        );
+      },
+    );
+
+    test(
+      'admin list, detail, and candidate cursors preserve opaque values',
+      () async {
+        final client = _FakeHttpClient(
+          List.filled(3, const _Scripted(200, '{}')),
+        );
+        final api = BackendApiService(httpClient: client);
+
+        await api.fetchAdminGiveaways(
+          identityToken: 'tok',
+          cursor: 'created:id/+',
+          limit: 25,
+        );
+        await api.fetchAdminGiveawayDetail(
+          identityToken: 'tok',
+          contestId: 'contest/id',
+        );
+        await api.fetchAdminGiveawayCandidates(
+          identityToken: 'tok',
+          contestId: 'contest/id',
+          cursor: 'rank:id/+',
+          limit: 50,
+        );
+
+        expect(client.requests[0].uri.path, '/admin/giveaways');
+        expect(client.requests[0].uri.queryParameters, {
+          'limit': '25',
+          'cursor': 'created:id/+',
+        });
+        expect(client.requests[1].uri.path, '/admin/giveaways/contest%2Fid');
+        expect(
+          client.requests[2].uri.path,
+          '/admin/giveaways/contest%2Fid/candidates',
+        );
+        expect(client.requests[2].uri.queryParameters, {
+          'limit': '50',
+          'cursor': 'rank:id/+',
+        });
+      },
+    );
+
+    test(
+      'admin mutation sends exact action body and UUID idempotency header',
+      () async {
+        final client = _FakeHttpClient([const _Scripted(200, '{}')]);
+        final api = BackendApiService(httpClient: client);
+
+        await api.mutateAdminGiveaway(
+          identityToken: 'tok',
+          contestId: 'contest-1',
+          action: 'award-coins',
+          idempotencyKey: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+          body: const {'revision': 9},
+        );
+
+        final request = client.requests.single;
+        expect(request.method, 'POST');
+        expect(request.uri.path, '/admin/giveaways/contest-1/award-coins');
+        expect(_bodyOf(request), {'revision': 9});
+        expect(
+          request.headers['Idempotency-Key'],
+          'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+        );
+      },
+    );
+
+    test('banner correction sends the exact audited contract', () async {
+      final client = _FakeHttpClient([const _Scripted(200, '{}')]);
+      final api = BackendApiService(httpClient: client);
+      const key = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+
+      await api.correctAdminGiveawayBanner(
+        identityToken: 'tok',
+        contestId: 'contest/id',
+        idempotencyKey: key,
+        revision: 8,
+        bannerMessage: r'Corrected: win US$50 + 5,000 Bara coins.',
+        reason: 'Corrected end-user wording without changing material terms.',
+      );
+
+      final request = client.requests.single;
+      expect(request.method, 'POST');
+      expect(
+        request.uri.path,
+        '/admin/giveaways/contest%2Fid/banner-correction',
+      );
+      expect(request.headers['Idempotency-Key'], key);
+      expect(_bodyOf(request), {
+        'revision': 8,
+        'bannerMessage': r'Corrected: win US$50 + 5,000 Bara coins.',
+        'reason': 'Corrected end-user wording without changing material terms.',
+      });
+    });
+
+    test('admin create sends its UUID idempotency header', () async {
+      final client = _FakeHttpClient([const _Scripted(201, '{}')]);
+      final api = BackendApiService(httpClient: client);
+      const key = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+      const body = <String, dynamic>{'slug': 'fall-referrals'};
+
+      await api.createAdminGiveaway(
+        identityToken: 'tok',
+        idempotencyKey: key,
+        body: body,
+      );
+
+      final request = client.requests.single;
+      expect(request.method, 'POST');
+      expect(request.uri.path, '/admin/giveaways');
+      expect(request.headers['Idempotency-Key'], key);
+      expect(_bodyOf(request), body);
+    });
+
+    test('contest capability is present in every transport request', () async {
+      final client = _FakeHttpClient([const _Scripted(200, '{}')]);
+      final api = BackendApiService(httpClient: client);
+      await api.fetchCurrentGiveaway(identityToken: 'tok');
+      expect(
+        client.requests.single.headers['X-Client-Features']!.split(','),
+        contains('referral_contest_v1'),
+      );
+    });
+  });
+
   // Batch 2026-08-09 item 10. The sectioned admin hub must not change what a
   // SHIPPED admin build asks for: an absent `sections` param is what makes the
   // backend run today's query set and nothing more.

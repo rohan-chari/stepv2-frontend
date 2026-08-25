@@ -189,6 +189,7 @@ void main() {
 
       expect(find.text('Banner ads'), findsOneWidget);
       expect(find.text('HOME SERVICE BANNER'), findsOneWidget);
+      expect(find.text('GIVEAWAY DASHBOARD'), findsOneWidget);
       expect(find.text('ACCESSORY RENDER TUNER'), findsOneWidget);
       expect(find.text('BALANCE CONFIG'), findsOneWidget);
       expect(find.text('POWERUP SHOP'), findsOneWidget);
@@ -204,6 +205,7 @@ void main() {
         'TEST INFO TOAST',
         'POWERUP ICONS',
         'POWERUP CRATE',
+        'GIVEAWAY DASHBOARD',
         'ACCESSORY RENDER TUNER',
         'BALANCE CONFIG',
         'POWERUP SHOP',

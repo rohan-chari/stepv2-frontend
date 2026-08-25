@@ -35,6 +35,7 @@ import '../discoverable_identity_flow.dart';
 import '../public_races_screen.dart';
 import '../get_coins_screen.dart';
 import '../referral_screen.dart';
+import '../giveaway_screen.dart';
 
 // Shared hard-offset "game piece" shadow for home cards — flat, no blur, so
 // cards read as chunky physical tiles sitting on the dark felt.
@@ -466,23 +467,77 @@ class HomeTab extends StatelessWidget {
   }
 
   Widget? _buildServiceBanner(BuildContext context) {
+    if (isTutorialPreview) return null;
     final raw = raceCard?['homeServiceBanner'];
     if (raw is! Map || raw['enabled'] != true) return null;
     final message = raw['message'];
     if (message is! String || message.trim().isEmpty || message.length > 240) {
       return null;
     }
+    String? contestSlug;
+    if (raw.containsKey('action')) {
+      final rawAction = raw['action'];
+      if (rawAction is! Map || rawAction['type'] != 'contest') return null;
+      final slug = rawAction['contestSlug'];
+      if (slug is! String ||
+          slug.isEmpty ||
+          slug.length > 120 ||
+          !RegExp(r'^[a-z0-9]+(?:-[a-z0-9]+)*$').hasMatch(slug)) {
+        return null;
+      }
+      contestSlug = slug;
+    }
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              message,
+              style: PixelText.body(
+                size: 13,
+                color: AppColors.of(context).textDark,
+              ),
+            ),
+          ),
+          if (contestSlug != null) ...[
+            const SizedBox(width: 8),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.of(context).textDark,
+            ),
+          ],
+        ],
+      ),
+    );
     return Container(
       key: const Key('home-service-banner'),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: AppColors.of(context).parchment,
         border: Border.all(color: AppColors.of(context).coinDark, width: 2),
         borderRadius: BorderRadius.circular(9),
       ),
-      child: Text(
-        message,
-        style: PixelText.body(size: 13, color: AppColors.of(context).textDark),
+      clipBehavior: Clip.antiAlias,
+      child: Material(
+        type: MaterialType.transparency,
+        child: contestSlug == null
+            ? content
+            : Semantics(
+                button: true,
+                label: '$message. Open referral contest details.',
+                child: InkWell(
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => GiveawayScreen(
+                        slug: contestSlug!,
+                        authService: authService,
+                        backendApiService: backendApiService,
+                      ),
+                    ),
+                  ),
+                  child: content,
+                ),
+              ),
       ),
     );
   }

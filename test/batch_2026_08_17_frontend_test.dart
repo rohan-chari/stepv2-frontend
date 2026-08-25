@@ -113,6 +113,7 @@ class _AdminBannerApi extends _InboxApi {
     required String identityToken,
     required bool enabled,
     required String message,
+    String? contestSlug,
   }) async {
     this.enabled = enabled;
     this.message = message;

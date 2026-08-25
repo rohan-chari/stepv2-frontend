@@ -256,10 +256,8 @@ for 7d, 30d, and 90d requests. Use bounded half-open UTC predicates and one
 pass per source where possible; do not multiply correlated per-day subqueries
 for every action.
 
-If a query cannot remain bounded and reliable, add a nullable additive daily
-rollup table with an immutable metric date and source version. Do not backfill a
-new rollup against production in this feature; document a local/test backfill
-and safe empty behavior first.
+Six-month and year-over-year comparisons remain nullable and report
+`gathering_data` until a separately reviewed exact-user rollup is added.
 
 ## Frontend plan
 
@@ -399,7 +397,7 @@ legacy path and must be checked independently.
   percentages and denominator display, added the nine-action average and union
   estimate, added five period-over-period comparisons, and defined
   `GATHERING DATA` for unavailable comparisons.
-- Architect review: required contract, math, source-definition, rollup,
+- Architect review: required contract, math, source-definition, bounded-query,
   performance, and compatibility changes folded in; concise review verdict was
   REVISE before these changes.
 - Manual UI-placement test plan: added verbatim from the UI review; no admin

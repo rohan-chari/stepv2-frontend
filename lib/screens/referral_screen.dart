@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/giveaway.dart';
 import '../services/auth_service.dart';
 import '../services/backend_api_service.dart';
 import '../services/health_service.dart';
@@ -8,6 +9,7 @@ import '../widgets/app_refresh_indicator.dart';
 import '../utils/at_name.dart';
 import '../utils/share_helper.dart';
 import 'referral_rules_screen.dart';
+import 'giveaway_screen.dart';
 import '../widgets/app_avatar.dart';
 import '../widgets/arcade_fx.dart';
 import '../widgets/error_toast.dart';
@@ -62,12 +64,32 @@ class _ReferralScreenState extends State<ReferralScreen> {
   int? _referrerCoins;
   int? _refereeCoins;
   List<Map<String, dynamic>> _friends = const [];
+  GiveawayCurrent? _giveaway;
 
   @override
   void initState() {
     super.initState();
     _api = widget.backendApiService ?? BackendApiService();
     _load();
+    _loadGiveaway();
+  }
+
+  Future<void> _loadGiveaway() async {
+    final token = widget.authService.authToken;
+    if (token == null || token.isEmpty) return;
+    try {
+      final raw = await _api.fetchCurrentGiveaway(identityToken: token);
+      final parsed = GiveawayCurrent.tryParse(raw);
+      final visible =
+          parsed != null &&
+          (parsed.contest.status == GiveawayStatus.active ||
+              parsed.contest.status == GiveawayStatus.scheduled);
+      if (mounted) setState(() => _giveaway = visible ? parsed : null);
+    } catch (_) {
+      // An older/temporarily unavailable giveaway backend must never block the
+      // ordinary referral dashboard or its share action.
+      if (mounted) setState(() => _giveaway = null);
+    }
   }
 
   Future<void> _load() async {
@@ -173,7 +195,9 @@ class _ReferralScreenState extends State<ReferralScreen> {
                 _buildHeader(),
                 Expanded(
                   child: AppRefreshIndicator(
-                    onRefresh: _load,
+                    onRefresh: () async {
+                      await Future.wait([_load(), _loadGiveaway()]);
+                    },
                     child: ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
@@ -308,9 +332,13 @@ class _ReferralScreenState extends State<ReferralScreen> {
           ),
         ),
       ],
+      if (_giveaway case final giveaway?) ...[
+        const SizedBox(height: 16),
+        StaggerIn(index: 2, child: _buildContestCard(giveaway)),
+      ],
       const SizedBox(height: 20),
       StaggerIn(
-        index: 2,
+        index: 3,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -366,6 +394,99 @@ class _ReferralScreenState extends State<ReferralScreen> {
         ),
       ),
     ];
+  }
+
+  Widget _buildContestCard(GiveawayCurrent giveaway) {
+    final contest = giveaway.contest;
+    final standing = giveaway.standing;
+    return Container(
+      key: const Key('referral-contest-card'),
+      padding: const EdgeInsets.all(16),
+      decoration: _referralCardDecoration().copyWith(
+        border: Border.all(color: AppColors.of(context).coinDark, width: 2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.emoji_events_rounded,
+                color: AppColors.of(context).coinDark,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'REFERRAL CONTEST',
+                  style: PixelText.title(
+                    size: 16,
+                    color: AppColors.of(context).textDark,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Win US\$${contest.prize.cashMinor ~/ 100} + ${contest.prize.coins} coins',
+            style: PixelText.title(
+              size: 18,
+              color: AppColors.of(context).textDark,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _contestRemaining(contest.endsAt),
+            style: PixelText.body(
+              size: 12,
+              color: AppColors.of(context).textMid,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            standing == null
+                ? 'Contest details and eligibility'
+                : '${standing.verifiedCount} verified contest referral${standing.verifiedCount == 1 ? '' : 's'}',
+            style: PixelText.body(
+              size: 13,
+              color: AppColors.of(context).textMid,
+            ),
+          ),
+          const SizedBox(height: 12),
+          PillButton(
+            label: 'VIEW CONTEST',
+            variant: PillButtonVariant.secondary,
+            fullWidth: true,
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => GiveawayScreen(
+                  slug: contest.slug,
+                  authService: widget.authService,
+                  backendApiService: _api,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _contestRemaining(DateTime end) {
+    final utc = end.toUtc();
+    final month = utc.month.toString().padLeft(2, '0');
+    final day = utc.day.toString().padLeft(2, '0');
+    final hour = utc.hour.toString().padLeft(2, '0');
+    final minute = utc.minute.toString().padLeft(2, '0');
+    final ends = '${utc.year}-$month-$day $hour:$minute UTC';
+    final duration = utc.difference(DateTime.now().toUtc());
+    if (duration <= Duration.zero) return 'Ends $ends · Contest ended';
+    final days = duration.inDays;
+    final hours = duration.inHours.remainder(24);
+    final remaining = days > 0
+        ? '${days}d ${hours}h remaining'
+        : '${duration.inHours}h ${duration.inMinutes.remainder(60)}m remaining';
+    return 'Ends $ends · $remaining';
   }
 
   /// Parchment game-piece card — same language as the redesigned tabs.

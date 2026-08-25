@@ -20,6 +20,7 @@ import 'admin_metrics_dashboard.dart';
 import 'admin_sections.dart';
 import '../services/ad_service.dart';
 import 'admin_balance_config_screen.dart';
+import 'admin_giveaway_screen.dart';
 import 'admin_powerup_shop_screen.dart';
 
 /// Batch 2026-08-09 item 10: no longer draws its own board or SETTINGS title —
@@ -49,6 +50,8 @@ class _AdminFlagsPanelState extends State<AdminFlagsPanel> {
   bool _saving = false;
   bool _bannerAdsEnabled = true;
   final TextEditingController _serviceBannerMessage = TextEditingController();
+  final TextEditingController _serviceBannerContestSlug =
+      TextEditingController();
   bool _serviceBannerEnabled = false;
 
   @override
@@ -71,6 +74,10 @@ class _AdminFlagsPanelState extends State<AdminFlagsPanel> {
           _serviceBannerEnabled = settings['homeServiceBannerEnabled'] == true;
           final message = settings['homeServiceBannerMessage'];
           _serviceBannerMessage.text = message is String ? message : '';
+          final contestSlug = settings['homeServiceBannerContestSlug'];
+          _serviceBannerContestSlug.text = contestSlug is String
+              ? contestSlug
+              : '';
           _loading = false;
         });
       }
@@ -112,6 +119,7 @@ class _AdminFlagsPanelState extends State<AdminFlagsPanel> {
   @override
   void dispose() {
     _serviceBannerMessage.dispose();
+    _serviceBannerContestSlug.dispose();
     super.dispose();
   }
 
@@ -129,6 +137,9 @@ class _AdminFlagsPanelState extends State<AdminFlagsPanel> {
         identityToken: token,
         enabled: _serviceBannerEnabled,
         message: _serviceBannerEnabled ? message : '',
+        contestSlug: _serviceBannerEnabled
+            ? _serviceBannerContestSlug.text.trim()
+            : '',
       );
       // The endpoint must echo the standard full settings envelope. A malformed
       // or legacy response must not erase the settings this panel already has.
@@ -142,6 +153,10 @@ class _AdminFlagsPanelState extends State<AdminFlagsPanel> {
           final returnedMessage = updated['homeServiceBannerMessage'];
           _serviceBannerMessage.text = returnedMessage is String
               ? returnedMessage
+              : '';
+          final returnedSlug = updated['homeServiceBannerContestSlug'];
+          _serviceBannerContestSlug.text = returnedSlug is String
+              ? returnedSlug
               : '';
         });
       }
@@ -214,6 +229,17 @@ class _AdminFlagsPanelState extends State<AdminFlagsPanel> {
           minLines: 2,
           maxLines: 4,
           decoration: const InputDecoration(hintText: 'Service status message'),
+        ),
+        TextField(
+          key: const Key('admin-home-service-banner-contest-slug'),
+          controller: _serviceBannerContestSlug,
+          enabled: !_saving,
+          maxLength: 120,
+          decoration: const InputDecoration(
+            hintText: 'Optional published contest slug',
+            helperText:
+                'Leave blank for an ordinary notice. A contest slug adds the typed in-app action.',
+          ),
         ),
         PillButton(
           label: _saving ? 'SAVING…' : 'SAVE SERVICE BANNER',
@@ -582,6 +608,25 @@ class _AdminScreenState extends State<AdminScreen> {
                         showErrorToast: widget.showErrorToast,
                       ),
                       const SizedBox(height: 16),
+                      PillButton(
+                        label: 'GIVEAWAY DASHBOARD',
+                        variant: PillButtonVariant.secondary,
+                        fontSize: 13,
+                        fullWidth: true,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 12,
+                        ),
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => AdminGiveawayScreen(
+                              authService: widget.authService,
+                              backendApiService: _api,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
                       PillButton(
                         label: 'ACCESSORY RENDER TUNER',
                         variant: PillButtonVariant.primary,
@@ -980,6 +1025,13 @@ class _AdminScreenState extends State<AdminScreen> {
         ),
         const SizedBox(height: 16),
         for (final item in [
+          (
+            label: 'GIVEAWAY DASHBOARD',
+            builder: (BuildContext context) => AdminGiveawayScreen(
+              authService: widget.authService,
+              backendApiService: _api,
+            ),
+          ),
           (
             label: 'ACCESSORY RENDER TUNER',
             builder: (BuildContext context) =>
